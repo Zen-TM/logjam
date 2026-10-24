@@ -85,9 +85,11 @@ _deliberate, recorded, and impossible-to-hide_:
   management event in the WORM log. The announcement task reads only account
   ids and push device tokens, and its writes (the announcement, one inbox row
   per user, and pruning dead push tokens) are logged like any other. The
-  deletion reads those jobs' ids, owners, statuses and sizes, and its writes
-  (deleting each job's row and shares, and lowering its owner's storage
-  charge) are logged like any other; it deletes the jobs' files from S3.
+  deletion reads those jobs' ids, owners, statuses and sizes, and which
+  running exports use them (ids only). Its writes (deleting each job's row,
+  its shares and its sharees' share notifications, failing any export still
+  queued from it, and lowering its owner's storage charge) are logged like any
+  other; it deletes the jobs' files from S3.
 - **Data minimisation.** No third-party analytics or telemetry. Short retention on
   topo/LiDAR artifacts. Operational logs are scrubbed so canyon names and
   coordinates never appear in plain text — and the audit logs above record SQL

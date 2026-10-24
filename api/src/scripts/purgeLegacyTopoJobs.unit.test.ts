@@ -130,11 +130,12 @@ describe("main", () => {
     expect(deleteTopoJob).toHaveBeenCalledTimes(2);
   });
 
-  // Red if a mistyped flag is read as --yes, or as a dry run that exits 0.
-  it.each([["-y"], ["--yes=no"], ["--dry-run"]])(
+  // Red if a mistyped flag is read as --yes, or as a dry run that exits 0, or
+  // if --yes beside another argument deletes (`args.includes("--yes")`).
+  it.each([["-y"], ["--yes=no"], ["--dry-run"], ["--yes", "--dry-run"]])(
     "refuses %s, deleting nothing",
-    async (arg) => {
-      expect(await main([arg])).toBe(1);
+    async (...args) => {
+      expect(await main(args)).toBe(1);
       expect(deleteTopoJob).not.toHaveBeenCalled();
     },
   );

@@ -91,7 +91,10 @@ A maintainer announcement runs on the `logjam-geo-pdf-worker` family and
 exits 1 when the script refuses a message, cannot find one to retract, or
 fails ([announcements.md](announcements.md)). Its event carries the
 announce command in `detail.overrides`; that failure is the script's, not
-the worker's, so there is nothing to roll back.
+the worker's, so there is nothing to roll back. The one-off purge of legacy
+LiDAR jobs ([purge-legacy-topo-jobs.md](purge-legacy-topo-jobs.md)) runs on
+the same family and exits 1 when a job fails to delete; it too has nothing to
+roll back, and a rerun picks up the failed jobs.
 
 ### `logjam-topo-stuck-task`
 

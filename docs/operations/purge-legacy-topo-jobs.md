@@ -13,18 +13,19 @@ For each `complete` or `failed` row with `sharpen` null:
 
 - the topo bucket's objects under `inputs/<id>/`, `outputs/<id>/` and
   `jobs/<id>/`;
-- its shares;
+- its shares, and the share notifications its sharees got;
 - the row;
 - its owner's `storage_used_bytes`, by the row's `output_bytes`;
-- any export still queued from it is failed (none can be since #641).
+- any export still queued from it is failed (none can be queued since #641).
 
 S3 goes first, then the rest in one transaction, so a job that fails keeps its
 row and a rerun finishes it.
 
 It leaves `uploading`, `pending` and `processing` rows (an uploading one may
-be a new job not yet started), a job a running export reads, inbox
+be a new job not yet started), a job a running export reads, the owner's own
 notifications that name a deleted job, and overlays already saved on phones.
-The first three are counted as skipped.
+Unfinished rows are counted as `skippedUnfinished` and jobs a running export
+reads as `skippedExporting`; notifications and phone overlays are not counted.
 
 ## Run it
 

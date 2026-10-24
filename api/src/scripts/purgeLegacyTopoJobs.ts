@@ -14,7 +14,8 @@
 // yet started (`/start` writes its mark), and a `pending` or `processing` one
 // is a worker's to finish or the reaper's to fail: both are counted, never
 // deleted. A job a running export reads is skipped, as DELETE refuses it
-// (only an export queued before #641 can name a job; none does since).
+// (POST /topo-exports writes `sourceJobIds: []`, so only older rows can name
+// a job).
 //
 // Logs say job ids and counts, never a place: a job id names no area.
 import { Prisma } from "@prisma/client";

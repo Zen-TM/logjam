@@ -405,4 +405,4 @@ module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
   each package's rules and how its tests run.
 - [`decisions/`](decisions/README.md): why.
 - [`operations/`](operations/): alarms, rollback, drills, saved queries, mobile
-  releases, maintainer announcements.
+  releases, maintainer announcements, the legacy LiDAR job purge.
