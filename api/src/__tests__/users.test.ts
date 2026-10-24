@@ -73,6 +73,27 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body.error).toBe("That username is taken. Choose another.");
   });
 
+  // Two usernames that differ only in case are one username (issue #360):
+  // `users_username_as_read_key` holds the lower-case form. Mutation: drop the
+  // index and this rename succeeds, taking alice's username off the seed.
+  it("PATCH /users/me refuses a username that differs only in case", async () => {
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "Bob" });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe("That username is taken. Choose another.");
+    } finally {
+      // Under the mutation above the rename lands; the export test later in
+      // this file expects "alice" back.
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "alice" });
+    }
+  });
+
   it("PATCH /users/me rejects an invalid themeSchemeId", async () => {
     const res = await request(API_URL)
       .patch("/users/me")
