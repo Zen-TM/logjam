@@ -37,17 +37,15 @@ const FORMAT_OPTIONS: ChipOption<ExportFormat>[] = FORMAT_ORDER.map(
 interface Props {
   value: ExportSelection;
   onChange: (next: ExportSelection) => void;
-  /** Layers the source can offer: the job's produced layers (export dialog) or
-   *  the layers the chosen settings will produce (auto-export tab). */
+  /** Layers the chosen settings will produce. */
   availableLayers: Set<TopoLayerKey>;
 }
 
 /**
  * What comes out of a topo: the file format, whether the layers arrive as one
- * file or several, and which of them. Shared by the export dialog (a finished
- * job) and the auto-export tab (a job not yet started), so the two cannot
- * disagree about what is legal — all of that lives in the shared
- * `reconcileExportSelection` / `validateExportRequest`.
+ * file or several, and which of them, for the auto-export tab (a job not yet
+ * started). What is legal lives in the shared `reconcileExportSelection` /
+ * `validateExportRequest`.
  *
  * Each rail says what the chosen option MEANS underneath it (a `hint`, visible
  * and read with the control), rather than hiding a format's description in a

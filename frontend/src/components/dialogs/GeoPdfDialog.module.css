@@ -239,6 +239,13 @@
   width: 7ch;
 }
 
+/* What a GIS format holds, and where the file turns up. */
+.note {
+  composes: detail from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 /* The area's size, and the button that leaves the form to place it. */
 .areaCell {
   display: flex;

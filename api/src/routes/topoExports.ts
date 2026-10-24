@@ -28,6 +28,7 @@ import {
   RASTER_LAYERS,
   validateExportRequest,
   VECTOR_STYLE_DEFAULTS,
+  type AreaBbox,
   type ExportFormat,
   type ExportBundling,
   type TopoExportJobView,
@@ -110,6 +111,7 @@ function rowToView(
     errorMessage: string | null;
     createdAt: Date;
     completedAt: Date | null;
+    bbox: unknown;
   },
   download: { url: string; expiresAt: string } | null,
 ): TopoExportJobView {
@@ -125,6 +127,7 @@ function rowToView(
     errorMessage: row.errorMessage,
     createdAt: row.createdAt.toISOString(),
     completedAt: row.completedAt?.toISOString() ?? null,
+    bbox: (row.bbox as AreaBbox | null) ?? null,
     downloadUrl: download?.url ?? null,
     downloadExpiresAt: download?.expiresAt ?? null,
   };

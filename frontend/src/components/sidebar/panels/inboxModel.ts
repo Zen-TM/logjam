@@ -20,6 +20,12 @@ const LIDAR: InboxDestination = {
   panel: "maps",
   mapsView: "lidar",
 };
+const EXPORTS: InboxDestination = {
+  kind: "page",
+  label: "View in Maps",
+  panel: "maps",
+  mapsView: "exports",
+};
 const GEOPDFS: InboxDestination = {
   kind: "page",
   label: "View in Maps",
@@ -36,8 +42,9 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
     case "friend_request_accepted":
       return { kind: "page", label: "View in Friends", panel: "friends" };
     case "topo_complete":
-    case "topo_export_complete":
       return failed ? null : LIDAR;
+    case "topo_export_complete":
+      return failed ? null : EXPORTS;
     case "geo_pdf_complete":
       return failed ? null : GEOPDFS;
     case "item_shared":

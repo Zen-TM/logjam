@@ -1,12 +1,11 @@
 // Maps → LiDAR topos: the topos the user has made or been sent, what is still
-// being made (topos and exports of them), the files exported from them, and the
-// templates topos are made with.
+// being made, and the templates topos are made with.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (shared/DESIGN.md §2): the hero counts the topos; a TAB each for the topos, the
-// files exported from them and the templates prevents templates being buried
-// under older topos; and what is still being made is pinned under all three so
-// in-flight progress stays immediately visible.
+// (shared/DESIGN.md §2): the hero counts the topos; a TAB each for the topos and
+// the templates prevents templates being buried under older topos; and what is
+// still being made is pinned under both so in-flight progress stays
+// immediately visible.
 //
 // A topo's body CENTRES the map on it (DESIGN.md, "Opening a thing centres
 // the map on it"), and turns LiDAR topos on so there is something there to see.
@@ -16,19 +15,17 @@
 //
 // How topos draw their vector layers opens beside the page as a sheet
 // (`TopoStyleSheet`), so the map stays in view while it changes.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   lidarJobCopy,
   lidarJobSharePromise,
   removeShareConfirm,
   SHARPEN_NEW_JOBS,
   type SharePromiseKind,
-  type TopoExportJobView,
   type VectorStyleSettings,
 } from "@logjam/shared";
 import {
   apiFetch,
-  deleteTopoExport,
   getEntityShares,
   shareEntityWith,
   unshareEntityWith,
@@ -44,7 +41,6 @@ import type {
 import { fetchTopoTemplates } from "../../dialogs/topoTemplatesFetch";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
-import TopoExportDialog from "../../dialogs/TopoExportDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import {
   Button,
@@ -62,19 +58,12 @@ import {
 } from "../../../ui";
 import {
   MAP_IDENTITY,
-  downloadFile,
-  exportFormatLabel,
-  exportLabel,
-  fileSubtitle,
   formatDay,
   isOlderLidarJob,
-  offersOldExport,
   offersTemplates,
   plural,
   topoLabel,
-  topoNamesById,
-  topoWorkBeingMade,
-  type MakingItem,
+  toposBeingMade,
 } from "./mapsModel";
 import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
@@ -83,8 +72,8 @@ import { usePanelSheet } from "./usePanelSheet";
 import { useIsMobile } from "../../../useIsMobile";
 import classes from "./MapsPanel.module.css";
 
-/** The three lists this view holds, one tab each. */
-type LidarTab = "topos" | "exports" | "templates";
+/** The two lists this view holds, one tab each. */
+type LidarTab = "topos" | "templates";
 
 const MAKE_LABEL = lidarJobCopy(SHARPEN_NEW_JOBS).make;
 
@@ -98,11 +87,9 @@ export default function LidarPanel({
   completedTopoJobs,
   topoJobsLoaded,
   friends,
-  topoExports,
-  topoExportsTotal,
-  onRefetchTopoExports,
   setLidarJobToggles,
   onOpenTopo,
+  onExportArea,
   onTopoFlyTarget,
   onRefetchCompletedTopoJobs,
   onDismissActiveJob,
@@ -115,7 +102,7 @@ export default function LidarPanel({
   onExpandSheet,
   loadsUserData,
 }: {
-  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
+  /** The Maps view switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
   activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
@@ -123,9 +110,6 @@ export default function LidarPanel({
   topoJobsLoaded: boolean;
   /** Friends a completed topo can be shared with. */
   friends: TFriend[];
-  topoExports: TopoExportJobView[];
-  topoExportsTotal: number | null;
-  onRefetchTopoExports: () => void;
   /** Only to forget a deleted topo's visibility; the switch itself is in Layers. */
   setLidarJobToggles: (
     v:
@@ -133,6 +117,8 @@ export default function LidarPanel({
       | ((prev: Record<string, boolean>) => Record<string, boolean>),
   ) => void;
   onOpenTopo: () => void;
+  /** Export an area, over a topo's footprint. */
+  onExportArea: (job: CompletedTopoJob) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
@@ -166,7 +152,6 @@ export default function LidarPanel({
     TopoTemplate | null | undefined
   >(undefined);
   const [templateFetchCount, setTemplateFetchCount] = useState(0);
-  const [exportJob, setExportJob] = useState<CompletedTopoJob | null>(null);
   // Non-null = the topo whose share dialog is open, named as its row names it.
   const [shareJob, setShareJob] = useState<{
     id: string;
@@ -191,59 +176,25 @@ export default function LidarPanel({
       });
   }, [toast, templateFetchCount, templateRefetchTrigger, loadsUserData]);
 
-  const topoNames = useMemo(
-    () => topoNamesById(completedTopoJobs),
-    [completedTopoJobs],
-  );
   const beingMade = useMemo(
-    () => topoWorkBeingMade(activeTopoJobs, topoExports, topoNames),
-    [activeTopoJobs, topoExports, topoNames],
+    () => toposBeingMade(activeTopoJobs),
+    [activeTopoJobs],
   );
-  const finishedExports = useMemo(
-    () => topoExports.filter((each) => each.status === "completed"),
-    [topoExports],
-  );
-
-  const deleteExport = useCallback(
-    async (id: string, failed: boolean) => {
-      try {
-        await deleteTopoExport(id);
-        onRefetchTopoExports();
-        // A failed export holds no bytes, so there is no quota to refresh.
-        if (!failed) onQuotaChanged();
-      } catch (err) {
-        console.error(err);
-        toast.error(
-          messageFromError(
-            err,
-            failed ? "Couldn't dismiss export." : "Couldn't delete export.",
-          ),
-        );
-      }
-    },
-    [onRefetchTopoExports, onQuotaChanged, toast],
-  );
-
-  const dismiss = (item: MakingItem) => {
-    if (item.kind === "export") void deleteExport(item.id, true);
-    else onDismissActiveJob(item.id);
-  };
 
   const topoEntries = (job: CompletedTopoJob): MenuEntry[] => {
     const label = topoLabel(job);
-    // Export is NOT owner-gated: a recipient can already see the overlay, and
-    // POST /topo-exports accepts a shared source job, making the export under
-    // the recipient's own account (api/src/__tests__/topoExports.test.ts).
-    const exportEntry: MenuEntry[] = !offersOldExport(job)
-      ? []
-      : [
+    // Not owner-gated: it exports the statewide terrain over the topo's area,
+    // which anyone may.
+    const exportEntry: MenuEntry[] = job.footprint
+      ? [
           {
             id: "export",
-            label: "Export…",
+            label: "Export this area…",
             icon: "export",
-            onSelect: () => setExportJob(job),
+            onSelect: () => onExportArea(job),
           },
-        ];
+        ]
+      : [];
     if (job.syncRole === "owner") {
       return [
         ...exportEntry,
@@ -329,37 +280,6 @@ export default function LidarPanel({
       },
     ];
   };
-
-  const exportEntries = (
-    exportJob: TopoExportJobView,
-    label: string,
-  ): MenuEntry[] => [
-    ...(exportJob.downloadUrl
-      ? [
-          {
-            id: "download",
-            label: "Download",
-            icon: "download" as const,
-            onSelect: () => downloadFile(exportJob.downloadUrl!),
-          },
-        ]
-      : []),
-    { id: "delete-sep", separator: true },
-    {
-      id: "delete",
-      label: "Delete",
-      icon: "delete",
-      danger: true,
-      onSelect: () =>
-        ask({
-          title: `Delete the ${exportFormatLabel(exportJob.format)} export of ${label}?`,
-          message:
-            "The exported file is deleted. The topo it was made from stays.",
-          confirmLabel: "Delete",
-          run: () => deleteExport(exportJob.id, false),
-        }),
-    },
-  ];
 
   const templateEntries = (template: TopoTemplate): MenuEntry[] => [
     ...(!offersTemplates(SHARPEN_NEW_JOBS)
@@ -474,10 +394,7 @@ export default function LidarPanel({
   );
 
   const nothingYet =
-    topoJobsLoaded &&
-    completedTopoJobs.length === 0 &&
-    beingMade.length === 0 &&
-    finishedExports.length === 0;
+    topoJobsLoaded && completedTopoJobs.length === 0 && beingMade.length === 0;
 
   // The same button is the empty state's and the end of the list's.
   const makeTopoButton = (
@@ -566,68 +483,6 @@ export default function LidarPanel({
         </section>
       )}
 
-      {tab === "exports" && (
-        <section className={classes.section} aria-labelledby="maps-exports">
-          <h3 id="maps-exports" className="visually-hidden">
-            Exports
-          </h3>
-          {/* The server's TOPO_EXPORT_TTL_MS sweep. */}
-          <p className={classes.note}>
-            {finishedExports.length === 0
-              ? "Export a topo as GeoTIFF, MBTiles and more from its menu. Exports are kept for 7 days."
-              : "Kept for 7 days after they're made."}
-          </p>
-          {finishedExports.map((exportJob) => {
-            const label = exportLabel(exportJob, topoNames);
-            return (
-              <Row
-                key={exportJob.id}
-                data-export-id={exportJob.id}
-                title={label}
-                subtitle={fileSubtitle({
-                  format: exportFormatLabel(exportJob.format),
-                  bytes: exportJob.resultBytes,
-                  createdAt: exportJob.createdAt,
-                })}
-                description={MAP_IDENTITY.export.label}
-                leading={
-                  <IconTile
-                    icon="export"
-                    hue={MAP_IDENTITY.export.hue}
-                    label={MAP_IDENTITY.export.label}
-                  />
-                }
-                // A real anchor, so middle-click and "save as" work.
-                href={exportJob.downloadUrl ?? undefined}
-                download=""
-                trailing={
-                  <Menu
-                    label={`Actions for ${label}`}
-                    title={label}
-                    placement="right-start"
-                    entries={exportEntries(exportJob, label)}
-                    trigger={(props) => (
-                      <IconButton
-                        {...props}
-                        icon="overflow"
-                        label={`Actions for ${label}`}
-                      />
-                    )}
-                  />
-                }
-              />
-            );
-          })}
-          {topoExportsTotal != null &&
-            topoExportsTotal > topoExports.length && (
-              <p className={classes.note}>
-                Showing your {topoExports.length} most recent exports of{" "}
-                {topoExportsTotal}. Older ones aren’t loaded.
-              </p>
-            )}
-        </section>
-      )}
-
       {tab === "templates" && offersTemplates(SHARPEN_NEW_JOBS) && (
         <section
           className={classes.section}
@@ -702,11 +557,6 @@ export default function LidarPanel({
                     label: "Topos",
                     count: completedTopoJobs.length,
                   },
-                  {
-                    value: "exports",
-                    label: "Exports",
-                    count: finishedExports.length,
-                  },
                   ...(offersTemplates(SHARPEN_NEW_JOBS)
                     ? [
                         {
@@ -723,7 +573,10 @@ export default function LidarPanel({
             )}
           </div>
           {list}
-          <MakingFooter items={beingMade} onDismiss={dismiss} />
+          <MakingFooter
+            items={beingMade}
+            onDismiss={(item) => onDismissActiveJob(item.id)}
+          />
           {sheet}
         </>
       )}
@@ -733,13 +586,6 @@ export default function LidarPanel({
         onClose={() => setEditingTemplate(undefined)}
         editingTemplate={editingTemplate ?? null}
         onSaved={() => setTemplateFetchCount((count) => count + 1)}
-      />
-
-      <TopoExportDialog
-        open={exportJob !== null}
-        onClose={() => setExportJob(null)}
-        job={exportJob}
-        onExportQueued={onRefetchTopoExports}
       />
 
       {shareJob && (

@@ -372,9 +372,9 @@ def send_completion_email(
         return
 
     base = FRONTEND_URL.rstrip("/")
-    # Job-completion email links the user to the topo job so they can
-    # open the Export… dialog. Downloads are produced on demand by the
-    # export worker; the job itself only provides display PMTiles + COG sources.
+    # Job-completion email links the user to the topo job, whose menu offers
+    # "Export this area…". Downloads are produced on demand by the export
+    # worker; the job itself only provides display PMTiles + COG sources.
     open_url = f"{base}/?topoJob={job_id}"
 
     osm_warning_text = (
@@ -737,7 +737,7 @@ def process_legacy(
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
     # Worker now always pins --work-dir so we can upload styled per-layer
-    # GeoTIFFs (TopoExportDialog GeoTIFF format option).
+    # GeoTIFFs (the auto-export's GeoTIFF format).
     pipeline_work_dir = Path(tmp) / "pipeline_work"
     pipeline_work_dir.mkdir()
     cmd = [
