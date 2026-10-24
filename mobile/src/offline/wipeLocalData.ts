@@ -31,6 +31,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
+import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { wipeAllSyncData } from "../sync/syncDb";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
@@ -82,6 +83,11 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopWeatherForWipe()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
+
+  // The sharpened areas the map still has on screen: MLRN's request
+  // transforms hold each one's presigned URL, and the map, mounted until the
+  // wipe ends, would write their tile ranges into TileJSONs again.
+  stopSharpenedAreasForWipe();
 
   // In-memory DEM tiles, which are the terrain around the departing user's
   // saved areas. The files go with the region directory below; this is the copy

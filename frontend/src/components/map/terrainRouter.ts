@@ -16,6 +16,7 @@ import {
   NSW_CONTOURS,
   NSW_HILLSHADE,
   NSW_SLOPE,
+  SHARPENED_ARCHIVE_URL,
   sharpenedDemSource,
   terrainTileArchive,
   type SharpenedOverlay,
@@ -46,12 +47,6 @@ const ARCHIVE_LAYER: Record<TerrainLayerKey, TerrainArchiveLayer> = {
   slope: "slope",
   hillshade: "heights",
 };
-
-const AREA_URL = {
-  heights: "heightsUrl",
-  slope: "slopeUrl",
-  contours: "contoursUrl",
-} as const satisfies Record<TerrainArchiveLayer, keyof SharpenedOverlay>;
 
 let routedAreas: readonly SharpenedOverlay[] = [];
 
@@ -141,7 +136,7 @@ export async function terrainTile(
   const statewide = answer === "statewide";
   const url = statewide
     ? `${window.location.origin}/${TERRAIN_STATEWIDE[key].archivePath}`
-    : answer[AREA_URL[layer]];
+    : answer[SHARPENED_ARCHIVE_URL[layer]];
   // The router hands contours only to an area that has them.
   if (!url) throw new AbsentTerrainTile();
   let tile;

@@ -72,6 +72,9 @@ vi.mock("../tracks/trackRecorder", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("../map/sharpenedArchives", () => ({
+  stopSharpenedAreasForWipe: () => record("stop:sharpened"),
+}));
 vi.mock("../weather/weatherStorage", () => ({
   stopWeatherForWipe: () => {
     record("stop:weather");
@@ -135,7 +138,8 @@ describe("wipeAllLocalData", () => {
   });
 
   // Red if the stop calls move after (or are removed from before) the first
-  // delete: a live producer would re-create what the wipe just removed.
+  // delete: a live producer would re-create what the wipe just removed, and
+  // the sharpened areas' transforms would keep their presigned URLs.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -144,6 +148,7 @@ describe("wipeAllLocalData", () => {
       "stop:geopdf",
       "stop:track",
       "stop:weather",
+      "stop:sharpened",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);
