@@ -383,6 +383,111 @@ class ContourTileLines(unittest.TestCase):
             self.assertAlmostEqual(lat, want_lat, places=4)
 
 
+def archive_of(tiles, attribution="made up"):
+    """A pmtiles archive in memory holding {(z, x, y): bytes}."""
+    import io
+
+    from pmtiles.reader import MemorySource
+    from pmtiles.tile import Compression, TileType, zxy_to_tileid
+    from pmtiles.writer import Writer
+
+    buf = io.BytesIO()
+    writer = Writer(buf)
+    for zxy in sorted(tiles, key=lambda t: zxy_to_tileid(*t)):
+        writer.write_tile(zxy_to_tileid(*zxy), tiles[zxy])
+    zooms = [z for z, _, _ in tiles]
+    writer.finalize(
+        {
+            "tile_type": TileType.PNG,
+            "tile_compression": Compression.NONE,
+            "min_zoom": min(zooms),
+            "max_zoom": max(zooms),
+            "min_lon_e7": 0,
+            "min_lat_e7": 0,
+            "max_lon_e7": 0,
+            "max_lat_e7": 0,
+            "center_zoom": min(zooms),
+            "center_lon_e7": 0,
+            "center_lat_e7": 0,
+        },
+        {"attribution": attribution},
+    )
+    return MemorySource(buf.getvalue())
+
+
+@unittest.skipIf(is_stubbed("pmtiles"), "needs pmtiles")
+class ContourFilesNamedByIndex(unittest.TestCase):
+    # Mutation: name the files z/x/y.pbf, and a GDAL error or warning about
+    # one puts a tile address, and so the box, in the worker's log.
+    def test_no_tile_address_in_a_file_name(self):
+        import tempfile
+
+        from area_export import Archive, fetch_contour_tiles
+        from build_nsw_dem import lonlat_to_tile
+
+        x, y = lonlat_to_tile(150.3, -33.7, 14)
+        tiles = {(14, x, y): b"lines", (13, x >> 1, y >> 1): b"lines"}
+        box = (150.299, -33.701, 150.301, -33.699)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp, "contours")
+            files = fetch_contour_tiles(Archive(archive_of(tiles)), box, out)
+            self.assertEqual(set(files), set(tiles))
+            for path in files.values():
+                self.assertEqual(Path(path).read_bytes(), b"lines")
+                name = str(Path(path).relative_to(out))
+                for number in (x, y, x >> 1, y >> 1):
+                    self.assertNotIn(str(number), name)
+
+
+@unittest.skipIf(
+    is_stubbed("pmtiles") or is_stubbed("numpy") or is_stubbed("PIL"),
+    "needs pmtiles, numpy and Pillow",
+)
+class ContoursAlone(unittest.TestCase):
+    """Contours alone: the heights say whether the box is in NSW."""
+
+    box = (150.299, -33.701, 150.301, -33.699)
+
+    def export(self, heights_tiles):
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor
+        from unittest import mock
+
+        from area_export import render_mbtiles
+        from build_nsw_dem import lonlat_to_tile
+
+        far = lonlat_to_tile(145.0, -30.0, 14)
+        archives = {
+            "heights": archive_of(heights_tiles),
+            "contours": archive_of({(14, *far): b"lines elsewhere"}),
+        }
+        # Threads: a worker process would import without the test's stubs.
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
+        ):
+            return render_mbtiles(
+                archives, self.box, ["contours"], {}, Path(tmp)
+            ).exists()
+
+    # Mutation: treat no contour tiles as outside NSW, and a box on flat NSW
+    # ground is refused with "outside NSW".
+    def test_flat_ground_in_nsw_is_an_export(self):
+        from build_nsw_dem import lonlat_to_tile
+
+        inside = lonlat_to_tile(150.3, -33.7, 15)
+        self.assertTrue(self.export({(15, *inside): b"heights"}))
+
+    # Mutation: drop the heights check, and a contours-only box outside NSW
+    # comes out an empty file instead of the outside-NSW sentence.
+    def test_no_heights_is_outside_nsw(self):
+        from build_nsw_dem import lonlat_to_tile
+
+        far = lonlat_to_tile(145.0, -30.0, 15)
+        with self.assertRaises(AreaOutsideNsw):
+            self.export({(15, *far): b"heights"})
+
+
 class SyncWithShared(unittest.TestCase):
     """shared/src/areaExport.ts is what the API checks a request against, and
     this worker's declarations must say the same."""

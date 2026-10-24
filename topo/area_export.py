@@ -503,26 +503,41 @@ def mbtiles_settings(style: dict) -> dict:
     return settings
 
 
-def fetch_contour_tiles(reader: Archive, bbox: Bbox, out: Path) -> int:
-    """The contour archive's tiles over the box, every zoom it has, as
-    `out/z/x/y.pbf` for GDAL's MVT driver. Returns how many had lines."""
+def covers(heights: Archive, bbox: Bbox) -> bool:
+    """Whether the statewide heights have a tile in the box: a box with
+    none is outside NSW."""
+    x0, y0, x1, y1 = tile_range(bbox, ZMAX)
+    return any(
+        heights.get(ZMAX, x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)
+    )
+
+
+def fetch_contour_tiles(
+    reader: Archive, bbox: Bbox, out: Path
+) -> Dict[Tuple[int, int, int], str]:
+    """The contour archive's tiles over the box, every zoom it has, written
+    to `out` for GDAL's MVT driver. Returns the file of each tile with lines;
+    flat ground has none. The files are named by index, never z/x/y: GDAL
+    quotes the path in its errors and warnings, and a tile address in the
+    log would place the box (tests/test_area_export.py)."""
     wanted = [
         (z, x, y)
         for z in range(MBTILES_ZOOMS[0], CONTOUR_ZMAX + 1)
         for x, y in tiles_for_bbox(*bbox, z)
     ]
+    out.mkdir(parents=True, exist_ok=True)
 
-    def fetch(zxy: Tuple[int, int, int]) -> bool:
+    def fetch(job: Tuple[int, Tuple[int, int, int]]):
+        index, zxy = job
         data = reader.get(*zxy)
         if not data:
-            return False
-        path = out / "{}/{}/{}.pbf".format(*zxy)
-        path.parent.mkdir(parents=True, exist_ok=True)
+            return None
+        path = out / f"{index}.pbf"
         path.write_bytes(gzip.decompress(data) if data[:2] == b"\x1f\x8b" else data)
-        return True
+        return zxy, str(path)
 
     with ThreadPoolExecutor(FETCH_THREADS) as pool:
-        return sum(pool.map(fetch, wanted))
+        return dict(hit for hit in pool.map(fetch, enumerate(wanted)) if hit)
 
 
 @lru_cache(maxsize=8)
@@ -570,18 +585,13 @@ def clip_to_box(tile: Image.Image, bbox: Bbox, z: int, x: int, y: int) -> Image.
 def mbtiles_tile(job: tuple) -> Tuple[int, int, int, Optional[bytes]]:
     """One tile of the map, its layers in the pipeline's order. Runs in a
     worker process."""
-    z, x, y, bbox, rasters, contour_dir, settings = job
+    z, x, y, bbox, rasters, contours, settings = job
     tile = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     for layer in COMPOSITE_LAYER_ORDER:
         if layer in rasters:
             img = styled_tile(*rasters[layer], z, x, y)
-        elif layer == "contours" and contour_dir:
-            cz = min(z, CONTOUR_ZMAX)
-            cx, cy = x >> (z - cz), y >> (z - cz)
-            path = Path(contour_dir) / f"{cz}/{cx}/{cy}.pbf"
-            if not path.exists():
-                continue
-            lines = contour_lines(str(path), cz, cx, cy)
+        elif layer == "contours" and contours:
+            lines = contour_lines(*contours)
             img = render_contours_tile({}, tile_to_bbox(x, y, z), z, settings, lines)
         else:
             continue
@@ -606,6 +616,11 @@ def render_mbtiles(
     attribution = heights_reader.metadata().get("attribution")
     if not attribution:
         raise AreaExportError("the heights archive carries no attribution")
+    # With slope or hillshade, write_mosaic finds a box outside NSW. With
+    # contours alone the heights decide, because flat ground in NSW has no
+    # contour tiles either (tests/test_area_export.py `ContoursAlone`).
+    if not {"slope", "hillshade"} & set(layers) and not covers(heights_reader, bbox):
+        raise AreaOutsideNsw("no heights tiles in the box")
     settings = mbtiles_settings(style)
     # Each raster layer's COG and its colour table.
     rasters: Dict[str, Tuple[Path, np.ndarray]] = {}
@@ -639,11 +654,19 @@ def render_mbtiles(
         )
         value_cog(mosaic, rasters["slope"][0], SLOPE_NODATA)
         mosaic.unlink()
-    contour_dir: Optional[Path] = None
+    contour_files: Dict[Tuple[int, int, int], str] = {}
     if "contours" in layers:
-        contour_dir = work / "contours"
-        if fetch_contour_tiles(Archive(archives["contours"]), bbox, contour_dir) == 0:
-            raise AreaOutsideNsw("no contour tiles in the box")
+        contour_files = fetch_contour_tiles(
+            Archive(archives["contours"]), bbox, work / "contours"
+        )
+
+    def contour_tile(z: int, x: int, y: int) -> Optional[tuple]:
+        """The file and address of the contour tile a tile draws: itself,
+        or its z14 parent from z15 up."""
+        cz = min(z, CONTOUR_ZMAX)
+        parent = (cz, x >> (z - cz), y >> (z - cz))
+        path = contour_files.get(parent)
+        return (path, *parent) if path else None
 
     zmin, zmax = MBTILES_ZOOMS
     tiles = [
@@ -665,7 +688,9 @@ def render_mbtiles(
         "INSERT OR REPLACE INTO metadata VALUES ('attribution', ?)",
         (credit_line(layers, attribution),),
     )
-    jobs = [(z, x, y, bbox, rasters, contour_dir, settings) for z, x, y in tiles]
+    jobs = [
+        (z, x, y, bbox, rasters, contour_tile(z, x, y), settings) for z, x, y in tiles
+    ]
     with ProcessPoolExecutor(_composite_workers()) as pool:
         for z, x, y, png in pool.map(mbtiles_tile, jobs, chunksize=64):
             if png is not None:
