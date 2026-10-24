@@ -112,7 +112,8 @@ Guards:
 - **Neutral (updated 2026-10-24):** each client routes per tile, and reads an
   area's archive straight from its presigned URL, so no tile index reaches
   Logjam's servers. Logjam Web does it in the browser with a MapLibre
-  protocol. MapLibre Native has no custom protocol, so Logjam GPS cuts the map
+  protocol, for its 3D terrain as well as the Terrain group
+  (`frontend/src/components/map/terrainSource.ts`). MapLibre Native has no custom protocol, so Logjam GPS cuts the map
   into rectangles that each read one archive: the statewide layer stops where
   routing starts, and each rectangle is a source kept to its tiles by the
   bounds in a TileJSON the phone writes (`mobile/src/map/terrainRoutes.ts`).
