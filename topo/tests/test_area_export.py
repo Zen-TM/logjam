@@ -339,7 +339,8 @@ class ContoursDrawnFromLines(unittest.TestCase):
 )
 class ContourTileLines(unittest.TestCase):
     # Mutation: get the inverse mercator wrong (or leave the lines in metres),
-    # and every contour is drawn off its tile.
+    # or drop one of the X/Y/Z open options, and every contour is drawn off
+    # its tile.
     def test_a_tiles_lines_come_back_in_lon_lat(self):
         import tempfile
 
@@ -375,7 +376,13 @@ class ContourTileLines(unittest.TestCase):
                 f"{tmp}/tiles", src, format="MVT",
                 datasetCreationOptions=["MINZOOM=14", "MAXZOOM=14", "COMPRESS=NO"],
             )  # fmt: skip
-            lines = contour_lines(str(Path(tmp, "tiles", f"{z}/{x}/{y}.pbf")), z, x, y)
+            # A lone file named by index, as fetch_contour_tiles writes it:
+            # beside the writer's metadata.json, GDAL would place the tile
+            # from its z/x/y path even without the open options.
+            lone = Path(tmp, "contours", "0.pbf")
+            lone.parent.mkdir()
+            lone.write_bytes(Path(tmp, "tiles", f"{z}/{x}/{y}.pbf").read_bytes())
+            lines = contour_lines(str(lone), z, x, y)
         self.assertEqual(len(lines), 1)
         props, coords = lines[0]
         self.assertEqual(props["properties"]["elev"], 950)
