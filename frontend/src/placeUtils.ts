@@ -781,12 +781,6 @@ export type ComputeEstimate = {
 
 export type ComputeEstimateRequest =
   | { kind: "topo"; tileCount: number | null }
-  | {
-      kind: "topoExport";
-      sourceJobId: string;
-      format: string;
-      bundling: string;
-    }
   | { kind: "geoPdf"; config: unknown };
 
 export function fetchComputeEstimate(

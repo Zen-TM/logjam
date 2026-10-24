@@ -11,21 +11,16 @@
 import { Router, Response } from "express";
 import { z } from "zod";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
-import { AppError, malformed } from "../middleware/errorHandler";
-import prisma from "../services/prisma";
+import { malformed } from "../middleware/errorHandler";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import {
-  estimateExportSeconds,
   estimateGeoPdfSeconds,
   estimateTopoSeconds,
 } from "../lib/runtimeEstimates";
-import { directlySharedIds } from "../lib/shareAccess";
 import {
-  say,
   estimateCredits,
   validateGeoPdfConfig,
-  EXPORT_FORMAT_RULES,
   type GeoPdfConfig,
 } from "@logjam/shared";
 
@@ -35,12 +30,6 @@ const requestSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("topo"),
     tileCount: z.number().int().nonnegative().nullable(),
-  }),
-  z.object({
-    kind: z.literal("topoExport"),
-    sourceJobId: z.string(),
-    format: z.enum(Object.keys(EXPORT_FORMAT_RULES) as [string, ...string[]]),
-    bundling: z.enum(["composite", "per-layer"]),
   }),
   z.object({
     kind: z.literal("geoPdf"),
@@ -69,29 +58,6 @@ router.post(
       case "topo":
         estimatedSeconds = await estimateTopoSeconds(request.tileCount);
         break;
-
-      case "topoExport": {
-        // Same read-access rule the real submit uses — owned OR directly shared.
-        // A job the caller cannot read is 404, never 403, so this endpoint is not
-        // an existence oracle for job ids.
-        const job = await prisma.topoJob.findFirst({
-          where: {
-            id: request.sourceJobId,
-            OR: [
-              { userId: user.id },
-              { id: { in: await directlySharedIds(user.id, "topoJob") } },
-            ],
-          },
-          select: { tileCount: true },
-        });
-        if (!job) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-        estimatedSeconds = await estimateExportSeconds(
-          request.format,
-          request.bundling,
-          job.tileCount ?? null,
-        );
-        break;
-      }
 
       case "geoPdf": {
         const configError = validateGeoPdfConfig(

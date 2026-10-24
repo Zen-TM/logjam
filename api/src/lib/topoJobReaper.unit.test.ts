@@ -17,10 +17,6 @@ vi.mock("../services/awsClients", () => ({
   s3: { send: vi.fn() },
 }));
 
-vi.mock("./topoExportLauncher", () => ({
-  createAndLaunchTopoExport: vi.fn(),
-}));
-
 vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
 // sendPushToUser POSTs to https://exp.host/--/api/v2/push/send. Unmocked, with
 // a device token staged below, tests would make a real request to Expo on every
@@ -38,15 +34,10 @@ import {
   progressStallDeadline,
   absoluteProcessingDeadline,
   isProcessingDead,
-  queueAutoExports,
-  exportableLayers,
   ESTIMATE_SAFETY_FACTOR,
 } from "./topoJobReaper";
-import { createAndLaunchTopoExport } from "./topoExportLauncher";
 import { sendEmail } from "../services/email";
 import { sendPushToUser } from "../services/push";
-import { AppError } from "../middleware/errorHandler";
-import { AUTO_EXPORT_DEFAULTS } from "@logjam/shared";
 import { getEnv } from "./env";
 
 const jobUpdateMany = (prisma as unknown as { topoJob: { updateMany: Mock } })
@@ -94,7 +85,6 @@ function stageByStatus(mock: Mock, rowsByStatus: Record<string, unknown[]>) {
     return rowsByStatus[status] ?? [];
   });
 }
-const launchExport = createAndLaunchTopoExport as unknown as Mock;
 
 // Transaction client handed to the expiry sweep's interactive callback.
 const txExportDelete = vi.fn();
@@ -131,7 +121,6 @@ beforeEach(() => {
   pushSend.mockReset().mockResolvedValue(undefined);
   userFindMany.mockReset().mockResolvedValue([]);
   emailSend.mockReset().mockResolvedValue(undefined);
-  launchExport.mockReset().mockResolvedValue("export-id");
   transaction
     .mockReset()
     .mockImplementation(async (fn: (tx: typeof txClient) => Promise<unknown>) =>
@@ -1044,161 +1033,6 @@ describe("expireCompletedGeoPdfJobs", () => {
     } finally {
       liveEnv.TOPO_EXPORT_TTL_MS = original;
     }
-  });
-});
-
-// ── exportableLayers (pure: produced-output → exportable layer set) ──────────
-
-describe("exportableLayers", () => {
-  it("includes raster layers only when a COG exists", () => {
-    const set = exportableLayers([
-      {
-        name: "hillshade",
-        cogKey: "k/hillshade.tif",
-        pmtilesKey: "k/hillshade.pmtiles",
-      },
-      { name: "slope", cogKey: null, pmtilesKey: "k/slope.pmtiles" },
-    ]);
-    expect(set.has("hillshade")).toBe(true);
-    expect(set.has("slope")).toBe(false); // raster without COG can't export
-  });
-
-  it("includes vector layers regardless of cogKey", () => {
-    const set = exportableLayers([
-      { name: "contours", cogKey: null, pmtilesKey: "k/contours.pmtiles" },
-      { name: "features", cogKey: null, pmtilesKey: "k/features.pmtiles" },
-    ]);
-    expect(set.has("contours")).toBe(true);
-    expect(set.has("features")).toBe(true);
-  });
-
-  it("returns an empty set for malformed / unknown outputs", () => {
-    expect(exportableLayers(null).size).toBe(0);
-    expect(
-      exportableLayers([{ name: "bogus", cogKey: "x", pmtilesKey: "y" }]).size,
-    ).toBe(0);
-  });
-});
-
-// ── queueAutoExports (auto-export trigger pass) ─────────────────────────────
-
-describe("queueAutoExports", () => {
-  const enabledAutoExport = {
-    ...AUTO_EXPORT_DEFAULTS,
-    enabled: true,
-    format: "mbtiles" as const,
-    bundling: "composite" as const,
-    layers: ["hillshade", "contours"],
-  };
-  const completeJob = {
-    id: "job-1",
-    userId: "user-1",
-    autoExport: enabledAutoExport,
-    s3OutputKeys: [
-      {
-        name: "hillshade",
-        cogKey: "k/hillshade.tif",
-        pmtilesKey: "k/hillshade.pmtiles",
-      },
-      { name: "contours", cogKey: null, pmtilesKey: "k/contours.pmtiles" },
-    ],
-    vectorStyleSnapshot: { contours: {}, features: {} },
-    // The auto-export path spends the owner's monthly credit allowance, so the
-    // launcher needs it on the row (see queueAutoExports' select).
-    user: { monthlyComputeCredits: 1200 },
-  };
-
-  it("claims the job and launches an export for an enabled config", async () => {
-    jobFindMany.mockResolvedValueOnce([completeJob]);
-    jobUpdateMany.mockResolvedValueOnce({ count: 1 }); // claim wins
-
-    const count = await queueAutoExports(NOW);
-
-    expect(count).toBe(1);
-    // Claim is status-guarded on autoExportedAt: null.
-    expect(jobUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: "job-1", autoExportedAt: null },
-        data: { autoExportedAt: NOW },
-      }),
-    );
-    expect(launchExport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        sourceJobIds: ["job-1"],
-        format: "mbtiles",
-        bundling: "composite",
-        layers: ["hillshade", "contours"],
-      }),
-    );
-    expect(notificationCreate).not.toHaveBeenCalled();
-  });
-
-  it("does not launch when the claim is lost to a concurrent sweep", async () => {
-    jobFindMany.mockResolvedValueOnce([completeJob]);
-    jobUpdateMany.mockResolvedValueOnce({ count: 0 }); // someone else claimed it
-
-    const count = await queueAutoExports(NOW);
-
-    expect(count).toBe(0);
-    expect(launchExport).not.toHaveBeenCalled();
-    expect(notificationCreate).not.toHaveBeenCalled();
-  });
-
-  it("notifies and skips when none of the chosen layers were produced", async () => {
-    jobFindMany.mockResolvedValueOnce([
-      {
-        ...completeJob,
-        // Only a raster layer without a COG → nothing exportable.
-        s3OutputKeys: [
-          { name: "hillshade", cogKey: null, pmtilesKey: "k/h.pmtiles" },
-        ],
-      },
-    ]);
-    jobUpdateMany.mockResolvedValueOnce({ count: 1 });
-
-    const count = await queueAutoExports(NOW);
-
-    expect(count).toBe(0);
-    expect(launchExport).not.toHaveBeenCalled();
-    expect(notificationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          userId: "user-1",
-          type: "topo_export_skipped",
-        }),
-      }),
-    );
-  });
-
-  it("notifies on a cap-exceeded (429) launch failure, claim already set", async () => {
-    jobFindMany.mockResolvedValueOnce([completeJob]);
-    jobUpdateMany.mockResolvedValueOnce({ count: 1 });
-    launchExport.mockRejectedValueOnce(
-      new AppError(429, "Too many concurrent exports"),
-    );
-
-    const count = await queueAutoExports(NOW);
-
-    expect(count).toBe(0);
-    expect(notificationCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ type: "topo_export_skipped" }),
-      }),
-    );
-  });
-
-  it("claims but does nothing when the stored config is disabled", async () => {
-    jobFindMany.mockResolvedValueOnce([
-      { ...completeJob, autoExport: { ...enabledAutoExport, enabled: false } },
-    ]);
-    jobUpdateMany.mockResolvedValueOnce({ count: 1 });
-
-    const count = await queueAutoExports(NOW);
-
-    expect(count).toBe(0);
-    expect(launchExport).not.toHaveBeenCalled();
-    expect(notificationCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -11,8 +11,6 @@ from .context import ExportTooLarge, RenderContext, RenderError
 from .mbtiles import render_mbtiles
 from .geotiff import render_geotiff
 from .gpkg import render_gpkg
-from .geojson import render_geojson
-from .gpx import render_gpx
 
 __all__ = [
     "ExportTooLarge",
@@ -21,6 +19,4 @@ __all__ = [
     "render_mbtiles",
     "render_geotiff",
     "render_gpkg",
-    "render_geojson",
-    "render_gpx",
 ]

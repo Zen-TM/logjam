@@ -36,7 +36,6 @@ export type TopoJobRequest = {
   jobName: string | null;
   filename: string;
   settings: unknown;
-  autoExport: unknown;
 };
 
 /** Sends every part not yet in `session.done`, then joins them. Rejects with

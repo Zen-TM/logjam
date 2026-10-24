@@ -9,7 +9,7 @@
 // reason to hide its fourth item.
 import {
   areaSizeKm,
-  EXPORT_FORMAT_RULES,
+  EXPORT_FORMAT_LABELS,
   formatBytes,
   formatMinutes,
   type GeoPdfJobView,
@@ -135,7 +135,7 @@ export function topoLabel(job: {
 
 /** "GeoTIFF", from the one declaration of what the formats are called. */
 export function exportFormatLabel(format: TopoExportJobView["format"]): string {
-  return EXPORT_FORMAT_RULES[format].label;
+  return EXPORT_FORMAT_LABELS[format];
 }
 
 /** An export of an area is named by the ground it covers, as the dialog

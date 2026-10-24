@@ -1,10 +1,10 @@
 // On-demand export pipeline.
 //
-// Users submit POST /topo-exports with {sourceJobIds, layers, format,
-// bundling}. The server snapshots the live vector style, persists a
-// TopoExportJob row, and launches an ECS task that produces the requested
-// artefact and emails the user when ready. The dialog polls
-// GET /topo-exports for the recent-exports list and pre-signed download URLs.
+// Users submit POST /topo-exports with {bbox, layers, format}: an export of an
+// area. The server persists a TopoExportJob row and launches an ECS task that
+// produces the file and emails the user when ready. Logjam Web polls
+// GET /topo-exports for the recent-exports list and pre-signed download URLs;
+// older exports of a LiDAR topo are listed there until they expire.
 
 import { Router, Response } from "express";
 import { z } from "zod";
@@ -24,10 +24,6 @@ import {
   areaExportStyleSnapshot,
   areaExportTooLarge,
   areaInNsw,
-  EXPORT_FORMAT_RULES,
-  RASTER_LAYERS,
-  validateExportRequest,
-  VECTOR_STYLE_DEFAULTS,
   type AreaBbox,
   type ExportFormat,
   type ExportBundling,
@@ -43,14 +39,6 @@ import {
 } from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
-import { directlySharedIds } from "../lib/shareAccess";
-
-const exportRequestSchema = z.object({
-  sourceJobIds: z.array(z.string()).length(1),
-  layers: z.array(z.string()).min(1),
-  format: z.enum(Object.keys(EXPORT_FORMAT_RULES) as [string, ...string[]]),
-  bundling: z.enum(["composite", "per-layer"]),
-});
 
 // An export of an area: the statewide terrain over a box (topo/area_export.py).
 const areaRequestSchema = z.object({
@@ -66,12 +54,6 @@ const areaRequestSchema = z.object({
     .max(AREA_EXPORT_LAYERS.length),
   format: z.enum(AREA_EXPORT_FORMATS),
 });
-
-type S3OutputKey = {
-  name: string;
-  cogKey: string | null;
-  pmtilesKey: string | null;
-};
 
 const router = Router();
 
@@ -148,127 +130,34 @@ router.post(
     // the per-user concurrency cap).
     await assertHasStorageQuota(user.id);
 
-    if (req.body && typeof req.body === "object" && "bbox" in req.body) {
-      const area = areaRequestSchema.safeParse(req.body);
-      if (!area.success) {
-        throw malformed(area.error.issues[0]?.message ?? "Invalid area export");
-      }
-      const detail = areaExportRequestError(area.data);
-      if (detail) throw malformed(detail);
-      if (areaExportTooLarge(area.data.bbox)) {
-        throw new AppError(400, AREA_EXPORT_TOO_LARGE);
-      }
-      if (!areaInNsw(area.data.bbox)) {
-        throw new AppError(400, AREA_EXPORT_OUTSIDE_NSW);
-      }
-      const exportJobId = await createAndLaunchTopoExport({
-        userId: user.id,
-        sourceJobIds: [],
-        layers: area.data.layers,
-        format: area.data.format,
-        // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
-        bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
-        vectorStyleSnapshot: areaExportStyleSnapshot(
-          area.data.format,
-          user.uiPreferences,
-        ),
-        // No size signal the estimator knows yet, so no estimate.
-        sourceTileCount: null,
-        monthlyComputeCredits: user.monthlyComputeCredits,
-        bbox: area.data.bbox,
-      });
-      res.status(201).json({ id: exportJobId });
-      return;
+    const area = areaRequestSchema.safeParse(req.body);
+    if (!area.success) {
+      throw malformed(area.error.issues[0]?.message ?? "Invalid area export");
     }
-
-    const parsed = exportRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw malformed(
-        parsed.error.issues[0]?.message ?? "Invalid export request",
-      );
+    const detail = areaExportRequestError(area.data);
+    if (detail) throw malformed(detail);
+    if (areaExportTooLarge(area.data.bbox)) {
+      throw new AppError(400, AREA_EXPORT_TOO_LARGE);
     }
-    const { sourceJobIds, bundling } = parsed.data;
-    const format = parsed.data.format as ExportFormat;
-    const layers = parsed.data.layers as TopoLayerKey[];
-
-    const v = validateExportRequest({ format, bundling, layers });
-    if (!v.ok) throw malformed(v.error);
-
-    // Read-access check on every source job — owned OR directly shared with
-    // the caller, the same OR arm the list endpoints use. A recipient can
-    // already see the topo's overlay tiles, so exporting it broadens nothing;
-    // the export job is created under THEIR user id, so it charges their quota
-    // and lands in their downloads, not the owner's.
-    // A job the caller cannot read is 404 (never 403) — the id must not be
-    // confirmable to a stranger who guessed it.
-    const jobs = await prisma.topoJob.findMany({
-      where: {
-        id: { in: sourceJobIds },
-        OR: [
-          { userId: user.id },
-          { id: { in: await directlySharedIds(user.id, "topoJob") } },
-        ],
-      },
-    });
-    if (jobs.length !== sourceJobIds.length) {
-      throw new AppError(404, say`Couldn't find one of those LiDAR maps.`);
+    if (!areaInNsw(area.data.bbox)) {
+      throw new AppError(400, AREA_EXPORT_OUTSIDE_NSW);
     }
-    for (const j of jobs) {
-      if (j.status !== "complete") {
-        throw new AppError(
-          400,
-          say`One of those LiDAR maps isn't finished yet.`,
-        );
-      }
-      // A job without a footprint (legacy / failed-but-marked-complete) crashes
-      // the export worker at render_composite_* ("No source-job footprints
-      // available"). Reject here; re-running the job recomputes the footprint.
-      if (j.footprint === null) {
-        throw new AppError(
-          400,
-          say`This LiDAR map was made before exports existed. Make it again to export it.`,
-        );
-      }
-    }
-
-    // Reject jobs whose outputs predate the COG export source:
-    // they would otherwise fail deep inside the export worker. Only raster
-    // layers need a COG; vector layers export from raw GeoJSON.
-    const requestedRasterLayers = layers.filter((l) =>
-      RASTER_LAYERS.includes(l),
-    );
-    for (const j of jobs) {
-      const outputs = (j.s3OutputKeys as S3OutputKey[] | null) ?? [];
-      for (const layer of requestedRasterLayers) {
-        const match = outputs.find((o) => o.name === layer);
-        if (!match?.cogKey) {
-          throw new AppError(
-            400,
-            say`This LiDAR map was made before exports existed. Make it again to export it.`,
-          );
-        }
-      }
-    }
-
-    const vectorStyleSnapshot =
-      (user.vectorStyle as object | null) ?? VECTOR_STYLE_DEFAULTS;
-
-    // Cap-checked create + ECS launch — shared with the reaper's auto-export
-    // pass so both enforce the same per-user concurrency limit and
-    // fail-on-launch semantics.
     const exportJobId = await createAndLaunchTopoExport({
       userId: user.id,
-      sourceJobIds,
-      layers,
-      format,
-      bundling,
-      vectorStyleSnapshot,
-      // zod pins sourceJobIds to length 1 (exportRequestSchema above) — if that
-      // ever loosens to multiple source jobs, sum their tileCounts here instead.
-      sourceTileCount: jobs[0].tileCount ?? null,
+      sourceJobIds: [],
+      layers: area.data.layers,
+      format: area.data.format,
+      // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
+      bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
+      vectorStyleSnapshot: areaExportStyleSnapshot(
+        area.data.format,
+        user.uiPreferences,
+      ),
+      // No size signal the estimator knows yet, so no estimate.
+      sourceTileCount: null,
       monthlyComputeCredits: user.monthlyComputeCredits,
+      bbox: area.data.bbox,
     });
-
     res.status(201).json({ id: exportJobId });
   },
 );

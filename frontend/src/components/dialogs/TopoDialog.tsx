@@ -22,7 +22,6 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   RASTER_TEMPLATE_DEFAULTS,
-  AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   slopeBandsError,
   hillshadeSettingsError,
@@ -33,7 +32,6 @@ import {
   lidarJobCopy,
   type ElvisStats,
   type RasterTemplateSettings,
-  type AutoExportSettings,
 } from "@logjam/shared";
 import {
   Button,
@@ -64,7 +62,6 @@ export type TopoTemplate = {
   name: string;
   isSystem: boolean;
   config: RasterTemplateSettings;
-  autoExport: AutoExportSettings | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -77,14 +74,6 @@ const DEFAULT_TEMPLATE_ID = "default";
 const HELD_REASON_ID = "topo-held-reason";
 const KEPT_FOR_RESUME =
   "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
-
-// Deep-copy a template's auto-export slice (or fall back to defaults for older
-// templates saved before the feature existed) so edits don't mutate the cached
-// template list.
-function cloneAutoExport(value: AutoExportSettings | null): AutoExportSettings {
-  if (!value) return { ...AUTO_EXPORT_DEFAULTS };
-  return { ...value, layers: [...value.layers] };
-}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -194,9 +183,6 @@ export default function TopoDialog({
   const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
     cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
   );
-  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
-    ...AUTO_EXPORT_DEFAULTS,
-  }));
   // Sharpening: the one styled layer a job can still make, off unless asked.
   const [vegetation, setVegetation] = useState(false);
   const [templates, setTemplates] = useState<TopoTemplate[]>([]);
@@ -254,7 +240,6 @@ export default function TopoDialog({
     setTopoNameTouched(false);
     setValidationError(null);
     setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
-    setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
     setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
     setSaveAsName("");
     setShowSaveAs(false);
@@ -294,7 +279,6 @@ export default function TopoDialog({
           if (t) {
             setSelectedTemplateId(t.id);
             setSettings(cloneRasterTemplateSettings(t.config));
-            setAutoExport(cloneAutoExport(t.autoExport));
           }
         }
       })
@@ -309,7 +293,6 @@ export default function TopoDialog({
     const t = templates.find((x) => x.id === id);
     if (t) {
       setSettings(cloneRasterTemplateSettings(t.config));
-      setAutoExport(cloneAutoExport(t.autoExport));
     }
   }
 
@@ -330,7 +313,7 @@ export default function TopoDialog({
     try {
       const created = await apiFetch<TopoTemplate>("/topo-templates", {
         method: "POST",
-        body: { name, config: settings, autoExport },
+        body: { name, config: settings },
       });
       setSaveAsName("");
       setShowSaveAs(false);
@@ -527,7 +510,7 @@ export default function TopoDialog({
           filename: file.name,
           ...(SHARPEN_NEW_JOBS
             ? sharpenJobRequest(settings, vegetation, stats.lazCount)
-            : { settings, autoExport }),
+            : { settings }),
         },
         {
           progress: (sent, total) => {
@@ -732,8 +715,6 @@ export default function TopoDialog({
             tab={settingsTab}
             value={settings}
             onChange={setSettings}
-            autoExport={autoExport}
-            onAutoExportChange={setAutoExport}
           />
         ) : (
           <>

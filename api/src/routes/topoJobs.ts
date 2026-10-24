@@ -19,7 +19,6 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   validateRasterTemplateSettings,
-  validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
   SHARPEN_NEW_JOBS,
@@ -131,7 +130,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { tileCount, jobName, settings, autoExport } = req.body;
+    const { tileCount, jobName, settings } = req.body;
 
     // Validate jobName is a string and cap it alongside the type check rather
     // than storing whatever fits in the body budget.
@@ -168,20 +167,6 @@ router.post(
       layerOptions = validation.value as object;
     }
 
-    // Optional auto-export config. Persisted so the reaper can queue a
-    // TopoExportJob once this job completes. Validated to the same legality
-    // rules as a manual export so a bad config can't strand the auto-export.
-    let autoExportConfig: object | undefined;
-    if (autoExport !== undefined && autoExport !== null) {
-      const validation = validateAutoExportSettings(autoExport);
-      if (!validation.ok) {
-        throw malformed(
-          `Invalid auto-export settings: ${validation.errors.join("; ")}`,
-        );
-      }
-      autoExportConfig = validation.value as object;
-    }
-
     // Snapshot the user's live vector style at submission time. The composite
     // raster bake uses this snapshot; in-app display reads the live value
     // independently. Falls back to defaults if the column is null.
@@ -198,7 +183,6 @@ router.post(
         tileCount: tileCount ?? null,
         estimatedSeconds,
         layerOptions,
-        autoExport: autoExportConfig ?? undefined,
         vectorStyleSnapshot,
       },
     });

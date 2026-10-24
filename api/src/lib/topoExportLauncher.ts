@@ -14,9 +14,7 @@ import type {
   TopoLayerKey,
 } from "@logjam/shared";
 
-// Cap to prevent users from flooding ECS with queued exports. Shared by the
-// manual export route (POST /topo-exports) and the reaper's auto-export pass so
-// both enforce one limit.
+// Cap to prevent users from flooding ECS with queued exports.
 export const MAX_QUEUED_PER_USER = 5;
 
 export interface CreateAndLaunchExportInput {
@@ -27,8 +25,8 @@ export interface CreateAndLaunchExportInput {
   bundling: ExportBundling;
   vectorStyleSnapshot: object;
   sourceTileCount: number | null;
-  /** The submitting user's monthly credit allowance, passed in because both
-   * callers have already loaded the user row. */
+  /** The submitting user's monthly credit allowance, passed in because the
+   * route has already loaded the user row. */
   monthlyComputeCredits: number;
   /** An export of an area: the box, with no source job. */
   bbox?: AreaBbox;
@@ -36,8 +34,7 @@ export interface CreateAndLaunchExportInput {
 
 /**
  * Create a TopoExportJob and launch its Fargate task. The single owner of the
- * concurrency cap + ECS launch + ARN-persist + fail-on-launch sequence, so the
- * manual route and the reaper's auto-export pass behave identically.
+ * concurrency cap + ECS launch + ARN-persist + fail-on-launch sequence.
  *
  * - The cap check + create run in one user-row-locked transaction so concurrent
  *   submissions can't both pass the cap. Throws AppError(429) when at

@@ -42,8 +42,7 @@ const VCPUS = {
  * Elapsed time per job, in priority order:
  *  1. topo only — `pipeline_metrics.wallSeconds`, the worker's own measurement.
  *     Preferred because topo_jobs has no completed_at and `updated_at` keeps
- *     moving after completion (the reaper stamps auto_exported_at on it), which
- *     would inflate the charge.
+ *     moving after completion, which would inflate the charge.
  *  2. still running — NOW() - started_at, so in-flight work counts immediately.
  *  3. finished without metrics (a failure, mostly) — the row's end timestamp.
  *

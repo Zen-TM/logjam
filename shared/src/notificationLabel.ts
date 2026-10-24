@@ -5,6 +5,7 @@
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
 import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
 export type NotificationLabel = {
   text: string;
@@ -116,7 +117,9 @@ export function notificationLabel(n: TNotification): NotificationLabel {
           : "LiDAR map failed",
       };
     case "topo_export_complete": {
-      const format = String(p.format ?? "Topo").toUpperCase();
+      const format =
+        EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
+        String(p.format ?? "Topo").toUpperCase();
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,
@@ -127,6 +130,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
       };
     }
+    // No longer sent (auto-export is gone); older ones stay in the inbox.
     case "topo_export_skipped":
       return {
         text: "Auto-export didn't run",

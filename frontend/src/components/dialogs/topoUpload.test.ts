@@ -135,7 +135,6 @@ describe("useTopoUpload", () => {
     jobName: "Katoomba",
     filename: "lidar.zip",
     settings: {},
-    autoExport: {},
   };
   const on = { progress: () => {}, uploaded: () => {} };
 
