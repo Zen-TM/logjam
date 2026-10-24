@@ -21,6 +21,7 @@ import {
   AREA_EXPORT_OUTSIDE_NSW,
   AREA_EXPORT_TOO_LARGE,
   areaExportRequestError,
+  areaExportStyleSnapshot,
   areaExportTooLarge,
   areaInNsw,
   EXPORT_FORMAT_RULES,
@@ -162,10 +163,12 @@ router.post(
         sourceJobIds: [],
         layers: area.data.layers,
         format: area.data.format,
-        // A GeoTIFF is a file per layer; a GeoPackage holds them all.
+        // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
         bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
-        // Raw data: no style is drawn into it.
-        vectorStyleSnapshot: {},
+        vectorStyleSnapshot: areaExportStyleSnapshot(
+          area.data.format,
+          user.uiPreferences,
+        ),
         // No size signal the estimator knows yet, so no estimate.
         sourceTileCount: null,
         monthlyComputeCredits: user.monthlyComputeCredits,

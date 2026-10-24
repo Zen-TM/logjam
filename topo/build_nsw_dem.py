@@ -614,6 +614,8 @@ def build_slope(heights: Path, out: Path, work: Path, jobs: int) -> None:
 # beside it: test_nsw_dem.py `TestSlopeS3` holds the first.
 HEIGHT_KEY = "master/dem/nsw-5m.pmtiles"
 SLOPE_KEY = "master/dem/nsw-5m-slope.pmtiles"
+# NSW_CONTOURS.archivePath in shared/src/nswContours.ts (test_nsw_dem.py).
+CONTOUR_KEY = "master/contours/nsw-10m.pmtiles"
 
 
 def slope_s3(bucket: str, work: Path, jobs: int, client=None) -> None:

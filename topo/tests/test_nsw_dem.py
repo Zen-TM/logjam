@@ -33,6 +33,7 @@ from build_nsw_dem import (  # noqa: E402
     block_slope,
     blocks_for,
     credit,
+    CONTOUR_KEY,
     HEIGHT_KEY,
     SLOPE_KEY,
     decode_terrarium,
@@ -453,6 +454,13 @@ class TestSlopeS3(unittest.TestCase):
         self.assertEqual(
             SLOPE_KEY, HEIGHT_KEY.replace("5m.pmtiles", "5m-slope.pmtiles")
         )
+
+    # Mutation: change CONTOUR_KEY alone and an area export draws contours
+    # from an archive the clients do not read.
+    def test_the_contour_key_is_the_one_the_clients_read(self):
+        root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        with open(os.path.join(root, "shared/src/nswContours.ts")) as f:
+            self.assertIn(f'archivePath: "{CONTOUR_KEY}"', f.read())
 
 
 class TestHalveMax(unittest.TestCase):

@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   AREA_EXPORT_MAX_SIDE_KM,
   areaExportRequestError,
+  areaExportStyleSnapshot,
   areaExportTooLarge,
   areaInNsw,
   areaSizeKm,
   type AreaBbox,
 } from "./areaExport.js";
+import { nswContourStyle } from "./nswContours.js";
+import { RASTER_TEMPLATE_DEFAULTS } from "./topoSettings.js";
 
 // A square of `sideKm` centred near Katoomba.
 function square(sideKm: number, lat = -33.7, lon = 150.3): AreaBbox {
@@ -69,6 +72,21 @@ describe("areaExportRequestError", () => {
     ).not.toBeNull();
   });
 
+  // Mutation: give MBTiles every layer, and the worker is asked to draw
+  // heights it has no style for.
+  it("draws an MBTiles from slope, hillshade and contours, never heights", () => {
+    expect(
+      areaExportRequestError({
+        ...ok,
+        format: "mbtiles",
+        layers: ["slope", "hillshade", "contours"],
+      }),
+    ).toBeNull();
+    expect(
+      areaExportRequestError({ ...ok, format: "mbtiles", layers: ["heights"] }),
+    ).not.toBeNull();
+  });
+
   it("refuses an empty, inverted or off-Earth box, and bad layers", () => {
     expect(
       areaExportRequestError({
@@ -83,6 +101,44 @@ describe("areaExportRequestError", () => {
     expect(
       areaExportRequestError({ ...ok, layers: ["heights", "heights"] }),
     ).not.toBeNull();
-    expect(areaExportRequestError({ ...ok, format: "mbtiles" })).not.toBeNull();
+    expect(areaExportRequestError({ ...ok, format: "geojson" })).not.toBeNull();
+  });
+});
+
+describe("areaExportStyleSnapshot", () => {
+  const bands = [{ fromDeg: 30, toDeg: 90, colour: "#ff000080" }];
+
+  // Mutation: snapshot `{}` for an MBTiles, or name the key anything but
+  // slopeBands, and the file is drawn in the default bands, not the account's.
+  it("draws an MBTiles in the account's slope bands", () => {
+    expect(
+      areaExportStyleSnapshot("mbtiles", { slopeBands: bands }).slopeBands,
+    ).toEqual(bands);
+  });
+
+  // Mutation: snapshot the account's bands as stored, and an account that
+  // never set any sends the worker none.
+  it("gives an account with no bands the defaults", () => {
+    expect(areaExportStyleSnapshot("mbtiles", null).slopeBands).toEqual(
+      RASTER_TEMPLATE_DEFAULTS.slope.bands,
+    );
+  });
+
+  // Mutation: draw them in any look but the map's (the imagery one, say),
+  // and the file's statewide contours look unlike the map's.
+  it("draws the statewide contours as the map does", () => {
+    const { slopeBands: _, ...style } = areaExportStyleSnapshot("mbtiles", {
+      slopeBands: bands,
+    });
+    expect(style).toEqual(nswContourStyle("protomaps"));
+  });
+
+  // Mutation: snapshot a style for every format, and raw data claims a style
+  // nothing draws.
+  it("saves no style for raw data", () => {
+    expect(areaExportStyleSnapshot("geotiff", { slopeBands: bands })).toEqual(
+      {},
+    );
+    expect(areaExportStyleSnapshot("gpkg", { slopeBands: bands })).toEqual({});
   });
 });
