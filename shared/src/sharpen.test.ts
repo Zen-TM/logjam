@@ -11,13 +11,12 @@ import { DEM_TILE_SIZE } from "./demTiles.js";
 import { PLACE_VERBS } from "./contracts/placeVerbs.js";
 import { buildElevationProfile, climbFromProfile } from "./elevation.js";
 import {
-  SHARPEN_NEW_JOBS,
-  lidarJobCopy,
   areasInBox,
   compareSharpenedAreas,
   demSourcesFor,
   terrainTileArchive,
   type SharpenedArea,
+  LIDAR_JOB_COPY,
 } from "./sharpen.js";
 
 // Made-up areas near Katoomba: a z15 range of two by two z14 tiles.
@@ -224,22 +223,11 @@ describe("a sharpened area's heights", () => {
   });
 });
 
-describe("SHARPEN_NEW_JOBS", () => {
-  // Red if set false: /start stops marking jobs, and the worker refuses every
-  // one (topo/worker.py `OLD_JOB`).
-  it("stays on", () => {
-    expect(SHARPEN_NEW_JOBS).toBe(true);
-  });
-});
-
-describe("lidarJobCopy", () => {
-  // Mutations: an entry point that writes its own label (the place verb
-  // keeping "Make a LiDAR topo here" after the flip), or one side of the
-  // switch losing its words, so a revert shows the wrong ones.
-  it("names a new job by the switch, in one place", () => {
+describe("LIDAR_JOB_COPY", () => {
+  // Mutation: an entry point that writes its own label, as the place verb
+  // once kept "Make a LiDAR topo here".
+  it("names a new job in one place", () => {
     const verb = PLACE_VERBS.find((v) => v.id === "makeTopo")!;
-    expect(verb.label).toBe(lidarJobCopy(SHARPEN_NEW_JOBS).makeHere);
-    expect(lidarJobCopy(true).make).toBe("Sharpen an area");
-    expect(lidarJobCopy(false).make).toBe("Make a LiDAR topo");
+    expect(verb.label).toBe(LIDAR_JOB_COPY.makeHere);
   });
 });

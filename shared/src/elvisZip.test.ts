@@ -134,7 +134,7 @@ describe("isUnsafeZipEntryName", () => {
 });
 
 describe("classifyElvisEntries", () => {
-  it("DEM + LAZ — LAZ wins (bundled DEM ignored, runs as LiDAR-only)", () => {
+  it("DEM + LAZ: the 2 m DEM is the ground, and the point clouds counted", () => {
     const zip = buildZip([
       {
         name: "NSW Government - Spatial Services/DEM/2 Metre/Katoomba201804-LID2-AHD_2566284_56_0002_0002_2m.tif",
@@ -170,11 +170,10 @@ describe("classifyElvisEntries", () => {
       },
     ]);
     const entries = parse(zip);
-    // The legacy pipeline's rules, which come back if the switch is set off.
-    const stats = classifyElvisEntries(entries, false);
+    const stats = classifyElvisEntries(entries);
 
     expect(stats.mode).toBe("LAZ_ONLY");
-    expect(stats.modeLabel).toBe("LiDAR (bundled DEM ignored)");
+    expect(stats.modeLabel).toBe("Ground from the DEM");
     expect(stats.lazCount).toBe(2);
     expect(stats.demCount).toBe(2);
     expect(stats.derivativeTifCount).toBe(0);
@@ -349,10 +348,10 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     size: 1000,
   };
   const label = (files: { name: string; size: number }[]) =>
-    classifyElvisEntries(parse(buildZip(files)), true).modeLabel;
+    classifyElvisEntries(parse(buildZip(files))).modeLabel;
 
-  // Mutation: the legacy labels under the switch ("bundled DEM ignored"),
-  // while topo/sharpen.py's dem_plan takes the DEM as ground.
+  // Mutation: label a ZIP with a fine DEM "from the point clouds", while
+  // topo/sharpen.py's dem_plan takes the DEM as ground.
   it("says where the ground comes from, as sharpen.py chooses it", () => {
     expect(label([dem(2), laz])).toBe("Ground from the DEM");
     expect(label([dem(1)])).toBe("Ground from the DEM");
@@ -364,8 +363,7 @@ describe("classifyElvisEntries for a job that sharpens", () => {
   // worker only after the upload and a charged launch.
   it("refuses a ZIP of 5 m DEMs only, before it is uploaded", () => {
     const only5m = parse(buildZip([dem(5), dem(5)]));
-    expect(() => classifyElvisEntries(only5m, true)).toThrow(ElvisZipError);
-    expect(() => classifyElvisEntries(only5m, false)).not.toThrow();
+    expect(() => classifyElvisEntries(only5m)).toThrow(ElvisZipError);
   });
 
   // Mutation: change the coarsest DEM cell sharpen.py grounds on (its
@@ -381,7 +379,7 @@ describe("classifyElvisEntries for a job that sharpens", () => {
     );
     expect(label([dem(coarsest)])).toBe("Ground from the DEM");
     expect(() =>
-      classifyElvisEntries(parse(buildZip([dem(coarsest + 0.5)])), true),
+      classifyElvisEntries(parse(buildZip([dem(coarsest + 0.5)]))),
     ).toThrow(ElvisZipError);
   });
 
@@ -397,7 +395,7 @@ describe("classifyElvisEntries for a job that sharpens", () => {
       .map((m) => m[1])
       .join("");
     try {
-      classifyElvisEntries(parse(buildZip([dem(5)])), true);
+      classifyElvisEntries(parse(buildZip([dem(5)])));
     } catch (error) {
       expect((error as ElvisZipError).sentence).toBe(sentence);
       return;

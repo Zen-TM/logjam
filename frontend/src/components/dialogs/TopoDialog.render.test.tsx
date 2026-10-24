@@ -5,35 +5,11 @@ import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// The switch, read at each render: the template tests hold the form it
-// brings back when set off (a revert is one line), the rest the form it shows.
-const switches = vi.hoisted(() => ({ sharpen: false }));
-vi.mock("@logjam/shared", async (importOriginal) => {
-  const shared = await importOriginal<typeof import("@logjam/shared")>();
-  return {
-    ...shared,
-    get SHARPEN_NEW_JOBS() {
-      return switches.sharpen;
-    },
-  };
-});
-
-import TopoDialog, { type TopoTemplate } from "./TopoDialog";
-import { apiFetch } from "../../placeUtils";
-
-const template = (id: string): TopoTemplate => ({
-  id,
-  name: `Template ${id}`,
-  isSystem: false,
-  config: RASTER_TEMPLATE_DEFAULTS,
-  createdAt: null,
-  updatedAt: null,
-});
-const templates = [template("t1"), template("t2")];
+import TopoDialog from "./TopoDialog";
 
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
-  apiFetch: vi.fn(async () => templates),
+  apiFetch: vi.fn(async () => ({})),
   // These two call placeUtils' own apiFetch, so replacing the export above
   // does not reach them. Left real they fetched localhost, and the failure
   // logged while the worker was tearing down (setup-smoke's intermittent
@@ -98,19 +74,13 @@ HTMLDialogElement.prototype.close = function () {
 };
 
 afterEach(() => {
-  switches.sharpen = false;
   submit.mockReset();
   cleanup();
   discard.mockClear();
-  vi.mocked(apiFetch).mockImplementation(async () => templates as never);
   expect(network).not.toHaveBeenCalled();
 });
 
-function dialog(props: {
-  open: boolean;
-  awaitingBbox?: boolean;
-  initialTemplateId?: string;
-}) {
+function dialog(props: { open: boolean; awaitingBbox?: boolean }) {
   return (
     <TopoDialog
       onClose={() => {}}
@@ -123,46 +93,6 @@ function dialog(props: {
     />
   );
 }
-
-const templateSelect = () =>
-  screen.getByLabelText("Template", { exact: true }) as HTMLSelectElement;
-
-describe("TopoDialog, the template it was opened with", () => {
-  // Mutation: drop `!initialTemplateApplied.current`, and the return from
-  // drawing the area puts t1 back over the user's pick.
-  it("survives a pick across drawing the area", async () => {
-    const { rerender } = render(
-      dialog({ open: true, initialTemplateId: "t1" }),
-    );
-    await vi.waitFor(() => expect(templateSelect().value).toBe("t1"));
-
-    fireEvent.change(templateSelect(), { target: { value: "t2" } });
-    rerender(
-      dialog({ open: false, awaitingBbox: true, initialTemplateId: "t1" }),
-    );
-    rerender(dialog({ open: true, initialTemplateId: "t1" }));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(templateSelect().value).toBe("t2");
-  });
-
-  // Mutation: drop `if (!live) return`, and the list answering after the
-  // dialog closed marks t1 applied, so the next open from t2 shows t1.
-  it("applies on the next open after a close that beat the list", async () => {
-    let answer: (list: TopoTemplate[]) => void = () => {};
-    vi.mocked(apiFetch).mockImplementationOnce(
-      () => new Promise((resolve) => (answer = resolve)) as never,
-    );
-    const { rerender } = render(
-      dialog({ open: true, initialTemplateId: "t1" }),
-    );
-    rerender(dialog({ open: false, initialTemplateId: "t1" }));
-    answer(templates);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    rerender(dialog({ open: true, initialTemplateId: "t2" }));
-    await vi.waitFor(() => expect(templateSelect().value).toBe("t2"));
-  });
-});
 
 // Mutation: remove `upload.discard()` from onFilePicked, and the held job
 // keeps the fields locked after a new ZIP is chosen.
@@ -178,17 +108,13 @@ describe("TopoDialog, choosing a ZIP", () => {
   });
 });
 
-describe("TopoDialog once new jobs sharpen", () => {
-  // Mutations: the old title, or a template picker for a job that draws no
-  // styled layer a template could set.
-  it("sharpens an area, with no template or style to choose", () => {
-    switches.sharpen = true;
+describe("TopoDialog", () => {
+  // Mutation: a title of its own instead of LIDAR_JOB_COPY's.
+  it("sharpens an area", () => {
     render(dialog({ open: true }));
     expect(
       screen.getByRole("heading", { name: "Sharpen an area" }),
     ).toBeTruthy();
-    expect(screen.queryByLabelText("Template", { exact: true })).toBeNull();
-    expect(screen.queryByText("How this topo is drawn")).toBeNull();
   });
 });
 
@@ -215,7 +141,6 @@ describe("TopoDialog's Vegetation choice", () => {
   // Mutation: leave Vegetation out of the reset, and the next job, which
   // nobody ticked, runs the vegetation pass because the last one did.
   it("is off again for the next job", async () => {
-    switches.sharpen = true;
     const { container, rerender } = render(dialog({ open: true }));
     pick(container, lazZip());
     fireEvent.click(await vegetationBox());
@@ -232,33 +157,19 @@ describe("TopoDialog's Vegetation choice", () => {
     );
   });
 
-  // Mutation: drop the switch's gate on the template the dialog was opened
-  // with, and the job is sent that template's style.
-  it("applies no template, even the one it was opened with", async () => {
-    switches.sharpen = true;
-    const styled = {
-      ...template("t1"),
-      config: {
-        ...RASTER_TEMPLATE_DEFAULTS,
-        vegetation: {
-          ...RASTER_TEMPLATE_DEFAULTS.vegetation,
-          denseColour: "#123456ff",
-        },
-      },
-    };
-    vi.mocked(apiFetch).mockImplementation(async () => [styled] as never);
-    const { container } = render(
-      dialog({ open: true, initialTemplateId: "t1" }),
-    );
+  // Mutation: send the tick as it was before the box was clicked, or any
+  // style but the default.
+  it("is sent with the default style", async () => {
+    const { container } = render(dialog({ open: true }));
     pick(container, lazZip());
-    await vegetationBox();
+    fireEvent.click(await vegetationBox());
     submit.mockResolvedValue("job-1");
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await vi.waitFor(() => expect(submit).toHaveBeenCalled());
     const sent = submit.mock.calls[0]![1];
     expect(sent.settings).toEqual({
       ...RASTER_TEMPLATE_DEFAULTS,
-      vegetation: { ...RASTER_TEMPLATE_DEFAULTS.vegetation, enabled: false },
+      vegetation: { ...RASTER_TEMPLATE_DEFAULTS.vegetation, enabled: true },
     });
   });
 });

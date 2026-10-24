@@ -117,8 +117,7 @@ import {
   MAP_MEASURE,
   MAP_MEASURE_ICON,
   MAP_TERRAIN,
-  SHARPEN_NEW_JOBS,
-  lidarJobCopy,
+  LIDAR_JOB_COPY,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth } from "../useAuth";
@@ -429,15 +428,6 @@ function App() {
 
   // Bumped when a GeoPDF job is queued, to trigger the panel's job list refetch
   const [geoPdfJobsRefetch, setGeoPdfJobsRefetch] = useState(0);
-
-  // Topo template: ID to pre-select when opening TopoDialog
-  const [initialTopoTemplateId, setInitialTopoTemplateId] = useState<
-    string | null
-  >(null);
-
-  // Bumped when TopoDialog saves a template inline, so LidarPanel's template
-  // list refreshes without waiting for an accordion re-open.
-  const [topoTemplateRefetch, setTopoTemplateRefetch] = useState(0);
 
   // Place fly-to target
   const [flyToPlace, setFlyToPlace] = useState<{
@@ -1551,7 +1541,7 @@ function App() {
       menu: [
         {
           id: "topo",
-          label: lidarJobCopy(SHARPEN_NEW_JOBS).make,
+          label: LIDAR_JOB_COPY.make,
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
@@ -1592,7 +1582,6 @@ function App() {
         onClose={() => {
           setShowTopo(false);
           setBoxPick((pick) => endBox(pick, "topo"));
-          setInitialTopoTemplateId(null);
           // The dialog empties itself on a real close; the drawn area is held
           // out here (going off to draw closes the dialog), so it has to be
           // emptied with it or the next topo starts with the last one's box.
@@ -1605,8 +1594,6 @@ function App() {
         awaitingBbox={selectingTopoBbox}
         pendingBbox={pendingTopoBbox}
         onJobCreated={handleTopoJobCreated}
-        onTemplateSaved={() => setTopoTemplateRefetch((n) => n + 1)}
-        initialTemplateId={initialTopoTemplateId}
         existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
           .map((j) => j.name)
           .filter((n): n is string => !!n)}
@@ -1822,7 +1809,6 @@ function App() {
             setShowGeoPdf(true);
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
-          topoTemplateRefetch={topoTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
@@ -1833,10 +1819,7 @@ function App() {
           topoExportsError={topoExportsError}
           onRefetchTopoExports={refetchTopoExports}
           setLidarJobToggles={setLidarJobToggles}
-          onOpenTopo={() => {
-            setInitialTopoTemplateId(null);
-            setShowTopo(true);
-          }}
+          onOpenTopo={() => setShowTopo(true)}
           onOpenExport={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1855,13 +1838,9 @@ function App() {
           currentUser={currentUser}
           currentUserError={currentUserError}
           onRetryCurrentUser={refetchCurrentUser}
-          onOpenTopoWithTemplate={(templateId) => {
-            setInitialTopoTemplateId(templateId);
-            setShowTopo(true);
-          }}
-          // The Maps views fetch their own lists (GeoPDF jobs and templates,
-          // topo templates) — the same gate as every hook above, so a pending
-          // or stale consent holds them too.
+          // The GeoPDFs view fetches its own lists (jobs and templates) — the
+          // same gate as every hook above, so a pending or stale consent holds
+          // them too.
           loadsUserData={loadsUserData}
           friends={friends}
           friendRequests={friendRequests}

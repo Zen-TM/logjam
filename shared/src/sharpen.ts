@@ -16,40 +16,18 @@ import { escapeXml } from "./escapeXml.js";
 import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
 
 /**
- * Whether a new job sharpens: /start marks it (the worker then runs
- * topo/sharpen.py), and Logjam Web offers "Sharpen an area" with no style
- * options. It must stay true: the worker refuses a job with no mark
- * (topo/worker.py `OLD_JOB`), so a job started with it off fails (guard:
- * sharpen.test.ts "stays on").
+ * What a new LiDAR job is called wherever one is offered or made: declared
+ * once (sharpen.test.ts).
  */
-export const SHARPEN_NEW_JOBS = true;
-
-/**
- * What a new LiDAR job is called wherever one is offered or made, for each
- * side of the switch: declared once (sharpen.test.ts). The switch is a
- * parameter, so each client passes the one it imports.
- */
-export function lidarJobCopy(sharpen: boolean) {
-  return sharpen
-    ? {
-        make: "Sharpen an area",
-        makeHere: "Sharpen the area here",
-        noun: "Sharpened area",
-        starting: "Starting to sharpen",
-        startingLine: "Uploaded. Checking it over and starting to sharpen…",
-        unnamed: "Your area",
-        beingMade: "is being sharpened",
-      }
-    : {
-        make: "Make a LiDAR topo",
-        makeHere: "Make a LiDAR topo here",
-        noun: "LiDAR topo",
-        starting: "Starting your topo",
-        startingLine: "Uploaded. Checking it over and starting your topo…",
-        unnamed: "Your topo",
-        beingMade: "is being made",
-      };
-}
+export const LIDAR_JOB_COPY = {
+  make: "Sharpen an area",
+  makeHere: "Sharpen the area here",
+  noun: "Sharpened area",
+  starting: "Starting to sharpen",
+  startingLine: "Uploaded. Checking it over and starting to sharpen…",
+  unnamed: "Your area",
+  beingMade: "is being sharpened",
+} as const;
 
 /** A completed sharpened job, as a client and the API's sampler need it. */
 export type SharpenedArea = {

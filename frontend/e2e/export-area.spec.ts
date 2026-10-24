@@ -83,11 +83,8 @@ test("a template opened after an abandoned GIS pick is a GeoPDF template", async
   await openApp(page);
   await abandonGisPick(page);
   // A topo takes the box tool over, which leaves the rail live again.
-  // `lidarJobCopy(…).make`, whichever kind new jobs are.
-  await mapTool(page, [
-    "Make a map of an area",
-    /^(Sharpen an area|Make a LiDAR topo)$/,
-  ]);
+  // `LIDAR_JOB_COPY.make`.
+  await mapTool(page, ["Make a map of an area", "Sharpen an area"]);
   await page.getByRole("button", { name: "Maps", exact: true }).click();
   const aside = page.locator("aside");
   await aside.getByRole("radio", { name: "GeoPDFs" }).click();

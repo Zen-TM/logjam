@@ -1,11 +1,10 @@
-// Maps → LiDAR topos: the topos the user has made or been sent, what is still
-// being made, and the templates topos are made with.
+// Maps → LiDAR topos: the topos the user has made or been sent, and what is
+// still being made.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (shared/DESIGN.md §2): the hero counts the topos; a TAB each for the topos and
-// the templates prevents templates being buried under older topos; and what is
-// still being made is pinned under both so in-flight progress stays
-// immediately visible.
+// (shared/DESIGN.md §2): the hero counts the topos, and what is still being
+// made is pinned under the list so in-flight progress stays immediately
+// visible.
 //
 // A topo's body CENTRES the map on it (DESIGN.md, "Opening a thing centres
 // the map on it"), and turns LiDAR topos on so there is something there to see.
@@ -15,12 +14,11 @@
 //
 // How topos draw their vector layers opens beside the page as a sheet
 // (`TopoStyleSheet`), so the map stays in view while it changes.
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
-  lidarJobCopy,
+  LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
-  SHARPEN_NEW_JOBS,
   type SharePromiseKind,
   type VectorStyleSettings,
 } from "@logjam/shared";
@@ -33,18 +31,11 @@ import {
 } from "../../../placeUtils";
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
-import type {
-  GeoJsonPolygonal,
-  TopoJob,
-  TopoTemplate,
-} from "../../dialogs/TopoDialog";
-import { fetchTopoTemplates } from "../../dialogs/topoTemplatesFetch";
+import type { GeoJsonPolygonal, TopoJob } from "../../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
-import TopoTemplateEditDialog from "../../dialogs/TopoTemplateEditDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import {
   Button,
-  ChipRail,
   EmptyState,
   Hero,
   IconButton,
@@ -60,7 +51,6 @@ import {
   MAP_IDENTITY,
   formatDay,
   isOlderLidarJob,
-  offersTemplates,
   plural,
   topoLabel,
   toposBeingMade,
@@ -72,10 +62,7 @@ import { usePanelSheet } from "./usePanelSheet";
 import { useIsMobile } from "../../../useIsMobile";
 import classes from "./MapsPanel.module.css";
 
-/** The two lists this view holds, one tab each. */
-type LidarTab = "topos" | "templates";
-
-const MAKE_LABEL = lidarJobCopy(SHARPEN_NEW_JOBS).make;
+const MAKE_LABEL = LIDAR_JOB_COPY.make;
 
 /** A sharpened job and an older LiDAR topo, told apart in the list. */
 const identityOf = (job: CompletedTopoJob) =>
@@ -93,14 +80,11 @@ export default function LidarPanel({
   onTopoFlyTarget,
   onRefetchCompletedTopoJobs,
   onDismissActiveJob,
-  onOpenTopoWithTemplate,
   onQuotaChanged,
   vectorStyle,
   onVectorStyleChange,
-  templateRefetchTrigger,
   onSheetOpenChange,
   onExpandSheet,
-  loadsUserData,
 }: {
   /** The Maps view switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
@@ -122,18 +106,12 @@ export default function LidarPanel({
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
-  onOpenTopoWithTemplate: (templateId: string) => void;
   onQuotaChanged: () => void;
   vectorStyle: VectorStyleSettings | null;
   onVectorStyleChange: (next: VectorStyleSettings) => void;
-  templateRefetchTrigger: number;
   /** Told when the style sheet opens or closes, so the map insets for it. */
   onSheetOpenChange: (open: boolean) => void;
   onExpandSheet?: () => void;
-  /** App's own `authenticated && consentSettled` — the value every
-   *  user-data hook in this app takes as `enabled`: the template fetch below
-   *  waits for it like the rest. */
-  loadsUserData: boolean;
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
@@ -142,39 +120,12 @@ export default function LidarPanel({
     onExpandSheet,
   });
   const isNarrow = useIsMobile();
-  // Which tab of the view is showing. Panel-local: which list you were reading
-  // is not worth remembering past a page change.
-  const [tab, setTab] = useState<LidarTab>("topos");
-
-  const [templates, setTemplates] = useState<TopoTemplate[]>([]);
-  // undefined = closed; null = a new template; a template = editing it.
-  const [editingTemplate, setEditingTemplate] = useState<
-    TopoTemplate | null | undefined
-  >(undefined);
-  const [templateFetchCount, setTemplateFetchCount] = useState(0);
   // Non-null = the topo whose share dialog is open, named as its row names it.
   const [shareJob, setShareJob] = useState<{
     id: string;
     label: string;
     promise: SharePromiseKind;
   } | null>(null);
-
-  // A template saved from TopoDialog's "Save as template" bumps
-  // `templateRefetchTrigger`, so the list is never a reload behind.
-  useEffect(() => {
-    // Behind the consent gate this is one more user-data request the gate
-    // exists to hold, so it waits with every other fetch.
-    if (!loadsUserData) return;
-    // Nothing shows a template once new jobs sharpen.
-    if (!offersTemplates(SHARPEN_NEW_JOBS)) return;
-    // Concurrent-duplicate-safe fetch shared with TopoDialog.
-    fetchTopoTemplates()
-      .then(setTemplates)
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load topo templates."));
-      });
-  }, [toast, templateFetchCount, templateRefetchTrigger, loadsUserData]);
 
   const beingMade = useMemo(
     () => toposBeingMade(activeTopoJobs),
@@ -281,62 +232,6 @@ export default function LidarPanel({
     ];
   };
 
-  const templateEntries = (template: TopoTemplate): MenuEntry[] => [
-    ...(!offersTemplates(SHARPEN_NEW_JOBS)
-      ? []
-      : ([
-          {
-            id: "make",
-            label: "Make a LiDAR topo with this",
-            icon: "lidar",
-            onSelect: () => onOpenTopoWithTemplate(template.id),
-          },
-        ] satisfies MenuEntry[])),
-    // The built-in Default is nobody's to change: absent, not disabled.
-    ...(template.isSystem
-      ? []
-      : ([
-          {
-            id: "edit",
-            label: "Edit…",
-            icon: "edit",
-            onSelect: () => setEditingTemplate(template),
-          },
-          { id: "delete-sep", separator: true },
-          {
-            id: "delete",
-            label: "Delete",
-            icon: "delete",
-            danger: true,
-            onSelect: () =>
-              ask({
-                title: `Delete the template “${template.name}”?`,
-                message:
-                  "The template is deleted. Topos already made with it stay.",
-                confirmLabel: "Delete",
-                run: async () => {
-                  try {
-                    await apiFetch(`/topo-templates/${template.id}`, {
-                      method: "DELETE",
-                    });
-                    setTemplates((previous) =>
-                      previous.filter((each) => each.id !== template.id),
-                    );
-                  } catch (err) {
-                    console.error(err);
-                    toast.error(
-                      messageFromError(
-                        err,
-                        "Couldn't delete template. Please try again.",
-                      ),
-                    );
-                  }
-                },
-              }),
-          },
-        ] satisfies MenuEntry[])),
-  ];
-
   const hero = (
     <Hero
       title={
@@ -365,16 +260,6 @@ export default function LidarPanel({
                 icon: "lidar",
                 onSelect: onOpenTopo,
               },
-              ...(!offersTemplates(SHARPEN_NEW_JOBS)
-                ? []
-                : [
-                    {
-                      id: "template",
-                      label: "New template…",
-                      icon: "add" as const,
-                      onSelect: () => setEditingTemplate(null),
-                    },
-                  ]),
             ]}
             trigger={(props) => (
               <Button
@@ -412,118 +297,70 @@ export default function LidarPanel({
       <EmptyState
         icon="lidar"
         title="No LiDAR topos yet"
-        body={
-          SHARPEN_NEW_JOBS
-            ? "Pick an area and order its LiDAR from the government's survey: Logjam Web draws the contours, slope and hillshade there at the survey's own detail."
-            : "Pick an area and Logjam Web builds contours, slope, hillshade and vegetation from the government's LiDAR survey. Save one to Logjam GPS for the field."
-        }
+        body="Pick an area and order its LiDAR from the government's survey: Logjam Web draws the contours, slope and hillshade there at the survey's own detail."
         actions={makeTopoButton}
       />
     </div>
   ) : (
     <div className={classes.list}>
-      {tab === "topos" && (
-        <section className={classes.section} aria-labelledby="maps-topos">
-          {/* The tab is the heading: a chip that says "Topos 6" over a heading
+      <section className={classes.section} aria-labelledby="maps-topos">
+        {/* The hero is the heading: one that says "6 LiDAR topos" over one
             that says "LIDAR TOPOS 6" is the same line drawn twice. */}
-          <h3 id="maps-topos" className="visually-hidden">
-            LiDAR topos
-          </h3>
-          {completedTopoJobs.length === 0 && (
-            <p className={classes.note}>None finished yet.</p>
-          )}
-          {completedTopoJobs.map((job) => {
-            const label = topoLabel(job);
-            return (
-              <Row
-                key={job.jobId}
-                data-topo-id={job.jobId}
-                title={label}
-                // A named topo keeps its date beneath; an unnamed one IS its date.
-                subtitle={job.name ? formatDay(job.createdAt) : undefined}
-                description={identityOf(job).label}
-                leading={
-                  <IconTile
-                    icon={identityOf(job).icon}
-                    hue={identityOf(job).hue}
-                    label={identityOf(job).label}
-                  />
-                }
-                onOpen={
-                  job.footprint
-                    ? () => onTopoFlyTarget(job.footprint!)
-                    : undefined
-                }
-                trailing={
-                  <>
-                    {isOlderLidarJob(job, SHARPEN_NEW_JOBS) && (
-                      <StatusPill label="Old" tone="outline" />
-                    )}
-                    {job.syncRole !== "owner" && (
-                      <StatusPill label="Shared" tone="outline" />
-                    )}
-                    <Menu
-                      label={`Actions for ${label}`}
-                      title={label}
-                      placement="right-start"
-                      entries={topoEntries(job)}
-                      trigger={(props) => (
-                        <IconButton
-                          {...props}
-                          icon="overflow"
-                          label={`Actions for ${label}`}
-                        />
-                      )}
-                    />
-                  </>
-                }
-              />
-            );
-          })}
-        </section>
-      )}
-
-      {tab === "templates" && offersTemplates(SHARPEN_NEW_JOBS) && (
-        <section
-          className={classes.section}
-          aria-labelledby="maps-topo-templates"
-        >
-          <h3 id="maps-topo-templates" className="visually-hidden">
-            Templates
-          </h3>
-          {templates.map((template) => (
+        <h3 id="maps-topos" className="visually-hidden">
+          LiDAR topos
+        </h3>
+        {completedTopoJobs.length === 0 && (
+          <p className={classes.note}>None finished yet.</p>
+        )}
+        {completedTopoJobs.map((job) => {
+          const label = topoLabel(job);
+          return (
             <Row
-              key={template.id}
-              title={template.name}
-              subtitle={template.isSystem ? "Built in" : undefined}
-              description={MAP_IDENTITY.topoTemplate.label}
+              key={job.jobId}
+              data-topo-id={job.jobId}
+              title={label}
+              // A named topo keeps its date beneath; an unnamed one IS its date.
+              subtitle={job.name ? formatDay(job.createdAt) : undefined}
+              description={identityOf(job).label}
               leading={
                 <IconTile
-                  icon={MAP_IDENTITY.topoTemplate.icon}
-                  hue={MAP_IDENTITY.topoTemplate.hue}
-                  label={MAP_IDENTITY.topoTemplate.label}
+                  icon={identityOf(job).icon}
+                  hue={identityOf(job).hue}
+                  label={identityOf(job).label}
                 />
               }
-              onOpen={() => onOpenTopoWithTemplate(template.id)}
+              onOpen={
+                job.footprint
+                  ? () => onTopoFlyTarget(job.footprint!)
+                  : undefined
+              }
               trailing={
-                <Menu
-                  label={`Actions for ${template.name}`}
-                  title={template.name}
-                  placement="right-start"
-                  entries={templateEntries(template)}
-                  trigger={(props) => (
-                    <IconButton
-                      {...props}
-                      icon="overflow"
-                      label={`Actions for ${template.name}`}
-                    />
+                <>
+                  {isOlderLidarJob(job) && (
+                    <StatusPill label="Old" tone="outline" />
                   )}
-                />
+                  {job.syncRole !== "owner" && (
+                    <StatusPill label="Shared" tone="outline" />
+                  )}
+                  <Menu
+                    label={`Actions for ${label}`}
+                    title={label}
+                    placement="right-start"
+                    entries={topoEntries(job)}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Actions for ${label}`}
+                      />
+                    )}
+                  />
+                </>
               }
             />
-          ))}
-        </section>
-      )}
+          );
+        })}
+      </section>
       <ListEnd>{makeTopoButton}</ListEnd>
     </div>
   );
@@ -544,34 +381,7 @@ export default function LidarPanel({
       ) : (
         <>
           {hero}
-          <div className={classes.rails}>
-            {views}
-            {!nothingYet && topoJobsLoaded && (
-              <ChipRail
-                label="LiDAR topos view"
-                options={[
-                  // The Templates chip counts the built-in Default too, so it
-                  // can't say 0 over a list with something in it.
-                  {
-                    value: "topos",
-                    label: "Topos",
-                    count: completedTopoJobs.length,
-                  },
-                  ...(offersTemplates(SHARPEN_NEW_JOBS)
-                    ? [
-                        {
-                          value: "templates" as const,
-                          label: "Templates",
-                          count: templates.length,
-                        },
-                      ]
-                    : []),
-                ]}
-                value={tab}
-                onChange={setTab}
-              />
-            )}
-          </div>
+          <div className={classes.rails}>{views}</div>
           {list}
           <MakingFooter
             items={beingMade}
@@ -580,13 +390,6 @@ export default function LidarPanel({
           {sheet}
         </>
       )}
-
-      <TopoTemplateEditDialog
-        open={editingTemplate !== undefined}
-        onClose={() => setEditingTemplate(undefined)}
-        editingTemplate={editingTemplate ?? null}
-        onSaved={() => setTemplateFetchCount((count) => count + 1)}
-      />
 
       {shareJob && (
         <ShareDialog

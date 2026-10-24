@@ -11,11 +11,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
-import {
-  geoPdfMaxNativeZoom,
-  geoPdfNativeMegapixels,
-  SHARPEN_NEW_JOBS,
-} from "@logjam/shared";
+import { geoPdfMaxNativeZoom, geoPdfNativeMegapixels } from "@logjam/shared";
 import {
   estimateRuntimeSeconds,
   type JobActual,
@@ -24,9 +20,8 @@ import {
 
 const env = getEnv();
 
-// A sharpened job's cold-start rate, until enough of them have run to fit
-// one: sharpening one published Katoomba tile took 14 to 150 s (a 1 m DEM
-// to a dense LAZ's TIN), far below the legacy default's 510 s.
+// The cold-start rate, until enough jobs have run to fit one: sharpening one
+// published Katoomba tile took 14 to 150 s (a 1 m DEM to a dense LAZ's TIN).
 const SHARPEN_DEFAULT_SECONDS_PER_TILE = 150;
 
 // Fixed per-job floor added on top of the fitted rate term.
@@ -147,25 +142,24 @@ export async function estimateGeoPdfSeconds(
  * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
  * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
  * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
- * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
- * estimate self-corrects as the pipeline's performance changes.
+ * fixed cold-start rate below TOPO_ESTIMATE_MIN_SAMPLES so the estimate
+ * self-corrects as the pipeline's performance changes.
  *
  * Privacy: reads only aggregate timing + tile counts across jobs — never place
  * names, coordinates, or footprints.
  */
 export async function estimateTopoSeconds(
   inputTileCount: number | null,
-  sharpen: boolean = SHARPEN_NEW_JOBS,
 ): Promise<number | null> {
   if (!inputTileCount) return null;
-  // A sharpened job and a legacy one cost very differently per tile, so each
-  // is estimated from its own kind only (runtimeEstimates.unit.test.ts).
+  // Sharpened jobs only: an older job cost very differently per tile
+  // (runtimeEstimates.unit.test.ts).
   const recent = await prisma.topoJob.findMany({
     where: {
       status: "complete",
       outputTileCount: { not: null },
       tileCount: { not: null },
-      sharpen: sharpen ? { not: Prisma.DbNull } : { equals: Prisma.DbNull },
+      sharpen: { not: Prisma.DbNull },
     },
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -196,9 +190,7 @@ export async function estimateTopoSeconds(
     }
   }
   return estimateRuntimeSeconds(actuals, inputTileCount, {
-    defaultSecondsPerInputTile: sharpen
-      ? SHARPEN_DEFAULT_SECONDS_PER_TILE
-      : env.TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
+    defaultSecondsPerInputTile: SHARPEN_DEFAULT_SECONDS_PER_TILE,
     minSamples: env.TOPO_ESTIMATE_MIN_SAMPLES,
   });
 }

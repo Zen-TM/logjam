@@ -307,9 +307,8 @@ curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/dem
 
 ## Sharpening an area
 
-A job the API marks to sharpen (`topo_jobs.sharpen`, set at `/start` while
-`SHARPEN_NEW_JOBS` in `shared/src/sharpen.ts` is on, as it is) runs `sharpen.py`
-instead of `pipeline.py`. It writes the statewide terrain formats at the
+Every job is marked to sharpen at `/start` (`topo_jobs.sharpen`), and the
+worker runs `sharpen.py` on it. It writes the statewide terrain formats at the
 survey's own cell: `heights.pmtiles` and `slope.pmtiles` (terrarium PNG,
 z15 to z16 for 2 m ground or z17 for 1 m) and `contours.pmtiles` (10 m
 lines at z14). Where the survey has no ground, each tile holds the statewide

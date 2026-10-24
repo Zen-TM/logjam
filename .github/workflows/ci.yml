@@ -760,8 +760,7 @@ jobs:
           for name in nsw-5m nsw-5m-slope; do
             aws s3 cp "$RUNNER_TEMP/statewide/$name.pmtiles" "s3://$S3_BUCKET_TOPO/master/dem/$name.pmtiles"
           done
-      # SHARPEN_NEW_JOBS is on, so the API marks the job and the worker runs
-      # topo/sharpen.py.
+      # The API marks the job, and the worker runs topo/sharpen.py.
       - name: Start a job through the API; ECS runs the worker
         id: complete
         env:

@@ -30,7 +30,6 @@ export function regionNameFromSurvey(survey: string): string {
   return survey.match(/^[A-Za-z]+/)?.[0] ?? survey;
 }
 
-import { SHARPEN_NEW_JOBS } from "./sharpen.js";
 import { say, type UserSentence } from "./userSentence.js";
 
 const NOT_A_ZIP = say`That file isn't a ZIP. Choose the ZIP that ELVIS sent you.`;
@@ -166,12 +165,9 @@ export function parseZipCentralDirectory(
 /**
  * Validates ZIP entries against worker requirements and returns stats.
  * Throws ElvisZipError with the same wording the topo worker would surface.
- * Worker source: topo/pipeline.py extract_elvis_zip ("LAZ wins" mode selection).
+ * Worker source: topo/sharpen.py `dem_plan`.
  */
-export function classifyElvisEntries(
-  entries: ZipEntry[],
-  sharpen: boolean = SHARPEN_NEW_JOBS,
-): ElvisStats {
+export function classifyElvisEntries(entries: ZipEntry[]): ElvisStats {
   if (entries.length === 0) {
     throw new ElvisZipError("EMPTY_ZIP", say`That ZIP is empty.`);
   }
@@ -263,38 +259,23 @@ export function classifyElvisEntries(
   // else on the point clouds, and a ZIP with neither adds nothing to the
   // statewide 5 m data (topo/sharpen.py `dem_plan`). Said before the upload,
   // as the worker would.
-  if (sharpen && lazCount === 0 && !groundDem) {
+  if (lazCount === 0 && !groundDem) {
     throw new ElvisZipError("ONLY_5M", ONLY_5M);
   }
 
-  let mode: ElvisStats["mode"];
-  let modeLabel: string;
-  if (sharpen) {
-    mode = lazCount > 0 ? "LAZ_ONLY" : "DEM_ONLY";
-    // Vegetation is the form's own choice, so the label says only the ground.
-    modeLabel = groundDem
-      ? "Ground from the DEM"
-      : "Ground from the point clouds";
-  } else if (lazCount > 0) {
-    // "LAZ wins": the worker derives terrain from the point cloud and ignores
-    // any bundled DEM (topo/pipeline.py extract_elvis_zip). Mirror that here so
-    // the submit-time mode/label match what actually runs.
-    mode = "LAZ_ONLY";
-    modeLabel = demCount > 0 ? "LiDAR (bundled DEM ignored)" : "LiDAR only";
-  } else {
-    // demCount > 0 — the empty-input case already threw above.
-    mode = "DEM_ONLY";
-    modeLabel = "DEM only (no vegetation layer)";
-  }
+  const mode: ElvisStats["mode"] = lazCount > 0 ? "LAZ_ONLY" : "DEM_ONLY";
+  // Vegetation is the form's own choice, so the label says only the ground.
+  const modeLabel = groundDem
+    ? "Ground from the DEM"
+    : "Ground from the point clouds";
 
   // Fall back to file count if no tile IDs parsed
   const tileCount = tileIds.size > 0 ? tileIds.size : lazCount + demCount;
   const demResolutionMeters =
     demResolutions.size === 1 ? [...demResolutions][0] : null;
 
-  // Overlap only matters in LAZ mode — the worker's survey selection runs on the
-  // point cloud (a bundled DEM is ignored). Any footprint with >1 point-cloud
-  // file means two surveys cover the same ground.
+  // Overlap is in the point clouds: any footprint with >1 point-cloud file
+  // means two surveys cover the same ground.
   const overlappingSurveys =
     mode === "LAZ_ONLY" &&
     [...lazTileFileCounts.values()].some((count) => count > 1);

@@ -635,7 +635,6 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
 
     // The seed always has completed LiDAR jobs, so there is always a row menu.
-    // (Templates, the other menu here, are hidden once new jobs sharpen.)
     await aside
       .getByRole("button", { name: /^Actions for / })
       .first()
