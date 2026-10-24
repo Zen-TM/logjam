@@ -4,9 +4,9 @@
 // unshared drops out the next time the list loads.
 //
 // PRIVACY: an area's coverage and tile range say where its owner surveyed.
-// The file is wiped with the account (SHARPENED_AREAS_DIR), a list asked for
-// before that wipe is never written (`sharpenedAreasEpoch`), and nothing here
-// logs. Guard: sharpenedAreaStore.test.ts.
+// The file is wiped with the account (SHARPENED_AREAS_DIR), and a list asked
+// for before that wipe is never written (`sharpenedAreasEpoch`; guard:
+// sharpenedAreaStore.test.ts). Nothing here logs.
 import * as FileSystem from "expo-file-system/legacy";
 import type { SharpenedArea, SharpenedOverlay } from "@logjam/shared";
 

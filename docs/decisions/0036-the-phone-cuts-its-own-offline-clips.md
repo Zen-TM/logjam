@@ -122,9 +122,11 @@ saved, by anyone, whatever maps are picked.** `checkRegionCaps` in
 `shared/src/mapRegionEstimate.ts` refuses it on the save screen (guard:
 `mapRegionEstimate.test.ts`, "rejects an area over MAX_REGION_AREA_KM2
 whatever is being saved"). The cap now
-bounds what a save costs the phone: about 160 MB and 185 requests for the four
-clips of 40 km of mountains (updated 2026-10-23: the three above, plus the
-slope clip below).
+bounds what the public clips cost the phone: about 160 MB and 185 requests for
+the four clips of 40 km of mountains (updated 2026-10-23: the three above, plus
+the slope clip below). A signed-in save's sharpened-area clips add to that,
+bounded by the box and the free-space check only: about 0.4 MB a km² of a 2 m
+area and 1.4 MB a km² of a 1 m area (updated 2026-10-24).
 
 **A clip that fails never fails the region.** The rest saves and the card
 reports one map that did not finish. A DEM or contour archive the CDN does not
@@ -200,7 +202,8 @@ Nothing new calls it.
   covers, widened to whole z14 tiles (`areaClipSpecs` in
   `mobile/src/offline/sharpenedClips.ts`). Each clip is cut through the
   presigned URL the list gave, by byte range with no header but `range`, and
-  filed under the area's source id, `lidar-<id>`. A guest has no areas, so
+  filed under the area's source id, `lidar-<id>`. They are queued first, while
+  the list's URLs are freshest. A guest has no areas, so
   their save is unchanged. A presigned URL expires after 24 h, so a clip
   resumed after that fails with a line that says to save the area again. Offline, the map routes the area clips over the statewide
   clips one archive per tile as it does online, the sampler reads an area's
@@ -221,7 +224,8 @@ Nothing new calls it.
   the Vector map, snapping to tracks and creeks, 5 m heights and contours. The
   area a user saves never reaches our API, signed in or not. A save no longer
   costs the API a `pmtiles` process, a temporary file of up to 80 MB and the
-  egress, and no longer fails when the API does.
+  egress, and a guest's save no longer fails when the API does; a signed-in
+  save waits for the account's area list (updated 2026-10-24).
 - **Negative:** the CDN sees which byte ranges a phone reads, and anyone with
   the archive can map ranges back to an area. That was already true of the
   Vector map, snapping and heights online, the requests carry no account, and

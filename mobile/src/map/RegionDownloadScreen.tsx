@@ -437,6 +437,13 @@ export function RegionDownloadScreen({
     (groupId: string, groupLabel: string, allowCellular: boolean) => {
       if (!bbox || !job) return;
       enqueueRegionDownloads([
+        // First, while the list's presigned URLs are freshest: the queue runs
+        // one job at a time, and an expired URL fails its clip for good.
+        ...areaClipSpecs(
+          { bbox, groupId, groupLabel, allowCellular },
+          sharpenedAreas,
+          uuid,
+        ),
         ...job.perSource.map((source) => ({
           taskKind: "tile-pyramid" as const,
           id: uuid(),
@@ -453,11 +460,6 @@ export function RegionDownloadScreen({
           { bbox, groupId, groupLabel, allowCellular },
           job.demArchives.map(({ sourceId }) => sourceId),
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
-        ),
-        ...areaClipSpecs(
-          { bbox, groupId, groupLabel, allowCellular },
-          sharpenedAreas,
-          uuid,
         ),
       ]);
       // The first region brings the place names for search (ADR 0034).
@@ -652,8 +654,9 @@ export function RegionDownloadScreen({
             </Notice>
           </View>
         ) : areasState === "failed" ? (
-          // Not `pointerEvents="none"`: "Try again" must take a press.
-          <View style={styles.mapWarning}>
+          // `box-none`: "Try again" takes a press, and the strip around it
+          // still lets the frame's top handle and a pan through.
+          <View style={styles.mapWarning} pointerEvents="box-none">
             <Notice
               icon="warning"
               tone="warning"
