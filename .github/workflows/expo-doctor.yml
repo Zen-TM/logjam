@@ -1,15 +1,21 @@
 name: expo-doctor
 
-# Not a job in CI: the check compares the expo-* pins with the versions Expo
-# currently publishes, so it turns red whenever a patch release lands, on
-# commits that changed nothing. The deploy workflows run only after a green CI
-# on main, and a patch release must not hold a deploy back.
+# Required on every PR, but it only runs for a Logjam GPS release PR: one that
+# changes the version in mobile/package.json (docs/operations/mobile-release.md).
+# The check compares the expo-* pins with the versions Expo currently
+# publishes, so it turns red whenever a patch release lands, on commits that
+# changed nothing. That is the right verdict on a release, which ships native
+# code to phones that update months later, and the wrong one on every other PR:
+# there it would block unrelated work for upstream drift. Fix a red release PR
+# with `npx expo install --fix` in the same PR.
+#
+# Nightly on main as well, so drift is fixed on an ordinary day and not found
+# on release day: a red run opens one issue (or rewrites the open one), and a
+# green run closes it.
 on:
   pull_request:
-    paths:
-      - "mobile/package.json"
-      - "mobile/package-lock.json"
-      - ".github/workflows/expo-doctor.yml"
+  schedule:
+    - cron: "47 16 * * *" # 02:47 AEST, after the nightly CI run
   workflow_dispatch:
 
 permissions:
@@ -20,16 +26,65 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          fetch-depth: 0
+      # Fails open: a PR whose base version cannot be read runs the check.
+      - name: Is this a release PR?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -uo pipefail
+          read_version() { node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version ?? ""'; }
+          run=true
+          if [ "$EVENT" = pull_request ]; then
+            base=$(git show "$BASE_SHA:mobile/package.json" | read_version) || base=
+            head=$(read_version < mobile/package.json)
+            if [ -n "$base" ] && [ "$base" = "$head" ]; then run=false; fi
+            echo "==> version $base -> $head"
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+      - if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
           cache: npm
           cache-dependency-path: mobile/package-lock.json
-      - name: Install
+      - if: steps.scope.outputs.run == 'true'
+        name: Install
         working-directory: mobile
         run: npm ci
-      # Fails when an expo-* pin drifts from the SDK's own; fix with
-      # `npx expo install --fix`.
-      - name: Expo doctor
+      - if: steps.scope.outputs.run == 'true'
+        name: Expo doctor
         working-directory: mobile
         run: npx expo-doctor
+
+  nightly-issue:
+    needs: expo-doctor
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "expo-doctor is red on main"
+      RESULT: ${{ needs.expo-doctor.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          set -euo pipefail
+          n=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          if [ "$RESULT" = success ]; then
+            [ -z "$n" ] || gh issue close "$n" --comment "Green again in $RUN_URL"
+            exit 0
+          fi
+          body="The nightly \`expo-doctor\` run on \`main\` failed: [run]($RUN_URL). Usually Expo published a patch release or a package was deprecated. In \`mobile/\`, run \`npx expo install --fix\` and \`npx expo-doctor\`. Logjam GPS release PRs are gated on this check."
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label task --label triage --body "$body"
+          fi

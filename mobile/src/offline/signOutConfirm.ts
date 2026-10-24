@@ -7,7 +7,11 @@
 //
 // PRIVACY: counts and a total size, never a name, a coordinate or a bounding
 // box: an alert is the screen most likely to be screenshotted.
-import { formatBytes, pluralCount } from "@logjam/shared";
+import {
+  formatBytes,
+  pluralCount,
+  SIGN_OUT_EVERYWHERE_NOTE,
+} from "@logjam/shared";
 
 import type { Loss } from "./wipedStores";
 
@@ -16,7 +20,11 @@ import type { Loss } from "./wipedStores";
  * not ask: the account is gone, so nothing is waiting to sync and "your places
  * stay in your account" would be untrue.
  */
-export type SignOutHandler = (options?: { accountDeleted?: boolean }) => void;
+export type SignOutHandler = (options?: {
+  accountDeleted?: boolean;
+  /** Also end the account's sessions on every other phone and browser. */
+  everywhere?: boolean;
+}) => void;
 
 /** What the wipe would take, by kind. A zero is a kind with nothing in it. */
 export type SignOutCounts = Record<Loss, number> & {
@@ -31,6 +39,8 @@ export type SignOutConfirm = {
   lines: string[];
   /** What stays. */
   keeps: string;
+  /** Also ends the account's other sessions, so it asks even with no `lines`. */
+  everywhere: boolean;
   /** Offer "Sync first": there is unsynced work and the phone can reach Logjam. */
   canSyncFirst: boolean;
 };
@@ -82,13 +92,15 @@ const LINES: { loss: Loss; text: (n: number, c: SignOutCounts) => string }[] = [
 export function signOutConfirm(
   counts: SignOutCounts,
   online: boolean,
+  everywhere = false,
 ): SignOutConfirm | null {
   const lines = LINES.filter(({ loss }) => counts[loss] > 0).map(
     ({ text, loss }) => text(counts[loss], counts),
   );
-  if (lines.length === 0) return null;
+  if (lines.length === 0 && !everywhere) return null;
   return {
-    title: "Sign out of Logjam GPS?",
+    title: everywhere ? "Sign out everywhere?" : "Sign out of Logjam GPS?",
+    everywhere,
     intro: "This removes from this phone:",
     lines,
     keeps: "Your synced places and trips stay in your account.",
@@ -98,10 +110,13 @@ export function signOutConfirm(
 
 /** The confirmation as one alert body. */
 export function signOutConfirmBody(confirm: SignOutConfirm): string {
+  const loss =
+    confirm.lines.length === 0
+      ? []
+      : [confirm.intro, ...confirm.lines.map((line) => `• ${line}`), ""];
   return [
-    confirm.intro,
-    ...confirm.lines.map((line) => `• ${line}`),
-    "",
+    ...(confirm.everywhere ? [SIGN_OUT_EVERYWHERE_NOTE, ""] : []),
+    ...loss,
     confirm.keeps,
   ].join("\n");
 }
