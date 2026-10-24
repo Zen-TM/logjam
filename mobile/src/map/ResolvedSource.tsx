@@ -10,7 +10,6 @@ import {
 } from "@maplibre/maplibre-react-native";
 
 import type { ResolvedTileSource } from "./sourceResolver";
-import { tileJsonUrl } from "./tileJsonFile";
 
 export function sourceIdFor(key: string): string {
   return `src-${key}`;
@@ -26,7 +25,6 @@ export function ResolvedSource({
   const common = {
     id: sourceIdFor(resolved.key),
     ...(resolved.url != null && { url: resolved.url }),
-    ...(resolved.tileJson != null && { url: tileJsonUrl(resolved.tileJson) }),
     ...(resolved.tiles != null && { tiles: resolved.tiles }),
     ...(resolved.minZoom != null && { minzoom: resolved.minZoom }),
     ...(resolved.maxZoom != null && { maxzoom: resolved.maxZoom }),

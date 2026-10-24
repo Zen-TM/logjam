@@ -14,20 +14,11 @@
 // PRIVACY: an area's tile range says where its owner surveyed. Nothing here
 // logs.
 import {
+  TERRAIN_ROUTED_FROM,
   terrainTileArchive,
   type SharpenedArea,
   type TerrainArchiveLayer,
 } from "@logjam/shared";
-
-/**
- * The zoom each archive is routed from (`terrainTileArchive`): statewide
- * below it everywhere, one archive per tile from it.
- */
-export const ROUTED_FROM: Record<TerrainArchiveLayer, number> = {
-  heights: 15,
-  slope: 15,
-  contours: 14,
-};
 
 /**
  * The fixed address a source reads one of an area's archives at: a request
@@ -40,7 +31,7 @@ export function sharpenedArchiveAddress(
   return `https://sharpened-area.invalid/${areaId}/${layer}.pmtiles`;
 }
 
-/** One rectangle of tiles, inclusive, at its layer's `ROUTED_FROM` zoom. */
+/** One rectangle of tiles, inclusive, at its layer's `TERRAIN_ROUTED_FROM` zoom. */
 export type TileRect = readonly [
   x0: number,
   y0: number,
@@ -54,7 +45,7 @@ export type TerrainRoute<A extends SharpenedArea> = {
 };
 
 /**
- * The world at `ROUTED_FROM[layer]`, cut along every area's range into
+ * The world at `TERRAIN_ROUTED_FROM[layer]`, cut along every area's range into
  * rectangles each read from one archive. Every tile is in exactly one, and
  * its archive is the one `terrainTileArchive` picks for the tile and for
  * every descendant it has.
@@ -63,7 +54,7 @@ export function terrainRoutes<A extends SharpenedArea>(
   areas: readonly A[],
   layer: TerrainArchiveLayer,
 ): TerrainRoute<A>[] {
-  const z = ROUTED_FROM[layer];
+  const z = TERRAIN_ROUTED_FROM[layer];
   const shift = 15 - z;
   const ranges = areas
     .filter((a) => layer !== "contours" || a.contours)
@@ -83,7 +74,7 @@ export function terrainRoutes<A extends SharpenedArea>(
     const column: (typeof routes)[number][] = [];
     for (let j = 0; j + 1 < ys.length; j++) {
       const archive = terrainTileArchive(areas, layer, z, xs[i], ys[j]);
-      // From ROUTED_FROM down to an area's zmax a tile is never absent.
+      // At the zoom routing starts a tile is never absent.
       if (archive === "absent") continue;
       const last = column[column.length - 1];
       if (last?.archive === archive && last.tiles[3] === ys[j] - 1)

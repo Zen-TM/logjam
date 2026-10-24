@@ -570,6 +570,8 @@ describe("routes the Terrain group", () => {
   const ok = (sources: ReturnType<typeof resolveMapSource>) =>
     sources.flatMap((s) => (s.status === "ok" ? [s] : []));
 
+  // Red if statewide isn't stopped at z15, or a DEM TileJSON loses its
+  // terrarium encoding.
   it("stops statewide slope at z15 and reads each rectangle from one archive", () => {
     const sources = ok(
       resolveMapSource(
@@ -600,6 +602,7 @@ describe("routes the Terrain group", () => {
     }
   });
 
+  // Red if the hillshade reads the slope archive.
   it("shades the hillshade from the area's heights", () => {
     const routed = ok(
       resolveMapSource(
@@ -610,6 +613,7 @@ describe("routes the Terrain group", () => {
     expect(JSON.stringify(routed)).toContain("area-1/heights.pmtiles");
   });
 
+  // Red if an area's contours are read past z14.
   it("routes contours from z14, to the area's z14 archive", () => {
     const [statewide, ...routed] = ok(
       resolveMapSource(
@@ -623,6 +627,7 @@ describe("routes the Terrain group", () => {
     expect(own?.tileJson?.encoding).toBeUndefined();
   });
 
+  // Red if an area without contours takes a contour rectangle.
   it("leaves the statewide contours where an area has none", () => {
     const routed = ok(
       resolveMapSource(
@@ -635,6 +640,7 @@ describe("routes the Terrain group", () => {
     );
   });
 
+  // Red if a source reads the presigned URL instead of the fixed address.
   it("puts no presigned URL in a source, so new URLs remount nothing", () => {
     const before = resolveMapSource(
       { kind: "nsw-slope" },
@@ -648,6 +654,7 @@ describe("routes the Terrain group", () => {
     expect(after.map((s) => s.key)).toEqual(before.map((s) => s.key));
   });
 
+  // Red if saved clips are routed offline.
   it("draws statewide alone with no area, and offline", () => {
     expect(resolveMapSource({ kind: "nsw-slope" }, ctx())).toEqual(
       resolveMapSource({ kind: "nsw-slope" }, ctx({ sharpenedAreas: [] })),

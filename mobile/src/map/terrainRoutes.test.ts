@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { terrainTileArchive, type SharpenedArea } from "@logjam/shared";
+import {
+  TERRAIN_ROUTED_FROM,
+  terrainTileArchive,
+  type SharpenedArea,
+} from "@logjam/shared";
 
 import {
-  ROUTED_FROM,
   terrainRoutes,
   tileRectBounds,
   type TerrainRoute,
@@ -39,8 +42,9 @@ const holds = (route: TerrainRoute<SharpenedArea>, x: number, y: number) =>
 
 describe("terrainRoutes", () => {
   for (const layer of ["heights", "slope", "contours"] as const) {
+    // Red if a route widens across archives, or an area drops out of a layer.
     it(`gives each ${layer} tile the archive terrainTileArchive picks, from one route`, () => {
-      const z = ROUTED_FROM[layer];
+      const z = TERRAIN_ROUTED_FROM[layer];
       const shift = 15 - z;
       const routes = terrainRoutes(AREAS, layer);
       for (let x = (96 >> shift) - 1; x <= 306 >> shift; x++)
@@ -53,8 +57,38 @@ describe("terrainRoutes", () => {
         }
     });
 
-    it(`covers the world at z${ROUTED_FROM[layer]} with ${layer} routes that never overlap`, () => {
-      const z = ROUTED_FROM[layer];
+    // Red if terrainTileArchive routes from a zoom other than
+    // TERRAIN_ROUTED_FROM, or an area's tiles are not its range's descendants.
+    it(`draws each deeper ${layer} tile from its route's archive, larger past that archive's deepest zoom`, () => {
+      const from = TERRAIN_ROUTED_FROM[layer];
+      const shift = 15 - from;
+      const routes = terrainRoutes(AREAS, layer);
+      for (let z = from + 1; z <= 18; z++) {
+        const s = 2 ** (z - from);
+        for (let x = (98 >> shift) - 1; x <= 108 >> shift; x++)
+          for (let y = (198 >> shift) - 1; y <= 208 >> shift; y++) {
+            const [route] = routes.filter((r) => holds(r, x, y));
+            const answer = terrainTileArchive(
+              AREAS,
+              layer,
+              z,
+              x * s + s - 1,
+              y * s,
+            );
+            if (answer !== "absent") expect(route.archive).toBe(answer);
+            // Absent: the route's archive stops above z, and MapLibre draws
+            // its deepest tile larger, as Logjam Web draws the parent.
+            else
+              expect(
+                route.archive === "statewide" || route.archive.zmax < z,
+              ).toBe(true);
+          }
+      }
+    });
+
+    // Red if a route widens across archives (two routes then hold one tile).
+    it(`covers the world at z${TERRAIN_ROUTED_FROM[layer]} with ${layer} routes that never overlap`, () => {
+      const z = TERRAIN_ROUTED_FROM[layer];
       const routes = terrainRoutes(AREAS, layer);
       const size = ({ tiles: [x0, y0, x1, y1] }: TerrainRoute<SharpenedArea>) =>
         (x1 - x0 + 1) * (y1 - y0 + 1);
@@ -94,6 +128,7 @@ describe("tileRectBounds", () => {
     );
   };
 
+  // Red if the bounds are not drawn in: the neighbouring row is then inside.
   it("holds the rectangle's tiles and none of their neighbours, at every zoom to z17", () => {
     const rect = [30062, 19646, 30065, 19649] as const;
     const [west, south, east, north] = tileRectBounds(15, rect);

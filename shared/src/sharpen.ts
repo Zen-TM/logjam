@@ -93,6 +93,24 @@ export const TERRAIN_ARCHIVE_LAYERS = ["heights", "slope", "contours"] as const;
 
 export type TerrainArchiveLayer = (typeof TERRAIN_ARCHIVE_LAYERS)[number];
 
+/** Which field of a `SharpenedOverlay` holds each archive's URL. */
+export const SHARPENED_ARCHIVE_URL = {
+  heights: "heightsUrl",
+  slope: "slopeUrl",
+  contours: "contoursUrl",
+} as const satisfies Record<TerrainArchiveLayer, keyof SharpenedOverlay>;
+
+/**
+ * The zoom each archive is routed from (`terrainTileArchive`): statewide
+ * below it everywhere, one archive per tile from it. Logjam GPS stops its
+ * statewide layers here (mobile/src/map/terrainRoutes.ts).
+ */
+export const TERRAIN_ROUTED_FROM = {
+  heights: 15,
+  slope: 15,
+  contours: 14,
+} as const satisfies Record<TerrainArchiveLayer, number>;
+
 /**
  * Which of two areas answers where both could: the finer, then the newer,
  * then the lower id, so the order never depends on how a list was fetched.
@@ -165,7 +183,8 @@ const holds = (
  * Contours: statewide below z14 (the statewide archive's deepest zoom); at
  * z14 and deeper, the first area with a contour archive whose range holds
  * the z14 ancestor, else statewide. Deeper zooms overzoom z14, so a contour
- * tile is never absent. Guard: `sharpen.test.ts`.
+ * tile is never absent. The zooms are `TERRAIN_ROUTED_FROM`. Guard:
+ * `sharpen.test.ts`.
  */
 export function terrainTileArchive<A extends SharpenedArea>(
   areas: readonly A[],
@@ -175,28 +194,25 @@ export function terrainTileArchive<A extends SharpenedArea>(
   y: number,
 ): TerrainTileAnswer<A> {
   const ordered = [...areas].sort(compareSharpenedAreas);
-  if (layer === "contours") {
-    if (z < 14) return "statewide";
-    const shift = z - 14;
-    const area = ordered.find(
-      (a) =>
-        a.contours &&
-        holds(
-          [
-            a.tiles15[0] >> 1,
-            a.tiles15[1] >> 1,
-            a.tiles15[2] >> 1,
-            a.tiles15[3] >> 1,
-          ],
-          x >> shift,
-          y >> shift,
-        ),
-    );
-    return area ?? "statewide";
-  }
-  if (z < 15) return "statewide";
-  const shift = z - 15;
-  const area = ordered.find((a) => holds(a.tiles15, x >> shift, y >> shift));
+  const from = TERRAIN_ROUTED_FROM[layer];
+  if (z < from) return "statewide";
+  const up = 15 - from;
+  const shift = z - from;
+  const area = ordered.find(
+    (a) =>
+      (layer !== "contours" || a.contours) &&
+      holds(
+        [
+          a.tiles15[0] >> up,
+          a.tiles15[1] >> up,
+          a.tiles15[2] >> up,
+          a.tiles15[3] >> up,
+        ],
+        x >> shift,
+        y >> shift,
+      ),
+  );
+  if (layer === "contours") return area ?? "statewide";
   if (area) return z <= area.zmax ? area : "absent";
-  return z === 15 ? "statewide" : "absent";
+  return z === from ? "statewide" : "absent";
 }

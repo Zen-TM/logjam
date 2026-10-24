@@ -4,17 +4,12 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SharpenedOverlay } from "@logjam/shared";
 
-import {
-  serveSharpenedArchives,
-  sharpenedArchiveTransforms,
-} from "./sharpenedArchives";
 import { sharpenedArchiveAddress } from "./terrainRoutes";
 
-const added = new Map<
-  string,
-  { match?: string; find: string; replace: string }
->();
-const removed: string[] = [];
+// MLRN's native transform table, as the module drives it.
+const native = vi.hoisted(() => ({
+  table: new Map<string, { match?: string; find: string; replace: string }>(),
+}));
 vi.mock("@maplibre/maplibre-react-native", () => ({
   TransformRequestManager: {
     addUrlTransform: ({
@@ -26,14 +21,20 @@ vi.mock("@maplibre/maplibre-react-native", () => ({
       find: string;
       replace: string;
     }) => {
-      added.set(id, transform);
+      native.table.set(id, transform);
     },
     removeUrlTransform: (id: string) => {
-      added.delete(id);
-      removed.push(id);
+      native.table.delete(id);
+    },
+    clearUrlTransforms: () => {
+      native.table.clear();
     },
   },
 }));
+
+// A fresh JS context each time: the module's own state starts over, MLRN's
+// native table does not.
+const load = () => import("./sharpenedArchives");
 
 const area = (id: string, contoursUrl: string | null): SharpenedOverlay => ({
   id,
@@ -59,14 +60,14 @@ const kotlinReplace = (input: string, find: string, replacement: string) =>
   );
 
 beforeEach(() => {
-  added.clear();
-  removed.length = 0;
-  serveSharpenedArchives([]);
-  removed.length = 0;
+  vi.resetModules();
+  native.table.clear();
 });
 
 describe("sharpenedArchiveTransforms", () => {
-  it("turns each fixed address into its presigned URL, character for character", () => {
+  // Red if `$` is doubled instead of escaped, or the URL goes in unescaped.
+  it("turns each fixed address into its presigned URL, character for character", async () => {
+    const { sharpenedArchiveTransforms } = await load();
     const a = area("a1", null);
     const transforms = sharpenedArchiveTransforms([a]);
     for (const [layer, url] of [
@@ -80,7 +81,9 @@ describe("sharpenedArchiveTransforms", () => {
     }
   });
 
-  it("matches only its own area's archive", () => {
+  // Red if the pattern loses its anchor or its layer.
+  it("matches only its own area's archive", async () => {
+    const { sharpenedArchiveTransforms } = await load();
     const t = sharpenedArchiveTransforms([area("a1", null)]).get(
       "sharpened-a1-slope",
     )!;
@@ -92,40 +95,67 @@ describe("sharpenedArchiveTransforms", () => {
     ).toBe(false);
   });
 
-  it("serves no contour archive for an area that has none", () => {
+  it("serves no contour archive for an area that has none", async () => {
+    const { sharpenedArchiveTransforms } = await load();
     const ids = [...sharpenedArchiveTransforms([area("a1", null)]).keys()];
     expect(ids).toEqual(["sharpened-a1-heights", "sharpened-a1-slope"]);
   });
 });
 
 describe("serveSharpenedArchives", () => {
-  it("drops the transforms of an area no longer listed", () => {
-    serveSharpenedArchives([
-      area("a1", null),
-      area("a2", "https://c.example/c"),
-    ]);
-    serveSharpenedArchives([area("a2", "https://c.example/c")]);
-    expect(removed.sort()).toEqual([
-      "sharpened-a1-heights",
-      "sharpened-a1-slope",
-    ]);
-    expect([...added.keys()].sort()).toEqual([
+  // Red if stale transforms are kept.
+  it("drops the transforms of an area no longer listed", async () => {
+    const { serveSharpenedArchives, sharpenedAreasEpoch } = await load();
+    const epoch = sharpenedAreasEpoch();
+    serveSharpenedArchives(
+      [area("a1", null), area("a2", "https://c.example/c")],
+      epoch,
+    );
+    serveSharpenedArchives([area("a2", "https://c.example/c")], epoch);
+    expect([...native.table.keys()].sort()).toEqual([
       "sharpened-a2-contours",
       "sharpened-a2-heights",
       "sharpened-a2-slope",
     ]);
   });
 
-  it("holds no URL once signed out", () => {
-    serveSharpenedArchives([area("a1", null)]);
-    serveSharpenedArchives([]);
-    expect(added.size).toBe(0);
+  // Red if the first serve of a JS context doesn't clear MLRN's table.
+  it("drops transforms a JS reload left behind", async () => {
+    native.table.set("sharpened-gone-slope", { find: "x", replace: "y" });
+    const { serveSharpenedArchives, sharpenedAreasEpoch } = await load();
+    serveSharpenedArchives([area("a1", null)], sharpenedAreasEpoch());
+    expect(native.table.has("sharpened-gone-slope")).toBe(false);
   });
 });
 
+describe("stopSharpenedAreasForWipe", () => {
+  // Red if the wipe leaves a transform, or a list read before it is served.
+  it("drops every transform, and never serves a list read before it", async () => {
+    const {
+      serveSharpenedArchives,
+      sharpenedAreasEpoch,
+      stopSharpenedAreasForWipe,
+    } = await load();
+    const before = sharpenedAreasEpoch();
+    serveSharpenedArchives([area("a1", null)], before);
+    stopSharpenedAreasForWipe();
+    expect(native.table.size).toBe(0);
+    // The map, still mounted while the wipe runs, renders with its old list.
+    serveSharpenedArchives([area("a1", null)], before);
+    expect(native.table.size).toBe(0);
+    // The next account's map reads its list after the wipe.
+    serveSharpenedArchives([area("b1", null)], sharpenedAreasEpoch());
+    expect([...native.table.keys()]).toEqual([
+      "sharpened-b1-heights",
+      "sharpened-b1-slope",
+    ]);
+  });
+});
+
+// Red if anything in Logjam GPS sets MLRN's log level below "warn".
 it("never turns MLRN's logging up", () => {
-  // MLRN logs every transformed URL, presigned query and all, at its debug
-  // level. Nothing in Logjam GPS may set a level below "warn".
+  // MLRN logs every transformed URL, presigned query and all, to its JS log
+  // at its debug level.
   const files = (dir: string): string[] =>
     readdirSync(dir).flatMap((name) => {
       const path = join(dir, name);

@@ -326,7 +326,11 @@ import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
-import { serveSharpenedArchives } from "./sharpenedArchives";
+import {
+  serveSharpenedArchives,
+  sharpenedAreasEpoch,
+} from "./sharpenedArchives";
+import { writeTileJsons } from "./tileJsonFile";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -422,6 +426,13 @@ const CAMERA_DEFAULTS = {
  * same button do two different things depending on where the map happened to be.
  */
 const FOLLOW_ZOOM = 15;
+
+/**
+ * MapLibre's deepest zoom, the `maxzoom` of a Terrain layer that draws at
+ * every zoom. Set rather than left out, so a layer whose limit is lifted
+ * (routing falling back to statewide) gets this one and not a stale value.
+ */
+const MAX_LAYER_ZOOM = 24;
 
 /** How near the drawn line a press-and-hold must land to insert a point, in DP. */
 const LINE_GRAB_DP = 24;
@@ -1371,19 +1382,25 @@ export function MapScreen({
 
   // The sharpened areas the user can see: the Terrain group reads each one's
   // own archive inside it (sourceResolver.ts `routeTerrain`). Gated on the
-  // account as well as the list, which keeps its last answer once disabled:
-  // signed out, no area and no transform outlive the account.
-  const sharpenedAreas = useMemo(
-    () =>
-      isGuest
+  // account as well as the list, which keeps its last answer once disabled.
+  // `areasEpoch` is read with the list: a sign-out wipe running while the map
+  // is still mounted stops the list read before it (sharpenedArchives.ts).
+  const { sharpenedAreas, areasEpoch } = useMemo(
+    () => ({
+      sharpenedAreas: isGuest
         ? []
         : (overlays.data?.jobs ?? []).flatMap((job) =>
             job.sharpened ? [job.sharpened] : [],
           ),
+      areasEpoch: sharpenedAreasEpoch(),
+    }),
     [isGuest, overlays.data],
   );
   // Before the sources that read them mount (sharpenedArchives.ts).
-  useMemo(() => serveSharpenedArchives(sharpenedAreas), [sharpenedAreas]);
+  useMemo(
+    () => serveSharpenedArchives(sharpenedAreas, areasEpoch),
+    [sharpenedAreas, areasEpoch],
+  );
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
@@ -1424,31 +1441,40 @@ export function MapScreen({
   const contoursResolved = useMemo(
     () =>
       drawsNswContours(renderedBasemapId, terrainLayers.contours)
-        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
-            (r) => r.status === "ok",
+        ? writeTileJsons(
+            resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+              (r) => r.status === "ok",
+            ),
+            areasEpoch,
           )
         : [],
-    [renderedBasemapId, terrainLayers.contours, ctx],
+    [renderedBasemapId, terrainLayers.contours, ctx, areasEpoch],
   );
   const slopeResolved = useMemo(
     () =>
       terrainLayers.slope
-        ? resolveMapSource(
-            { kind: "nsw-slope", viewport: viewportBbox },
-            ctx,
-          ).filter((r) => r.status === "ok")
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-slope", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
         : [],
-    [terrainLayers.slope, viewportBbox, ctx],
+    [terrainLayers.slope, viewportBbox, ctx, areasEpoch],
   );
   const hillshadeResolved = useMemo(
     () =>
       terrainLayers.hillshade
-        ? resolveMapSource(
-            { kind: "nsw-hillshade", viewport: viewportBbox },
-            ctx,
-          ).filter((r) => r.status === "ok")
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-hillshade", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
         : [],
-    [terrainLayers.hillshade, viewportBbox, ctx],
+    [terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
   );
 
   /**
@@ -4651,8 +4677,8 @@ export function MapScreen({
               type="hillshade"
               id={`nsw-hillshade-${r.key}`}
               beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
-              minzoom={r.layerMinZoom}
-              maxzoom={r.layerMaxZoom}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
             />
           </ResolvedSource>
         ))}
@@ -4663,8 +4689,8 @@ export function MapScreen({
               type="color-relief"
               id={`nsw-slope-${r.key}`}
               beforeId={groundBefore[`nsw-slope-${r.key}`]}
-              minzoom={r.layerMinZoom}
-              maxzoom={r.layerMaxZoom}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               paint={{
                 "color-relief-color": slopeReliefColor(
                   slopeBands,
@@ -4684,8 +4710,8 @@ export function MapScreen({
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
               vectorStyle={nswContoursStyle}
-              minzoom={r.layerMinZoom}
-              maxzoom={r.layerMaxZoom}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
             />
           </ResolvedSource>
         ))}

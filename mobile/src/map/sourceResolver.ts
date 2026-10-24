@@ -21,6 +21,7 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   type BasemapCatalogEntry,
+  TERRAIN_ROUTED_FROM,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
   type TopoLayerFormat,
@@ -28,7 +29,6 @@ import {
 } from "@logjam/shared";
 
 import {
-  ROUTED_FROM,
   sharpenedArchiveAddress,
   terrainRoutes,
   tileRectBounds,
@@ -348,7 +348,7 @@ function routeTerrain(
     !source.url
   )
     return statewide;
-  const z = ROUTED_FROM[layer];
+  const z = TERRAIN_ROUTED_FROM[layer];
   return [
     { ...source, layerMaxZoom: z },
     ...terrainRoutes(areas, layer).map((route): ResolvedTileSource => {

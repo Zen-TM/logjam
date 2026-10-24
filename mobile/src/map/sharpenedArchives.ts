@@ -7,24 +7,25 @@
 // `.invalid` host never resolves (RFC 2606), so a request no transform
 // matches fails instead of leaving the phone.
 //
-// PRIVACY: a presigned URL is a bearer credential. Nothing here logs, and
-// MLRN logs a transformed URL only at its debug level, which Logjam GPS never
-// sets (sharpenedArchives.test.ts, "never turns MLRN's logging up").
+// PRIVACY: a presigned URL is a bearer credential. Nothing here logs. MLRN
+// writes each transformed URL to its JS log at its debug level, which Logjam
+// GPS never sets (sharpenedArchives.test.ts, "never turns MLRN's logging up");
+// natively it writes them to logcat only where the `TransformRequestInterceptor`
+// log tag is set to DEBUG on the device, and to NSLog in an iOS debug build.
+// The sign-out wipe drops every transform (`stopSharpenedAreasForWipe`).
 import { TransformRequestManager } from "@maplibre/maplibre-react-native";
-import type { SharpenedOverlay, TerrainArchiveLayer } from "@logjam/shared";
+import {
+  SHARPENED_ARCHIVE_URL,
+  TERRAIN_ARCHIVE_LAYERS,
+  type SharpenedOverlay,
+} from "@logjam/shared";
 
 import { sharpenedArchiveAddress } from "./terrainRoutes";
 
-const URL_FIELD = {
-  heights: "heightsUrl",
-  slope: "slopeUrl",
-  contours: "contoursUrl",
-} as const satisfies Record<TerrainArchiveLayer, keyof SharpenedOverlay>;
-
 /**
  * The transforms that serve `areas`' archives, by transform id: each fixed
- * address, replaced by the presigned URL, its `\` and `$`
- * escaped (Kotlin's `Regex.replace` reads `$1` as a group).
+ * address, replaced by the presigned URL, its `\` and `$` escaped (Kotlin's
+ * `Regex.replace` reads `$1` as a group).
  */
 export function sharpenedArchiveTransforms(
   areas: readonly SharpenedOverlay[],
@@ -34,8 +35,8 @@ export function sharpenedArchiveTransforms(
     { match: string; find: string; replace: string }
   >();
   for (const area of areas)
-    for (const layer of ["heights", "slope", "contours"] as const) {
-      const url = area[URL_FIELD[layer]];
+    for (const layer of TERRAIN_ARCHIVE_LAYERS) {
+      const url = area[SHARPENED_ARCHIVE_URL[layer]];
       if (!url) continue;
       // Its dots match any character, harmlessly: an id is a UUID.
       const pattern = `^${sharpenedArchiveAddress(area.id, layer)}`;
@@ -48,19 +49,41 @@ export function sharpenedArchiveTransforms(
   return transforms;
 }
 
-let installed = new Set<string>();
+// Bumped by the sign-out wipe: a list read before it serves nothing after it,
+// and its TileJSONs are not written again (tileJsonFile.ts).
+let epoch = 0;
+
+/** Read with the list of areas; handed back to serve them. */
+export const sharpenedAreasEpoch = (): number => epoch;
+
+// The transform ids installed, or null before the first serve of this JS
+// context: MLRN's transforms are native and outlive a JS reload.
+let installed: Set<string> | null = null;
+
+/**
+ * Called by the sign-out wipe: every transform goes, and no list read before
+ * it is served again. The map stays mounted while the wipe runs.
+ */
+export function stopSharpenedAreasForWipe(): void {
+  epoch += 1;
+  TransformRequestManager.clearUrlTransforms();
+  installed = new Set();
+}
 
 /**
  * Point the fixed addresses at `areas`' current URLs, and drop the ones of
- * areas no longer listed (deleted, unshared, or signed out). Called while the
- * map renders, before the sources that read them mount: MLRN applies both
- * on the UI thread, in the order they were sent.
+ * areas no longer listed (deleted or unshared). Called while the map renders,
+ * before the sources that read them mount: MLRN applies both on the UI
+ * thread, in the order they were sent.
  */
 export function serveSharpenedArchives(
   areas: readonly SharpenedOverlay[],
+  areasEpoch: number,
 ): void {
+  if (areasEpoch !== epoch) return;
+  if (installed === null) TransformRequestManager.clearUrlTransforms();
   const transforms = sharpenedArchiveTransforms(areas);
-  for (const id of installed)
+  for (const id of installed ?? [])
     if (!transforms.has(id)) TransformRequestManager.removeUrlTransform(id);
   for (const [id, transform] of transforms)
     TransformRequestManager.addUrlTransform({ id, ...transform });
