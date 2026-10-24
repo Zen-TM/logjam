@@ -3,10 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   NSW_TERRAIN_SOURCE,
   WORLDWIDE_TERRAIN_SOURCE,
+  applyTerrain,
   dropStaleTerrainSources,
   terrainSourceFor,
 } from "./terrainSource";
-import type { SharpenedOverlay } from "@logjam/shared";
+import { NSW_5M, type SharpenedOverlay } from "@logjam/shared";
 
 function fakeMap(lng: number, lat: number) {
   const sources = new Map<string, unknown>();
@@ -125,6 +126,7 @@ describe("terrainSourceFor", () => {
       });
       expect(spec.url).toBeUndefined();
       expect(spec.attribution).toContain("a made-up survey");
+      expect(spec.attribution).toContain(NSW_5M.creditHtml);
     });
 
     // Mutation: one source id for every set, and a revoked share keeps being
@@ -151,6 +153,82 @@ describe("terrainSourceFor", () => {
         none,
       );
       expect(removed).toEqual([before]);
+    });
+  });
+
+  // Mutations (each red): skip dropStaleTerrainSources; setTerrain with the
+  // old source; ignore isCurrent.
+  describe("applyTerrain", () => {
+    const area: SharpenedOverlay = {
+      id: "a1",
+      zmax: 16,
+      tiles15: [30100, 19654, 30103, 19657],
+      coverage: [150.7, -33.8, 150.72, -33.78],
+      contours: false,
+      credit: "Elevation: a made-up survey.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+      heightsUrl: "https://bucket.test/h?sig",
+      slopeUrl: "https://bucket.test/s?sig",
+      contoursUrl: null,
+    };
+    function terrainMap() {
+      const base = fakeMap(...KATOOMBA);
+      const added = new Set<string>();
+      const map = Object.assign(base, {
+        getSource: (id: string) => (added.has(id) ? {} : undefined),
+        addSource: vi.fn((id: string) => void added.add(id)),
+        getStyle: () => ({
+          sources: Object.fromEntries(
+            [WORLDWIDE_TERRAIN_SOURCE, ...added].map((id) => [id, {}]),
+          ),
+        }),
+        removeSource: vi.fn((id: string) => void added.delete(id)),
+        setTerrain: vi.fn(),
+        once: vi.fn(),
+      });
+      return map;
+    }
+
+    it("draws the new set and removes the source of an area no longer seen", async () => {
+      const map = terrainMap();
+      const go = (areas: SharpenedOverlay[]) =>
+        applyTerrain(
+          map as never,
+          areas,
+          opens,
+          "https://web.test",
+          () => true,
+        );
+      await go([area]);
+      const withArea = map.setTerrain.mock.calls[0]![0].source as string;
+      await go([]);
+      expect(map.setTerrain.mock.calls[1]![0].source).toBe(NSW_TERRAIN_SOURCE);
+      expect(map.removeSource).toHaveBeenCalledWith(withArea);
+      expect(map.removeSource).not.toHaveBeenCalledWith(
+        WORLDWIDE_TERRAIN_SOURCE,
+      );
+    });
+
+    it("draws nothing for a stale answer, and tilts once idle", async () => {
+      const map = terrainMap();
+      await applyTerrain(
+        map as never,
+        [area],
+        opens,
+        "https://web.test",
+        () => false,
+      );
+      expect(map.setTerrain).not.toHaveBeenCalled();
+      const tilt = vi.fn();
+      await applyTerrain(
+        map as never,
+        [],
+        opens,
+        "https://web.test",
+        () => true,
+        tilt,
+      );
+      expect(map.once).toHaveBeenCalledWith("idle", tilt);
     });
   });
 });

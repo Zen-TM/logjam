@@ -23,11 +23,8 @@ import {
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
-import {
-  WORLDWIDE_TERRAIN_SOURCE,
-  dropStaleTerrainSources,
-  terrainSourceFor,
-} from "./terrainSource";
+import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import type { PlaceHighlight } from "./placeHighlight";
@@ -3436,8 +3433,17 @@ function Map({
   useEffect(() => {
     sharpenedAreasRef.current = sharpenedAreas ?? [];
   }, [sharpenedAreas]);
-  const applyTerrain = (map: maplibregl.Map, toggle: number, tilt: boolean) => {
-    void terrainSourceFor(
+  // Set on switching 3D on, cleared when the tilt is scheduled: a change of
+  // areas before then still tilts.
+  const pendingTiltRef = useRef(false);
+  const applyTerrainNow = (map: maplibregl.Map, toggle: number) => {
+    const tilt = pendingTiltRef.current
+      ? () => {
+          pendingTiltRef.current = false;
+          map.easeTo({ pitch: 30, duration: 1200 });
+        }
+      : undefined;
+    void applyTerrain(
       map,
       sharpenedAreasRef.current,
       async (url) => {
@@ -3447,36 +3453,25 @@ function Map({
         pmtilesProtocol.add(archive);
       },
       window.location.origin,
-    ).then((source) => {
-      // The second test: the map may have been removed while this waited.
-      if (toggle !== terrainToggleRef.current || mapRef.current !== map) return;
-      map.setTerrain({ source, exaggeration: 1.5 });
-      dropStaleTerrainSources(map, source);
-      // Turning on — wait for the terrain tiles to actually load before tilting
-      if (tilt)
-        map.once("idle", () => {
-          map.easeTo({ pitch: 30, duration: 1200 });
-        });
-    });
+      // The map may have been removed, or 3D toggled, while this waited.
+      () => toggle === terrainToggleRef.current && mapRef.current === map,
+      tilt,
+    );
   };
-  // A new set of areas (sign-out, a share revoked) while 3D is on: draw the
-  // new set, never an area the user can no longer see.
-  const areasKeyNow = areasKey(sharpenedAreas ?? []);
-  const drawnAreasKeyRef = useRef(areasKeyNow);
-  useEffect(() => {
-    if (drawnAreasKeyRef.current === areasKeyNow) return;
-    drawnAreasKeyRef.current = areasKeyNow;
+  // A change of areas while 3D is on draws terrain again from the new set:
+  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
+  // ("applyTerrain": the new source, the old one removed).
+  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
     const map = mapRef.current;
-    if (!map || !is3D) return;
-    applyTerrain(map, ++terrainToggleRef.current, false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areasKeyNow]);
+    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+  });
   const toggleTerrain = () => {
     const map = mapRef.current;
     if (!map) return;
     const toggle = ++terrainToggleRef.current;
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
+      pendingTiltRef.current = false;
       map.setTerrain(null);
       map.setMaxPitch(0);
       map.touchPitch.disable();
@@ -3492,7 +3487,8 @@ function Map({
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
-      applyTerrain(map, toggle, true);
+      pendingTiltRef.current = true;
+      applyTerrainNow(map, toggle);
     }
 
     setIs3D(!is3D);

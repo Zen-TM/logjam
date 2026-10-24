@@ -87,3 +87,33 @@ export function dropStaleTerrainSources(
   for (const id of Object.keys(map.getStyle().sources ?? {}))
     if (id.startsWith(NSW_TERRAIN_SOURCE) && id !== keep) map.removeSource(id);
 }
+
+/**
+ * Draws 3D terrain from the source for `areas`, then drops the sources it
+ * replaces. `isCurrent` is asked after the archive opens: a newer toggle, or a
+ * removed map, makes this answer stale and nothing is drawn.
+ */
+export async function applyTerrain(
+  map: Pick<
+    MapLibreMap,
+    | "getCenter"
+    | "getSource"
+    | "addSource"
+    | "getStyle"
+    | "removeSource"
+    | "setTerrain"
+    | "once"
+  >,
+  areas: readonly SharpenedOverlay[],
+  openArchive: (url: string) => Promise<unknown>,
+  origin: string,
+  isCurrent: () => boolean,
+  /** Runs once the terrain tiles have loaded (the auto-tilt on turning 3D on). */
+  afterIdle?: () => void,
+): Promise<void> {
+  const source = await terrainSourceFor(map, areas, openArchive, origin);
+  if (!isCurrent()) return;
+  map.setTerrain({ source, exaggeration: 1.5 });
+  dropStaleTerrainSources(map, source);
+  if (afterIdle) map.once("idle", afterIdle);
+}
