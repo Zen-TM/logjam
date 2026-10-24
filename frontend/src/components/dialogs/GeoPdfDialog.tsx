@@ -1157,8 +1157,11 @@ function GeoPdfDialog({
           {!templateMode && (
             <section className={classes.group}>
               <SectionHeader title="Format" />
+              {/* Named for what it holds, beside For GIS: the choice spans the
+                  two groups, so neither claims it all (the render test "names
+                  the GeoPDF group"). */}
               <ChipRail
-                label="Format"
+                label="For print"
                 className={classes.railCell}
                 options={GEOPDF_OPTION}
                 value={format}

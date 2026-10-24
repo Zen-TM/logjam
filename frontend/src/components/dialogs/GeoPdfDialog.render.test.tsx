@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -417,6 +423,16 @@ describe("Export an area, for GIS", () => {
         .getAttribute("aria-checked"),
     ).toBe("true");
     expect(screen.getByText("For GIS").closest("details")!.open).toBe(false);
+  });
+
+  // The choice spans two groups, so neither may claim the whole of it: with
+  // a GIS format chosen, a screen reader would hear "Format" with nothing
+  // checked. Mutation: name the GeoPDF group "Format" again.
+  it("names the GeoPDF group for what it holds, beside For GIS", () => {
+    render(dialog({ open: true }));
+    const print = screen.getByRole("radiogroup", { name: "For print" });
+    expect(within(print).getByRole("radio", { name: "GeoPDF" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "For GIS" })).toBeTruthy();
   });
 
   // A GIS file is a free box: no paper, and only the layers the format holds.
