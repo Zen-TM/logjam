@@ -349,6 +349,13 @@ jobs:
         env:
           VITE_AUTH_MODE: fake
         run: npx playwright test e2e/a11y.spec.ts --workers=1
+      # App's own state around Export an area's box pick, which no unit test
+      # reaches (App has no render harness). Writes nothing.
+      - name: Playwright Export an area
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/export-area.spec.ts --workers=1
       # Writes to the seeded account and Undoes it, which leaves sync
       # tombstones (frontend/AGENTS.md): after the integration suite, never
       # before it.

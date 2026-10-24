@@ -321,9 +321,10 @@ function App() {
   // opens on a GIS format (from Maps, Exports).
   const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
   const [exportOpensWithGis, setExportOpensWithGis] = useState(false);
-  // A new key for every opening that is not a pick coming back, so the dialog
-  // starts afresh even when a pick it left for never returned (another
-  // product took the box tool over it).
+  // A new key for every opening that is not a pick coming back
+  // (`freshExportDialog`), because a pick the dialog left for may never return:
+  // another product can take the box tool over it. Held by
+  // e2e/export-area.spec.ts (run in CI), since App has no render harness.
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -1492,6 +1493,8 @@ function App() {
     setPendingGeoPdfExtent(null);
     setPendingGeoPdfScale(null);
     setPendingExportBox(null);
+    setExportOpensWithGis(false);
+    setExportAreaSeed(null);
   };
 
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
@@ -1835,9 +1838,9 @@ function App() {
           onOpenExport={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
-            setExportOpensWithGis(true);
             setBoxPick((pick) => endBox(pick, "export"));
             freshExportDialog();
+            setExportOpensWithGis(true);
             setShowGeoPdf(true);
           }}
           onExportArea={(job) => {

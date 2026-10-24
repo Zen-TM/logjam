@@ -30,8 +30,8 @@ export function isPicking(pick: BoxPick, forWhat: BoxFor): boolean {
 /**
  * Whether the rail and the pages are held still while the box is drawn. The
  * export dialog is hidden as a round trip meanwhile, so a page that opened it
- * would bring back the stale form (boxPick.test.ts). TopoDialog's own pick
- * leaves them live, as it always has.
+ * would bring back the stale form (boxPick.test.ts). A topo's pick leaves them
+ * live.
  */
 export function boxPickDimsUI(pick: BoxPick): boolean {
   return pick === "export";

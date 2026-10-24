@@ -34,7 +34,7 @@ describe("the box tool, shared by a topo and an export", () => {
   // the export from `boxPickDimsUI`.
   it("holds the pages still while it draws an export's box", () => {
     expect(boxPickDimsUI(armBox(NO_BOX_PICK, "export"))).toBe(true);
-    // As before: TopoDialog's own pick leaves them live.
+    // A topo's pick leaves them live.
     expect(boxPickDimsUI(armBox(NO_BOX_PICK, "topo"))).toBe(false);
     expect(boxPickDimsUI(NO_BOX_PICK)).toBe(false);
   });
