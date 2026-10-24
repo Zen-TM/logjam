@@ -39,6 +39,8 @@ describe("Maps, Exports, before it has a list", () => {
     expect(refetch).toHaveBeenCalledOnce();
   });
 
+  // Mutation: drop the !loaded branch, and a load in flight reads as
+  // "No exports yet".
   it("says it is loading until the first fetch settles", () => {
     panel({ loaded: false, error: null });
     expect(screen.getByText("Loading your exports…")).toBeTruthy();

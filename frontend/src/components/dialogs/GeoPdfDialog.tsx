@@ -1944,8 +1944,7 @@ function AreaExportFields({
           ))}
         </div>
         <FieldError message={noLayers ? "Pick at least one layer." : null} />
-        {/* Unknown, never free (`estimateCredits`), until computeEstimate
-            has an area-export kind. */}
+        {/* No number until computeEstimate has an area-export kind. */}
         <p className={classes.note}>
           Its time and credits aren't known until it has run; it's charged for
           the time it takes.

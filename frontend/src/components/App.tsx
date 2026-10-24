@@ -87,6 +87,15 @@ import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import { footprintBounds } from "./map/topoFootprint";
 import {
+  armBox,
+  boxFor,
+  boxPickDimsUI,
+  endBox,
+  isPicking,
+  NO_BOX_PICK,
+  type BoxPick,
+} from "./map/boxPick";
+import {
   buildWays,
   wayFromRoute,
   type WayItem,
@@ -302,15 +311,20 @@ function App() {
 
   // Topo dialog
   const [showTopo, setShowTopo] = useState(false);
-  const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
+  // The box tool, drawing a topo's area or an export's (`boxPick.ts`).
+  const [boxPick, setBoxPick] = useState<BoxPick>(NO_BOX_PICK);
+  const selectingTopoBbox = isPicking(boxPick, "topo");
+  const selectingExportBox = isPicking(boxPick, "export");
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
-  // Export an area: a GIS format's box is drawn with the same tool.
-  const [selectingExportBox, setSelectingExportBox] = useState(false);
   const [pendingExportBox, setPendingExportBox] = useState<TBbox | null>(null);
   // The box an opening was given (a selection's, a topo's), and whether it
   // opens on a GIS format (from Maps, Exports).
   const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
   const [exportOpensWithGis, setExportOpensWithGis] = useState(false);
+  // A new key for every opening that is not a pick coming back, so the dialog
+  // starts afresh even when a pick it left for never returned (another
+  // product took the box tool over it).
+  const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygonal | null>(
@@ -1446,7 +1460,11 @@ function App() {
     );
   }
 
-  const dimUI = pickingCoords || selectingFilterArea || selectingGeoPdfExtent;
+  const dimUI =
+    pickingCoords ||
+    selectingFilterArea ||
+    selectingGeoPdfExtent ||
+    boxPickDimsUI(boxPick);
 
   // A filter changes what the MAP shows too, so the map says so while the
   // Places page is closed or scrolled away.
@@ -1468,6 +1486,14 @@ function App() {
       </Notice>
     ) : null;
 
+  // Opening Export an area anew: no stale form, and no pick result from last time.
+  const freshExportDialog = () => {
+    setExportDialogKey((key) => key + 1);
+    setPendingGeoPdfExtent(null);
+    setPendingGeoPdfScale(null);
+    setPendingExportBox(null);
+  };
+
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
   // A topo goes straight to its dialog with the box; an export opens a GeoPDF's
   // paper frame on the map over the box, because the paper decides the final
@@ -1478,8 +1504,9 @@ function App() {
       setShowTopo(true);
       return;
     }
+    freshExportDialog();
     setExportAreaSeed(bounds);
-    setSelectingExportBox(false);
+    setBoxPick((pick) => endBox(pick, "export"));
     setEditingGeoPdfTemplate(undefined);
     setInitialGeoPdfTemplateId(null);
     setGeoPdfPaperAspect(210 / 297);
@@ -1524,7 +1551,7 @@ function App() {
           icon: "lidar",
           onSelect: () => {
             setActivePanel(null);
-            setSelectingTopoBbox(true);
+            setBoxPick((pick) => armBox(pick, "topo"));
           },
         },
         {
@@ -1532,9 +1559,10 @@ function App() {
           label: "Export an area",
           icon: "export",
           onSelect: () => {
-            setSelectingExportBox(false);
+            setBoxPick((pick) => endBox(pick, "export"));
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
+            freshExportDialog();
             setShowGeoPdf(true);
           },
         },
@@ -1559,7 +1587,7 @@ function App() {
         open={showTopo}
         onClose={() => {
           setShowTopo(false);
-          setSelectingTopoBbox(false);
+          setBoxPick((pick) => endBox(pick, "topo"));
           setInitialTopoTemplateId(null);
           // The dialog empties itself on a real close; the drawn area is held
           // out here (going off to draw closes the dialog), so it has to be
@@ -1568,7 +1596,7 @@ function App() {
         }}
         onSelectBbox={() => {
           setShowTopo(false);
-          setSelectingTopoBbox(true);
+          setBoxPick((pick) => armBox(pick, "topo"));
         }}
         awaitingBbox={selectingTopoBbox}
         pendingBbox={pendingTopoBbox}
@@ -1580,6 +1608,7 @@ function App() {
           .filter((n): n is string => !!n)}
       />
       <GeoPdfDialog
+        key={exportDialogKey}
         open={showGeoPdf}
         onClose={() => {
           setShowGeoPdf(false);
@@ -1588,7 +1617,7 @@ function App() {
           setExportAreaSeed(null);
           setPendingExportBox(null);
           setExportOpensWithGis(false);
-          setSelectingExportBox(false);
+          setBoxPick((pick) => endBox(pick, "export"));
         }}
         onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
           // The latest pick, every visit: the map follows the dialog.
@@ -1599,7 +1628,7 @@ function App() {
           setGeoPdfInitialScale(scale);
           setShowGeoPdf(false);
           setActivePanel(null);
-          setSelectingExportBox(false);
+          setBoxPick((pick) => endBox(pick, "export"));
           setSelectingGeoPdfExtent(true);
         }}
         pendingExtent={pendingGeoPdfExtent}
@@ -1614,7 +1643,7 @@ function App() {
         editingTemplate={editingGeoPdfTemplate ?? undefined}
         onTemplateSaved={() => {
           setEditingGeoPdfTemplate(undefined);
-          setSelectingExportBox(false);
+          setBoxPick((pick) => endBox(pick, "export"));
           setShowGeoPdf(false);
           setGeoPdfTemplateRefetch((n) => n + 1);
         }}
@@ -1625,7 +1654,7 @@ function App() {
         onPickArea={() => {
           setShowGeoPdf(false);
           setActivePanel(null);
-          setSelectingExportBox(true);
+          setBoxPick((pick) => armBox(pick, "export"));
         }}
         pendingArea={pendingExportBox}
         onExportQueued={refetchTopoExports}
@@ -1766,21 +1795,25 @@ function App() {
           onOpenGeoPdf={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
+            freshExportDialog();
             setShowGeoPdf(true);
           }}
           onOpenGeoPdfWithTemplate={(id) => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(id);
+            freshExportDialog();
             setShowGeoPdf(true);
           }}
           onEditGeoPdfTemplate={(t) => {
             setEditingGeoPdfTemplate(t);
             setInitialGeoPdfTemplateId(null);
+            freshExportDialog();
             setShowGeoPdf(true);
           }}
           onCreateGeoPdfTemplate={() => {
             setEditingGeoPdfTemplate(null);
             setInitialGeoPdfTemplateId(null);
+            freshExportDialog();
             setShowGeoPdf(true);
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
@@ -1803,7 +1836,8 @@ function App() {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
             setExportOpensWithGis(true);
-            setSelectingExportBox(false);
+            setBoxPick((pick) => endBox(pick, "export"));
+            freshExportDialog();
             setShowGeoPdf(true);
           }}
           onExportArea={(job) => {
@@ -1927,22 +1961,22 @@ function App() {
             mapBoundsRef.current = bounds;
             setMapBounds(bounds);
           }}
-          selectingBbox={selectingTopoBbox || selectingExportBox}
+          selectingBbox={boxFor(boxPick) !== null}
           onBboxSelected={(bbox) => {
-            if (selectingExportBox) {
+            if (boxFor(boxPick) === "export") {
               setPendingExportBox(bbox);
-              setSelectingExportBox(false);
+              setBoxPick((pick) => endBox(pick, "export"));
               setShowGeoPdf(true);
               return;
             }
             setPendingTopoBbox(bbox);
-            setSelectingTopoBbox(false);
+            setBoxPick((pick) => endBox(pick, "topo"));
             setShowTopo(true);
           }}
           onBboxCancelled={
-            selectingExportBox
+            boxFor(boxPick) === "export"
               ? () => {
-                  setSelectingExportBox(false);
+                  setBoxPick((pick) => endBox(pick, "export"));
                   setShowGeoPdf(true);
                 }
               : undefined
