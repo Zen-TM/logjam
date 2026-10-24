@@ -173,8 +173,8 @@ describe("inAreasEpoch", () => {
 
 describe("sharpenedAreasOf", () => {
   // Red if the map's areas take the epoch they land in rather than the one
-  // the list carries (MapScreen's R2-1 shape): a list in flight at sign-out
-  // would be served after the wipe.
+  // the list carries: a list in flight at sign-out would be served after the
+  // wipe.
   it("gives a list in flight at sign-out the epoch it was asked in", async () => {
     const {
       inAreasEpoch,
