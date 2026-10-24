@@ -19,13 +19,18 @@ import _native_stub  # noqa: F401,E402
 from _native_stub import is_stubbed  # noqa: E402
 
 from area_export import (  # noqa: E402
+    AREA_CELL_M,
     CELL_M,
     FORMATS,
     LAYERS,
     LAYERS_BY_FORMAT,
     MBTILES_ZOOMS,
     STYLE_SLOPE_BANDS,
+    ROUTED_FROM,
+    Area,
     AreaOutsideNsw,
+    area_credit_line,
+    area_from,
     credit_line,
     HILLSHADE_FLAT,
     HILLSHADE_MAX_ALPHA,
@@ -35,11 +40,15 @@ from area_export import (  # noqa: E402
     mga_extent,
     slope_colours,
     plan,
+    tile_archive,
     tile_range,
 )
 
 _AREA_EXPORT_TS = os.path.join(
     os.path.dirname(__file__), "..", "..", "shared", "src", "areaExport.ts"
+)
+_SHARPEN_TS = os.path.join(
+    os.path.dirname(__file__), "..", "..", "shared", "src", "sharpen.ts"
 )
 ATTRIBUTION = (
     "Derived from the NSW 5 m Digital Elevation Model, © State of New South "
@@ -354,10 +363,11 @@ class MbtilesSettings(unittest.TestCase):
             (minor["zoomMin"], minor["intervalM"]), (CONTOUR_ZOOMS["minor"][0], 10)
         )
         self.assertEqual(minor["majorEveryN"], 5)
-        # One band at every zoom the file has, no gap and no overlap.
+        # One band at every zoom the file can have, a 1 m area's z17 too, no
+        # gap and no overlap.
         self.assertEqual(
             (major["zoomMin"], major["zoomMax"] + 1, minor["zoomMax"]),
-            (MBTILES_ZOOMS[0], minor["zoomMin"], MBTILES_ZOOMS[1]),
+            (MBTILES_ZOOMS[0], minor["zoomMin"], max(AREA_CELL_M)),
         )
 
 
@@ -545,6 +555,427 @@ class ContoursAlone(unittest.TestCase):
             self.export({(15, *far): b"heights"})
 
 
+def made_up_area(**over) -> Area:
+    """The made-up area of shared/src/sharpen.test.ts: a z15 range of two by
+    two z14 tiles."""
+    fields = dict(
+        id="a",
+        zmax=16,
+        tiles15=(30100, 19400, 30103, 19403),
+        coverage=(150.7, -33.8, 150.72, -33.78),
+        credit="Elevation: derived from a LiDAR survey. CC BY 3.0 AU.",
+        keys={"heights": "h", "slope": "s", "contours": "c"},
+        footprint=None,
+    )
+    fields.update(over)
+    return Area(**fields)
+
+
+class TileArchive(unittest.TestCase):
+    """The same edges as `terrainTileArchive` in shared/src/sharpen.test.ts,
+    over areas already in the router's order (the API's)."""
+
+    a = made_up_area()
+
+    def route(self, layer, z, x, y, areas=None):
+        answer = tile_archive([self.a] if areas is None else areas, layer, z, x, y)
+        return answer if isinstance(answer, str) else answer.id
+
+    # Mutations: an area answering below z15, or a statewide tile past z15.
+    def test_statewide_below_z15_and_nothing_past_it_outside_an_area(self):
+        self.assertEqual(self.route("heights", 14, 15050, 9700), "statewide")
+        self.assertEqual(self.route("heights", 15, 30099, 19400), "statewide")
+        self.assertEqual(self.route("heights", 16, 60198, 38800), "absent")
+        self.assertEqual(self.route("slope", 17, 120396, 77600), "absent")
+
+    # Mutation: an off-by-one at either edge of the inclusive range.
+    def test_exactly_the_range_and_its_descendants(self):
+        self.assertEqual(self.route("heights", 15, 30100, 19400), "a")
+        self.assertEqual(self.route("heights", 15, 30103, 19403), "a")
+        self.assertEqual(self.route("heights", 15, 30104, 19403), "statewide")
+        self.assertEqual(self.route("heights", 15, 30103, 19404), "statewide")
+        self.assertEqual(self.route("slope", 16, 30103 * 2 + 1, 19403 * 2 + 1), "a")
+        self.assertEqual(self.route("slope", 16, 30104 * 2, 19403 * 2), "absent")
+        self.assertEqual(self.route("slope", 16, 30100 * 2 - 1, 19400 * 2), "absent")
+
+    # Mutation: an area answering past its zmax.
+    def test_past_the_zmax_is_left_to_the_parent(self):
+        self.assertEqual(self.route("heights", 16, 60200, 38800), "a")
+        self.assertEqual(self.route("heights", 17, 120400, 77600), "absent")
+        fine = [made_up_area(zmax=17)]
+        self.assertEqual(self.route("heights", 17, 120400, 77600, fine), "a")
+
+    # Mutation: ask the areas in some other order than the API's.
+    def test_the_first_area_in_the_given_order_answers(self):
+        fine = made_up_area(id="fine", zmax=17, tiles15=(30102, 19402, 30105, 19405))
+        both = [fine, self.a]  # the router's order: finer first
+        self.assertEqual(self.route("heights", 15, 30102, 19402, both), "fine")
+        self.assertEqual(self.route("heights", 15, 30100, 19400, both), "a")
+        self.assertEqual(
+            self.route("heights", 17, 30100 * 4, 19400 * 4, both), "absent"
+        )
+
+    # Mutations: contours routed from z15, absent past z14, or taken from an
+    # area with no contour archive.
+    def test_contours_route_at_z14_and_are_never_absent(self):
+        self.assertEqual(self.route("contours", 13, 7525, 4850), "statewide")
+        self.assertEqual(self.route("contours", 14, 15050, 9700), "a")
+        self.assertEqual(self.route("contours", 14, 15052, 9700), "statewide")
+        self.assertEqual(self.route("contours", 16, 60200, 38800), "a")
+        self.assertEqual(self.route("contours", 16, 60208, 38800), "statewide")
+        bare = [made_up_area(keys={"heights": "h", "slope": "s", "contours": None})]
+        self.assertEqual(self.route("contours", 14, 15050, 9700, bare), "statewide")
+
+
+class AreaFrom(unittest.TestCase):
+    row = {
+        "id": "job-1",
+        "sharpen": {
+            "v": 1,
+            "zmax": 17,
+            "tiles15": [30100, 19400, 30103, 19403],
+            "coverage": [150.7, -33.8, 150.72, -33.78],
+            "credit": "Elevation: derived from a LiDAR survey.",
+            "keys": {
+                "heights": "outputs/job-1/heights.pmtiles",
+                "slope": "outputs/job-1/slope.pmtiles",
+                "contours": None,
+            },
+        },
+        "footprint": {"type": "Polygon", "coordinates": []},
+    }
+
+    def test_reads_an_area(self):
+        area = area_from(self.row)
+        self.assertEqual((area.zmax, area.contours), (17, False))
+        self.assertEqual(area.keys["heights"], "outputs/job-1/heights.pmtiles")
+
+    # Mutation: drop the own-outputs check, and a bad row points the worker's
+    # role at another job's (or any) object.
+    def test_refuses_a_key_outside_the_jobs_own_outputs(self):
+        import copy
+
+        bad = copy.deepcopy(self.row)
+        bad["sharpen"]["keys"]["slope"] = "outputs/someone-else/slope.pmtiles"
+        self.assertIsNone(area_from(bad))
+        self.assertIsNone(area_from({**self.row, "sharpen": {"v": 2}}))
+
+
+class AreaCredit(unittest.TestCase):
+    # Mutation: credit the survey for "Elevation", not the layers drawn.
+    def test_worded_as_the_geopdf_words_it(self):
+        self.assertEqual(
+            area_credit_line(
+                ["contours", "slope"], "Elevation: derived from a LiDAR survey."
+            ),
+            "Slope and contours: derived from a LiDAR survey.",
+        )
+
+
+def terrarium_png(value: float) -> bytes:
+    """One 256 px tile of a single height or slope, as terrarium PNG."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from build_nsw_dem import encode_terrarium
+
+    grid = np.full((256, 256), value, np.float32)
+    rgb = encode_terrarium(grid, np.ones_like(grid, bool), 0.25)
+    buf = io.BytesIO()
+    Image.fromarray(rgb).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@unittest.skipIf(
+    is_stubbed("osgeo") or is_stubbed("pmtiles") or is_stubbed("numpy"),
+    "needs real GDAL, pmtiles and numpy",
+)
+class SharpenedAreaInAnExport(unittest.TestCase):
+    """A made-up area near Katoomba, its slope 40° where the statewide one is
+    5°, inside a box a little larger than its z15 range."""
+
+    def setUp(self):
+        from build_nsw_dem import lonlat_to_tile
+
+        self.box = (150.300, -33.705, 150.320, -33.690)
+        sx0, sy0 = lonlat_to_tile(self.box[0], self.box[3], 15)
+        sx1, sy1 = lonlat_to_tile(self.box[2], self.box[1], 15)
+        # Statewide z15 tiles over the box, and the area: one z14 tile
+        # (whole, as an area's range is) at the box's north-west corner.
+        self.statewide = {
+            "heights": archive_of(
+                {(15, x, y): terrarium_png(900.0)
+                 for x in range(sx0, sx1 + 1) for y in range(sy0, sy1 + 1)},
+                ATTRIBUTION,
+            ),
+            "slope": archive_of(
+                {(15, x, y): terrarium_png(5.0)
+                 for x in range(sx0, sx1 + 1) for y in range(sy0, sy1 + 1)},
+                ATTRIBUTION,
+            ),
+        }  # fmt: skip
+        ax, ay = (sx0 >> 1) << 1, (sy0 >> 1) << 1
+        self.tiles15 = (ax, ay, ax + 1, ay + 1)
+        area_tiles = {
+            (16, x, y)
+            for x in range(ax * 2, ax * 2 + 4)
+            for y in range(ay * 2, ay * 2 + 4)
+        } | {(15, x, y) for x in (ax, ax + 1) for y in (ay, ay + 1)}
+        self.area_archives = {
+            "heights": archive_of({t: terrarium_png(950.0) for t in area_tiles}),
+            "slope": archive_of({t: terrarium_png(40.0) for t in area_tiles}),
+        }
+        from pipeline import tile_to_bbox
+
+        west, _, _, north = tile_to_bbox(ax, ay, 15)
+        _, south, east, _ = tile_to_bbox(ax + 1, ay + 1, 15)
+        self.area = made_up_area(
+            id="job-1",
+            tiles15=self.tiles15,
+            coverage=(west, south, east, north),
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )
+
+    def empty_area(self, area_id="empty"):
+        """An area over the same range whose archives have no tile in the box,
+        as where neither its survey nor the 5 m it was filled from has a
+        height (sea, past the border)."""
+        elsewhere = {(16, 1, 1): terrarium_png(1.0)}
+        area = made_up_area(
+            id=area_id,
+            tiles15=self.tiles15,
+            coverage=self.area.coverage,
+            credit="Elevation: derived from the empty survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )
+        return area, {"heights": archive_of(elsewhere), "slope": archive_of(elsewhere)}
+
+    def mbtiles_meta(self, layers, areas, statewide=None):
+        import sqlite3
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import closing
+        from unittest import mock
+
+        from area_export import render_mbtiles
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
+        ):
+            path = render_mbtiles(
+                statewide or self.statewide, self.box, layers, {}, Path(tmp), areas
+            )
+            with closing(sqlite3.connect(path)) as db:
+                return dict(db.execute("SELECT name, value FROM metadata"))
+
+    # Mutation: let an area with no tile in the box raise, and a box mostly
+    # in NSW fails as "outside NSW". Its tiles go to statewide instead.
+    def test_an_area_with_no_tile_in_the_box_leaves_it_to_statewide(self):
+        meta = self.mbtiles_meta(["slope"], [self.empty_area()])
+        self.assertNotIn("empty survey", meta["attribution"])
+
+    # Mutation: credit every area in the box with every layer asked, and the
+    # file credits a survey for contours it has no archive of, and an area
+    # every tile of which a finer one won.
+    def test_an_mbtiles_credits_an_area_only_for_what_it_drew(self):
+        from build_nsw_dem import lonlat_to_tile
+
+        ax, ay = self.tiles15[0], self.tiles15[1]
+        z17 = {
+            (17, x, y)
+            for x in range(ax * 4, ax * 4 + 8)
+            for y in range(ay * 4, ay * 4 + 8)
+        }
+        fine = made_up_area(
+            id="fine", zmax=17, tiles15=self.tiles15, coverage=self.area.coverage,
+            credit="Elevation: derived from the fine survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )  # fmt: skip
+        coarse = made_up_area(
+            id="coarse", tiles15=self.tiles15, coverage=self.area.coverage,
+            credit="Elevation: derived from the coarse survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )  # fmt: skip
+        fine_tiles = {
+            t: terrarium_png(40.0)
+            for t in z17
+            | {(16, x >> 1, y >> 1) for _, x, y in z17}
+            | {(15, x >> 2, y >> 2) for _, x, y in z17}
+        }
+        far = lonlat_to_tile(145.0, -30.0, 14)
+        statewide = {**self.statewide, "contours": archive_of({(14, *far): b"x"})}
+        meta = self.mbtiles_meta(
+            ["slope", "contours"],
+            [
+                (
+                    fine,
+                    {
+                        "heights": archive_of(fine_tiles),
+                        "slope": archive_of(fine_tiles),
+                    },
+                ),
+                (coarse, self.area_archives),
+            ],
+            statewide,
+        )
+        self.assertIn("Slope: derived from the fine survey.", meta["attribution"])
+        self.assertNotIn("contours: derived from the fine", meta["attribution"])
+        self.assertNotIn("coarse survey", meta["attribution"])
+
+    # Mutation: leave a dropped area's work dir behind, and the next area,
+
+    # Mutation: join the lines without de-duplicating them, and two areas
+    # extracted in the same month print the same credit twice.
+    def test_two_areas_with_one_credit_list_it_once(self):
+        import tempfile
+        import zipfile
+        from dataclasses import replace
+
+        from area_export import render_area
+
+        twin = replace(self.area, id="twin")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(
+                self.statewide, self.box, ["slope"], "geotiff", Path(tmp),
+                areas=[(self.area, self.area_archives), (twin, self.area_archives)],
+            )  # fmt: skip
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+        self.assertIn("sharpened-2/slope.tif", names)
+        self.assertEqual(credits.count("Slope: derived from a LiDAR survey."), 1)
+
+    # named for the same place, fails the export on an existing dir.
+    def test_a_dropped_area_leaves_the_next_one_its_name(self):
+        import tempfile
+        import zipfile
+
+        from area_export import render_area
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(
+                self.statewide, self.box, ["slope"], "geotiff", Path(tmp),
+                areas=[self.empty_area(), (self.area, self.area_archives)],
+            )  # fmt: skip
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+        self.assertIn("sharpened-1/slope.tif", names)
+        self.assertFalse(any(n.startswith("sharpened-2") for n in names))
+        self.assertNotIn("empty survey", credits)
+
+    # Mutation: drop the areas from the GIS export, and its files hold only
+    # the 5 m terrain; or warp an area's files at 5 m.
+    def test_a_geotiff_holds_the_areas_files_at_its_cell_and_credit(self):
+        import tempfile
+        import zipfile
+
+        from osgeo import gdal
+
+        from area_export import render_area
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(
+                self.statewide, self.box, ["heights", "slope"], "geotiff",
+                Path(tmp), areas=[(self.area, self.area_archives)],
+            )  # fmt: skip
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+                zf.extractall(tmp)
+            self.assertLessEqual(
+                {"heights.tif", "slope.tif", "sharpened-1/heights.tif",
+                 "sharpened-1/slope.tif"}, names,
+            )  # fmt: skip
+            ds = gdal.Open(str(Path(tmp, "sharpened-1", "slope.tif")))
+            self.assertEqual(ds.GetGeoTransform()[1], AREA_CELL_M[16])
+            values = ds.GetRasterBand(1).ReadAsArray()
+            self.assertEqual(set(values[values != 255].tolist()), {40})
+            self.assertIn("Heights and slope: derived from a LiDAR survey.", credits)
+            # Mutation: list each area's file credit whole, and the 5 m line
+            # repeats after every area.
+            self.assertEqual(credits.count("NSW 5 m"), 1)
+
+    # Mutation: draw a tile inside the area from the statewide archive (or
+    # the other way round), and the file shows the 5 m slope over the survey.
+    def test_an_mbtiles_draws_the_areas_tiles_from_the_area(self):
+        import io
+        import sqlite3
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import closing
+        from unittest import mock
+
+        from PIL import Image
+
+        from area_export import render_mbtiles, tile_archive
+
+        style = {"slopeBands": [
+            {"fromDeg": 0, "toDeg": 20, "colour": "#00FF00FF"},
+            {"fromDeg": 20, "toDeg": 90, "colour": "#FF0000FF"},
+        ]}  # fmt: skip
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
+        ):
+            path = render_mbtiles(
+                self.statewide, self.box, ["slope"], style, Path(tmp),
+                [(self.area, self.area_archives)],
+            )  # fmt: skip
+            with closing(sqlite3.connect(path)) as db:
+                rows = db.execute(
+                    "SELECT zoom_level, tile_column, tile_row, tile_data FROM tiles "
+                    "WHERE zoom_level = 16"
+                ).fetchall()
+        seen = set()
+        for z, x, tms_y, data in rows:
+            y = (1 << z) - 1 - tms_y
+            centre = Image.open(io.BytesIO(data)).convert("RGBA").getpixel((128, 128))
+            if centre[3] == 0:
+                continue  # outside the box
+            inside = tile_archive([self.area], "slope", z, x, y) is self.area
+            seen.add(inside)
+            self.assertEqual(centre[:3], (255, 0, 0) if inside else (0, 255, 0))
+        self.assertEqual(seen, {True, False})
+
+
+class AreaCells(unittest.TestCase):
+    # Mutation: give a zoom a cell sharpen.py would not make that zoom from,
+    # and an area's files are warped coarser (or finer) than its survey.
+    def test_each_areas_cell_is_the_one_its_zoom_was_made_from(self):
+        from sharpen import zoom_for_cell
+
+        for zoom, cell in AREA_CELL_M.items():
+            self.assertEqual(zoom_for_cell(cell), zoom)
+
+
+class CutlineErrors(unittest.TestCase):
+    # Mutation: keep GDAL's stderr when a warp reads a footprint, and a bad
+    # geometry's coordinates ("Self-intersection at or near point 150.0051
+    # -33.0051") reach the worker's log.
+    def test_a_failed_cut_says_nothing_of_the_footprint(self):
+        from unittest import mock
+
+        from area_export import AreaExportError, warp_to_mga
+
+        failed = mock.Mock(
+            returncode=1, stderr="Self-intersection at 150.0051 -33.0051"
+        )
+        with mock.patch("area_export.subprocess.run", return_value=failed):
+            with self.assertRaises(AreaExportError) as raised:
+                warp_to_mga(
+                    Path("in.tif"), Path("out.tif"), (0, 0, 2, 2), 7856, "near",
+                    2, Path("footprint.geojson"),
+                )  # fmt: skip
+            self.assertNotIn("150.0051", str(raised.exception))
+            with self.assertRaises(AreaExportError) as raised:
+                warp_to_mga(Path("in.tif"), Path("out.tif"), (0, 0, 5, 5), 7856, "near")
+            self.assertIn("150.0051", str(raised.exception))
+
+
 class SyncWithShared(unittest.TestCase):
     """shared/src/areaExport.ts is what the API checks a request against, and
     this worker's declarations must say the same."""
@@ -603,6 +1034,16 @@ class SyncWithShared(unittest.TestCase):
             match.group("body"),
             rf"\n\s+{STYLE_SLOPE_BANDS}: normalizeUserUiPreferences",
         )
+
+    # Mutation: route one layer from another zoom on one side only, and an
+    # export draws a tile from a different archive than the map does.
+    def test_the_routed_zooms_match(self):
+        with open(_SHARPEN_TS, encoding="utf-8") as fh:
+            src = fh.read()
+        match = re.search(r"TERRAIN_ROUTED_FROM = \{(?P<body>[^}]*)\}", src)
+        self.assertIsNotNone(match, "TERRAIN_ROUTED_FROM not found in sharpen.ts")
+        declared = {k: int(v) for k, v in re.findall(r"(\w+): (\d+)", match["body"])}
+        self.assertEqual(declared, ROUTED_FROM)
 
 
 if __name__ == "__main__":

@@ -1662,6 +1662,7 @@ function App() {
         }}
         pendingArea={pendingExportBox}
         onExportQueued={refetchTopoExports}
+        sharpenedAreas={sharpenedAreas}
       />
       <div className={dimUI ? classes.dimmed : undefined}>
         <NavRail

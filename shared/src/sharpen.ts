@@ -13,6 +13,7 @@ import {
   type DemSource,
 } from "./demSources.js";
 import { escapeXml } from "./escapeXml.js";
+import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
 
 /**
  * Whether a new job sharpens: /start marks it (the worker then runs
@@ -212,4 +213,25 @@ export function terrainTileArchive<A extends SharpenedArea>(
   if (layer === "contours") return area ?? "statewide";
   if (area) return z <= area.zmax ? area : "absent";
   return z === from ? "statewide" : "absent";
+}
+
+/**
+ * The areas whose tile range meets a box, in the order the router asks them
+ * (`compareSharpenedAreas`): the ones an export of the box reads. A range is
+ * whole z14 tiles, so an area just outside the box can still meet it.
+ */
+export function areasInBox<A extends SharpenedArea>(
+  areas: readonly A[],
+  box: { west: number; south: number; east: number; north: number },
+): A[] {
+  const x0 = lon2tileX(box.west, 15);
+  const x1 = lon2tileX(box.east, 15);
+  const y0 = lat2tileY(box.north, 15);
+  const y1 = lat2tileY(box.south, 15);
+  return areas
+    .filter(
+      ({ tiles15: [ax0, ay0, ax1, ay1] }) =>
+        ax0 <= x1 && ax1 >= x0 && ay0 <= y1 && ay1 >= y0,
+    )
+    .sort(compareSharpenedAreas);
 }

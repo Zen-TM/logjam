@@ -8,6 +8,9 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  lat2tileY,
+  lon2tileX,
+  type SharpenedArea,
   AREA_EXPORT_TOO_LARGE,
   GEOPDF_TOO_LARGE,
   TERRAIN_LAYER_DEFAULTS,
@@ -91,6 +94,7 @@ function dialog({
   completedTopoJobs?: CompletedTopoJob[];
   areaSeed?: TBbox | null;
   openWithGis?: boolean;
+  sharpenedAreas?: SharpenedArea[];
   onPickArea?: () => void;
   pendingArea?: TBbox | null;
 }) {
@@ -503,6 +507,39 @@ describe("Export an area, for GIS", () => {
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
     expect(exportPosts()).toEqual([]);
     expect(screen.getByText("Exact edges").closest("details")!.open).toBe(true);
+  });
+
+  // The file takes in the readable areas inside its box (the API decides the
+  // same at submit, with the same areasInBox). Mutation: count every area,
+  // or none.
+  it("says how many sharpened areas inside the box it includes", () => {
+    const x = lon2tileX(seed.west, 15);
+    const y = lat2tileY(seed.north, 15);
+    const area = (id: string, tiles15: SharpenedArea["tiles15"]) => ({
+      id,
+      zmax: 16 as const,
+      tiles15,
+      coverage: [0, 0, 0, 0] as const,
+      contours: true,
+      credit: "",
+      createdAt: "2026-10-20T00:00:00.000Z",
+    });
+    render(
+      dialog({
+        open: true,
+        areaSeed: seed,
+        sharpenedAreas: [
+          area("in", [x, y, x + 1, y + 1]),
+          area("far", [x + 90, y + 90, x + 91, y + 91]),
+        ],
+      }),
+    );
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText(
+        "1 sharpened area inside is included, at its own detail.",
+      ),
+    ).toBeTruthy();
   });
 
   // Maps, Exports opens it on a GIS format. Mutation: ignore `openWithGis`.
