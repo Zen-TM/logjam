@@ -196,10 +196,6 @@ updates:
         update-types:
           - "version-update:semver-major"
           - "version-update:semver-minor"
-      - dependency-name: "react-native-edge-to-edge"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
       - dependency-name: "react-native-safe-area-context"
         update-types:
           - "version-update:semver-major"

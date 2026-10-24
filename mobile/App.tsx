@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
-import { Alert, AppState, Linking, Platform, Text } from "react-native";
+import {
+  Alert,
+  AppState,
+  Linking,
+  Platform,
+  StatusBar,
+  Text,
+} from "react-native";
 import Constants from "expo-constants";
-// SystemBars (react-native-edge-to-edge) rather than expo-status-bar: with
-// android.edgeToEdgeEnabled the app draws behind BOTH system bars, so the
-// navigation bar needs light icons too — expo-status-bar only styles the status
-// bar, which left the gesture area a black strip below the tab bar.
-import { SystemBars } from "react-native-edge-to-edge";
+import { NavigationBar } from "@zoontek/react-native-navigation-bar";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
 import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED } from "@logjam/shared";
@@ -93,9 +96,27 @@ async function confirmSignOut(everywhere: boolean): Promise<boolean> {
   }
 }
 
+// React Native's edge-to-edge (edgeToEdgeEnabled, which Expo's prebuild sets)
+// draws the app behind BOTH system bars, so each needs light icons on a dark
+// theme: StatusBar only styles the top one, which left the gesture area a
+// black strip below the tab bar.
+function SystemBars({
+  barStyle,
+}: {
+  barStyle: "light-content" | "dark-content";
+}) {
+  return (
+    <>
+      <StatusBar barStyle={barStyle} />
+      <NavigationBar barStyle={barStyle} />
+    </>
+  );
+}
+
 export default function App() {
   const styles = useStyles();
-  const systemBarStyle = useThemeMode() === "dark" ? "light" : "dark";
+  const systemBarStyle =
+    useThemeMode() === "dark" ? "light-content" : "dark-content";
 
   const minVersionGate = useMinVersionGate();
   const auth = useAuth();
@@ -147,7 +168,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <SafeAreaView style={styles.blockingContainer}>
-          <SystemBars style={systemBarStyle} />
+          <SystemBars barStyle={systemBarStyle} />
           <Text style={styles.blockingTitle}>Update required</Text>
           {/* The warn copy says "over mobile data, or on Wi-Fi later" and NOT
               "connect to Wi-Fi to install it", because the update is perfectly
@@ -179,7 +200,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SystemBars style={systemBarStyle} />
+      <SystemBars barStyle={systemBarStyle} />
       {/* App lock: active once offline map data exists on-device. */}
       <AppLockGate>
         {auth.state === "loading" ? (
