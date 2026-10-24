@@ -291,10 +291,10 @@ describe("topo-jobs route (fake auth)", () => {
   });
 
   // An export of an area names the sharpened areas it reads in sourceJobIds,
-  // a sharee's export too. Deleting such an area's job is refused while the
-  // export runs, and fails the export while it is queued, as for any export
-  // that reads the job's outputs. Mutations: drop the running guard, or the
-  // queued force-fail.
+  // and it may be another user's export, as a sharee's would be. Deleting
+  // such an area's job is refused while the export runs, and fails the
+  // export while it is queued, as for any export that reads the job's
+  // outputs. Mutations: drop the running guard, or the queued force-fail.
   it("guards a job a running export of a box reads, and fails a queued one", async () => {
     const created = await request(API_URL)
       .post("/topo-jobs")

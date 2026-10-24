@@ -413,9 +413,10 @@ def write_mosaic(
 
 
 def run(*command: str, stderr_in_error: bool = True) -> None:
-    """Raises with GDAL's stderr for the log, unless a call reads a survey's
-    footprint: GDAL quotes a bad geometry's coordinates there, and the log
-    never carries a place (tests/test_area_export.py `CutlineErrors`)."""
+    """Raises with GDAL's stderr for the log. A warp with a cutline drops it
+    (`warp_to_mga` passes `stderr_in_error=False`): GDAL quotes a bad
+    geometry's coordinates there, and the log never carries a place
+    (tests/test_area_export.py `CutlineErrors`)."""
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         detail = f": {result.stderr.strip()}" if stderr_in_error else ""
@@ -555,7 +556,8 @@ DISCLAIMER = (
 def package(mades: Sequence[Made], fmt: str, work: Path) -> Path:
     """The file the user downloads: the statewide files first, then each
     area's, named for it ("sharpened-1/heights.tif", "sharpened_1_heights")."""
-    credits = "\n".join(made.listed or made.credit for made in mades)
+    # Two areas extracted in the same month carry the same credit: once each.
+    credits = "\n".join(dict.fromkeys(made.listed or made.credit for made in mades))
     if fmt == "geotiff":
         out = work / "logjam-area.zip"
         with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_STORED) as zf:
@@ -912,9 +914,10 @@ def render_mbtiles(
             Archive(archives["contours"]), bbox, work / "contours"
         )
 
-    # Each area's own layers over the part of the box its tiles hold. An area
-    # whose archive has no tile there (a coast's sea, the empty corner of a
-    # diagonal footprint) is left out, so statewide answers there.
+    # Each area's own layers over the part of the box its tiles hold. An
+    # area's archive lacks a tile only where neither its survey nor the 5 m it
+    # was filled from has a height (sea, past the border). One with no tile in
+    # the box is left out, so a later area answers there, else statewide.
     routed: List[Area] = []
     area_rasters: Dict[str, Dict[str, Tuple[Path, np.ndarray]]] = {}
     area_contours: Dict[str, Dict[Tuple[int, int, int], str]] = {}
@@ -1027,12 +1030,14 @@ def render_mbtiles(
     ]
     out = work / "logjam-area.mbtiles"
     credit = " ".join(
-        [credit_line(layers, attribution)]
-        + [
-            area_credit_line(sorted(drew[area.id]), area.credit)
-            for area in routed
-            if drew[area.id]
-        ]
+        dict.fromkeys(
+            [credit_line(layers, attribution)]
+            + [
+                area_credit_line(sorted(drew[area.id]), area.credit)
+                for area in routed
+                if drew[area.id]
+            ]
+        )
     )
     conn = create_mbtiles(str(out), "logjam-area", credit, zmin, zmax, credit)
     with ProcessPoolExecutor(_composite_workers()) as pool:

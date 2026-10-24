@@ -741,8 +741,9 @@ class SharpenedAreaInAnExport(unittest.TestCase):
         )
 
     def empty_area(self, area_id="empty"):
-        """An area over the same range whose archives have no tile in the box:
-        a coast's sea corner, or the empty corner of a diagonal footprint."""
+        """An area over the same range whose archives have no tile in the box,
+        as where neither its survey nor the 5 m it was filled from has a
+        height (sea, past the border)."""
         elsewhere = {(16, 1, 1): terrarium_png(1.0)}
         area = made_up_area(
             id=area_id,
@@ -827,6 +828,28 @@ class SharpenedAreaInAnExport(unittest.TestCase):
         self.assertNotIn("coarse survey", meta["attribution"])
 
     # Mutation: leave a dropped area's work dir behind, and the next area,
+
+    # Mutation: join the lines without de-duplicating them, and two areas
+    # extracted in the same month print the same credit twice.
+    def test_two_areas_with_one_credit_list_it_once(self):
+        import tempfile
+        import zipfile
+        from dataclasses import replace
+
+        from area_export import render_area
+
+        twin = replace(self.area, id="twin")
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(
+                self.statewide, self.box, ["slope"], "geotiff", Path(tmp),
+                areas=[(self.area, self.area_archives), (twin, self.area_archives)],
+            )  # fmt: skip
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+        self.assertIn("sharpened-2/slope.tif", names)
+        self.assertEqual(credits.count("Slope: derived from a LiDAR survey."), 1)
+
     # named for the same place, fails the export on an existing dir.
     def test_a_dropped_area_leaves_the_next_one_its_name(self):
         import tempfile
