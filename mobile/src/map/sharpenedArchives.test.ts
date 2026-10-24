@@ -152,6 +152,25 @@ describe("stopSharpenedAreasForWipe", () => {
   });
 });
 
+describe("inAreasEpoch", () => {
+  // Red if the epoch is read when the list arrives rather than when it was
+  // asked for: a list still in flight at sign-out would be served after the
+  // wipe, the departing account's URLs back in MLRN.
+  it("never serves a list that was in flight when the sign-out wipe ran", async () => {
+    const { inAreasEpoch, serveSharpenedArchives, stopSharpenedAreasForWipe } =
+      await load();
+    let land!: (list: { jobs: SharpenedOverlay[] }) => void;
+    const answer = inAreasEpoch(
+      () => new Promise<{ jobs: SharpenedOverlay[] }>((r) => (land = r)),
+    );
+    stopSharpenedAreasForWipe();
+    land({ jobs: [area("a1", null)] });
+    const { jobs, areasEpoch } = await answer;
+    serveSharpenedArchives(jobs, areasEpoch);
+    expect(native.table.size).toBe(0);
+  });
+});
+
 // Red if anything in Logjam GPS sets MLRN's log level below "warn".
 it("never turns MLRN's logging up", () => {
   // MLRN logs every transformed URL, presigned query and all, to its JS log

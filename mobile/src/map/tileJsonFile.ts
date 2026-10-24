@@ -3,8 +3,11 @@
 // TileJSON at the source's `url` (terrainRoutes.ts).
 //
 // PRIVACY: a routed TileJSON's bounds are an area's tile range. The files are
-// a store of their own, wiped with the account (TILEJSON_DIR), none is written
-// for a list read before that wipe, and nothing here logs.
+// a store of their own, wiped with the account (TILEJSON_DIR), and none is
+// written for a list asked for before that wipe (tileJsonFile.test.ts, "writes
+// nothing for a list read before the sign-out wipe" and "… in flight when the
+// sign-out wipe ran"). It logs only a failed write, whose error names at most
+// the file's path, a hash of the TileJSON.
 import { Directory, File } from "expo-file-system";
 
 import { TILEJSON_DIR } from "../offline/localStores";
@@ -52,7 +55,7 @@ function tileJsonUrl(json: TileJson): string | null {
 
 /**
  * `sources` with each TileJSON written and its `url` set. When one can't be
- * written, or the list of areas was read before a sign-out wipe
+ * written, or the list of areas was asked for before a sign-out wipe
  * (`areasEpoch`), the statewide source alone at every zoom: an area then
  * draws as statewide, never as a hole.
  */

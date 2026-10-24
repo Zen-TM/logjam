@@ -103,7 +103,7 @@ export const SHARPENED_ARCHIVE_URL = {
 /**
  * The zoom each archive is routed from (`terrainTileArchive`): statewide
  * below it everywhere, one archive per tile from it. Logjam GPS stops its
- * statewide layers here (mobile/src/map/terrainRoutes.ts).
+ * statewide layers here (`routeTerrain` in mobile/src/map/sourceResolver.ts).
  */
 export const TERRAIN_ROUTED_FROM = {
   heights: 15,

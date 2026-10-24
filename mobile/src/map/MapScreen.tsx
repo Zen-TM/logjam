@@ -327,6 +327,7 @@ import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
+  inAreasEpoch,
   serveSharpenedArchives,
   sharpenedAreasEpoch,
 } from "./sharpenedArchives";
@@ -539,8 +540,12 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
   "course-up": "Facing your direction — tap to stop",
 };
 
-function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
-  return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
+// With the epoch it was asked in: a list in flight at sign-out is never served
+// (sharpenedArchives.ts `inAreasEpoch`).
+function getCompletedOverlays() {
+  return inAreasEpoch(() =>
+    apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays"),
+  );
 }
 
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
@@ -1383,8 +1388,9 @@ export function MapScreen({
   // The sharpened areas the user can see: the Terrain group reads each one's
   // own archive inside it (sourceResolver.ts `routeTerrain`). Gated on the
   // account as well as the list, which keeps its last answer once disabled.
-  // `areasEpoch` is read with the list: a sign-out wipe running while the map
-  // is still mounted stops the list read before it (sharpenedArchives.ts).
+  // `areasEpoch` is the one the list was asked in: a sign-out wipe running
+  // while the map is still mounted stops a list asked for before it, landed
+  // or not (sharpenedArchives.ts).
   const { sharpenedAreas, areasEpoch } = useMemo(
     () => ({
       sharpenedAreas: isGuest
@@ -1392,7 +1398,7 @@ export function MapScreen({
         : (overlays.data?.jobs ?? []).flatMap((job) =>
             job.sharpened ? [job.sharpened] : [],
           ),
-      areasEpoch: sharpenedAreasEpoch(),
+      areasEpoch: overlays.data?.areasEpoch ?? sharpenedAreasEpoch(),
     }),
     [isGuest, overlays.data],
   );

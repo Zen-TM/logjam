@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  inAreasEpoch,
   sharpenedAreasEpoch,
   stopSharpenedAreasForWipe,
 } from "./sharpenedArchives";
@@ -103,6 +104,18 @@ describe("writeTileJsons", () => {
     const before = sharpenedAreasEpoch();
     stopSharpenedAreasForWipe();
     expect(writeTileJsons([statewide, routed], before)).toHaveLength(1);
+    expect(disk.files.size).toBe(0);
+  });
+
+  // Red if the list's epoch is read when it arrives: a list in flight at
+  // sign-out would write the departing account's tile ranges after the wipe.
+  it("writes nothing for a list that was in flight when the sign-out wipe ran", async () => {
+    let land!: (list: object) => void;
+    const answer = inAreasEpoch(() => new Promise<object>((r) => (land = r)));
+    stopSharpenedAreasForWipe();
+    land({});
+    const { areasEpoch } = await answer;
+    expect(writeTileJsons([statewide, routed], areasEpoch)).toHaveLength(1);
     expect(disk.files.size).toBe(0);
   });
 });

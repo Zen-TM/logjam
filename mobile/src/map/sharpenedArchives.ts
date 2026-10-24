@@ -49,11 +49,11 @@ export function sharpenedArchiveTransforms(
   return transforms;
 }
 
-// Bumped by the sign-out wipe: a list read before it serves nothing after it,
-// and its TileJSONs are not written again (tileJsonFile.ts).
+// Bumped by the sign-out wipe: a list asked for before it (`inAreasEpoch`)
+// serves nothing after it, and its TileJSONs are not written (tileJsonFile.ts).
 let epoch = 0;
 
-/** Read with the list of areas; handed back to serve them. */
+/** The epoch now: a list asked for in it may be served until the next wipe. */
 export const sharpenedAreasEpoch = (): number => epoch;
 
 // The transform ids installed, or null before the first serve of this JS
@@ -61,8 +61,8 @@ export const sharpenedAreasEpoch = (): number => epoch;
 let installed: Set<string> | null = null;
 
 /**
- * Called by the sign-out wipe: every transform goes, and no list read before
- * it is served again. The map stays mounted while the wipe runs.
+ * Called by the sign-out wipe: every transform goes, and no list asked for
+ * before it is served again. The map stays mounted while the wipe runs.
  */
 export function stopSharpenedAreasForWipe(): void {
   epoch += 1;
@@ -88,4 +88,17 @@ export function serveSharpenedArchives(
   for (const [id, transform] of transforms)
     TransformRequestManager.addUrlTransform({ id, ...transform });
   installed = new Set(transforms.keys());
+}
+
+/**
+ * `request`'s answer, with the epoch it was asked in. A list still in flight
+ * when the sign-out wipe runs lands with the epoch before it, so it is never
+ * served and its TileJSONs are never written (sharpenedArchives.test.ts,
+ * "never serves a list that was in flight when the sign-out wipe ran").
+ */
+export async function inAreasEpoch<T extends object>(
+  request: () => Promise<T>,
+): Promise<T & { areasEpoch: number }> {
+  const areasEpoch = epoch;
+  return { ...(await request()), areasEpoch };
 }
