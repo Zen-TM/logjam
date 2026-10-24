@@ -21,7 +21,9 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   type BasemapCatalogEntry,
+  SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
+  type SharpenedArea,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
   type TopoLayerFormat,
@@ -32,6 +34,8 @@ import {
   sharpenedArchiveAddress,
   terrainRoutes,
   tileRectBounds,
+  tileRectCovering,
+  type TileRect,
 } from "./terrainRoutes";
 import type { TileJson } from "./tileJsonFile";
 
@@ -148,6 +152,11 @@ export interface ResolveContext {
    * the Terrain group reads each one's own archive inside it.
    */
   sharpenedAreas?: readonly SharpenedOverlay[];
+  /**
+   * The account's kept areas (offline/sharpenedAreaStore.ts): offline, the
+   * Terrain group reads the clips saved of them.
+   */
+  keptSharpenedAreas?: readonly SharpenedArea[];
 }
 
 const RASTER_TILE_SIZE = 256;
@@ -324,13 +333,64 @@ function resolveTopoOverlay(
   ];
 }
 
+const boxesMeet = (
+  [w1, s1, e1, n1]: readonly number[],
+  [w2, s2, e2, n2]: readonly number[],
+) => w1 <= e2 && w2 <= e1 && s1 <= n2 && s2 <= n1;
+
+/** An area as routing reads it: `tiles` is the archive its TileJSON names. */
+type RoutedArea = SharpenedArea & { tiles: string };
+
 /**
- * The Terrain group online where the user can see a sharpened area: the
- * statewide source up to the zoom routing starts at, then one source per
+ * The kind each of an area's saved clips is filed as: the statewide clip's of
+ * the same layer, under the area's id. Read where clips are filed
+ * (`regionClipKind`) and where the offline map looks them up.
+ */
+export const AREA_CLIP_KIND: Record<TerrainArchiveLayer, MapArtifact["kind"]> =
+  {
+    heights: "dem-region",
+    slope: "slope-region",
+    contours: "contours-region",
+  };
+
+/**
+ * The areas saved on this phone: each clip of one of the account's kept
+ * areas, its range read back from its bounds. A clip of an area no longer
+ * listed (deleted or unshared) stays on disk but is not drawn.
+ */
+function savedAreaClips(
+  ctx: ResolveContext,
+  layer: TerrainArchiveLayer,
+): RoutedArea[] {
+  const kept = ctx.keptSharpenedAreas ?? [];
+  return ctx.artifacts.flatMap((clip) => {
+    if (clip.kind !== AREA_CLIP_KIND[layer] || !clip.bbox) return [];
+    const area = kept.find(
+      (a) => clip.logicalKey === `${SHARPENED_SOURCE_PREFIX}${a.id}`,
+    );
+    if (!area) return [];
+    return [
+      {
+        ...area,
+        // Each clip routes on its own: two saved areas can hold one area.
+        id: clip.id,
+        tiles15: tileRectCovering(15, clip.bbox),
+        tiles: `pmtiles://file://${clip.path}`,
+      },
+    ];
+  });
+}
+
+/**
+ * The Terrain group where the user can see a sharpened area: the statewide
+ * source up to the zoom routing starts at, then one source per
  * `terrainRoutes` rectangle, each kept to its tiles by its TileJSON's bounds
- * and read from one archive (an area's at its fixed address,
- * sharpenedArchives.ts). Offline, and with no area, the statewide source alone
- * as before. Guard: `sourceResolver.test.ts` ("routes the Terrain group").
+ * and read from one archive. Online, the areas are the list's, each read at
+ * its fixed address (sharpenedArchives.ts). Offline, they are the area clips
+ * saved on this phone, and each statewide rectangle reads every saved
+ * statewide clip that reaches it. With no area, the statewide source alone as before.
+ * Guard: `sourceResolver.test.ts` ("routes the Terrain group", "routes saved
+ * areas offline").
  */
 function routeTerrain(
   statewide: ResolvedTileSource[],
@@ -338,48 +398,76 @@ function routeTerrain(
   layer: TerrainArchiveLayer,
   ctx: ResolveContext,
 ): ResolvedTileSource[] {
-  const areas = ctx.sharpenedAreas ?? [];
-  const [source] = statewide;
-  if (
-    areas.length === 0 ||
-    statewide.length !== 1 ||
-    source.status !== "ok" ||
-    source.origin !== "remote" ||
-    !source.url
-  )
-    return statewide;
+  const drawn = statewide.flatMap((s) =>
+    s.status === "ok" && s.url ? [s] : [],
+  );
+  const online = drawn.some((s) => s.origin === "remote");
+  if (online && drawn.length !== 1) return statewide;
+  const areas: RoutedArea[] = online
+    ? (ctx.sharpenedAreas ?? []).map((area) => ({
+        ...area,
+        tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
+      }))
+    : savedAreaClips(ctx, layer);
+  if (areas.length === 0) return statewide;
   const z = TERRAIN_ROUTED_FROM[layer];
+  const sourceType = layer === "contours" ? "vector" : "raster-dem";
+  const bounded = (
+    tiles: string,
+    maxzoom: number,
+    rect: TileRect,
+    attribution: string,
+  ): ResolvedTileSource => {
+    const tileJson: TileJson = {
+      tiles: [tiles],
+      minzoom: z,
+      maxzoom,
+      bounds: tileRectBounds(z, rect),
+      ...(sourceType === "raster-dem" && { encoding: "terrarium" }),
+    };
+    return {
+      status: "ok",
+      key: `${archive.id}:routed:${hashKey(JSON.stringify(tileJson))}`,
+      sourceType,
+      tileJson,
+      layerMinZoom: z,
+      attribution,
+      origin: online ? "remote" : "local",
+    };
+  };
   return [
-    { ...source, layerMaxZoom: z },
-    ...terrainRoutes(areas, layer).map((route): ResolvedTileSource => {
-      const area = route.archive === "statewide" ? null : route.archive;
-      const tileJson: TileJson = {
-        tiles: [
-          area
-            ? `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`
-            : source.url!,
-        ],
-        minzoom: z,
-        // An area's contours are z14 alone; past its deepest zoom MapLibre
-        // draws its tiles larger, as Logjam Web draws the parent.
-        maxzoom: area
-          ? layer === "contours"
-            ? z
-            : area.zmax
-          : archive.maxzoom,
-        bounds: tileRectBounds(z, route.tiles),
-        ...(source.sourceType === "raster-dem" && { encoding: "terrarium" }),
-      };
-      return {
-        status: "ok",
-        key: `${archive.id}:routed:${hashKey(JSON.stringify(tileJson))}`,
-        sourceType: source.sourceType,
-        tileJson,
-        layerMinZoom: z,
-        attribution: area ? area.credit : archive.credit,
-        origin: "remote",
-      };
-    }),
+    ...statewide.map((s) =>
+      s.status === "ok" ? { ...s, layerMaxZoom: z } : s,
+    ),
+    ...terrainRoutes(areas, layer).flatMap((route) =>
+      route.archive === "statewide"
+        ? // Each saved clip only where it reaches: a clip's bounds are its
+          // save's box, and the CDN's archive has none.
+          drawn
+            .filter(
+              (s) =>
+                !s.bounds ||
+                boxesMeet(s.bounds, tileRectBounds(z, route.tiles)),
+            )
+            .map((s) =>
+              bounded(
+                s.url!,
+                s.maxZoom ?? archive.maxzoom,
+                route.tiles,
+                archive.credit,
+              ),
+            )
+        : // An area's contours are z14 alone; past its deepest zoom
+          // MapLibre draws its tiles larger, as Logjam Web draws the parent.
+          [
+            bounded(
+              route.archive.tiles,
+              layer === "contours" ? z : route.archive.zmax,
+              route.tiles,
+              route.archive.credit,
+            ),
+          ],
+    ),
   ];
 }
 
@@ -557,7 +645,15 @@ export function resolveMapSource(
       return resolveTopoOverlay(ref, ctx);
     case "nsw-contours":
       return routeTerrain(
-        resolveStatewide(NSW_CONTOURS, "vector", "contours-region", ctx),
+        resolveStatewide(
+          NSW_CONTOURS,
+          "vector",
+          "contours-region",
+          ctx,
+          undefined,
+          // An area's contour clip is filed as this kind too.
+          (clip) => clip.logicalKey === NSW_CONTOURS.id,
+        ),
         NSW_CONTOURS,
         "contours",
         ctx,
@@ -570,6 +666,8 @@ export function resolveMapSource(
           "slope-region",
           ctx,
           nearestRegion(ref.viewport),
+          // An area's slope clip is filed as this kind too.
+          (clip) => clip.logicalKey === NSW_SLOPE.id,
         ),
         NSW_SLOPE,
         "slope",

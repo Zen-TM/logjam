@@ -4,7 +4,7 @@ import { join } from "node:path";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { createCanvas, loadImage, type Canvas } from "canvas";
+import type { Canvas } from "canvas";
 import {
   extentFromCentreAndSize,
   getMapDimensions,
@@ -16,6 +16,8 @@ import {
 import {
   AUTH,
   TILE_GREEN,
+  colourAt,
+  mapImage,
   realFetch,
   renderGeoPdf,
   stubTileServer,
@@ -158,31 +160,6 @@ const CONFIG: GeoPdfConfig = {
   overlays: [],
   elements: { compass: false, scaleText: false, scaleBar: false },
 };
-
-/** The page's map image: the JPEG pdfkit embeds, found by its filter. */
-async function mapImage(pdf: Uint8Array): Promise<Canvas> {
-  const bytes = Buffer.from(pdf);
-  const filter = bytes.indexOf("/DCTDecode");
-  const start = bytes.indexOf("stream", filter) + "stream".length;
-  const from = bytes.indexOf(Buffer.from([0xff, 0xd8]), start);
-  const to = bytes.indexOf("endstream", from);
-  const img = await loadImage(bytes.subarray(from, to));
-  const canvas = createCanvas(img.width, img.height);
-  canvas.getContext("2d").drawImage(img, 0, 0);
-  return canvas;
-}
-
-/** Mean colour of a block, centred at a fraction of the image. */
-function colourAt(canvas: Canvas, fx: number, fy: number) {
-  const { data } = canvas
-    .getContext("2d")
-    .getImageData(fx * canvas.width - 5, fy * canvas.height - 5, 10, 10);
-  const mean = [0, 0, 0];
-  for (let i = 0; i < data.length; i += 4) {
-    for (let c = 0; c < 3; c++) mean[c] += data[i + c] / (data.length / 4);
-  }
-  return mean;
-}
 
 /** How many pixels of a region differ between two images. */
 function differing(

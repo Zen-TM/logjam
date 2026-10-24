@@ -106,4 +106,7 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
     keeps: "Forecasts, fetched again with one press.",
   },
   TILEJSON_DIR: { keeps: "Map files, written again when the map opens." },
+  SHARPENED_AREAS_DIR: {
+    keeps: "The account's list of sharpened areas, fetched again online.",
+  },
 };

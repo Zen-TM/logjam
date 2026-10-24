@@ -92,9 +92,9 @@ import {
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  type SharpenedArea,
 } from "@logjam/shared";
 
-import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import type { SavedItemReveal } from "../saved/SavedScreen";
 import { setRouteEditing } from "./routeEditLock";
@@ -326,11 +326,13 @@ import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { getCompletedOverlays } from "./completedOverlays";
+import { serveSharpenedArchives, sharpenedAreasOf } from "./sharpenedArchives";
 import {
-  inAreasEpoch,
-  serveSharpenedArchives,
-  sharpenedAreasOf,
-} from "./sharpenedArchives";
+  rememberSharpenedAreas,
+  savedSharpenedAreas,
+  subscribeSharpenedAreas,
+} from "../offline/sharpenedAreaStore";
 import { writeTileJsons } from "./tileJsonFile";
 import {
   basemapsCoveringViewport,
@@ -342,7 +344,6 @@ import {
   topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
-  type CompletedOverlaysResponse,
   type TopoOverlayRef,
 } from "./topoOverlays";
 import {
@@ -539,14 +540,6 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
   follow: "Following — tap to face your direction",
   "course-up": "Facing your direction — tap to stop",
 };
-
-// With the epoch it was asked in: a list in flight at sign-out is never served
-// (sharpenedArchives.ts `inAreasEpoch`).
-function getCompletedOverlays() {
-  return inAreasEpoch(() =>
-    apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays"),
-  );
-}
 
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
 
@@ -1398,14 +1391,38 @@ export function MapScreen({
     () => serveSharpenedArchives(sharpenedAreas, areasEpoch),
     [sharpenedAreas, areasEpoch],
   );
+  // Each list that loads is kept, without its URLs, for the offline sampler,
+  // the climb upgrade and the offline map (offline/sharpenedAreaStore.ts).
+  useEffect(() => {
+    if (overlays.data && !isGuest)
+      void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
+  // The map draws its saved area clips from the kept list, read again
+  // whenever it changes: the save screen keeps the list it cut from, which
+  // can be newer than this one.
+  const [keptAreas, setKeptAreas] = useState<readonly SharpenedArea[]>([]);
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      void savedSharpenedAreas().then((kept) => {
+        if (live) setKeptAreas(kept);
+      });
+    read();
+    const stop = subscribeSharpenedAreas(read);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
       artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
       sharpenedAreas,
+      keptSharpenedAreas: isGuest ? [] : keptAreas,
     }),
-    [connectivity, artifacts, sharpenedAreas],
+    [connectivity, artifacts, sharpenedAreas, isGuest, keptAreas],
   );
 
   /**

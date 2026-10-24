@@ -1986,6 +1986,7 @@ function App() {
               : undefined
           }
           topoLayers={mapTopoLayers}
+          sharpenedAreas={sharpenedAreas}
           slopeBands={slopeBands.drawn}
           vectorStyle={vectorStyle}
           activeLayerId={mapLayerId}

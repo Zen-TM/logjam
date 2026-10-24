@@ -20,9 +20,11 @@ import {
   contourLabelHalo,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
+  type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
-import { WORLDWIDE_TERRAIN_SOURCE, terrainSourceFor } from "./terrainSource";
+import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
+import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import type { PlaceHighlight } from "./placeHighlight";
@@ -119,6 +121,7 @@ import { moveTerrainIntoBasemap, stackTopoLayers } from "./layerOrder";
 import { TERRAIN_ENTRIES, type RoutedTiles } from "./terrainEntries";
 import {
   TERRAIN_PROTOCOL,
+  areasKey,
   isAbsentTerrainTile,
   terrainTile,
 } from "./terrainRouter";
@@ -643,6 +646,7 @@ function Map({
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
+  sharpenedAreas,
   slopeBands,
   vectorStyle,
   activeLayerId,
@@ -750,6 +754,8 @@ function Map({
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
   }[];
+  /** The sharpened areas the user can see: 3D terrain reads them too. */
+  sharpenedAreas?: readonly SharpenedOverlay[];
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
   vectorStyle?: VectorStyleSettings | null;
@@ -1117,6 +1123,9 @@ function Map({
     // overlay for the whole session.
     map.on("error", (event) => {
       const { sourceId } = event as { sourceId?: unknown };
+      // The router's way of saying "draw the parent": not an error at all,
+      // for a Terrain layer and for the 3D terrain source alike.
+      if (isAbsentTerrainTile(event.error)) return;
       if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
         // Not ours — keep MapLibre's default behaviour of printing the error
         // (binding any "error" listener suppresses it otherwise).
@@ -1125,9 +1134,6 @@ function Map({
       }
       const entryId = sourceId.slice("topo-src-".length);
       if (failedTopoSourcesRef.current.has(entryId)) return;
-      // The router's way of saying "draw the parent": not an error at all.
-      if (isAbsentTerrainTile(event.error)) return;
-
       if (!isTerminalTopoSourceError(event.error)) {
         // Non-terminal: do NOT tear down or blacklist — retrying is correct.
         // Log once per source (no URLs — only the source id) so a flaky
@@ -3426,12 +3432,49 @@ function Map({
   // then on again looks the same to a flag, and an answer from the first "on"
   // would replace the terrain the second one chose somewhere else.
   const terrainToggleRef = useRef(0);
+  const sharpenedAreasRef = useRef(sharpenedAreas ?? []);
+  useEffect(() => {
+    sharpenedAreasRef.current = sharpenedAreas ?? [];
+  }, [sharpenedAreas]);
+  // Set on switching 3D on, cleared when the tilt runs, so a change of areas
+  // before the map goes idle still tilts.
+  const pendingTiltRef = useRef(false);
+  const applyTerrainNow = (map: maplibregl.Map, toggle: number) => {
+    const tilt = pendingTiltRef.current
+      ? () => {
+          pendingTiltRef.current = false;
+          map.easeTo({ pitch: 30, duration: 1200 });
+        }
+      : undefined;
+    void applyTerrain(
+      map,
+      sharpenedAreasRef.current,
+      async (url) => {
+        const archive = new PMTiles(url);
+        await archive.getHeader();
+        // Hand the opened archive to the protocol, so it is not opened twice.
+        pmtilesProtocol.add(archive);
+      },
+      window.location.origin,
+      // The map may have been removed, or 3D toggled, while this waited.
+      () => toggle === terrainToggleRef.current && mapRef.current === map,
+      tilt,
+    );
+  };
+  // A change of areas while 3D is on draws terrain again from the new set:
+  // `useTerrainReapply.test.ts` (the trigger) and `terrainSource.test.ts`
+  // ("applyTerrain": the new source, the old one removed).
+  useTerrainReapply(areasKey(sharpenedAreas ?? []), is3D, () => {
+    const map = mapRef.current;
+    if (map) applyTerrainNow(map, ++terrainToggleRef.current);
+  });
   const toggleTerrain = () => {
     const map = mapRef.current;
     if (!map) return;
     const toggle = ++terrainToggleRef.current;
     if (is3D) {
       // Turning off — nothing to wait for, flatten immediately
+      pendingTiltRef.current = false;
       map.setTerrain(null);
       map.setMaxPitch(0);
       map.touchPitch.disable();
@@ -3447,25 +3490,8 @@ function Map({
       }
       map.setMaxPitch(60);
       map.touchPitch.enable();
-      void terrainSourceFor(
-        map,
-        async (url) => {
-          const archive = new PMTiles(url);
-          await archive.getHeader();
-          // Hand the opened archive to the protocol, so it is not opened twice.
-          pmtilesProtocol.add(archive);
-        },
-        window.location.origin,
-      ).then((source) => {
-        // The second test: the map may have been removed while this waited.
-        if (toggle !== terrainToggleRef.current || mapRef.current !== map)
-          return;
-        // Turning on — wait for the terrain tiles to actually load before tilting
-        map.setTerrain({ source, exaggeration: 1.5 });
-        map.once("idle", () => {
-          map.easeTo({ pitch: 30, duration: 1200 });
-        });
-      });
+      pendingTiltRef.current = true;
+      applyTerrainNow(map, toggle);
     }
 
     setIs3D(!is3D);

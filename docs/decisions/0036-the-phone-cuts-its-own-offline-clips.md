@@ -122,9 +122,11 @@ saved, by anyone, whatever maps are picked.** `checkRegionCaps` in
 `shared/src/mapRegionEstimate.ts` refuses it on the save screen (guard:
 `mapRegionEstimate.test.ts`, "rejects an area over MAX_REGION_AREA_KM2
 whatever is being saved"). The cap now
-bounds what a save costs the phone: about 160 MB and 185 requests for the four
-clips of 40 km of mountains (updated 2026-10-23: the three above, plus the
-slope clip below).
+bounds what the public clips cost the phone: about 160 MB and 185 requests for
+the four clips of 40 km of mountains (updated 2026-10-23: the three above, plus
+the slope clip below). A signed-in save's sharpened-area clips add to that,
+bounded by the box and the free-space check only: about 0.4 MB a km² of a 2 m
+area and 1.4 MB a km² of a 1 m area (updated 2026-10-24).
 
 **A clip that fails never fails the region.** The rest saves and the card
 reports one map that did not finish. A DEM or contour archive the CDN does not
@@ -188,6 +190,40 @@ Nothing new calls it.
   every zoom the hillshade is drawn at"), `sourceResolver.test.ts`
   ("holdsHillshade", "a clip saved at z15 alone gives no shade"). Everything
   else above stands.
+- **Update 2026-10-24: a signed-in save also keeps the account's sharpened
+  areas it reaches ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)),
+  cut on the phone from their private archives.** Two rules above bend for
+  these clips alone. They are cut from private archives in the bucket, not the
+  public ones on the CDN. And the save makes one request to Logjam's API: the
+  save screen asks for the account's list (`GET
+  /topo-jobs/completed-overlays`), which sends no bbox. Online it waits for
+  the list; if the list fails it warns, with "Try again" and an explicit "Save
+  without sharpened areas", and never skips them quietly. Offline, Save's tap
+  shows its "needs a connection" alert. Offline here is the map's own reading
+  (`useConnectivity`: no connection, or the internet unreachable), where the
+  alert used to fire only with no connection at all. The Save button and its
+  tap read that one value, so Wi-Fi with no internet asks for a connection
+  rather than queue a save with no area list (`saveGate`). For each area the
+  box reaches, the save cuts the area's heights, slope and contours over the
+  part of it the box covers, widened to whole z14 tiles (`areaClipSpecs` in
+  `mobile/src/offline/sharpenedClips.ts`). Each clip is cut through the
+  presigned URL the list gave, by byte range with no header but `range`, and
+  filed under the area's source id, `lidar-<id>`. They are queued first, while
+  the list's URLs are freshest. A guest has no areas, so their save is
+  unchanged. A presigned URL expires after 24 h, so a clip resumed after that
+  fails with a line that says to save the area again. Offline, the map routes
+  the area clips over the statewide clips one archive per tile as it does
+  online, the sampler reads an area's heights first, and the account's last
+  list (without its URLs) is kept so they know the areas
+  (`offline/sharpenedAreaStore.ts`). Guards: `regionDownloads.test.ts` ("cuts
+  a sharpened area's clip through its presigned URL, filed under the area"),
+  `sharpenedClips.test.ts`, `sourceResolver.test.ts` ("routes saved areas
+  offline"), `demLookup.test.ts` ("reads a saved clip of a sharpened area
+  before the statewide one"), `sharpenedAreaStore.test.ts` (no URL kept,
+  nothing kept from a list asked for before the sign-out wipe). What holds the
+  decision up still holds: the phone cuts every clip, no request about a clip
+  goes to the API, and the bbox never reaches it. Everything else above
+  stands.
 
 ## Consequences
 
@@ -195,7 +231,9 @@ Nothing new calls it.
   the Vector map, snapping to tracks and creeks, 5 m heights and contours. The
   area a user saves never reaches our API, signed in or not. A save no longer
   costs the API a `pmtiles` process, a temporary file of up to 80 MB and the
-  egress, and no longer fails when the API does.
+  egress, and a save no longer fails when the API does: a guest's never asks
+  it, and a signed-in one whose area list fails can be saved without the
+  areas after a warning (updated 2026-10-24).
 - **Negative:** the CDN sees which byte ranges a phone reads, and anyone with
   the archive can map ranges back to an area. That was already true of the
   Vector map, snapping and heights online, the requests carry no account, and
@@ -231,6 +269,19 @@ Nothing new calls it.
   users.** Rejected: a guest-only path ([0007](0007-guest-mode-is-dont-sync-yet.md)),
   two implementations to keep in step, and a signed-in user's bbox would still
   reach the API for no gain.
+- **Keep sharpened areas online only, or have the API cut their clips.**
+  Rejected for the update of 2026-10-24: online only leaves a canyon on 5 m
+  heights and climbs exactly where the user went to the trouble of
+  sharpening it, and an API cut would send the bbox, the one thing this
+  decision keeps from Logjam (and 0040 rejects one composite archive on the
+  server).
+- **Merge each area into the statewide slope and contour clips**, one file
+  a layer holding each tile from the archive `terrainTileArchive` picks, so
+  the map draws one clip with no routing. Rejected for the update of
+  2026-10-24: a tile past an area's deepest zoom, outside it, would be missing
+  from the merged file, and MapLibre Native's drawing of the parent for a
+  missing tile is unverified, where the routed sources are what Logjam GPS
+  already draws online.
 - **Fetch the clip tile by tile (`PMTiles.getZxy`).** No merging or writer
   needed. Rejected: a 40 km box at z15 is about 2,000 tiles, so 2,000 requests
   for the vector map alone, and the result still has to be written as an
