@@ -79,12 +79,28 @@ export async function createUserForSignup(params: {
   initialUsername: string;
 }): Promise<User> {
   const { sub, email, initialUsername } = params;
-  // Substring match so it works whether Postgres reports the field name
-  // ("username") or the constraint name ("User_username_key").
-  const targetHas = (e: Prisma.PrismaClientKnownRequestError, name: string) =>
-    ((e.meta?.target as string[] | undefined) ?? []).some((t) =>
-      t.includes(name),
+  // Which unique index a P2002 names, as a substring: the indexes are named
+  // for their columns (`users_username_key`, `users_email_key`), and a
+  // case-variant username trips `users_username_as_read_key` — still
+  // "username". Under the pg driver adapter Prisma leaves `meta.target`
+  // undefined and reports the index under `driverAdapterError`; `target` is
+  // kept for an engine that fills it.
+  const indexHas = (e: Prisma.PrismaClientKnownRequestError, name: string) => {
+    const meta = e.meta as
+      | {
+          target?: unknown;
+          driverAdapterError?: {
+            cause?: { constraint?: { index?: unknown } };
+          };
+        }
+      | undefined;
+    const target = Array.isArray(meta?.target) ? meta.target.join(" ") : "";
+    const index = meta?.driverAdapterError?.cause?.constraint?.index;
+    return (
+      target.includes(name) ||
+      (typeof index === "string" && index.includes(name))
     );
+  };
   const recoverRacingRow = async (): Promise<User | null> =>
     prisma.user.findUnique({ where: { cognitoId: sub } });
 
@@ -107,7 +123,7 @@ export async function createUserForSignup(params: {
         throw e;
       }
 
-      if (targetHas(e, "email")) {
+      if (indexHas(e, "email")) {
         // Email got owned between the pre-check and now. If a concurrent
         // request for this same sub created it, use that row; otherwise a
         // genuinely different account owns the email.
@@ -119,7 +135,7 @@ export async function createUserForSignup(params: {
         );
       }
 
-      if (targetHas(e, "username")) {
+      if (indexHas(e, "username")) {
         // Taken by a different user — try the next, more-unique suffix.
         if (attempt < candidateUsernames.length - 1) continue;
         // Exhausted suffixes (astronomically unlikely): recover a racing row or
