@@ -48,8 +48,13 @@ function layerFor(
   idPrefix: string,
   sourceID: string,
   beforeId: string,
+  zooms: { minzoom?: number; maxzoom?: number },
 ) {
   const id = `${idPrefix}-${def.suffix}`;
+  const minzoom =
+    def.minzoom === undefined || zooms.minzoom === undefined
+      ? (def.minzoom ?? zooms.minzoom)
+      : Math.max(def.minzoom, zooms.minzoom);
   // One cast for the whole prop bag: buildTopoVectorLayerDefs emits one merged
   // camelCase style object (parity with Logjam Web), not the spec's
   // paint/layout split, so it goes in through MLRN's legacy `style` prop —
@@ -63,7 +68,8 @@ function layerFor(
     type: def.type,
     style: def.style,
     ...(def.filter && { filter: def.filter }),
-    ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
+    ...(minzoom !== undefined && { minzoom }),
+    ...(zooms.maxzoom !== undefined && { maxzoom: zooms.maxzoom }),
   } as LayerProps;
   return <Layer key={id} {...props} />;
 }
@@ -85,6 +91,8 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
   sourceID,
   beforeIds,
   vectorStyle,
+  minzoom,
+  maxzoom,
 }: {
   kind: "contours" | "features";
   /** Unique per overlay — layer ids must not collide across jobs. */
@@ -93,6 +101,9 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
   /** `chainBeforeIds` entries for this overlay's `topoVectorLayerIds`. */
   beforeIds: Record<string, string>;
   vectorStyle: VectorStyleSettings;
+  /** The zooms the stack draws at, where it doesn't draw at every zoom. */
+  minzoom?: number;
+  maxzoom?: number;
 }) {
   const defs = useMemo(
     () => buildTopoVectorLayerDefs(kind, vectorStyle),
@@ -106,6 +117,7 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
           idPrefix,
           sourceID,
           beforeIds[`${idPrefix}-${def.suffix}`],
+          { minzoom, maxzoom },
         ),
       )}
     </>

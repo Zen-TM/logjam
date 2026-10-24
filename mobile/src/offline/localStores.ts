@@ -95,6 +95,14 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
 
 /**
+ * TileJSONs Logjam GPS writes for map sources MLRN can't describe in props
+ * (`map/tileJsonFile.ts`). WIPED: a sharpened area's holds its tile range,
+ * which says where its owner surveyed. Each is written again when the map
+ * next needs it.
+ */
+export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -107,6 +115,7 @@ export const WIPED_DIRS = [
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
   WEATHER_DIR,
+  TILEJSON_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */
