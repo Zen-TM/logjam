@@ -22,6 +22,7 @@ import {
   AREA_EXPORT_TOO_LARGE,
   areaExportRequestError,
   areaExportStyleSnapshot,
+  areasInBox,
   areaExportTooLarge,
   areaInNsw,
   type AreaBbox,
@@ -39,6 +40,7 @@ import {
 } from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { visibleSharpenedAreas } from "../services/sharpenedAreas";
 
 // An export of an area: the statewide terrain over a box (topo/area_export.py).
 const areaRequestSchema = z.object({
@@ -142,9 +144,16 @@ router.post(
     if (!areaInNsw(area.data.bbox)) {
       throw new AppError(400, AREA_EXPORT_OUTSIDE_NSW);
     }
+    // The sharpened areas in the box this user may read (ADR 0040), in the
+    // router's order: the worker reads only these, so a stranger's area never
+    // reaches a file. Decided now, at submit.
+    const areas = areasInBox(
+      await visibleSharpenedAreas(user.id),
+      area.data.bbox,
+    );
     const exportJobId = await createAndLaunchTopoExport({
       userId: user.id,
-      sourceJobIds: [],
+      sourceJobIds: areas.map((each) => each.id),
       layers: area.data.layers,
       format: area.data.format,
       // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.

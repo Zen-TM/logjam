@@ -53,9 +53,12 @@ from renderers import (
 )
 from area_export import (
     FETCH_THREADS,
+    Area,
     AreaExportError,
     AreaOutsideNsw,
+    area_from,
     render_area,
+    s3_area_archives,
     s3_archives,
 )
 from worker_common import (
@@ -281,9 +284,27 @@ def render_job_export(conn, export_job: dict, work: Path) -> Tuple[Path, Optiona
     return result_local, job_name
 
 
-def render_area_export(export_job: dict, work: Path) -> Path:
-    """An export of an area: the statewide terrain over its box (area_export.py)."""
+def get_sharpened_areas(conn, ids: list[str]) -> list[Area]:
+    """The sharpened areas the API chose for an export, in its order (the
+    router's). A job deleted since is gone from the list."""
+    if not ids:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, sharpen, footprint FROM topo_jobs "
+            "WHERE id = ANY(%s) AND status = 'complete'",
+            (ids,),
+        )
+        rows = {r["id"]: dict(r) for r in cur.fetchall() or []}
+    areas = [area_from(rows[i]) for i in ids if i in rows]
+    return [a for a in areas if a is not None]
+
+
+def render_area_export(conn, export_job: dict, work: Path) -> Path:
+    """An export of an area: the statewide terrain over its box, and the
+    sharpened areas in it the API chose (area_export.py)."""
     bbox = export_job["bbox"]
+    areas = get_sharpened_areas(conn, list(export_job["source_job_ids"]))
     log.info(
         f"Rendering area format={export_job['format']} "
         f"layers={list(export_job['layers'])}"
@@ -295,6 +316,7 @@ def render_area_export(export_job: dict, work: Path) -> Path:
         export_job["format"],
         work,
         export_job["vector_style_snapshot"],
+        [(area, s3_area_archives(s3, BUCKET, area)) for area in areas],
     )
 
 
@@ -334,7 +356,7 @@ def main():
     try:
         with tempfile.TemporaryDirectory(prefix="export_") as tmp:
             if export_job.get("bbox"):
-                result_local = render_area_export(export_job, Path(tmp))
+                result_local = render_area_export(conn, export_job, Path(tmp))
             else:
                 result_local, job_name = render_job_export(conn, export_job, Path(tmp))
 

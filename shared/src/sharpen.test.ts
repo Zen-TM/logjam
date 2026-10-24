@@ -13,6 +13,7 @@ import { buildElevationProfile, climbFromProfile } from "./elevation.js";
 import {
   SHARPEN_NEW_JOBS,
   lidarJobCopy,
+  areasInBox,
   compareSharpenedAreas,
   demSourcesFor,
   terrainTileArchive,
@@ -44,6 +45,22 @@ describe("compareSharpenedAreas", () => {
         .sort(compareSharpenedAreas)
         .map((a) => a.id),
     ).toEqual(["f", "c", "a", "b", "o"]);
+  });
+});
+
+describe("areasInBox", () => {
+  // Mutations: drop the filter (an area far from the box is read), or the
+  // sort (an export's areas lose the router's order).
+  it("keeps the areas meeting the box, finest first", () => {
+    const coarse = area({ id: "coarse" });
+    const fine = area({ id: "fine", zmax: 17 });
+    const far = area({ id: "far", tiles15: [29000, 19000, 29001, 19001] });
+    // A box inside the made-up range (z15 x 30100–30103, y 19400–19403).
+    const box = { west: 150.7, south: -31.44, east: 150.71, north: -31.43 };
+    expect(areasInBox([coarse, far, fine], box).map((a) => a.id)).toEqual([
+      "fine",
+      "coarse",
+    ]);
   });
 });
 
