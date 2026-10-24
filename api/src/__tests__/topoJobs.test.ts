@@ -3,6 +3,7 @@ import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
+import prisma from "../services/prisma";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // No auth header = alice. These tests deliberately exercise only launch-free
@@ -287,5 +288,54 @@ describe("topo-jobs route (fake auth)", () => {
     // for is gone. Mutation: drop the abort from deleteTopoJobObjects.
     const after = await fetch(partUrl, { method: "PUT", body });
     expect(after.status).toBe(404);
+  });
+
+  // An export of an area names the sharpened areas it reads in sourceJobIds,
+  // and it may be another user's export, as a sharee's would be. Deleting
+  // such an area's job is refused while the export runs, and fails the
+  // export while it is queued, as for any export that reads the job's
+  // outputs. Mutations: drop the running guard, or the queued force-fail.
+  it("guards a job a running export of a box reads, and fails a queued one", async () => {
+    const created = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "area an export reads" });
+    expect(created.status).toBe(201);
+    const jobId: string = created.body.jobId;
+    const reading = await prisma.topoExportJob.create({
+      data: {
+        userId: BOB_ID,
+        sourceJobIds: [jobId],
+        layers: ["heights"],
+        format: "geotiff",
+        bundling: "per-layer",
+        vectorStyleSnapshot: {},
+        bbox: { west: 150.3, south: -33.71, east: 150.31, north: -33.7 },
+        status: "running",
+        startedAt: new Date(),
+      },
+    });
+    try {
+      const refused = await request(API_URL)
+        .delete(`/topo-jobs/${jobId}`)
+        .set(AUTH);
+      expect(refused.status).toBe(409);
+
+      await prisma.topoExportJob.update({
+        where: { id: reading.id },
+        data: { status: "queued", startedAt: null },
+      });
+      const deleted = await request(API_URL)
+        .delete(`/topo-jobs/${jobId}`)
+        .set(AUTH);
+      expect(deleted.status).toBe(204);
+      const after = await prisma.topoExportJob.findUniqueOrThrow({
+        where: { id: reading.id },
+      });
+      expect(after.status).toBe("failed");
+    } finally {
+      await prisma.topoExportJob.deleteMany({ where: { id: reading.id } });
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
   });
 });

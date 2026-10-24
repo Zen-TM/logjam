@@ -68,6 +68,21 @@ found three problems:
   `topo/sharpen.py` writes it into the job's result, and the API passes it
   on. Every result read from an area also carries the NSW 5 m credit
   (`demCredits`), because the area's edge tiles hold 5 m heights.
+- **Update 2026-10-24: a file made from an area can leave that circle.** An
+  export of an area (GeoTIFF, GeoPackage, MBTiles) or a GeoPDF made by
+  someone who may read a sharpened area carries the area's terrain. Which
+  areas is decided by `visibleSharpenedAreas`: for an export when it is
+  submitted (`areasInBox` in `api/src/routes/topoExports.ts`, which names
+  them in `sourceJobIds`; `topo/area_export.py` reads only those), for a
+  GeoPDF when its render starts. The file is its maker's. It downloads, and a
+  GeoPDF can be shared in Logjam like any other, so the area reaches whoever
+  the maker hands it on to. The maintainer accepted this on 2026-10-24: a
+  sharpened area is terrain, not a place anyone needs hidden. What still
+  holds the decision up is that Logjam itself serves an area's archive, and
+  draws it on a map, only for its owner and the users it is shared with
+  directly. Guards: `api/src/routes/topoExports.unit.test.ts` (only the
+  caller's readable areas in the box) and
+  `api/src/__tests__/geoPdfSharpened.test.ts`. Everything else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of
@@ -144,3 +159,8 @@ Guards:
 - **The survey credit as a constant in `shared/`.** It would need a parity
   test against the worker's copy, and the extraction month differs for each
   area.
+- **Refuse to share a GeoPDF onward in Logjam once it drew a shared area.**
+  It would keep a sharee's print inside Logjam's circle, at the cost of a
+  column on `geo_pdf_jobs` the worker writes and a refusal on the GeoPDF's
+  share. Rejected by the maintainer (2026-10-24, the update above): the
+  terrain is not secret, and a downloaded file leaves Logjam anyway.

@@ -71,6 +71,7 @@ import {
   AREA_EXPORT_LAYERS_BY_FORMAT,
   AREA_EXPORT_OUTSIDE_NSW,
   AREA_EXPORT_TOO_LARGE,
+  areasInBox,
   areaExportTooLarge,
   areaInNsw,
   areaSizeKm,
@@ -80,6 +81,7 @@ import {
   MAP_TERRAIN,
   type AreaExportFormat,
   type AreaExportLayer,
+  type SharpenedArea,
   TERRAIN_LAYER_KEYS,
   type GeoPdfConfig,
   type TerrainLayerKey,
@@ -238,6 +240,7 @@ function GeoPdfDialog({
   onPickArea,
   pendingArea,
   onExportQueued,
+  sharpenedAreas = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -274,6 +277,9 @@ function GeoPdfDialog({
   /** The box drawn on the map, handed back. */
   pendingArea?: TBbox | null;
   onExportQueued?: () => void;
+  /** The sharpened areas this user may read, which a GIS file includes
+   *  where they fall inside its box (the API decides the same at submit). */
+  sharpenedAreas?: readonly SharpenedArea[];
 }) {
   // ── State ────────────────────────────────────────────────────────────────
 
@@ -1235,6 +1241,9 @@ function GeoPdfDialog({
                 markDirty();
               }}
               noLayers={gisTried && gisChosenLayers.length === 0}
+              sharpenedInside={
+                gisArea ? areasInBox(sharpenedAreas, gisArea).length : 0
+              }
             />
           ) : (
             <>
@@ -1849,6 +1858,7 @@ function AreaExportFields({
   layers,
   onToggleLayer,
   noLayers,
+  sharpenedInside,
 }: {
   format: AreaExportFormat;
   area: TBbox | null;
@@ -1866,6 +1876,7 @@ function AreaExportFields({
   layers: ReadonlySet<AreaExportLayer>;
   onToggleLayer: (layer: AreaExportLayer) => void;
   noLayers: boolean;
+  sharpenedInside: number;
 }) {
   const { coordMode } = edges;
   const size = area ? areaSizeKm(area) : null;
@@ -1947,6 +1958,13 @@ function AreaExportFields({
           ))}
         </div>
         <FieldError message={noLayers ? "Pick at least one layer." : null} />
+        {sharpenedInside > 0 && (
+          <p className={classes.note}>
+            {sharpenedInside === 1
+              ? "1 sharpened area inside is included, at its own detail."
+              : `${sharpenedInside} sharpened areas inside are included, at their own detail.`}
+          </p>
+        )}
         {/* No number until computeEstimate has an area-export kind. */}
         <p className={classes.note}>
           Its time and credits aren't known until it has run; it's charged for
