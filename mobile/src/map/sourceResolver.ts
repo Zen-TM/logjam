@@ -336,12 +336,17 @@ function resolveTopoOverlay(
 /** An area as routing reads it: `tiles` is the archive its TileJSON names. */
 type RoutedArea = SharpenedArea & { tiles: string };
 
-/** The kind each of an area's saved clips is filed as (sharpenedClips.ts). */
-const AREA_CLIP_KIND: Record<TerrainArchiveLayer, MapArtifact["kind"]> = {
-  heights: "dem-region",
-  slope: "slope-region",
-  contours: "contours-region",
-};
+/**
+ * The kind each of an area's saved clips is filed as: the statewide clip's of
+ * the same layer, under the area's id. Read where clips are filed
+ * (`regionClipKind`) and where the offline map looks them up.
+ */
+export const AREA_CLIP_KIND: Record<TerrainArchiveLayer, MapArtifact["kind"]> =
+  {
+    heights: "dem-region",
+    slope: "slope-region",
+    contours: "contours-region",
+  };
 
 /**
  * The areas saved on this phone: each clip of one of the account's kept

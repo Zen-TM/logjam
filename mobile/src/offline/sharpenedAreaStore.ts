@@ -30,6 +30,15 @@ const isArea = (a: SharpenedArea): boolean =>
 let areas: readonly SharpenedArea[] | null = null;
 // Writes run one at a time, each checking the epoch it was asked in.
 let tail: Promise<void> = Promise.resolve();
+// The mounted map, told when the kept list changes: the save screen keeps
+// the list it cut from, which can be newer than the one the map loaded.
+const listeners = new Set<() => void>();
+
+/** Called whenever the kept list changes; returns the unsubscribe. */
+export function subscribeSharpenedAreas(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 /** The areas last kept, read once from the file. Sends nothing. */
 export async function savedSharpenedAreas(): Promise<readonly SharpenedArea[]> {
@@ -61,6 +70,7 @@ export function rememberSharpenedAreas(
     ({ heightsUrl: _h, slopeUrl: _s, contoursUrl: _c, ...area }) => area,
   );
   areas = kept;
+  for (const listener of listeners) listener();
   tail = tail
     .then(async () => {
       if (areasEpoch !== sharpenedAreasEpoch()) return;
@@ -80,5 +90,6 @@ export function rememberSharpenedAreas(
  */
 export function forgetSharpenedAreas(): Promise<void> {
   areas = [];
+  for (const listener of listeners) listener();
   return tail;
 }

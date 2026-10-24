@@ -125,6 +125,36 @@ describe("sharpenedAreaStore", () => {
     expect(await savedSharpenedAreas()).toEqual([]);
   });
 
+  // Red if a list kept from elsewhere (the save screen's) doesn't reach the
+  // mounted map: an area new since the map loaded its own list would be cut
+  // into the save but never drawn or read offline.
+  it("tells the map when a newer list is kept, and when the wipe forgets it", async () => {
+    const {
+      rememberSharpenedAreas,
+      savedSharpenedAreas,
+      sharpenedAreasEpoch,
+      stopSharpenedAreasForWipe,
+      forgetSharpenedAreas,
+      subscribeSharpenedAreas,
+    } = await load();
+    await rememberSharpenedAreas([area("a1")], sharpenedAreasEpoch());
+    const seen: string[][] = [];
+    const stop = subscribeSharpenedAreas(async () => {
+      seen.push((await savedSharpenedAreas()).map((a) => a.id));
+    });
+    await rememberSharpenedAreas(
+      [area("a1"), area("a2")],
+      sharpenedAreasEpoch(),
+    );
+    stopSharpenedAreasForWipe();
+    await forgetSharpenedAreas();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(seen).toEqual([["a1", "a2"], []]);
+    stop();
+  });
+
+  // Red if a bad file doesn't read as empty: a file this build didn't write
+  // must not name areas.
   it("reads no area from a file it can't use", async () => {
     disk.files.set(FILE, JSON.stringify([{ id: "a1", zmax: 18 }, "x"]));
     const { savedSharpenedAreas } = await load();

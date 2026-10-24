@@ -43,6 +43,8 @@ describe("areaRangeIn", () => {
     ]);
   });
 
+  // Red if a box that misses the area gets a range: it would cut a clip of
+  // tiles the area doesn't hold.
   it("is null for a saved area that misses the area", () => {
     expect(areaRangeIn(area(), bboxOf([110, 210, 111, 211]))).toBeNull();
   });
@@ -73,6 +75,8 @@ describe("areaClipSpecs", () => {
     ).toEqual([]);
   });
 
+  // Red if an area with no contour archive gets a contours clip: its null
+  // URL would fail the save.
   it("cuts no contours for an area that has none", () => {
     const specs = areaClipSpecs(
       { ...run, bbox: bboxOf([101, 201, 101, 201]) },
@@ -92,5 +96,35 @@ describe("areaClipBytes", () => {
     expect(quarter).toBeGreaterThan(0);
     expect(whole).toBe(quarter * 4);
     expect(areaClipBytes([area()], bboxOf([110, 210, 111, 211]))).toBe(0);
+  });
+});
+
+describe("areasForSave", () => {
+  const query = (over: object) => ({
+    data: null,
+    loading: false,
+    error: null,
+    ...over,
+  });
+  // Red if a signed-in save may go ahead while the list is loading or has
+  // failed: it would save no sharpened terrain and say nothing.
+  it("lets a signed-in save go ahead only once the list has loaded", async () => {
+    const { areasForSave } = await import("./sharpenedClips");
+    expect(areasForSave(true, query({ loading: true }))).toBe("loading");
+    expect(areasForSave(true, query({}))).toBe("loading");
+    expect(areasForSave(true, query({ error: "Couldn't load" }))).toBe(
+      "failed",
+    );
+    expect(areasForSave(true, query({ data: { jobs: [] } }))).toBe("ready");
+    // A failed refresh of a loaded list is still a failure to say.
+    expect(
+      areasForSave(true, query({ data: { jobs: [] }, error: "Couldn't load" })),
+    ).toBe("failed");
+  });
+
+  // Red if a guest's save waits on a list they can't have.
+  it("asks a guest for nothing", async () => {
+    const { areasForSave } = await import("./sharpenedClips");
+    expect(areasForSave(false, query({}))).toBe("none");
   });
 });

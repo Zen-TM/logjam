@@ -422,6 +422,7 @@ describe("runRegionClip", () => {
     expect(await run({ basemapId: "lidar-a1", area })).toEqual({
       status: "failed",
       code: "source-unavailable",
+      detail: "sharpened-area",
     });
   });
 

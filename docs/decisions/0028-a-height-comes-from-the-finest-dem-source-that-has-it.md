@@ -62,16 +62,17 @@ Proposal: #359.
   for it, and each segment is filled from its own fixes and DEM samples. The
   chart still shows the jump. `upgradeTrackClimbs` in
   `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
-  the finish, and after that only when the ids or `coverage` in
-  `DEM_SOURCES` change; nothing polls. It reads saved terrain and
+  the finish, and after that only when the ids or `coverage` of the
+  sources it reads change: `DEM_SOURCES` and the account's kept sharpened
+  areas (updated 2026-10-24); nothing polls. It reads saved terrain and
   `POST /elevation/profile`, never a public tile host, because nobody opened
   the track. Guards: `shared/src/elevation.test.ts`,
   `shared/src/gpsFill.test.ts`, `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
   than the best terrain, a phone built with a new source before the API
   serves it marks its tracks as asked, and the key sees only the declaration: an
-  archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
-  source with no declared footprint (a LiDAR job's DEM) must change the key
-  itself when it gains ground. Everything else above stands.
+  archive rebuilt inside an unchanged `coverage` re-asks nothing (updated
+  2026-10-24: a sharpened area declares its `coverage`, so the key sees one
+  that is new or grown). Everything else above stands.
 - **Update 2026-10-12: Logjam Web replaces a stored climb too, and each
   figure says its source.** A finished recording's Ascent and Descent are the
   stored figures on every screen of both clients; no screen shows its own

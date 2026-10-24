@@ -190,17 +190,19 @@ Nothing new calls it.
   else above stands.
 - **Update 2026-10-24: a signed-in save also keeps the account's sharpened
   areas it reaches ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)),
-  cut on the phone from their private archives.** For each area the box
-  reaches, the save cuts the area's heights, slope and contours over the part
-  of it the box covers, widened to whole z14 tiles (`areaClipSpecs` in
-  `mobile/src/offline/sharpenedClips.ts`). The save screen asks the API for
-  the account's list (`GET /topo-jobs/completed-overlays`), which sends no
-  bbox. Each clip is cut through the presigned URL the list gave, by byte
-  range with no header but `range`, from the bucket instead of the CDN, and
+  cut on the phone from their private archives.** Two rules above bend for
+  these clips alone. They are cut from private archives in the bucket, not
+  the public ones on the CDN. And the save makes one request to Logjam's API:
+  the save screen asks for the account's list
+  (`GET /topo-jobs/completed-overlays`), which sends no bbox, and waits for it
+  rather than save without the areas. For each area the box reaches, the save
+  cuts the area's heights, slope and contours over the part of it the box
+  covers, widened to whole z14 tiles (`areaClipSpecs` in
+  `mobile/src/offline/sharpenedClips.ts`). Each clip is cut through the
+  presigned URL the list gave, by byte range with no header but `range`, and
   filed under the area's source id, `lidar-<id>`. A guest has no areas, so
   their save is unchanged. A presigned URL expires after 24 h, so a clip
-  resumed after that fails with "source unavailable" and is saved again from
-  the save screen. Offline, the map routes the area clips over the statewide
+  resumed after that fails with a line that says to save the area again. Offline, the map routes the area clips over the statewide
   clips one archive per tile as it does online, the sampler reads an area's
   heights first, and the account's last list (without its URLs) is kept so
   they know the areas (`offline/sharpenedAreaStore.ts`). Guards:
@@ -209,8 +211,8 @@ Nothing new calls it.
   `sourceResolver.test.ts` ("routes saved areas offline"),
   `demLookup.test.ts` ("reads a saved clip of a sharpened area before the
   statewide one"). What holds the decision up still holds: the phone cuts
-  every clip, and the bbox never reaches the API. Everything else above
-  stands.
+  every clip, no request about a clip goes to the API, and the bbox never
+  reaches it. Everything else above stands.
 
 ## Consequences
 
@@ -254,6 +256,12 @@ Nothing new calls it.
   users.** Rejected: a guest-only path ([0007](0007-guest-mode-is-dont-sync-yet.md)),
   two implementations to keep in step, and a signed-in user's bbox would still
   reach the API for no gain.
+- **Keep sharpened areas online only, or have the API cut their clips.**
+  Rejected for the update of 2026-10-24: online only leaves a canyon on 5 m
+  heights and climbs exactly where the user went to the trouble of
+  sharpening it, and an API cut would send the bbox, the one thing this
+  decision keeps from Logjam (and 0040 rejects one composite archive on the
+  server).
 - **Merge each area into the statewide slope and contour clips**, one file
   a layer holding each tile from the archive `terrainTileArchive` picks, so
   the map draws one clip with no routing. Rejected for the update of

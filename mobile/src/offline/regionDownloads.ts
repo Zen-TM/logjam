@@ -136,10 +136,12 @@ const requestTimeoutMs = (length: number) => 30_000 + length / 16;
 const MAX_ATTEMPTS = 3;
 
 /**
- * A pmtiles `Source` over the CDN. No headers but the range: the archive is
- * public, so nothing identifies the user or the app to it. The platform's
- * default User-Agent still goes, and must: the web distribution's WAF refuses
- * a request without one (docs/decisions/0036).
+ * A pmtiles `Source` over `url`: a public archive on the CDN, or a sharpened
+ * area's archive through its presigned URL, a bearer credential that is
+ * never logged. No headers but the range either way, so nothing else
+ * identifies the user or the app. The platform's default User-Agent still
+ * goes, and must: the web distribution's WAF refuses a request without one
+ * (docs/decisions/0036).
  */
 function rangeSource(
   url: string,
@@ -330,7 +332,15 @@ export async function runRegionClip(
     }
     if (permanent(stop.error)) {
       await deleteClipFile(spec.id);
-      return { status: "failed", code: "source-unavailable" };
+      // A sharpened area's URL has expired, or the area has gone: its own
+      // line, which says to save the area again (sourceUnavailableLine).
+      return spec.area
+        ? {
+            status: "failed",
+            code: "source-unavailable",
+            detail: "sharpened-area",
+          }
+        : { status: "failed", code: "source-unavailable" };
     }
     // A status's text is not for the row (shared/DESIGN.md §11).
     if (

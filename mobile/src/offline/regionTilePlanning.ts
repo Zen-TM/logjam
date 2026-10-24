@@ -12,7 +12,11 @@ import {
   type RegionTilePlan,
 } from "@logjam/shared";
 
-import { hashKey, type MapArtifact } from "../map/sourceResolver";
+import {
+  AREA_CLIP_KIND,
+  hashKey,
+  type MapArtifact,
+} from "../map/sourceResolver";
 import type { RegionClipSpec } from "./regionDownloads";
 
 /** Plan order: zoom ascending, then row-major within a level. */
@@ -104,14 +108,8 @@ export function regionClipKind(
   spec: Pick<RegionClipSpec, "demSourceId" | "contours" | "slope" | "area">,
 ): MapArtifact["kind"] {
   // `dem-region` is the kind the sampler filters saved files on
-  // (offline/demLookup.ts). An area's clips are filed as the statewide clip
-  // of the same layer, under the area's id.
-  if (spec.area)
-    return spec.area.layer === "heights"
-      ? "dem-region"
-      : spec.area.layer === "slope"
-        ? "slope-region"
-        : "contours-region";
+  // (offline/demLookup.ts).
+  if (spec.area) return AREA_CLIP_KIND[spec.area.layer];
   if (spec.demSourceId) return "dem-region";
   if (spec.contours) return "contours-region";
   if (spec.slope) return "slope-region";

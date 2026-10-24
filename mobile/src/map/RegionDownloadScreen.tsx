@@ -72,11 +72,16 @@ import { placeRegistryWithRegion } from "../offline/placeRegistry";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { regionClipSpecs } from "../offline/regionTilePlanning";
-import { areaClipBytes, areaClipSpecs } from "../offline/sharpenedClips";
-import { apiFetch } from "../api/apiFetch";
+import {
+  areaClipBytes,
+  areaClipSpecs,
+  areasForSave,
+} from "../offline/sharpenedClips";
+import { rememberSharpenedAreas } from "../offline/sharpenedAreaStore";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import type { CompletedOverlaysResponse } from "./topoOverlays";
+import { getCompletedOverlays } from "./completedOverlays";
+import { sharpenedAreasOf } from "./sharpenedArchives";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -122,14 +127,6 @@ const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
   "six-base": "Base Map",
   "six-imagery": "Imagery",
 };
-
-/**
- * The account's list, for the sharpened areas a saved area keeps: their
- * presigned URLs are what their clips are cut through (sharpenedClips.ts).
- */
-function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
-  return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
-}
 
 /**
  * Detail levels offered. The ceiling is per-source (topo stops at z16), so the
@@ -370,22 +367,27 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
-  // A guest has no account, so no area.
+  // The account's sharpened areas the box reaches go into the save, cut
+  // through the list's presigned URLs (offline/sharpenedClips.ts). A guest has
+  // none; a signed-in save waits for the list rather than leave them out.
   const isGuest = useAccountState().accountState === "guest";
   const overlays = useApiQuery(
     getCompletedOverlays,
     "Couldn't load your sharpened areas.",
     !isGuest,
   );
-  const sharpenedAreas = useMemo(
-    () =>
-      isGuest
-        ? []
-        : (overlays.data?.jobs ?? []).flatMap((j) =>
-            j.sharpened ? [j.sharpened] : [],
-          ),
+  const areasState = areasForSave(!isGuest, overlays);
+  const { sharpenedAreas, areasEpoch } = useMemo(
+    () => sharpenedAreasOf(overlays.data, !isGuest),
     [isGuest, overlays.data],
   );
+  // The list the clips are cut from is the one the offline map and sampler
+  // must know, or an area new since the map loaded its list would be saved
+  // but never drawn or read.
+  useEffect(() => {
+    if (overlays.data && !isGuest)
+      void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
   const areaBytes = bbox ? areaClipBytes(sharpenedAreas, bbox) : 0;
 
   const pyramidIds = selected;
@@ -397,7 +399,10 @@ export function RegionDownloadScreen({
   // The vector map comes with every area and is a download worth making on
   // its own, so no raster need be picked.
   const mapCount = selected.length + 1;
-  const canDownload = bbox != null && caps?.ok === true;
+  const canDownload =
+    bbox != null &&
+    caps?.ok === true &&
+    (areasState === "none" || areasState === "ready");
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -705,6 +710,26 @@ export function RegionDownloadScreen({
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
+          {areasState === "loading" ? (
+            <Notice>Checking for your sharpened areas…</Notice>
+          ) : null}
+          {areasState === "failed" ? (
+            <Notice
+              icon="warning"
+              tone="warning"
+              action={
+                <Button
+                  label="Try again"
+                  variant="outlineAccent"
+                  onPress={overlays.refetch}
+                />
+              }
+            >
+              {
+                "Couldn't load your sharpened areas, so this area can't be saved yet."
+              }
+            </Notice>
+          ) : null}
           <Button
             label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
             icon="saveOffline"

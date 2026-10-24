@@ -6,7 +6,7 @@
 // online, one archive per tile (sourceResolver.ts `routeTerrain`).
 //
 // PRIVACY: a presigned URL is a bearer credential and an area's range says
-// where its owner surveyed. Nothing here logs.
+// where its owner surveyed. This file is pure: no I/O, so nothing to log.
 import {
   SHARPENED_ARCHIVE_URL,
   SHARPENED_SOURCE_PREFIX,
@@ -116,4 +116,18 @@ export function areaClipBytes(
       count * (per.heights + per.slope + (area.contoursUrl ? per.contours : 0))
     );
   }, 0);
+}
+
+/**
+ * Whether a save may go ahead, as far as the account's areas go: a guest has
+ * none to wait for; a signed-in save waits for the list, and says so when it
+ * failed, rather than saving no sharpened terrain without a word.
+ */
+export function areasForSave(
+  signedIn: boolean,
+  list: { data: unknown; loading: boolean; error: string | null },
+): "none" | "loading" | "failed" | "ready" {
+  if (!signedIn) return "none";
+  if (list.error != null) return "failed";
+  return list.loading || list.data == null ? "loading" : "ready";
 }
