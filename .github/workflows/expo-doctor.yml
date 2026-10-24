@@ -1,15 +1,15 @@
 name: expo-doctor
 
-# Not a job in CI: the check compares the expo-* pins with the versions Expo
-# currently publishes, so it turns red whenever a patch release lands, on
-# commits that changed nothing. The deploy workflows run only after a green CI
-# on main, and a patch release must not hold a deploy back.
+# Nightly on main, not on pull requests: the check compares the expo-* pins
+# with the versions Expo currently publishes, so it turns red whenever a patch
+# release lands, on commits that changed nothing. That is a maintenance signal
+# about main, not a verdict on a PR's diff, and a red PR check for upstream
+# drift is one people learn to ignore. The deploy workflows run only after a
+# green CI on main, so this must not hold a deploy back; dependency security on
+# a PR is dependency-review's job.
 on:
-  pull_request:
-    paths:
-      - "mobile/package.json"
-      - "mobile/package-lock.json"
-      - ".github/workflows/expo-doctor.yml"
+  schedule:
+    - cron: "47 16 * * *" # 02:47 AEST, after the nightly CI run
   workflow_dispatch:
 
 permissions:
