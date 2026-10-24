@@ -193,8 +193,10 @@ When a released build needs a fix that is **not** JavaScript only, and `main`
 holds work that should not ship yet: branch `release/mobile-vX.Y.Z` from the
 tag as in step 2 above, cherry-pick, bump to X.Y.(Z+1) and add its
 `CHANGELOG.md` section on the branch (and the same section on `main`), then
-tag `mobile-vX.Y.(Z+1)` on the branch and release as usual. Delete the branch
-once the release is published. If `main` has nothing unready, release from
+tag `mobile-vX.Y.(Z+1)` on the branch and release as usual. The bump is an
+admin push, not a PR, so the required `expo-doctor` check does not run on it:
+the branch keeps the pins of the build it came from. Delete the branch once
+the release is published. If `main` has nothing unready, release from
 `main` instead: no branch.
 
 ## Runtime versions

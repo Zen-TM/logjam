@@ -30,7 +30,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -uo pipefail
-          read_version() { node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version'; }
+          read_version() { node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version ?? ""'; }
           run=true
           if [ "$EVENT" = pull_request ]; then
             base=$(git show "$BASE_SHA:mobile/package.json" | read_version) || base=
