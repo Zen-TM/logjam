@@ -35,7 +35,39 @@ const templates = [template("t1"), template("t2")];
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   apiFetch: vi.fn(async () => templates),
+  // These two call placeUtils' own apiFetch, so replacing the export above
+  // does not reach them. Left real they fetched localhost, and the failure
+  // logged while the worker was tearing down (setup-smoke's intermittent
+  // EnvironmentTeardownError on "onUserConsoleLog").
+  fetchCurrentUser: vi.fn(
+    async () =>
+      ({
+        monthlyComputeUsage: 0,
+        monthlyComputeCredits: 600,
+        monthlyComputeResetAt: "",
+        storageUsedBytes: 0,
+        storageQuotaBytes: 1_000_000_000,
+      }) as never,
+  ),
+  fetchComputeEstimate: vi.fn(
+    async () =>
+      ({
+        estimatedSeconds: null,
+        credits: null,
+        used: 0,
+        quota: 0,
+        remaining: 0,
+        resetAt: "",
+        wouldExceed: false,
+      }) as never,
+  ),
 }));
+
+// Mutation: drop either stub above, and the afterEach assertion goes red.
+const network = vi.fn(async () => {
+  throw new Error("a unit test must not reach the network");
+});
+vi.stubGlobal("fetch", network);
 
 const discard = vi.fn();
 const submit = vi.hoisted(() => vi.fn());
@@ -72,6 +104,7 @@ afterEach(() => {
   cleanup();
   discard.mockClear();
   vi.mocked(apiFetch).mockImplementation(async () => templates as never);
+  expect(network).not.toHaveBeenCalled();
 });
 
 function dialog(props: {
