@@ -29,6 +29,19 @@ function fakeMap(lng: number, lat: number) {
 const KATOOMBA = [150.31, -33.71] as const;
 const opens = async () => {};
 
+const area: SharpenedOverlay = {
+  id: "a1",
+  zmax: 16,
+  tiles15: [30100, 19654, 30103, 19657],
+  coverage: [150.7, -33.8, 150.72, -33.78],
+  contours: false,
+  credit: "Elevation: a made-up survey.",
+  createdAt: "2026-10-24T00:00:00.000Z",
+  heightsUrl: "https://bucket.test/h?sig",
+  slopeUrl: "https://bucket.test/s?sig",
+  contoursUrl: null,
+};
+
 describe("terrainSourceFor", () => {
   it("uses the NSW archive over NSW, and adds its source once", async () => {
     const map = fakeMap(...KATOOMBA);
@@ -99,19 +112,6 @@ describe("terrainSourceFor", () => {
   });
 
   describe("with sharpened areas", () => {
-    const area: SharpenedOverlay = {
-      id: "a1",
-      zmax: 16,
-      tiles15: [30100, 19654, 30103, 19657],
-      coverage: [150.7, -33.8, 150.72, -33.78],
-      contours: false,
-      credit: "Elevation: a made-up survey.",
-      createdAt: "2026-10-24T00:00:00.000Z",
-      heightsUrl: "https://bucket.test/h?sig",
-      slopeUrl: "https://bucket.test/s?sig",
-      contoursUrl: null,
-    };
-
     // Mutation: keep the archive's own URL when areas exist and 3D ignores
     // them, as it did before the router.
     it("reads the router, to the deepest zmax, with the area's credit", async () => {
@@ -159,18 +159,6 @@ describe("terrainSourceFor", () => {
   // Mutations (each red): skip dropStaleTerrainSources; setTerrain with the
   // old source; ignore isCurrent.
   describe("applyTerrain", () => {
-    const area: SharpenedOverlay = {
-      id: "a1",
-      zmax: 16,
-      tiles15: [30100, 19654, 30103, 19657],
-      coverage: [150.7, -33.8, 150.72, -33.78],
-      contours: false,
-      credit: "Elevation: a made-up survey.",
-      createdAt: "2026-10-24T00:00:00.000Z",
-      heightsUrl: "https://bucket.test/h?sig",
-      slopeUrl: "https://bucket.test/s?sig",
-      contoursUrl: null,
-    };
     function terrainMap() {
       const base = fakeMap(...KATOOMBA);
       const added = new Set<string>();

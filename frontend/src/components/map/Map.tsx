@@ -3433,8 +3433,8 @@ function Map({
   useEffect(() => {
     sharpenedAreasRef.current = sharpenedAreas ?? [];
   }, [sharpenedAreas]);
-  // Set on switching 3D on, cleared when the tilt is scheduled: a change of
-  // areas before then still tilts.
+  // Set on switching 3D on, cleared when the tilt runs, so a change of areas
+  // before the map goes idle still tilts.
   const pendingTiltRef = useRef(false);
   const applyTerrainNow = (map: maplibregl.Map, toggle: number) => {
     const tilt = pendingTiltRef.current
