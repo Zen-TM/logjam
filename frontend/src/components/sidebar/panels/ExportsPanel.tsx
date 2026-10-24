@@ -13,6 +13,7 @@ import {
   IconButton,
   IconTile,
   ListEnd,
+  LoadingState,
   Menu,
   Row,
   type MenuEntry,
@@ -36,6 +37,7 @@ export default function ExportsPanel({
   views,
   topoExports,
   topoExportsTotal,
+  loaded,
   completedTopoJobs,
   onRefetchTopoExports,
   onQuotaChanged,
@@ -45,6 +47,9 @@ export default function ExportsPanel({
   views: React.ReactNode;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
+  /** False until the first fetch settles: loading is not empty
+   *  (shared/DESIGN.md §11). */
+  loaded: boolean;
   /** Only to name an older export after the topo it was made from. */
   completedTopoJobs: CompletedTopoJob[];
   onRefetchTopoExports: () => void;
@@ -130,14 +135,20 @@ export default function ExportsPanel({
     <div className={classes.root}>
       <Hero
         title={
-          finished.length === 0
-            ? "No exports yet"
-            : plural(finished.length, "export")
+          !loaded
+            ? "Exports"
+            : finished.length === 0
+              ? "No exports yet"
+              : plural(finished.length, "export")
         }
         actions={exportAreaButton}
       />
       <div className={classes.rails}>{views}</div>
-      {finished.length === 0 && beingMade.length === 0 ? (
+      {!loaded ? (
+        <div className={classes.emptyArea} role="status">
+          <LoadingState label="Loading your exports…" />
+        </div>
+      ) : finished.length === 0 && beingMade.length === 0 ? (
         <div className={classes.emptyArea}>
           <EmptyState
             icon="export"

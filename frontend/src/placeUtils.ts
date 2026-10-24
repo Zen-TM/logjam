@@ -2023,6 +2023,8 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // True once the first fetch has settled, as useGeoPdfJobs' is.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -2052,7 +2054,10 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
           setError(messageFromError(err, "Couldn't load exports."));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -2069,7 +2074,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { exports, total, loading, error, refetch };
+  return { exports, total, loading, loaded, error, refetch };
 }
 
 export function deleteTopoExport(id: string): Promise<void> {

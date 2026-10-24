@@ -600,7 +600,7 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  test("Maps: both views, a row menu, the topo style sheet and its colour", async ({
+  test("Maps: every view, a row menu, the topo style sheet and its colour", async ({
     page,
   }) => {
     await openApp(page);
@@ -612,6 +612,15 @@ test.describe("desktop", () => {
       aside.getByRole("heading", {
         level: 2,
         name: /^(No GeoPDFs yet|\d+ GeoPDFs?)$/,
+      }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    await aside.getByRole("radio", { name: "Exports" }).click();
+    await expect(
+      aside.getByRole("heading", {
+        level: 2,
+        name: /^(No exports yet|\d+ exports?)$/,
       }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
@@ -705,7 +714,7 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Make a GeoPDF, its template mode and its dense extent grid", async ({
+  test("Export an area: GeoPDF, its template mode and extent grid, and For GIS", async ({
     page,
   }) => {
     await openApp(page);
@@ -717,7 +726,7 @@ test.describe("desktop", () => {
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Make a GeoPDF" }),
+      dialog.getByRole("heading", { name: "Export an area" }),
     ).toBeVisible();
     // Closed, the Area section is paper, scale and the button to the map.
     await expect(
@@ -753,6 +762,16 @@ test.describe("desktop", () => {
     ).toBeFocused();
     await expectNoViolations(page, "dialog");
     await dialog.getByRole("button", { name: "Cancel" }).first().click();
+
+    // For GIS swaps the paper for a free box, its edges and the format's layers.
+    await dialog.getByText("For GIS").click();
+    await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
+    await expect(
+      dialog.getByRole("checkbox", { name: "Heights" }),
+    ).toBeVisible();
+    await dialog.getByText("Exact edges").click();
+    await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
+    await expectNoViolations(page, "dialog");
 
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");

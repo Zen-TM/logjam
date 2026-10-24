@@ -383,9 +383,9 @@ function PlacesPanel({
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
-        id: "geopdf",
-        label: "GeoPDF",
-        icon: "geoPdf",
+        id: "export",
+        label: "Export this area",
+        icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
     ];
@@ -665,7 +665,7 @@ function PlacesPanel({
           onClear={clearSelection}
         >
           {/* An icon like its siblings: as a labelled filled button the bar ran
-              past one line at 380px. The menu it opens says LiDAR topo or GeoPDF. */}
+              past one line at 380px. The menu it opens says what it makes. */}
           <Menu
             label="Make a map"
             entries={makeMapEntries(selected)}

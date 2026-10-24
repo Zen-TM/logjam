@@ -106,6 +106,7 @@ function SidebarPanel({
   topoJobsLoaded,
   topoExports,
   topoExportsTotal,
+  topoExportsLoaded,
   onRefetchTopoExports,
   setLidarJobToggles,
   onOpenTopo,
@@ -214,6 +215,8 @@ function SidebarPanel({
   topoJobsLoaded: boolean;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
+  /** False until the first fetch of exports settles (shared/DESIGN.md §11). */
+  topoExportsLoaded: boolean;
   onRefetchTopoExports: () => void;
   setLidarJobToggles: (
     v:
@@ -446,6 +449,7 @@ function SidebarPanel({
             views={mapsViewRail}
             topoExports={topoExports}
             topoExportsTotal={topoExportsTotal}
+            loaded={topoExportsLoaded}
             completedTopoJobs={completedTopoJobs}
             onRefetchTopoExports={onRefetchTopoExports}
             onQuotaChanged={onQuotaChanged}

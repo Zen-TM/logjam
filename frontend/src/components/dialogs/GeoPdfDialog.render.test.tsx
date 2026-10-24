@@ -84,6 +84,7 @@ function dialog({
   pendingScale?: number | null;
   completedTopoJobs?: CompletedTopoJob[];
   areaSeed?: TBbox | null;
+  openWithGis?: boolean;
   onPickArea?: () => void;
   pendingArea?: TBbox | null;
 }) {
@@ -466,6 +467,67 @@ describe("Export an area, for GIS", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+    expect(exportPosts()).toEqual([]);
+  });
+
+  // An edge left wrong is not committed, so the box underneath is the last
+  // good one. Mutation: drop the edge-error check from handleExportArea.
+  it("sends nothing while an edge shows an error, and opens Exact edges", () => {
+    vi.mocked(apiFetch).mockClear();
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    const gisEdges = screen.getByText("Exact edges").closest("details")!;
+    gisEdges.open = true;
+    const north = screen.getByRole("textbox", { name: "North" });
+    fireEvent.change(north, { target: { value: "-34" } });
+    fireEvent.blur(north);
+    gisEdges.open = false;
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+    expect(exportPosts()).toEqual([]);
+    expect(screen.getByText("Exact edges").closest("details")!.open).toBe(true);
+  });
+
+  // Maps, Exports opens it on a GIS format. Mutation: ignore `openWithGis`.
+  it("opens on GeoTIFF with For GIS open from the Exports view", () => {
+    render(dialog({ open: true, openWithGis: true }));
+    expect(
+      screen
+        .getByRole("radio", { name: "GeoTIFF" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("For GIS").closest("details")!.open).toBe(true);
+  });
+
+  // A requirement shows on Make it, a limit live (shared/DESIGN.md §11).
+  // Mutation: drop the `gisTried` gate on "Pick at least one layer."
+  it("asks for a layer only once Make it is pressed without one", () => {
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    for (const name of ["Heights", "Slope", "Hillshade"])
+      fireEvent.click(screen.getByRole("checkbox", { name }));
+    expect(screen.queryByText("Pick at least one layer.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("Pick at least one layer.")).toBeTruthy();
+  });
+
+  // Two clicks on one spot draw a box with no size, which the API refuses as
+  // a fault. Mutation: drop the no-size branch from `gisAreaLimit`.
+  it("says a box with no size needs drawing again, and sends nothing", () => {
+    vi.mocked(apiFetch).mockClear();
+    render(
+      dialog({
+        open: true,
+        areaSeed: { north: -33.6, south: -33.6, east: 150.3, west: 150.3 },
+      }),
+    );
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText("That box has no size. Draw it again on the map."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(exportPosts()).toEqual([]);
   });
 

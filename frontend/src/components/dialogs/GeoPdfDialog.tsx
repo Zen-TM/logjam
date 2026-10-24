@@ -38,7 +38,9 @@ import {
   hasExtentFieldError,
   parseExtentField,
   scaleFieldError,
+  type ExtentFieldErrors,
   type ExtentFieldKey,
+  type ExtentFieldValues,
 } from "./geoPdfExtentFields";
 import type {
   ExtentState,
@@ -64,6 +66,7 @@ import {
   extentFromCentreAndSize,
 } from "@logjam/shared";
 import {
+  AREA_EXPORT_FORMATS,
   AREA_EXPORT_LAYERS,
   AREA_EXPORT_LAYERS_BY_FORMAT,
   AREA_EXPORT_OUTSIDE_NSW,
@@ -168,19 +171,19 @@ const GEOPDF_OPTION: ChipOption<FormatChoice>[] = [
   { value: "geopdf", label: "GeoPDF" },
 ];
 
-const GIS_FORMATS: AreaExportFormat[] = ["geotiff", "gpkg", "mbtiles"];
-
-const GIS_OPTIONS: ChipOption<FormatChoice>[] = GIS_FORMATS.map((format) => ({
-  value: format,
-  label: EXPORT_FORMAT_RULES[format].label,
-}));
+const GIS_OPTIONS: ChipOption<FormatChoice>[] = AREA_EXPORT_FORMATS.map(
+  (format) => ({
+    value: format,
+    label: EXPORT_FORMAT_RULES[format].label,
+  }),
+);
 
 const GIS_FORMAT_NOTES: Record<AreaExportFormat, string> = {
   geotiff:
     "A .zip of rasters in GDA2020 / MGA, for QGIS or ArcGIS: heights in metres, slope in degrees, and hillshade.",
   gpkg: "One file for QGIS: the rasters in GDA2020 / MGA, and the contours as lines that carry their height.",
   mbtiles:
-    "Map tiles for Gaia, Locus or OruxMaps, drawn over their own map. Slope is in your slope bands as they are now, so changing them later won't change the file.",
+    "Map data for Gaia, Locus or OruxMaps, drawn over their own map, with slope in your slope bands as they are now.",
 };
 
 const COORD_OPTIONS: ChipOption<CoordMode>[] = [
@@ -316,7 +319,8 @@ function GeoPdfDialog({
     false,
   );
 
-  // What is made. GeoPDF on every open, with For GIS closed (DESIGN.md).
+  // What is made: GeoPDF with For GIS closed, unless `openWithGis` (the render
+  // tests "opens on GeoPDF with For GIS closed" and "opens on GeoTIFF").
   const [format, setFormat] = useState<FormatChoice>("geopdf");
   const [gisOpen, setGisOpen] = useState(false);
   // A GIS format's box, once drawn or typed; until then it starts from the
@@ -325,6 +329,14 @@ function GeoPdfDialog({
   const [gisLayers, setGisLayers] = useState<ReadonlySet<AreaExportLayer>>(
     () => new Set(AREA_EXPORT_LAYERS),
   );
+  // Its Exact edges: what is typed, held here so Make it can refuse an edge
+  // that shows an error, and whether they are open.
+  const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
+  const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
+  const [gisEdgesOpen, setGisEdgesOpen] = useState(false);
+  // Make it was pressed with something missing: a requirement shows from then
+  // on, where a limit shows live (shared/DESIGN.md §11).
+  const [gisTried, setGisTried] = useState(false);
 
   // Generation
   const [generating, setGenerating] = useState(false);
@@ -471,6 +483,9 @@ function GeoPdfDialog({
       setEdgesOpen(false);
       setGisBox(null);
       setGisLayers(new Set(AREA_EXPORT_LAYERS));
+      setGisRaw(NO_EDGES_TYPED);
+      setGisEdgesOpen(false);
+      setGisTried(false);
       setDirty(false);
     }
   }
@@ -820,13 +835,43 @@ function GeoPdfDialog({
         }
       : null);
   const gisFormat = format === "geopdf" ? null : format;
-  const gisAreaError = !gisArea
-    ? "Pick an area on the map."
-    : areaExportTooLarge(gisArea)
-      ? AREA_EXPORT_TOO_LARGE
-      : !areaInNsw(gisArea)
-        ? AREA_EXPORT_OUTSIDE_NSW
-        : null;
+  // A limit, or a box with no size (two clicks on one spot), shows live.
+  const gisAreaLimit = !gisArea
+    ? null
+    : gisArea.north <= gisArea.south || gisArea.east <= gisArea.west
+      ? "That box has no size. Draw it again on the map."
+      : areaExportTooLarge(gisArea)
+        ? AREA_EXPORT_TOO_LARGE
+        : !areaInNsw(gisArea)
+          ? AREA_EXPORT_OUTSIDE_NSW
+          : null;
+  const gisEdges = {
+    ...(gisArea ?? NO_AREA),
+    coordMode: extentState.coordMode,
+  };
+  const gisAreaSet = gisArea !== null;
+  // The typed edges follow the box, except the one being typed in.
+  useEffect(() => {
+    setGisRaw((previous) => {
+      const next = { ...previous };
+      for (const which of ["n", "s", "e", "w"] as const)
+        if (gisFocused.current !== which)
+          next[which] = gisArea ? edgeText(which, gisEdges) : "";
+      return next;
+    });
+    // The box's numbers, not its object, which is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    gisAreaSet,
+    gisEdges.north,
+    gisEdges.south,
+    gisEdges.east,
+    gisEdges.west,
+    gisEdges.coordMode,
+  ]);
+  const gisEdgeErrors = gisArea
+    ? extentFieldErrors(gisRaw, gisEdges)
+    : NO_EDGE_ERRORS;
   const gisChosenLayers = gisFormat
     ? AREA_EXPORT_LAYERS_BY_FORMAT[gisFormat].filter((layer) =>
         gisLayers.has(layer),
@@ -834,12 +879,16 @@ function GeoPdfDialog({
     : [];
 
   const handleExportArea = async () => {
+    const edgeError = hasExtentFieldError(gisEdgeErrors);
     if (
       !gisFormat ||
       !gisArea ||
-      gisAreaError ||
+      gisAreaLimit ||
+      edgeError ||
       gisChosenLayers.length === 0
     ) {
+      setGisTried(true);
+      if (edgeError) setGisEdgesOpen(true);
       setError("A field below needs fixing first.");
       return;
     }
@@ -1161,8 +1210,20 @@ function GeoPdfDialog({
             <AreaExportFields
               format={gisFormat}
               area={gisArea}
-              areaError={gisAreaError}
-              coordMode={extentState.coordMode}
+              areaError={
+                gisAreaLimit ??
+                (gisTried && !gisArea ? "Pick an area on the map." : null)
+              }
+              edges={gisEdges}
+              raw={gisRaw}
+              onDraft={(which, value) => {
+                setGisRaw((previous) => ({ ...previous, [which]: value }));
+                markDirty();
+              }}
+              edgeErrors={gisEdgeErrors}
+              focusedFieldRef={gisFocused}
+              edgesOpen={gisEdgesOpen}
+              onEdgesOpenChange={setGisEdgesOpen}
               onCoordModeChange={(coordMode) =>
                 setExtentState(applyCoordModeChange(extentState, coordMode))
               }
@@ -1182,7 +1243,7 @@ function GeoPdfDialog({
                 setGisLayers(next);
                 markDirty();
               }}
-              noLayers={gisChosenLayers.length === 0}
+              noLayers={gisTried && gisChosenLayers.length === 0}
             />
           ) : (
             <>
@@ -1760,6 +1821,32 @@ const EDGE_FIELDS: {
   { which: "s", cell: "extentSouth", latlon: "South", en: "S (northing)" },
 ];
 
+const NO_EDGES_TYPED: ExtentFieldValues = { n: "", s: "", e: "", w: "" };
+const NO_EDGE_ERRORS: ExtentFieldErrors = {
+  n: null,
+  s: null,
+  e: null,
+  w: null,
+};
+
+/** An edge as its field shows it. E/N reads each edge at the corner the
+ *  GeoPDF's fields use (`parseExtentField`). */
+function edgeText(
+  which: ExtentFieldKey,
+  edges: TBbox & { coordMode: CoordMode },
+): string {
+  const [lat, lon] = {
+    n: [edges.north, edges.west],
+    s: [edges.south, edges.east],
+    e: [edges.north, edges.east],
+    w: [edges.south, edges.west],
+  }[which];
+  const latitude = which === "n" || which === "s";
+  if (edges.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
+  const en = toEastingNorthing(lat, lon);
+  return (latitude ? en.northing : en.easting).toFixed(1);
+}
+
 const EDGE_OF: Record<ExtentFieldKey, keyof TBbox> = {
   n: "north",
   s: "south",
@@ -1776,7 +1863,13 @@ function AreaExportFields({
   format,
   area,
   areaError,
-  coordMode,
+  edges,
+  raw,
+  onDraft,
+  edgeErrors,
+  focusedFieldRef,
+  edgesOpen,
+  onEdgesOpenChange,
   onCoordModeChange,
   onAreaChange,
   onPick,
@@ -1787,7 +1880,13 @@ function AreaExportFields({
   format: AreaExportFormat;
   area: TBbox | null;
   areaError: string | null;
-  coordMode: CoordMode;
+  edges: TBbox & { coordMode: CoordMode };
+  raw: ExtentFieldValues;
+  onDraft: (which: ExtentFieldKey, value: string) => void;
+  edgeErrors: ExtentFieldErrors;
+  focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
+  edgesOpen: boolean;
+  onEdgesOpenChange: (open: boolean) => void;
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
@@ -1795,45 +1894,7 @@ function AreaExportFields({
   onToggleLayer: (layer: AreaExportLayer) => void;
   noLayers: boolean;
 }) {
-  const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
-  const edges = useMemo(
-    () => ({ ...(area ?? NO_AREA), coordMode }),
-    [area, coordMode],
-  );
-  const shown = useCallback(
-    (which: ExtentFieldKey) => {
-      if (!area) return "";
-      // E/N shows each edge at the corner the GeoPDF's fields use.
-      const [lat, lon] = {
-        n: [edges.north, edges.west],
-        s: [edges.south, edges.east],
-        e: [edges.north, edges.east],
-        w: [edges.south, edges.west],
-      }[which];
-      if (coordMode === "latlon")
-        return (which === "n" || which === "s" ? lat : lon).toFixed(6);
-      const en = toEastingNorthing(lat, lon);
-      return (
-        which === "n" || which === "s" ? en.northing : en.easting
-      ).toFixed(1);
-    },
-    [area, coordMode, edges],
-  );
-  const [raw, setRaw] = useState<Record<ExtentFieldKey, string>>({
-    n: "",
-    s: "",
-    e: "",
-    w: "",
-  });
-  useEffect(() => {
-    setRaw((previous) => {
-      const next = { ...previous };
-      for (const which of ["n", "s", "e", "w"] as const)
-        if (focusedField.current !== which) next[which] = shown(which);
-      return next;
-    });
-  }, [shown]);
-  const errors = extentFieldErrors(raw, edges);
+  const { coordMode } = edges;
   const size = area ? areaSizeKm(area) : null;
 
   return (
@@ -1854,7 +1915,11 @@ function AreaExportFields({
         </SettingsRow>
         <FieldError message={areaError} />
         {area && (
-          <details className={classes.edges}>
+          <details
+            className={classes.edges}
+            open={edgesOpen}
+            onToggle={(event) => onEdgesOpenChange(event.currentTarget.open)}
+          >
             <summary className={classes.edgesSummary}>Exact edges</summary>
             <div className={classes.group}>
               <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
@@ -1873,14 +1938,9 @@ function AreaExportFields({
                       which={field.which}
                       label={coordMode === "latlon" ? field.latlon : field.en}
                       value={raw[field.which]}
-                      error={errors[field.which]}
-                      focusedFieldRef={focusedField}
-                      onDraft={(next) =>
-                        setRaw((previous) => ({
-                          ...previous,
-                          [field.which]: next,
-                        }))
-                      }
+                      error={edgeErrors[field.which]}
+                      focusedFieldRef={focusedFieldRef}
+                      onDraft={(next) => onDraft(field.which, next)}
                       onCommit={(degrees) =>
                         onAreaChange({
                           ...area,
@@ -1890,7 +1950,7 @@ function AreaExportFields({
                       parse={(value) =>
                         parseExtentField(field.which, value, edges)
                       }
-                      valid={!hasExtentFieldError(errors)}
+                      valid={!hasExtentFieldError(edgeErrors)}
                       markDirty={() => {}}
                     />
                   </div>

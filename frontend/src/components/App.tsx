@@ -936,7 +936,7 @@ function App() {
   }, [completedTopoJobs, setLidarJobToggles]);
 
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
-  // recent-exports list (rendered in the LiDAR panel accordion) and the
+  // recent-exports list (rendered in Maps, Exports) and the
   // auto-download on completion work regardless of which panel or dialog is
   // open. The hook self-throttles: it only polls while an export is in
   // progress.
@@ -944,6 +944,7 @@ function App() {
     exports: topoExports,
     total: topoExportsTotal,
     loading: topoExportsLoading,
+    loaded: topoExportsLoaded,
     refetch: refetchTopoExports,
   } = useTopoExports(loadsUserData);
 
@@ -1173,7 +1174,7 @@ function App() {
 
   // Resolve a stashed ?export=<id> deep link: download the export directly
   // (mirrors NotificationsPanel.handleDownloadExport). A presign that has
-  // expired (no downloadUrl) opens the LiDAR panel so the user can re-presign.
+  // expired (no downloadUrl) opens Maps, Exports so the user can re-presign.
   useEffect(() => {
     if (!loadsUserData) return;
     const exportId = sessionStorage.getItem("pendingExportId");
@@ -1477,6 +1478,7 @@ function App() {
       return;
     }
     setExportAreaSeed(bounds);
+    setSelectingExportBox(false);
     setEditingGeoPdfTemplate(undefined);
     setInitialGeoPdfTemplateId(null);
     setGeoPdfPaperAspect(210 / 297);
@@ -1529,6 +1531,7 @@ function App() {
           label: "Export an area",
           icon: "export",
           onSelect: () => {
+            setSelectingExportBox(false);
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
             setShowGeoPdf(true);
@@ -1584,6 +1587,7 @@ function App() {
           setExportAreaSeed(null);
           setPendingExportBox(null);
           setExportOpensWithGis(false);
+          setSelectingExportBox(false);
         }}
         onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
           // The latest pick, every visit: the map follows the dialog.
@@ -1784,6 +1788,7 @@ function App() {
           topoJobsLoaded={completedTopoJobsLoaded}
           topoExports={topoExports}
           topoExportsTotal={topoExportsTotal}
+          topoExportsLoaded={topoExportsLoaded}
           onRefetchTopoExports={refetchTopoExports}
           setLidarJobToggles={setLidarJobToggles}
           onOpenTopo={() => {
@@ -1794,6 +1799,7 @@ function App() {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
             setExportOpensWithGis(true);
+            setSelectingExportBox(false);
             setShowGeoPdf(true);
           }}
           onExportArea={(job) => {
