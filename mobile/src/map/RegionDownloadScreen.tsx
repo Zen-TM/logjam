@@ -375,22 +375,24 @@ export function RegionDownloadScreen({
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
   // The account's sharpened areas the box reaches go into the save, cut
-  // through the list's presigned URLs (offline/sharpenedClips.ts). A guest has
-  // none; a signed-in save waits for the list rather than leave them out.
-  // Online passed as true, as `capabilityScreenBlock` does: offline the
-  // query fails and says so, where a disabled one would wait for good.
+  // through the list's presigned URLs (offline/sharpenedClips.ts); a guest
+  // has none. What Save does while the list loads or fails is `saveGate`'s.
+  // Online passed as true, as `capabilityScreenBlock` does: a query disabled
+  // offline would leave the list loading for good.
   const loadsAreas =
     capabilityStatus("lidarOverlays", useAccountState().accountState, true)
       .status === "available";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load your sharpened areas, so this area can't be saved yet.",
+    "Couldn't load your sharpened areas.",
     loadsAreas,
   );
   const areasState = areasForSave(loadsAreas, overlays);
-  // Offline, Save goes ahead to its "needs a connection" alert; online it
-  // waits for the list, or is saved without the areas after a warning.
-  const gate = saveGate(areasState, useConnectivity() === "online");
+  // ONE connectivity reading for the Save button and its tap (`noConnection`
+  // below): two readings disagree on Wi-Fi with no internet, where a save
+  // would then queue with no area list and leave the areas out quietly.
+  const online = useConnectivity() === "online";
+  const gate = saveGate(areasState, online);
   const { sharpenedAreas, areasEpoch } = useMemo(
     () => sharpenedAreasOf(overlays.data, loadsAreas),
     [loadsAreas, overlays.data],
@@ -483,20 +485,21 @@ export function RegionDownloadScreen({
       setBusy(true);
       void (async () => {
         try {
-          // Asked HERE, at the tap, rather than from a subscription's last
-          // value: the answer decides whether tens of megabytes go on someone's
-          // plan, and the connection can change between the last event and the
-          // tap. It is also why there is no "use mobile data" toggle: a switch
-          // set before the walk out of Wi-Fi range answers a question about a
-          // connection the phone is no longer on.
-          const connection = await NetInfo.fetch();
-          if (connection.isConnected === false) {
+          // Offline by the same reading that enabled Save (`gate`).
+          if (gate.noConnection) {
             Alert.alert(
               "No connection",
               "Saving maps needs a connection. Try again when you have one.",
             );
             return;
           }
+          // Metered asked HERE, at the tap, rather than from a subscription's
+          // last value: the answer decides whether tens of megabytes go on
+          // someone's plan, and the connection can change between the last
+          // event and the tap. It is also why there is no "use mobile data"
+          // toggle: a switch set before the walk out of Wi-Fi range answers a
+          // question about a connection the phone is no longer on.
+          const connection = await NetInfo.fetch();
           // Metered: ask, once, about THIS download. Declining is a cancel, not
           // a setting to go and find.
           let allowCellular = false;
@@ -544,7 +547,7 @@ export function RegionDownloadScreen({
         }
       })();
     },
-    [bbox, job, areaBytes, defaultName, startDownloads],
+    [bbox, job, areaBytes, defaultName, startDownloads, gate.noConnection],
   );
 
   // Confirm and dismiss do the same thing: the field starts on the default, so

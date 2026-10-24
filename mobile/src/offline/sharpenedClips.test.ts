@@ -130,29 +130,42 @@ describe("areasForSave", () => {
 });
 
 describe("saveGate", () => {
-  // Red if a failed list blocks Save offline (the old "needs a connection"
-  // alert never shows), or lets an online save go ahead without the warning
-  // and its explicit "Save without sharpened areas".
+  // Red if offline lets a save queue instead of asking for a connection, or a
+  // failed list blocks Save offline: the gate and the tap must read the same
+  // connectivity, or a save with no area list leaves the areas out quietly.
   it("asks for a connection offline, and online warns with a way to save without the areas", async () => {
     const { saveGate } = await import("./sharpenedClips");
     expect(saveGate("failed", true)).toEqual({
       canSave: false,
       warning: "failed",
+      noConnection: false,
     });
-    expect(saveGate("failed", false)).toEqual({ canSave: true, warning: null });
+    expect(saveGate("failed", false)).toEqual({
+      canSave: true,
+      warning: null,
+      noConnection: true,
+    });
     expect(saveGate("loading", true)).toEqual({
       canSave: false,
       warning: "loading",
+      noConnection: false,
     });
-    expect(saveGate("loading", false)).toEqual({
+    expect(saveGate("ready", true)).toEqual({
       canSave: true,
       warning: null,
+      noConnection: false,
     });
-    for (const state of ["ready", "none"] as const)
-      for (const online of [true, false])
-        expect(saveGate(state, online)).toEqual({
-          canSave: true,
-          warning: null,
-        });
+  });
+
+  // Red if any state lets a save queue (Save enabled and no connection alert)
+  // while the area list is loading or has failed.
+  it("never queues a save while the area list is loading or has failed", async () => {
+    const { saveGate } = await import("./sharpenedClips");
+    for (const areas of ["none", "loading", "failed", "ready"] as const)
+      for (const online of [true, false]) {
+        const gate = saveGate(areas, online);
+        if (gate.canSave && !gate.noConnection)
+          expect(["none", "ready"]).toContain(areas);
+      }
   });
 });

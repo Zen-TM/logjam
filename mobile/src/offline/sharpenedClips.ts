@@ -133,16 +133,23 @@ export function areasForSave(
 }
 
 /**
- * What the save screen does with the area list's state. Offline, Save goes
- * ahead to the screen's own "needs a connection" alert. Online, it waits for
- * the list, and when the list fails it warns, with "Try again" and an
- * explicit "Save without sharpened areas": a warned skip, never a quiet one.
+ * What the save screen does with the area list's state, from the one
+ * connectivity reading both the Save button and its tap use. Offline, Save
+ * stays enabled and its tap asks for a connection (`noConnection`). Online,
+ * it waits for the list, and when the list fails it warns, with "Try again"
+ * and an explicit "Save without sharpened areas": a warned skip, never a
+ * quiet one. So no state queues a save while the list is loading or failed.
  */
 export function saveGate(
   areas: ReturnType<typeof areasForSave>,
   online: boolean,
-): { canSave: boolean; warning: "loading" | "failed" | null } {
-  if (!online || areas === "none" || areas === "ready")
-    return { canSave: true, warning: null };
-  return { canSave: false, warning: areas };
+): {
+  canSave: boolean;
+  warning: "loading" | "failed" | null;
+  noConnection: boolean;
+} {
+  if (!online) return { canSave: true, warning: null, noConnection: true };
+  if (areas === "none" || areas === "ready")
+    return { canSave: true, warning: null, noConnection: false };
+  return { canSave: false, warning: areas, noConnection: false };
 }

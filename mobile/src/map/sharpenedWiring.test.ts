@@ -20,11 +20,21 @@ describe("the save screen", () => {
     );
   });
 
-  // Mutation: build `canDownload` without the gate, and a signed-in save
-  // goes ahead online without the areas and without a word.
-  it("lets Save go ahead only as the gate says", () => {
-    expect(source).toMatch(/saveGate\(areasState,/);
+  // Mutations: build `canDownload` without the gate, or hard-code the gate's
+  // connectivity, and a signed-in save goes ahead online without the areas
+  // and without a word.
+  it("lets Save go ahead only as the gate says, from the live connectivity", () => {
+    expect(source).toMatch(/const online = useConnectivity\(\) === "online";/);
+    expect(source).toMatch(/saveGate\(areasState, online\)/);
     expect(source).toMatch(/const canDownload =[^;]*gate\.canSave/);
+  });
+
+  // Mutation: let the tap read its own connectivity (`isConnected`), and on
+  // Wi-Fi with no internet Save is enabled, no alert shows, and the save
+  // queues with no area list.
+  it("asks for a connection at the tap by the gate's reading", () => {
+    expect(source).toMatch(/if \(gate\.noConnection\)/);
+    expect(source).not.toMatch(/isConnected === false/);
   });
 });
 
