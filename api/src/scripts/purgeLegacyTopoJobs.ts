@@ -7,13 +7,14 @@
 //   node dist/scripts/purgeLegacyTopoJobs.js          # counts, deletes nothing
 //   node dist/scripts/purgeLegacyTopoJobs.js --yes    # deletes
 //
-// In prod it runs as an announcement does, a one-off task on the live API
-// image (docs/operations/announcements.md, "In prod"), with this command.
+// In prod it runs as a one-off task on the live API image, as an
+// announcement does: docs/operations/purge-legacy-topo-jobs.md.
 //
 // Only `complete` and `failed` rows. An `uploading` row may be a new job not
 // yet started (`/start` writes its mark), and a `pending` or `processing` one
 // is a worker's to finish or the reaper's to fail: both are counted, never
-// deleted. A job a running export reads is skipped, as DELETE refuses it.
+// deleted. A job a running export reads is skipped, as DELETE refuses it
+// (only an export queued before #641 can name a job; none does since).
 //
 // Logs say job ids and counts, never a place: a job id names no area.
 import { Prisma } from "@prisma/client";
@@ -61,10 +62,12 @@ export async function purge(confirmed: boolean): Promise<number> {
   let failed = 0;
   for (const job of doomed) {
     try {
-      // False: deleted meanwhile (its owner, from a client), which is done.
+      // False: its owner deleted it meanwhile, which is done. One deleted in
+      // the instant between the read and the transaction throws below and
+      // counts as failed; a rerun finds it gone.
       if (await deleteTopoJob(job.id, job.userId)) deleted += 1;
     } catch (err) {
-      // The row stays with its objects (S3 first), so a rerun picks it up.
+      // The row stays, so a rerun finishes the deletes.
       failed += 1;
       logger.error(
         { jobId: job.id, err: safeErrorForLog(err) },
@@ -76,7 +79,8 @@ export async function purge(confirmed: boolean): Promise<number> {
   return failed > 0 ? 1 : 0;
 }
 
-async function main(args: string[]): Promise<number> {
+/** The command line: no argument is the dry run, `--yes` deletes. */
+export async function main(args: string[]): Promise<number> {
   if (args.every((arg) => arg === "--yes")) return purge(args.length > 0);
   logger.error("usage: purgeLegacyTopoJobs.js [--yes]");
   return 1;

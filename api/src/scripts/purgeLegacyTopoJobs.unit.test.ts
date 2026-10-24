@@ -11,6 +11,7 @@ const db = vi.hoisted(() => ({
   }[],
   running: [] as { sourceJobIds: string[] }[],
   jobWhere: undefined as unknown,
+  exportWhere: undefined as unknown,
 }));
 vi.mock("../services/prisma", () => ({
   default: {
@@ -20,7 +21,12 @@ vi.mock("../services/prisma", () => ({
         return db.jobs;
       },
     },
-    topoExportJob: { findMany: async () => db.running },
+    topoExportJob: {
+      findMany: async ({ where }: { where: unknown }) => {
+        db.exportWhere = where;
+        return db.running;
+      },
+    },
   },
 }));
 const deleteTopoJob = vi.hoisted(() => vi.fn(async () => true));
@@ -38,7 +44,7 @@ vi.mock("../lib/logger", () => ({
   safeErrorForLog: (err: unknown) => String(err),
 }));
 
-import { purge } from "./purgeLegacyTopoJobs";
+import { main, purge } from "./purgeLegacyTopoJobs";
 
 const job = (id: string, status: string, outputBytes = 100n) => ({
   id,
@@ -88,9 +94,14 @@ describe("purge", () => {
   });
 
   // Red if an uploading, pending or processing row is deleted (a new job not
-  // yet started, or one a worker still runs), or one a running export reads.
+  // yet started, or one a worker still runs), or one a running export reads:
+  // the export query must ask for running exports naming a finished job.
   it("deletes only finished jobs no export is reading", async () => {
     expect(await purge(true)).toBe(0);
+    expect(db.exportWhere).toEqual({
+      status: "running",
+      sourceJobIds: { hasSome: ["done", "broke", "busy"] },
+    });
     expect(deleteTopoJob.mock.calls).toEqual([
       ["done", "owner-of-done"],
       ["broke", "owner-of-broke"],
@@ -108,4 +119,23 @@ describe("purge", () => {
       data: { deleted: 1, failed: 1 },
     });
   });
+});
+
+describe("main", () => {
+  // Red if no argument deletes: the dry run is the default.
+  it("counts without deleting when given no argument, and deletes with --yes", async () => {
+    expect(await main([])).toBe(0);
+    expect(deleteTopoJob).not.toHaveBeenCalled();
+    expect(await main(["--yes"])).toBe(0);
+    expect(deleteTopoJob).toHaveBeenCalledTimes(2);
+  });
+
+  // Red if a mistyped flag is read as --yes, or as a dry run that exits 0.
+  it.each([["-y"], ["--yes=no"], ["--dry-run"]])(
+    "refuses %s, deleting nothing",
+    async (arg) => {
+      expect(await main([arg])).toBe(1);
+      expect(deleteTopoJob).not.toHaveBeenCalled();
+    },
+  );
 });

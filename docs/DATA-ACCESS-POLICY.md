@@ -76,13 +76,18 @@ _deliberate, recorded, and impossible-to-hide_:
   access uses the master account, so an operator read is **distinct in the logs**
   from ordinary application traffic — and because the application's own reads are
   not logged while operator reads are, an operator read does not hide in a sea of
-  app traffic. One exception: sending a message to every user
-  ([`operations/announcements.md`](operations/announcements.md)) runs the
-  application's own code, as the application role, in a one-off task I launch.
-  That launch, with its command and the message, is a CloudTrail management
-  event in the WORM log; the task reads only account ids and push device tokens,
-  and its writes (the announcement, one inbox row per user, and pruning dead
-  push tokens) are logged like any other.
+  app traffic. Two exceptions run the application's own code, as the
+  application role, in a one-off task I launch: sending a message to every user
+  ([`operations/announcements.md`](operations/announcements.md)), and the
+  one-time deletion of LiDAR jobs from before areas were sharpened
+  ([`operations/purge-legacy-topo-jobs.md`](operations/purge-legacy-topo-jobs.md)).
+  Each launch, with its command (and an announcement's message), is a CloudTrail
+  management event in the WORM log. The announcement task reads only account
+  ids and push device tokens, and its writes (the announcement, one inbox row
+  per user, and pruning dead push tokens) are logged like any other. The
+  deletion reads those jobs' ids, owners, statuses and sizes, and its writes
+  (deleting each job's row and shares, and lowering its owner's storage
+  charge) are logged like any other; it deletes the jobs' files from S3.
 - **Data minimisation.** No third-party analytics or telemetry. Short retention on
   topo/LiDAR artifacts. Operational logs are scrubbed so canyon names and
   coordinates never appear in plain text — and the audit logs above record SQL
@@ -105,9 +110,10 @@ I will not pretend this is airtight. It is not.
    read via the application role from anywhere other than the app's own servers is
    therefore anomalous and on the record, even though the individual statements
    are not. The honest path — me reading as the master account — logs every read.
-   The announcement task above is the one operator action that runs as the
-   application from the app's own network; its connection is logged but looks
-   like the application's own, so its record is the CloudTrail launch event.
+   The announcement and job-deletion tasks above are the operator actions
+   that run as the application from the app's own network; their connections
+   are logged but look like the application's own, so their record is the
+   CloudTrail launch event.
 2. **Snapshot exfiltration is recorded, but the downstream read is not.** I cannot
    query a backup invisibly — there is no read interface on a snapshot. To get
    data out I must restore, export, copy, or share it, and **every one of those is
