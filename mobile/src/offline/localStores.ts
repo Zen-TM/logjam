@@ -95,6 +95,13 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
 
 /**
+ * The sharpened areas the account could last see, without their URLs
+ * (`offline/sharpenedAreaStore.ts`). WIPED: an area's coverage and tile range
+ * say where its owner surveyed.
+ */
+export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-areas/`;
+
+/**
  * TileJSONs Logjam GPS writes for map sources MLRN can't describe in props
  * (`map/tileJsonFile.ts`). WIPED: a sharpened area's holds its tile range,
  * which says where its owner surveyed. Each is written again when the map
@@ -116,6 +123,7 @@ export const WIPED_DIRS = [
   SENSOR_LOG_DIR,
   WEATHER_DIR,
   TILEJSON_DIR,
+  SHARPENED_AREAS_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

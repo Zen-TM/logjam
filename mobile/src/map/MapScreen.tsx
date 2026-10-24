@@ -92,6 +92,7 @@ import {
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  type SharpenedArea,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -331,6 +332,10 @@ import {
   serveSharpenedArchives,
   sharpenedAreasOf,
 } from "./sharpenedArchives";
+import {
+  rememberSharpenedAreas,
+  savedSharpenedAreas,
+} from "../offline/sharpenedAreaStore";
 import { writeTileJsons } from "./tileJsonFile";
 import {
   basemapsCoveringViewport,
@@ -1398,14 +1403,31 @@ export function MapScreen({
     () => serveSharpenedArchives(sharpenedAreas, areasEpoch),
     [sharpenedAreas, areasEpoch],
   );
+  // Each list that loads is kept, without its URLs, for the offline sampler,
+  // the climb upgrade and the offline map (offline/sharpenedAreaStore.ts);
+  // the map reads it back for its saved area clips.
+  const [keptAreas, setKeptAreas] = useState<readonly SharpenedArea[]>([]);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      if (overlays.data && !isGuest)
+        await rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+      const kept = await savedSharpenedAreas();
+      if (live) setKeptAreas(kept);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
       artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
       sharpenedAreas,
+      keptSharpenedAreas: isGuest ? [] : keptAreas,
     }),
-    [connectivity, artifacts, sharpenedAreas],
+    [connectivity, artifacts, sharpenedAreas, isGuest, keptAreas],
   );
 
   /**

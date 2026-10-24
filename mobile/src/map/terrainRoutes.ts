@@ -127,3 +127,23 @@ export function tileRectBounds(
     lat(y0) - inset,
   ];
 }
+
+/**
+ * The tiles at `z` that `[west, south, east, north]` touches, inclusive: the
+ * inverse of `tileRectBounds`, so a rectangle saved as its bounds reads back
+ * as itself (terrainRoutes.test.ts).
+ */
+export function tileRectCovering(
+  z: number,
+  [west, south, east, north]: readonly [number, number, number, number],
+): TileRect {
+  const n = 2 ** z;
+  const x = (lon: number) => Math.floor(((lon + 180) / 360) * n);
+  const y = (lat: number) => {
+    const r = (lat * Math.PI) / 180;
+    return Math.floor(
+      ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * n,
+    );
+  };
+  return [x(west), y(north), x(east), y(south)];
+}

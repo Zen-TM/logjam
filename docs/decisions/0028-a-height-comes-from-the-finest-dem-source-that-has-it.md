@@ -105,10 +105,10 @@ Proposal: #359.
   "one declaration": an area's zoom and credit come from its job's result at
   run time, not from `DEM_SOURCES`. The precedence and the one sampler still
   hold, and no file names an area's archive by URL or path. Each area
-  declares its `coverage`, so the key `upgradeTrackClimbs` uses can see a
-  new area once Logjam GPS adds the caller's area ids and coverage to it.
-  That change comes with Logjam GPS's reading of areas, with a test; until
-  then the cost the update of 2026-10-12 names still applies. Every area's
+  declares its `coverage`, so the key `upgradeTrackClimbs` uses sees a new
+  area: Logjam GPS keys it on `demSourcesFor` the account's kept areas, and
+  then counts a track short of `lidar` as due (updated 2026-10-24; guard
+  `mobile/src/tracks/trackClimb.test.ts`). Every area's
   heights are stored under one climb id, `lidar`, first in `CLIMB_SOURCES`,
   so a track's label names no job. Guard: `shared/src/sharpen.test.ts`.
   Everything else above stands.

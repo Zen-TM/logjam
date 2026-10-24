@@ -75,6 +75,12 @@ vi.mock("../tracks/trackRecorder", () => ({
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
+vi.mock("./sharpenedAreaStore", () => ({
+  forgetSharpenedAreas: () => {
+    record("stop:sharpened-areas");
+    return Promise.resolve();
+  },
+}));
 vi.mock("../weather/weatherStorage", () => ({
   stopWeatherForWipe: () => {
     record("stop:weather");
@@ -149,6 +155,7 @@ describe("wipeAllLocalData", () => {
       "stop:track",
       "stop:weather",
       "stop:sharpened",
+      "stop:sharpened-areas",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);

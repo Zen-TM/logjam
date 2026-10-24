@@ -72,6 +72,11 @@ import { placeRegistryWithRegion } from "../offline/placeRegistry";
 import { isExpensive } from "../offline/networkPolicy";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { regionClipSpecs } from "../offline/regionTilePlanning";
+import { areaClipBytes, areaClipSpecs } from "../offline/sharpenedClips";
+import { apiFetch } from "../api/apiFetch";
+import { useApiQuery } from "../api/queries";
+import { useAccountState } from "../auth/AccountStateContext";
+import type { CompletedOverlaysResponse } from "./topoOverlays";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
@@ -117,6 +122,14 @@ const DOWNLOAD_CHIP_LABEL: Record<SelectableId, string> = {
   "six-base": "Base Map",
   "six-imagery": "Imagery",
 };
+
+/**
+ * The account's list, for the sharpened areas a saved area keeps: their
+ * presigned URLs are what their clips are cut through (sharpenedClips.ts).
+ */
+function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
+  return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
+}
 
 /**
  * Detail levels offered. The ceiling is per-source (topo stops at z16), so the
@@ -357,6 +370,24 @@ export function RegionDownloadScreen({
   const bbox: RegionBbox | null =
     viewport && frame ? frameToBbox(viewport, frame) : null;
 
+  // A guest has no account, so no area.
+  const isGuest = useAccountState().accountState === "guest";
+  const overlays = useApiQuery(
+    getCompletedOverlays,
+    "Couldn't load your sharpened areas.",
+    !isGuest,
+  );
+  const sharpenedAreas = useMemo(
+    () =>
+      isGuest
+        ? []
+        : (overlays.data?.jobs ?? []).flatMap((j) =>
+            j.sharpened ? [j.sharpened] : [],
+          ),
+    [isGuest, overlays.data],
+  );
+  const areaBytes = bbox ? areaClipBytes(sharpenedAreas, bbox) : 0;
+
   const pyramidIds = selected;
   // Not memoised: `bbox` is a fresh object every render, so no key could hold.
   const job = bbox
@@ -409,11 +440,16 @@ export function RegionDownloadScreen({
           job.demArchives.map(({ sourceId }) => sourceId),
           (basemapId) => ({ id: uuid(), label: regionLabelFor(basemapId) }),
         ),
+        ...areaClipSpecs(
+          { bbox, groupId, groupLabel, allowCellular },
+          sharpenedAreas,
+          uuid,
+        ),
       ]);
       // The first region brings the place names for search (ADR 0034).
       placeRegistryWithRegion(allowCellular);
     },
-    [bbox, job],
+    [bbox, job, sharpenedAreas],
   );
 
   const handleSave = useCallback(() => {
@@ -463,7 +499,7 @@ export function RegionDownloadScreen({
         // `p90Bytes` has no entry for the vector clip, whose size is known
         // once its directories are read. That one is checked inside
         // `runRegionClip`, through the same helper.
-        await assertSpaceFor(job.p90Bytes);
+        await assertSpaceFor(job.p90Bytes + areaBytes);
         // One id for the whole run: every map chosen here covers the SAME area,
         // so Saved shows them as one card (see MapArtifact.groupId).
         //
@@ -481,7 +517,7 @@ export function RegionDownloadScreen({
         setBusy(false);
       }
     })();
-  }, [bbox, job, defaultName, startDownloads]);
+  }, [bbox, job, areaBytes, defaultName, startDownloads]);
 
   // Confirm and dismiss do the same thing: the field starts on the default, so
   // an untouched dismissal rewrites the label the jobs already carry. Leaving
@@ -524,7 +560,9 @@ export function RegionDownloadScreen({
           // so the map does not resize under a frame the user is actively
           // dragging.
           value={
-            job && job.totalTiles > 0 ? `≈ ${formatBytes(job.meanBytes)}` : "—"
+            job && job.totalTiles > 0
+              ? `≈ ${formatBytes(job.meanBytes + areaBytes)}`
+              : "—"
           }
           secondaryValue={
             job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"

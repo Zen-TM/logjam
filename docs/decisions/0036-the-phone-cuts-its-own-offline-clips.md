@@ -188,6 +188,29 @@ Nothing new calls it.
   every zoom the hillshade is drawn at"), `sourceResolver.test.ts`
   ("holdsHillshade", "a clip saved at z15 alone gives no shade"). Everything
   else above stands.
+- **Update 2026-10-24: a signed-in save also keeps the account's sharpened
+  areas it reaches ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)),
+  cut on the phone from their private archives.** For each area the box
+  reaches, the save cuts the area's heights, slope and contours over the part
+  of it the box covers, widened to whole z14 tiles (`areaClipSpecs` in
+  `mobile/src/offline/sharpenedClips.ts`). The save screen asks the API for
+  the account's list (`GET /topo-jobs/completed-overlays`), which sends no
+  bbox. Each clip is cut through the presigned URL the list gave, by byte
+  range with no header but `range`, from the bucket instead of the CDN, and
+  filed under the area's source id, `lidar-<id>`. A guest has no areas, so
+  their save is unchanged. A presigned URL expires after 24 h, so a clip
+  resumed after that fails with "source unavailable" and is saved again from
+  the save screen. Offline, the map routes the area clips over the statewide
+  clips one archive per tile as it does online, the sampler reads an area's
+  heights first, and the account's last list (without its URLs) is kept so
+  they know the areas (`offline/sharpenedAreaStore.ts`). Guards:
+  `regionDownloads.test.ts` ("cuts a sharpened area's clip through its
+  presigned URL, filed under the area"), `sharpenedClips.test.ts`,
+  `sourceResolver.test.ts` ("routes saved areas offline"),
+  `demLookup.test.ts` ("reads a saved clip of a sharpened area before the
+  statewide one"). What holds the decision up still holds: the phone cuts
+  every clip, and the bbox never reaches the API. Everything else above
+  stands.
 
 ## Consequences
 
@@ -231,6 +254,13 @@ Nothing new calls it.
   users.** Rejected: a guest-only path ([0007](0007-guest-mode-is-dont-sync-yet.md)),
   two implementations to keep in step, and a signed-in user's bbox would still
   reach the API for no gain.
+- **Merge each area into the statewide slope and contour clips**, one file
+  a layer holding each tile from the archive `terrainTileArchive` picks, so
+  the map draws one clip with no routing. Rejected for the update of
+  2026-10-24: a tile past an area's deepest zoom, outside it, would be missing
+  from the merged file, and MapLibre Native's drawing of the parent for a
+  missing tile is unverified, where the routed sources are what Logjam GPS
+  already draws online.
 - **Fetch the clip tile by tile (`PMTiles.getZxy`).** No merging or writer
   needed. Rejected: a 40 km box at z15 is about 2,000 tiles, so 2,000 requests
   for the vector map alone, and the result still has to be written as an

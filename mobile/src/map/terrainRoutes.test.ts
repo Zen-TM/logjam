@@ -8,6 +8,7 @@ import {
 import {
   terrainRoutes,
   tileRectBounds,
+  tileRectCovering,
   type TerrainRoute,
 } from "./terrainRoutes";
 
@@ -139,5 +140,18 @@ describe("tileRectBounds", () => {
       expect(tileY(north, z)).toBe(rect[1] * s);
       expect(tileY(south, z)).toBe((rect[3] + 1) * s - 1);
     }
+  });
+});
+
+describe("tileRectCovering", () => {
+  // Red if the inverse drifts from tileRectBounds: an area clip saved as its
+  // bounds would read back as a rectangle a tile wider or narrower.
+  it("reads a rectangle's bounds back as the rectangle", () => {
+    for (const rect of [
+      [30062, 19646, 30065, 19649],
+      [30064, 19652, 30067, 19655],
+      [0, 0, 1, 1],
+    ] as const)
+      expect(tileRectCovering(15, tileRectBounds(15, rect))).toEqual(rect);
   });
 });
