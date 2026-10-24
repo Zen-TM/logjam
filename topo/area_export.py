@@ -602,8 +602,8 @@ Rgba = Tuple[int, int, int, int]
 
 def slope_colours(bands: Sequence[dict]) -> List[Rgba]:
     """The colour of each whole degree (an index 0–255) for slope bands: a
-    band takes fromDeg up to, not including, toDeg, as `render_slope_tile`
-    draws it; every other value, the no-data 255 among them, is clear."""
+    band takes fromDeg up to, not including, toDeg; every other value, the
+    no-data 255 among them, is clear."""
     colours = [(0, 0, 0, 0)] * 256
     for band in bands:
         for deg in range(int(band["fromDeg"]), int(band["toDeg"])):

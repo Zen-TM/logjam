@@ -1,4 +1,4 @@
-"""worker.py pure helpers: error mapping, settings merge, email-preference read.
+"""worker.py pure helpers: error mapping, job processing, email-preference read.
 
 worker.py reads required env vars and creates a boto3 client at import time, so
 we set placeholder env before importing. It does not import GDAL, so no osgeo
@@ -26,7 +26,6 @@ try:
     import worker  # noqa: E402
     from worker import (  # noqa: E402
         compose_database_url,
-        merge_settings,
         safe_error_message,
         send_failure_email,
     )
@@ -91,52 +90,6 @@ class TestSafeErrorMessage(unittest.TestCase):
 
     def test_os_error_points_at_input(self):
         self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))
-
-
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
-class TestMergeSettings(unittest.TestCase):
-    def test_none_inputs_fall_back_to_vector_defaults(self):
-        merged = merge_settings(None, None)
-        self.assertEqual(merged["contours"], worker.VECTOR_STYLE_DEFAULTS["contours"])
-        self.assertEqual(merged["features"]["enabled"], True)
-        self.assertEqual(
-            merged["features"]["features"], worker.VECTOR_STYLE_DEFAULTS["features"]
-        )
-
-    def test_raster_layers_pass_through_when_present(self):
-        merged = merge_settings({"hillshade": {"azimuth": 315}, "slope": {"x": 1}}, {})
-        self.assertEqual(merged["hillshade"], {"azimuth": 315})
-        self.assertEqual(merged["slope"], {"x": 1})
-        self.assertNotIn("vegetation", merged)  # None values dropped
-
-    def test_features_enabled_taken_from_raster_options(self):
-        merged = merge_settings({"features": {"enabled": False}}, None)
-        self.assertFalse(merged["features"]["enabled"])
-
-    def test_vector_style_contours_override(self):
-        vec = {
-            "contours": {
-                "majorColour": "#111111ff",
-                "minorColour": "#222222ff",
-                "majorWidthM": 5,
-                "minorWidthM": 2,
-            }
-        }
-        merged = merge_settings({"contours": {"zoomBands": [1, 2, 3]}}, vec)
-        self.assertEqual(merged["contours"]["majorColour"], "#111111ff")
-        # raster contour fields are preserved alongside vector style.
-        self.assertEqual(merged["contours"]["zoomBands"], [1, 2, 3])
-
-    def test_label_scale_passthrough(self):
-        merged = merge_settings(None, {"labelScale": 1.5})
-        self.assertEqual(merged["labelScale"], 1.5)
-
-    def test_label_scale_defaults_when_absent(self):
-        # Vector styles snapshotted before labelScale existed omit it → default 1.
-        merged = merge_settings(None, {"contours": {}})
-        self.assertEqual(merged["labelScale"], 1)
 
 
 @unittest.skipUnless(
@@ -269,17 +222,16 @@ class TestComposeDatabaseUrl(unittest.TestCase):
     _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
 )
 class TestProcessSharpen(unittest.TestCase):
-    """A job the API marked to sharpen runs sharpen.py, not the legacy
-    pipeline, and its mark becomes the result.
+    """A job the API marked to sharpen runs sharpen.py, and its mark becomes
+    the result.
 
-    Mutations that turn it red: process_job ignoring `job["sharpen"]` (the
-    legacy pipeline runs), the archives' keys left out of the result, the
-    vegetation tick ignored, a missing contour archive uploaded anyway (or
-    failing the job), and exit 2 reported as the generic failure instead of
-    sharpen.py's sentence.
+    Mutations that turn it red: an unmarked job run instead of refused, the
+    archives' keys left out of the result, the vegetation tick ignored, a
+    missing contour archive uploaded anyway (or failing the job), and exit 2
+    reported as the generic failure instead of sharpen.py's sentence.
     """
 
-    def run_job(self, mark, write, legacy_metrics=None):
+    def run_job(self, mark, write, veg_metrics=None):
         import tempfile
         from pathlib import Path
         from unittest import mock
@@ -291,18 +243,19 @@ class TestProcessSharpen(unittest.TestCase):
             out.mkdir(parents=True, exist_ok=True)
             return write(out)
 
-        legacy = mock.Mock(
-            return_value=([{"name": "vegetation"}], None, True, 7, legacy_metrics)
-        )
+        vegetation = mock.Mock(return_value=([{"name": "vegetation"}], 7, veg_metrics))
         with (
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(worker, "s3") as s3,
             mock.patch.object(worker, "run_with_heartbeat", side_effect=fake_run),
-            mock.patch.object(worker, "process_legacy", legacy),
+            mock.patch.object(worker, "process_vegetation", vegetation),
         ):
-            result = worker.process_job(job, tmp)
+            try:
+                result = worker.process_job(job, tmp)
+            finally:
+                self.downloads = s3.download_file.call_count
             uploads = [c.args[2] for c in s3.upload_file.call_args_list]
-        return result, uploads, legacy
+        return result, uploads, vegetation
 
     @staticmethod
     def finished(out):
@@ -314,13 +267,12 @@ class TestProcessSharpen(unittest.TestCase):
         return 0
 
     def test_the_mark_becomes_the_result(self):
-        result, uploads, legacy = self.run_job(
+        result, uploads, vegetation = self.run_job(
             {"v": 1, "vegetation": False}, self.finished
         )
-        output_keys, _, osm_failed, total, _, sharpen = result
-        legacy.assert_not_called()
+        output_keys, _, total, _, sharpen = result
+        vegetation.assert_not_called()
         self.assertEqual(output_keys, [])
-        self.assertFalse(osm_failed)
         self.assertEqual(total, 30)
         self.assertEqual(sharpen["zmax"], 16)
         self.assertFalse(sharpen["vegetation"])
@@ -367,11 +319,16 @@ class TestProcessSharpen(unittest.TestCase):
             return self.finished(out)
 
         result, _, _ = self.run_job(
-            {"v": 1, "vegetation": True}, finished, {"wallSeconds": 40.0}
+            {"v": 1, "vegetation": True},
+            finished,
+            {"wallSeconds": 40.0, "fireStaleFraction": 0.25},
         )
-        metrics = result[4]
+        metrics = result[3]
         self.assertEqual(metrics["wallSeconds"], 53.0)
         self.assertEqual(metrics["vegetationWallSeconds"], 40.0)
+        # Red if the pass's fire reading is dropped: CI reads it to know the
+        # worker read the fire raster.
+        self.assertEqual(metrics["fireStaleFraction"], 0.25)
 
     def test_unread_sharpen_metrics_are_not_replaced_by_the_vegetation_pass(self):
         # Mutation: store the vegetation seconds alone when sharpen.py's
@@ -380,12 +337,13 @@ class TestProcessSharpen(unittest.TestCase):
         result, _, _ = self.run_job(
             {"v": 1, "vegetation": True}, self.finished, {"wallSeconds": 40.0}
         )
-        self.assertIsNone(result[4])
+        self.assertIsNone(result[3])
 
-    def test_a_ticked_job_gets_the_legacy_vegetation_layer(self):
-        result, _, legacy = self.run_job({"v": 1, "vegetation": True}, self.finished)
-        output_keys, _, _, total, _, sharpen = result
-        self.assertEqual(legacy.call_args.kwargs, {"layers": "vegetation"})
+    def test_a_ticked_job_gets_the_vegetation_layer(self):
+        result, _, vegetation = self.run_job(
+            {"v": 1, "vegetation": True}, self.finished
+        )
+        output_keys, _, total, _, sharpen = result
         self.assertEqual(output_keys, [{"name": "vegetation"}])
         self.assertEqual(total, 37)
         self.assertTrue(sharpen["vegetation"])
@@ -419,11 +377,11 @@ class TestProcessSharpen(unittest.TestCase):
             self.run_job({"v": 1, "vegetation": False}, lambda out: 1)
         self.assertEqual(safe_error_message(ctx.exception), worker.GENERIC_FAILURE)
 
-    def test_an_unmarked_job_runs_the_legacy_pipeline(self):
-        result, _, legacy = self.run_job(None, self.finished)
-        legacy.assert_called_once()
-        self.assertEqual(legacy.call_args.kwargs, {})
-        self.assertIsNone(result[-1])
+    def test_an_unmarked_job_is_refused_before_its_download(self):
+        with self.assertRaises(worker.JobInputError) as ctx:
+            self.run_job(None, self.finished)
+        self.assertEqual(safe_error_message(ctx.exception), worker.OLD_JOB)
+        self.assertEqual(self.downloads, 0)
 
 
 if __name__ == "__main__":

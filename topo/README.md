@@ -1,22 +1,10 @@
 # Topo Pipeline
 
-Convert an **ELVIS (NSW Spatial Services) LiDAR ZIP** into a set of raster
-**MBTiles** files ready to import into **Gaia GPS**.
-
----
-
-## Output files
-
-| File | Contents |
-|------|----------|
-| `hillshade.mbtiles` | Faint greyscale hillshade from DTM |
-| `vegetation.mbtiles` | Semi-transparent walking-height vegetation density (0.25–2 m CHM) |
-| `features.mbtiles` | OSM topo features: waterways, tracks, roads, buildings, power lines, campsites, peaks, springs, viewpoints, caves, picnic areas |
-| `slope.mbtiles` | Slope angle overlay: 40–50° yellow → 50–60° orange → 60–70° red → 70°+ dark red |
-| `contours.mbtiles` | 5 m contours (z16–z18), 10 m (z14–z15), 50 m (z12–z13); 50 m always labelled; 10 m labelled when 5 m contours are also showing |
-| `composite.mbtiles` | All five layers composited in correct stacking order |
-
-Zoom range: **z12–z18**
+Turns an **ELVIS (NSW Spatial Services) LiDAR ZIP** into a sharpened area:
+`sharpen.py` writes height, slope and contour archives at the survey's own
+cell ([Sharpening an area](#sharpening-an-area)), and, when the owner ticks
+it, `pipeline.py` renders the walking-height vegetation layer from the ZIP's
+point clouds.
 
 ---
 
@@ -29,10 +17,10 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 | Source | Used for | Licence | Required credit |
 |--------|----------|---------|-----------------|
-| **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | hillshade, slope, contours | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
+| **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
 | **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness hatch, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
-| **OpenStreetMap** | features; the place registry Logjam searches | ODbL | "Features © OpenStreetMap contributors"; the registry: "© OpenStreetMap contributors" |
+| **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
 > **SVTM licence — unconfirmed.** NSW open data on the SEED portal
@@ -51,151 +39,39 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 ---
 
-## Quick start (Docker — recommended)
+## The vegetation pass
 
-### Prerequisites
-- Docker Desktop (Windows/macOS) or Docker Engine (Linux)
-- An ELVIS LiDAR ZIP downloaded from https://elvis.ga.gov.au/
-
-### Steps
+`pipeline.py` renders a ticked job's vegetation layer: PDAL counts the
+returns over the ground, they become a scrub push-through density weighted by
+the SVTM formation, and a hatch marks ground burned since the capture. Each
+point cloud's ground is its own class 2 where it has any, and SMRF's where it
+has none.
 
 ```bash
-# 1. Clone / copy this project
-git clone <this-repo> logjam
-cd logjam/topo
-
-# 2. Create input/output directories
-mkdir -p input output
-
-# 3. Copy your ELVIS ZIP in
-cp /path/to/your/elvis_download.zip input/elvis.zip
-
-# 4. Build the Docker image (first time only – takes ~5 min)
+mkdir -p input output && cp /path/to/elvis_download.zip input/elvis.zip
 docker compose build
-
-# 5. Run
-docker compose up
-
-# MBTiles will appear in ./output/ when complete.
+docker compose up            # writes ./output/vegetation.mbtiles
 ```
 
-### Custom options
-
-Edit the `command:` section in `docker-compose.yml`, or override at runtime
-(the image's own command starts the job worker, so name the script):
-
-```bash
-docker compose run topo python3 /app/pipeline.py \
-  /input/elvis.zip \
-  --output /output \
-  --workers 8 \
-  --keep-work
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--output DIR` | `./output` | Where to write MBTiles |
-| `--workers N` | CPU count − 1 | Parallel tile-render workers |
-| `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
-| `--keep-work` | off | Don't delete intermediate files |
-| `--skip-osm` | off | Skip Overpass API download (offline mode) |
-| `--benchmark` | off | Print a per-step timing report at the end |
-| `--layers LIST` | `all` | Comma-separated layers: `hillshade`, `vegetation`, `features`, `slope`, `contours` |
-| `--settings-json PATH` | none | Per-job render overrides (the shape of `TopoSettings` in `shared/src/topoSettings.ts`) |
-| `--export-geojson DIR` | none | Copy the intermediate contour and OSM GeoJSON to `DIR` |
-| `--export-footprint DIR` | none | Copy the data-coverage footprint GeoJSON to `DIR` |
-| `--metrics-json PATH` | none | Write per-phase timings and tile counts to `PATH` |
-| `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
-
----
-
-## Running without Docker (Linux)
-
-### System dependencies
-
-```bash
-# Ubuntu / Debian
-sudo apt-get update
-sudo apt-get install -y gdal-bin libgdal-dev python3-gdal pdal fonts-dejavu-core
-```
-
-### Python dependencies
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-
-# GDAL Python bindings must match the system GDAL version
-pip install "GDAL==$(gdal-config --version)"
-pip install -r requirements.txt
-```
-
-### Run
+Or, without Docker, with GDAL, PDAL and `requirements.txt` installed (the
+GDAL Python bindings must match the system GDAL):
 
 ```bash
 python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 ```
 
----
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output DIR` | `./output` | Where to write `vegetation.mbtiles` |
+| `--workers N` | CPU count − 1 | Parallel tile-render workers |
+| `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
+| `--keep-work` | off | Don't delete intermediate files |
+| `--benchmark` | off | Print a per-step timing report at the end |
+| `--settings-json PATH` | none | The job's settings; only `vegetation` is read (`TopoSettings` in `shared/src/topoSettings.ts`) |
+| `--metrics-json PATH` | none | Write per-phase timings and tile counts to `PATH` |
+| `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
 
-## How to import into Gaia GPS
-
-1. Copy the `.mbtiles` files to your device (USB, Files app, cloud sync, etc.)
-2. In Gaia GPS → **Map Layers** → **+** → **Import MBTiles**
-3. Import each file. You can toggle layers on/off independently, or use `composite.mbtiles` as a single all-in-one layer.
-
-**Tip:** Import `composite.mbtiles` for the full map, then import individual layers
-(e.g. `slope.mbtiles`) as toggleable overlays on top.
-
----
-
-## Architecture notes
-
-### Why raster tiles and not vector?
-Gaia GPS only accepts **raster MBTiles**. To preserve the "vector-like" appearance
-of contours and OSM features at all zoom levels, each zoom level is rendered at its
-**native tile resolution** with zoom-calibrated line widths and font sizes — rather
-than scaling up lower-zoom tiles. This gives clean, sharp lines at every zoom level
-without the overhead of true vector tiles.
-
-### Processing pipeline
-
-```
-ELVIS ZIP
-  └─ LAZ/LAS files
-       └─ PDAL pipeline
-            ├─ DTM (ground-return raster, 1 m resolution)
-            │    ├─ Hillshade   (gdal.DEMProcessing)
-            │    ├─ Slope       (gdal.DEMProcessing)
-            │    └─ Contours    (gdal_contour CLI → GeoJSON)
-            └─ DSM (max-return raster)
-                 └─ CHM = DSM − DTM → vegetation density
-
-OSM Overpass API → features GeoJSON (auto-fetched from tile bbox)
-
-Parallel tile renderer (ProcessPoolExecutor)
-  └─ For each (z, x, y):
-       ├─ Read raster windows
-       ├─ Render 5 × RGBA tiles
-       ├─ Alpha-composite → composite tile
-       └─ Write PNG to MBTiles (SQLite)
-```
-
-### Performance
-
-| Area | Tiles (z12–z18) | 8-core VM | 4-core laptop |
-|------|----------------|-----------|---------------|
-| ~5 km² (1–2 LAZ) | ~3 000 | ~3 min | ~8 min |
-| ~50 km² (10 LAZ) | ~25 000 | ~15 min | ~40 min |
-| ~200 km² | ~100 000 | ~45 min | ~2 hr |
-
-The bottleneck is the PDAL point-cloud processing step, which is single-threaded.
-Tile rendering is fully parallelised across all available cores.
-
-### GPU acceleration
-GPU rendering is not implemented. For this pipeline (raster windowed reads +
-Pillow compositing), parallelised CPU workers achieve near-equivalent throughput
-to GPU-based tile rendering while avoiding CUDA/ROCm dependency complexity.
+A ZIP with no point clouds writes nothing.
 
 ---
 
@@ -502,14 +378,6 @@ REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 
 **`pdal: command not found`**
 Install PDAL: `sudo apt-get install pdal`
-
-**`gdal_contour: command not found`**
-Install GDAL tools: `sudo apt-get install gdal-bin`
-
-**Overpass API timeout**
-Large areas (> 100 km²) may hit the Overpass API rate limit. The script will warn
-and produce an empty features layer. Re-run with `--skip-osm` and add OSM data
-manually via the Overpass Turbo web export if needed.
 
 **Empty or patchy output tiles**
 This usually means the LiDAR tiles have nodata holes. The `fill_nodata` step

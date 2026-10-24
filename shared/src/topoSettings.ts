@@ -24,8 +24,7 @@
 // (TopoLayerKey) except the GeoPDF
 // overlay allowlist, which is declared so stored templates keep validating and
 // must hold every name here (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
-// frontend/src/topoLayerTypes.ts are thin re-exports. The only structurally
-// unavoidable mirror is topo/worker.py → ALL_LAYERS (Python).
+// frontend/src/topoLayerTypes.ts are thin re-exports.
 
 // `surveyPick` declares, per layer, which survey to prefer when an ELVIS ZIP
 // contains multiple overlapping surveys for the same ground footprint:
@@ -35,7 +34,7 @@
 //               than raw point density for the scrub/bushbash layer).
 //   "none"    — layer is not LiDAR-derived (OSM features); selection N/A.
 // Consumed by the topo worker's per-footprint survey selection (topo/pipeline.py
-// select_surveys_by_layer). LAYER_SURVEY_PICK in topo/worker.py mirrors this.
+// select_surveys_by_layer).
 export const TOPO_LAYERS = [
   {
     name: "hillshade",
@@ -166,8 +165,7 @@ export type OsmFeatureKey =
   | "hut";
 
 // Per-category vector style. `enabled` controls both paint-time layer presence
-// in-app and composite-bake-time inclusion. Worker always fetches all
-// categories from Overpass unconditionally.
+// in-app and composite-bake-time inclusion.
 export interface OsmFeatureStyle {
   enabled: boolean;
   colour: RgbaHex;

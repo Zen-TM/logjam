@@ -1,20 +1,20 @@
 """What CI's topo-e2e job asserts once the worker has exited. Runs inside the
 worker image with the worker's env (DB_*, S3_BUCKET_TOPO, AWS_*):
 
-  python3 check.py complete <job_id> <lon> <lat>   the job finished, in full
-  python3 check.py reaped <job_id>                 a relaunch left a reaped job alone
   python3 check.py sharpened <job_id> <lon> <lat>  a job marked to sharpen made its archives
+  python3 check.py ticked <job_id> <lon> <lat>     a ticked job made its vegetation layer too
+  python3 check.py reaped <job_id>                 a relaunch left a reaped job alone
 
 <lon> <lat> is a point inside the survey: every layer's tile there must hold
 something.
 
 Mutations that turn it red: dropping the `expected_status="pending"` guard on
 worker.py's claim fails "status stays failed"; pointing FIRE_HISTORY_S3_PATH
-at a missing key fails "fire history read from S3". A second worker that never
-renders is caught by ci.yml's step, which needs render_tiles_done > 0 before
-it kills the container. For `sharpened`: the worker running the legacy
-pipeline for a marked job fails "the mark became the result"; no fill, or
-fill read a tile away or flipped, fails "the fill is the statewide value, in
+at a missing key fails "fire history read from S3". A first worker that is
+not killed mid-run is caught by ci.yml's step, which needs the row still
+`processing` once it has killed the container. For `sharpened`: a mark left
+in place of the result fails "the mark became the result"; no fill, or fill
+read a tile away or flipped, fails "the fill is the statewide value, in
 place".
 """
 
@@ -33,7 +33,7 @@ import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from pmtiles.reader import MmapSource, Reader  # noqa: E402
 
-from worker import ALL_LAYERS, BUCKET, RASTER_LAYERS, db_connect, s3  # noqa: E402
+from worker import BUCKET, db_connect, s3  # noqa: E402
 from build_nsw_dem import decode_terrarium  # noqa: E402
 from statewide import (  # noqa: E402
     FILL_BASE_M,
@@ -75,22 +75,21 @@ def query(sql, *args):
         return cur.fetchall()
 
 
-def complete(job_id, lon, lat):
+def ticked(job_id, lon, lat):
     job = query("SELECT * FROM topo_jobs WHERE id = %s", job_id)[0]
     check(job["status"] == "complete", f"status is complete (got {job['status']})")
-    check(job["error_message"] is None, "no error message")
-    check(job["footprint"] is not None, "footprint filled")
-    check((job["output_bytes"] or 0) > 0, "output_bytes counted")
-    check((job["output_tile_count"] or 0) > 0, "output_tile_count filled")
+    check((job["sharpen"] or {}).get("vegetation") is True, "the result keeps the tick")
     metrics = job["pipeline_metrics"] or {}
     # The made-up fire raster says the whole tile burned after its 2018 capture.
     check(
         (metrics.get("fireStaleFraction") or 0) > 0.9,
         f"fire history read from S3 (fireStaleFraction {metrics.get('fireStaleFraction')})",
     )
-    outputs = {o["name"]: o for o in job["s3_output_keys"] or []}
-    check(set(outputs) == ALL_LAYERS, f"one output per layer (got {sorted(outputs)})")
-
+    outputs = job["s3_output_keys"] or []
+    check(
+        [o.get("name") for o in outputs] == ["vegetation"],
+        f"one vegetation output (got {outputs})",
+    )
     owner = query("SELECT storage_used_bytes FROM users WHERE id = %s", job["user_id"])
     check(
         owner[0]["storage_used_bytes"] >= job["output_bytes"], "owner's storage charged"
@@ -100,50 +99,24 @@ def complete(job_id, lon, lat):
         job_id,
     )
     check(len(notes) == 1, "one topo_complete notification")
-
     check(not exists(job["s3_input_key"]), "input ZIP deleted")
-    for name in ("contours_5m.geojson", "osm_features.geojson"):
-        check(exists(f"outputs/{job_id}/{name}"), f"{name} uploaded")
-
+    key = outputs[0].get("pmtilesKey") if outputs else None
+    if not (key and exists(key)):
+        check(False, "vegetation: PMTiles in the bucket")
+        return
     z, x, y = tile_at(lon, lat, 15)
-    for name in sorted(outputs):
-        out = outputs[name]
-        if name in RASTER_LAYERS:
-            check(
-                out.get("cogKey") and exists(out["cogKey"]),
-                f"{name}: COG in the bucket",
-            )
-        key = out.get("pmtilesKey")
-        if not (key and exists(key)):
-            check(False, f"{name}: PMTiles in the bucket")
-            continue
-        with tempfile.TemporaryFile() as f:
-            s3.download_fileobj(BUCKET, key, f)
-            f.seek(0)
-            tile = Reader(MmapSource(f)).get(z, x, y)
-        if tile is None:
-            check(False, f"{name}: tile {z}/{x}/{y} present")
-            continue
-        if name in RASTER_LAYERS:
-            img = Image.open(io.BytesIO(tile)).convert("RGBA")
-            check(
-                img.getchannel("A").getbbox() is not None,
-                f"{name}: tile {z}/{x}/{y} not blank",
-            )
-        else:
-            if tile[:2] == b"\x1f\x8b":
-                tile = gzip.decompress(tile)
-            check(
-                name.encode() in tile,
-                f"{name}: tile {z}/{x}/{y} holds the {name} layer",
-            )
+    tile = archive(key).get(z, x, y)
+    check(
+        tile is not None
+        and Image.open(io.BytesIO(tile)).convert("RGBA").getchannel("A").getbbox()
+        is not None,
+        f"vegetation: tile {z}/{x}/{y} not blank",
+    )
 
 
 def reaped(job_id):
     job = query("SELECT status FROM topo_jobs WHERE id = %s", job_id)[0]
     check(job["status"] == "failed", f"status stays failed (got {job['status']})")
-    listed = s3.list_objects_v2(Bucket=BUCKET, Prefix=f"outputs/{job_id}/")
-    check(listed.get("KeyCount", 0) == 0, "no outputs left under its prefix")
     notes = query(
         "SELECT 1 FROM notifications WHERE type = 'topo_complete' AND payload->>'jobId' = %s",
         job_id,
@@ -177,7 +150,7 @@ def sharpened(job_id, lon, lat):
     )
     check(job["footprint"] is not None, "footprint filled")
     check((job["output_bytes"] or 0) > 0, "output_bytes counted")
-    check(job["s3_output_keys"] == [], "no legacy layers without the vegetation tick")
+    check(job["s3_output_keys"] == [], "no vegetation layer without the tick")
     check(
         result.get("ground") == "class-2",
         f"ground from the LAZ's class 2 (got {result.get('ground')})",
@@ -253,8 +226,8 @@ def sharpened(job_id, lon, lat):
     )
 
 
-if sys.argv[1] == "complete":
-    complete(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
+if sys.argv[1] == "ticked":
+    ticked(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
 elif sys.argv[1] == "sharpened":
     sharpened(sys.argv[2], float(sys.argv[3]), float(sys.argv[4]))
 else:

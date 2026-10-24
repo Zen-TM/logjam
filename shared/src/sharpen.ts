@@ -18,12 +18,9 @@ import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
 /**
  * Whether a new job sharpens: /start marks it (the worker then runs
  * topo/sharpen.py), and Logjam Web offers "Sharpen an area" with no style
- * options. Setting it back to false returns new jobs to the legacy pipeline
- * and the old form together; a job already marked still sharpens. Guards:
- * topo/tests/test_worker_helpers.py `TestProcessSharpen` (the worker runs the
- * mark, and the legacy pipeline for no mark), and the switch-off template
- * tests in frontend TopoDialog.render.test.tsx (the old form). /start's
- * half is this one constant, which both read; no test sets it off there.
+ * options. It must stay true: the worker refuses a job with no mark
+ * (topo/worker.py `OLD_JOB`), so a job started with it off fails (guard:
+ * sharpen.test.ts "stays on").
  */
 export const SHARPEN_NEW_JOBS = true;
 

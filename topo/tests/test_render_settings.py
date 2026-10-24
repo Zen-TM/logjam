@@ -21,7 +21,6 @@ try:
     from pipeline import (
         _default_render_settings,
         _parse_rgba_hex,
-        active_layers_from_settings,
         load_render_settings,
     )
 
@@ -39,7 +38,6 @@ class TestRenderSettings(unittest.TestCase):
     def setUp(self):
         self.default = _default_render_settings
         self.parse = _parse_rgba_hex
-        self.active = active_layers_from_settings
         self.load = load_render_settings
 
     def test_defaults_match_legacy_hillshade(self):
@@ -120,9 +118,25 @@ class TestRenderSettings(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    # Red if the job's file can change a layer other than vegetation, the one
+    # layer the pipeline renders.
+    def test_load_settings_takes_only_vegetation(self):
+        job = self.default()
+        job["vegetation"]["alphaMin"] = 10
+        job["slope"]["enabled"] = False
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump(job, f)
+            path = f.name
+        try:
+            loaded = self.load(path)
+        finally:
+            os.unlink(path)
+        self.assertEqual(loaded["vegetation"]["alphaMin"], 10)
+        self.assertEqual(loaded["slope"], self.default()["slope"])
+
     def test_load_settings_rejects_invalid_hex(self):
         bad = self.default()
-        bad["hillshade"]["colour"] = "#zzz"
+        bad["vegetation"]["sparseColour"] = "#zzz"
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(bad, f)
             path = f.name
@@ -131,18 +145,6 @@ class TestRenderSettings(unittest.TestCase):
                 self.load(path)
         finally:
             os.unlink(path)
-
-    def test_active_layers_filters_disabled(self):
-        s = self.default()
-        s["slope"]["enabled"] = False
-        layers = self.active(s, has_vegetation=True)
-        self.assertNotIn("slope", layers)
-        self.assertIn("hillshade", layers)
-
-    def test_active_layers_drops_vegetation_when_no_laz(self):
-        s = self.default()
-        layers = self.active(s, has_vegetation=False)
-        self.assertNotIn("vegetation", layers)
 
     def test_parse_rgba_hex_endpoints(self):
         self.assertEqual(self.parse("#00000000"), (0, 0, 0, 0))

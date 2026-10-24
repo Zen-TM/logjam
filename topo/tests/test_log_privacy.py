@@ -171,7 +171,7 @@ class TestGdalMessages(unittest.TestCase):
 
 
 class TestUncaughtFailure(unittest.TestCase):
-    """A legacy job that fails leaves pipeline.py as its type and code
+    """A vegetation pass that fails leaves pipeline.py as its type and code
     locations, never Python's traceback, whose message can quote an ELVIS
     file ("`pdal info --summary` failed for <file>"). Mutations that turn it
     red: main lets the exception escape, or prints it."""

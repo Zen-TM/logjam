@@ -72,8 +72,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ------------------------------------------------------------
 # 2b. tippecanoe – GeoJSON → vector MBTiles (MVT format)
-#     Used by the worker to produce vector tiles for contours
-#     and OSM features before merging into master PMTiles.
+#     Used by the export worker's MBTiles renderer for an old
+#     job's contours and features (renderers/mbtiles.py).
 # ------------------------------------------------------------
 #     Pinned to a released tag — `main` HEAD would silently change the
 #     vector-tile renderer on every rebuild, with nothing to bisect.
