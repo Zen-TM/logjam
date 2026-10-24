@@ -131,3 +131,18 @@ export function areasForSave(
   if (list.error != null) return "failed";
   return list.loading || list.data == null ? "loading" : "ready";
 }
+
+/**
+ * What the save screen does with the area list's state. Offline, Save goes
+ * ahead to the screen's own "needs a connection" alert. Online, it waits for
+ * the list, and when the list fails it warns, with "Try again" and an
+ * explicit "Save without sharpened areas": a warned skip, never a quiet one.
+ */
+export function saveGate(
+  areas: ReturnType<typeof areasForSave>,
+  online: boolean,
+): { canSave: boolean; warning: "loading" | "failed" | null } {
+  if (!online || areas === "none" || areas === "ready")
+    return { canSave: true, warning: null };
+  return { canSave: false, warning: areas };
+}

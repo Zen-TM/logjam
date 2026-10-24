@@ -831,6 +831,31 @@ describe("routes saved areas offline", () => {
     expect(own?.tileJson).toMatchObject({ minzoom: 14, maxzoom: 14 });
   });
 
+  // Red if a statewide rectangle reads a saved clip that doesn't reach it:
+  // ten saved regions would mount ten contour sources for every rectangle.
+  it("reads only the statewide clips that reach each rectangle", () => {
+    const far: MapArtifact["bbox"] = [10, 10, 10.1, 10.1];
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        offline([
+          clip("near", "contours-region", "nsw-contours"),
+          // Saved far from the area: only a rectangle reaching it reads it.
+          clip("far", "contours-region", "nsw-contours", far),
+          clip("ac", "contours-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    );
+    const reading = (name: string) =>
+      sources.filter((s) => s.tileJson?.tiles[0]?.endsWith(`/${name}.pmtiles`));
+    const meets = (a: readonly number[], b: readonly number[]) =>
+      a[0]! <= b[2]! && b[0]! <= a[2]! && a[1]! <= b[3]! && b[1]! <= a[3]!;
+    expect(reading("far").length).toBeGreaterThan(0);
+    expect(reading("far").length).toBeLessThan(reading("near").length);
+    for (const s of reading("far"))
+      expect(meets(s.tileJson!.bounds, far!)).toBe(true);
+  });
+
   // Red if the hillshade leaves the area's saved heights out.
   it("shades the area from its saved heights", () => {
     const sources = ok(

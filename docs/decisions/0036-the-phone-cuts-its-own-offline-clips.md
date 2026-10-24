@@ -193,30 +193,33 @@ Nothing new calls it.
 - **Update 2026-10-24: a signed-in save also keeps the account's sharpened
   areas it reaches ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)),
   cut on the phone from their private archives.** Two rules above bend for
-  these clips alone. They are cut from private archives in the bucket, not
-  the public ones on the CDN. And the save makes one request to Logjam's API:
-  the save screen asks for the account's list
-  (`GET /topo-jobs/completed-overlays`), which sends no bbox, and waits for it
-  rather than save without the areas. For each area the box reaches, the save
-  cuts the area's heights, slope and contours over the part of it the box
-  covers, widened to whole z14 tiles (`areaClipSpecs` in
-  `mobile/src/offline/sharpenedClips.ts`). Each clip is cut through the
-  presigned URL the list gave, by byte range with no header but `range`, and
-  filed under the area's source id, `lidar-<id>`. They are queued first, while
-  the list's URLs are freshest. A guest has no areas, so
+  these clips alone. They are cut from private archives in the bucket, not the
+  public ones on the CDN. And the save makes one request to Logjam's API: the
+  save screen asks for the account's list (`GET
+  /topo-jobs/completed-overlays`), which sends no bbox. Online it waits for
+  the list; if the list fails it warns, with "Try again" and an explicit "Save
+  without sharpened areas", and never skips them quietly. Offline, Save goes
+  ahead to its "needs a connection" alert as before (`saveGate`). For each
+  area the box reaches, the save cuts the area's heights, slope and contours
+  over the part of it the box covers, widened to whole z14 tiles
+  (`areaClipSpecs` in `mobile/src/offline/sharpenedClips.ts`). Each clip is
+  cut through the presigned URL the list gave, by byte range with no header
+  but `range`, and filed under the area's source id, `lidar-<id>`. They are
+  queued first, while the list's URLs are freshest. A guest has no areas, so
   their save is unchanged. A presigned URL expires after 24 h, so a clip
-  resumed after that fails with a line that says to save the area again. Offline, the map routes the area clips over the statewide
-  clips one archive per tile as it does online, the sampler reads an area's
-  heights first, and the account's last list (without its URLs) is kept so
-  they know the areas (`offline/sharpenedAreaStore.ts`). Guards:
-  `regionDownloads.test.ts` ("cuts a sharpened area's clip through its
-  presigned URL, filed under the area"), `sharpenedClips.test.ts`,
-  `sourceResolver.test.ts` ("routes saved areas offline"),
-  `demLookup.test.ts` ("reads a saved clip of a sharpened area before the
-  statewide one"), `sharpenedAreaStore.test.ts` (no URL kept, nothing kept
-  from a list asked for before the sign-out wipe). What holds the decision up still holds: the phone cuts
-  every clip, no request about a clip goes to the API, and the bbox never
-  reaches it. Everything else above stands.
+  resumed after that fails with a line that says to save the area again.
+  Offline, the map routes the area clips over the statewide clips one archive
+  per tile as it does online, the sampler reads an area's heights first, and
+  the account's last list (without its URLs) is kept so they know the areas
+  (`offline/sharpenedAreaStore.ts`). Guards: `regionDownloads.test.ts` ("cuts
+  a sharpened area's clip through its presigned URL, filed under the area"),
+  `sharpenedClips.test.ts`, `sourceResolver.test.ts` ("routes saved areas
+  offline"), `demLookup.test.ts` ("reads a saved clip of a sharpened area
+  before the statewide one"), `sharpenedAreaStore.test.ts` (no URL kept,
+  nothing kept from a list asked for before the sign-out wipe). What holds the
+  decision up still holds: the phone cuts every clip, no request about a clip
+  goes to the API, and the bbox never reaches it. Everything else above
+  stands.
 
 ## Consequences
 
@@ -224,8 +227,9 @@ Nothing new calls it.
   the Vector map, snapping to tracks and creeks, 5 m heights and contours. The
   area a user saves never reaches our API, signed in or not. A save no longer
   costs the API a `pmtiles` process, a temporary file of up to 80 MB and the
-  egress, and a guest's save no longer fails when the API does; a signed-in
-  save waits for the account's area list (updated 2026-10-24).
+  egress, and a save no longer fails when the API does: a guest's never asks
+  it, and a signed-in one whose area list fails can be saved without the
+  areas after a warning (updated 2026-10-24).
 - **Negative:** the CDN sees which byte ranges a phone reads, and anyone with
   the archive can map ranges back to an area. That was already true of the
   Vector map, snapping and heights online, the requests carry no account, and

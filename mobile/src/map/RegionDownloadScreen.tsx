@@ -80,12 +80,14 @@ import {
   areaClipBytes,
   areaClipSpecs,
   areasForSave,
+  saveGate,
 } from "../offline/sharpenedClips";
 import { rememberSharpenedAreas } from "../offline/sharpenedAreaStore";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityStatus } from "../auth/capabilities";
 import { getCompletedOverlays } from "./completedOverlays";
+import { useConnectivity } from "./connectivity";
 import { sharpenedAreasOf } from "./sharpenedArchives";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
@@ -386,6 +388,9 @@ export function RegionDownloadScreen({
     loadsAreas,
   );
   const areasState = areasForSave(loadsAreas, overlays);
+  // Offline, Save goes ahead to its "needs a connection" alert; online it
+  // waits for the list, or is saved without the areas after a warning.
+  const gate = saveGate(areasState, useConnectivity() === "online");
   const { sharpenedAreas, areasEpoch } = useMemo(
     () => sharpenedAreasOf(overlays.data, loadsAreas),
     [loadsAreas, overlays.data],
@@ -408,10 +413,7 @@ export function RegionDownloadScreen({
   // The vector map comes with every area and is a download worth making on
   // its own, so no raster need be picked.
   const mapCount = selected.length + 1;
-  const canDownload =
-    bbox != null &&
-    caps?.ok === true &&
-    (areasState === "none" || areasState === "ready");
+  const canDownload = bbox != null && caps?.ok === true && gate.canSave;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
@@ -434,14 +436,19 @@ export function RegionDownloadScreen({
   const overCap = caps != null && !caps.ok;
 
   const startDownloads = useCallback(
-    (groupId: string, groupLabel: string, allowCellular: boolean) => {
+    (
+      groupId: string,
+      groupLabel: string,
+      allowCellular: boolean,
+      withAreas: boolean,
+    ) => {
       if (!bbox || !job) return;
       enqueueRegionDownloads([
         // First, while the list's presigned URLs are freshest: the queue runs
         // one job at a time, and an expired URL fails its clip for good.
         ...areaClipSpecs(
           { bbox, groupId, groupLabel, allowCellular },
-          sharpenedAreas,
+          withAreas ? sharpenedAreas : [],
           uuid,
         ),
         ...job.perSource.map((source) => ({
@@ -468,72 +475,77 @@ export function RegionDownloadScreen({
     [bbox, job, sharpenedAreas],
   );
 
-  const handleSave = useCallback(() => {
-    if (!bbox || !job) return;
-    setBusy(true);
-    void (async () => {
-      try {
-        // Asked HERE, at the tap, rather than from a subscription's last
-        // value: the answer decides whether tens of megabytes go on someone's
-        // plan, and the connection can change between the last event and the
-        // tap. It is also why there is no "use mobile data" toggle: a switch
-        // set before the walk out of Wi-Fi range answers a question about a
-        // connection the phone is no longer on.
-        const connection = await NetInfo.fetch();
-        if (connection.isConnected === false) {
-          Alert.alert(
-            "No connection",
-            "Saving maps needs a connection. Try again when you have one.",
-          );
-          return;
-        }
-        // Metered: ask, once, about THIS download. Declining is a cancel, not
-        // a setting to go and find.
-        let allowCellular = false;
-        if (isExpensive(connection)) {
-          allowCellular = await new Promise<boolean>((resolve) => {
+  // `withAreas` false only from the failed-list warning's "Save without
+  // sharpened areas".
+  const handleSave = useCallback(
+    (withAreas: boolean) => {
+      if (!bbox || !job) return;
+      setBusy(true);
+      void (async () => {
+        try {
+          // Asked HERE, at the tap, rather than from a subscription's last
+          // value: the answer decides whether tens of megabytes go on someone's
+          // plan, and the connection can change between the last event and the
+          // tap. It is also why there is no "use mobile data" toggle: a switch
+          // set before the walk out of Wi-Fi range answers a question about a
+          // connection the phone is no longer on.
+          const connection = await NetInfo.fetch();
+          if (connection.isConnected === false) {
             Alert.alert(
-              "Use mobile data?",
-              "This download will use your mobile data.",
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resolve(false),
-                },
-                { text: "Download", onPress: () => resolve(true) },
-              ],
-              { cancelable: true, onDismiss: () => resolve(false) },
+              "No connection",
+              "Saving maps needs a connection. Try again when you have one.",
             );
-          });
-          if (!allowCellular) return;
+            return;
+          }
+          // Metered: ask, once, about THIS download. Declining is a cancel, not
+          // a setting to go and find.
+          let allowCellular = false;
+          if (isExpensive(connection)) {
+            allowCellular = await new Promise<boolean>((resolve) => {
+              Alert.alert(
+                "Use mobile data?",
+                "This download will use your mobile data.",
+                [
+                  {
+                    text: "Cancel",
+                    style: "cancel",
+                    onPress: () => resolve(false),
+                  },
+                  { text: "Download", onPress: () => resolve(true) },
+                ],
+                { cancelable: true, onDismiss: () => resolve(false) },
+              );
+            });
+            if (!allowCellular) return;
+          }
+          // Check space before starting: on a full phone the SQLite insert would
+          // fail mid-batch and report a generic failure with nothing reclaimed.
+          // The p90 estimate is what actually lands, so that is what has to fit.
+          //
+          // `p90Bytes` has no entry for the vector clip, whose size is known
+          // once its directories are read. That one is checked inside
+          // `runRegionClip`, through the same helper.
+          await assertSpaceFor(job.p90Bytes + (withAreas ? areaBytes : 0));
+          // One id for the whole run: every map chosen here covers the SAME area,
+          // so Saved shows them as one card (see MapArtifact.groupId).
+          //
+          // Enqueue FIRST, ask for a name after: the naming prompt opens over a
+          // download that is already running, which is the point of it — the
+          // tiles do not wait on the keyboard. The default name is written with
+          // the jobs, so dismissing the prompt is a complete answer.
+          const groupId = uuid();
+          startDownloads(groupId, defaultName, allowCellular, withAreas);
+          setNaming({ groupId, name: defaultName });
+        } catch (err) {
+          if (!(err instanceof NotEnoughSpaceError)) throw err;
+          Alert.alert("Not enough space", `${err.message} Or pick fewer maps.`);
+        } finally {
+          setBusy(false);
         }
-        // Check space before starting: on a full phone the SQLite insert would
-        // fail mid-batch and report a generic failure with nothing reclaimed.
-        // The p90 estimate is what actually lands, so that is what has to fit.
-        //
-        // `p90Bytes` has no entry for the vector clip, whose size is known
-        // once its directories are read. That one is checked inside
-        // `runRegionClip`, through the same helper.
-        await assertSpaceFor(job.p90Bytes + areaBytes);
-        // One id for the whole run: every map chosen here covers the SAME area,
-        // so Saved shows them as one card (see MapArtifact.groupId).
-        //
-        // Enqueue FIRST, ask for a name after: the naming prompt opens over a
-        // download that is already running, which is the point of it — the
-        // tiles do not wait on the keyboard. The default name is written with
-        // the jobs, so dismissing the prompt is a complete answer.
-        const groupId = uuid();
-        startDownloads(groupId, defaultName, allowCellular);
-        setNaming({ groupId, name: defaultName });
-      } catch (err) {
-        if (!(err instanceof NotEnoughSpaceError)) throw err;
-        Alert.alert("Not enough space", `${err.message} Or pick fewer maps.`);
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [bbox, job, areaBytes, defaultName, startDownloads]);
+      })();
+    },
+    [bbox, job, areaBytes, defaultName, startDownloads],
+  );
 
   // Confirm and dismiss do the same thing: the field starts on the default, so
   // an untouched dismissal rewrites the label the jobs already carry. Leaving
@@ -653,7 +665,7 @@ export function RegionDownloadScreen({
               Too large — reduce the area or detail, or pick fewer maps.
             </Notice>
           </View>
-        ) : areasState === "failed" ? (
+        ) : gate.warning === "failed" ? (
           // `box-none`: "Try again" takes a press, and the strip around it
           // still lets the frame's top handle and a pan through.
           <View style={styles.mapWarning} pointerEvents="box-none">
@@ -661,17 +673,25 @@ export function RegionDownloadScreen({
               icon="warning"
               tone="warning"
               action={
-                <Button
-                  label="Try again"
-                  variant="outlineAccent"
-                  onPress={overlays.refetch}
-                />
+                <View style={styles.warningActions}>
+                  <Button
+                    label="Try again"
+                    variant="outlineAccent"
+                    onPress={overlays.refetch}
+                  />
+                  <Button
+                    label="Save without sharpened areas"
+                    variant="outlineAccent"
+                    onPress={() => handleSave(false)}
+                    disabled={bbox == null || caps?.ok !== true || busy}
+                  />
+                </View>
               }
             >
               {overlays.error ?? ""}
             </Notice>
           </View>
-        ) : areasState === "loading" ? (
+        ) : gate.warning === "loading" ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Notice>Checking for your sharpened areas…</Notice>
           </View>
@@ -748,7 +768,7 @@ export function RegionDownloadScreen({
           <Button
             label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
             icon="saveOffline"
-            onPress={handleSave}
+            onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
           />
         </View>
@@ -819,6 +839,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     top: HERO_OVERLAP + spacing(1),
     alignItems: "center",
   },
+  warningActions: { gap: spacing(1) },
   namingBody: { gap: spacing(1.5) },
   namingNote: { ...muted(theme, textRole.detail) },
   panel: {

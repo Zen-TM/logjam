@@ -333,6 +333,11 @@ function resolveTopoOverlay(
   ];
 }
 
+const boxesMeet = (
+  [w1, s1, e1, n1]: readonly number[],
+  [w2, s2, e2, n2]: readonly number[],
+) => w1 <= e2 && w2 <= e1 && s1 <= n2 && s2 <= n1;
+
 /** An area as routing reads it: `tiles` is the archive its TileJSON names. */
 type RoutedArea = SharpenedArea & { tiles: string };
 
@@ -383,7 +388,7 @@ function savedAreaClips(
  * and read from one archive. Online, the areas are the list's, each read at
  * its fixed address (sharpenedArchives.ts). Offline, they are the area clips
  * saved on this phone, and each statewide rectangle reads every saved
- * statewide clip. With no area, the statewide source alone as before.
+ * statewide clip that reaches it. With no area, the statewide source alone as before.
  * Guard: `sourceResolver.test.ts` ("routes the Terrain group", "routes saved
  * areas offline").
  */
@@ -436,14 +441,22 @@ function routeTerrain(
     ),
     ...terrainRoutes(areas, layer).flatMap((route) =>
       route.archive === "statewide"
-        ? drawn.map((s) =>
-            bounded(
-              s.url!,
-              s.maxZoom ?? archive.maxzoom,
-              route.tiles,
-              archive.credit,
-            ),
-          )
+        ? // Each saved clip only where it reaches: a clip's bounds are its
+          // save's box, and the CDN's archive has none.
+          drawn
+            .filter(
+              (s) =>
+                !s.bounds ||
+                boxesMeet(s.bounds, tileRectBounds(z, route.tiles)),
+            )
+            .map((s) =>
+              bounded(
+                s.url!,
+                s.maxZoom ?? archive.maxzoom,
+                route.tiles,
+                archive.credit,
+              ),
+            )
         : // An area's contours are z14 alone; past its deepest zoom
           // MapLibre draws its tiles larger, as Logjam Web draws the parent.
           [

@@ -128,3 +128,31 @@ describe("areasForSave", () => {
     expect(areasForSave(false, query({}))).toBe("none");
   });
 });
+
+describe("saveGate", () => {
+  // Red if a failed list blocks Save offline (the old "needs a connection"
+  // alert never shows), or lets an online save go ahead without the warning
+  // and its explicit "Save without sharpened areas".
+  it("asks for a connection offline, and online warns with a way to save without the areas", async () => {
+    const { saveGate } = await import("./sharpenedClips");
+    expect(saveGate("failed", true)).toEqual({
+      canSave: false,
+      warning: "failed",
+    });
+    expect(saveGate("failed", false)).toEqual({ canSave: true, warning: null });
+    expect(saveGate("loading", true)).toEqual({
+      canSave: false,
+      warning: "loading",
+    });
+    expect(saveGate("loading", false)).toEqual({
+      canSave: true,
+      warning: null,
+    });
+    for (const state of ["ready", "none"] as const)
+      for (const online of [true, false])
+        expect(saveGate(state, online)).toEqual({
+          canSave: true,
+          warning: null,
+        });
+  });
+});
