@@ -71,7 +71,7 @@ class JobInputError(Exception):
 
 # A job /start never marked to sharpen: from before new jobs sharpened their
 # area, which nothing runs any more (tests/test_worker_helpers.py
-# `TestProcessJob`).
+# `test_an_unmarked_job_is_refused_before_its_download`).
 OLD_JOB = (
     "This LiDAR map was started before LiDAR maps sharpened their area, and "
     "can't be made now. Sharpen the area again."
@@ -305,7 +305,7 @@ def send_failure_email(to_email: str, job_id: str, error_message: str):
     """Failure sibling of send_completion_email. Both are gated on the
     same `topoEmail` preference, which means "finishes or fails" — the export
     worker's send_completion_email carries ok/error in one function instead;
-    here a separate function keeps the osm-warning branches out of the way."""
+    this one is failure-only."""
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping failure email")
         return
@@ -473,7 +473,7 @@ def process_sharpen(
         veg_dir = Path(tmp) / "vegetation"
         veg_dir.mkdir()
         output_keys, veg_bytes, veg_metrics = process_vegetation(
-            job, str(veg_dir), zip_path, GROUND_FOR.get(result.get("ground"), "auto")
+            job, str(veg_dir), zip_path
         )
         total_output_bytes += veg_bytes
         # Charged with the job: credits come from wallSeconds
@@ -503,14 +503,8 @@ def process_sharpen(
     )
 
 
-# The vegetation pass's ground, from the ground sharpen.py found: class 2
-# where the survey has it, SMRF where it has none, and for a ground from the
-# ZIP's DEM, the pipeline looks for class 2 itself (pipeline.py `run`).
-GROUND_FOR = {"class-2": "class2", "smrf": "smrf"}
-
-
 def process_vegetation(
-    job: dict, tmp: str, zip_path: Path, ground: str
+    job: dict, tmp: str, zip_path: Path
 ) -> tuple[list[dict], int, Optional[dict]]:
     """A ticked job's vegetation layer: `pipeline.py` renders it from the
     ZIP's point clouds, and its PMTiles is uploaded for display. Returns
@@ -531,7 +525,7 @@ def process_vegetation(
         str(Path(__file__).parent / "pipeline.py"),
         str(zip_path),
         *["--output", str(output_dir), "--work-dir", str(work_dir)],
-        *["--workers", str(os.cpu_count() or 4), "--ground", ground],
+        *["--workers", str(os.cpu_count() or 4)],
         *["--settings-json", str(settings_path)],
         *["--metrics-json", str(metrics_path), "--progress-file", str(progress_path)],
     ]

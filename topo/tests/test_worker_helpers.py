@@ -258,12 +258,10 @@ class TestProcessSharpen(unittest.TestCase):
         return result, uploads, vegetation
 
     @staticmethod
-    def finished(out, ground="elvis-dem"):
+    def finished(out):
         import json
 
-        (out / "sharpen.json").write_text(
-            json.dumps({"v": 1, "zmax": 16, "ground": ground})
-        )
+        (out / "sharpen.json").write_text(json.dumps({"v": 1, "zmax": 16}))
         for name in ("heights", "slope", "contours"):
             (out / f"{name}.pmtiles").write_bytes(b"x" * 10)
         return 0
@@ -346,19 +344,9 @@ class TestProcessSharpen(unittest.TestCase):
             {"v": 1, "vegetation": True}, self.finished
         )
         output_keys, _, total, _, sharpen = result
-        self.assertEqual(vegetation.call_args.args[3], "auto")
         self.assertEqual(output_keys, [{"name": "vegetation"}])
         self.assertEqual(total, 37)
         self.assertTrue(sharpen["vegetation"])
-
-    # Red if the vegetation pass ignores the ground sharpen.py found: a
-    # survey's class 2 re-derived by SMRF, or SMRF guessed where class 2 is.
-    def test_the_vegetation_pass_keeps_the_ground_sharpen_found(self):
-        for found, ground in (("class-2", "class2"), ("smrf", "smrf")):
-            _, _, vegetation = self.run_job(
-                {"v": 1, "vegetation": True}, lambda out: self.finished(out, found)
-            )
-            self.assertEqual(vegetation.call_args.args[3], ground)
 
     def test_no_contour_archive_is_left_out(self):
         import json

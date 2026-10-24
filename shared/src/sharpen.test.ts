@@ -207,6 +207,14 @@ describe("a sharpened area's heights", () => {
   });
 });
 
+describe("SHARPEN_NEW_JOBS", () => {
+  // Red if set false: /start stops marking jobs, and the worker refuses every
+  // one (topo/worker.py `OLD_JOB`).
+  it("stays on", () => {
+    expect(SHARPEN_NEW_JOBS).toBe(true);
+  });
+});
+
 describe("lidarJobCopy", () => {
   // Mutations: an entry point that writes its own label (the place verb
   // keeping "Make a LiDAR topo here" after the flip), or one side of the

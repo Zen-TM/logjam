@@ -18,8 +18,8 @@ import { escapeXml } from "./escapeXml.js";
  * Whether a new job sharpens: /start marks it (the worker then runs
  * topo/sharpen.py), and Logjam Web offers "Sharpen an area" with no style
  * options. It must stay true: the worker refuses a job with no mark
- * (topo/worker.py `OLD_JOB`; guard: topo/tests/test_worker_helpers.py
- * `TestProcessSharpen`), so a job started with it off fails.
+ * (topo/worker.py `OLD_JOB`), so a job started with it off fails (guard:
+ * sharpen.test.ts "stays on").
  */
 export const SHARPEN_NEW_JOBS = true;
 

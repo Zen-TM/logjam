@@ -1423,11 +1423,10 @@ def run_pdal_sequential_full(
     out_all_count: str,
     work_dir: str,
     resolution: float = 1.0,
-    *,
-    ground: str,
 ):
     """Process LAZ files one at a time (DTM + strata/below/all counts), then
-    merge, with ground as `build_pipeline_full` takes it.
+    merge. Each tile is grounded on its own class 2 where it has any, and on
+    SMRF's where it has none (tests/test_pipeline_build.py `TestGroundPerTile`).
 
     `terrain_tiles` and `veg_tiles` are the per-footprint survey selections
     (see select_surveys_by_layer): the DTM mosaic is built ONLY from the
@@ -1462,7 +1461,7 @@ def run_pdal_sequential_full(
             tile["below"],
             tile["all"],
             resolution,
-            ground=ground,
+            ground="class2" if has_class2(laz) else "smrf",
         )
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         grids[laz] = tile
@@ -3584,15 +3583,6 @@ def run():
         help="Print per-step timing report at the end",
     )
     parser.add_argument(
-        "--ground",
-        choices=["class2", "smrf", "auto"],
-        default="auto",
-        help=(
-            "Ground for the height above ground: the survey's class 2, or "
-            "SMRF's for a survey with none. 'auto' (default) looks for class 2."
-        ),
-    )
-    parser.add_argument(
         "--settings-json",
         default=None,
         metavar="PATH",
@@ -3674,14 +3664,6 @@ def run():
         ):
             survey_selection = select_surveys_by_layer(contents.las_files)
         capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
-        ground = args.ground
-        if ground == "auto":
-            ground = (
-                "class2"
-                if any(has_class2(p) for p in survey_selection.gridded_paths)
-                else "smrf"
-            )
-        log.info(f"Ground for height above ground: {ground}")
         with bench.step("PDAL: LAZ → DTM + vegetation counts", key="pdal"):
             run_pdal_sequential_full(
                 survey_selection.terrain_tiles,
@@ -3693,7 +3675,6 @@ def run():
                 native["all_count"],
                 work_dir,
                 resolution=1.0,
-                ground=ground,
             )
         with bench.step("Fill DTM nodata holes", key="fill"):
             fill_nodata(dtm_raw, dtm_native_filled)

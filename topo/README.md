@@ -43,9 +43,9 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 `pipeline.py` renders a ticked job's vegetation layer: PDAL counts the
 returns over the ground, they become a scrub push-through density weighted by
-the SVTM formation, and a hatch marks ground burned since the capture. The
-worker passes the ground `sharpen.py` found (`--ground`); by hand, `auto`
-uses the survey's class 2 where it has one and SMRF where it has none.
+the SVTM formation, and a hatch marks ground burned since the capture. Each
+point cloud's ground is its own class 2 where it has any, and SMRF's where it
+has none.
 
 ```bash
 mkdir -p input output && cp /path/to/elvis_download.zip input/elvis.zip
@@ -67,7 +67,6 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | `--work-dir DIR` | auto temp dir | Where to keep intermediate rasters |
 | `--keep-work` | off | Don't delete intermediate files |
 | `--benchmark` | off | Print a per-step timing report at the end |
-| `--ground KIND` | `auto` | `class2`, `smrf`, or `auto` (class 2 where the survey has it) |
 | `--settings-json PATH` | none | The job's settings; only `vegetation` is read (`TopoSettings` in `shared/src/topoSettings.ts`) |
 | `--metrics-json PATH` | none | Write per-phase timings and tile counts to `PATH` |
 | `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |

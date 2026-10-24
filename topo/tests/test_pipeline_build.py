@@ -129,5 +129,46 @@ class TestBuildPipelineFull(unittest.TestCase):
             self.assertIn(gate, w["where"])
 
 
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestGroundPerTile(unittest.TestCase):
+    """Each point cloud is grounded on its own: class 2 where it has it, SMRF
+    where it has none. Made-up tiles, no PDAL run.
+
+    Red if one ground is chosen for the whole job: a ZIP mixing a classified
+    tile with an unclassified one (a water-only tile, a second survey) then
+    either runs height above ground on a tile with no ground points, which
+    fails the job, or wipes the survey's classes everywhere."""
+
+    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+        import tempfile
+        from unittest import mock
+
+        import pipeline
+
+        run = mock.Mock()
+        with (
+            tempfile.TemporaryDirectory() as work,
+            mock.patch.object(
+                pipeline, "has_class2", side_effect=lambda p: p == "classified.laz"
+            ),
+            mock.patch.object(pipeline, "run_pdal_pipeline", run),
+            mock.patch.object(pipeline, "_merge_raster_tiles"),
+            mock.patch.object(pipeline.os, "remove"),
+        ):
+            pipeline.run_pdal_sequential_full(
+                ["classified.laz", "unclassified.laz"],
+                ["classified.laz", "unclassified.laz"],
+                *(os.path.join(work, f"{n}.tif") for n in "abcde"),
+                work,
+            )
+        smrf = {
+            next(
+                s["filename"] for s in p["pipeline"] if s.get("type") == "readers.las"
+            ): bool(_stages_of_type(p["pipeline"], "filters.smrf"))
+            for p in (c.args[0] for c in run.call_args_list)
+        }
+        self.assertEqual(smrf, {"classified.laz": False, "unclassified.laz": True})
+
+
 if __name__ == "__main__":
     unittest.main()
