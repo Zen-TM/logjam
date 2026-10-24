@@ -41,6 +41,7 @@ import json
 import logging
 import math
 import re
+import shutil
 import subprocess
 import zipfile
 from concurrent.futures import ThreadPoolExecutor
@@ -114,7 +115,8 @@ CONTOUR_ZMAX = max(zmax for _, zmax in CONTOUR_ZOOMS.values())
 CELL_M = 5
 SLOPE_NODATA = 255
 # An area's cell at its deepest zoom: ~2 m at z16 and ~1 m at z17 at NSW's
-# latitudes (topo/sharpen.py `zoom_for_cell`).
+# latitudes, the cells topo/sharpen.py `zoom_for_cell` makes each zoom from
+# (tests/test_area_export.py `AreaCells`).
 AREA_CELL_M = {16: 2, 17: 1}
 # shared/src/sharpen.ts TERRAIN_ROUTED_FROM (tests/test_area_export.py).
 ROUTED_FROM = {"heights": 15, "slope": 15, "contours": 14}
@@ -410,10 +412,14 @@ def write_mosaic(
         raise AreaOutsideNsw(f"no {kind} tiles in the box")
 
 
-def run(*command: str) -> None:
+def run(*command: str, stderr_in_error: bool = True) -> None:
+    """Raises with GDAL's stderr for the log, unless a call reads a survey's
+    footprint: GDAL quotes a bad geometry's coordinates there, and the log
+    never carries a place (tests/test_area_export.py `CutlineErrors`)."""
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
-        raise AreaExportError(f"{command[0]} failed: {result.stderr.strip()}")
+        detail = f": {result.stderr.strip()}" if stderr_in_error else ""
+        raise AreaExportError(f"{command[0]} failed{detail}")
 
 
 def warp_to_mga(
@@ -440,6 +446,7 @@ def warp_to_mga(
         "-co", "COMPRESS=DEFLATE", "-co", "PREDICTOR=YES",
         "-co", "BIGTIFF=IF_SAFER", "-co", "NUM_THREADS=ALL_CPUS",
         str(source), str(out),
+        stderr_in_error=cutline is None,
     )  # fmt: skip
 
 
@@ -451,6 +458,9 @@ class Made:
     # Where the files go in the download: "" for the statewide 5 m ones,
     # "sharpened-1" and on for each area's.
     name: str = ""
+    # Its line in CREDITS.txt, when not `credit`: an area's own, since the
+    # 5 m line its files also carry is listed once already.
+    listed: Optional[str] = None
 
 
 def make_layers(
@@ -545,7 +555,7 @@ DISCLAIMER = (
 def package(mades: Sequence[Made], fmt: str, work: Path) -> Path:
     """The file the user downloads: the statewide files first, then each
     area's, named for it ("sharpened-1/heights.tif", "sharpened_1_heights")."""
-    credits = "\n".join(made.credit for made in mades)
+    credits = "\n".join(made.listed or made.credit for made in mades)
     if fmt == "geotiff":
         out = work / "logjam-area.zip"
         with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_STORED) as zf:
@@ -814,8 +824,10 @@ def area_made(
             cutline=cutline, credit=credit,
         )  # fmt: skip
     except AreaOutsideNsw:  # no tile of the area's archive in the box
+        shutil.rmtree(sub)  # so the next area takes this name
         return None
     made.name = name
+    made.listed = area_credit_line(layers, area.credit)
     return made
 
 
@@ -900,50 +912,61 @@ def render_mbtiles(
             Archive(archives["contours"]), bbox, work / "contours"
         )
 
-    # Each area's own layers over the part of the box its tiles hold.
-    in_box = [(a, arch) for a, arch in areas if intersect(bbox, tiles15_bounds(a))]
-    routed = [a for a, _ in in_box]
+    # Each area's own layers over the part of the box its tiles hold. An area
+    # whose archive has no tile there (a coast's sea, the empty corner of a
+    # diagonal footprint) is left out, so statewide answers there.
+    routed: List[Area] = []
     area_rasters: Dict[str, Dict[str, Tuple[Path, np.ndarray]]] = {}
     area_contours: Dict[str, Dict[Tuple[int, int, int], str]] = {}
+    in_box = [(a, arch) for a, arch in areas if intersect(bbox, tiles15_bounds(a))]
     for i, (area, arch) in enumerate(in_box, 1):
         part = intersect(bbox, tiles15_bounds(area))
         own: Dict[str, Tuple[Path, np.ndarray]] = {}
-        if "hillshade" in layers:
-            mosaic, shade = work / f"a{i}-heights.tif", work / f"a{i}-shade.tif"
-            write_mosaic(
-                Archive(arch["heights"]),
-                part,
-                mosaic,
-                "heights",
-                attribution,
-                area.zmax,
-            )
-            gdal.DEMProcessing(
-                str(shade), str(mosaic), "hillshade",
-                azimuth=HILLSHADE_DEFAULTS["azimuth"],
-                altitude=HILLSHADE_DEFAULTS["altitude"],
-                zFactor=HILLSHADE_DEFAULTS["zFactor"],
-                scale=math.cos(math.radians((bbox[1] + bbox[3]) / 2)),
-                computeEdges=True,
-                creationOptions=["TILED=YES", "COMPRESS=DEFLATE", "BIGTIFF=IF_SAFER"],
-            )  # fmt: skip
-            mosaic.unlink()
-            own["hillshade"] = (work / f"a{i}-hillshade.tif", rasters["hillshade"][1])
-            value_cog(shade, own["hillshade"][0], 0)
-            shade.unlink()
-        if "slope" in layers:
-            mosaic = work / f"a{i}-slope-3857.tif"
-            write_mosaic(
-                Archive(arch["slope"]), part, mosaic, "slope", attribution, area.zmax
-            )
-            own["slope"] = (work / f"a{i}-slope.tif", rasters["slope"][1])
-            value_cog(mosaic, own["slope"][0], SLOPE_NODATA)
-            mosaic.unlink()
+        made = [work / f"a{i}-{n}.tif" for n in ("heights", "shade", "slope-3857")]
+        try:
+            if "hillshade" in layers:
+                mosaic, shade = made[0], made[1]
+                write_mosaic(
+                    Archive(arch["heights"]), part, mosaic, "heights", attribution,
+                    area.zmax,
+                )  # fmt: skip
+                gdal.DEMProcessing(
+                    str(shade), str(mosaic), "hillshade",
+                    azimuth=HILLSHADE_DEFAULTS["azimuth"],
+                    altitude=HILLSHADE_DEFAULTS["altitude"],
+                    zFactor=HILLSHADE_DEFAULTS["zFactor"],
+                    scale=math.cos(math.radians((bbox[1] + bbox[3]) / 2)),
+                    computeEdges=True,
+                    creationOptions=["TILED=YES", "COMPRESS=DEFLATE", "BIGTIFF=IF_SAFER"],
+                )  # fmt: skip
+                own["hillshade"] = (
+                    work / f"a{i}-hillshade.tif",
+                    rasters["hillshade"][1],
+                )
+                value_cog(shade, own["hillshade"][0], 0)
+            if "slope" in layers:
+                mosaic = made[2]
+                write_mosaic(
+                    Archive(arch["slope"]), part, mosaic, "slope", attribution,
+                    area.zmax,
+                )  # fmt: skip
+                own["slope"] = (work / f"a{i}-slope.tif", rasters["slope"][1])
+                value_cog(mosaic, own["slope"][0], SLOPE_NODATA)
+        except AreaOutsideNsw:
+            for path in [*made, *(cog for cog, _ in own.values())]:
+                path.unlink(missing_ok=True)
+            continue
+        finally:
+            for path in made:
+                path.unlink(missing_ok=True)
+        routed.append(area)
         area_rasters[area.id] = own
         if "contours" in layers and area.contours:
             area_contours[area.id] = fetch_contour_tiles(
                 Archive(arch["contours"]), part, work / f"a{i}-contours"
             )
+    # The layers each area won a tile for, which it is credited for.
+    drew: Dict[str, set] = {area.id: set() for area in routed}
 
     def contour_tile(z: int, x: int, y: int) -> Optional[tuple]:
         """The file and address of the contour tile a tile draws: itself,
@@ -957,6 +980,8 @@ def render_mbtiles(
             else contour_files
         )
         path = files.get(parent)
+        if path and isinstance(answer, Area):
+            drew[answer.id].add("contours")
         return (path, *parent) if path else None
 
     def tile_rasters(z: int, x: int, y: int) -> Dict[str, Tuple[Path, np.ndarray]]:
@@ -969,6 +994,7 @@ def render_mbtiles(
             )
             if isinstance(answer, Area):
                 chosen[layer] = area_rasters[answer.id][layer]
+                drew[answer.id].add(layer)
             elif z <= MBTILES_ZOOMS[1]:
                 chosen[layer] = cog
         return chosen
@@ -995,16 +1021,20 @@ def render_mbtiles(
             t[2] >> max(0, t[0] - CONTOUR_ZMAX),
         )
     )
-    out = work / "logjam-area.mbtiles"
-    credit = " ".join(
-        [credit_line(layers, attribution)]
-        + [area_credit_line(layers, area.credit) for area in routed]
-    )
-    conn = create_mbtiles(str(out), "logjam-area", credit, zmin, zmax, credit)
     jobs = [
         (z, x, y, bbox, tile_rasters(z, x, y), contour_tile(z, x, y), settings)
         for z, x, y in tiles
     ]
+    out = work / "logjam-area.mbtiles"
+    credit = " ".join(
+        [credit_line(layers, attribution)]
+        + [
+            area_credit_line(sorted(drew[area.id]), area.credit)
+            for area in routed
+            if drew[area.id]
+        ]
+    )
+    conn = create_mbtiles(str(out), "logjam-area", credit, zmin, zmax, credit)
     with ProcessPoolExecutor(_composite_workers()) as pool:
         for z, x, y, png in pool.map(mbtiles_tile, jobs, chunksize=64):
             if png is not None:

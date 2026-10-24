@@ -740,6 +740,112 @@ class SharpenedAreaInAnExport(unittest.TestCase):
             keys={"heights": "h", "slope": "s", "contours": None},
         )
 
+    def empty_area(self, area_id="empty"):
+        """An area over the same range whose archives have no tile in the box:
+        a coast's sea corner, or the empty corner of a diagonal footprint."""
+        elsewhere = {(16, 1, 1): terrarium_png(1.0)}
+        area = made_up_area(
+            id=area_id,
+            tiles15=self.tiles15,
+            coverage=self.area.coverage,
+            credit="Elevation: derived from the empty survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )
+        return area, {"heights": archive_of(elsewhere), "slope": archive_of(elsewhere)}
+
+    def mbtiles_meta(self, layers, areas, statewide=None):
+        import sqlite3
+        import tempfile
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import closing
+        from unittest import mock
+
+        from area_export import render_mbtiles
+
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
+        ):
+            path = render_mbtiles(
+                statewide or self.statewide, self.box, layers, {}, Path(tmp), areas
+            )
+            with closing(sqlite3.connect(path)) as db:
+                return dict(db.execute("SELECT name, value FROM metadata"))
+
+    # Mutation: let an area with no tile in the box raise, and a box mostly
+    # in NSW fails as "outside NSW". Its tiles go to statewide instead.
+    def test_an_area_with_no_tile_in_the_box_leaves_it_to_statewide(self):
+        meta = self.mbtiles_meta(["slope"], [self.empty_area()])
+        self.assertNotIn("empty survey", meta["attribution"])
+
+    # Mutation: credit every area in the box with every layer asked, and the
+    # file credits a survey for contours it has no archive of, and an area
+    # every tile of which a finer one won.
+    def test_an_mbtiles_credits_an_area_only_for_what_it_drew(self):
+        from build_nsw_dem import lonlat_to_tile
+
+        ax, ay = self.tiles15[0], self.tiles15[1]
+        z17 = {
+            (17, x, y)
+            for x in range(ax * 4, ax * 4 + 8)
+            for y in range(ay * 4, ay * 4 + 8)
+        }
+        fine = made_up_area(
+            id="fine", zmax=17, tiles15=self.tiles15, coverage=self.area.coverage,
+            credit="Elevation: derived from the fine survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )  # fmt: skip
+        coarse = made_up_area(
+            id="coarse", tiles15=self.tiles15, coverage=self.area.coverage,
+            credit="Elevation: derived from the coarse survey.",
+            keys={"heights": "h", "slope": "s", "contours": None},
+        )  # fmt: skip
+        fine_tiles = {
+            t: terrarium_png(40.0)
+            for t in z17
+            | {(16, x >> 1, y >> 1) for _, x, y in z17}
+            | {(15, x >> 2, y >> 2) for _, x, y in z17}
+        }
+        far = lonlat_to_tile(145.0, -30.0, 14)
+        statewide = {**self.statewide, "contours": archive_of({(14, *far): b"x"})}
+        meta = self.mbtiles_meta(
+            ["slope", "contours"],
+            [
+                (
+                    fine,
+                    {
+                        "heights": archive_of(fine_tiles),
+                        "slope": archive_of(fine_tiles),
+                    },
+                ),
+                (coarse, self.area_archives),
+            ],
+            statewide,
+        )
+        self.assertIn("Slope: derived from the fine survey.", meta["attribution"])
+        self.assertNotIn("contours: derived from the fine", meta["attribution"])
+        self.assertNotIn("coarse survey", meta["attribution"])
+
+    # Mutation: leave a dropped area's work dir behind, and the next area,
+    # named for the same place, fails the export on an existing dir.
+    def test_a_dropped_area_leaves_the_next_one_its_name(self):
+        import tempfile
+        import zipfile
+
+        from area_export import render_area
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = render_area(
+                self.statewide, self.box, ["slope"], "geotiff", Path(tmp),
+                areas=[self.empty_area(), (self.area, self.area_archives)],
+            )  # fmt: skip
+            with zipfile.ZipFile(out) as zf:
+                names = set(zf.namelist())
+                credits = zf.read("CREDITS.txt").decode()
+        self.assertIn("sharpened-1/slope.tif", names)
+        self.assertFalse(any(n.startswith("sharpened-2") for n in names))
+        self.assertNotIn("empty survey", credits)
+
     # Mutation: drop the areas from the GIS export, and its files hold only
     # the 5 m terrain; or warp an area's files at 5 m.
     def test_a_geotiff_holds_the_areas_files_at_its_cell_and_credit(self):
@@ -768,6 +874,9 @@ class SharpenedAreaInAnExport(unittest.TestCase):
             values = ds.GetRasterBand(1).ReadAsArray()
             self.assertEqual(set(values[values != 255].tolist()), {40})
             self.assertIn("Heights and slope: derived from a LiDAR survey.", credits)
+            # Mutation: list each area's file credit whole, and the 5 m line
+            # repeats after every area.
+            self.assertEqual(credits.count("NSW 5 m"), 1)
 
     # Mutation: draw a tile inside the area from the statewide archive (or
     # the other way round), and the file shows the 5 m slope over the survey.
@@ -810,6 +919,40 @@ class SharpenedAreaInAnExport(unittest.TestCase):
             seen.add(inside)
             self.assertEqual(centre[:3], (255, 0, 0) if inside else (0, 255, 0))
         self.assertEqual(seen, {True, False})
+
+
+class AreaCells(unittest.TestCase):
+    # Mutation: give a zoom a cell sharpen.py would not make that zoom from,
+    # and an area's files are warped coarser (or finer) than its survey.
+    def test_each_areas_cell_is_the_one_its_zoom_was_made_from(self):
+        from sharpen import zoom_for_cell
+
+        for zoom, cell in AREA_CELL_M.items():
+            self.assertEqual(zoom_for_cell(cell), zoom)
+
+
+class CutlineErrors(unittest.TestCase):
+    # Mutation: keep GDAL's stderr when a warp reads a footprint, and a bad
+    # geometry's coordinates ("Self-intersection at or near point 150.0051
+    # -33.0051") reach the worker's log.
+    def test_a_failed_cut_says_nothing_of_the_footprint(self):
+        from unittest import mock
+
+        from area_export import AreaExportError, warp_to_mga
+
+        failed = mock.Mock(
+            returncode=1, stderr="Self-intersection at 150.0051 -33.0051"
+        )
+        with mock.patch("area_export.subprocess.run", return_value=failed):
+            with self.assertRaises(AreaExportError) as raised:
+                warp_to_mga(
+                    Path("in.tif"), Path("out.tif"), (0, 0, 2, 2), 7856, "near",
+                    2, Path("footprint.geojson"),
+                )  # fmt: skip
+            self.assertNotIn("150.0051", str(raised.exception))
+            with self.assertRaises(AreaExportError) as raised:
+                warp_to_mga(Path("in.tif"), Path("out.tif"), (0, 0, 5, 5), 7856, "near")
+            self.assertIn("150.0051", str(raised.exception))
 
 
 class SyncWithShared(unittest.TestCase):

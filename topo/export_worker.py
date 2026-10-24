@@ -286,7 +286,9 @@ def render_job_export(conn, export_job: dict, work: Path) -> Tuple[Path, Optiona
 
 def get_sharpened_areas(conn, ids: list[str]) -> list[Area]:
     """The sharpened areas the API chose for an export, in its order (the
-    router's). A job deleted since is gone from the list."""
+    router's). Deleting an area's job is refused while this export runs and
+    fails it while queued (api/src/routes/topoJobs.ts), so only a race leaves
+    one missing here, and it drops out."""
     if not ids:
         return []
     with conn.cursor() as cur:
