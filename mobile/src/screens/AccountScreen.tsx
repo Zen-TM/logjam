@@ -333,6 +333,14 @@ function LinkedAccountScreen({
           icon="signOut"
           onPress={() => onSignOut()}
         />
+        <Button
+          label={copy.signOutEverywhere}
+          variant="outlineAccent"
+          icon="signOut"
+          disabled={!online}
+          disabledReason="Needs a connection"
+          onPress={() => onSignOut({ everywhere: true })}
+        />
         <Row
           icon="delete"
           hue={theme.warning}

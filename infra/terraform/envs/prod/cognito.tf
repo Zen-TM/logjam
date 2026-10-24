@@ -100,8 +100,9 @@ resource "aws_cognito_user_pool" "main" {
 }
 
 # 10 years: Logjam GPS must never sign a user out mid-trip, and a trip with no
-# signal must not cost access to local data. Explicit sign-out still revokes the
-# token (enable_token_revocation), as does a password change.
+# signal must not cost access to local data. A session ends by "Sign out
+# everywhere" (GlobalSignOut), an explicit sign-out (enable_token_revocation)
+# or an admin's AdminUserGlobalSignOut; a password change does not end one.
 resource "aws_cognito_user_pool_client" "main" {
   access_token_validity                         = 60
   allowed_oauth_flows                           = ["code"]

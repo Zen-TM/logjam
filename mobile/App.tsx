@@ -8,9 +8,12 @@ import Constants from "expo-constants";
 import { SystemBars } from "react-native-edge-to-edge";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 
+import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED } from "@logjam/shared";
+
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { storeListingUrl } from "./src/version";
+import { assertCanSignOutEverywhere } from "./src/auth/cognitoSignOut";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
 import { requestSync } from "./src/sync/syncEngine";
 import { isReachableNow } from "./src/map/connectivity";
@@ -73,11 +76,12 @@ function askSignOut(confirm: SignOutConfirm): Promise<SignOutChoice> {
  * True when the user has settled it: nothing to lose, or they chose Sign out.
  * "Sync first" runs a sync and asks again with the counts as they now are.
  */
-async function confirmSignOut(): Promise<boolean> {
+async function confirmSignOut(everywhere: boolean): Promise<boolean> {
   for (;;) {
     const confirm = signOutConfirm(
       await countSignOutLosses(),
       await isReachableNow(),
+      everywhere,
     );
     if (!confirm) return true;
     const choice = await askSignOut(confirm);
@@ -193,7 +197,24 @@ export default function App() {
                 // Sign-out wipes this phone's data, and what the account does
                 // not have goes with it: ask once, saying what goes and what
                 // stays (offline/wipedStores.ts declares what that can be).
-                if (!options?.accountDeleted && !(await confirmSignOut())) {
+                if (options?.everywhere) {
+                  // Before anything is wiped: a phone that can't reach Logjam
+                  // can't end the other sessions, and must stay signed in.
+                  try {
+                    await assertCanSignOutEverywhere();
+                  } catch (err) {
+                    console.error(err);
+                    Alert.alert(
+                      ACCOUNT.copy.signOutEverywhere,
+                      SIGN_OUT_EVERYWHERE_FAILED,
+                    );
+                    return;
+                  }
+                }
+                if (
+                  !options?.accountDeleted &&
+                  !(await confirmSignOut(options?.everywhere === true))
+                ) {
                   return;
                 }
                 // Unregister the push token BEFORE tokens are cleared (the DELETE
@@ -208,7 +229,7 @@ export default function App() {
                     `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
                   );
                 }
-                await auth.signOut();
+                await auth.signOut(options?.everywhere === true);
               }}
             />
           </>
