@@ -599,20 +599,17 @@ export default function TopoDialog({
               />
             )}
 
-            {/* Two short answers about the same topo: one line holds both. */}
-            <div className={classes.nameRow}>
-              <TextField
-                label="Name"
-                placeholder="Name this area"
-                disabled={upload.held}
-                aria-describedby={upload.held ? HELD_REASON_ID : undefined}
-                value={topoName}
-                onChange={(e) => {
-                  setTopoName(e.target.value);
-                  setTopoNameTouched(true);
-                }}
-              />
-            </div>
+            <TextField
+              label="Name"
+              placeholder="Name this area"
+              disabled={upload.held}
+              aria-describedby={upload.held ? HELD_REASON_ID : undefined}
+              value={topoName}
+              onChange={(e) => {
+                setTopoName(e.target.value);
+                setTopoNameTouched(true);
+              }}
+            />
             {upload.held && (
               <p id={HELD_REASON_ID} className={classes.summaryNote}>
                 {KEPT_FOR_RESUME}

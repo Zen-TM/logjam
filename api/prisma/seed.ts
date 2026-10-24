@@ -2296,8 +2296,10 @@ async function main() {
     ],
   });
 
-  // Templates of both kinds, validated as the routes validate them so the seed
-  // cannot hold a config the API would refuse to store.
+  // Templates of both kinds, validated so the seed holds no config the API
+  // would refuse: the GeoPDF one as its route validates it, the topo one as
+  // POST /topo-jobs validates a job's settings (topo templates have no route
+  // left; these rows are kept for the data export and account deletion).
   assertValid(
     "the GeoPDF template",
     validateGeoPdfTemplateConfig(GEO_PDF_TEMPLATE_CONFIG),

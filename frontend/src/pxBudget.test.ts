@@ -40,7 +40,7 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/SelectedPlacesDialog.module.css": 5,
   "components/dialogs/SendCopyDialog.module.css": 6,
   "components/dialogs/ShareDialog.module.css": 5,
-  "components/dialogs/TopoDialog.module.css": 17,
+  "components/dialogs/TopoDialog.module.css": 16,
   "components/dialogs/TripLogDialog.module.css": 14,
   "components/dialogs/UnifiedImportDialog.module.css": 16,
   "components/dialogs/topoSettings/topoSettings.module.css": 10,

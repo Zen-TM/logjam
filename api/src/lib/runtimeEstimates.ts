@@ -142,8 +142,8 @@ export async function estimateGeoPdfSeconds(
  * Adaptive processing-time estimate (seconds) for a job of `inputTileCount`
  * ELVIS tiles. Fits a per-input-tile rate from recent completed jobs' real
  * runtimes (TopoJob.pipeline_metrics / startedAt→updatedAt), falling back to a
- * configurable cold-start default below TOPO_ESTIMATE_MIN_SAMPLES so the
- * estimate self-corrects as the pipeline's performance changes.
+ * fixed cold-start rate below TOPO_ESTIMATE_MIN_SAMPLES so the estimate
+ * self-corrects as the pipeline's performance changes.
  *
  * Privacy: reads only aggregate timing + tile counts across jobs — never place
  * names, coordinates, or footprints.
