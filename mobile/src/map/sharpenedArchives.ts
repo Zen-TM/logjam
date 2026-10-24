@@ -102,3 +102,23 @@ export async function inAreasEpoch<T extends object>(
   const areasEpoch = epoch;
   return { ...(await request()), areasEpoch };
 }
+
+/**
+ * The areas a completed-overlays list shows the user, with the epoch the list
+ * was asked in, never the one it lands in, so a list in flight at sign-out is
+ * stopped by the wipe. None for a guest: the list keeps its last answer once
+ * its query is disabled. Guard: sharpenedArchives.test.ts, "gives a list in
+ * flight at sign-out the epoch it was asked in" and "shows a guest no area".
+ */
+export function sharpenedAreasOf(
+  list: { jobs: { sharpened?: SharpenedOverlay }[]; areasEpoch: number } | null,
+  signedIn: boolean,
+): { sharpenedAreas: SharpenedOverlay[]; areasEpoch: number } {
+  if (!list || !signedIn) return { sharpenedAreas: [], areasEpoch: epoch };
+  return {
+    sharpenedAreas: list.jobs.flatMap((job) =>
+      job.sharpened ? [job.sharpened] : [],
+    ),
+    areasEpoch: list.areasEpoch,
+  };
+}

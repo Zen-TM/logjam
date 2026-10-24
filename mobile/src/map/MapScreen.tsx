@@ -329,7 +329,7 @@ import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   inAreasEpoch,
   serveSharpenedArchives,
-  sharpenedAreasEpoch,
+  sharpenedAreasOf,
 } from "./sharpenedArchives";
 import { writeTileJsons } from "./tileJsonFile";
 import {
@@ -1386,20 +1386,11 @@ export function MapScreen({
   const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
 
   // The sharpened areas the user can see: the Terrain group reads each one's
-  // own archive inside it (sourceResolver.ts `routeTerrain`). Gated on the
-  // account as well as the list, which keeps its last answer once disabled.
-  // `areasEpoch` is the one the list was asked in: a sign-out wipe running
-  // while the map is still mounted stops a list asked for before it, landed
-  // or not (sharpenedArchives.ts).
+  // own archive inside it (sourceResolver.ts `routeTerrain`), with the epoch
+  // the list was asked in, so a sign-out wipe running while the map is still
+  // mounted stops it (sharpenedArchives.ts `sharpenedAreasOf`).
   const { sharpenedAreas, areasEpoch } = useMemo(
-    () => ({
-      sharpenedAreas: isGuest
-        ? []
-        : (overlays.data?.jobs ?? []).flatMap((job) =>
-            job.sharpened ? [job.sharpened] : [],
-          ),
-      areasEpoch: overlays.data?.areasEpoch ?? sharpenedAreasEpoch(),
-    }),
+    () => sharpenedAreasOf(overlays.data, !isGuest),
     [isGuest, overlays.data],
   );
   // Before the sources that read them mount (sharpenedArchives.ts).

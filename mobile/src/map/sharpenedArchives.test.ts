@@ -171,6 +171,43 @@ describe("inAreasEpoch", () => {
   });
 });
 
+describe("sharpenedAreasOf", () => {
+  // Red if the map's areas take the epoch they land in rather than the one
+  // the list carries (MapScreen's R2-1 shape): a list in flight at sign-out
+  // would be served after the wipe.
+  it("gives a list in flight at sign-out the epoch it was asked in", async () => {
+    const {
+      inAreasEpoch,
+      serveSharpenedArchives,
+      sharpenedAreasOf,
+      stopSharpenedAreasForWipe,
+    } = await load();
+    let land!: (list: { jobs: { sharpened?: SharpenedOverlay }[] }) => void;
+    const answer = inAreasEpoch(
+      () =>
+        new Promise<{ jobs: { sharpened?: SharpenedOverlay }[] }>(
+          (r) => (land = r),
+        ),
+    );
+    stopSharpenedAreasForWipe();
+    land({ jobs: [{ sharpened: area("a1", null) }, {}] });
+    const { sharpenedAreas, areasEpoch } = sharpenedAreasOf(await answer, true);
+    expect(sharpenedAreas.map((a) => a.id)).toEqual(["a1"]);
+    serveSharpenedArchives(sharpenedAreas, areasEpoch);
+    expect(native.table.size).toBe(0);
+  });
+
+  // Red if a guest gets the list's areas: it keeps its last answer once the
+  // query is disabled.
+  it("shows a guest no area", async () => {
+    const { inAreasEpoch, sharpenedAreasOf } = await load();
+    const list = await inAreasEpoch(async () => ({
+      jobs: [{ sharpened: area("a1", null) }],
+    }));
+    expect(sharpenedAreasOf(list, false).sharpenedAreas).toEqual([]);
+  });
+});
+
 // Red if anything in Logjam GPS sets MLRN's log level below "warn".
 it("never turns MLRN's logging up", () => {
   // MLRN logs every transformed URL, presigned query and all, to its JS log
