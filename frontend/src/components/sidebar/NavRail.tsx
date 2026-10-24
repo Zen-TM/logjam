@@ -44,6 +44,10 @@ function NavButton({
         <Icon idea={icon} size={22} />
       </span>
       <span className={classes.label}>{label}</span>
+      {/* Load-bearing: without it the badge glues "Inbox10" together, and
+          axe's label-content-name-mismatch finds that the accessible name
+          ("Inbox, 10 unread") does not contain it (e2e/a11y.spec.ts). It
+          renders no gap: .item is a column flex, which drops whitespace. */}{" "}
       {count > 0 && (
         <span className={classes.badge} aria-hidden>
           {count}
