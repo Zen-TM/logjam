@@ -27,19 +27,16 @@ import {
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { deleteTopoJob } from "../lib/deleteTopoJob";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasCredits } from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { assertGlobalCapacity } from "../lib/fargateCapacity";
-import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import {
   MAX_INPUT_ZIP_COMPRESSED_BYTES,
   TOPO_UPLOAD_MAX_PARTS,
   TOPO_UPLOAD_PART_BYTES,
-  deleteTopoJobObjects,
   joinTopoUpload,
   signTopoParts,
 } from "../lib/topoUpload";
@@ -47,7 +44,6 @@ import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { sharpenedAreaFrom } from "../services/sharpenedAreas";
 import {
-  deleteSharesFor,
   directlySharedIds,
   getJobRole,
   requireShareAccess,
@@ -668,42 +664,10 @@ router.delete(
       }
     }
 
-    // Re-read outputBytes: the worker may have completed between the
-    // ownership read and the cancel flip — the decrement must match what was
-    // actually charged.
-    const fresh = await prisma.topoJob.findUnique({
-      where: { id: jobId },
-      select: { outputBytes: true },
-    });
-    if (!fresh) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-
-    // S3-first: delete the objects before the DB row and the quota
-    // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
-    // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
-    // — no orphaned objects, and the quota is only decremented once the bytes
-    // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
-    await deleteTopoJobObjects(TOPO_BUCKET, jobId);
-
-    // One transaction: queued exports referencing this job are
-    // force-failed with a clear message (their COG source is about to
-    // disappear), and the row delete commits with the quota decrement.
-    await prisma.$transaction(async (tx) => {
-      await tx.topoExportJob.updateMany({
-        where: { status: "queued", sourceJobIds: { has: jobId } },
-        data: {
-          status: "failed",
-          errorMessage: say`A LiDAR map this export needed was deleted before it started.`,
-        },
-      });
-      // Share.entityId is polymorphic, so Postgres cannot cascade: without
-      // this the rows outlive the job and keep it in a recipient's list.
-      // No tombstone — topo jobs are not delta-synced; the recipient's next
-      // GET /topo-jobs simply stops returning it and the client reconciles
-      // its downloaded overlay from that.
-      await deleteSharesFor(tx, "topoJob", [jobId]);
-      await tx.topoJob.delete({ where: { id: jobId } });
-      await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
-    });
+    // The worker may have completed between the ownership read and the
+    // cancel flip: `deleteTopoJob` re-reads the charge it undoes.
+    if (!(await deleteTopoJob(jobId, job.userId)))
+      throw new AppError(404, say`Couldn't find that LiDAR map.`);
 
     res.status(204).send();
   },
