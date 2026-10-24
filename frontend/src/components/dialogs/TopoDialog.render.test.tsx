@@ -39,8 +39,28 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   // does not reach them. Left real they fetched localhost, and the failure
   // logged while the worker was tearing down (setup-smoke's intermittent
   // EnvironmentTeardownError on "onUserConsoleLog").
-  fetchCurrentUser: vi.fn(async () => ({}) as never),
-  fetchComputeEstimate: vi.fn(async () => ({}) as never),
+  fetchCurrentUser: vi.fn(
+    async () =>
+      ({
+        monthlyComputeUsage: 0,
+        monthlyComputeCredits: 600,
+        monthlyComputeResetAt: "",
+        storageUsedBytes: 0,
+        storageQuotaBytes: 1_000_000_000,
+      }) as never,
+  ),
+  fetchComputeEstimate: vi.fn(
+    async () =>
+      ({
+        estimatedSeconds: null,
+        credits: null,
+        used: 0,
+        quota: 0,
+        remaining: 0,
+        resetAt: "",
+        wouldExceed: false,
+      }) as never,
+  ),
 }));
 
 // Mutation: drop either stub above, and the afterEach assertion goes red.
