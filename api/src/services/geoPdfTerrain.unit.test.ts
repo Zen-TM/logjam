@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   lat2tileY,
+  NSW_5M,
   NSW_SLOPE,
   RASTER_TEMPLATE_DEFAULTS,
   type SharpenedArea,
@@ -11,6 +12,7 @@ import {
 } from "@logjam/shared";
 import {
   areasOnPage,
+  contourTilesBySource,
   decodeTerrarium,
   hillshadePixels,
   nswContourZoom,
@@ -323,14 +325,46 @@ describe("terrainReadZoom", () => {
   });
 });
 
+describe("contourTilesBySource", () => {
+  // Mutation: send every tile to the statewide archive, or route areas with
+  // no contour archive (`contours: false`) to their own.
+  it("reads each contour tile from the first area with contours that holds it, else statewide", () => {
+    const tiles = [
+      { z: 14, x: 30000, y: 19500 }, // the areas' z14 tile
+      { z: 14, x: 30001, y: 19500 }, // east of every area
+    ];
+    const none = { ...area(17, "no-contours"), contours: false };
+    const grouped = contourTilesBySource([none, area(16)], tiles);
+    expect([...grouped]).toEqual([
+      ["area-16", [tiles[0]]],
+      [STATEWIDE, [tiles[1]]],
+    ]);
+    expect([...contourTilesBySource([none], tiles).keys()]).toEqual([
+      STATEWIDE,
+    ]);
+  });
+});
+
 describe("terrainCreditLines", () => {
-  // Mutation: credit only the area, or only the statewide data.
-  it("credits each area's survey beside the NSW 5 m data, each once", () => {
-    const drawn = new Set(["slope"] as const);
-    expect(terrainCreditLines(drawn, [])).toEqual([NSW_SLOPE.credit]);
-    expect(terrainCreditLines(drawn, [area(16), area(17, "another")])).toEqual([
-      NSW_SLOPE.credit,
-      "Slope: derived from a made-up survey. CC BY 3.0 AU.",
+  const SURVEY = "derived from a made-up survey. CC BY 3.0 AU.";
+
+  // Mutation: word an area's line from every layer the page drew.
+  it("credits each area's survey for the layers it supplied, beside the NSW 5 m data", () => {
+    const drawn = new Set(["contours", "slope"] as const);
+    expect(terrainCreditLines(drawn, new Map())).toEqual([
+      NSW_5M.credit.replace(/^Elevation/, "Contours and slope"),
+    ]);
+    expect(
+      terrainCreditLines(
+        drawn,
+        new Map([
+          [area(16), new Set(["slope"] as const)],
+          [area(17, "another"), new Set(["slope"] as const)],
+        ]),
+      ),
+    ).toEqual([
+      NSW_5M.credit.replace(/^Elevation/, "Contours and slope"),
+      `Slope: ${SURVEY}`,
     ]);
   });
 });

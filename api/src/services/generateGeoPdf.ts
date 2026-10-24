@@ -42,7 +42,6 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   nswContourStyle,
-  terrainTileArchive,
   type TerrainArchiveLayer,
 } from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
@@ -53,6 +52,7 @@ import { VectorTileFeature } from "@mapbox/vector-tile";
 import { decodeVectorTileLayer } from "./geoPdfVectorTile";
 import {
   areasOnPage,
+  contourTilesBySource,
   decodeTerrarium,
   hillshadePixels,
   nswContourZoom,
@@ -411,7 +411,8 @@ export async function generateGeoPdf(
   // on the page (e.g. a layer selected over an area with no LiDAR coverage).
   const renderedOverlays = new Set<string>();
   const drawnTerrain = new Set<TerrainLayerKey>();
-  const drawnAreas = new Set<VisibleSharpenedArea>();
+  // Each area that drew, and the layers it supplied: its credit names those.
+  const drawnAreas = new Map<VisibleSharpenedArea, Set<TerrainLayerKey>>();
   // Fail loud on a missing bucket instead of guessing a name: every S3 error in
   // the overlay path is swallowed as "this job has no such layer" (the
   // deliberate 404-tolerance below), so a wrong bucket renders every GeoPDF
@@ -506,10 +507,13 @@ export async function generateGeoPdf(
         }
         return archive;
       };
-    const creditAreas = (sources: Iterable<string>) => {
+    const creditAreas = (layer: TerrainLayerKey, sources: Iterable<string>) => {
       for (const source of sources) {
         const area = areas.find((a) => a.id === source);
-        if (area) drawnAreas.add(area);
+        if (!area) continue;
+        const layers = drawnAreas.get(area) ?? new Set<TerrainLayerKey>();
+        layers.add(layer);
+        drawnAreas.set(area, layers);
       }
     };
     const demZoom = (maxzoom: number) =>
@@ -531,7 +535,7 @@ export async function generateGeoPdf(
         true,
       );
       if (drew.size > 0) drawnTerrain.add("hillshade");
-      creditAreas(drew);
+      creditAreas("hillshade", drew);
     }
     if (config.overlays.includes("slope")) {
       const drew = await drawTerrarium(
@@ -550,7 +554,7 @@ export async function generateGeoPdf(
         false,
       );
       if (drew.size > 0) drawnTerrain.add("slope");
-      creditAreas(drew);
+      creditAreas("slope", drew);
     }
     const contourZoom = nswContourZoom(config.scale, centreLat, overlayZoom);
     if (
@@ -570,23 +574,10 @@ export async function generateGeoPdf(
         nativeW,
         nativeH,
       );
-      const bySource = new Map<string, TileCoord[]>();
-      for (const tile of contourTransform.tiles) {
-        const answer = terrainTileArchive(
-          areas,
-          "contours",
-          tile.z,
-          tile.x,
-          tile.y,
-        );
-        // Never absent for contours: deeper zooms overzoom z14.
-        if (answer === "absent") continue;
-        const source = answer === "statewide" ? STATEWIDE : answer.id;
-        const tiles = bySource.get(source) ?? [];
-        tiles.push(tile);
-        bySource.set(source, tiles);
-      }
-      for (const [source, tiles] of bySource) {
+      for (const [source, tiles] of contourTilesBySource(
+        areas,
+        contourTransform.tiles,
+      )) {
         const archive = contoursFrom(source);
         if (!archive) continue;
         const drew = await fetchAndDrawPMTilesVectorDirect(
@@ -605,7 +596,7 @@ export async function generateGeoPdf(
         );
         if (drew > 0) {
           drawnTerrain.add("contours");
-          creditAreas([source]);
+          creditAreas("contours", [source]);
         }
       }
     }
@@ -731,7 +722,7 @@ export async function generateGeoPdf(
     elementDpi,
     config,
     Array.from(renderedOverlays),
-    terrainCreditLines(drawnTerrain, [...drawnAreas]),
+    terrainCreditLines(drawnTerrain, drawnAreas),
     baseLayerExtractedAt,
   );
 

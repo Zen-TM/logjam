@@ -370,19 +370,48 @@ export function terrainGrid(
 }
 
 /**
- * The credit lines for the terrain a print drew: the statewide line, then
- * each area's survey worded the same way. The statewide line is the NSW 5 m
- * credit an area's always carries too (`demCredits`), because its edge tiles
- * hold 5 m heights; a layer drew wherever an area did, so it is never null
- * then.
+ * The contour tiles a print reads, grouped by the archive each comes from
+ * (`STATEWIDE` or an area's id): at z14 and deeper the first area with a
+ * contour archive whose range holds the tile, else statewide
+ * (`terrainTileArchive`). Never absent: deeper zooms overzoom z14.
+ */
+export function contourTilesBySource(
+  areas: readonly SharpenedArea[],
+  tiles: readonly TileCoord[],
+): Map<string, TileCoord[]> {
+  const bySource = new Map<string, TileCoord[]>();
+  for (const tile of tiles) {
+    const answer = terrainTileArchive(
+      areas,
+      "contours",
+      tile.z,
+      tile.x,
+      tile.y,
+    );
+    if (answer === "absent") continue;
+    const source = answer === "statewide" ? STATEWIDE : answer.id;
+    const group = bySource.get(source) ?? [];
+    group.push(tile);
+    bySource.set(source, group);
+  }
+  return bySource;
+}
+
+/**
+ * The credit lines for the terrain a print drew: the statewide line for every
+ * layer drawn, then each area's survey for the layers that area supplied,
+ * worded the same way. The statewide line is the NSW 5 m credit an area's
+ * always carries too (`demCredits`), because its edge tiles hold 5 m heights;
+ * every layer an area supplied is in `drawn`, so that line is there whenever
+ * an area's is.
  */
 export function terrainCreditLines(
   drawn: ReadonlySet<TerrainLayerKey>,
-  areas: readonly SharpenedArea[],
+  areas: ReadonlyMap<SharpenedArea, ReadonlySet<TerrainLayerKey>>,
 ): string[] {
   const lines = [
     terrainCredit(drawn),
-    ...areas.map((area) => terrainCredit(drawn, area.credit)),
+    ...[...areas].map(([area, layers]) => terrainCredit(layers, area.credit)),
   ].filter((line): line is string => line !== null);
   return [...new Set(lines)];
 }
