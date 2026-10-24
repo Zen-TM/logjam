@@ -126,6 +126,14 @@ describe("terrainCredit", () => {
     expect(terrainCredit(["slope"])).toBe(NSW_SLOPE.credit);
     expect(terrainCredit([])).toBeNull();
   });
+
+  // Mutation: reword only the 5 m credit, ignoring the one passed.
+  it("words an area's own credit the same way", () => {
+    const survey = "Elevation: derived from a made-up survey. CC BY 3.0 AU.";
+    expect(terrainCredit(["contours", "slope"], survey)).toBe(
+      "Contours and slope: derived from a made-up survey. CC BY 3.0 AU.",
+    );
+  });
 });
 
 describe("the statewide slope and hillshade", () => {
