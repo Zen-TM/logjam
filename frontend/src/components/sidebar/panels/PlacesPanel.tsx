@@ -431,7 +431,7 @@ function PlacesPanel({
       logTrip: handOff("logTrip"),
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),
-      makeGeoPdf: makeMap("geopdf"),
+      exportArea: makeMap("geopdf"),
       share: () => onSharePlaces([place.id]),
       copy: handOff("copy"),
       copyAndRemove: handOff("copyAndRemove"),

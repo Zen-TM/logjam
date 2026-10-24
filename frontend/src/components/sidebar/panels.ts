@@ -57,4 +57,4 @@ export const PANEL_TITLES: Record<PanelId, string> = {
 /** A page with two views swaps its content in place under one rail of chips,
  *  rather than being two pages. */
 export type LogsView = "logs" | "stats";
-export type MapsView = "geopdfs" | "lidar";
+export type MapsView = "geopdfs" | "exports" | "lidar";

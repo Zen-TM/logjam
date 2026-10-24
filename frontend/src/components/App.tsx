@@ -85,6 +85,7 @@ import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
 import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
 import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
+import { footprintBounds } from "./map/topoFootprint";
 import {
   buildWays,
   wayFromRoute,
@@ -303,6 +304,13 @@ function App() {
   const [showTopo, setShowTopo] = useState(false);
   const [selectingTopoBbox, setSelectingTopoBbox] = useState(false);
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
+  // Export an area: a GIS format's box is drawn with the same tool.
+  const [selectingExportBox, setSelectingExportBox] = useState(false);
+  const [pendingExportBox, setPendingExportBox] = useState<TBbox | null>(null);
+  // The box an opening was given (a selection's, a topo's), and whether it
+  // opens on a GIS format (from Maps, Exports).
+  const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
+  const [exportOpensWithGis, setExportOpensWithGis] = useState(false);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
   const [topoFlyTarget, setTopoFlyTarget] = useState<GeoJsonPolygonal | null>(
@@ -1177,10 +1185,10 @@ function App() {
         if (view.downloadUrl) {
           triggerDownload(view.downloadUrl);
         } else {
-          setMapsView("lidar");
+          setMapsView("exports");
           setActivePanel("maps");
           toast.error(
-            "Export download expired. Open it again from Maps, LiDAR topos.",
+            "Export download expired. Open it again from Maps, Exports.",
           );
         }
       })
@@ -1459,14 +1467,16 @@ function App() {
     ) : null;
 
   // "Make a map" from Places: the selection's bounds prefill the chosen product.
-  // A topo goes straight to its dialog with the box; a GeoPDF opens its paper
-  // frame on the map over the box, because the paper decides the final extent.
+  // A topo goes straight to its dialog with the box; an export opens a GeoPDF's
+  // paper frame on the map over the box, because the paper decides the final
+  // extent, and keeps the box for a GIS format.
   const makeMap = (bounds: TBbox, kind: MapKind) => {
     if (kind === "topo") {
       setPendingTopoBbox(bounds);
       setShowTopo(true);
       return;
     }
+    setExportAreaSeed(bounds);
     setEditingGeoPdfTemplate(undefined);
     setInitialGeoPdfTemplateId(null);
     setGeoPdfPaperAspect(210 / 297);
@@ -1515,9 +1525,9 @@ function App() {
           },
         },
         {
-          id: "geopdf",
-          label: "Make a GeoPDF",
-          icon: "geoPdf",
+          id: "export",
+          label: "Export an area",
+          icon: "export",
           onSelect: () => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1533,7 +1543,8 @@ function App() {
     pickingCoords ||
     selectingFilterArea ||
     selectingGeoPdfExtent ||
-    selectingTopoBbox;
+    selectingTopoBbox ||
+    selectingExportBox;
 
   return (
     <div className={classes.app}>
@@ -1570,6 +1581,9 @@ function App() {
           setShowGeoPdf(false);
           setEditingGeoPdfTemplate(undefined);
           setInitialGeoPdfTemplateId(null);
+          setExportAreaSeed(null);
+          setPendingExportBox(null);
+          setExportOpensWithGis(false);
         }}
         onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
           // The latest pick, every visit: the map follows the dialog.
@@ -1599,6 +1613,15 @@ function App() {
         }}
         initialTemplateId={initialGeoPdfTemplateId}
         onJobQueued={handleGeoPdfJobQueued}
+        openWithGis={exportOpensWithGis}
+        areaSeed={exportAreaSeed}
+        onPickArea={() => {
+          setShowGeoPdf(false);
+          setActivePanel(null);
+          setSelectingExportBox(true);
+        }}
+        pendingArea={pendingExportBox}
+        onExportQueued={refetchTopoExports}
       />
       <div className={dimUI ? classes.dimmed : undefined}>
         <NavRail
@@ -1767,6 +1790,16 @@ function App() {
             setInitialTopoTemplateId(null);
             setShowTopo(true);
           }}
+          onOpenExport={() => {
+            setEditingGeoPdfTemplate(undefined);
+            setInitialGeoPdfTemplateId(null);
+            setExportOpensWithGis(true);
+            setShowGeoPdf(true);
+          }}
+          onExportArea={(job) => {
+            const bounds = job.footprint && footprintBounds(job.footprint);
+            if (bounds) makeMap(bounds, "geopdf");
+          }}
           onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
           onDismissActiveJob={handleDismissActiveTopoJob}
           onQuotaChanged={refetchCurrentUser}
@@ -1884,12 +1917,26 @@ function App() {
             mapBoundsRef.current = bounds;
             setMapBounds(bounds);
           }}
-          selectingBbox={selectingTopoBbox}
+          selectingBbox={selectingTopoBbox || selectingExportBox}
           onBboxSelected={(bbox) => {
+            if (selectingExportBox) {
+              setPendingExportBox(bbox);
+              setSelectingExportBox(false);
+              setShowGeoPdf(true);
+              return;
+            }
             setPendingTopoBbox(bbox);
             setSelectingTopoBbox(false);
             setShowTopo(true);
           }}
+          onBboxCancelled={
+            selectingExportBox
+              ? () => {
+                  setSelectingExportBox(false);
+                  setShowGeoPdf(true);
+                }
+              : undefined
+          }
           topoLayers={mapTopoLayers}
           slopeBands={slopeBands.drawn}
           vectorStyle={vectorStyle}

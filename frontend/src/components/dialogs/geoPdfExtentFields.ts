@@ -20,6 +20,11 @@ import {
 export type ExtentFieldKey = "n" | "s" | "e" | "w";
 export type ExtentFieldValues = Record<ExtentFieldKey, string>;
 export type ExtentFieldErrors = Record<ExtentFieldKey, string | null>;
+/** The edges and how they are typed: a GeoPDF's extent, or a free box. */
+type Edges = Pick<
+  ExtentState,
+  "north" | "south" | "east" | "west" | "coordMode"
+>;
 
 function rawToNumber(raw: string): number | null {
   const trimmed = raw.trim();
@@ -41,7 +46,7 @@ function rawToNumber(raw: string): number | null {
 export function parseExtentField(
   field: ExtentFieldKey,
   raw: string,
-  state: ExtentState,
+  state: Edges,
 ): number | null {
   const v = rawToNumber(raw);
   if (v === null) return null;
@@ -91,7 +96,7 @@ function rangeError(
  */
 export function extentFieldErrors(
   values: ExtentFieldValues,
-  state: ExtentState,
+  state: Edges,
 ): ExtentFieldErrors {
   const latlon = state.coordMode === "latlon";
   const errors: ExtentFieldErrors = { n: null, s: null, e: null, w: null };
