@@ -803,12 +803,12 @@ jobs:
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py ticked "$id" 150.311 -33.780
-      # Runbook step 6: the reaper fails a job whose worker died mid-render,
-      # and a worker relaunched for it must leave it failed. A ticked job, set
-      # up by hand: its vegetation pass runs long enough for the heartbeat to
-      # report it, where an unticked one-tile job is done in seconds. Both
-      # workers are started by hand, since only the reaper's failing of the
-      # row is stood in for here.
+      # Runbook step 6: the reaper fails a job whose worker died mid-run, and
+      # a worker relaunched for it must leave it failed. A ticked job, set up
+      # by hand, its worker killed as soon as it has claimed the row: the
+      # whole one-tile job takes under a minute, less than two heartbeats,
+      # so its progress is no trigger. Both workers are started by hand,
+      # since only the reaper's failing of the row is stood in for here.
       - name: A relaunched worker leaves a reaped job alone
         env:
           ZIP: ${{ steps.sample.outputs.zip }}
@@ -817,13 +817,12 @@ jobs:
           cid=$(docker run -d --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE")
           sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
           for _ in $(seq 1 120); do
-            [ "$(sql "SELECT coalesce(render_tiles_done, 0) > 0 FROM topo_jobs WHERE id = '$JOB_ID'")" = t ] && break
-            sleep 5
+            [ "$(sql "SELECT status FROM topo_jobs WHERE id = '$JOB_ID'")" = processing ] && break
+            sleep 1
           done
-          done=$(sql "SELECT coalesce(render_tiles_done, 0) FROM topo_jobs WHERE id = '$JOB_ID'")
-          [ "$done" -gt 0 ] || { echo "the worker never rendered (render_tiles_done=$done)"; docker logs "$cid"; exit 1; }
-          sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
           docker kill "$cid"
+          status=$(sql "SELECT status FROM topo_jobs WHERE id = '$JOB_ID'")
+          [ "$status" = processing ] || { echo "killed with the job $status, not mid-run"; docker logs "$cid"; exit 1; }
           sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
           # The killed worker may have uploaded the sharpen archives before
           # its vegetation pass; the relaunch must add or rewrite nothing.

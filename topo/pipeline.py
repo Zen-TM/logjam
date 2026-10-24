@@ -1158,12 +1158,12 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
         has_vegetation=has_veg,
     )
 
-    mode_labels = {
-        MODE_LAZ_ONLY: "C – LAZ (full PDAL DTM + DSM pipeline)",
-        MODE_DEM_ONLY: "A – DEM only  (no point cloud; vegetation layer unavailable)",
-    }
     log.info(f"ELVIS contents detected:\n{contents.describe()}")
-    log.info(f"Selected pipeline mode {mode_labels[mode]}")
+    log.info(
+        "Point clouds in the ZIP"
+        if mode == MODE_LAZ_ONLY
+        else "No point clouds in the ZIP: no vegetation layer"
+    )
 
     if not has_veg:
         log.warning(

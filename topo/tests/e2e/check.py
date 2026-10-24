@@ -10,11 +10,12 @@ something.
 
 Mutations that turn it red: dropping the `expected_status="pending"` guard on
 worker.py's claim fails "status stays failed"; pointing FIRE_HISTORY_S3_PATH
-at a missing key fails "fire history read from S3". A second worker that never
-renders is caught by ci.yml's step, which needs render_tiles_done > 0 before
-it kills the container. For `sharpened`: a mark left in place of the result
-fails "the mark became the result"; no fill, or fill read a tile away or
-flipped, fails "the fill is the statewide value, in place".
+at a missing key fails "fire history read from S3". A first worker that is
+not killed mid-run is caught by ci.yml's step, which needs the row still
+`processing` once it has killed the container. For `sharpened`: a mark left
+in place of the result fails "the mark became the result"; no fill, or fill
+read a tile away or flipped, fails "the fill is the statewide value, in
+place".
 """
 
 import gzip

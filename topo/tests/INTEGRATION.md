@@ -68,9 +68,10 @@ elvis-katoomba-2506258-laz.zip`:
    raster's staleness in its metrics, and charges storage; the input ZIP is
    gone, and the vegetation tile on Mount Solitary is not blank.
 6. **Resurrection check** (`e2e/check.py reaped`): a ticked job is inserted
-   by hand (`e2e/ticked-job.sh`, so no RunTask launches a worker for it; its
-   vegetation pass runs long enough for the heartbeat to report it), its
-   worker killed mid-run and the row force-failed as the reaper would; a
+   by hand (`e2e/ticked-job.sh`, so no RunTask launches a worker for it), its
+   worker killed as soon as it has claimed the row (the one-tile job is done
+   in under a minute, too soon for its heartbeat) and the row force-failed as
+   the reaper would; a
    worker relaunched for the same `JOB_ID` leaves it `failed`, writes no
    outputs and sends no notification. Both workers are started by
    `docker run` with `e2e/worker.env`, not RunTask: only the reaper's half is
