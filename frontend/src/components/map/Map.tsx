@@ -639,6 +639,7 @@ function Map({
   onDrawPointMove,
   selectingBbox,
   onBboxSelected,
+  onBboxCancelled,
   selectingFilterArea,
   onFilterAreaSelected,
   topoLayers,
@@ -735,6 +736,8 @@ function Map({
   onDrawPointInsert: (segmentIndex: number, lngLat: [number, number]) => void;
   selectingBbox?: boolean;
   onBboxSelected?: (bbox: TBbox) => void;
+  /** Given, the box tool has a Cancel that leaves it undrawn. */
+  onBboxCancelled?: () => void;
   /** The Places filter's "area on map" mode — the third box-draw on this map. */
   selectingFilterArea?: boolean;
   onFilterAreaSelected?: (bbox: TBbox) => void;
@@ -3527,8 +3530,13 @@ function Map({
         <div className={classes.pickBanner}>
           <Notice>
             {pickVerb} to set a corner, then {pickVerb.toLowerCase()} again to
-            define the topo area
+            define the area
           </Notice>
+        </div>
+      )}
+      {selectingBbox && onBboxCancelled && (
+        <div className={classes.geoPdfConfirmBar}>
+          <Button onClick={onBboxCancelled}>Cancel</Button>
         </div>
       )}
       {selectingGeoPdfExtent && (

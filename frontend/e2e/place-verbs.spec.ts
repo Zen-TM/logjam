@@ -35,7 +35,7 @@ test("an owned place's row has every verb, and Edit opens the form on its page",
     "Log a trip here",
     "Edit place",
     "Sharpen the area here",
-    "Make a GeoPDF here",
+    "Export the area here",
     "Share or export…",
     "Delete place",
   ]);
@@ -61,7 +61,7 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Open place",
     "Sharpen the area here",
-    "Make a GeoPDF here",
+    "Export the area here",
     "Save a copy",
     "Save a copy and remove",
     "Remove from my account",

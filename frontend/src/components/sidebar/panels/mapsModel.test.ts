@@ -3,13 +3,13 @@ import type { GeoPdfJobView, TopoExportJobView } from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import {
   exportLabel,
+  exportsBeingMade,
   fileSubtitle,
   geoPdfLabel,
   geoPdfsBeingMade,
   isOlderLidarJob,
-  offersOldExport,
   offersTemplates,
-  topoWorkBeingMade,
+  toposBeingMade,
 } from "./mapsModel";
 
 const geoPdf = (overrides: Partial<GeoPdfJobView>): GeoPdfJobView => ({
@@ -47,6 +47,7 @@ const topoExport = (
 ): TopoExportJobView => ({
   id: "e",
   sourceJobIds: ["t1"],
+  bbox: null,
   layers: ["contours"],
   format: "gpkg",
   bundling: "composite",
@@ -91,20 +92,29 @@ describe("what the Maps page is still making", () => {
     expect(zero.detail).toBe("Making");
   });
 
-  it("puts topos and exports of topos in ONE list, newest first", () => {
-    const items = topoWorkBeingMade(
-      [
-        topo({
-          id: "old",
-          createdAt: "2026-09-01T00:00:00.000Z",
-          status: "pending",
-        }),
-        topo({
-          id: "new",
-          createdAt: "2026-09-09T00:00:00.000Z",
-          estimatedSeconds: 1260,
-        }),
-      ],
+  it("lists topos still on their way, newest first", () => {
+    const items = toposBeingMade([
+      topo({
+        id: "old",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        status: "pending",
+      }),
+      topo({
+        id: "new",
+        createdAt: "2026-09-09T00:00:00.000Z",
+        estimatedSeconds: 1260,
+      }),
+    ]);
+    expect(
+      items.map((item) => [item.kind, item.id, item.title, item.detail]),
+    ).toEqual([
+      ["topo", "new", "Claustral", "Processing · about 21 min"],
+      ["topo", "old", "Claustral", "Queued"],
+    ]);
+  });
+
+  it("lists exports still on their way, and not the finished ones", () => {
+    const items = exportsBeingMade(
       [
         topoExport({
           id: "mid",
@@ -118,18 +128,12 @@ describe("what the Maps page is still making", () => {
     expect(
       items.map((item) => [item.kind, item.id, item.title, item.detail]),
     ).toEqual([
-      ["topo", "new", "Claustral", "Processing · about 21 min"],
       ["export", "mid", "Wollangambe", "Export as GeoPackage · Queued"],
-      ["topo", "old", "Claustral", "Queued"],
     ]);
   });
 
   it("says a failure in the worker's words, or plainly when it gave none", () => {
-    const [failed] = topoWorkBeingMade(
-      [topo({ status: "failed" })],
-      [],
-      new Map(),
-    );
+    const [failed] = toposBeingMade([topo({ status: "failed" })]);
     expect(failed).toMatchObject({ failed: true, detail: "Couldn't be made" });
   });
 });
@@ -145,11 +149,27 @@ describe("what a finished map is called", () => {
   // The source topo is deletable; its exports outlive it for their 7 days.
   it("names an export after its topo, even once the topo is gone", () => {
     expect(
-      exportLabel({ sourceJobIds: ["t1"] }, new Map([["t1", "Wollangambe"]])),
+      exportLabel(
+        { sourceJobIds: ["t1"], bbox: null },
+        new Map([["t1", "Wollangambe"]]),
+      ),
     ).toBe("Wollangambe");
-    expect(exportLabel({ sourceJobIds: ["gone"] }, new Map())).toBe(
+    expect(exportLabel({ sourceJobIds: ["gone"], bbox: null }, new Map())).toBe(
       "Deleted topo",
     );
+  });
+
+  // Mutation: drop the bbox branch, and every area export reads "Deleted topo".
+  it("names an export of an area by the ground it covers", () => {
+    expect(
+      exportLabel(
+        {
+          sourceJobIds: [],
+          bbox: { west: 150.2, south: -33.7, east: 150.3, north: -33.6 },
+        },
+        new Map(),
+      ),
+    ).toBe("Area of 9.3 km × 11.1 km");
   });
 
   it("gives a file's size in the phone's words, and leaves out what it does not know", () => {
@@ -178,17 +198,6 @@ describe("an older LiDAR job", () => {
 });
 
 describe("what the LiDAR list offers", () => {
-  // Mutations: Export offered on a sharpened job (it has none of the files
-  // the export reads), or hidden on an older job, including after a revert.
-  it("offers the old export only on a job with its files", () => {
-    expect(offersOldExport({})).toBe(true);
-    expect(
-      offersOldExport({ sharpened: {} } as Parameters<
-        typeof offersOldExport
-      >[0]),
-    ).toBe(false);
-  });
-
   // Mutation: keep the template entries with the switch on, and a template
   // row starts a sharpened job with settings it can't use.
   it("offers templates only while new jobs don't sharpen", () => {

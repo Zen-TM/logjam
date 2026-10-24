@@ -10,6 +10,7 @@ import type {
   RasterTemplateSettings,
   ValidationResult,
 } from "./topoSettings.js";
+import type { AreaBbox } from "./areaExport.js";
 
 export type ExportFormat = "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx";
 // KMZ is deferred until Avenza-structure quirks are validated in user testing.
@@ -327,6 +328,8 @@ export interface TopoExportJobView {
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** An export of an area: its box. Null for an export of a topo. */
+  bbox: AreaBbox | null;
   downloadUrl: string | null; // presigned, set only when status=completed
   downloadExpiresAt: string | null;
 }
