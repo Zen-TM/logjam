@@ -1,8 +1,6 @@
 /**
  * Topo layer constants — thin re-export. The canonical TOPO_LAYERS list lives
- * in shared/src/topoSettings.ts; the only remaining mirror is
- * topo/worker.py → ALL_LAYERS (Python). The view types below are
- * frontend-local.
+ * in shared/src/topoSettings.ts. The view types below are frontend-local.
  */
 export { TOPO_LAYERS } from "@logjam/shared";
 export type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";

@@ -37,6 +37,7 @@ class TestBuildPipelineFull(unittest.TestCase):
             "below.tif",
             "all.tif",
             resolution=0.5,
+            ground="smrf",
         )["pipeline"]
 
     def test_one_reader_per_input(self):
@@ -63,6 +64,25 @@ class TestBuildPipelineFull(unittest.TestCase):
     def test_uses_smrf_and_hag_nn(self):
         self.assertEqual(len(_stages_of_type(self.p, "filters.smrf")), 1)
         self.assertEqual(len(_stages_of_type(self.p, "filters.hag_nn")), 1)
+
+    # Red if a survey with class 2 still has its classes wiped and SMRF run:
+    # on a classified survey SMRF reads canopy as ground (sharpen.py's rule),
+    # so heights above ground come out low under trees.
+    def test_class2_ground_keeps_the_survey_classes(self):
+        p = build_pipeline_full(
+            ["a.laz"],
+            "dtm.tif",
+            "lo.tif",
+            "hi.tif",
+            "below.tif",
+            "all.tif",
+            ground="class2",
+        )["pipeline"]
+        types = [s["type"] for s in p]
+        self.assertNotIn("filters.assign", types)
+        self.assertNotIn("filters.smrf", types)
+        # Noise and overlap still go first; height above ground still runs.
+        self.assertLess(types.index("filters.range"), types.index("filters.hag_nn"))
 
     def test_five_gdal_writers_with_resolution(self):
         writers = _stages_of_type(self.p, "writers.gdal")

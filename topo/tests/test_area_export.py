@@ -181,26 +181,24 @@ class MgaExtent(unittest.TestCase):
             self.assertTrue(west <= lon <= east and south <= lat <= north, (lon, lat))
 
 
-@unittest.skipIf(is_stubbed("numpy") or is_stubbed("PIL"), "needs numpy and Pillow")
 class MbtilesColours(unittest.TestCase):
-    """An MBTiles colours its slope through a colour table, and must draw it
-    as the pipeline's own tile renderer does."""
+    """An MBTiles colours its slope through a colour table: a band takes
+    fromDeg up to, not including, toDeg."""
 
-    def every_value(self):
-        import numpy as np
-
-        return np.tile(np.arange(256, dtype=np.float32), (256, 1))
-
-    # Mutation: let a band run through toDeg, and a 50° cliff is drawn in the
-    # 40–50 colour as well as the 50–60 one.
-    def test_slope_matches_render_slope_tile(self):
-        import numpy as np
-        from pipeline import _default_render_settings, render_slope_tile
-
-        settings = _default_render_settings()
-        drawn = np.asarray(render_slope_tile(self.every_value(), settings))[0]
-        table = slope_colours(settings["slope"]["bands"])
-        self.assertEqual([tuple(int(c) for c in px) for px in drawn], table)
+    # Mutation: let a band run through toDeg, and a 60° cliff past the last
+    # band is drawn in the 50–60 colour.
+    def test_a_band_stops_before_its_toDeg(self):
+        table = slope_colours(
+            [
+                {"fromDeg": 40, "toDeg": 50, "colour": "#ff000080"},
+                {"fromDeg": 50, "toDeg": 60, "colour": "#0000ffff"},
+            ]
+        )
+        clear, red, blue = (0, 0, 0, 0), (255, 0, 0, 128), (0, 0, 255, 255)
+        self.assertEqual(
+            [table[d] for d in (39, 40, 49, 50, 59, 60, 255)],
+            [clear, red, red, blue, blue, clear, clear],
+        )
 
 
 class HillshadeOverlay(unittest.TestCase):

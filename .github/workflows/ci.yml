@@ -566,10 +566,9 @@ jobs:
   # /topo-jobs/:id/start calls ECS RunTask against MiniStack's ECS, which runs
   # the image from a task definition registered here, so the RunTask call, its
   # network config, the container override and the task definition's env are
-  # all exercised. The worker gets a network with no internet: Overpass is a
-  # stub serving a committed response, and the SVTM and fire-history rasters it
-  # reads through /vsis3/ are made-up ones in MiniStack, so a read the job
-  # forgot to stub fails instead of reaching out.
+  # all exercised. The worker gets a network with no internet: the SVTM and
+  # fire-history rasters it reads through /vsis3/ are made-up ones in
+  # MiniStack, so a read the job forgot to stub fails instead of reaching out.
   #
   # Its own job, not a step of api-integration: it is scoped to what the worker
   # image is built from and the two API files that launch it (ci-scope.sh)
@@ -705,14 +704,11 @@ jobs:
           aws s3 cp "$RUNNER_TEMP/rasters/fire_history_year.tif" "s3://$S3_BUCKET_TOPO/fire/fire_history_year.tif"
       # MiniStack stays on the job's network too (the runner and the API reach
       # it there), but its tasks run on this one.
-      - name: A network with no internet, and the Overpass stub on it
+      - name: A network with no internet
         run: |
           docker network create --internal "$NET"
           docker network connect --alias postgres "$NET" "${{ job.services.postgres.id }}"
           docker network connect --alias ministack "$NET" "${{ job.services.ministack.id }}"
-          docker run -d --name overpass --network "$NET" --network-alias overpass \
-            -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
-            /e2e/overpass_stub.py /e2e/overpass-katoomba-2506258.json
       # The task definition is worker.env, which the first step checks against
       # prod's: one copy of the env. The container name is prod's too, so an
       # API that overrides a container the definition doesn't have loses its
@@ -787,39 +783,37 @@ jobs:
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py sharpened "$JOB_ID" 150.311 -33.780
-      # An unmarked job still runs the legacy pipeline: one pending when the
-      # switch flipped, and the vegetation pass, run that way. Inserted and run
-      # by hand, since the API now marks every new job.
-      - name: An unmarked job runs the legacy pipeline in full
+      # The API marks a ticked job for the vegetation pass, which reads the
+      # SVTM and fire rasters.
+      - name: A ticked job makes its vegetation layer too
         env:
           ZIP: ${{ steps.sample.outputs.zip }}
         run: |
           set -o pipefail
-          id=$($E2E/legacy-job.sh "e2e legacy" "$ZIP")
-          docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$id" "$IMAGE" \
-            2>&1 | tee "$RUNNER_TEMP/legacy.log"
-          # Mutation that turns the first grep red: drop OVERPASS_ENDPOINTS from
-          # worker.env; the worker tries the real mirrors and logs "Overpass
-          # attempt". Mutation that turns the second red: empty
-          # SVTM_FORMATION_S3_PATH there; the worker logs "skipping" instead.
-          if grep -E 'raster unavailable|Overpass attempt' "$RUNNER_TEMP/legacy.log"; then exit 1; fi
-          grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/legacy.log" \
+          id=$($E2E/start-job.sh "e2e ticked" "$ZIP" vegetation)
+          cid=$($E2E/ecs-worker.sh "$id")
+          docker logs -f "$cid" 2>&1 | tee "$RUNNER_TEMP/ticked.log"
+          [ "$(docker wait "$cid")" = 0 ] || { echo "the worker exited non-zero"; exit 1; }
+          # Mutation that turns these red: empty SVTM_FORMATION_S3_PATH in
+          # worker.env; the worker logs "skipping" instead.
+          if grep -E 'raster unavailable' "$RUNNER_TEMP/ticked.log"; then exit 1; fi
+          grep -q 'Warping SVTM formation raster onto DTM grid' "$RUNNER_TEMP/ticked.log" \
             || { echo "the worker never read the SVTM raster"; exit 1; }
           # A point on Mount Solitary, inside the tile.
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
-            /e2e/check.py complete "$id" 150.311 -33.780
+            /e2e/check.py ticked "$id" 150.311 -33.780
       # Runbook step 6: the reaper fails a job whose worker died mid-render,
-      # and a worker relaunched for it must leave it failed. A legacy job, set
-      # up by hand: its render runs long enough for the heartbeat to report it,
-      # where a one-tile sharpen job is done in seconds. Both workers are
-      # started by hand, since only the reaper's failing of the row is stood in
-      # for here.
+      # and a worker relaunched for it must leave it failed. A ticked job, set
+      # up by hand: its vegetation pass runs long enough for the heartbeat to
+      # report it, where an unticked one-tile job is done in seconds. Both
+      # workers are started by hand, since only the reaper's failing of the
+      # row is stood in for here.
       - name: A relaunched worker leaves a reaped job alone
         env:
           ZIP: ${{ steps.sample.outputs.zip }}
         run: |
-          JOB_ID=$($E2E/legacy-job.sh "e2e reaped" "$ZIP")
+          JOB_ID=$($E2E/ticked-job.sh "e2e reaped" "$ZIP")
           cid=$(docker run -d --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE")
           sql() { psql -h localhost -U logjam -d logjam -tAc "$1"; }
           for _ in $(seq 1 120); do
@@ -831,7 +825,12 @@ jobs:
           sql "SELECT status, render_tiles_done FROM topo_jobs WHERE id = '$JOB_ID'"
           docker kill "$cid"
           sql "UPDATE topo_jobs SET status = 'failed', error_message = 'reaped' WHERE id = '$JOB_ID'"
+          # The killed worker may have uploaded the sharpen archives before
+          # its vegetation pass; the relaunch must add or rewrite nothing.
+          outputs() { aws s3 ls --recursive "s3://$S3_BUCKET_TOPO/outputs/$JOB_ID/" || true; }
+          before=$(outputs)
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" -e "JOB_ID=$JOB_ID" "$IMAGE"
+          [ "$(outputs)" = "$before" ] || { echo "the relaunched worker wrote outputs"; exit 1; }
           docker run --rm --network "$NET" --env-file "$E2E/worker.env" \
             -v "$PWD/$E2E:/e2e:ro" --entrypoint python3 "$IMAGE" \
             /e2e/check.py reaped "$JOB_ID"
@@ -839,7 +838,6 @@ jobs:
         if: failure()
         run: |
           cat "$RUNNER_TEMP/api.log" || true
-          docker logs overpass || true
           docker logs "${{ job.services.ministack.id }}" 2>&1 | tail -n 200 || true
           for c in $(docker ps -aq --filter label=com.amazonaws.ecs.task-arn); do docker logs "$c" 2>&1 | tail -n 100; done || true
 

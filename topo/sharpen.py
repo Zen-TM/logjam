@@ -390,7 +390,7 @@ def smrf_classify(paths: List[str], work: Path) -> List[str]:
     """Each tile with its ground found by SMRF, for a survey with no class 2
     at all (the lab's fallback; on a classified tile SMRF reads canopy as
     ground). Noise and overlap are dropped first, and every class is wiped,
-    as the legacy pipeline does (pipeline.py `build_pdal_pipeline_full`)."""
+    as the vegetation pass does (pipeline.py `build_pipeline_full`)."""
     out = []
     for i, path in enumerate(paths):
         out.append(str(work / f"smrf-{i}.las"))
