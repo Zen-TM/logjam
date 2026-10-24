@@ -7,16 +7,30 @@
 // `hillshade_prepare` and `hillshade` shaders), ported, so a print looks like
 // the screen. Pure, like geoPdfTileMath: generateGeoPdf reads the
 // tiles and draws the result.
+//
+// Inside a sharpened area the requesting user may read, each tile comes from
+// the one archive Logjam Web would draw it from (`terrainTileArchive`, ADR
+// 0040), read as deep as the print and the area allow (`terrainReadZoom`).
+//
+// PRIVACY: an area's id and tile range say where its owner surveyed. Nothing
+// in this file logs.
 import {
   DEM_NO_DATA_BELOW,
+  lat2tileY,
+  lon2tileX,
   metersPerPixel,
   demMetresFromRgb,
   parseRgbaHex,
   NSW_CONTOURS,
   slopeBandAt,
+  terrainCredit,
+  terrainTileArchive,
   TILE_SIZE,
   tileY2lat,
+  type SharpenedArea,
   type SlopeBand,
+  type TerrainLayerKey,
+  type TileCoord,
 } from "@logjam/shared";
 
 /** A terrarium tile set decoded into one row-major grid: metres, or degrees. */
@@ -155,4 +169,220 @@ export function nswContourZoom(
   );
   if (cameraZoom < NSW_CONTOURS.minzoom) return null;
   return Math.min(overlayZoom, NSW_CONTOURS.maxzoom);
+}
+
+/** Where a print reads a terrain tile from: the statewide archive, or an area's. */
+export const STATEWIDE = "statewide";
+
+/** A tile a print reads: `source` is `STATEWIDE` or an area's id. */
+export type TerrainTileRead = {
+  source: string;
+  z: number;
+  x: number;
+  y: number;
+};
+
+export const terrainReadKey = (r: TerrainTileRead) =>
+  `${r.source} ${r.z}/${r.x}/${r.y}`;
+
+/** The areas whose tiles reach into a page, by their z15 range. */
+export function areasOnPage<A extends SharpenedArea>(
+  areas: readonly A[],
+  extent: { north: number; south: number; east: number; west: number },
+): A[] {
+  const x0 = lon2tileX(extent.west, 15);
+  const x1 = lon2tileX(extent.east, 15);
+  const y0 = lat2tileY(extent.north, 15);
+  const y1 = lat2tileY(extent.south, 15);
+  return areas.filter(
+    ({ tiles15: [ax0, ay0, ax1, ay1] }) =>
+      ax0 <= x1 && ax1 >= x0 && ay0 <= y1 && ay1 >= y0,
+  );
+}
+
+/**
+ * The zoom a print reads heights or slope at: its own, but no deeper than
+ * the statewide archive's `statewideMax` (z15) unless an area on the page
+ * holds more, then that area's zmax. At 300 dpi and NSW's latitude a print
+ * at 1:50 000 wants z15, 1:25 000 z16, 1:15 000 z17, 1:10 000 z18; the base
+ * layer's own cap comes first (`computeZoom`).
+ */
+export function terrainReadZoom(
+  printZoom: number,
+  statewideMax: number,
+  areas: readonly SharpenedArea[],
+): number {
+  return Math.min(
+    printZoom,
+    Math.max(statewideMax, ...areas.map((a) => a.zmax)),
+  );
+}
+
+/**
+ * Which tile a print reads for the heights or slope tile `z/x/y`: the one
+ * archive `terrainTileArchive` routes it to or, where that says absent, the
+ * nearest ancestor it routes, which a map would draw in its place. Below z15
+ * every tile is statewide, so the walk up ends. Memoised: a grid asks for each
+ * tile many times.
+ */
+export function terrainTileReader(
+  areas: readonly SharpenedArea[],
+  layer: "heights" | "slope",
+): (z: number, x: number, y: number) => TerrainTileRead {
+  const known = new Map<string, TerrainTileRead>();
+  return (z, x, y) => {
+    const key = `${z}/${x}/${y}`;
+    let read = known.get(key);
+    if (!read) {
+      for (let up = 0; !read; up++) {
+        const answer = terrainTileArchive(
+          areas,
+          layer,
+          z - up,
+          x >> up,
+          y >> up,
+        );
+        if (answer !== "absent") {
+          const source = answer === "statewide" ? STATEWIDE : answer.id;
+          read = { source, z: z - up, x: x >> up, y: y >> up };
+        }
+      }
+      known.set(key, read);
+    }
+    return read;
+  };
+}
+
+/**
+ * The tiles to fetch for a grid of `tiles` at `zoom`, each once: every
+ * tile's read and, where heights are stretched up from an ancestor
+ * (`smooth`), the ancestor's eight neighbours, which the stretch reads across
+ * its edges.
+ */
+export function terrainTileReads(
+  tiles: readonly TileCoord[],
+  zoom: number,
+  read: (z: number, x: number, y: number) => TerrainTileRead,
+  smooth: boolean,
+): TerrainTileRead[] {
+  const reads = new Map<string, TerrainTileRead>();
+  const add = (r: TerrainTileRead) => reads.set(terrainReadKey(r), r);
+  for (const tile of tiles) {
+    const r = read(zoom, tile.x, tile.y);
+    add(r);
+    if (!smooth || r.z === zoom) continue;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) add(read(r.z, r.x + dx, r.y + dy));
+    }
+  }
+  return [...reads.values()];
+}
+
+/** −32768, the terrarium no-data value (`DEM_NO_DATA_BELOW`). */
+const NO_DATA = -32768;
+
+/**
+ * Heights or slope over a `cols` × `rows` block of tiles at `zoom` (top left
+ * `minTileX`, `minTileY`) as one grid, each tile from its read in `decoded`
+ * (`terrainReadKey` → 256 × 256 values). A read at `zoom` is copied; one from
+ * an ancestor is stretched: nearest for slope, so a band keeps its edge, and
+ * bilinear for heights, reading across the ancestor's edges into the tiles
+ * the router gives beside it, so a hillshade shades no seam where an area's
+ * deeper tiles meet the stretched statewide ones. Guard: the plane test in
+ * geoPdfTerrain.unit.test.ts.
+ */
+export function terrainGrid(
+  zoom: number,
+  minTileX: number,
+  minTileY: number,
+  cols: number,
+  rows: number,
+  read: (z: number, x: number, y: number) => TerrainTileRead,
+  decoded: ReadonlyMap<string, Float32Array>,
+  smooth: boolean,
+): DemGrid {
+  const width = cols * TILE_SIZE;
+  const height = rows * TILE_SIZE;
+  const values = new Float32Array(width * height).fill(NO_DATA);
+  // A pixel at zoom z (global pixel coordinates), from wherever it is read.
+  const at = (z: number, px: number, py: number) => {
+    const r = read(z, Math.floor(px / TILE_SIZE), Math.floor(py / TILE_SIZE));
+    const tile = decoded.get(terrainReadKey(r));
+    if (!tile) return NO_DATA;
+    const s = z - r.z;
+    return tile[((py >> s) & 255) * TILE_SIZE + ((px >> s) & 255)]!;
+  };
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      const r = read(zoom, minTileX + tx, minTileY + ty);
+      const tile = decoded.get(terrainReadKey(r));
+      if (!tile) continue;
+      const s = zoom - r.z;
+      const k = 2 ** s;
+      const gx0 = (minTileX + tx) * TILE_SIZE;
+      // The ancestor's top-left pixel, at its own zoom.
+      const ax = r.x * TILE_SIZE;
+      const ay = r.y * TILE_SIZE;
+      for (let j = 0; j < TILE_SIZE; j++) {
+        const gy = (minTileY + ty) * TILE_SIZE + j;
+        const o = (ty * TILE_SIZE + j) * width + tx * TILE_SIZE;
+        if (s === 0) {
+          values.set(tile.subarray(j * TILE_SIZE, (j + 1) * TILE_SIZE), o);
+          continue;
+        }
+        if (!smooth) {
+          const row = ((gy >> s) & 255) * TILE_SIZE;
+          for (let i = 0; i < TILE_SIZE; i++) {
+            values[o + i] = tile[row + (((gx0 + i) >> s) & 255)]!;
+          }
+          continue;
+        }
+        const v = (gy + 0.5) / k - 0.5;
+        const y0 = Math.floor(v);
+        const fy = v - y0;
+        const ly = y0 - ay;
+        for (let i = 0; i < TILE_SIZE; i++) {
+          const u = (gx0 + i + 0.5) / k - 0.5;
+          const x0 = Math.floor(u);
+          const fx = u - x0;
+          const lx = x0 - ax;
+          let a: number, b: number, c: number, d: number;
+          if (lx >= 0 && lx < 255 && ly >= 0 && ly < 255) {
+            const p = ly * TILE_SIZE + lx;
+            a = tile[p]!;
+            b = tile[p + 1]!;
+            c = tile[p + TILE_SIZE]!;
+            d = tile[p + TILE_SIZE + 1]!;
+          } else {
+            a = at(r.z, x0, y0);
+            b = at(r.z, x0 + 1, y0);
+            c = at(r.z, x0, y0 + 1);
+            d = at(r.z, x0 + 1, y0 + 1);
+          }
+          if (Math.min(a, b, c, d) <= DEM_NO_DATA_BELOW) continue;
+          values[o + i] =
+            (a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy;
+        }
+      }
+    }
+  }
+  return { values, width, height };
+}
+
+/**
+ * The credit lines for the terrain a print drew: the statewide line, then
+ * each area's survey worded the same way. The statewide line is the NSW 5 m
+ * credit an area's always carries too (`demCredits`), because its edge tiles
+ * hold 5 m heights; a layer drew wherever an area did, so it is never null
+ * then.
+ */
+export function terrainCreditLines(
+  drawn: ReadonlySet<TerrainLayerKey>,
+  areas: readonly SharpenedArea[],
+): string[] {
+  const lines = [
+    terrainCredit(drawn),
+    ...areas.map((area) => terrainCredit(drawn, area.credit)),
+  ].filter((line): line is string => line !== null);
+  return [...new Set(lines)];
 }
