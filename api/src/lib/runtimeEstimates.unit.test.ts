@@ -202,18 +202,12 @@ describe("estimateTopoSeconds", () => {
     .topoJob.findMany;
   beforeEach(() => topoFindMany.mockReset().mockResolvedValue([]));
 
-  // Mutations: read every kind of job (a sharpened job is estimated at the
-  // legacy render's rate, and charged for it), or start a sharpened job from
-  // the legacy cold-start rate.
-  it("reads only jobs of the kind it estimates, from its own start", async () => {
-    const legacy = await estimateTopoSeconds(2, false);
+  // Red if older, unsharpened jobs feed the fit: a job would be estimated,
+  // and charged, at the old render's rate.
+  it("reads only sharpened jobs", async () => {
+    await estimateTopoSeconds(2);
     expect(topoFindMany.mock.calls[0]![0].where.sharpen).toEqual({
-      equals: expect.anything(),
-    });
-    const sharpened = await estimateTopoSeconds(2, true);
-    expect(topoFindMany.mock.calls[1]![0].where.sharpen).toEqual({
       not: expect.anything(),
     });
-    expect(sharpened).toBeLessThan(legacy!);
   });
 });

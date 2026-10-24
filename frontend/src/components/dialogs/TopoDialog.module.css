@@ -208,14 +208,3 @@
 }
 
 /* Naming a template, in the pinned toolbar above the settings it saves. */
-.saveAsLine {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.saveAsField {
-  flex: 1;
-  min-width: 0;
-}

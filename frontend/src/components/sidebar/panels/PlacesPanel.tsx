@@ -36,8 +36,7 @@ import {
   type RegionBbox,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
-  lidarJobCopy,
-  SHARPEN_NEW_JOBS,
+  LIDAR_JOB_COPY,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -378,7 +377,7 @@ function PlacesPanel({
     return [
       {
         id: "topo",
-        label: lidarJobCopy(SHARPEN_NEW_JOBS).noun,
+        label: LIDAR_JOB_COPY.noun,
         icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },

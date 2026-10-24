@@ -121,12 +121,7 @@ const baseSchema = z.object({
     .default(21_600_000), // 6 h
   // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
   // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
-  // then it falls back to DEFAULT_SECONDS_PER_TILE (conservative,
-  // self-corrects down as real jobs accumulate).
-  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
-    .number()
-    .positive()
-    .default(510),
+  // then it falls back to a cold-start rate (lib/runtimeEstimates.ts).
   TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Adaptive runtime estimator for topo exports (lib/runtimeEstimates.ts):
   // fitted per-(format, bundling) bucket from recent completed exports' actual

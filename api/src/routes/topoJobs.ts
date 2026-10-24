@@ -21,7 +21,6 @@ import {
   validateRasterTemplateSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
-  SHARPEN_NEW_JOBS,
   TOPO_UPLOAD_SIGN_MAX,
   type SharpenedOverlay,
 } from "@logjam/shared";
@@ -390,9 +389,7 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
-          ...(SHARPEN_NEW_JOBS
-            ? { sharpen: sharpenMark(lazCount, job.layerOptions) }
-            : {}),
+          sharpen: sharpenMark(lazCount, job.layerOptions),
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,

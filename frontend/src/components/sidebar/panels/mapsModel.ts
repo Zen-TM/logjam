@@ -14,7 +14,7 @@ import {
   formatMinutes,
   type GeoPdfJobView,
   type TopoExportJobView,
-  lidarJobCopy,
+  LIDAR_JOB_COPY,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import type { TopoJob } from "../../dialogs/TopoDialog";
@@ -29,12 +29,7 @@ import { type Glyph } from "../../../ui";
  * with — so a row says both what it is and what it belongs to.
  */
 export const MAP_IDENTITY: Record<
-  | "geoPdf"
-  | "topo"
-  | "sharpened"
-  | "export"
-  | "geoPdfTemplate"
-  | "topoTemplate",
+  "geoPdf" | "topo" | "sharpened" | "export" | "geoPdfTemplate",
   {
     icon: Glyph;
     hue: string;
@@ -45,14 +40,14 @@ export const MAP_IDENTITY: Record<
   topo: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: lidarJobCopy(false).noun,
+    label: "LiDAR topo",
   },
   // A LiDAR job of the newer kind: the Terrain layers made sharper over its
   // area. Beside it, "LiDAR topo" is what an older job is called.
   sharpened: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: lidarJobCopy(true).noun,
+    label: LIDAR_JOB_COPY.noun,
   },
   export: {
     icon: "export",
@@ -63,11 +58,6 @@ export const MAP_IDENTITY: Record<
     icon: "template",
     hue: "var(--hue-geo-pdf)",
     label: "GeoPDF template",
-  },
-  topoTemplate: {
-    icon: "template",
-    hue: "var(--hue-overlay)",
-    label: "LiDAR topo template",
   },
 };
 
@@ -265,23 +255,11 @@ export function newestFirst<T extends { createdAt: string }>(
 }
 
 /**
- * Whether a LiDAR job is of the older kind, worth saying so beside it: once
- * new jobs sharpen, a job without a sharpened area is an older LiDAR topo
- * (mapsModel.test.ts).
+ * Whether a LiDAR job is of the older kind, worth saying so beside it: a job
+ * without a sharpened area is an older LiDAR topo (mapsModel.test.ts).
  */
 export function isOlderLidarJob(
   job: Pick<CompletedTopoJob, "sharpened">,
-  sharpenNewJobs: boolean,
 ): boolean {
-  return sharpenNewJobs && !job.sharpened;
-}
-
-/**
- * Whether the LiDAR list offers templates (their tab, "New template…", and a
- * template's way into a new job): not once new jobs sharpen, since a
- * sharpened job takes no template; its one styled layer, vegetation, draws in
- * the default style (mapsModel.test.ts).
- */
-export function offersTemplates(sharpenNewJobs: boolean): boolean {
-  return !sharpenNewJobs;
+  return !job.sharpened;
 }

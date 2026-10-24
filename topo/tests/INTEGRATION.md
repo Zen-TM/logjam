@@ -55,9 +55,8 @@ elvis-katoomba-2506258-laz.zip`:
 4. **Sharpen** (`e2e/check.py sharpened`): before the job starts,
    `e2e/statewide.py` puts made-up stand-ins for the statewide height and
    slope archives in MiniStack (the heights a steep plane, so the check can
-   say what every fill pixel must hold). `SHARPEN_NEW_JOBS`
-   (`shared/src/sharpen.ts`) is on, so `/start` marks the job and the worker
-   runs `sharpen.py`. The row must be `complete` with its result and ground
+   say what every fill pixel must hold). `/start` marks the job and the
+   worker runs `sharpen.py`. The row must be `complete` with its result and ground
    kind, every z15 tile of its range in both raster archives, the survey's own
    heights on Mount Solitary, the fill pixels of the range's corner tile in
    place, and a contour tile.
@@ -101,7 +100,7 @@ from the GDAL block of `e2e/worker.env`:
 (`worker.env` points the rasters at CI's stand-ins; the `-e` overrides skip
 them.) It claims only a `pending` job.
 
-A job started in Logjam Web sharpens (`SHARPEN_NEW_JOBS`), and `sharpen.py`
+A job started in Logjam Web sharpens, and `sharpen.py`
 reads the statewide height and slope archives from the dev bucket, which
 nothing local puts there. Before starting one, put CI's made-up stand-ins in
 (a steep plane, so the area's fill looks nothing like real ground):

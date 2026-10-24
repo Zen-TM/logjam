@@ -6,7 +6,7 @@
 // already on, and (Logjam GPS only) Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let
 // go of rather than edited and deleted.
-import { lidarJobCopy, SHARPEN_NEW_JOBS } from "../sharpen.js";
+import { LIDAR_JOB_COPY } from "../sharpen.js";
 import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
 
@@ -66,7 +66,7 @@ export const PLACE_VERBS = [
   {
     id: "makeTopo",
     icon: "lidar",
-    label: lidarJobCopy(SHARPEN_NEW_JOBS).makeHere,
+    label: LIDAR_JOB_COPY.makeHere,
     for: "both",
     on: "web",
     reason: NO_MAP_FROM_A_PLACE,

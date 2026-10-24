@@ -8,7 +8,6 @@ import {
   geoPdfLabel,
   geoPdfsBeingMade,
   isOlderLidarJob,
-  offersTemplates,
   toposBeingMade,
 } from "./mapsModel";
 
@@ -187,21 +186,10 @@ describe("what a finished map is called", () => {
 });
 
 describe("an older LiDAR job", () => {
-  // Mutations: mark the sharpened jobs instead, or mark the old ones before
-  // new jobs sharpen, when every job is of the old kind.
-  it("is marked once new jobs sharpen, and only if it has no area", () => {
+  // Mutation: mark the sharpened jobs instead.
+  it("is marked only if it has no area", () => {
     const area = { sharpened: {} } as Parameters<typeof isOlderLidarJob>[0];
-    expect(isOlderLidarJob({}, true)).toBe(true);
-    expect(isOlderLidarJob(area, true)).toBe(false);
-    expect(isOlderLidarJob({}, false)).toBe(false);
-  });
-});
-
-describe("what the LiDAR list offers", () => {
-  // Mutation: keep the template entries with the switch on, and a template
-  // row starts a sharpened job with settings it can't use.
-  it("offers templates only while new jobs don't sharpen", () => {
-    expect(offersTemplates(true)).toBe(false);
-    expect(offersTemplates(false)).toBe(true);
+    expect(isOlderLidarJob({})).toBe(true);
+    expect(isOlderLidarJob(area)).toBe(false);
   });
 });

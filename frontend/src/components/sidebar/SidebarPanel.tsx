@@ -98,7 +98,6 @@ function SidebarPanel({
   onEditGeoPdfTemplate,
   onCreateGeoPdfTemplate,
   geoPdfTemplateRefetch,
-  topoTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
   activeTopoJobs,
@@ -119,7 +118,6 @@ function SidebarPanel({
   currentUser,
   currentUserError,
   onRetryCurrentUser,
-  onOpenTopoWithTemplate,
   loadsUserData,
   // Friends
   friends,
@@ -207,7 +205,6 @@ function SidebarPanel({
   onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
   onCreateGeoPdfTemplate: () => void;
   geoPdfTemplateRefetch: number;
-  topoTemplateRefetch: number;
   geoPdfJobsRefetch: number;
   // LiDAR
   activeTopoJobs: TopoJob[];
@@ -238,8 +235,7 @@ function SidebarPanel({
    *  the Account page has no fallback for. */
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
-  onOpenTopoWithTemplate: (templateId: string) => void;
-  /** App's consent-gate decision, handed to the two Maps views so their own
+  /** App's consent-gate decision, handed to the GeoPDFs view so its own
    *  fetches wait for it (`loadsUserData` there). */
   loadsUserData: boolean;
   // Friends
@@ -474,12 +470,9 @@ function SidebarPanel({
             onTopoFlyTarget={onTopoFlyTarget}
             onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
             onDismissActiveJob={onDismissActiveJob}
-            onOpenTopoWithTemplate={onOpenTopoWithTemplate}
             onQuotaChanged={onQuotaChanged}
             vectorStyle={vectorStyle}
             onVectorStyleChange={onVectorStyleChange}
-            templateRefetchTrigger={topoTemplateRefetch}
-            loadsUserData={loadsUserData}
           />
         )}
         {activePanel === "friends" && (
