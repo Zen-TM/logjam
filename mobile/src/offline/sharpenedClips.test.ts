@@ -157,6 +157,23 @@ describe("saveGate", () => {
     });
   });
 
+  // Red if a guest's Save waits on a list they can't have, or any offline
+  // state saves without the "needs a connection" alert.
+  it("lets a guest save, and asks for a connection in every offline state", async () => {
+    const { saveGate } = await import("./sharpenedClips");
+    expect(saveGate("none", true)).toEqual({
+      canSave: true,
+      warning: null,
+      noConnection: false,
+    });
+    for (const areas of ["none", "loading", "failed", "ready"] as const)
+      expect(saveGate(areas, false)).toEqual({
+        canSave: true,
+        warning: null,
+        noConnection: true,
+      });
+  });
+
   // Red if any state lets a save queue (Save enabled and no connection alert)
   // while the area list is loading or has failed.
   it("never queues a save while the area list is loading or has failed", async () => {

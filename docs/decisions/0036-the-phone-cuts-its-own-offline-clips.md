@@ -198,19 +198,23 @@ Nothing new calls it.
   save screen asks for the account's list (`GET
   /topo-jobs/completed-overlays`), which sends no bbox. Online it waits for
   the list; if the list fails it warns, with "Try again" and an explicit "Save
-  without sharpened areas", and never skips them quietly. Offline, Save goes
-  ahead to its "needs a connection" alert as before (`saveGate`). For each
-  area the box reaches, the save cuts the area's heights, slope and contours
-  over the part of it the box covers, widened to whole z14 tiles
-  (`areaClipSpecs` in `mobile/src/offline/sharpenedClips.ts`). Each clip is
-  cut through the presigned URL the list gave, by byte range with no header
-  but `range`, and filed under the area's source id, `lidar-<id>`. They are
-  queued first, while the list's URLs are freshest. A guest has no areas, so
-  their save is unchanged. A presigned URL expires after 24 h, so a clip
-  resumed after that fails with a line that says to save the area again.
-  Offline, the map routes the area clips over the statewide clips one archive
-  per tile as it does online, the sampler reads an area's heights first, and
-  the account's last list (without its URLs) is kept so they know the areas
+  without sharpened areas", and never skips them quietly. Offline, Save's tap
+  shows its "needs a connection" alert. Offline here is the map's own reading
+  (`useConnectivity`: no connection, or the internet unreachable), where the
+  alert used to fire only with no connection at all. The Save button and its
+  tap read that one value, so Wi-Fi with no internet asks for a connection
+  rather than queue a save with no area list (`saveGate`). For each area the
+  box reaches, the save cuts the area's heights, slope and contours over the
+  part of it the box covers, widened to whole z14 tiles (`areaClipSpecs` in
+  `mobile/src/offline/sharpenedClips.ts`). Each clip is cut through the
+  presigned URL the list gave, by byte range with no header but `range`, and
+  filed under the area's source id, `lidar-<id>`. They are queued first, while
+  the list's URLs are freshest. A guest has no areas, so their save is
+  unchanged. A presigned URL expires after 24 h, so a clip resumed after that
+  fails with a line that says to save the area again. Offline, the map routes
+  the area clips over the statewide clips one archive per tile as it does
+  online, the sampler reads an area's heights first, and the account's last
+  list (without its URLs) is kept so they know the areas
   (`offline/sharpenedAreaStore.ts`). Guards: `regionDownloads.test.ts` ("cuts
   a sharpened area's clip through its presigned URL, filed under the area"),
   `sharpenedClips.test.ts`, `sourceResolver.test.ts` ("routes saved areas

@@ -139,6 +139,9 @@ export function areasForSave(
  * it waits for the list, and when the list fails it warns, with "Try again"
  * and an explicit "Save without sharpened areas": a warned skip, never a
  * quiet one. So no state queues a save while the list is loading or failed.
+ * Guard: sharpenedClips.test.ts ("never queues a save while the area list is
+ * loading or has failed", "lets a guest save, and asks for a connection in
+ * every offline state").
  */
 export function saveGate(
   areas: ReturnType<typeof areasForSave>,

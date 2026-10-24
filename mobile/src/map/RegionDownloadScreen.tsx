@@ -391,6 +391,9 @@ export function RegionDownloadScreen({
   // ONE connectivity reading for the Save button and its tap (`noConnection`
   // below): two readings disagree on Wi-Fi with no internet, where a save
   // would then queue with no area list and leave the areas out quietly.
+  // Guard: map/sharpenedWiring.test.ts ("lets Save go ahead only as the gate
+  // says, from the live connectivity", "asks for a connection at the tap by
+  // the gate's reading").
   const online = useConnectivity() === "online";
   const gate = saveGate(areasState, online);
   const { sharpenedAreas, areasEpoch } = useMemo(
