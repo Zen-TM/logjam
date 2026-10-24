@@ -106,6 +106,15 @@ describe("notificationLabel", () => {
     expect(withWarning.detail).toMatch(/Roads and labels/);
   });
 
+  // Mutation: uppercase the format again, and it reads "GPKG export ready".
+  it("names an export's format as the app does", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { format: "gpkg" }),
+      ).text,
+    ).toBe("GeoPackage export ready");
+  });
+
   it("labels export completion and failure", () => {
     expect(
       notificationLabel(

@@ -3,10 +3,12 @@ export_worker.py
 ----------------
 ECS Fargate export worker. Processes a single TopoExportJob then exits.
 
-Reads the export-job ID from EXPORT_JOB_ID, fetches the source TopoJob's
+Reads the export-job ID from EXPORT_JOB_ID. An export of an area renders the
+statewide terrain over its box (area_export.py). An export of a topo, which
+only a row queued before Export an area can be, fetches the source TopoJob's
 outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
-PMTiles where needed), dispatches to the right renderer for the requested
-{format, bundling, layers}, uploads the artefact to:
+PMTiles where needed) and dispatches to the renderer for its
+{format, bundling, layers}. Either way it uploads the artefact to:
     s3://$S3_BUCKET_TOPO/exports/<exportJobId>/<filename>
 and emails the user a download link via Resend (see email_send.py).
 
@@ -48,8 +50,6 @@ from renderers import (
     render_mbtiles,
     render_geotiff,
     render_gpkg,
-    render_geojson,
-    render_gpx,
 )
 from area_export import (
     FETCH_THREADS,
@@ -276,10 +276,6 @@ def render_job_export(conn, export_job: dict, work: Path) -> Tuple[Path, Optiona
         result_local = render_geotiff(ctx)
     elif fmt == "gpkg":
         result_local = render_gpkg(ctx)
-    elif fmt == "geojson":
-        result_local = render_geojson(ctx)
-    elif fmt == "gpx":
-        result_local = render_gpx(ctx)
     else:
         raise RenderError(f"Unsupported export format: {fmt}")
     return result_local, job_name

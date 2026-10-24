@@ -38,9 +38,8 @@ export type GeoJsonPolygonal = GeoJsonPolygon | GeoJsonMultiPolygon;
 export type CompletedTopoJob = {
   jobId: string;
   /** Owner vs recipient. The list returns topos shared WITH the user; they are
-   *  read-only, so no re-share and no delete. Export IS allowed — the recipient
-   *  can already see the overlay, and the export is created under their own
-   *  account (POST /topo-exports accepts a shared source job). */
+   *  read-only, so no re-share and no delete. A recipient may export its area,
+   *  under their own account, as anyone may export the statewide terrain. */
   syncRole: "owner" | "shared";
   name: string | null;
   createdAt: string;

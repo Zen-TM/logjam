@@ -17,8 +17,7 @@ MBTiles composite (`render_composite_to_mbtiles`):
        (pipeline.COMPOSITE_LAYER_ORDER).
 
 GeoTIFF composite (`render_composite_to_geotiff`):
-  Raster-only — vectors are excluded by `EXPORT_FORMAT_RULES.geotiff.allowVector
-  = false`. Warp each source COG onto the template grid as its own RGBA array
+  Raster-only: vector layers are not composited. Warp each source COG onto the template grid as its own RGBA array
   (`srcAlpha=True, dstAlpha=True`), then alpha-composite bottom→top with
   explicit numpy source-over. (Warping sequentially into one shared destination
   no longer composites under GDAL 3.11 — see render_composite_to_geotiff.)
@@ -361,8 +360,7 @@ def render_composite_to_mbtiles(ctx: RenderContext, layers: List[str]) -> Path:
 def render_composite_to_geotiff(ctx: RenderContext, raster_layers: List[str]) -> Path:
     """Composite the selected raster COGs into a single GeoTIFF.
 
-    Raster-only — vector layers are NOT included (GeoTIFF export format is
-    raster-only, see EXPORT_FORMAT_RULES.geotiff.allowVector = false).
+    Raster-only: vector layers are not composited.
 
     Strategy: warp each source COG onto the template grid as its own RGBA array,
     then alpha-composite them bottom→top with explicit numpy source-over.

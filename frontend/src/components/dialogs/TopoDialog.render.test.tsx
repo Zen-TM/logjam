@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { AUTO_EXPORT_DEFAULTS, RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
+import { RASTER_TEMPLATE_DEFAULTS } from "@logjam/shared";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +26,6 @@ const template = (id: string): TopoTemplate => ({
   name: `Template ${id}`,
   isSystem: false,
   config: RASTER_TEMPLATE_DEFAULTS,
-  autoExport: null,
   createdAt: null,
   updatedAt: null,
 });
@@ -237,7 +236,7 @@ describe("TopoDialog's Vegetation choice", () => {
   // with, and the job is sent that template's style.
   it("applies no template, even the one it was opened with", async () => {
     switches.sharpen = true;
-    const exporting = {
+    const styled = {
       ...template("t1"),
       config: {
         ...RASTER_TEMPLATE_DEFAULTS,
@@ -246,9 +245,8 @@ describe("TopoDialog's Vegetation choice", () => {
           denseColour: "#123456ff",
         },
       },
-      autoExport: { ...AUTO_EXPORT_DEFAULTS, enabled: true },
     };
-    vi.mocked(apiFetch).mockImplementation(async () => [exporting] as never);
+    vi.mocked(apiFetch).mockImplementation(async () => [styled] as never);
     const { container } = render(
       dialog({ open: true, initialTemplateId: "t1" }),
     );
@@ -262,6 +260,5 @@ describe("TopoDialog's Vegetation choice", () => {
       ...RASTER_TEMPLATE_DEFAULTS,
       vegetation: { ...RASTER_TEMPLATE_DEFAULTS.vegetation, enabled: false },
     });
-    expect(sent.autoExport.enabled).toBe(false);
   });
 });

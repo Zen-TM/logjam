@@ -43,7 +43,7 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/TopoDialog.module.css": 18,
   "components/dialogs/TripLogDialog.module.css": 14,
   "components/dialogs/UnifiedImportDialog.module.css": 16,
-  "components/dialogs/topoSettings/topoSettings.module.css": 14,
+  "components/dialogs/topoSettings/topoSettings.module.css": 13,
   "components/feedback/RootErrorBoundary.module.css": 10,
   "components/feedback/ToastProvider.module.css": 4,
   "components/map/LayersPopover.module.css": 28,

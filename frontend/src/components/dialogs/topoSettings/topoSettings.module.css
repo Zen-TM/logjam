@@ -162,20 +162,6 @@
   color: var(--color-text);
 }
 
-/* The layers a format can carry. */
-.checkList {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* Why the format the user just picked refuses what they had chosen. */
-.exportNote {
-  composes: detail from "../../../textRoles.generated.module.css";
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
 /* A group's header and its sentence, with the control that resets the group
    beside them rather than under. */
 .resetLine {

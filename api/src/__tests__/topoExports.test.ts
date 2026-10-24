@@ -6,7 +6,7 @@ import {
   AREA_EXPORT_OUTSIDE_NSW,
   AREA_EXPORT_TOO_LARGE,
 } from "@logjam/shared";
-import { API_URL, BOB_SUB, as } from "./_actors";
+import { API_URL } from "./_actors";
 
 // Requires `make dev` (Postgres + MiniStack + API on :8080, AUTH_MODE=fake).
 // No auth header = alice. Launch-free surfaces only (auth, list + truncation
@@ -34,27 +34,20 @@ describe("topo-exports route (fake auth)", () => {
     expect(res.status).toBe(400);
   });
 
-  // POST /topo-exports takes a source job the caller can READ, not only one
-  // they own — a direct recipient can export a topo shared with them, charged
-  // to their own quota. The widened OR must not become "any job at all", so
-  // this pins the negative half: an id in neither arm is still 404, never a
-  // 403 that would confirm it exists. (The positive half needs a completed
-  // source job, whose POST would spawn a MiniStack export worker — the same
-  // reason no valid POST is exercised in this file.)
-  it("404s a source job the caller can neither own nor see", async () => {
-    const body = {
-      sourceJobIds: [randomUUID()],
-      layers: ["hillshade"],
-      format: "geotiff",
-      bundling: "per-layer",
-    };
-    for (const actor of [AUTH, as(BOB_SUB)]) {
-      const res = await request(API_URL)
-        .post("/topo-exports")
-        .set(actor)
-        .send(body);
-      expect(res.status).toBe(404);
-    }
+  // Exporting a LiDAR topo is gone: only an export of an area is taken, so
+  // an old client's body is refused, not queued. Mutation: bring back the
+  // sourceJobIds path.
+  it("refuses an export of a topo", async () => {
+    const res = await request(API_URL)
+      .post("/topo-exports")
+      .set(AUTH)
+      .send({
+        sourceJobIds: [randomUUID()],
+        layers: ["hillshade"],
+        format: "geotiff",
+        bundling: "per-layer",
+      });
+    expect(res.status).toBe(400);
   });
 
   it("404s an unknown export id (get / delete)", async () => {

@@ -7,9 +7,7 @@ import { resolveUser as getUser } from "../lib/resolveUser";
 import {
   say,
   RASTER_TEMPLATE_DEFAULTS,
-  AUTO_EXPORT_DEFAULTS,
   validateRasterTemplateSettings,
-  validateAutoExportSettings,
 } from "@logjam/shared";
 
 const router = Router();
@@ -27,7 +25,6 @@ function defaultTemplate() {
     name: "Default",
     isSystem: true,
     config: RASTER_TEMPLATE_DEFAULTS,
-    autoExport: AUTO_EXPORT_DEFAULTS,
     createdAt: null,
     updatedAt: null,
   };
@@ -73,7 +70,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { name, config, autoExport } = req.body;
+    const { name, config } = req.body;
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       throw new AppError(400, say`A template needs a name.`);
@@ -83,21 +80,11 @@ router.post(
       throw malformed(`Invalid topo settings: ${validation.errors.join("; ")}`);
     }
 
-    let autoExportConfig: object | undefined;
-    if (autoExport !== undefined && autoExport !== null) {
-      const v = validateAutoExportSettings(autoExport);
-      if (!v.ok) {
-        throw malformed(`Invalid auto-export settings: ${v.errors.join("; ")}`);
-      }
-      autoExportConfig = v.value as object;
-    }
-
     const template = await prisma.topoTemplate.create({
       data: {
         userId: user.id,
         name: name.trim(),
         config: validation.value as object,
-        autoExport: autoExportConfig ?? undefined,
       },
     });
     res.status(201).json({ ...template, isSystem: false });
@@ -119,8 +106,8 @@ router.patch(
       throw new AppError(404, say`Couldn't find that template.`);
     }
 
-    const { name, config, autoExport } = req.body;
-    const data: { name?: string; config?: object; autoExport?: object } = {};
+    const { name, config } = req.body;
+    const data: { name?: string; config?: object } = {};
     if (name !== undefined) {
       if (typeof name !== "string" || name.trim().length === 0) {
         throw new AppError(400, say`A template needs a name.`);
@@ -136,14 +123,6 @@ router.patch(
       }
       data.config = validation.value as object;
     }
-    if (autoExport !== undefined && autoExport !== null) {
-      const v = validateAutoExportSettings(autoExport);
-      if (!v.ok) {
-        throw malformed(`Invalid auto-export settings: ${v.errors.join("; ")}`);
-      }
-      data.autoExport = v.value as object;
-    }
-
     const template = await prisma.topoTemplate.update({ where: { id }, data });
     res.json({ ...template, isSystem: false });
   },

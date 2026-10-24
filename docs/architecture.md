@@ -99,7 +99,7 @@ CloudFront's address ranges (`envs/prod/eb.tf`), and CloudFront adds a secret
 **API.** Node/Express in `api/`, one Docker container on a single-instance
 Elastic Beanstalk environment (no load balancer). The container also runs the
 periodic sweeps (`api/src/lib/topoJobReaper.ts`): it fails stuck jobs, expires
-old exports, queues auto-exports, removes orphaned media uploads and expired
+old exports, removes orphaned media uploads and expired
 "Send a copy" files, and meters egress. A deploy briefly takes the API down.
 That is why deploys smoke-test and roll back on their own
 ([below](#how-a-change-reaches-prod)).
@@ -113,7 +113,7 @@ definitions are in `envs/prod/ecs.tf`:
 | Task family | Image | Runs | Launched by |
 |---|---|---|---|
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
-| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: tiles → download file | `POST /topo-exports`, or the auto-export sweep (`EXPORT_JOB_ID`) |
+| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
 | `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
 | `logjam-geo-pdf-worker` | API | `api/src/worker/geoPdfWorker.ts` | `POST /geo-pdf` (`GEO_PDF_JOB_ID`) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
@@ -277,7 +277,6 @@ job that is still advancing is left alone. The sweep deletes a job left in
 rule aborts any parts left behind two days after the upload began. Deleting a job that is still running fails
 it, stops its task and then removes the row. Deleting also fails the exports
 queued from the job, and is refused while one of its exports is running.
-When a job with auto-export turned on completes, the sweep queues its export.
 
 ### Exports and GeoPDFs
 
@@ -287,7 +286,7 @@ share one state machine:
 
 ```mermaid
 stateDiagram-v2
-  [*] --> queued: POST /topo-exports or /geo-pdf<br/>(or the auto-export sweep)
+  [*] --> queued: POST /topo-exports or /geo-pdf
   queued --> running: worker claims the job
   queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or (export) its source topo job was deleted
   running --> completed: file uploaded to the topo-jobs bucket

@@ -11,18 +11,7 @@ import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
 import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
-import { createAndLaunchTopoExport } from "./topoExportLauncher";
-import { AppError } from "../middleware/errorHandler";
-import {
-  TOPO_LAYERS,
-  VECTOR_STYLE_DEFAULTS,
-  normalizeUserUiPreferences,
-  reconcileExportSelection,
-  validateAutoExportSettings,
-  validateExportRequest,
-  type TopoLayerKey,
-  say,
-} from "@logjam/shared";
+import { normalizeUserUiPreferences, say } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
@@ -277,10 +266,9 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
  * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
  * actually claimed.
  *
- * The status-guarded claim is the house dedup rule (root AGENTS.md; same shape
- * as `queueAutoExports`'s `autoExportedAt` marker): two API instances sweeping
- * concurrently both read the same overdue ids, but only one `updateMany` per id
- * reports `count === 1`. Notifying on the READ set instead would send the user
+ * The status-guarded claim is the house dedup rule (root AGENTS.md): two API
+ * instances sweeping concurrently both read the same overdue ids, but only one
+ * `updateMany` per id reports `count === 1`. Notifying on the READ set instead would send the user
  * two notifications, two pushes and two emails per reaped job — prod runs the
  * API on Elastic Beanstalk, so >1 instance is a real configuration.
  *
@@ -713,166 +701,6 @@ export async function expireCompletedGeoPdfJobs(
   return expired;
 }
 
-type S3OutputKey = {
-  name: string;
-  cogKey: string | null;
-  pmtilesKey: string | null;
-};
-
-/**
- * The layers a completed job can actually export, from its s3OutputKeys. A
- * raster layer needs a COG to export (the manual route rejects otherwise); a
- * vector layer exports from its stored GeoJSON, so presence is enough. Mirrors
- * the gate in routes/topoExports.ts so auto-export and manual export agree.
- */
-export function exportableLayers(outputs: unknown): Set<TopoLayerKey> {
-  const set = new Set<TopoLayerKey>();
-  if (!Array.isArray(outputs)) return set;
-  for (const raw of outputs as S3OutputKey[]) {
-    const meta = TOPO_LAYERS.find((m) => m.name === raw?.name);
-    if (!meta) continue;
-    if (meta.format === "raster" && !raw.cogKey) continue;
-    set.add(meta.name);
-  }
-  return set;
-}
-
-async function notifyAutoExportSkipped(
-  userId: string,
-  topoJobId: string,
-  reason: string,
-): Promise<void> {
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "topo_export_skipped",
-      payload: { topoJobId, reason },
-    },
-  });
-  // Best-effort push — generic title + opaque IDs only (the skip reason
-  // stays in the in-app notification, never in the push).
-  await sendPushToUser(userId, {
-    type: "topo_export_skipped",
-    jobId: topoJobId,
-  });
-}
-
-/**
- * Auto-export pass: for every completed topo job whose persisted auto-export
- * config is enabled and not yet handled, queue a TopoExportJob. The trigger for
- * the auto-export feature — the API owns ECS launching, so this runs here rather
- * than in the Python worker.
- *
- * Dedup is a status-guarded claim: `autoExportedAt` is flipped from null to now
- * in one updateMany, and only the sweep that flips exactly one row proceeds, so
- * overlapping sweeps / multiple API instances can never double-queue (same
- * idempotency rationale as the stuck-job sweeps above). A job that can't be
- * exported (config disabled/invalid, no exportable layers produced, cap hit, or
- * launch failure) is still claimed — we never retry — and the user is told via a
- * `topo_export_skipped` notification rather than failing silently.
- *
- * Returns the number of exports queued.
- */
-export async function queueAutoExports(
-  now: Date = new Date(),
-): Promise<number> {
-  const candidates = await prisma.topoJob.findMany({
-    where: {
-      status: "complete",
-      autoExportedAt: null,
-      autoExport: { path: ["enabled"], equals: true },
-    },
-    select: {
-      id: true,
-      userId: true,
-      autoExport: true,
-      s3OutputKeys: true,
-      vectorStyleSnapshot: true,
-      footprint: true,
-      tileCount: true,
-      // The auto-export path spends the owner's monthly allowance just as a
-      // manual export does — an auto-export must not be a way around the cap.
-      user: { select: { monthlyComputeCredits: true } },
-    },
-  });
-
-  let queued = 0;
-  for (const job of candidates) {
-    try {
-      // Claim first so a concurrent sweep can't also act on this job.
-      const claim = await prisma.topoJob.updateMany({
-        where: { id: job.id, autoExportedAt: null },
-        data: { autoExportedAt: now },
-      });
-      if (claim.count !== 1) continue;
-
-      // A footprint-less job (legacy / failed-but-marked-complete) crashes the
-      // export worker at render_composite_*. Skip with a notification; the claim
-      // above keeps it from being retried each sweep.
-      if (job.footprint === null) {
-        await notifyAutoExportSkipped(
-          job.userId,
-          job.id,
-          "the source job is missing its footprint — re-run it",
-        );
-        continue;
-      }
-
-      const parsed = validateAutoExportSettings(job.autoExport);
-      if (!parsed.ok || !parsed.value.enabled) continue; // claimed; nothing to do
-      const cfg = parsed.value;
-
-      const selection = reconcileExportSelection(
-        { format: cfg.format, bundling: cfg.bundling, layers: cfg.layers },
-        exportableLayers(job.s3OutputKeys),
-      );
-      const valid = validateExportRequest(selection);
-      if (selection.layers.length === 0 || !valid.ok) {
-        await notifyAutoExportSkipped(
-          job.userId,
-          job.id,
-          valid.ok
-            ? "none of the chosen layers were produced by this job"
-            : valid.error,
-        );
-        continue;
-      }
-
-      try {
-        await createAndLaunchTopoExport({
-          userId: job.userId,
-          sourceJobIds: [job.id],
-          layers: selection.layers,
-          format: selection.format,
-          bundling: selection.bundling,
-          vectorStyleSnapshot:
-            (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
-          sourceTileCount: job.tileCount ?? null,
-          monthlyComputeCredits: job.user.monthlyComputeCredits,
-        });
-        queued += 1;
-      } catch (err) {
-        const reason =
-          err instanceof AppError && err.statusCode === 429
-            ? "too many exports are already in progress"
-            : "the export could not be started";
-        logger.error(
-          { err: safeErrorForLog(err), jobId: job.id },
-          "auto_export_launch_failed",
-        );
-        await notifyAutoExportSkipped(job.userId, job.id, reason);
-      }
-    } catch (err) {
-      // One bad job can't wedge the pass (matches expireCompletedExports).
-      logger.error(
-        { err: safeErrorForLog(err), jobId: job.id },
-        "auto_export_pass_failed",
-      );
-    }
-  }
-  return queued;
-}
-
 /**
  * Sweep sync tombstones older than SYNC_TOMBSTONE_TTL_MS. Safe to
  * run concurrently (deleteMany on a time cutoff is idempotent). A delta client
@@ -921,16 +749,6 @@ export function startTopoJobReaper(): () => void {
         "topo_abandoned_upload_sweep_failed",
       );
     });
-    queueAutoExports()
-      .then((count) => {
-        if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
-      })
-      .catch((err) => {
-        logger.error(
-          { err: safeErrorForLog(err) },
-          "topo_auto_export_sweep_failed",
-        );
-      });
     expireCompletedExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_exports_expired");

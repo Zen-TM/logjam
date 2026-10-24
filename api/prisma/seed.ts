@@ -17,7 +17,6 @@ import {
   TOPO_UNREADABLE_MESSAGE,
 } from "../src/lib/failureCopy";
 import {
-  AUTO_EXPORT_DEFAULTS,
   NOTIFICATION_TYPES,
   FILE_SEND_TTL_DAYS,
   FRIEND_INVITE_TTL_DAYS,
@@ -2335,7 +2334,6 @@ async function main() {
         userId: ALICE_ID,
         name: "Low sun",
         config: topoTemplateConfig.value as object,
-        autoExport: AUTO_EXPORT_DEFAULTS as object,
       },
       {
         id: fid(13),
@@ -2566,7 +2564,7 @@ async function main() {
         read: false,
         createdAt: ago(98),
       },
-      // lib/topoJobReaper.ts, auto-export pass
+      // No longer sent (auto-export is gone); an older one still shows.
       {
         userId: ALICE_ID,
         type: "topo_export_skipped",

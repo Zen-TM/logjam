@@ -514,8 +514,7 @@ function draftFrom(
 /**
  * Turn a parsed vector file into route drafts — ONE PER LINE, so a multi-track
  * GPX imports as several routes rather than being refused. Polygons and lone
- * points are dropped and counted (same call the GPX exporter makes in
- * topo/renderers/gpx.py, for the same reason: a route is a line).
+ * points are dropped and counted (a route is a line).
  *
  * Over-cap drafts are returned flagged rather than simplified, so the caller
  * can offer the choice (simplify to fit, or keep the original as a file).

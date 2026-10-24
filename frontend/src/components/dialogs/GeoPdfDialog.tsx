@@ -74,7 +74,7 @@ import {
   areaExportTooLarge,
   areaInNsw,
   areaSizeKm,
-  EXPORT_FORMAT_RULES,
+  EXPORT_FORMAT_LABELS,
   geoPdfTooLarge,
   GEOPDF_TOO_LARGE,
   MAP_TERRAIN,
@@ -174,7 +174,7 @@ const GEOPDF_OPTION: ChipOption<FormatChoice>[] = [
 const GIS_OPTIONS: ChipOption<FormatChoice>[] = AREA_EXPORT_FORMATS.map(
   (format) => ({
     value: format,
-    label: EXPORT_FORMAT_RULES[format].label,
+    label: EXPORT_FORMAT_LABELS[format],
   }),
 );
 

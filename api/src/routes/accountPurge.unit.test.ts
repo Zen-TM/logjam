@@ -89,7 +89,8 @@ describe("account-delete purge covers every model related to User", () => {
 // Mutations that turn this red: creating a notification in a file not listed
 // here, listing a type its file does not create, or a listed type sent to
 // another user missing from the purge in routes/users.ts, or a type added to
-// NOTIFICATION_TYPES that no site lists (or listed but not declared).
+// NOTIFICATION_TYPES that no site lists and isn't retired (or listed but not
+// declared).
 describe("account-delete purge covers every notification type", () => {
   // Every file that creates a notification, and the types it creates.
   const CREATION_SITES: Record<string, string[]> = {
@@ -101,7 +102,6 @@ describe("account-delete purge covers every notification type", () => {
       "topo_failed",
       "topo_export_complete",
       "geo_pdf_complete",
-      "topo_export_skipped",
     ],
     "api/src/routes/bulkShare.ts": ["place_shared"],
     "api/src/routes/fileSends.ts": ["file_sent"],
@@ -114,6 +114,8 @@ describe("account-delete purge covers every notification type", () => {
     "topo/worker.py": ["topo_complete", "topo_failed"],
     "topo/export_worker.py": ["topo_export_complete"],
   };
+  // Declared because older rows still hold them, but no file creates them now.
+  const RETIRED = ["topo_export_skipped"];
   // Only ever sent to the user the row is about, so the purge's
   // `notification.deleteMany({ userId })` already removes them.
   const HELD_BY_OWNER_ONLY = [
@@ -122,7 +124,6 @@ describe("account-delete purge covers every notification type", () => {
     "topo_complete",
     "topo_failed",
     "topo_export_complete",
-    "topo_export_skipped",
     "geo_pdf_complete",
     // From no user: the maintainer's script, one row per recipient.
     "announcement",
@@ -159,9 +160,11 @@ describe("account-delete purge covers every notification type", () => {
   });
 
   it("lists exactly the declared notification types", () => {
-    expect([...new Set(Object.values(CREATION_SITES).flat())].sort()).toEqual(
-      [...NOTIFICATION_TYPES].sort(),
-    );
+    expect(
+      [
+        ...new Set([...Object.values(CREATION_SITES).flat(), ...RETIRED]),
+      ].sort(),
+    ).toEqual([...NOTIFICATION_TYPES].sort());
   });
 
   it("names each type sent to another user in the purge", () => {

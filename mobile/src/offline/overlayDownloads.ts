@@ -5,9 +5,7 @@
 // online, with zero map-code changes.
 //
 // No export job is created and no new API surface exists — this saves the
-// exact artifact the map streams. (The reconcileExportSelection /
-// validateExportRequest rule binds export-creating surfaces; nothing here
-// requests an export.)
+// exact artifact the map streams.
 //
 // PRIVACY: job bundles may include secret place-derived layers. Files live
 // in the same app-private, backup-excluded store as basemap regions, behind

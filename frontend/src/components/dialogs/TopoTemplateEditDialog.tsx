@@ -3,12 +3,10 @@ import { apiFetch } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   RASTER_TEMPLATE_DEFAULTS,
-  AUTO_EXPORT_DEFAULTS,
   cloneRasterTemplateSettings,
   slopeBandsError,
   hillshadeSettingsError,
   type RasterTemplateSettings,
-  type AutoExportSettings,
 } from "@logjam/shared";
 import { Button, ChipRail, Dialog, TextField, ErrorBanner } from "../../ui";
 import AdvancedSettings from "./topoSettings/AdvancedSettings";
@@ -46,15 +44,6 @@ function TemplateForm({
       editingTemplate?.config ?? RASTER_TEMPLATE_DEFAULTS,
     ),
   );
-  // Older templates predate auto-export (null) — fall back to defaults.
-  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() =>
-    editingTemplate?.autoExport
-      ? {
-          ...editingTemplate.autoExport,
-          layers: [...editingTemplate.autoExport.layers],
-        }
-      : { ...AUTO_EXPORT_DEFAULTS },
-  );
   const [tab, setTab] = useState<SettingsTab>("hillshade");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +76,7 @@ function TemplateForm({
           : "/topo-templates",
         {
           method: editingTemplate ? "PATCH" : "POST",
-          body: { name: trimmed, config: settings, autoExport },
+          body: { name: trimmed, config: settings },
         },
       );
       onSaved();
@@ -153,13 +142,7 @@ function TemplateForm({
     >
       {error && <ErrorBanner message={error} />}
 
-      <AdvancedSettings
-        tab={tab}
-        value={settings}
-        onChange={setSettings}
-        autoExport={autoExport}
-        onAutoExportChange={setAutoExport}
-      />
+      <AdvancedSettings tab={tab} value={settings} onChange={setSettings} />
     </Dialog>
   );
 }
