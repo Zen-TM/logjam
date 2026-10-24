@@ -96,7 +96,7 @@ async function confirmSignOut(everywhere: boolean): Promise<boolean> {
   }
 }
 
-// React Native's edge-to-edge (edgeToEdgeEnabled, which Expo's prebuild sets)
+// React Native's edge-to-edge (edgeToEdgeEnabled, which the prebuild template sets)
 // draws the app behind BOTH system bars, so each needs light icons on a dark
 // theme: StatusBar only styles the top one, which left the gesture area a
 // black strip below the tab bar.
