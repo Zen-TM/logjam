@@ -323,8 +323,9 @@ function App() {
   const [exportOpensWithGis, setExportOpensWithGis] = useState(false);
   // A new key for every opening that is not a pick coming back
   // (`freshExportDialog`), because a pick the dialog left for may never return:
-  // another product can take the box tool over it. Held by
-  // e2e/export-area.spec.ts (run in CI), since App has no render harness.
+  // another product can take the box tool over it. e2e/export-area.spec.ts (run
+  // in CI; App has no render harness) holds the mechanism through two of its
+  // callers, Map tools → Export an area and Maps → GeoPDFs → New template.
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);

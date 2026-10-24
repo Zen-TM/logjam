@@ -7,6 +7,13 @@ import { test, expect, type Page } from "@playwright/test";
 // abandoned pick leaks into the next opening, which then starts on GeoTIFF;
 // in template mode that form has no Save that works.
 
+// Local only: it needs fake auth and a seeded API, as a11y.spec.ts does.
+const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+test.skip(
+  !baseURL.startsWith("http://localhost"),
+  "needs the local fake-auth stack",
+);
+
 async function openApp(page: Page) {
   await page.goto("/");
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
@@ -46,12 +53,10 @@ test("the pages hold still while an export's box is drawn", async ({
   await openApp(page);
   await abandonGisPick(page);
   // Mutation: drop `boxPickDimsUI` from App's `dimUI`, and the rail takes the
-  // click.
-  await expect(
-    page
-      .getByRole("button", { name: "Places", exact: true })
-      .click({ trial: true, timeout: 2_000 }),
-  ).rejects.toThrow();
+  // click. Visible first, so a missing button can't pass as an inert one.
+  const places = page.getByRole("button", { name: "Places", exact: true });
+  await expect(places).toBeVisible();
+  await expect(places.click({ trial: true, timeout: 2_000 })).rejects.toThrow();
 });
 
 test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
