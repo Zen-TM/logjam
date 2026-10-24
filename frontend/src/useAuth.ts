@@ -206,7 +206,7 @@ export function useAuth() {
     [pendingUsername],
   );
 
-  const handleSignOut = useCallback(async () => {
+  const endSession = useCallback(async (everywhere: boolean) => {
     // A trip draft is place names and notes in localStorage, readable by
     // anything on the origin and unaffected by the reload below. It must not
     // outlive the session that wrote it — sign-out is the line (privacy rules,
@@ -220,12 +220,26 @@ export function useAuth() {
     // draft already gone. Reload unconditionally either way,
     // matching RootErrorBoundary.handleSignOut's identical flow.
     try {
-      await amplifySignOut();
+      await amplifySignOut({ global: everywhere });
     } catch (err) {
       console.error(err);
     }
     window.location.reload();
   }, []);
+
+  const handleSignOut = useCallback(() => endSession(false), [endSession]);
+
+  // Amplify's global sign-out swallows a failed GlobalSignOut and still clears
+  // this browser, so a stale access token or no reception would look like
+  // success while every other session lived on. Refreshing first makes that
+  // failure throw here, before anything is cleared.
+  const handleSignOutEverywhere = useCallback(async () => {
+    if (import.meta.env.VITE_AUTH_MODE !== "fake") {
+      const { tokens } = await fetchAuthSession({ forceRefresh: true });
+      if (!tokens) throw new Error("No session to refresh");
+    }
+    await endSession(true);
+  }, [endSession]);
 
   return {
     state,
@@ -238,6 +252,7 @@ export function useAuth() {
     forgotPassword: handleForgotPassword,
     confirmForgotPassword: handleConfirmForgotPassword,
     signOut: handleSignOut,
+    signOutEverywhere: handleSignOutEverywhere,
     goToSignUp: useCallback(() => {
       setError(null);
       setState("signUp");
