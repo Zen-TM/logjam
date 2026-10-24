@@ -21,6 +21,8 @@ import {
   ELEVATION_TRACK_MAX_SAMPLES,
   buildTrackElevationProfile,
   climbFromProfile,
+  climbSourceOf,
+  demSourcesFor,
   densifyLineSegments,
   isFinerClimbSource,
   type DemSource,
@@ -31,6 +33,7 @@ import {
 
 import { apiFetch } from "../api/apiFetch";
 import { sampleElevationsOffline } from "../offline/demLookup";
+import { savedSharpenedAreas } from "../offline/sharpenedAreaStore";
 import { canRunNow } from "../offline/networkPolicy";
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
 import { reclimbStandaloneMediaLocal } from "../sync/mediaUpload";
@@ -48,11 +51,13 @@ import {
  * climb for is asked about again only when this changes: a source added, or
  * one whose footprint grew. Nothing polls.
  *
- * ponytail: the declaration, not what is behind it. Two changes it cannot
- * see: an archive rebuilt to fill holes inside an unchanged `coverage`, and a
- * source whose footprint is not declared at all (a DEM built per account at
- * run time). Whatever adds the second must change this key when its footprint
- * does, or have the API report a coverage version to compare instead.
+ * The upgrade pass keys on `demSourcesFor` the account's kept sharpened
+ * areas, so a new area, or one grown, re-asks the tracks (ADR 0028's update
+ * of 2026-10-23).
+ *
+ * ponytail: the declaration, not what is behind it. One change it cannot
+ * see: an archive rebuilt to fill holes inside an unchanged `coverage`. Have
+ * the API report a coverage version to compare if that matters.
  * `trackClimb.test.ts` holds what the key does see.
  */
 export function climbSourcesKey(
@@ -60,7 +65,6 @@ export function climbSourcesKey(
 ): string {
   return JSON.stringify(sources.map((source) => [source.id, source.coverage]));
 }
-const SOURCES_KEY = climbSourcesKey();
 
 /**
  * Tracks one pass reads. Each is a full read of a series and maybe a request,
@@ -142,13 +146,11 @@ export async function storeTrackClimb(
 export async function upgradeTrackClimbs(): Promise<number> {
   if (AppState.currentState === "background" || isOfflineOnly()) return 0;
   if (!(await canRunNow("sync"))) return 0;
-  const due = await listTracksDueClimbUpgrade(
-    // Finest first: the order is the precedence.
-    DEM_SOURCES[0]!.id,
-    SOURCES_KEY,
-    TRACKS_PER_PASS,
-  );
-  const finest = DEM_SOURCES[0]!.id;
+  const sources = demSourcesFor(await savedSharpenedAreas());
+  const key = climbSourcesKey(sources);
+  // Finest first: the order is the precedence. With an area, `lidar`.
+  const finest = climbSourceOf(sources[0]!.id);
+  const due = await listTracksDueClimbUpgrade(finest, key, TRACKS_PER_PASS);
   let replaced = 0;
   for (const track of due) {
     const segments = toElevationLine(await listTrackPoints(track.id));
@@ -183,7 +185,7 @@ export async function upgradeTrackClimbs(): Promise<number> {
     // Marked whether or not anything changed: a track still short of the
     // finest source (outside its footprint, say) must not be read again on
     // every cycle.
-    await markTrackClimbChecked(track.id, SOURCES_KEY);
+    await markTrackClimbChecked(track.id, key);
   }
   return replaced;
 }

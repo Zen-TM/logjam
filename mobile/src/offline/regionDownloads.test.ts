@@ -388,6 +388,50 @@ describe("runRegionClip", () => {
     );
   });
 
+  // A sharpened area's clip: cut from the bucket through the presigned URL,
+  // filed under the area's source id, its bounds its z15 tiles.
+  // Mutations: cut it from the CDN, file it under the statewide key, keep
+  // the saved area's bbox, or let an expired URL drop it silently, and a line
+  // here goes red.
+  it("cuts a sharpened area's clip through its presigned URL, filed under the area", async () => {
+    const { tileRectBounds, tileRectCovering } = await import(
+      "../map/terrainRoutes"
+    );
+    const [x0, y0, x1, y1] = tileRectCovering(15, [150.3, -33.7, 150.4, -33.6]);
+    const tiles = [x0 & ~1, y0 & ~1, x1 | 1, y1 | 1] as const;
+    const url =
+      "https://bucket.example/outputs/a1/contours.pmtiles?X-Amz-Signature=s";
+    const area = { id: "a1", layer: "contours", url, zmax: 17, tiles };
+    expect((await run({ basemapId: "lidar-a1", area })).status).toBe("ready");
+    for (const call of cdn.calls) {
+      expect(call.url).toBe(url);
+      expect(Object.keys(call.init.headers)).toEqual(["range"]);
+    }
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "contours-region",
+        logicalKey: "lidar-a1",
+        sourceType: "vector",
+        bbox: tileRectBounds(15, tiles),
+        minzoom: 14,
+        maxzoom: 14,
+      }),
+    );
+    cdn.failFrom = 0;
+    cdn.status = 403;
+    expect(await run({ basemapId: "lidar-a1", area })).toEqual({
+      status: "failed",
+      code: "source-unavailable",
+      detail: "sharpened-area",
+    });
+    // A host refusing ranges is no expired link.
+    cdn.status = 416;
+    expect(await run({ basemapId: "lidar-a1", area })).toEqual({
+      status: "failed",
+      code: "source-unavailable",
+    });
+  });
+
   // Mutation: save the clip of an area outside the archive and the first
   // line goes red with a file of a few low-zoom tiles.
   it("refuses a vector area outside the archive", async () => {

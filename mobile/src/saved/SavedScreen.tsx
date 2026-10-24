@@ -53,6 +53,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   BASEMAP_CATALOG,
   NSW_5M,
+  SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
@@ -214,6 +215,9 @@ function basemapName(logicalKey: string): string {
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
+  // A sharpened area's clip, labelled when saved (offline/sharpenedClips.ts).
+  if (artifact.logicalKey.startsWith(SHARPENED_SOURCE_PREFIX))
+    return artifact.label ?? "Sharpened area";
   if (artifact.kind === "contours-region") return "Contours";
   if (artifact.kind === "slope-region") return "Slope";
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);

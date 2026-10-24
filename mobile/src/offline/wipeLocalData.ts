@@ -38,6 +38,7 @@ import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
+import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 import { OFFLINE_TABLES } from "./wipedStores";
 
@@ -76,18 +77,22 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // A live track recording is a producer too: its foreground service keeps
   // delivering fixes into a `track` row this wipe is about to delete, and its
   // in-memory point series is the departing user's location history.
+  //
+  // The sharpened areas the map still has on screen: MLRN's request
+  // transforms hold each one's presigned URL, and the map, mounted until the
+  // wipe ends, would write their tile ranges into TileJSONs and the area list
+  // again. Stopped first, so the area list's pending write sees it
+  // (wipeLocalData.test.ts, "moves the sharpened areas' epoch before it
+  // forgets the area list").
+  stopSharpenedAreasForWipe();
   const stopped = await Promise.all([
     stoppedInTime(cancelAllRegionDownloads()),
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
     stoppedInTime(stopWeatherForWipe()),
+    stoppedInTime(forgetSharpenedAreas()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
-
-  // The sharpened areas the map still has on screen: MLRN's request
-  // transforms hold each one's presigned URL, and the map, mounted until the
-  // wipe ends, would write their tile ranges into TileJSONs again.
-  stopSharpenedAreasForWipe();
 
   // In-memory DEM tiles, which are the terrain around the departing user's
   // saved areas. The files go with the region directory below; this is the copy

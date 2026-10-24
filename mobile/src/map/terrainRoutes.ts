@@ -15,6 +15,7 @@
 // logs.
 import {
   TERRAIN_ROUTED_FROM,
+  lonLatToTile,
   terrainTileArchive,
   type SharpenedArea,
   type TerrainArchiveLayer,
@@ -126,4 +127,18 @@ export function tileRectBounds(
     lon(x1 + 1) - inset,
     lat(y0) - inset,
   ];
+}
+
+/**
+ * The tiles at `z` that `[west, south, east, north]` touches, inclusive: the
+ * inverse of `tileRectBounds`, so a rectangle saved as its bounds reads back
+ * as itself (terrainRoutes.test.ts).
+ */
+export function tileRectCovering(
+  z: number,
+  [west, south, east, north]: readonly [number, number, number, number],
+): TileRect {
+  const nw = lonLatToTile(west, north, z);
+  const se = lonLatToTile(east, south, z);
+  return [nw.x, nw.y, se.x, se.y];
 }

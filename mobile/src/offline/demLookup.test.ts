@@ -27,6 +27,10 @@ const tile_data = new Uint8Array(
 
 /** Saved clips of archive sources; empty unless a test fills it. */
 const savedClips = vi.hoisted(() => [] as object[]);
+const savedAreas = vi.hoisted(() => [] as object[]);
+vi.mock("./sharpenedAreaStore", () => ({
+  savedSharpenedAreas: async () => savedAreas,
+}));
 
 vi.mock("expo-sqlite", () => ({
   openDatabaseAsync: async () => ({
@@ -100,6 +104,48 @@ describe("sampleElevations (saved tiles)", () => {
       expect(height).toBeCloseTo(nsw.levelled[i]!, 1),
     );
   });
+});
+
+// A made-up area holding one flat z16 terrarium tile (RGB 128,128,128 decodes
+// to 128.5 m) at the first point of dem-parity-nsw.json, where the statewide
+// fixture reads ~980 m. The archive is written as api/prisma/seedArchives.ts
+// `singleTilePmtiles` writes one, with an RGB tile in place of `flatPng`'s
+// grey (Logjam GPS decodes RGB, as every sharpened archive is).
+// Mutation: sample with DEM_SOURCES alone (not `demSourcesFor` the kept
+// areas), and the point reads the statewide clip.
+it("reads a saved clip of a sharpened area before the statewide one", async () => {
+  savedAreas.push({
+    id: "made-up",
+    zmax: 16,
+    tiles15: [30064, 19644, 30065, 19645],
+    coverage: [150.29, -33.71, 150.33, -33.69],
+    contours: false,
+    credit: "Elevation: a made-up survey.",
+    createdAt: "2026-10-01T00:00:00Z",
+  });
+  savedClips.push(
+    {
+      id: "area-clip",
+      kind: "dem-region",
+      logicalKey: "lidar-made-up",
+      format: "pmtiles",
+      path: join(FIXTURES, "sharpened-z16-flat.pmtiles"),
+    },
+    {
+      id: "nsw-clip",
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      format: "pmtiles",
+      path: join(FIXTURES, "nsw-5m-z15-katoomba.pmtiles"),
+    },
+  );
+  clearDemTileCache();
+  const dem = await sampleElevations([
+    { lon: 150.3105, lat: -33.7005, distanceM: 0 },
+  ]);
+  expect(dem.sourceIds).toEqual(["lidar-made-up"]);
+  expect(dem.heights[0]).toBeCloseTo(128.5, 1);
+  savedAreas.length = 0;
 });
 
 // Mutation: clear only the tile cache on sign-out, and an archive opened on a
