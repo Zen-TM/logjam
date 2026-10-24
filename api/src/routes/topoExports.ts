@@ -21,13 +21,13 @@ import {
   AREA_EXPORT_OUTSIDE_NSW,
   AREA_EXPORT_TOO_LARGE,
   areaExportRequestError,
+  areaExportStyleSnapshot,
   areaExportTooLarge,
   areaInNsw,
   EXPORT_FORMAT_RULES,
   RASTER_LAYERS,
   validateExportRequest,
   VECTOR_STYLE_DEFAULTS,
-  normalizeUserUiPreferences,
   type ExportFormat,
   type ExportBundling,
   type TopoExportJobView,
@@ -165,18 +165,10 @@ router.post(
         format: area.data.format,
         // A GeoTIFF is a file per layer; a GeoPackage or MBTiles holds them all.
         bundling: area.data.format === "geotiff" ? "per-layer" : "composite",
-        // Raw data has no style drawn into it. An MBTiles is drawn with the
-        // account's contour style and slope bands as they are now; the worker
-        // reads `slopeBands` beside the vector style (topo/area_export.py).
-        vectorStyleSnapshot:
-          area.data.format === "mbtiles"
-            ? {
-                ...((user.vectorStyle as object | null) ??
-                  VECTOR_STYLE_DEFAULTS),
-                slopeBands: normalizeUserUiPreferences(user.uiPreferences)
-                  .slopeBands,
-              }
-            : {},
+        vectorStyleSnapshot: areaExportStyleSnapshot(
+          area.data.format,
+          user.uiPreferences,
+        ),
         // No size signal the estimator knows yet, so no estimate.
         sourceTileCount: null,
         monthlyComputeCredits: user.monthlyComputeCredits,

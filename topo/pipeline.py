@@ -1040,6 +1040,7 @@ def create_mbtiles(
     description: str = "",
     minzoom: int = ZOOM_MIN,
     maxzoom: int = ZOOM_MAX,
+    attribution: Optional[str] = None,
 ) -> sqlite3.Connection:
     # Schema matches exactly what QGIS produces (confirmed working in Gaia):
     # - lowercase column types, no NOT NULL, no PRIMARY KEY on tiles
@@ -1067,6 +1068,8 @@ def create_mbtiles(
         ("minzoom", str(minzoom)),
         ("maxzoom", str(maxzoom)),
     ]
+    if attribution is not None:
+        meta.append(("attribution", attribution))
     for k, v in meta:
         c.execute("INSERT OR REPLACE INTO metadata (name, value) VALUES (?,?)", (k, v))
     conn.commit()

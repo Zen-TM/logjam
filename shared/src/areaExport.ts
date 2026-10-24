@@ -3,6 +3,8 @@
 // by the export worker (topo/area_export.py, which mirrors these declarations:
 // topo/tests/test_area_export.py).
 import { NSW_5M } from "./demSources.js";
+import { nswContourStyle } from "./nswContours.js";
+import { normalizeUserUiPreferences } from "./themeSchemes.js";
 import { say } from "./userSentence.js";
 
 /** What an area export can carry, in the order a file lists them. */
@@ -110,4 +112,23 @@ export function areaExportRequestError(request: {
     return "a layer is listed twice";
   const misfit = request.layers.find((layer) => !allowed.includes(layer));
   return misfit ? `${request.format} can't hold ${misfit}` : null;
+}
+
+/**
+ * What an export of an area is drawn with, saved on its row. Raw data (a
+ * GeoTIFF, a GeoPackage) has no style. An MBTiles draws the statewide
+ * contours in the look the map draws them in, and slope in the account's
+ * bands as they are now. The worker reads `slopeBands` beside the contour
+ * style (topo/tests/test_area_export.py `SyncWithShared`).
+ */
+export function areaExportStyleSnapshot(
+  format: AreaExportFormat,
+  uiPreferences: unknown,
+): Record<string, unknown> {
+  if (format !== "mbtiles") return {};
+  return {
+    // The file has no imagery under it.
+    ...nswContourStyle("protomaps"),
+    slopeBands: normalizeUserUiPreferences(uiPreferences).slopeBands,
+  };
 }

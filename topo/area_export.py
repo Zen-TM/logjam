@@ -486,10 +486,17 @@ def styled_tile(cog: Path, colours: np.ndarray, z: int, x: int, y: int) -> Image
     return Image.fromarray(rgba)
 
 
+# The key of the account's bands in an MBTiles export's style snapshot,
+# which shared/src/areaExport.ts `areaExportStyleSnapshot` writes
+# (tests/test_area_export.py `SyncWithShared`).
+STYLE_SLOPE_BANDS = "slopeBands"
+
+
 def mbtiles_settings(style: dict) -> dict:
-    """The pipeline's render settings for the account's style: its contour
-    colours, widths and label size, and its slope bands. Contours step as the
-    map's do: 50 m lines from z11, every 10 m from z14."""
+    """The pipeline's render settings for an export's style snapshot: the
+    statewide contours' colours, widths and label size, and the account's
+    slope bands. Contours step as the map's do: 50 m lines from z11, every
+    10 m from z14."""
     settings = _vector_style_to_render_settings(style)
     settings["contours"]["zoomBands"] = [
         {"zoomMin": MBTILES_ZOOMS[0], "zoomMax": CONTOUR_ZMAX - 1,
@@ -498,8 +505,8 @@ def mbtiles_settings(style: dict) -> dict:
          "intervalM": CONTOUR_INTERVAL_M,
          "majorEveryN": CONTOUR_MAJOR_M // CONTOUR_INTERVAL_M},
     ]  # fmt: skip
-    if style.get("slopeBands"):
-        settings["slope"]["bands"] = style["slopeBands"]
+    if style.get(STYLE_SLOPE_BANDS):
+        settings["slope"]["bands"] = style[STYLE_SLOPE_BANDS]
     return settings
 
 
@@ -611,7 +618,7 @@ def render_mbtiles(
     style: dict,
     work: Path,
 ) -> Path:
-    """The box as one MBTiles, drawn with the account's style."""
+    """The box as one MBTiles, drawn with the export's style snapshot."""
     heights_reader = Archive(archives["heights"])
     attribution = heights_reader.metadata().get("attribution")
     if not attribution:
@@ -681,13 +688,8 @@ def render_mbtiles(
         )
     )
     out = work / "logjam-area.mbtiles"
-    conn = create_mbtiles(
-        str(out), "logjam-area", credit_line(layers, attribution), zmin, zmax
-    )
-    conn.execute(
-        "INSERT OR REPLACE INTO metadata VALUES ('attribution', ?)",
-        (credit_line(layers, attribution),),
-    )
+    credit = credit_line(layers, attribution)
+    conn = create_mbtiles(str(out), "logjam-area", credit, zmin, zmax, credit)
     jobs = [
         (z, x, y, bbox, rasters, contour_tile(z, x, y), settings) for z, x, y in tiles
     ]

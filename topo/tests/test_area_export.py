@@ -24,6 +24,7 @@ from area_export import (  # noqa: E402
     LAYERS,
     LAYERS_BY_FORMAT,
     MBTILES_ZOOMS,
+    STYLE_SLOPE_BANDS,
     AreaOutsideNsw,
     credit_line,
     hillshade_colours,
@@ -288,10 +289,10 @@ class ClipToBox(unittest.TestCase):
 class MbtilesSettings(unittest.TestCase):
     # Mutation: ignore the snapshot's slopeBands, and an MBTiles is coloured
     # with the default bands, not the account's.
-    def test_the_accounts_bands_and_contour_style(self):
+    def test_the_snapshots_bands_and_contour_style(self):
         bands = [{"fromDeg": 30, "toDeg": 90, "colour": "#ff000080"}]
         settings = mbtiles_settings(
-            {"slopeBands": bands, "contours": {"majorColour": "#112233ff"}}
+            {STYLE_SLOPE_BANDS: bands, "contours": {"majorColour": "#112233ff"}}
         )
         self.assertEqual(settings["slope"]["bands"], bands)
         self.assertEqual(settings["contours"]["majorColour"], "#112233ff")
@@ -449,7 +450,10 @@ class ContoursAlone(unittest.TestCase):
     box = (150.299, -33.701, 150.301, -33.699)
 
     def export(self, heights_tiles):
+        """The metadata of a contours-only MBTiles of the box."""
+        import sqlite3
         import tempfile
+        from contextlib import closing
         from concurrent.futures import ThreadPoolExecutor
         from unittest import mock
 
@@ -466,17 +470,19 @@ class ContoursAlone(unittest.TestCase):
             tempfile.TemporaryDirectory() as tmp,
             mock.patch("area_export.ProcessPoolExecutor", ThreadPoolExecutor),
         ):
-            return render_mbtiles(
-                archives, self.box, ["contours"], {}, Path(tmp)
-            ).exists()
+            path = render_mbtiles(archives, self.box, ["contours"], {}, Path(tmp))
+            with closing(sqlite3.connect(path)) as db:
+                return dict(db.execute("SELECT name, value FROM metadata"))
 
     # Mutation: treat no contour tiles as outside NSW, and a box on flat NSW
-    # ground is refused with "outside NSW".
-    def test_flat_ground_in_nsw_is_an_export(self):
+    # ground is refused with "outside NSW". Or drop the attribution row, and
+    # the file loses its credit.
+    def test_flat_ground_in_nsw_is_an_export_with_its_credit(self):
         from build_nsw_dem import lonlat_to_tile
 
         inside = lonlat_to_tile(150.3, -33.7, 15)
-        self.assertTrue(self.export({(15, *inside): b"heights"}))
+        meta = self.export({(15, *inside): b"heights"})
+        self.assertEqual(meta["attribution"], credit_line(["contours"], "made up"))
 
     # Mutation: drop the heights check, and a contours-only box outside NSW
     # comes out an empty file instead of the outside-NSW sentence.
@@ -534,6 +540,18 @@ class SyncWithShared(unittest.TestCase):
             match, "AREA_EXPORT_OUTSIDE_NSW not found in areaExport.ts"
         )
         self.assertEqual(match.group(1), AreaOutsideNsw.SENTENCE)
+
+    # Mutation: rename the key on one side only, and every MBTiles is drawn
+    # in the default bands, not the account's.
+    def test_the_slope_bands_key_matches(self):
+        match = re.search(
+            r"function areaExportStyleSnapshot\((?P<body>.*?)\n}\n", self.src, re.DOTALL
+        )
+        self.assertIsNotNone(match, "areaExportStyleSnapshot not found")
+        self.assertRegex(
+            match.group("body"),
+            rf"\n\s+{STYLE_SLOPE_BANDS}: normalizeUserUiPreferences",
+        )
 
 
 if __name__ == "__main__":
