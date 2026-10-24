@@ -71,7 +71,10 @@ tester until you roll it out.
      and start a new empty `## [Unreleased]` above it.
 
    Pick the version by what users see: a patch for fixes only, a minor for
-   anything new. Merge it.
+   anything new. The required `expo-doctor` check runs on this PR, and only on
+   a PR that changes the version: if Expo has published a patch release since
+   the last one, run `cd mobile && npx expo install --fix` and commit the
+   result here. Merge it.
 2. **Qualify** the merge commit ([below](#release-qualification)).
 3. **Optional release candidate:** `git tag mobile-vX.Y.Z-rc.1 <sha>` and
    `git push origin mobile-vX.Y.Z-rc.1`. The APK installs over a `preview`
