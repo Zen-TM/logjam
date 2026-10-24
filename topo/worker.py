@@ -737,7 +737,8 @@ def process_legacy(
     geojson_dir = Path(tmp) / "geojson_export"
     geojson_dir.mkdir()
     # Worker now always pins --work-dir so we can upload styled per-layer
-    # GeoTIFFs (the auto-export's GeoTIFF format).
+    # GeoTIFFs, which the export worker's job-export branch reads (kept for
+    # rows queued before Export an area).
     pipeline_work_dir = Path(tmp) / "pipeline_work"
     pipeline_work_dir.mkdir()
     cmd = [
@@ -826,8 +827,8 @@ def process_legacy(
     osm_failed = features_vector is None
 
     # ── Upload raw vector GeoJSONs for the export worker ────────────────
-    # The export worker reads these directly when producing
-    # GeoJSON / GPX / GPKG outputs.
+    # The export worker's job-export branch (kept for rows queued before
+    # Export an area) reads these for its GeoPackage and MBTiles outputs.
     output_prefix = f"outputs/{job_id}"
     for geojson_name in ("contours_5m.geojson", "osm_features.geojson"):
         local = geojson_dir / geojson_name
