@@ -679,10 +679,25 @@ def process_sharpen(
     if vegetation:
         veg_dir = Path(tmp) / "vegetation"
         veg_dir.mkdir()
-        output_keys, _, _, veg_bytes, _ = process_legacy(
+        output_keys, _, _, veg_bytes, veg_metrics = process_legacy(
             job, str(veg_dir), zip_path, layers="vegetation"
         )
         total_output_bytes += veg_bytes
+        # Charged with the job: credits come from wallSeconds
+        # (api/src/lib/computeCredits.ts), and so does the next estimate
+        # (tests/test_worker_helpers.py `TestProcessSharpen`).
+        # Only onto sharpen.py's own figure: without it the job falls back to
+        # its elapsed time, which already holds the vegetation pass.
+        veg_seconds = (veg_metrics or {}).get("wallSeconds")
+        sharpen_seconds = (pipeline_metrics or {}).get("wallSeconds")
+        if isinstance(veg_seconds, (int, float)) and isinstance(
+            sharpen_seconds, (int, float)
+        ):
+            pipeline_metrics = {
+                **pipeline_metrics,
+                "wallSeconds": sharpen_seconds + veg_seconds,
+                "vegetationWallSeconds": veg_seconds,
+            }
 
     sharpen = {**result, "keys": keys, "vegetation": vegetation}
     return (

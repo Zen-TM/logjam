@@ -10,6 +10,7 @@ import {
   noFriendsMessage,
   sendCopyLabel,
   sharePromise,
+  lidarJobSharePromise,
   STATS,
   statsEmptyActivityBody,
   statsHeroTitle,
@@ -628,6 +629,27 @@ describe("sharing", () => {
     for (const kind of BULK_SHARE_ITEM_TYPES)
       expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
     expect(sharePromise("selection")).toContain("these");
+  });
+
+  // Mutation: the LiDAR topo's promise for a sharpened area, which a friend
+  // can't download or export.
+  it("promises no download or export for a sharpened area", () => {
+    for (const kind of ["sharpenedArea", "lidarJob"] as const) {
+      expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
+      expect(sharePromise(kind), kind).not.toMatch(/download|export/);
+    }
+  });
+
+  // Mutations: drop the syncRole check, and a row rebuilt from what a phone
+  // saved, a sharpened area perhaps, is promised an older topo's download
+  // and export; or read a sharpened job as an older one.
+  it("promises a LiDAR job by its kind, and only what is true of both when unknown", () => {
+    expect(lidarJobSharePromise({ syncRole: "owner", sharpened: {} })).toBe(
+      "sharpenedArea",
+    );
+    expect(lidarJobSharePromise({ syncRole: "shared" })).toBe("topoJob");
+    expect(lidarJobSharePromise({ sharpened: undefined })).toBe("lidarJob");
+    expect(lidarJobSharePromise(undefined)).toBe("lidarJob");
   });
 
   it("says a place share leaves copies alone, and a route's can be stopped", () => {
