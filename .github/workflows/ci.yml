@@ -322,7 +322,7 @@ jobs:
       # Postgres. Rides on this job because it needs exactly this seeded DB
       # (it acts as the seeded alice). Only psycopg2 has to be real; the rest
       # of worker.py's native imports stay stubbed by tests/_native_stub.py.
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: Topo status guard against real Postgres
@@ -534,7 +534,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       # Pure-logic tests; tests/_native_stub.py stubs osgeo/psycopg2 etc when
@@ -867,7 +867,7 @@ jobs:
         run: infra/scripts/ci-scope.sh --self-test
       - name: Sample-data fetch checks hashes
         run: scripts/sample-data.sh --self-test
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - name: rollback-compat mirrors api-integration
