@@ -14,9 +14,9 @@
 -- fails and names the duplicated value: renaming a user's account is the
 -- maintainer's decision, not something this migration should do silently.
 --
--- Pre-deploy window (ADR 0003): the previous image keeps serving for minutes
--- after this index lands, and a first login it now refuses gets P2002, which
--- that image cannot name (`meta.target` is undefined under the pg adapter) and
--- so answers 500 — the same answer it already gives an exact-name collision.
--- The deploy fixes both; no row is lost.
+-- Pre-deploy window and rollback (ADR 0003's 2026-10-24 exception): an older
+-- image keeps serving for the swap, or for as long as a rollback runs, and a
+-- first login it now refuses gets P2002, which that image cannot name
+-- (`meta.target` is undefined under the pg adapter) and so answers 500 — the
+-- same answer it already gives an exact-name collision. No row is lost.
 CREATE UNIQUE INDEX "users_username_as_read_key" ON "users" (lower("username"));
