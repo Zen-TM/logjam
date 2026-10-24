@@ -8,8 +8,14 @@ name: expo-doctor
 # code to phones that update months later, and the wrong one on every other PR:
 # there it would block unrelated work for upstream drift. Fix a red release PR
 # with `npx expo install --fix` in the same PR.
+#
+# Nightly on main as well, so drift is fixed on an ordinary day and not found
+# on release day: a red run opens one issue (or rewrites the open one), and a
+# green run closes it.
 on:
   pull_request:
+  schedule:
+    - cron: "47 16 * * *" # 02:47 AEST, after the nightly CI run
   workflow_dispatch:
 
 permissions:
@@ -53,3 +59,32 @@ jobs:
         name: Expo doctor
         working-directory: mobile
         run: npx expo-doctor
+
+  nightly-issue:
+    needs: expo-doctor
+    if: ${{ !cancelled() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "expo-doctor is red on main"
+      RESULT: ${{ needs.expo-doctor.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the issue
+        run: |
+          set -euo pipefail
+          n=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n1)
+          if [ "$RESULT" = success ]; then
+            [ -z "$n" ] || gh issue close "$n" --comment "Green again in $RUN_URL"
+            exit 0
+          fi
+          body="The nightly \`expo-doctor\` run on \`main\` failed: [run]($RUN_URL). Usually Expo published a patch release or a package was deprecated. In \`mobile/\`, run \`npx expo install --fix\` and \`npx expo-doctor\`. Logjam GPS release PRs are gated on this check."
+          if [ -n "$n" ]; then
+            gh issue edit "$n" --body "$body"
+          else
+            gh issue create --title "$TITLE" --label task --label triage --body "$body"
+          fi
