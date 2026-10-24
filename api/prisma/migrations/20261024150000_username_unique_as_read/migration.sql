@@ -1,0 +1,22 @@
+-- A username is one username however it is capitalised: friend search matches
+-- case-insensitively (routes/friends.ts), so "Sam" beside "sam" gave two rows
+-- nothing on screen could tell apart. A case variant is now a taken name:
+-- signup takes the suffix retry an exact collision already gets, and PATCH
+-- answers its 409. Guard: src/__tests__/users.test.ts.
+--
+-- The exact unique index on ("username") stays: Prisma's schema declares it,
+-- and a lookup by exact username keeps using it. `lower()` also folds names
+-- first login carries in from Cognito (preferred_username, or the email local
+-- part), which never pass the PATCH rule's ASCII letters: "Élodie" and
+-- "élodie" are one name here too.
+--
+-- No colliding pair is known in prod (issue #360). If one exists, CREATE INDEX
+-- fails and names the duplicated value: renaming a user's account is the
+-- maintainer's decision, not something this migration should do silently.
+--
+-- Pre-deploy window (ADR 0003): the previous image keeps serving for minutes
+-- after this index lands, and a first login it now refuses gets P2002, which
+-- that image cannot name (`meta.target` is undefined under the pg adapter) and
+-- so answers 500 — the same answer it already gives an exact-name collision.
+-- The deploy fixes both; no row is lost.
+CREATE UNIQUE INDEX "users_username_as_read_key" ON "users" (lower("username"));
