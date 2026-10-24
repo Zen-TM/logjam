@@ -401,14 +401,14 @@ export function useAuth() {
   // Lands on the chooser, not the sign-in form: a device with no account on it
   // is exactly the state the chooser exists for, and someone signing out may
   // well want to carry on without an account.
-  const handleSignOut = useCallback(async () => {
+  const handleSignOut = useCallback(async (everywhere = false) => {
     await clearLocalIdentity();
     // Not "account" — this device now has no account on it, and recording one
     // would send the next cold start to the sign-in form while this sign-out
     // sent them to the chooser. Same state, same screen, either way.
     clearEntryChoice();
     try {
-      await cognitoSignOut();
+      await cognitoSignOut({ everywhere });
     } catch (err) {
       // Offline sign-out: Amplify clears local tokens regardless; the server-
       // side revocation just didn't happen. Log and continue.

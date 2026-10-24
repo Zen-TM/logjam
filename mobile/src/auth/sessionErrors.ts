@@ -3,14 +3,14 @@
 // Offline-session semantics: NEVER auto-sign-out on token expiry or network
 // unreachability — that would brick the app mid-trip. Force re-auth only when
 // the refresh was *actively rejected* by Cognito while online
-// (revoked/disabled/password change). Everything else — airplane mode, flaky
-// reception, server hiccup — is transient: keep the session, keep local data
+// (revoked/disabled). Everything else — airplane mode, flaky reception, server
+// hiccup — is transient: keep the session, keep local data
 // usable (Guard: sessionErrors.test.ts).
 
 /** Cognito error names that mean "this refresh token is no longer accepted". */
 const REJECTION_ERROR_NAMES = new Set([
-  // Refresh token expired, revoked (global sign-out), or invalidated by a
-  // password change.
+  // Refresh token expired or revoked (global sign-out). A password change does
+  // not revoke one.
   "NotAuthorizedException",
   // Account disabled or deleted server-side.
   "UserNotFoundException",

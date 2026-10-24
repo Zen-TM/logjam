@@ -20,8 +20,9 @@ locals {
   # rollback-compat's "Live release on this schema", terraform-ci's,
   # setup-smoke) skip, and so pass, on a PR that touches nothing they test
   # (infra/scripts/ci-scope.sh); dependency-review passes when no manifest
-  # changed. Each workflow starts on every PR: a required check whose
-  # workflow never starts leaves the PR waiting.
+  # changed, and expo-doctor when the PR is not a Logjam GPS release. Each
+  # workflow starts on every PR: a required check whose workflow never starts
+  # leaves the PR waiting.
   required_checks = [
     "shared",
     "api",
@@ -50,6 +51,7 @@ locals {
     "topo-image",
     "gitleaks",
     "pr-closes",
+    "expo-doctor",
   ]
 }
 
