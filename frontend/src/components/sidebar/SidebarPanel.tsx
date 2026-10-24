@@ -38,6 +38,7 @@ import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import LidarPanel from "./panels/LidarPanel";
+import ExportsPanel from "./panels/ExportsPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
@@ -59,6 +60,7 @@ const LOGS_VIEWS = [
 
 const MAPS_VIEWS = [
   { value: "geopdfs", label: "GeoPDFs" },
+  { value: "exports", label: "Exports" },
   { value: "lidar", label: "LiDAR topos" },
 ] as const;
 
@@ -104,9 +106,13 @@ function SidebarPanel({
   topoJobsLoaded,
   topoExports,
   topoExportsTotal,
+  topoExportsLoaded,
+  topoExportsError,
   onRefetchTopoExports,
   setLidarJobToggles,
   onOpenTopo,
+  onOpenExport,
+  onExportArea,
   onRefetchCompletedTopoJobs,
   onDismissActiveJob,
   onQuotaChanged,
@@ -210,6 +216,9 @@ function SidebarPanel({
   topoJobsLoaded: boolean;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
+  /** False until the first fetch of exports settles (shared/DESIGN.md §11). */
+  topoExportsLoaded: boolean;
+  topoExportsError: string | null;
   onRefetchTopoExports: () => void;
   setLidarJobToggles: (
     v:
@@ -217,6 +226,10 @@ function SidebarPanel({
       | ((prev: Record<string, boolean>) => Record<string, boolean>),
   ) => void;
   onOpenTopo: () => void;
+  /** Export an area, from the Exports view. */
+  onOpenExport: () => void;
+  /** Export an area over a topo's footprint. */
+  onExportArea: (job: CompletedTopoJob) => void;
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
@@ -433,6 +446,19 @@ function SidebarPanel({
             loadsUserData={loadsUserData}
           />
         )}
+        {activePanel === "maps" && mapsView === "exports" && (
+          <ExportsPanel
+            views={mapsViewRail}
+            topoExports={topoExports}
+            topoExportsTotal={topoExportsTotal}
+            loaded={topoExportsLoaded}
+            error={topoExportsError}
+            completedTopoJobs={completedTopoJobs}
+            onRefetchTopoExports={onRefetchTopoExports}
+            onQuotaChanged={onQuotaChanged}
+            onOpenExport={onOpenExport}
+          />
+        )}
         {activePanel === "maps" && mapsView === "lidar" && (
           <LidarPanel
             views={mapsViewRail}
@@ -442,11 +468,9 @@ function SidebarPanel({
             friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
-            topoExports={topoExports}
-            topoExportsTotal={topoExportsTotal}
-            onRefetchTopoExports={onRefetchTopoExports}
             setLidarJobToggles={setLidarJobToggles}
             onOpenTopo={onOpenTopo}
+            onExportArea={onExportArea}
             onTopoFlyTarget={onTopoFlyTarget}
             onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
             onDismissActiveJob={onDismissActiveJob}

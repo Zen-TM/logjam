@@ -26,10 +26,16 @@ describe("inboxDestination", () => {
     });
   });
 
+  // Mutation: route a finished export back to "lidar", which no longer lists it.
   it("sends a finished map to the Maps view that lists it", () => {
     expect(
       inboxDestination(notification("topo_complete", { jobId: "j1" })),
     ).toMatchObject({ panel: "maps", mapsView: "lidar" });
+    expect(
+      inboxDestination(
+        notification("topo_export_complete", { status: "completed" }),
+      ),
+    ).toMatchObject({ panel: "maps", mapsView: "exports" });
     expect(
       inboxDestination(
         notification("geo_pdf_complete", { status: "completed" }),

@@ -3,7 +3,7 @@
 // vi.mock("../services/email") and ("../services/push") itself: vi.mock is per
 // file, and it keeps a real Resend send or a device token out of reach.
 import request from "supertest";
-import { createCanvas } from "canvas";
+import { createCanvas, loadImage, type Canvas } from "canvas";
 import { GEOPDF_BASE_LAYER_CONFIG, type GeoPdfConfig } from "@logjam/shared";
 import { API_URL } from "./_actors";
 import prisma from "../services/prisma";
@@ -100,4 +100,29 @@ export async function renderGeoPdf(
   } finally {
     await request(API_URL).delete(`/geo-pdf/${jobId}`).set(AUTH);
   }
+}
+
+/** The page's map image: the JPEG pdfkit embeds, found by its filter. */
+export async function mapImage(pdf: Uint8Array): Promise<Canvas> {
+  const bytes = Buffer.from(pdf);
+  const filter = bytes.indexOf("/DCTDecode");
+  const start = bytes.indexOf("stream", filter) + "stream".length;
+  const from = bytes.indexOf(Buffer.from([0xff, 0xd8]), start);
+  const to = bytes.indexOf("endstream", from);
+  const img = await loadImage(bytes.subarray(from, to));
+  const canvas = createCanvas(img.width, img.height);
+  canvas.getContext("2d").drawImage(img, 0, 0);
+  return canvas;
+}
+
+/** Mean colour of a block, centred at a fraction of the image. */
+export function colourAt(canvas: Canvas, fx: number, fy: number) {
+  const { data } = canvas
+    .getContext("2d")
+    .getImageData(fx * canvas.width - 5, fy * canvas.height - 5, 10, 10);
+  const mean = [0, 0, 0];
+  for (let i = 0; i < data.length; i += 4) {
+    for (let c = 0; c < 3; c++) mean[c] += data[i + c] / (data.length / 4);
+  }
+  return mean;
 }

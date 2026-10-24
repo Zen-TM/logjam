@@ -1,7 +1,18 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GEOPDF_TOO_LARGE, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import {
+  AREA_EXPORT_TOO_LARGE,
+  GEOPDF_TOO_LARGE,
+  TERRAIN_LAYER_DEFAULTS,
+} from "@logjam/shared";
+import { apiFetch } from "../../placeUtils";
 import GeoPdfDialog, { type GeoPdfTemplate } from "./GeoPdfDialog";
 import type { TBbox } from "../map/Map";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
@@ -78,6 +89,10 @@ function dialog({
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
   completedTopoJobs?: CompletedTopoJob[];
+  areaSeed?: TBbox | null;
+  openWithGis?: boolean;
+  onPickArea?: () => void;
+  pendingArea?: TBbox | null;
 }) {
   return (
     <ToastProvider>
@@ -381,5 +396,173 @@ describe("GeoPdfDialog, a new template's Terrain layers", () => {
       dialog({ open: true, templateMode: true, completedTopoJobs: [ownJob] }),
     );
     expect(slope().checked).toBe(true);
+  });
+});
+
+const seed: TBbox = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
+
+function chooseGis(format: "GeoTIFF" | "GeoPackage" | "MBTiles") {
+  const forGis = screen.getByText("For GIS").closest("details")!;
+  forGis.open = true;
+  fireEvent.click(screen.getByRole("radio", { name: format }));
+}
+
+const exportPosts = () =>
+  vi
+    .mocked(apiFetch)
+    .mock.calls.filter(([path]) => path === "/topo-exports")
+    .map(([, init]) => (init as { body: unknown }).body);
+
+describe("Export an area, for GIS", () => {
+  // Mutation: start `format` at a GIS format, or `gisOpen` at true.
+  it("opens on GeoPDF with For GIS closed", () => {
+    render(dialog({ open: true }));
+    expect(
+      screen
+        .getByRole("radio", { name: "GeoPDF" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("For GIS").closest("details")!.open).toBe(false);
+  });
+
+  // The choice spans two groups, so neither may claim the whole of it: with
+  // a GIS format chosen, a screen reader would hear "Format" with nothing
+  // checked. Mutation: name the GeoPDF group "Format" again.
+  it("names the GeoPDF group for what it holds, beside For GIS", () => {
+    render(dialog({ open: true }));
+    const print = screen.getByRole("radiogroup", { name: "For print" });
+    expect(within(print).getByRole("radio", { name: "GeoPDF" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "For GIS" })).toBeTruthy();
+  });
+
+  // A GIS file is a free box: no paper, and only the layers the format holds.
+  // Mutation: render the GeoPDF body whatever the format, or list every layer.
+  it("drops the paper and offers only the format's layers", () => {
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    expect(screen.queryByRole("radiogroup", { name: "Paper size" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Heights" })).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Contours" })).toBeNull();
+
+    chooseGis("MBTiles");
+    expect(screen.queryByRole("checkbox", { name: "Heights" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Contours" })).toBeTruthy();
+  });
+
+  // Mutation: post the GeoPDF's extent instead of the box, or send a layer
+  // that is unticked.
+  it("sends the box it was opened over, the ticked layers and the format", async () => {
+    vi.mocked(apiFetch).mockClear();
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoPackage");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Heights" }));
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+
+    await vi.waitFor(() =>
+      expect(exportPosts()).toEqual([
+        {
+          bbox: seed,
+          layers: ["slope", "hillshade", "contours"],
+          format: "gpkg",
+        },
+      ]),
+    );
+  });
+
+  // Mutation: drop the `areaExportTooLarge` check from `gisAreaError`.
+  it("refuses a box over the limit, live and at Make it", () => {
+    vi.mocked(apiFetch).mockClear();
+    render(
+      dialog({
+        open: true,
+        areaSeed: { north: -33, south: -35, east: 151, west: 149 },
+      }),
+    );
+    chooseGis("GeoTIFF");
+    expect(screen.getByText(AREA_EXPORT_TOO_LARGE)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+    expect(exportPosts()).toEqual([]);
+  });
+
+  // An edge left wrong is not committed, so the box underneath is the last
+  // good one. Mutation: drop the edge-error check from handleExportArea.
+  it("sends nothing while an edge shows an error, and opens Exact edges", () => {
+    vi.mocked(apiFetch).mockClear();
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    const gisEdges = screen.getByText("Exact edges").closest("details")!;
+    gisEdges.open = true;
+    const north = screen.getByRole("textbox", { name: "North" });
+    fireEvent.change(north, { target: { value: "-34" } });
+    fireEvent.blur(north);
+    gisEdges.open = false;
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+    expect(exportPosts()).toEqual([]);
+    expect(screen.getByText("Exact edges").closest("details")!.open).toBe(true);
+  });
+
+  // Maps, Exports opens it on a GIS format. Mutation: ignore `openWithGis`.
+  it("opens on GeoTIFF with For GIS open from the Exports view", () => {
+    render(dialog({ open: true, openWithGis: true }));
+    expect(
+      screen
+        .getByRole("radio", { name: "GeoTIFF" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("For GIS").closest("details")!.open).toBe(true);
+  });
+
+  // A requirement shows on Make it, a limit live (shared/DESIGN.md §11).
+  // Mutation: drop the `gisTried` gate on "Pick at least one layer."
+  it("asks for a layer only once Make it is pressed without one", () => {
+    render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    for (const name of ["Heights", "Slope", "Hillshade"])
+      fireEvent.click(screen.getByRole("checkbox", { name }));
+    expect(screen.queryByText("Pick at least one layer.")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(screen.getByText("Pick at least one layer.")).toBeTruthy();
+  });
+
+  // Two clicks on one spot draw a box with no size, which the API refuses as
+  // a fault. Mutation: drop the no-size branch from `gisAreaLimit`.
+  it("says a box with no size needs drawing again, and sends nothing", () => {
+    vi.mocked(apiFetch).mockClear();
+    render(
+      dialog({
+        open: true,
+        areaSeed: { north: -33.6, south: -33.6, east: 150.3, west: 150.3 },
+      }),
+    );
+    chooseGis("GeoTIFF");
+    expect(
+      screen.getByText("That box has no size. Draw it again on the map."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(exportPosts()).toEqual([]);
+  });
+
+  // Drawing the box closes the dialog and reopens it: a round trip, not a new
+  // open. Mutation: drop `setReturningFromMapSelect(true)` from the GIS pick.
+  it("keeps the format across Pick on the map, and takes the drawn box", () => {
+    let pick = () => {};
+    const props = { onPickArea: () => pick() };
+    const { rerender } = render(dialog({ open: true, ...props }));
+    chooseGis("GeoTIFF");
+    pick = () => rerender(dialog({ open: false, ...props }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
+    rerender(dialog({ open: true, pendingArea: seed, ...props }));
+
+    expect(
+      screen
+        .getByRole("radio", { name: "GeoTIFF" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(screen.getByText("9.3 km × 11.1 km")).toBeTruthy();
   });
 });

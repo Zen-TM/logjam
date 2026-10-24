@@ -42,7 +42,7 @@ import {
   NSW_HILLSHADE,
   NSW_SLOPE,
   nswContourStyle,
-  terrainCredit,
+  type TerrainArchiveLayer,
 } from "@logjam/shared";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { s3 as s3Client } from "./awsClients";
@@ -51,12 +51,26 @@ import type { Source } from "pmtiles";
 import { VectorTileFeature } from "@mapbox/vector-tile";
 import { decodeVectorTileLayer } from "./geoPdfVectorTile";
 import {
+  areasOnPage,
+  contourTilesBySource,
   decodeTerrarium,
   hillshadePixels,
   nswContourZoom,
   slopePixels,
+  STATEWIDE,
+  terrainCreditLines,
+  terrainGrid,
+  terrainReadKey,
+  terrainReadZoom,
+  terrainTileReader,
+  terrainTileReads,
   type DemGrid,
+  type TerrainTileRead,
 } from "./geoPdfTerrain";
+import {
+  visibleSharpenedAreas,
+  type VisibleSharpenedArea,
+} from "./sharpenedAreas";
 import {
   TILE_SIZE,
   TARGET_DPI,
@@ -397,6 +411,8 @@ export async function generateGeoPdf(
   // on the page (e.g. a layer selected over an area with no LiDAR coverage).
   const renderedOverlays = new Set<string>();
   const drawnTerrain = new Set<TerrainLayerKey>();
+  // Each area that drew, and the layers it supplied: its credit names those.
+  const drawnAreas = new Map<VisibleSharpenedArea, Set<TerrainLayerKey>>();
   // Fail loud on a missing bucket instead of guessing a name: every S3 error in
   // the overlay path is swallowed as "this job has no such layer" (the
   // deliberate 404-tolerance below), so a wrong bucket renders every GeoPDF
@@ -441,7 +457,7 @@ export async function generateGeoPdf(
     const completedJobs = await prisma.topoJob.findMany({
       where: { userId, status: "complete" },
       orderBy: { createdAt: "asc" },
-      select: { id: true, footprint: true },
+      select: { id: true, footprint: true, sharpen: true },
     });
     const overlappingJobs = completedJobs.filter((j) => {
       if (!j.footprint) return true;
@@ -467,18 +483,50 @@ export async function generateGeoPdf(
       ? await loadPointIcons(vectorStyle)
       : new Map<OsmPointFeatureKey, Image>();
 
-    // The statewide Terrain group comes first, under every LiDAR job's own
-    // layers, as Logjam Web stacks them: shading, slope, then contours. A
-    // terrarium layer is read at its own deepest zoom when the print wants a
-    // deeper one, and stretched. Never deeper than the canvas, so a grid is
-    // never larger than the map image (drawTerrarium's memory note).
+    // The Terrain group comes first, under every LiDAR job's own layers, as
+    // Logjam Web stacks them: shading, slope, then contours. Each tile comes
+    // from the statewide archive or from the one sharpened area the router
+    // gives it to, among the areas this user may read when the render starts
+    // (ADR 0040; guard: src/__tests__/geoPdfSharpened.test.ts). A terrarium
+    // layer is read at the deepest zoom its archives hold when the print
+    // wants a deeper one, and stretched. Never deeper than the canvas, so a
+    // grid is never larger than the map image (drawTerrarium's memory note).
     const extent = config.extent;
-    const demZoom = (maxzoom: number) => Math.min(zoom, overlayZoom, maxzoom);
+    const areas = areasOnPage(await visibleSharpenedAreas(userId), extent);
+    const areaArchives = new Map<string, PMTiles>();
+    const archiveFrom =
+      (layer: TerrainArchiveLayer, statewide: PMTiles | null) =>
+      (source: string): PMTiles | null => {
+        if (source === STATEWIDE) return statewide;
+        const key = areas.find((a) => a.id === source)?.keys[layer];
+        if (!key) return null;
+        let archive = areaArchives.get(key);
+        if (!archive) {
+          archive = new PMTiles(new S3Source(topoBucket, key, s3Client));
+          areaArchives.set(key, archive);
+        }
+        return archive;
+      };
+    const creditAreas = (layer: TerrainLayerKey, sources: Iterable<string>) => {
+      for (const source of sources) {
+        const area = areas.find((a) => a.id === source);
+        if (!area) continue;
+        const layers = drawnAreas.get(area) ?? new Set<TerrainLayerKey>();
+        layers.add(layer);
+        drawnAreas.set(area, layers);
+      }
+    };
+    const demZoom = (maxzoom: number) =>
+      terrainReadZoom(Math.min(zoom, overlayZoom), maxzoom, areas);
     if (config.overlays.includes("hillshade")) {
       const shadeZoom = demZoom(NSW_HILLSHADE.maxzoom);
       const drew = await drawTerrarium(
         mapCtx,
-        await openArchive(topoBucket, NSW_HILLSHADE.archivePath, "hillshade"),
+        archiveFrom(
+          "heights",
+          await openArchive(topoBucket, NSW_HILLSHADE.archivePath, "hillshade"),
+        ),
+        terrainTileReader(areas, "heights"),
         shadeZoom,
         extent,
         nativeW,
@@ -486,12 +534,17 @@ export async function generateGeoPdf(
         (grid, tileY, out) => hillshadePixels(grid, shadeZoom, tileY, out),
         true,
       );
-      if (drew) drawnTerrain.add("hillshade");
+      if (drew.size > 0) drawnTerrain.add("hillshade");
+      creditAreas("hillshade", drew);
     }
     if (config.overlays.includes("slope")) {
       const drew = await drawTerrarium(
         mapCtx,
-        await openArchive(topoBucket, NSW_SLOPE.archivePath, "slope"),
+        archiveFrom(
+          "slope",
+          await openArchive(topoBucket, NSW_SLOPE.archivePath, "slope"),
+        ),
+        terrainTileReader(areas, "slope"),
         demZoom(NSW_SLOPE.maxzoom),
         extent,
         nativeW,
@@ -500,15 +553,18 @@ export async function generateGeoPdf(
         // Stretched without smoothing, so a band keeps its hard edge.
         false,
       );
-      if (drew) drawnTerrain.add("slope");
+      if (drew.size > 0) drawnTerrain.add("slope");
+      creditAreas("slope", drew);
     }
     const contourZoom = nswContourZoom(config.scale, centreLat, overlayZoom);
-    const contourArchive =
+    if (
       contourZoom !== null &&
       drawsNswContours(config.baseLayer, config.overlays.includes("contours"))
-        ? await openArchive(topoBucket, NSW_CONTOURS.archivePath, "contours")
-        : null;
-    if (contourArchive && contourZoom !== null) {
+    ) {
+      const contoursFrom = archiveFrom(
+        "contours",
+        await openArchive(topoBucket, NSW_CONTOURS.archivePath, "contours"),
+      );
       const contourTransform = computeTileToMapTransform(
         contourZoom,
         extent.north,
@@ -518,27 +574,41 @@ export async function generateGeoPdf(
         nativeW,
         nativeH,
       );
-      const drew = await fetchAndDrawPMTilesVectorDirect(
-        mapCtx,
+      for (const [source, tiles] of contourTilesBySource(
+        areas,
         contourTransform.tiles,
-        contourArchive,
-        contourTransform,
-        "contours",
-        styleZoom,
-        vectorPxScale,
-        // The map's own look for these lines, not the user's LiDAR style.
-        nswContourStyle(config.baseLayer),
-        iconCache,
-        placedLabelPositions,
-        pendingLabels,
-      );
-      if (drew > 0) drawnTerrain.add("contours");
+      )) {
+        const archive = contoursFrom(source);
+        if (!archive) continue;
+        const drew = await fetchAndDrawPMTilesVectorDirect(
+          mapCtx,
+          tiles,
+          archive,
+          contourTransform,
+          "contours",
+          styleZoom,
+          vectorPxScale,
+          // The map's own look for these lines, not the user's LiDAR style.
+          nswContourStyle(config.baseLayer),
+          iconCache,
+          placedLabelPositions,
+          pendingLabels,
+        );
+        if (drew > 0) {
+          drawnTerrain.add("contours");
+          creditAreas("contours", [source]);
+        }
+      }
     }
 
     for (const overlayName of sortedOverlays as TopoLayerName[]) {
       const layerDef = TOPO_LAYERS.find((l) => l.name === overlayName);
       if (!layerDef) continue;
       for (const job of overlappingJobs) {
+        // A sharpened job's slope and contours are its terrain archives,
+        // drawn above; only a legacy layer it also made (vegetation) is drawn
+        // here. Guard: the owner case in geoPdfSharpened.test.ts.
+        if (job.sharpen != null && overlayName !== "vegetation") continue;
         const pmtilesKey = `outputs/${job.id}/${overlayName}.pmtiles`;
         const source = new S3Source(topoBucket, pmtilesKey, s3);
         const archive = new PMTiles(source);
@@ -652,7 +722,7 @@ export async function generateGeoPdf(
     elementDpi,
     config,
     Array.from(renderedOverlays),
-    terrainCredit(drawnTerrain),
+    terrainCreditLines(drawnTerrain, drawnAreas),
     baseLayerExtractedAt,
   );
 
@@ -884,32 +954,34 @@ async function openArchive(
 }
 
 /**
- * Read a terrarium archive's tiles over the map at `zoom` into one grid,
- * turn it into pixels with `paint`, and stretch those onto the map. Returns
- * whether any tile had data, so a layer with none is not credited.
+ * Read a terrarium layer's tiles over the map at `zoom` into one grid, each
+ * from the archive `read` routes it to (`archiveFrom`), turn it into pixels
+ * with `paint`, and stretch those onto the map. Returns the sources that had
+ * a tile, so a layer or an area with none is not credited.
  *
  * Memory: `zoom` is never deeper than the canvas's (`demZoom`), so the grid
- * is the map image's size at most, plus up to a tile on each side. It is held
- * three ways at once: the canvas, its pixel bytes (painted over in place) and
- * the decoded floats, 12 bytes a pixel. It is drawn through the context's
- * transform: in node-canvas a scaled 5-argument drawImage first copies the
- * whole source into a scratch surface at the destination's size, and this
- * does not. At the 400 MB canvas cap (about 105 Mpx, 116 Mpx with the tiles
- * around it) that peaks near 1.4 GB beside the 0.4 GB map image: about
- * 1.8 GB of the GeoPDF task's 4 GiB. One layer at a time, and the grid's
- * surface is let go as soon as it is drawn.
+ * is the map image's size at most, plus up to a tile on each side. The
+ * decoded tiles and the grid's floats come first (8 bytes a pixel); the tiles
+ * are let go before the canvas and its pixel bytes are made, so the peak is
+ * the canvas, its pixel bytes and the floats, 12 bytes a pixel. It is drawn
+ * through the context's transform: in node-canvas a scaled 5-argument
+ * drawImage first copies the whole source into a scratch surface at the
+ * destination's size, and this does not. At the 400 MB canvas cap (about
+ * 105 Mpx, 116 Mpx with the tiles around it) that peaks near 1.4 GB beside
+ * the 0.4 GB map image: about 1.8 GB of the GeoPDF task's 4 GiB. One layer at
+ * a time, and the grid's surface is let go as soon as it is drawn.
  */
 async function drawTerrarium(
   mapCtx: CanvasRenderingContext2D,
-  archive: PMTiles | null,
+  archiveFrom: (source: string) => PMTiles | null,
+  read: (z: number, x: number, y: number) => TerrainTileRead,
   zoom: number,
   extent: GeoPdfConfig["extent"],
   widthPx: number,
   heightPx: number,
   paint: (grid: DemGrid, tileY: number, out: Uint8ClampedArray) => void,
   smooth: boolean,
-): Promise<boolean> {
-  if (!archive) return false;
+): Promise<Set<string>> {
   const t = computeTileToMapTransform(
     zoom,
     extent.north,
@@ -920,39 +992,54 @@ async function drawTerrarium(
     heightPx,
   );
   const last = t.tiles[t.tiles.length - 1]!;
-  const width = (last.x - t.minTileX + 1) * TILE_SIZE;
-  const height = (last.y - t.minTileY + 1) * TILE_SIZE;
-  const grid = createCanvas(width, height);
-  const gridCtx = grid.getContext("2d");
-  const drawn = await pMap(
-    t.tiles,
-    async (tile) => {
+  const cols = last.x - t.minTileX + 1;
+  const rows = last.y - t.minTileY + 1;
+  const decoded = new Map<string, Float32Array>();
+  const drew = new Set<string>();
+  await pMap(
+    terrainTileReads(t.tiles, zoom, read, smooth),
+    async (r) => {
+      const archive = archiveFrom(r.source);
+      if (!archive) return;
       try {
-        const result = await archive.getZxy(tile.z, tile.x, tile.y);
-        if (!result?.data) return 0;
+        const result = await archive.getZxy(r.z, r.x, r.y);
+        if (!result?.data) return;
         const img = await loadImage(Buffer.from(result.data));
-        gridCtx.drawImage(
-          img,
-          (tile.x - t.minTileX) * TILE_SIZE,
-          (tile.y - t.minTileY) * TILE_SIZE,
+        const tile = createCanvas(TILE_SIZE, TILE_SIZE).getContext("2d");
+        tile.drawImage(img, 0, 0);
+        const { data } = tile.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+        decoded.set(
+          terrainReadKey(r),
+          decodeTerrarium(data, TILE_SIZE, TILE_SIZE).values,
         );
-        return 1;
+        drew.add(r.source);
       } catch (err) {
+        // The zoom only: a tile's index or archive would say where.
         logger.warn(
-          { source: "terrain-pmtile", z: tile.z, err: safeErrorForLog(err) },
+          { source: "terrain-pmtile", z: r.z, err: safeErrorForLog(err) },
           "GeoPDF: failed to fetch terrain tile",
         );
-        return 0;
       }
     },
     CONCURRENCY,
   );
-  if (!drawn.some(Boolean)) return false;
+  if (drew.size === 0) return drew;
 
-  const pixels = gridCtx.getImageData(0, 0, width, height);
-  const heights = decodeTerrarium(pixels.data, width, height);
-  pixels.data.fill(0);
-  paint(heights, t.minTileY, pixels.data);
+  const values = terrainGrid(
+    zoom,
+    t.minTileX,
+    t.minTileY,
+    cols,
+    rows,
+    read,
+    decoded,
+    smooth,
+  );
+  decoded.clear();
+  const grid = createCanvas(values.width, values.height);
+  const gridCtx = grid.getContext("2d");
+  const pixels = gridCtx.createImageData(values.width, values.height);
+  paint(values, t.minTileY, pixels.data);
   gridCtx.putImageData(pixels, 0, 0);
   mapCtx.save();
   mapCtx.imageSmoothingEnabled = smooth;
@@ -968,7 +1055,7 @@ async function drawTerrarium(
   mapCtx.restore();
   // Resizing frees the surface now rather than at the next collection.
   grid.width = 0;
-  return true;
+  return drew;
 }
 
 /**
@@ -2113,7 +2200,7 @@ function drawAttribution(
   dpi: number,
   config: GeoPdfConfig,
   renderedOverlays: string[],
-  terrainLine: string | null,
+  terrainLines: string[],
   baseLayerExtractedAt: Date,
 ) {
   const fontSize = mmToPx(1.8, dpi);
@@ -2158,7 +2245,7 @@ function drawAttribution(
     // NSW Spatial Services require a dated extraction credit beside the standing
     // one (web-service terms cl. 3.1.1); null for non-SIX base layers.
     extractionCreditLine(config.baseLayer, baseLayerExtractedAt),
-    terrainLine,
+    ...terrainLines,
     ...overlayAttributionLines(renderedOverlays),
   ]
     .filter((line): line is string => line !== null)

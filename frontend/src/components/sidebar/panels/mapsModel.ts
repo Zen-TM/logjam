@@ -3,11 +3,12 @@
 //
 // The page answers "what maps have I made, and what is still being made?"
 // (shared/DESIGN.md §2). The second half of that question is `beingMade`: every job the
-// user is still waiting on — a GeoPDF, a topo, an export of a topo — as one kind
+// user is still waiting on — a GeoPDF, a topo, an export — as one kind
 // of row, newest first, with the words for where it has got to. The tile's glyph
 // and hue already say which kind a row is, and a list that scrolls has no
 // reason to hide its fourth item.
 import {
+  areaSizeKm,
   EXPORT_FORMAT_RULES,
   formatBytes,
   formatMinutes,
@@ -17,6 +18,7 @@ import {
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import type { TopoJob } from "../../dialogs/TopoDialog";
+import { sheetSizeLabel } from "../../dialogs/geoPdfArea";
 import { type Glyph } from "../../../ui";
 
 /**
@@ -55,7 +57,7 @@ export const MAP_IDENTITY: Record<
   export: {
     icon: "export",
     hue: "var(--hue-overlay)",
-    label: "Export of a LiDAR topo",
+    label: "Export of an area",
   },
   geoPdfTemplate: {
     icon: "template",
@@ -136,11 +138,16 @@ export function exportFormatLabel(format: TopoExportJobView["format"]): string {
   return EXPORT_FORMAT_RULES[format].label;
 }
 
-/** An export is named after the topo it was made from — which may be gone. */
+/** An export of an area is named by the ground it covers, as the dialog
+ *  showed it; an older one after the topo it was made from, which may be gone. */
 export function exportLabel(
-  exportJob: Pick<TopoExportJobView, "sourceJobIds">,
+  exportJob: Pick<TopoExportJobView, "sourceJobIds" | "bbox">,
   topoNames: ReadonlyMap<string, string>,
 ): string {
+  if (exportJob.bbox) {
+    const { widthKm, heightKm } = areaSizeKm(exportJob.bbox);
+    return `Area of ${sheetSizeLabel(widthKm * 1000, heightKm * 1000)}`;
+  }
   return topoNames.get(exportJob.sourceJobIds[0]) ?? "Deleted topo";
 }
 
@@ -197,12 +204,8 @@ export function geoPdfsBeingMade(jobs: readonly GeoPdfJobView[]): MakingItem[] {
   );
 }
 
-/** Topos still on their way AND exports of finished topos still on theirs: one
- *  list, because to the person waiting they are the same kind of wait. */
-export function topoWorkBeingMade(
+export function toposBeingMade(
   activeTopoJobs: readonly TopoJob[],
-  exports: readonly TopoExportJobView[],
-  topoNames: ReadonlyMap<string, string>,
 ): MakingItem[] {
   const topos = activeTopoJobs.map((job) => ({
     key: `topo-${job.id}`,
@@ -220,6 +223,13 @@ export function topoWorkBeingMade(
     failed: job.status === "failed",
     createdAt: job.createdAt,
   }));
+  return newestFirst(topos);
+}
+
+export function exportsBeingMade(
+  exports: readonly TopoExportJobView[],
+  topoNames: ReadonlyMap<string, string>,
+): MakingItem[] {
   const exporting = exports
     .filter((exportJob) => exportJob.status !== "completed")
     .map((exportJob) => {
@@ -242,7 +252,7 @@ export function topoWorkBeingMade(
         createdAt: exportJob.createdAt,
       };
     });
-  return newestFirst([...topos, ...exporting]);
+  return newestFirst(exporting);
 }
 
 /** Newest first, and stable: two made in the same second keep their order. */
@@ -274,15 +284,4 @@ export function isOlderLidarJob(
  */
 export function offersTemplates(sharpenNewJobs: boolean): boolean {
   return !sharpenNewJobs;
-}
-
-/**
- * Whether a job offers the old Export…: only a job with the files it reads,
- * which a sharpened job has none of. By kind, not by the switch, so a
- * revert still offers it on every older job (mapsModel.test.ts).
- */
-export function offersOldExport(
-  job: Pick<CompletedTopoJob, "sharpened">,
-): boolean {
-  return !job.sharpened;
 }
