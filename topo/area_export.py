@@ -450,13 +450,28 @@ def slope_colours(bands: Sequence[dict]) -> List[Rgba]:
     return colours
 
 
-def hillshade_colours(tint: str) -> List[Rgba]:
-    """Each shade (0–255) under a tint, as `render_hillshade_tile` draws it;
-    0 is gdaldem's no-data, so clear."""
-    r, g, b, a = _parse_rgba_hex(tint)
-    return [(0, 0, 0, 0)] + [
-        (v * r // 255, v * g // 255, v * b // 255, a) for v in range(1, 256)
-    ]
+# The shade gdaldem gives flat ground, 1 + 254 sin(sun altitude)
+# (tests/test_area_export.py `HillshadeOfFlatGround`).
+HILLSHADE_FLAT = round(1 + 254 * math.sin(math.radians(HILLSHADE_DEFAULTS["altitude"])))
+HILLSHADE_MAX_ALPHA = 192
+
+
+def hillshade_colours() -> List[Rgba]:
+    """Each gdaldem shade (1–255) as a see-through overlay, so an app's
+    basemap shows under it, as a GeoPDF's hillshade does. Flat ground is
+    clear. Ground turned from the sun is black, and ground facing it white,
+    more opaque the further its shade is from flat's. 0 is no-data, clear.
+    The job pipeline's hillshade is an opaque sheet; this is not."""
+    flat = HILLSHADE_FLAT
+
+    def colour(v: int) -> Rgba:
+        if v == 0 or v == flat:
+            return (0, 0, 0, 0)
+        if v < flat:
+            return (0, 0, 0, round(HILLSHADE_MAX_ALPHA * (flat - v) / (flat - 1)))
+        return (255, 255, 255, round(HILLSHADE_MAX_ALPHA * (v - flat) / (255 - flat)))
+
+    return [colour(v) for v in range(256)]
 
 
 def value_cog(source: Path, out: Path, nodata: int) -> None:
@@ -648,7 +663,7 @@ def render_mbtiles(
         mosaic.unlink()
         rasters["hillshade"] = (
             work / "hillshade.tif",
-            np.array(hillshade_colours(HILLSHADE_DEFAULTS["colour"]), np.uint8),
+            np.array(hillshade_colours(), np.uint8),
         )
         value_cog(shade, rasters["hillshade"][0], 0)
         shade.unlink()

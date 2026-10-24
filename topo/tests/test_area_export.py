@@ -27,6 +27,8 @@ from area_export import (  # noqa: E402
     STYLE_SLOPE_BANDS,
     AreaOutsideNsw,
     credit_line,
+    HILLSHADE_FLAT,
+    HILLSHADE_MAX_ALPHA,
     hillshade_colours,
     mbtiles_settings,
     mga_epsg,
@@ -181,8 +183,8 @@ class MgaExtent(unittest.TestCase):
 
 @unittest.skipIf(is_stubbed("numpy") or is_stubbed("PIL"), "needs numpy and Pillow")
 class MbtilesColours(unittest.TestCase):
-    """An MBTiles colours its slope and hillshade through a colour table, and
-    must draw them as the pipeline's own tile renderers do."""
+    """An MBTiles colours its slope through a colour table, and must draw it
+    as the pipeline's own tile renderer does."""
 
     def every_value(self):
         import numpy as np
@@ -200,20 +202,64 @@ class MbtilesColours(unittest.TestCase):
         table = slope_colours(settings["slope"]["bands"])
         self.assertEqual([tuple(int(c) for c in px) for px in drawn], table)
 
-    # Mutation: draw shade 0 (gdaldem's no-data) as black, and the edge of
-    # the box is a black frame.
-    def test_hillshade_matches_render_hillshade_tile_and_clears_no_data(self):
-        import numpy as np
-        from pipeline import HILLSHADE_DEFAULTS, render_hillshade_tile
 
-        tint = "#c0c0c0b4"
-        drawn = np.asarray(
-            render_hillshade_tile(self.every_value(), {"hillshade": {"colour": tint}})
-        )[0]
-        table = hillshade_colours(tint)
-        self.assertEqual(table[0], (0, 0, 0, 0))
-        self.assertEqual([tuple(int(c) for c in px) for px in drawn][1:], table[1:])
-        self.assertEqual(len(hillshade_colours(HILLSHADE_DEFAULTS["colour"])), 256)
+class HillshadeOverlay(unittest.TestCase):
+    """An MBTiles hillshade is see-through, so an app's basemap shows under
+    it."""
+
+    # Mutation: draw the shades opaque, as the job pipeline does, and the
+    # file hides the basemap; or leave flat ground tinted, and a plain is a
+    # grey sheet.
+    def test_flat_ground_and_no_data_are_clear_and_slopes_translucent(self):
+        table = hillshade_colours()
+        self.assertEqual(len(table), 256)
+        self.assertEqual(table[0], (0, 0, 0, 0))  # gdaldem's no-data
+        self.assertEqual(table[HILLSHADE_FLAT], (0, 0, 0, 0))
+        self.assertTrue(
+            all(0 < a <= HILLSHADE_MAX_ALPHA < 255 for *_, a in table[1:HILLSHADE_FLAT])
+        )
+        self.assertTrue(
+            all(0 < a <= HILLSHADE_MAX_ALPHA for *_, a in table[HILLSHADE_FLAT + 1 :])
+        )
+
+    # Mutation: shade the sunny side black or the shady side white, and the
+    # relief reads inside out.
+    def test_shadow_is_black_and_light_is_white_deepening_away_from_flat(self):
+        table = hillshade_colours()
+        self.assertEqual(table[1], (0, 0, 0, HILLSHADE_MAX_ALPHA))
+        self.assertEqual(table[255], (255, 255, 255, HILLSHADE_MAX_ALPHA))
+        alphas = [a for *_, a in table]
+        self.assertEqual(
+            alphas[1 : HILLSHADE_FLAT + 1],
+            sorted(alphas[1 : HILLSHADE_FLAT + 1], reverse=True),
+        )
+        self.assertEqual(alphas[HILLSHADE_FLAT:], sorted(alphas[HILLSHADE_FLAT:]))
+
+
+@unittest.skipUnless(
+    not is_stubbed("osgeo"), "needs real GDAL (skipped under host stub)"
+)
+class HillshadeOfFlatGround(unittest.TestCase):
+    # Mutation: get flat ground's shade wrong (truncate it, say), and every
+    # plain in the file is a faint grey sheet.
+    def test_gdaldem_shades_flat_ground_as_hillshade_flat(self):
+        import numpy as np
+        from osgeo import gdal
+
+        from pipeline import HILLSHADE_DEFAULTS
+
+        gdal.UseExceptions()
+        dem = gdal.GetDriverByName("MEM").Create("", 8, 8, 1, gdal.GDT_Float32)
+        dem.SetGeoTransform((0, 5, 0, 0, 0, -5))
+        dem.GetRasterBand(1).Fill(300)
+        shade = gdal.DEMProcessing(
+            "", dem, "hillshade", format="MEM",
+            azimuth=HILLSHADE_DEFAULTS["azimuth"],
+            altitude=HILLSHADE_DEFAULTS["altitude"],
+            zFactor=HILLSHADE_DEFAULTS["zFactor"], computeEdges=True,
+        )  # fmt: skip
+        values = np.unique(shade.GetRasterBand(1).ReadAsArray())
+        self.assertEqual(values.tolist(), [HILLSHADE_FLAT])
 
 
 @unittest.skipUnless(
