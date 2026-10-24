@@ -81,7 +81,9 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // The sharpened areas the map still has on screen: MLRN's request
   // transforms hold each one's presigned URL, and the map, mounted until the
   // wipe ends, would write their tile ranges into TileJSONs and the area list
-  // again. Stopped first, so the area list's pending write sees it.
+  // again. Stopped first, so the area list's pending write sees it
+  // (wipeLocalData.test.ts, "moves the sharpened areas' epoch before it
+  // forgets the area list").
   stopSharpenedAreasForWipe();
   const stopped = await Promise.all([
     stoppedInTime(cancelAllRegionDownloads()),

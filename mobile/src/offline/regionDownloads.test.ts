@@ -424,6 +424,12 @@ describe("runRegionClip", () => {
       code: "source-unavailable",
       detail: "sharpened-area",
     });
+    // A host refusing ranges is no expired link.
+    cdn.status = 416;
+    expect(await run({ basemapId: "lidar-a1", area })).toEqual({
+      status: "failed",
+      code: "source-unavailable",
+    });
   });
 
   // Mutation: save the clip of an area outside the archive and the first

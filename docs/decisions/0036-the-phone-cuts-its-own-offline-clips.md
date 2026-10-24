@@ -210,7 +210,8 @@ Nothing new calls it.
   presigned URL, filed under the area"), `sharpenedClips.test.ts`,
   `sourceResolver.test.ts` ("routes saved areas offline"),
   `demLookup.test.ts` ("reads a saved clip of a sharpened area before the
-  statewide one"). What holds the decision up still holds: the phone cuts
+  statewide one"), `sharpenedAreaStore.test.ts` (no URL kept, nothing kept
+  from a list asked for before the sign-out wipe). What holds the decision up still holds: the phone cuts
   every clip, no request about a clip goes to the API, and the bbox never
   reaches it. Everything else above stands.
 

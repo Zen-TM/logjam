@@ -173,6 +173,17 @@ describe("wipeAllLocalData", () => {
     expect(events).toContain("sql:DELETE FROM map_artifact");
   });
 
+  // Red if the area epoch moves after the area list is forgotten: a list
+  // landing while the wipe waits would pass the epoch check and put the
+  // departing account's areas back after the forget.
+  it("moves the sharpened areas' epoch before it forgets the area list", async () => {
+    await wipeAllLocalData();
+    expect(events.indexOf("stop:sharpened")).toBeGreaterThanOrEqual(0);
+    expect(events.indexOf("stop:sharpened")).toBeLessThan(
+      events.indexOf("stop:sharpened-areas"),
+    );
+  });
+
   // Red if a failure in the mirror wipe is swallowed or aborts the later steps.
   it("reports a failing sync wipe and still clears the offline registry", async () => {
     failOn = (e) => e === `sql:DELETE FROM ${SYNC_TABLES[0].name}`;

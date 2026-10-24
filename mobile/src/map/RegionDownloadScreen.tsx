@@ -16,10 +16,14 @@
 // (see regionFrame.ts).
 //
 // PRIVACY: the framed bbox exists in component state and goes to the provider as
-// tile coordinates only, and to our CDN as byte ranges of public archives
-// (offline/regionDownloads.ts). A save makes no Logjam API request at all.
-// Guard: offline/regionDownloads.test.ts ("cuts the clip from the CDN, asking
-// for nothing but byte ranges").
+// tile coordinates only, as byte ranges of public archives to our CDN, and as
+// byte ranges of a sharpened area's private archive to the bucket, through the
+// presigned URL the account's list gave (offline/regionDownloads.ts). The one
+// Logjam API request is for that list, and it carries no bbox: the bbox never
+// reaches the API (docs/decisions/0036, update of 2026-10-24). Guards:
+// offline/regionDownloads.test.ts ("cuts the clip from the CDN, asking for
+// nothing but byte ranges", "cuts a sharpened area's clip through its
+// presigned URL, filed under the area").
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -80,6 +84,7 @@ import {
 import { rememberSharpenedAreas } from "../offline/sharpenedAreaStore";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
+import { capabilityStatus } from "../auth/capabilities";
 import { getCompletedOverlays } from "./completedOverlays";
 import { sharpenedAreasOf } from "./sharpenedArchives";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -370,24 +375,28 @@ export function RegionDownloadScreen({
   // The account's sharpened areas the box reaches go into the save, cut
   // through the list's presigned URLs (offline/sharpenedClips.ts). A guest has
   // none; a signed-in save waits for the list rather than leave them out.
-  const isGuest = useAccountState().accountState === "guest";
+  // Online passed as true, as `capabilityScreenBlock` does: offline the
+  // query fails and says so, where a disabled one would wait for good.
+  const loadsAreas =
+    capabilityStatus("lidarOverlays", useAccountState().accountState, true)
+      .status === "available";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load your sharpened areas.",
-    !isGuest,
+    "Couldn't load your sharpened areas, so this area can't be saved yet.",
+    loadsAreas,
   );
-  const areasState = areasForSave(!isGuest, overlays);
+  const areasState = areasForSave(loadsAreas, overlays);
   const { sharpenedAreas, areasEpoch } = useMemo(
-    () => sharpenedAreasOf(overlays.data, !isGuest),
-    [isGuest, overlays.data],
+    () => sharpenedAreasOf(overlays.data, loadsAreas),
+    [loadsAreas, overlays.data],
   );
   // The list the clips are cut from is the one the offline map and sampler
   // must know, or an area new since the map loaded its list would be saved
   // but never drawn or read.
   useEffect(() => {
-    if (overlays.data && !isGuest)
+    if (overlays.data && loadsAreas)
       void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
-  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
+  }, [overlays.data, loadsAreas, sharpenedAreas, areasEpoch]);
   const areaBytes = bbox ? areaClipBytes(sharpenedAreas, bbox) : 0;
 
   const pyramidIds = selected;
@@ -633,12 +642,35 @@ export function RegionDownloadScreen({
         ) : null}
         {/* The screen's ONLY warning, over the map rather than in the hero:
             a hero band would take vertical space the map needs, and the three
-            cap reasons represent one message wearing three hats. */}
+            cap reasons represent one message wearing three hats. One at a
+            time: the cap first, then the account's area list, which a save
+            waits for (`areasForSave`). */}
         {overCap ? (
           <View style={styles.mapWarning} pointerEvents="none">
             <Notice icon="warning" tone="warning">
               Too large — reduce the area or detail, or pick fewer maps.
             </Notice>
+          </View>
+        ) : areasState === "failed" ? (
+          // Not `pointerEvents="none"`: "Try again" must take a press.
+          <View style={styles.mapWarning}>
+            <Notice
+              icon="warning"
+              tone="warning"
+              action={
+                <Button
+                  label="Try again"
+                  variant="outlineAccent"
+                  onPress={overlays.refetch}
+                />
+              }
+            >
+              {overlays.error ?? ""}
+            </Notice>
+          </View>
+        ) : areasState === "loading" ? (
+          <View style={styles.mapWarning} pointerEvents="none">
+            <Notice>Checking for your sharpened areas…</Notice>
           </View>
         ) : null}
         <View style={styles.mapHint} pointerEvents="none">
@@ -710,26 +742,6 @@ export function RegionDownloadScreen({
           {/* Progress lives as cards in the Saved tab's Regions filter from
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
-          {areasState === "loading" ? (
-            <Notice>Checking for your sharpened areas…</Notice>
-          ) : null}
-          {areasState === "failed" ? (
-            <Notice
-              icon="warning"
-              tone="warning"
-              action={
-                <Button
-                  label="Try again"
-                  variant="outlineAccent"
-                  onPress={overlays.refetch}
-                />
-              }
-            >
-              {
-                "Couldn't load your sharpened areas, so this area can't be saved yet."
-              }
-            </Notice>
-          ) : null}
           <Button
             label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
             icon="saveOffline"

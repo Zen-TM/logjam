@@ -102,7 +102,10 @@ Guards:
   - **Repeated bytes.** Each archive repeats statewide data in its edge
     tiles.
   - **Revoking.** A presigned URL keeps working until it expires, 24 h at
-    most after the share ends.
+    most after the share ends. A sharee who saved the area offline keeps its
+    clips on the phone: Logjam GPS draws and samples them until a list
+    loaded online drops the area, and the files stay until the saved area is
+    deleted (updated 2026-10-24).
   - **Old builds.** A Logjam GPS build older than this stores the climb of
     a profile read wholly inside areas as `terrarium`. Logjam Web relabels
     the account's copy as `lidar` when the track is opened. Logjam GPS

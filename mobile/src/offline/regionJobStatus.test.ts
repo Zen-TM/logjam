@@ -86,7 +86,7 @@ describe("sourceUnavailableLine", () => {
   // wait for Logjam to fix something only a new save fixes.
   it("tells a sharpened area to be saved again, and any other archive to wait", () => {
     expect(sourceUnavailableLine("sharpened-area")).toMatch(
-      /Save the area again/,
+      /Saving the area again fetches it/,
     );
     expect(sourceUnavailableLine(undefined)).toBe(
       "Logjam couldn't prepare this map right now. Other maps still work.",

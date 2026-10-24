@@ -48,14 +48,20 @@ describe("terrainRoutes", () => {
       const z = TERRAIN_ROUTED_FROM[layer];
       const shift = 15 - z;
       const routes = terrainRoutes(AREAS, layer);
-      for (let x = (96 >> shift) - 1; x <= 306 >> shift; x++)
-        for (let y = (196 >> shift) - 1; y <= 306 >> shift; y++) {
-          const owners = routes.filter((r) => holds(r, x, y));
-          expect(owners).toHaveLength(1);
-          expect(owners[0].archive).toBe(
-            terrainTileArchive(AREAS, layer, z, x, y),
-          );
-        }
+      // Around the first three areas, and around the fourth: every tile in
+      // between is statewide, and a gap test is the coverage test below.
+      for (const [x0, y0, x1, y1] of [
+        [96, 196, 110, 210],
+        [296, 296, 305, 305],
+      ])
+        for (let x = (x0 >> shift) - 1; x <= x1 >> shift; x++)
+          for (let y = (y0 >> shift) - 1; y <= y1 >> shift; y++) {
+            const owners = routes.filter((r) => holds(r, x, y));
+            expect(owners).toHaveLength(1);
+            expect(owners[0].archive).toBe(
+              terrainTileArchive(AREAS, layer, z, x, y),
+            );
+          }
     });
 
     // Red if terrainTileArchive routes from a zoom other than

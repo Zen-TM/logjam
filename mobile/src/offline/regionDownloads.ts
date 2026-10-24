@@ -332,9 +332,10 @@ export async function runRegionClip(
     }
     if (permanent(stop.error)) {
       await deleteClipFile(spec.id);
-      // A sharpened area's URL has expired, or the area has gone: its own
-      // line, which says to save the area again (sourceUnavailableLine).
-      return spec.area
+      // A sharpened area's URL has expired (403), or the area was deleted
+      // (404): its own line (sourceUnavailableLine). A host refusing ranges
+      // (200, 416) is the same fault as for any archive.
+      return spec.area && [403, 404].includes(stop.error.status)
         ? {
             status: "failed",
             code: "source-unavailable",
