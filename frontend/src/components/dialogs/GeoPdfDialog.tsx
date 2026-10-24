@@ -35,6 +35,7 @@ import ConfirmDialog from "./ConfirmDialog";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
+  extentFieldText,
   hasExtentFieldError,
   parseExtentField,
   scaleFieldError,
@@ -62,7 +63,6 @@ import {
   applyOrientationChange,
   applyPivotChange,
   applyCoordModeChange,
-  toEastingNorthing,
   extentFromCentreAndSize,
 } from "@logjam/shared";
 import {
@@ -606,32 +606,20 @@ function GeoPdfDialog({
     [selectedOverlays, terrainFollowsMap, terrainLayers, jobInArea],
   );
 
-  // Display helpers for coord mode
-  const formatCoord = useCallback(
-    (lat: number, lon: number, which: "lat" | "lon"): string => {
-      if (extentState.coordMode === "latlon") {
-        return which === "lat" ? lat.toFixed(6) : lon.toFixed(6);
-      }
-      const en = toEastingNorthing(lat, lon);
-      return which === "lat" ? en.northing.toFixed(1) : en.easting.toFixed(1);
-    },
-    [extentState.coordMode],
-  );
-
   // Sync raw strings from extentState whenever extentState changes,
   // but only for fields the user is not currently editing.
   useEffect(() => {
     if (focusedField.current !== "n")
-      setRawN(formatCoord(extentState.north, extentState.west, "lat"));
+      setRawN(extentFieldText("n", extentState));
     if (focusedField.current !== "s")
-      setRawS(formatCoord(extentState.south, extentState.east, "lat"));
+      setRawS(extentFieldText("s", extentState));
     if (focusedField.current !== "e")
-      setRawE(formatCoord(extentState.north, extentState.east, "lon"));
+      setRawE(extentFieldText("e", extentState));
     if (focusedField.current !== "w")
-      setRawW(formatCoord(extentState.south, extentState.west, "lon"));
+      setRawW(extentFieldText("w", extentState));
     if (focusedField.current !== "scale")
       setRawScale(String(Math.round(extentState.scale)));
-  }, [extentState, formatCoord]);
+  }, [extentState]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -856,7 +844,7 @@ function GeoPdfDialog({
       const next = { ...previous };
       for (const which of ["n", "s", "e", "w"] as const)
         if (gisFocused.current !== which)
-          next[which] = gisArea ? edgeText(which, gisEdges) : "";
+          next[which] = gisArea ? extentFieldText(which, gisEdges) : "";
       return next;
     });
     // The box's numbers, not its object, which is rebuilt every render.
@@ -1829,24 +1817,6 @@ const NO_EDGE_ERRORS: ExtentFieldErrors = {
   w: null,
 };
 
-/** An edge as its field shows it. E/N reads each edge at the corner the
- *  GeoPDF's fields use (`parseExtentField`). */
-function edgeText(
-  which: ExtentFieldKey,
-  edges: TBbox & { coordMode: CoordMode },
-): string {
-  const [lat, lon] = {
-    n: [edges.north, edges.west],
-    s: [edges.south, edges.east],
-    e: [edges.north, edges.east],
-    w: [edges.south, edges.west],
-  }[which];
-  const latitude = which === "n" || which === "s";
-  if (edges.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
-  const en = toEastingNorthing(lat, lon);
-  return (latitude ? en.northing : en.easting).toFixed(1);
-}
-
 const EDGE_OF: Record<ExtentFieldKey, keyof TBbox> = {
   n: "north",
   s: "south",
@@ -1974,6 +1944,12 @@ function AreaExportFields({
           ))}
         </div>
         <FieldError message={noLayers ? "Pick at least one layer." : null} />
+        {/* Unknown, never free (`estimateCredits`), until computeEstimate
+            has an area-export kind. */}
+        <p className={classes.note}>
+          Its time and credits aren't known until it has run; it's charged for
+          the time it takes.
+        </p>
         <p className={classes.note}>
           It turns up in Maps, Exports, and downloads itself when it's ready.
           Exports are kept for 7 days.

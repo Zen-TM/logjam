@@ -9,6 +9,7 @@ import type { CompletedTopoJob } from "../../../topoLayerTypes";
 import {
   Button,
   EmptyState,
+  ErrorState,
   Hero,
   IconButton,
   IconTile,
@@ -38,6 +39,7 @@ export default function ExportsPanel({
   topoExports,
   topoExportsTotal,
   loaded,
+  error,
   completedTopoJobs,
   onRefetchTopoExports,
   onQuotaChanged,
@@ -50,6 +52,9 @@ export default function ExportsPanel({
   /** False until the first fetch settles: loading is not empty
    *  (shared/DESIGN.md §11). */
   loaded: boolean;
+  /** Why the last fetch failed; with nothing to list, it is said in place of
+   *  the empty state, with Try again. */
+  error: string | null;
   /** Only to name an older export after the topo it was made from. */
   completedTopoJobs: CompletedTopoJob[];
   onRefetchTopoExports: () => void;
@@ -124,6 +129,9 @@ export default function ExportsPanel({
     },
   ];
 
+  const nothing = finished.length === 0 && beingMade.length === 0;
+  const failed = loaded && error !== null && nothing;
+
   // The same button is the hero's, the empty state's and the end of the list's.
   const exportAreaButton = (
     <Button compact variant="filled" icon="export" onClick={onOpenExport}>
@@ -135,7 +143,7 @@ export default function ExportsPanel({
     <div className={classes.root}>
       <Hero
         title={
-          !loaded
+          !loaded || failed
             ? "Exports"
             : finished.length === 0
               ? "No exports yet"
@@ -148,7 +156,11 @@ export default function ExportsPanel({
         <div className={classes.emptyArea} role="status">
           <LoadingState label="Loading your exports…" />
         </div>
-      ) : finished.length === 0 && beingMade.length === 0 ? (
+      ) : failed ? (
+        <div className={classes.emptyArea}>
+          <ErrorState message={error} onRetry={onRefetchTopoExports} />
+        </div>
+      ) : nothing ? (
         <div className={classes.emptyArea}>
           <EmptyState
             icon="export"

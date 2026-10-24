@@ -72,6 +72,24 @@ export function parseExtentField(
   }
 }
 
+/**
+ * One field's text for the edges as they stand: degrees in "latlon", MGA2020
+ * metres in "enNorthing", at the corner `parseExtentField` pairs it with, so
+ * parsing the text gives the edge back (geoPdfExtentFields.test.ts).
+ */
+export function extentFieldText(field: ExtentFieldKey, state: Edges): string {
+  const [lat, lon] = {
+    n: [state.north, state.west],
+    s: [state.south, state.east],
+    e: [state.north, state.east],
+    w: [state.south, state.west],
+  }[field];
+  const latitude = field === "n" || field === "s";
+  if (state.coordMode === "latlon") return (latitude ? lat : lon).toFixed(6);
+  const en = toEastingNorthing(lat, lon);
+  return (latitude ? en.northing : en.easting).toFixed(1);
+}
+
 const LAT_FIELDS: ExtentFieldKey[] = ["n", "s"];
 
 function rangeError(

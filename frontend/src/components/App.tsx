@@ -945,6 +945,7 @@ function App() {
     total: topoExportsTotal,
     loading: topoExportsLoading,
     loaded: topoExportsLoaded,
+    error: topoExportsError,
     refetch: refetchTopoExports,
   } = useTopoExports(loadsUserData);
 
@@ -1598,6 +1599,7 @@ function App() {
           setGeoPdfInitialScale(scale);
           setShowGeoPdf(false);
           setActivePanel(null);
+          setSelectingExportBox(false);
           setSelectingGeoPdfExtent(true);
         }}
         pendingExtent={pendingGeoPdfExtent}
@@ -1612,6 +1614,7 @@ function App() {
         editingTemplate={editingGeoPdfTemplate ?? undefined}
         onTemplateSaved={() => {
           setEditingGeoPdfTemplate(undefined);
+          setSelectingExportBox(false);
           setShowGeoPdf(false);
           setGeoPdfTemplateRefetch((n) => n + 1);
         }}
@@ -1789,6 +1792,7 @@ function App() {
           topoExports={topoExports}
           topoExportsTotal={topoExportsTotal}
           topoExportsLoaded={topoExportsLoaded}
+          topoExportsError={topoExportsError}
           onRefetchTopoExports={refetchTopoExports}
           setLidarJobToggles={setLidarJobToggles}
           onOpenTopo={() => {

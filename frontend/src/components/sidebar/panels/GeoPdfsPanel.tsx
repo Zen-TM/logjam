@@ -65,7 +65,7 @@ export default function GeoPdfsPanel({
   friends,
   loadsUserData,
 }: {
-  /** The GeoPDFs | LiDAR topos switch, drawn under this view's hero (DESIGN.md). */
+  /** The Maps view switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
   onOpenGeoPdf: () => void;
   onOpenGeoPdfWithTemplate: (id: string) => void;
