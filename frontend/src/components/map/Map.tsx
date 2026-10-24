@@ -3433,7 +3433,9 @@ function Map({
   // would replace the terrain the second one chose somewhere else.
   const terrainToggleRef = useRef(0);
   const sharpenedAreasRef = useRef(sharpenedAreas ?? []);
-  sharpenedAreasRef.current = sharpenedAreas ?? [];
+  useEffect(() => {
+    sharpenedAreasRef.current = sharpenedAreas ?? [];
+  }, [sharpenedAreas]);
   const applyTerrain = (map: maplibregl.Map, toggle: number, tilt: boolean) => {
     void terrainSourceFor(
       map,
