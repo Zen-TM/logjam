@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   lat2tileY,
   NSW_5M,
+  NSW_HILLSHADE,
   NSW_SLOPE,
   RASTER_TEMPLATE_DEFAULTS,
   type SharpenedArea,
@@ -348,7 +349,8 @@ describe("contourTilesBySource", () => {
 describe("terrainCreditLines", () => {
   const SURVEY = "derived from a made-up survey. CC BY 3.0 AU.";
 
-  // Mutation: word an area's line from every layer the page drew.
+  // Mutations: word an area's line from every layer the page drew; build the
+  // NSW 5 m line from `drawn` alone, leaving an area's layers out of it.
   it("credits each area's survey for the layers it supplied, beside the NSW 5 m data", () => {
     const drawn = new Set(["contours", "slope"] as const);
     expect(terrainCreditLines(drawn, new Map())).toEqual([
@@ -366,5 +368,11 @@ describe("terrainCreditLines", () => {
       NSW_5M.credit.replace(/^Elevation/, "Contours and slope"),
       `Slope: ${SURVEY}`,
     ]);
+    expect(
+      terrainCreditLines(
+        new Set(),
+        new Map([[area(16), new Set(["hillshade"] as const)]]),
+      ),
+    ).toEqual([NSW_HILLSHADE.credit, `Hillshade: ${SURVEY}`]);
   });
 });

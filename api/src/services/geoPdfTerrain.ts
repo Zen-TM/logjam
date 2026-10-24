@@ -401,16 +401,18 @@ export function contourTilesBySource(
  * The credit lines for the terrain a print drew: the statewide line for every
  * layer drawn, then each area's survey for the layers that area supplied,
  * worded the same way. The statewide line is the NSW 5 m credit an area's
- * always carries too (`demCredits`), because its edge tiles hold 5 m heights;
- * every layer an area supplied is in `drawn`, so that line is there whenever
- * an area's is.
+ * always carries too (`demCredits`), because its edge tiles hold 5 m heights,
+ * so it names every layer an area supplied as well as `drawn`. Guard: the
+ * "beside the NSW 5 m data" test in geoPdfTerrain.unit.test.ts.
  */
 export function terrainCreditLines(
   drawn: ReadonlySet<TerrainLayerKey>,
   areas: ReadonlyMap<SharpenedArea, ReadonlySet<TerrainLayerKey>>,
 ): string[] {
   const lines = [
-    terrainCredit(drawn),
+    terrainCredit(
+      new Set([...drawn, ...[...areas.values()].flatMap((l) => [...l])]),
+    ),
     ...[...areas].map(([area, layers]) => terrainCredit(layers, area.credit)),
   ].filter((line): line is string => line !== null);
   return [...new Set(lines)];
