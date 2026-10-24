@@ -298,6 +298,7 @@ def render_area_export(export_job: dict, work: Path) -> Path:
         list(export_job["layers"]),
         export_job["format"],
         work,
+        export_job["vector_style_snapshot"],
     )
 
 

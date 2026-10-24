@@ -83,6 +83,7 @@ class TestAreaBoxNeverLogged(unittest.TestCase):
             },
             "format": "gpkg",
             "layers": ["heights", "contours"],
+            "vector_style_snapshot": {},
         }
         with (
             mock.patch.object(export_worker, "render_area") as render,
