@@ -360,7 +360,10 @@ function GeoPdfDialog({
   // The last settings, applied over the form once per genuine open. A field
   // the stored value lacks keeps the seed already set.
   function applyLastSettings() {
-    const c = readSettings(stored);
+    const c = readSettings(
+      stored,
+      BASE_LAYER_OPTIONS.map((option) => option.value),
+    );
     setExtentState((prev: ExtentState) => {
       let updated = {
         ...prev,
@@ -373,10 +376,8 @@ function GeoPdfDialog({
       return updated;
     });
     if (c.baseLayer) setSelectedBaseLayer(c.baseLayer);
-    if (c.overlays) {
-      setSelectedOverlays(new Set(c.overlays));
-      setTerrainFollowsMap(false);
-    }
+    if (c.overlays) setSelectedOverlays(new Set(c.overlays));
+    if (c.terrainPinned) setTerrainFollowsMap(false);
     if (c.compass !== undefined) setCompassEnabled(c.compass);
     if (c.scaleText !== undefined) setScaleTextEnabled(c.scaleText);
     if (c.scaleBar !== undefined) setScaleBarEnabled(c.scaleBar);
@@ -732,7 +733,12 @@ function GeoPdfDialog({
         method: "POST",
         body: config,
       });
-      setStored(settingsOf(config));
+      setStored(
+        settingsOf(config, {
+          overlays: selectedOverlays,
+          terrainPinned: !terrainFollowsMap,
+        }),
+      );
       toast.success(
         "GeoPDF queued — download will appear in the GeoPDFs panel.",
       );
@@ -763,6 +769,8 @@ function GeoPdfDialog({
     showSharedPlacesOnPdf,
     onJobQueued,
     setStored,
+    selectedOverlays,
+    terrainFollowsMap,
     toast,
     onClose,
     extentValid,

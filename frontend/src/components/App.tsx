@@ -323,7 +323,7 @@ function App() {
   // (`freshExportDialog`), because a pick the dialog left for may never return:
   // another product can take the box tool over it. e2e/export-area.spec.ts (run
   // in CI; App has no render harness) holds the mechanism through two of its
-  // callers, Map tools → Export an area and Maps → GeoPDFs → New template.
+  // callers, Map tools → Export an area and Maps → GeoPDFs → Make.
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -1650,7 +1650,7 @@ function App() {
           currentUser={currentUser}
           currentUserError={currentUserError}
           onRetryCurrentUser={refetchCurrentUser}
-          // The GeoPDFs view fetches its own lists (jobs and templates) — the
+          // The GeoPDFs view fetches its own list (the jobs) — the
           // same gate as every hook above, so a pending or stale consent holds
           // them too.
           loadsUserData={loadsUserData}

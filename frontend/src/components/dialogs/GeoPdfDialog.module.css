@@ -31,19 +31,6 @@
   }
 }
 
-/* Which template this came from, and the button that turns the form into one:
-   pinned above the body, because both act on all four sections. */
-.templateLine {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.templateField {
-  flex: 1;
-  min-width: 0;
-}
-
 /* A rail in a line's right-hand column. It scrolls itself, so it may shrink
    below its chips rather than pushing the label off the row. */
 .railCell {

@@ -180,7 +180,7 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
   EgressLogCursor:
     "not per user: how far the egress meter has read the storage access logs",
   GeoPdfTemplate:
-    "removed feature: nothing reads or writes these rows, and the table drops a release later (ADR 0003)",
+    "removed feature: a migration deletes every row (beta keeps no data, ADR 0003 covers the later table drop), so nothing user-authored is held",
   Announcement:
     "not per user: the maintainer's own messages; each user's copy is a row under notifications",
 };
