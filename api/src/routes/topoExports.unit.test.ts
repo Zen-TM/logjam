@@ -11,10 +11,6 @@ vi.mock("../lib/resolveUser", () => ({
     monthlyComputeCredits: 100,
   }),
 }));
-vi.mock("../lib/storageQuota", () => ({
-  assertHasStorageQuota: async () => {},
-  decrementStorageUsed: async () => {},
-}));
 const launch = vi.hoisted(() => vi.fn());
 vi.mock("../lib/topoExportLauncher", () => ({
   createAndLaunchTopoExport: launch,

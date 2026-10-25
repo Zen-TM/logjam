@@ -136,23 +136,18 @@ def update_status(
     conn,
     export_job_id: str,
     status: str,
-    storage_delta_bytes: int = 0,
     expected_status: Optional[str] = None,
     **kwargs,
 ) -> int:
     """Update the export row's status and optional extra columns. Returns rows
     updated.
 
-    If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
-    incremented in the SAME transaction/commit as the status update: a crash
-    between a `completed` commit and a separate storage commit would leave a
-    downloadable export whose bytes were never quota-accounted (guarded by
-    tests/test_status_guards.py).
+    An export is not charged to the owner's storage (it is gone in 7 days and
+    the owner can't see or delete the charge): this never touches users.
 
     With expected_status the UPDATE is guarded (`AND status = %s`), making
     transitions write-once: a reaped/deleted export matches 0
-    rows, the storage charge is SKIPPED, and the caller must self-clean and
-    skip notification/email.
+    rows and the caller must self-clean and skip notification/email.
     """
     # No `updated_at = NOW()` here, unlike worker.py's twin: topo_export_jobs
     # has no updated_at column (schema.prisma TopoExportJob / migration
@@ -174,12 +169,6 @@ def update_status(
             values,
         )
         updated = cur.rowcount
-        if updated and storage_delta_bytes:
-            cur.execute(
-                "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
-                " WHERE id = (SELECT user_id FROM topo_export_jobs WHERE id = %s)",
-                (storage_delta_bytes, export_job_id),
-            )
     conn.commit()
     return updated
 
@@ -383,9 +372,7 @@ def main():
         log.error(f"Unexpected failure: {e}", exc_info=True)
         error_msg = failure_sentence(e)
 
-    # Terminal write guarded on `running`. On success the storage charge shares
-    # the same commit as the status flip (guarded by
-    # tests/test_status_guards.py) — never a separate commit.
+    # Terminal write guarded on `running`.
     if error_msg or result_key is None:
         updated = update_status(
             conn,
@@ -402,7 +389,6 @@ def main():
             EXPORT_JOB_ID,
             "completed",
             expected_status="running",
-            storage_delta_bytes=result_bytes,
             result_key=result_key,
             result_bytes=result_bytes,
             completed_at=datetime.now(timezone.utc),
@@ -411,7 +397,7 @@ def main():
 
     if updated == 0:
         # Export was reaped or deleted mid-render: nothing references the
-        # uploaded artefact and no storage was charged — self-clean and skip
+        # uploaded artefact and self-clean and skip
         # notification/email. Exit 0 either way (the outcome is moot).
         log.warning(
             f"Export {EXPORT_JOB_ID} was reaped or deleted mid-run — "
@@ -433,6 +419,7 @@ def main():
                 "exportJobId": EXPORT_JOB_ID,
                 "format": export_job["format"],
                 "jobName": job_name,
+                "resultBytes": result_bytes,
                 "status": "completed" if ok else "failed",
                 "errorMessage": None if ok else (error_msg or GENERIC_FAILURE),
             },

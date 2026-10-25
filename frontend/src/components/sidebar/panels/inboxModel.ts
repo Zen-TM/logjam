@@ -17,12 +17,6 @@ export type InboxDestination =
   | { kind: "sharpened"; label: string };
 
 const SHARPENED: InboxDestination = { kind: "sharpened", label: "Show" };
-const EXPORTS: InboxDestination = {
-  kind: "page",
-  label: "View in Maps",
-  panel: "maps",
-  mapsView: "exports",
-};
 const GEOPDFS: InboxDestination = {
   kind: "page",
   label: "View in Maps",
@@ -41,7 +35,8 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
     case "topo_complete":
       return failed ? null : SHARPENED;
     case "topo_export_complete":
-      return failed ? null : EXPORTS;
+      // A file, not a place in Logjam Web: the row's Download is the answer.
+      return null;
     case "geo_pdf_complete":
       return failed ? null : GEOPDFS;
     case "item_shared":

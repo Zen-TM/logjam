@@ -5,6 +5,7 @@
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
 import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatBytes } from "./format.js";
 import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
 export type NotificationLabel = {
@@ -125,6 +126,9 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       }
       return {
         text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        // Older ones carry no size.
+        ...(typeof p.resultBytes === "number" &&
+          p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),
       };
     }
     // No longer sent (auto-export is gone); older ones stay in the inbox.

@@ -895,7 +895,7 @@ function GeoPdfDialog({
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
       toast.success(
-        "Export queued. It turns up in Maps, Exports, and downloads itself when it's ready.",
+        "Making your export. It comes to your Inbox, and downloads itself if this tab is still open.",
       );
       onExportQueued?.();
       onClose();
@@ -2002,8 +2002,8 @@ function AreaExportFields({
           the time it takes.
         </p>
         <p className={classes.note}>
-          It turns up in Maps, Exports, and downloads itself when it's ready.
-          Exports are kept for 7 days.
+          It comes to your Inbox, and downloads itself if this tab is still
+          open. Exports are kept for 7 days.
         </p>
         <p className={classes.note}>
           What comes out is drawn from the government's survey, and it may be

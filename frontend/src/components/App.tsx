@@ -33,6 +33,7 @@ import type {
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import {
   PANEL_TITLES,
+  isMapsView,
   type LogsView,
   type MapsView,
   type PanelId,
@@ -180,14 +181,14 @@ function App() {
     "logs",
     sessionStorage,
   );
-  const [storedMapsView, setMapsView] = useStoredState<string>(
+  // A session that stored a view since retired ("lidar", "exports") reads as
+  // the first one.
+  const [mapsView, setMapsView] = useStoredState<MapsView>(
     "logjam.mapsView",
     "geopdfs",
     sessionStorage,
+    isMapsView,
   );
-  // A session that stored the retired "lidar" view reads as the first one.
-  const mapsView: MapsView =
-    storedMapsView === "exports" ? "exports" : "geopdfs";
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
   // The Inbox's "Show" opens the popover on the sharpened areas.
@@ -317,10 +318,8 @@ function App() {
   const selectingExportBox = isPicking(boxPick, "export");
   const [pendingTopoBbox, setPendingTopoBbox] = useState<TBbox | null>(null);
   const [pendingExportBox, setPendingExportBox] = useState<TBbox | null>(null);
-  // The box an opening was given (a selection's, a topo's), and whether it
-  // opens on a GIS format (from Maps, Exports).
+  // The box an opening was given (a selection's, a topo's).
   const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
-  const [exportOpensWithGis, setExportOpensWithGis] = useState(false);
   // A new key for every opening that is not a pick coming back
   // (`freshExportDialog`), because a pick the dialog left for may never return:
   // another product can take the box tool over it. e2e/export-area.spec.ts (run
@@ -831,16 +830,12 @@ function App() {
   }, [loadsUserData]);
 
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
-  // recent-exports list (rendered in Maps, Exports) and the
-  // auto-download on completion work regardless of which panel or dialog is
+  // auto-download on completion works regardless of which panel or dialog is
   // open. The hook self-throttles: it only polls while an export is in
   // progress.
   const {
     exports: topoExports,
-    total: topoExportsTotal,
     loading: topoExportsLoading,
-    loaded: topoExportsLoaded,
-    error: topoExportsError,
     refetch: refetchTopoExports,
   } = useTopoExports(loadsUserData);
 
@@ -1069,8 +1064,8 @@ function App() {
   }, [loadsUserData, toast]);
 
   // Resolve a stashed ?export=<id> deep link: download the export directly
-  // (mirrors NotificationsPanel.handleDownloadExport). A presign that has
-  // expired (no downloadUrl) opens Maps, Exports so the user can re-presign.
+  // (mirrors NotificationsPanel.handleDownloadExport). An export that has
+  // expired (the API says so, 404) opens the Inbox with that as the toast.
   useEffect(() => {
     if (!loadsUserData) return;
     const exportId = sessionStorage.getItem("pendingExportId");
@@ -1082,18 +1077,20 @@ function App() {
         if (view.downloadUrl) {
           triggerDownload(view.downloadUrl);
         } else {
-          setMapsView("exports");
-          setActivePanel("maps");
+          setActivePanel("inbox");
           toast.error(
-            "Export download expired. Open it again from Maps, Exports.",
+            view.status === "failed"
+              ? (view.errorMessage ?? "That export couldn't be made.")
+              : "That export isn't ready yet. It comes to your Inbox when it is.",
           );
         }
       })
       .catch((err) => {
         console.error(err);
+        setActivePanel("inbox");
         toast.error(messageFromError(err, "Couldn't load the export."));
       });
-  }, [loadsUserData, toast, setMapsView]);
+  }, [loadsUserData, toast]);
 
   // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
   // job list carries per-item download buttons (and auto-download for jobs this
@@ -1373,7 +1370,6 @@ function App() {
     setPendingGeoPdfExtent(null);
     setPendingGeoPdfScale(null);
     setPendingExportBox(null);
-    setExportOpensWithGis(false);
     setExportAreaSeed(null);
   };
 
@@ -1496,7 +1492,6 @@ function App() {
           setInitialGeoPdfTemplateId(null);
           setExportAreaSeed(null);
           setPendingExportBox(null);
-          setExportOpensWithGis(false);
           setBoxPick((pick) => endBox(pick, "export"));
         }}
         onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
@@ -1529,7 +1524,6 @@ function App() {
         }}
         initialTemplateId={initialGeoPdfTemplateId}
         onJobQueued={handleGeoPdfJobQueued}
-        openWithGis={exportOpensWithGis}
         areaSeed={exportAreaSeed}
         onPickArea={() => {
           setShowGeoPdf(false);
@@ -1700,20 +1694,6 @@ function App() {
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
-          completedTopoJobs={completedTopoJobs}
-          topoExports={topoExports}
-          topoExportsTotal={topoExportsTotal}
-          topoExportsLoaded={topoExportsLoaded}
-          topoExportsError={topoExportsError}
-          onRefetchTopoExports={refetchTopoExports}
-          onOpenExport={() => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(null);
-            setBoxPick((pick) => endBox(pick, "export"));
-            freshExportDialog();
-            setExportOpensWithGis(true);
-            setShowGeoPdf(true);
-          }}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           currentUserError={currentUserError}

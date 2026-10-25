@@ -604,11 +604,9 @@ export async function reapStuckTopoJobs(
  * Export-expiry sweep: completed exports older than
  * TOPO_EXPORT_TTL_MS (default 7 days, 0 disables) are removed — S3 object
  * first (idempotent: the bucket's `expire-exports` lifecycle rule, verified
- * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then one
- * transaction decrementing the storage charge and deleting the row. This
- * makes the in-app accounting authoritative: rows stop presigning dead keys
- * and the quota is reclaimed when the bytes actually disappear, with the S3
- * rule kept as backstop. Returns the number of exports expired.
+ * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then the row.
+ * Rows stop presigning dead keys, with the S3 rule kept as backstop. An
+ * export is not charged to storage, so nothing is given back. Returns the number of exports expired.
  *
  * Per-row failures are logged and skipped (the row simply survives to the
  * next sweep) so one bad row can't wedge the others.
@@ -623,7 +621,7 @@ export async function expireCompletedExports(
   const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
   const expiredRows = await prisma.topoExportJob.findMany({
     where: { status: "completed", completedAt: { lt: cutoff } },
-    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+    select: { id: true, resultKey: true },
   });
 
   let expired = 0;
@@ -637,10 +635,7 @@ export async function expireCompletedExports(
           new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
         );
       }
-      await prisma.$transaction(async (tx) => {
-        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
-        await tx.topoExportJob.delete({ where: { id: row.id } });
-      });
+      await prisma.topoExportJob.delete({ where: { id: row.id } });
       expired += 1;
     } catch (err) {
       logger.error(

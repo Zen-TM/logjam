@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 vi.mock("../services/prisma", () => ({
   default: {
     topoJob: { updateMany: vi.fn(), findMany: vi.fn(), deleteMany: vi.fn() },
-    topoExportJob: { updateMany: vi.fn(), findMany: vi.fn() },
+    topoExportJob: {
+      updateMany: vi.fn(),
+      findMany: vi.fn(),
+      delete: vi.fn(),
+    },
     geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
     notification: { create: vi.fn(), createMany: vi.fn() },
     deviceToken: { findMany: vi.fn() },
@@ -50,6 +54,8 @@ const exportUpdateMany = (
 const exportFindMany = (
   prisma as unknown as { topoExportJob: { findMany: Mock } }
 ).topoExportJob.findMany;
+const exportDelete = (prisma as unknown as { topoExportJob: { delete: Mock } })
+  .topoExportJob.delete;
 const geoPdfUpdateMany = (
   prisma as unknown as { geoPdfJob: { updateMany: Mock } }
 ).geoPdfJob.updateMany;
@@ -87,13 +93,11 @@ function stageByStatus(mock: Mock, rowsByStatus: Record<string, unknown[]>) {
 }
 
 // Transaction client handed to the expiry sweep's interactive callback.
-const txExportDelete = vi.fn();
 const txGeoPdfDelete = vi.fn();
 const txExecuteRaw = vi.fn();
 const txShareDeleteMany = vi.fn();
 const txClient = {
   $executeRaw: txExecuteRaw,
-  topoExportJob: { delete: txExportDelete },
   geoPdfJob: { delete: txGeoPdfDelete },
   share: { deleteMany: txShareDeleteMany },
   notification: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
@@ -111,7 +115,7 @@ beforeEach(() => {
   geoPdfFindMany.mockReset().mockResolvedValue([]);
   ecsSend.mockReset().mockResolvedValue({});
   s3Send.mockReset().mockResolvedValue({});
-  txExportDelete.mockReset().mockResolvedValue({});
+  exportDelete.mockReset().mockResolvedValue({});
   txGeoPdfDelete.mockReset().mockResolvedValue({});
   txExecuteRaw.mockReset().mockResolvedValue(1);
   txShareDeleteMany.mockReset().mockResolvedValue({ count: 0 });
@@ -825,7 +829,9 @@ describe("expireCompletedExports", () => {
     );
   });
 
-  it("deletes the S3 object, then decrements quota and deletes the row in one tx", async () => {
+  // An export is not charged to storage, so the sweep gives nothing back.
+  // Mutation: decrement storage here again, and $executeRaw / $transaction run.
+  it("deletes the S3 object, then the row, and touches no storage", async () => {
     exportFindMany.mockResolvedValue([expiredRow]);
 
     const count = await expireCompletedExports(NOW);
@@ -835,14 +841,12 @@ describe("expireCompletedExports", () => {
     expect(s3Send.mock.calls[0][0].input).toMatchObject({
       Key: "exports/exp-1/result.zip",
     });
-    // Decrement (raw UPDATE through the tx client) and row delete both went
-    // through the transaction client — one commit.
-    expect(transaction).toHaveBeenCalledTimes(1);
-    expect(txExecuteRaw).toHaveBeenCalledTimes(1);
-    expect(txExportDelete).toHaveBeenCalledWith({ where: { id: "exp-1" } });
-    // S3 delete strictly before the DB transaction.
+    expect(transaction).not.toHaveBeenCalled();
+    expect(txExecuteRaw).not.toHaveBeenCalled();
+    expect(exportDelete).toHaveBeenCalledWith({ where: { id: "exp-1" } });
+    // S3 delete strictly before the DB delete.
     expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
-      transaction.mock.invocationCallOrder[0],
+      exportDelete.mock.invocationCallOrder[0],
     );
   });
 
@@ -851,7 +855,7 @@ describe("expireCompletedExports", () => {
     const count = await expireCompletedExports(NOW);
     expect(count).toBe(1);
     expect(s3Send).not.toHaveBeenCalled();
-    expect(txExportDelete).toHaveBeenCalledTimes(1);
+    expect(exportDelete).toHaveBeenCalledTimes(1);
   });
 
   it("an S3 failure skips that row but does not abort the sweep", async () => {
@@ -867,8 +871,8 @@ describe("expireCompletedExports", () => {
 
     // First row survives for the next sweep; second is cleaned.
     expect(count).toBe(1);
-    expect(txExportDelete).toHaveBeenCalledTimes(1);
-    expect(txExportDelete).toHaveBeenCalledWith({ where: { id: "exp-2" } });
+    expect(exportDelete).toHaveBeenCalledTimes(1);
+    expect(exportDelete).toHaveBeenCalledWith({ where: { id: "exp-2" } });
   });
 
   it("TOPO_EXPORT_TTL_MS=0 disables the sweep entirely", async () => {

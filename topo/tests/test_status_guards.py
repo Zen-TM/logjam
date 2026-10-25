@@ -1,5 +1,5 @@
 """Status-transition guards in worker.py / export_worker.py and
-the single-commit storage charge.
+(worker.py's single-commit storage charge; an export is never charged).
 
 Pure SQL-emission tests on a fake connection: assert the guard predicate is
 present, the rowcount is returned, the storage UPDATE shares the commit with
@@ -173,29 +173,25 @@ class TestExportWorkerUpdateStatusGuards(unittest.TestCase):
             0,
         )
 
-    def test_completed_charge_shares_the_single_commit(self):
-        # Status flip + storage charge must be one commit.
+    def test_completed_export_never_charges_storage(self):
+        # An export is not charged to storage; a charge would be one the owner
+        # can neither see nor delete.
         conn = _FakeConn(rowcount=1)
         export_worker.update_status(
             conn,
             "e1",
             "completed",
             expected_status="running",
-            storage_delta_bytes=2048,
             result_key="exports/e1/out.mbtiles",
             result_bytes=2048,
         )
-        before_commit = conn.ops_before_first_commit()
-        self.assertEqual(len(before_commit), 2)
-        self.assertIn("storage_used_bytes", before_commit[1][1])
-        self.assertEqual(sum(1 for op in conn.ops if op[0] == "commit"), 1)
-
-    def test_zero_rows_skips_storage_charge(self):
-        conn = _FakeConn(rowcount=0)
-        export_worker.update_status(
-            conn, "e1", "completed", expected_status="running", storage_delta_bytes=2048
-        )
         self.assertEqual(len(conn.executes()), 1)
+        self.assertNotIn("users", conn.executes()[0][1])
+        self.assertEqual(sum(1 for op in conn.ops if op[0] == "commit"), 1)
+        # Mutation: a charge written anywhere in the worker turns this red.
+        import inspect
+
+        self.assertNotIn("storage_used_bytes", inspect.getsource(export_worker))
 
     def test_failed_write_emits_no_storage_update(self):
         conn = _FakeConn(rowcount=1)

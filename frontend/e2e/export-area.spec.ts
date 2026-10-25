@@ -21,18 +21,13 @@ async function openApp(page: Page) {
   });
 }
 
-/** Maps, Exports → Export an area → Pick on the map: the dialog hides and
- *  the box tool waits for the export's box. */
+/** Map tools → Export an area → For GIS → GeoTIFF → Pick on the map: the
+ *  dialog hides and the box tool waits for the export's box. */
 async function abandonGisPick(page: Page) {
-  await page.getByRole("button", { name: "Maps", exact: true }).click();
-  const aside = page.locator("aside");
-  await aside.getByRole("radio", { name: "Exports" }).click();
-  await aside.getByRole("button", { name: "Export an area" }).first().click();
+  await mapTool(page, ["Make a map", "Export an area"]);
   const dialog = page.locator("dialog[open]");
-  await expect(dialog.getByRole("radio", { name: "GeoTIFF" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await dialog.getByText("For GIS").click();
+  await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
   await dialog.getByRole("button", { name: "Pick on the map" }).click();
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 }
@@ -64,7 +59,8 @@ test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
 }) => {
   await openApp(page);
   await abandonGisPick(page);
-  // Mutation: let `freshExportDialog` keep `exportOpensWithGis`.
+  // Mutation: let `freshExportDialog` skip its key bump, and the dialog keeps
+  // the GeoTIFF the abandoned opening chose.
   await mapTool(page, ["Make a map", "Export an area"]);
   const dialog = page.locator("dialog[open]");
   await expect(dialog.getByRole("radio", { name: "GeoPDF" })).toHaveAttribute(
@@ -91,8 +87,8 @@ test("a template opened after an abandoned GIS pick is a GeoPDF template", async
   await aside.getByRole("button", { name: /^Make/ }).first().click();
   await page.getByRole("menuitem", { name: "New template…" }).click();
 
-  // Mutation: let `freshExportDialog` keep `exportOpensWithGis`, and template
-  // mode opens on GeoTIFF with no paper and a Save that does nothing.
+  // Mutation: let `freshExportDialog` skip its key bump, and template mode
+  // opens on GeoTIFF with no paper and a Save that does nothing.
   const dialog = page.locator("dialog[open]");
   await expect(
     dialog.getByRole("heading", { name: "New template" }),
