@@ -17,6 +17,9 @@ import {
   type TerrainSwitchKey,
 } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { GeoJsonPolygonal, TopoJob } from "../dialogs/TopoDialog";
+import type { TFriend } from "../../placeUtils";
+import SharpenedAreasView from "./SharpenedAreasView";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
 import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
@@ -33,7 +36,7 @@ import {
 import classes from "./LayersPopover.module.css";
 
 type BaseLayer = TileLayer & { id: string; name: string };
-type View = "overlays" | "basemap" | "terrain" | "slopeBands";
+type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
 
 const copy = MAP_LAYERS.copy;
 const terrainCopy = MAP_TERRAIN.copy;
@@ -97,6 +100,16 @@ export default function LayersPopover({
   onSlopeBandsChange,
   mapView,
   onImportFile,
+  startView,
+  sharpenedLoaded,
+  activeTopoJobs,
+  friends,
+  onSharpen,
+  onExportArea,
+  onFlyToArea,
+  onRefetchCompletedTopoJobs,
+  onDismissActiveJob,
+  onQuotaChanged,
 }: {
   open: boolean;
   onClose: () => void;
@@ -120,8 +133,37 @@ export default function LayersPopover({
   mapView: { lng: number; lat: number; zoom: number } | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
+  /**
+   * A request to open on a sub-view instead of where the popover was. Each
+   * request is a new object, so asking again for the same view navigates
+   * again (Back, then the Inbox's Show once more).
+   */
+  startView: { view: "sharpened" } | null;
+  /** False until the first fetch of sharpened areas settles (shared/DESIGN.md §11). */
+  sharpenedLoaded: boolean;
+  activeTopoJobs: TopoJob[];
+  friends: TFriend[];
+  /** Arms the pick for a new sharpened area, as the Make a map menu does. */
+  onSharpen: () => void;
+  onExportArea: (job: CompletedTopoJob) => void;
+  onFlyToArea: (footprint: GeoJsonPolygonal) => void;
+  onRefetchCompletedTopoJobs: () => void;
+  onDismissActiveJob: (jobId: string) => void;
+  onQuotaChanged: () => void;
 }) {
   const [view, setView] = useState<View>("overlays");
+  // However it closes (the button toggles `open` itself), the next opening
+  // starts on Overlays; a start request made in the same render wins.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setView("overlays");
+  }
+  const [seenStartView, setSeenStartView] = useState(startView);
+  if (seenStartView !== startView) {
+    setSeenStartView(startView);
+    if (startView) setView(startView.view);
+  }
 
   // Only a sharpened area made with the vegetation layer has one to switch.
   const hasVegetation = completedTopoJobs.some((job) =>
@@ -139,12 +181,39 @@ export default function LayersPopover({
       open={open}
       onClose={close}
       anchorRef={anchorRef}
-      label={view === "slopeBands" ? terrainCopy.slopeBands : "Map layers"}
+      label={
+        view === "slopeBands"
+          ? terrainCopy.slopeBands
+          : view === "sharpened"
+            ? terrainCopy.sharpenedAreas
+            : "Map layers"
+      }
       className={classes.popover}
       // Both views carry their own × in the header.
       closeButton={false}
     >
-      {view === "slopeBands" ? (
+      {view === "sharpened" ? (
+        <SharpenedAreasView
+          onBack={() => setView("terrain")}
+          onClose={close}
+          activeTopoJobs={activeTopoJobs}
+          completedTopoJobs={completedTopoJobs}
+          friends={friends}
+          loaded={sharpenedLoaded}
+          onSharpen={() => {
+            close();
+            onSharpen();
+          }}
+          onExportArea={(job) => {
+            close();
+            onExportArea(job);
+          }}
+          onFlyTo={onFlyToArea}
+          onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
+          onDismissActiveJob={onDismissActiveJob}
+          onQuotaChanged={onQuotaChanged}
+        />
+      ) : view === "slopeBands" ? (
         <SlopeBandsView
           onBack={() => setView("terrain")}
           onClose={close}
@@ -195,6 +264,10 @@ export default function LayersPopover({
                   activeLayerId={activeLayerId}
                   onOpenSlopeBands={() => setView("slopeBands")}
                   hasVegetation={hasVegetation}
+                  sharpenedCount={
+                    sharpenedLoaded ? completedTopoJobs.length : null
+                  }
+                  onOpenSharpened={() => setView("sharpened")}
                 />
               ),
               overlays: () => (
@@ -269,6 +342,8 @@ export function TerrainPane({
   activeLayerId,
   onOpenSlopeBands,
   hasVegetation,
+  sharpenedCount,
+  onOpenSharpened,
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
@@ -276,6 +351,9 @@ export function TerrainPane({
   onOpenSlopeBands: () => void;
   /** Whether any sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
+  /** Null until the first fetch settles. */
+  sharpenedCount: number | null;
+  onOpenSharpened: () => void;
 }) {
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
@@ -338,6 +416,17 @@ export function TerrainPane({
           }
         />
       ) : null,
+    sharpenedAreas: () => (
+      <Row
+        key="sharpenedAreas"
+        title={
+          sharpenedCount === null
+            ? terrainCopy.sharpenedAreas
+            : `${terrainCopy.sharpenedAreas} · ${sharpenedCount}`
+        }
+        onOpen={onOpenSharpened}
+      />
+    ),
     // Opened from the Slope row's chevron, as a view of its own.
     slopeBands: () => null,
   };

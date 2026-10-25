@@ -19,7 +19,6 @@ const PANELS: [file: string, button: string][] = [
   ["FriendsPanel.tsx", "addFriendButton"],
   ["RoutesPanel.tsx", "addWayButtons"],
   ["GeoPdfsPanel.tsx", "makeGeoPdfButton"],
-  ["LidarPanel.tsx", "makeTopoButton"],
   ["ExportsPanel.tsx", "exportAreaButton"],
   ["PlaceTypeSection.tsx", "addTypeButton"],
 ];

@@ -600,7 +600,7 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  test("Maps: every view and a row menu", async ({ page }) => {
+  test("Maps: every view", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Maps", exact: true }).click();
     const aside = page.locator("aside");
@@ -622,18 +622,27 @@ test.describe("desktop", () => {
       }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
+  });
 
-    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
-    await expect(
-      aside.getByRole("heading", {
-        level: 2,
-        name: /^(No LiDAR topos yet|\d+ LiDAR topos?)$/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "aside");
+  test("Layers → Terrain → Sharpened areas, and a row menu", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    const popover = page.getByRole("dialog", { name: "Sharpened areas" });
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: "Terrain" })
+      .click();
+    await page.getByRole("button", { name: /^Sharpened areas/ }).click();
+    await expect(popover).toBeVisible();
+    await expectNoViolations(
+      page,
+      "[role='dialog'][aria-label='Sharpened areas']",
+    );
 
-    // The seed always has completed LiDAR jobs, so there is always a row menu.
-    await aside
+    // The seed always has completed sharpened jobs, so there is always a row menu.
+    await popover
       .getByRole("button", { name: /^Actions for / })
       .first()
       .click();
@@ -646,11 +655,13 @@ test.describe("desktop", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
-    await aside.getByRole("button", { name: /^Make/ }).first().click();
-    await page.getByRole("menuitem", { name: "Sharpen an area" }).click();
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: "Terrain" })
+      .click();
+    await page.getByRole("button", { name: /^Sharpened areas/ }).click();
+    await page.getByRole("button", { name: "Sharpen an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(

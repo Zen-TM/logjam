@@ -12,14 +12,11 @@ import type { MapsView, PanelId } from "../panels";
  */
 export type InboxDestination =
   | { kind: "place"; label: string; placeId: string }
-  | { kind: "page"; label: string; panel: PanelId; mapsView?: MapsView };
+  | { kind: "page"; label: string; panel: PanelId; mapsView?: MapsView }
+  /** Layers → Terrain → Sharpened areas, over the map. */
+  | { kind: "sharpened"; label: string };
 
-const LIDAR: InboxDestination = {
-  kind: "page",
-  label: "View in Maps",
-  panel: "maps",
-  mapsView: "lidar",
-};
+const SHARPENED: InboxDestination = { kind: "sharpened", label: "Show" };
 const EXPORTS: InboxDestination = {
   kind: "page",
   label: "View in Maps",
@@ -42,7 +39,7 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
     case "friend_request_accepted":
       return { kind: "page", label: "View in Friends", panel: "friends" };
     case "topo_complete":
-      return failed ? null : LIDAR;
+      return failed ? null : SHARPENED;
     case "topo_export_complete":
       return failed ? null : EXPORTS;
     case "geo_pdf_complete":
@@ -52,7 +49,7 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
         case "route":
           return { kind: "page", label: "View in Ways", panel: "ways" };
         case "topoJob":
-          return LIDAR;
+          return SHARPENED;
         case "geoPdfJob":
           return GEOPDFS;
         default:

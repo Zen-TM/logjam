@@ -93,6 +93,7 @@ function Harness({ rows }: { rows: TNotification[] }) {
         setSelectedPlaceID={noop}
         setActivePanel={noop}
         onMapsViewChange={noop}
+        onShowSharpened={noop}
         onTopoFlyTarget={noop}
       />
     </ToastProvider>
