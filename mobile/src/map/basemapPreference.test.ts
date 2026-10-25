@@ -32,11 +32,11 @@ describe("readBasemapPreference", () => {
 });
 
 describe("readTerrainLayers", () => {
-  it("is the contours alone until the user switches", () => {
+  it("is contours and slope until the user switches", () => {
     storedValue = null;
     expect(readTerrainLayers()).toEqual({
       contours: true,
-      slope: false,
+      slope: true,
       hillshade: false,
     });
   });

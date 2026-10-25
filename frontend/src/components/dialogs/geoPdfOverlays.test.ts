@@ -3,6 +3,7 @@ import { TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import {
   contoursPrintedHere,
+  hillshadeShadowedHere,
   LIDAR_ONLY_OVERLAYS,
   ownJobInArea,
   seedOverlays,
@@ -87,5 +88,14 @@ describe("contoursPrintedHere", () => {
     expect(contoursPrintedHere("six-topo", false)).toBe(true);
     expect(contoursPrintedHere("six-topo", true)).toBe(false);
     expect(contoursPrintedHere("six-imagery", false)).toBe(false);
+  });
+});
+
+describe("hillshadeShadowedHere", () => {
+  // Mutation: return false, and imagery offers a shading over its own shadows.
+  it("is true over imagery only", () => {
+    expect(hillshadeShadowedHere("six-imagery")).toBe(true);
+    expect(hillshadeShadowedHere("six-topo")).toBe(false);
+    expect(hillshadeShadowedHere("protomaps")).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
   MAP_TERRAIN,
   PLACE_TYPE_COLORS,
   takesNswContours,
+  takesNswHillshade,
   type RegionBbox,
   type SectionKeysOn,
   type SlopeBand,
@@ -377,19 +378,27 @@ export function TerrainPane({
   const row = (key: TerrainLayerKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
     const printed = key === "contours" && !takesNswContours(activeLayerId);
+    const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
+    const reason = printed
+      ? terrainCopy.contoursPrinted
+      : shadowed
+        ? terrainCopy.hillshadeImagery
+        : undefined;
     return (
       <Row
         key={key}
         title={title}
-        subtitle={printed ? terrainCopy.contoursPrinted : undefined}
+        subtitle={reason}
         trailing={
           <>
             {extra}
             <Toggle
-              checked={layers[key]}
+              // Off while nothing can draw it; the stored choice returns with
+              // the basemap that can.
+              checked={layers[key] && !printed && !shadowed}
               onChange={(on) => onChange(key, on)}
               label={`Show ${title.toLowerCase()}`}
-              disabled={printed}
+              disabled={printed || shadowed}
             />
           </>
         }

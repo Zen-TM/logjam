@@ -5,7 +5,9 @@ import {
   NSW_CONTOURS,
   contourLabelHalo,
   drawsNswContours,
+  drawsNswHillshade,
   takesNswContours,
+  takesNswHillshade,
   nswContourStyle,
 } from "./nswContours.js";
 import { VECTOR_STYLE_DEFAULTS } from "./topoSettings.js";
@@ -37,6 +39,20 @@ describe("drawsNswContours", () => {
 
   it("credits the contours, not the elevation", () => {
     expect(NSW_CONTOURS.credit).toMatch(/^Contours: derived from the NSW 5 m/);
+  });
+});
+
+describe("drawsNswHillshade", () => {
+  // Mutation: let imagery take it, and the shading doubles the photographs'.
+  it("draws over every basemap but imagery while the switch is on", () => {
+    for (const { id } of BASEMAP_CATALOG)
+      expect(drawsNswHillshade(id, true)).toBe(id !== "six-imagery");
+    expect(takesNswHillshade("six-imagery")).toBe(false);
+    expect(takesNswHillshade("protomaps")).toBe(true);
+  });
+
+  it("draws nowhere while the switch is off", () => {
+    expect(drawsNswHillshade("protomaps", false)).toBe(false);
   });
 });
 
