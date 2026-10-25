@@ -37,7 +37,7 @@ import { latToMercY, computeZoom, TARGET_DPI } from "@logjam/shared";
 import { API_URL, ALICE_ID } from "./_actors";
 
 // Requires the seed's saved GeoPDF template (api/prisma/seed.ts, "f" 10) and
-// the topo bucket. Each test makes its own completed topo job, with ONE hillshade
+// the topo bucket. Each test makes its own completed topo job, with ONE vegetation
 // tile in S3 at the zoom the page renders at: the seed's archives hold only z12,
 // the zoom Logjam Web's map draws a topo at, and a GeoPDF reads overlays at its
 // print zoom (z16 or deeper at 1:25,000). The worker reads the archive from S3
@@ -86,7 +86,7 @@ const EXTENT = extentFor({});
 type Extent = typeof EXTENT;
 
 /**
- * A completed topo job of alice's with one hillshade tile under the 25%-across,
+ * A completed topo job of alice's with one vegetation tile under the 25%-across,
  * mid-height point of the page. Returns where that tile's centre falls on the
  * page (fractions) and removes the job and object.
  */
@@ -97,7 +97,7 @@ async function topoTileUnder(extent: Extent, scale: number) {
   const tile = tileAt(z, lon, centreLat);
   const [west, south, east, north] = tileBounds(tile.z, tile.x, tile.y);
   const id = randomUUID();
-  const key = `outputs/${id}/hillshade.pmtiles`;
+  const key = `outputs/${id}/vegetation.pmtiles`;
   const archive = singleTilePmtiles({
     ...tile,
     tile: flatPng(150),
@@ -128,7 +128,7 @@ async function topoTileUnder(extent: Extent, scale: number) {
           ],
         ],
       },
-      s3OutputKeys: [{ name: "hillshade", cogKey: null, pmtilesKey: key }],
+      s3OutputKeys: [{ name: "vegetation", cogKey: null, pmtilesKey: key }],
     },
   });
   const merc = (lat: number) => latToMercY(lat);
@@ -192,13 +192,13 @@ const isGreen = (c: number[]) =>
   c.every((v, i) => Math.abs(v - TILE_GREEN[i]) < 10);
 
 describe("GeoPDF overlay render over a completed topo job (alice)", () => {
-  it("paints the job's hillshade from S3 and credits its source", async () => {
+  it("paints the job's vegetation from S3 and credits its source", async () => {
     const tiles = stubTileServer(BASE_LAYER);
     const topo = await topoTileUnder(EXTENT, CONFIG.scale);
     try {
       const plain = await mapImage((await renderGeoPdf(CONFIG)).pdf);
       const shaded = await mapImage(
-        (await renderGeoPdf({ ...CONFIG, overlays: ["hillshade"] })).pdf,
+        (await renderGeoPdf({ ...CONFIG, overlays: ["vegetation"] })).pdf,
       );
       // Only this process's worker answers from the stub; a launched container
       // (ECS_SUBNETS set) would render real tiles and fail the pixels below.
@@ -214,7 +214,7 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
       expect(isGreen(colourAt(plain, topo.fx, topo.fy))).toBe(true);
 
       // Credited: the two pages differ only where the attribution block grows
-      // by the elevation credit (bottom right), nowhere above it off the tile.
+      // by the LiDAR credit (bottom right), nowhere above it off the tile.
       expect(differing(plain, shaded, 0.5, 0, 1, 0.6)).toBe(0);
       expect(differing(plain, shaded, 0.45, 0.75, 1, 1)).toBeGreaterThan(0);
     } finally {
@@ -237,13 +237,17 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
     const extent = extentFor(template.config);
     const topo = await topoTileUnder(extent, template.config.scale);
     try {
-      const { pdf } = await renderGeoPdf({ ...template.config, extent });
+      const { pdf } = await renderGeoPdf({
+        ...template.config,
+        overlays: [...template.config.overlays, "vegetation"],
+        extent,
+      });
       expect(
         tiles.length,
         "a worker container rendered: unset ECS_SUBNETS",
       ).toBeGreaterThan(0);
       const image = await mapImage(pdf);
-      // The page is the template's A4 portrait, and its hillshade is painted.
+      // The page is the template's A4 portrait, and the job's vegetation is painted.
       const page = (await parseGeoPdfGeoref(pdf)).pages[0];
       const a4 = getPaperDimensions({ ...PAPER, ...template.config });
       expect(Math.abs(page.pageWidthPt - a4.w * MM_TO_PT)).toBeLessThan(1);
