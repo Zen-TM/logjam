@@ -114,7 +114,8 @@ renumber.
   Exempt: text fields, switches, the surfaces themselves and the map's chrome.
 - **Small things follow it.** A button wears the card fill; a surface's one
   primary action wears the accent. A status pill is read, so it has no fill:
-  words with a dot or a glyph. A selected chip looks like neither. A badge on
+  words with a dot or a glyph. A selected chip looks like neither: its fill
+  shows it, with no check, so selecting never changes its width. A badge on
   something pressable (an unread count, a chip's tally) keeps its fill.
 - **A pill is never narrower than it is tall.**
 - **Things that look alike behave alike**; a thing that behaves differently
@@ -161,8 +162,13 @@ renumber.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.
+- **A selected chip's fill is `chipFill(hue, scheme)`, not the hue**: the hue
+  moved just far enough to stand 3:1 off the unselected chip beside it and off
+  the page behind a lone chip, since the fill is all that shows it is
+  selected. Tiles, avatars and map marks keep the hue as declared. Guard: `shared/src/chipFill.test.ts` walks every scheme
+  and hue.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
-  a shape. Selected is an accent edge and a check, not a tint.
+  a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
 - **Controls over a photo are black and white on a scrim**, not theme
