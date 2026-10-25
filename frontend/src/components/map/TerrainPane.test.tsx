@@ -7,9 +7,9 @@ afterEach(cleanup);
 
 const copy = MAP_TERRAIN.copy;
 
-function draw(activeLayerId = "protomaps") {
+function draw(activeLayerId = "protomaps", layers = TERRAIN_LAYER_DEFAULTS) {
   const props = {
-    layers: TERRAIN_LAYER_DEFAULTS,
+    layers,
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
@@ -30,7 +30,7 @@ describe("the Terrain group on Logjam Web", () => {
   it("switches each layer by its key", () => {
     const props = draw();
     fireEvent.click(screen.getByRole("switch", { name: "Show slope" }));
-    expect(props.onChange).toHaveBeenCalledWith("slope", true);
+    expect(props.onChange).toHaveBeenCalledWith("slope", false);
     fireEvent.click(screen.getByRole("switch", { name: "Show hillshade" }));
     expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
     fireEvent.click(screen.getByRole("switch", { name: "Show contours" }));
@@ -50,5 +50,43 @@ describe("the Terrain group on Logjam Web", () => {
     const contours = screen.getByRole("switch", { name: "Show contours" });
     expect((contours as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(copy.contoursPrinted)).toBeTruthy();
+  });
+
+  // Mutation: drop `shadowed` from the Hillshade row, and imagery offers a
+  // shading over photographs that carry their own.
+  it("says imagery has its own shadows, and offers Hillshade elsewhere", () => {
+    draw("six-imagery");
+    const hillshade = screen.getByRole("switch", { name: "Show hillshade" });
+    expect((hillshade as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(copy.hillshadeImagery)).toBeTruthy();
+    cleanup();
+    draw("six-topo");
+    expect(
+      (
+        screen.getByRole("switch", {
+          name: "Show hillshade",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
+  });
+
+  // Mutation: read `layers[key]` alone as `checked`, and a stored-on switch
+  // shows ON over a basemap that draws nothing for it.
+  it("reads off while a basemap disables it, and on again elsewhere", () => {
+    const on = (name: string) =>
+      (screen.getByRole("switch", { name }) as HTMLButtonElement).getAttribute(
+        "aria-checked",
+      );
+    const stored = { contours: true, slope: true, hillshade: true };
+    draw("six-imagery", stored);
+    expect(on("Show hillshade")).toBe("false");
+    cleanup();
+    draw("six-topo", stored);
+    expect(on("Show contours")).toBe("false");
+    expect(on("Show slope")).toBe("true");
+    cleanup();
+    draw("protomaps", stored);
+    expect(on("Show contours")).toBe("true");
+    expect(on("Show hillshade")).toBe("true");
   });
 });

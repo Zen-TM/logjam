@@ -105,10 +105,10 @@ export function terrainBeforeIds(
   return pairs;
 }
 
-/** What a map shows before the user touches a switch: the contours it always had. */
+/** What a map shows before the user touches a switch: contours and slope. */
 export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainLayerKey, boolean>
-> = { contours: true, slope: false, hillshade: false };
+> = { contours: true, slope: true, hillshade: false };
 
 /**
  * The switches as stored on a device, with anything missing or not a boolean

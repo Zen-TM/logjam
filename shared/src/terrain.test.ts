@@ -151,11 +151,11 @@ describe("the statewide slope and hillshade", () => {
 });
 
 describe("normalizeTerrainLayers", () => {
-  it("reads nothing stored as the defaults: contours only", () => {
+  it("reads nothing stored as the defaults: contours and slope", () => {
     expect(normalizeTerrainLayers(null)).toEqual(TERRAIN_LAYER_DEFAULTS);
     expect(TERRAIN_LAYER_DEFAULTS).toEqual({
       contours: true,
-      slope: false,
+      slope: true,
       hillshade: false,
     });
   });
@@ -163,7 +163,7 @@ describe("normalizeTerrainLayers", () => {
   it("keeps what was stored and defaults the rest", () => {
     expect(normalizeTerrainLayers({ contours: false, slope: "yes" })).toEqual({
       contours: false,
-      slope: false,
+      slope: true,
       hillshade: false,
     });
   });

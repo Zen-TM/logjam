@@ -21,6 +21,7 @@ import type { TBbox } from "../map/Map";
 import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
+  hillshadeShadowedHere,
   LIDAR_ONLY_OVERLAYS,
   ownJobInArea,
   seedOverlays,
@@ -936,9 +937,15 @@ function GeoPdfDialog({
       },
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...overlays].map((id) =>
-        id.startsWith("master-") ? id.slice("master-".length) : id,
-      ),
+      // A hillshade chosen on another sheet is kept, not drawn over imagery.
+      overlays: [...overlays]
+        .filter(
+          (id) =>
+            id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer),
+        )
+        .map((id) =>
+          id.startsWith("master-") ? id.slice("master-".length) : id,
+        ),
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
@@ -1221,9 +1228,17 @@ function GeoPdfDialog({
               focusedFieldRef={gisFocused}
               edgesOpen={gisEdgesOpen}
               onEdgesOpenChange={setGisEdgesOpen}
-              onCoordModeChange={(coordMode) =>
-                setExtentState(applyCoordModeChange(extentState, coordMode))
-              }
+              onCoordModeChange={(coordMode) => {
+                // The text moves with the mode (see the GeoPDF chip).
+                if (gisArea)
+                  setGisRaw({
+                    n: extentFieldText("n", { ...gisArea, coordMode }),
+                    s: extentFieldText("s", { ...gisArea, coordMode }),
+                    e: extentFieldText("e", { ...gisArea, coordMode }),
+                    w: extentFieldText("w", { ...gisArea, coordMode }),
+                  });
+                setExtentState(applyCoordModeChange(extentState, coordMode));
+              }}
               onAreaChange={(area) => {
                 setGisBox(area);
                 markDirty();
@@ -1426,11 +1441,20 @@ function GeoPdfDialog({
                             className={classes.railCell}
                             options={COORD_OPTIONS}
                             value={extentState.coordMode}
-                            onChange={(coordMode) =>
-                              setExtentState(
-                                applyCoordModeChange(extentState, coordMode),
-                              )
-                            }
+                            onChange={(coordMode) => {
+                              const next = applyCoordModeChange(
+                                extentState,
+                                coordMode,
+                              );
+                              // The text moves with the mode, not in the
+                              // effect after it, or a render checks metres
+                              // as degrees.
+                              setRawN(extentFieldText("n", next));
+                              setRawS(extentFieldText("s", next));
+                              setRawE(extentFieldText("e", next));
+                              setRawW(extentFieldText("w", next));
+                              setExtentState(next);
+                            }}
                           />
                         </SettingsRow>
                         <SettingsRow
@@ -1604,15 +1628,22 @@ function GeoPdfDialog({
                     const printed =
                       key === "contours" &&
                       contoursPrintedHere(selectedBaseLayer, lidarOverlap);
+                    const shadowed =
+                      key === "hillshade" &&
+                      hillshadeShadowedHere(selectedBaseLayer);
                     return (
                       <Checkbox
                         key={key}
                         label={MAP_TERRAIN.copy[key]}
                         description={
-                          printed ? MAP_TERRAIN.copy.contoursPrinted : undefined
+                          printed
+                            ? MAP_TERRAIN.copy.contoursPrinted
+                            : shadowed
+                              ? MAP_TERRAIN.copy.hillshadeImagery
+                              : undefined
                         }
-                        disabled={printed}
-                        checked={!printed && overlays.has(key)}
+                        disabled={printed || shadowed}
+                        checked={!printed && !shadowed && overlays.has(key)}
                         onChange={() => toggleOverlay(key)}
                       />
                     );

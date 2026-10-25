@@ -65,7 +65,7 @@ test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
   await openApp(page);
   await abandonGisPick(page);
   // Mutation: let `freshExportDialog` keep `exportOpensWithGis`.
-  await mapTool(page, ["Make a map of an area", "Export an area"]);
+  await mapTool(page, ["Make a map", "Export an area"]);
   const dialog = page.locator("dialog[open]");
   await expect(dialog.getByRole("radio", { name: "GeoPDF" })).toHaveAttribute(
     "aria-checked",
@@ -84,7 +84,7 @@ test("a template opened after an abandoned GIS pick is a GeoPDF template", async
   await abandonGisPick(page);
   // A topo takes the box tool over, which leaves the rail live again.
   // `LIDAR_JOB_COPY.make`.
-  await mapTool(page, ["Make a map of an area", "Sharpen an area"]);
+  await mapTool(page, ["Make a map", "Sharpen an area"]);
   await page.getByRole("button", { name: "Maps", exact: true }).click();
   const aside = page.locator("aside");
   await aside.getByRole("radio", { name: "GeoPDFs" }).click();

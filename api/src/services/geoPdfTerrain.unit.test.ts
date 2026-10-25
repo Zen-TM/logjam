@@ -17,6 +17,7 @@ import {
   decodeTerrarium,
   hillshadePixels,
   nswContourZoom,
+  overlaysDrawn,
   slopePixels,
   STATEWIDE,
   terrainCreditLines,
@@ -374,5 +375,26 @@ describe("terrainCreditLines", () => {
         new Map([[area(16), new Set(["hillshade"] as const)]]),
       ),
     ).toEqual([NSW_HILLSHADE.credit, `Hillshade: ${SURVEY}`]);
+  });
+});
+
+describe("overlaysDrawn", () => {
+  // Mutation: drop the `drawsNswHillshade` call (a bare `overlays.includes`),
+  // and a request for hillshade over imagery prints a shade over photographs
+  // that carry their own.
+  it("draws no hillshade over imagery, and no contours over a topographic sheet", () => {
+    const overlays = ["hillshade", "contours"];
+    expect(overlaysDrawn({ baseLayer: "six-imagery", overlays })).toEqual({
+      hillshade: false,
+      contours: true,
+    });
+    expect(overlaysDrawn({ baseLayer: "six-topo", overlays })).toEqual({
+      hillshade: true,
+      contours: false,
+    });
+    expect(overlaysDrawn({ baseLayer: "protomaps", overlays: [] })).toEqual({
+      hillshade: false,
+      contours: false,
+    });
   });
 });

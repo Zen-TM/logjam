@@ -5,7 +5,9 @@ import {
   basemapsCoveringViewport,
   resolveMapSource,
   hashKey,
+  holdsContours,
   holdsHillshade,
+  holdsSlope,
   type BasemapId,
   type MapArtifact,
   type ResolveContext,
@@ -461,6 +463,25 @@ describe("statewide slope and hillshade", () => {
     expect(holdsHillshade({ ...clip, minzoom: null })).toBe(false);
     expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
     expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
+  });
+  // Mutation: drop the `logicalKey` test, and a sharpened area's contour or
+  // slope clip (filed as the same kind) enables the statewide switch.
+  it("holdsContours and holdsSlope: the statewide clip, not an area's", () => {
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "nsw-contours" }),
+    ).toBe(true);
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "area-1" }),
+    ).toBe(false);
+    expect(
+      holdsContours({ kind: "slope-region", logicalKey: "nsw-contours" }),
+    ).toBe(false);
+    expect(
+      holdsSlope({ kind: "slope-region", logicalKey: "nsw-5m-slope" }),
+    ).toBe(true);
+    expect(holdsSlope({ kind: "slope-region", logicalKey: "area-1" })).toBe(
+      false,
+    );
   });
   it("offline: a clip saved at z15 alone gives no shade, and never beats a z8-15 one", () => {
     const old = artifact({

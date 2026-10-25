@@ -534,6 +534,23 @@ export function holdsHillshade(
 }
 
 /**
+ * Whether a saved file is a clip of the statewide contours or slope, not an
+ * area's own (a sharpened area's clip is filed as this kind too, under its
+ * id). The layers sheet's switches and the resolver read the same test.
+ * Guard: `sourceResolver.test.ts` ("holdsContours and holdsSlope").
+ */
+export const holdsContours = (
+  artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+): boolean =>
+  artifact.kind === "contours-region" &&
+  artifact.logicalKey === NSW_CONTOURS.id;
+
+export const holdsSlope = (
+  artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+): boolean =>
+  artifact.kind === "slope-region" && artifact.logicalKey === NSW_SLOPE.id;
+
+/**
  * The one slope clip drawn offline: the saved area nearest the middle of the
  * screen, and of those holding it, the biggest, so a canyon saved inside a
  * wider area doesn't crop the slope to its own edge (before the map first
@@ -651,8 +668,7 @@ export function resolveMapSource(
           "contours-region",
           ctx,
           undefined,
-          // An area's contour clip is filed as this kind too.
-          (clip) => clip.logicalKey === NSW_CONTOURS.id,
+          holdsContours,
         ),
         NSW_CONTOURS,
         "contours",
@@ -666,8 +682,7 @@ export function resolveMapSource(
           "slope-region",
           ctx,
           nearestRegion(ref.viewport),
-          // An area's slope clip is filed as this kind too.
-          (clip) => clip.logicalKey === NSW_SLOPE.id,
+          holdsSlope,
         ),
         NSW_SLOPE,
         "slope",

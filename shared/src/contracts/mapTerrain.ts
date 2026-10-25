@@ -25,5 +25,7 @@ export const MAP_TERRAIN = {
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
+    // The Hillshade switch over imagery.
+    hillshadeImagery: "The photos have their own shadows",
   },
 } as const satisfies ScreenContract;

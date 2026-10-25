@@ -27,7 +27,6 @@ import {
   contourWidthStops,
   lerpZoom,
   contourLabelHalo,
-  drawsNswContours,
   geoPdfMaxNativeZoom,
   GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_TOO_LARGE,
@@ -49,6 +48,7 @@ import {
   decodeTerrarium,
   hillshadePixels,
   nswContourZoom,
+  overlaysDrawn,
   slopePixels,
   STATEWIDE,
   terrainCreditLines,
@@ -461,7 +461,8 @@ export async function generateGeoPdf(
     };
     const demZoom = (maxzoom: number) =>
       terrainReadZoom(Math.min(zoom, overlayZoom), maxzoom, areas);
-    if (config.overlays.includes("hillshade")) {
+    const drawn = overlaysDrawn(config);
+    if (drawn.hillshade) {
       const shadeZoom = demZoom(NSW_HILLSHADE.maxzoom);
       const drew = await drawTerrarium(
         mapCtx,
@@ -500,10 +501,7 @@ export async function generateGeoPdf(
       creditAreas("slope", drew);
     }
     const contourZoom = nswContourZoom(config.scale, centreLat, overlayZoom);
-    if (
-      contourZoom !== null &&
-      drawsNswContours(config.baseLayer, config.overlays.includes("contours"))
-    ) {
+    if (contourZoom !== null && drawn.contours) {
       const contoursFrom = archiveFrom(
         "contours",
         await openArchive(topoBucket, NSW_CONTOURS.archivePath, "contours"),

@@ -84,6 +84,7 @@ import {
   type SnapMode,
   type TrackPass,
   drawsNswContours,
+  drawsNswHillshade,
   slopeReliefColor,
   TERRAIN_LAYER_KEYS,
   terrainBeforeIds,
@@ -1458,7 +1459,7 @@ export function MapScreen({
   );
   const hillshadeResolved = useMemo(
     () =>
-      terrainLayers.hillshade
+      drawsNswHillshade(renderedBasemapId, terrainLayers.hillshade)
         ? writeTileJsons(
             resolveMapSource(
               { kind: "nsw-hillshade", viewport: viewportBbox },
@@ -1467,7 +1468,7 @@ export function MapScreen({
             areasEpoch,
           )
         : [],
-    [terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
+    [renderedBasemapId, terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
   );
 
   /**

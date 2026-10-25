@@ -1,6 +1,7 @@
 import {
   TERRAIN_LAYER_KEYS,
   takesNswContours,
+  takesNswHillshade,
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
@@ -91,4 +92,9 @@ export function contoursPrintedHere(
   lidarOverlap: boolean,
 ): boolean {
   return !takesNswContours(baseLayer) && !lidarOverlap;
+}
+
+/** Whether ticking Hillshade could draw nothing useful: imagery has its own shadows. */
+export function hillshadeShadowedHere(baseLayer: string): boolean {
+  return !takesNswHillshade(baseLayer);
 }

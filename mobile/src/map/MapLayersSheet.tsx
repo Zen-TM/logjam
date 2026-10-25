@@ -41,7 +41,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
-  takesNswContours,
+  TERRAIN_LAYER_KEYS,
   type SectionKeysOn,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -64,15 +64,11 @@ import {
   type Glyph,
   SwitchRow,
 } from "../ui";
-import { unavailableReasonText } from "../auth/capabilities";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import {
-  holdsHillshade,
-  type BasemapId,
-  type MapArtifact,
-} from "./sourceResolver";
+import { terrainSwitch } from "./terrainSwitches";
+import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -210,7 +206,7 @@ export function MapLayersSheet({
         onChange={onTerrainLayerChange}
         basemapId={basemapId}
         online={online}
-        shadeSaved={artifacts.some(holdsHillshade)}
+        artifacts={artifacts}
       />
     ),
     overlays: () => (
@@ -322,56 +318,39 @@ function TerrainTab({
   onChange,
   basemapId,
   online,
-  shadeSaved,
+  artifacts,
 }: {
   layers: Readonly<Record<TerrainLayerKey, boolean>>;
   onChange: (key: TerrainLayerKey, on: boolean) => void;
   basemapId: BasemapId;
   online: boolean;
-  /** A saved area holds a height clip the shade can be drawn from offline. */
-  shadeSaved: boolean;
+  /** What is saved on this phone: offline, a layer needs a clip of itself. */
+  artifacts: readonly MapArtifact[];
 }) {
   const styles = useStyles();
-  const terrain = MAP_TERRAIN.copy;
-  // A sheet that prints its own contours has no room for a second set.
-  const printed = !takesNswContours(basemapId);
-  const rows: Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode> = {
-    contours: (
-      <SwitchRow
-        key="contours"
-        title={terrain.contours}
-        description={printed ? terrain.contoursPrinted : undefined}
-        disabled={printed}
-        style={styles.itemRow}
-        checked={layers.contours}
-        onChange={(on) => onChange("contours", on)}
-      />
-    ),
-    slope: (
-      <SwitchRow
-        key="slope"
-        title={terrain.slope}
-        style={styles.itemRow}
-        checked={layers.slope}
-        onChange={(on) => onChange("slope", on)}
-      />
-    ),
-    hillshade: (
-      <SwitchRow
-        key="hillshade"
-        title={terrain.hillshade}
-        description={
-          online || shadeSaved
-            ? undefined
-            : unavailableReasonText("needs-connection")
-        }
-        disabled={!online && !shadeSaved}
-        style={styles.itemRow}
-        checked={layers.hillshade}
-        onChange={(on) => onChange("hillshade", on)}
-      />
-    ),
-  };
+  const rows = Object.fromEntries(
+    TERRAIN_LAYER_KEYS.map((key) => {
+      const state = terrainSwitch(
+        key,
+        layers[key],
+        basemapId,
+        online,
+        artifacts,
+      );
+      return [
+        key,
+        <SwitchRow
+          key={key}
+          title={MAP_TERRAIN.copy[key]}
+          description={state.reason}
+          disabled={state.disabled}
+          style={styles.itemRow}
+          checked={state.checked}
+          onChange={(on) => onChange(key, on)}
+        />,
+      ];
+    }),
+  ) as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
   return (
     <View style={styles.body}>
       {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
