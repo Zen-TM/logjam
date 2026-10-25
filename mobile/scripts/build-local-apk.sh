@@ -53,7 +53,9 @@ install_apk=1
 export LOGJAM_LOCAL_API=1
 export SENTRY_DISABLE_AUTO_UPLOAD=true
 
-bundle_dir="android/app/build/generated/assets/createBundleReleaseJsAndAssets"
+# The whole generated tree, not the bundle task's own folder: that path changes
+# between React Native versions, and a delete that misses it ships a stale bundle.
+bundle_dir="android/app/build/generated/assets"
 apk="android/app/build/outputs/apk/release/app-release.apk"
 
 # The plugin writes into android/, which is prebuild-generated, so prebuild has
@@ -84,11 +86,13 @@ if [ -z "$want" ]; then
   echo "    EXPO_PUBLIC_API_URL is not set in .env" >&2
   exit 1
 fi
-if grep -aqF "$want" "$bundle_dir/index.android.bundle"; then
+# The bundle inside the APK, which is what ships. Not `grep -q`: it exits at the
+# first match, unzip dies of SIGPIPE, and pipefail reports a miss.
+if unzip -p "$apk" assets/index.android.bundle | grep -aF "$want" >/dev/null; then
   echo "    API URL:   $want (in the bundle)"
 else
   echo "    API URL:   MISSING — the build asked for $want but the bundle does not contain it." >&2
-  echo "               The JS bundle is stale; delete $bundle_dir and rebuild." >&2
+  echo "               The JS bundle is stale; delete android/app/build and rebuild." >&2
   exit 1
 fi
 case "$want" in
