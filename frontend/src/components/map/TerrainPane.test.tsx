@@ -30,7 +30,7 @@ describe("the Terrain group on Logjam Web", () => {
   it("switches each layer by its key", () => {
     const props = draw();
     fireEvent.click(screen.getByRole("switch", { name: "Show slope" }));
-    expect(props.onChange).toHaveBeenCalledWith("slope", true);
+    expect(props.onChange).toHaveBeenCalledWith("slope", false);
     fireEvent.click(screen.getByRole("switch", { name: "Show hillshade" }));
     expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
     fireEvent.click(screen.getByRole("switch", { name: "Show contours" }));
@@ -50,5 +50,23 @@ describe("the Terrain group on Logjam Web", () => {
     const contours = screen.getByRole("switch", { name: "Show contours" });
     expect((contours as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(copy.contoursPrinted)).toBeTruthy();
+  });
+
+  // Mutation: drop `shadowed` from the Hillshade row, and imagery offers a
+  // shading over photographs that carry their own.
+  it("says imagery has its own shadows, and offers Hillshade elsewhere", () => {
+    draw("six-imagery");
+    const hillshade = screen.getByRole("switch", { name: "Show hillshade" });
+    expect((hillshade as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(copy.hillshadeImagery)).toBeTruthy();
+    cleanup();
+    draw("six-topo");
+    expect(
+      (
+        screen.getByRole("switch", {
+          name: "Show hillshade",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(false);
   });
 });

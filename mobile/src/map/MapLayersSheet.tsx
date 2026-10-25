@@ -42,6 +42,7 @@ import {
   MAP_OVERLAYS,
   MAP_TERRAIN,
   takesNswContours,
+  takesNswHillshade,
   type SectionKeysOn,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -335,6 +336,8 @@ function TerrainTab({
   const terrain = MAP_TERRAIN.copy;
   // A sheet that prints its own contours has no room for a second set.
   const printed = !takesNswContours(basemapId);
+  // Imagery has its own shadows; offline keeps its own reason below.
+  const shadowed = !takesNswHillshade(basemapId);
   const rows: Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode> = {
     contours: (
       <SwitchRow
@@ -361,11 +364,13 @@ function TerrainTab({
         key="hillshade"
         title={terrain.hillshade}
         description={
-          online || shadeSaved
-            ? undefined
-            : unavailableReasonText("needs-connection")
+          shadowed
+            ? terrain.hillshadeImagery
+            : online || shadeSaved
+              ? undefined
+              : unavailableReasonText("needs-connection")
         }
-        disabled={!online && !shadeSaved}
+        disabled={shadowed || (!online && !shadeSaved)}
         style={styles.itemRow}
         checked={layers.hillshade}
         onChange={(on) => onChange("hillshade", on)}

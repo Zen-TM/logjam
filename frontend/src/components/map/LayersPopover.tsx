@@ -12,6 +12,7 @@ import {
   MAP_TERRAIN,
   PLACE_TYPE_COLORS,
   takesNswContours,
+  takesNswHillshade,
   type RegionBbox,
   type SectionKeysOn,
   type SlopeBand,
@@ -377,11 +378,17 @@ export function TerrainPane({
   const row = (key: TerrainLayerKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
     const printed = key === "contours" && !takesNswContours(activeLayerId);
+    const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
+    const reason = printed
+      ? terrainCopy.contoursPrinted
+      : shadowed
+        ? terrainCopy.hillshadeImagery
+        : undefined;
     return (
       <Row
         key={key}
         title={title}
-        subtitle={printed ? terrainCopy.contoursPrinted : undefined}
+        subtitle={reason}
         trailing={
           <>
             {extra}
@@ -389,7 +396,7 @@ export function TerrainPane({
               checked={layers[key]}
               onChange={(on) => onChange(key, on)}
               label={`Show ${title.toLowerCase()}`}
-              disabled={printed}
+              disabled={printed || shadowed}
             />
           </>
         }

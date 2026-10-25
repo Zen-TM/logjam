@@ -21,6 +21,7 @@ import type { TBbox } from "../map/Map";
 import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
+  hillshadeShadowedHere,
   LIDAR_ONLY_OVERLAYS,
   ownJobInArea,
   seedOverlays,
@@ -936,9 +937,15 @@ function GeoPdfDialog({
       },
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      overlays: [...overlays].map((id) =>
-        id.startsWith("master-") ? id.slice("master-".length) : id,
-      ),
+      // A hillshade chosen on another sheet is kept, not drawn over imagery.
+      overlays: [...overlays]
+        .filter(
+          (id) =>
+            id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer),
+        )
+        .map((id) =>
+          id.startsWith("master-") ? id.slice("master-".length) : id,
+        ),
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
@@ -1604,15 +1611,22 @@ function GeoPdfDialog({
                     const printed =
                       key === "contours" &&
                       contoursPrintedHere(selectedBaseLayer, lidarOverlap);
+                    const shadowed =
+                      key === "hillshade" &&
+                      hillshadeShadowedHere(selectedBaseLayer);
                     return (
                       <Checkbox
                         key={key}
                         label={MAP_TERRAIN.copy[key]}
                         description={
-                          printed ? MAP_TERRAIN.copy.contoursPrinted : undefined
+                          printed
+                            ? MAP_TERRAIN.copy.contoursPrinted
+                            : shadowed
+                              ? MAP_TERRAIN.copy.hillshadeImagery
+                              : undefined
                         }
-                        disabled={printed}
-                        checked={!printed && overlays.has(key)}
+                        disabled={printed || shadowed}
+                        checked={!printed && !shadowed && overlays.has(key)}
                         onChange={() => toggleOverlay(key)}
                       />
                     );

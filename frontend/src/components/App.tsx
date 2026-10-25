@@ -111,6 +111,7 @@ import {
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
   drawsNswContours,
+  drawsNswHillshade,
   normalizeTerrainLayers,
   type TerrainLayerKey,
   MAP_MEASURE,
@@ -551,7 +552,7 @@ function App() {
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
-      hillshade,
+      hillshade: drawsNswHillshade(activeLayerId, hillshade),
     };
     return [
       ...[...TERRAIN_LAYER_KEYS]
@@ -1527,7 +1528,7 @@ function App() {
     },
     {
       id: "make-map",
-      label: "Make a map of an area",
+      label: "Make a map",
       icon: "pickArea",
       menu: [
         {

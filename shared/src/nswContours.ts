@@ -37,6 +37,19 @@ export function takesNswContours(basemapId: string): boolean {
   return basemapId === "protomaps" || basemapId === "six-imagery";
 }
 
+/**
+ * Whether the hillshade is drawn over a basemap: when its switch is on, except
+ * over imagery, whose photographs already carry their own shadows.
+ */
+export function drawsNswHillshade(basemapId: string, on: boolean): boolean {
+  return on && takesNswHillshade(basemapId);
+}
+
+/** Whether a basemap has room for the hillshade: every one but imagery. */
+export function takesNswHillshade(basemapId: string): boolean {
+  return basemapId !== "six-imagery";
+}
+
 /** Imagery is dark, and the brown a paper map prints its contours in is lost on it. */
 const OVER_IMAGERY = { majorColour: "#ffffffe6", minorColour: "#ffffff8c" };
 
