@@ -11,6 +11,8 @@ export const MAP_TERRAIN = {
     { key: "contours" },
     { key: "slope" },
     { key: "hillshade" },
+    // Only while a sharpened area of the user's has a vegetation layer.
+    { key: "vegetation" },
     {
       key: "slopeBands",
       on: "web",
@@ -22,6 +24,9 @@ export const MAP_TERRAIN = {
     contours: "Contours",
     slope: "Slope",
     hillshade: "Hillshade",
+    vegetation: "Vegetation",
+    vegetationHint:
+      "Scrub density for bushbashing: denser reads darker. Orange crosshatching is ground burnt since the survey.",
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",

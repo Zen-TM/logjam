@@ -37,7 +37,6 @@ import {
   type MapsView,
   type PanelId,
 } from "./sidebar/panels";
-import { TOPO_LAYERS } from "../topoLayerTypes";
 import {
   usePlaces,
   usePlaceTracks,
@@ -113,7 +112,7 @@ import {
   drawsNswContours,
   drawsNswHillshade,
   normalizeTerrainLayers,
-  type TerrainLayerKey,
+  type TerrainSwitchKey,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
   MAP_TERRAIN,
@@ -127,11 +126,6 @@ import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
-
-const currentLayerNames: string[] = TOPO_LAYERS.map((l) => l.name);
-const defaultLayerToggles = Object.fromEntries(
-  currentLayerNames.map((n) => [n, true]),
-);
 
 function App() {
   const toast = useToast();
@@ -213,7 +207,7 @@ function App() {
     TERRAIN_LAYER_DEFAULTS,
   );
   const terrainLayers = normalizeTerrainLayers(storedTerrainLayers);
-  const setTerrainLayer = (key: TerrainLayerKey, on: boolean) =>
+  const setTerrainLayer = (key: TerrainSwitchKey, on: boolean) =>
     setStoredTerrainLayers((prev: unknown) => ({
       ...normalizeTerrainLayers(prev),
       [key]: on,
@@ -363,13 +357,7 @@ function App() {
     loaded: completedTopoJobsLoaded,
     refetch: refetchCompletedTopoJobs,
   } = useCompletedTopoJobs(loadsUserData, authenticated);
-  // Topo overlay entries (`${jobId}-${layerName}`) whose PMTiles source failed
-  // to load this session (e.g. output files gone from S3). Drives the
-  // "unavailable" badge in the Layers panel.
-  const [unavailableTopoEntryIds, setUnavailableTopoEntryIds] = useState<
-    Set<string>
-  >(new Set());
-  // One toast for the whole session, however many sources fail.
+  // One toast for the whole session, however many vegetation sources fail.
   const topoUnavailableToastShownRef = useRef(false);
 
   // GeoPDF dialog
@@ -448,94 +436,31 @@ function App() {
     if (target) setFlyToPlace({ lat: target.latitude, lng: target.longitude });
   }, []);
 
-  // LiDAR topo panel state — lifted so it persists across panel open/close
-  const [lidarEnabled, setLidarEnabled] = useStoredState(
-    "logjam.lidarEnabled",
-    false,
-  );
-
-  const [rawLidarLayerToggles, setLidarLayerToggles] = useStoredState<
-    Record<string, boolean>
-  >("logjam.lidarLayerToggles", defaultLayerToggles);
-  // Drop unknown layers, add missing new layers as true
-  const lidarLayerToggles = useMemo<Record<string, boolean>>(
-    () => ({
-      ...defaultLayerToggles,
-      ...Object.fromEntries(
-        Object.entries(rawLidarLayerToggles).filter(([k]) =>
-          currentLayerNames.includes(k),
-        ),
-      ),
-    }),
-    [rawLidarLayerToggles],
-  );
-
-  const [rawLidarLayerOrder, setLidarLayerOrder] = useStoredState<string[]>(
-    "logjam.lidarLayerOrder",
-    currentLayerNames,
-  );
-  // Drop unknown names, append any new layers at end
-  const lidarLayerOrder = useMemo<string[]>(
-    () => [
-      ...rawLidarLayerOrder.filter((n) => currentLayerNames.includes(n)),
-      ...currentLayerNames.filter((n) => !rawLidarLayerOrder.includes(n)),
-    ],
-    [rawLidarLayerOrder],
-  );
-
-  // Per-completed-job visibility. Newly fetched jobs default to true (visible).
-  const [lidarJobToggles, setLidarJobToggles] = useStoredState<
-    Record<string, boolean>
-  >("logjam.lidarJobToggles", {});
-
-  // Compose all (job × layer) pairs into the flat list the Map consumes.
-  // Z-order: outer loop = layer (per user-chosen order), inner loop = jobs
-  // (newest first so newer data renders on top of older within the same layer).
-  // A pair is included only when both the layer toggle and the job toggle are on.
-  const combinedTopoLayers = useMemo(() => {
-    if (!lidarEnabled) return [];
-    const out: {
-      id: string;
-      pmtilesUrl: string;
-      format?: "raster" | "vector";
-      attribution?: string;
-    }[] = [];
-    for (const layerName of lidarLayerOrder) {
-      if (!lidarLayerToggles[layerName]) continue;
-      // Credit the overlay's open-data source (ELVIS / SVTM / OSM) so MapLibre's
-      // AttributionControl surfaces the required CC BY / ODbL attribution.
-      // A layer may credit more than one source (e.g. vegetation density is a
-      // LiDAR CHM, so it credits both elevation and the SVTM vegetation source).
-      // layerName comes from persisted user state (string), so index the
-      // TopoLayerName-keyed record defensively rather than crash on a stale
-      // stored name.
-      const overlaySources =
-        (TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>)[
-          layerName
-        ] ?? [];
-      const attribution = overlaySources.length
-        ? overlaySources.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s]).join(" · ")
-        : undefined;
-      for (const job of completedTopoJobs) {
-        if (!(lidarJobToggles[job.jobId] ?? true)) continue;
-        const match = job.layers.find((l) => l.name === layerName);
-        if (!match) continue;
-        out.push({
-          id: `${job.jobId}-${layerName}`,
-          pmtilesUrl: match.pmtilesUrl,
-          format: match.format,
-          attribution,
-        });
-      }
-    }
-    return out;
-  }, [
-    lidarEnabled,
-    lidarLayerOrder,
-    lidarLayerToggles,
-    lidarJobToggles,
-    completedTopoJobs,
-  ]);
+  // A sharpened area's optional vegetation layer: every area's, newest first
+  // so a newer survey draws over an older one, while the Terrain switch is on.
+  const vegetationLayers = useMemo(() => {
+    if (!terrainLayers.vegetation) return [];
+    // Credit the layer's open-data sources (ELVIS / SVTM) so MapLibre's
+    // AttributionControl surfaces the required CC BY / ODbL attribution.
+    const attribution = (
+      TOPO_OVERLAY_SOURCE as Record<string, OverlaySource[] | undefined>
+    ).vegetation
+      ?.map((s) => GEOPDF_OVERLAY_ATTRIBUTION[s])
+      .join(" · ");
+    return completedTopoJobs.flatMap((job) => {
+      const match = job.layers.find((l) => l.name === "vegetation");
+      return match
+        ? [
+            {
+              id: `${job.jobId}-vegetation`,
+              pmtilesUrl: match.pmtilesUrl,
+              format: match.format,
+              attribution,
+            },
+          ]
+        : [];
+    });
+  }, [terrainLayers.vegetation, completedTopoJobs]);
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
@@ -559,25 +484,24 @@ function App() {
         .reverse()
         .filter((key) => shown[key])
         .map((key) => entries[key]),
-      ...combinedTopoLayers,
+      ...vegetationLayers,
     ];
   }, [
     activeLayerId,
     contours,
     slope,
     hillshade,
-    combinedTopoLayers,
+    vegetationLayers,
     sharpenedAreas,
   ]);
 
-  // A topo overlay's PMTiles source failed to load (Map already tore it down
-  // to stop the retry spam). Record it for the Layers-panel badge and tell the
-  // user once.
+  // A PMTiles source failed to load (Map already tore it down to stop the
+  // retry spam). Tell the user once.
   const handleTopoSourceUnavailable = useCallback(
     (entryId: string) => {
-      // A Terrain layer is not a topo area's: no badge, but its switch is on,
-      // so say which one draws nothing. Only a reload retries it: the pmtiles
-      // protocol keeps the failed header for the page's life.
+      // A Terrain layer's switch is on, so say which one draws nothing. Only
+      // a reload retries it: the pmtiles protocol keeps the failed header for
+      // the page's life.
       const terrainKey = TERRAIN_LAYER_KEYS.find(
         (key) => TERRAIN_ENTRIES[key].id === entryId,
       );
@@ -587,35 +511,15 @@ function App() {
         );
         return;
       }
-      setUnavailableTopoEntryIds((prev) => {
-        if (prev.has(entryId)) return prev;
-        const next = new Set(prev);
-        next.add(entryId);
-        return next;
-      });
       if (!topoUnavailableToastShownRef.current) {
         topoUnavailableToastShownRef.current = true;
         toast.error(
-          "Some LiDAR topo layers couldn't be loaded — their map files are missing. Affected layers are marked in the Layers panel.",
+          `${MAP_TERRAIN.copy.vegetation} couldn't be loaded for some sharpened areas — their map files are missing.`,
         );
       }
     },
     [toast],
   );
-
-  // Layer names with at least one failed source, for the Layers-panel badge.
-  const unavailableTopoLayerNames = useMemo(() => {
-    const names = new Set<string>();
-    if (unavailableTopoEntryIds.size === 0) return names;
-    for (const job of completedTopoJobs) {
-      for (const layer of job.layers) {
-        if (unavailableTopoEntryIds.has(`${job.jobId}-${layer.name}`)) {
-          names.add(layer.name);
-        }
-      }
-    }
-    return names;
-  }, [completedTopoJobs, unavailableTopoEntryIds]);
 
   const startPickingCoords = useCallback(
     (onPicked: (lat: number, lng: number) => void) => {
@@ -643,9 +547,6 @@ function App() {
    * renders.
    */
   const mapBoundsRef = useRef<TBbox | null>(null);
-  // The same bounds as state, for the Layers popover's "In this view". Set on
-  // moveend only, so it re-renders once per gesture rather than per frame.
-  const [mapBounds, setMapBounds] = useState<TBbox | null>(null);
 
   const startFilterAreaSelection = useCallback(() => {
     setActivePanel(null);
@@ -921,17 +822,6 @@ function App() {
         console.error(err);
       });
   }, [loadsUserData]);
-
-  // Default newly-seen jobs to visible; keep the toggle of jobs already known.
-  useEffect(() => {
-    setLidarJobToggles((prev) => {
-      const next: Record<string, boolean> = { ...prev };
-      for (const j of completedTopoJobs) {
-        if (next[j.jobId] === undefined) next[j.jobId] = true;
-      }
-      return next;
-    });
-  }, [completedTopoJobs, setLidarJobToggles]);
 
   // Topo exports (Stage 2 on-demand pipeline). Owned at App level so the
   // recent-exports list (rendered in Maps, Exports) and the
@@ -1652,10 +1542,7 @@ function App() {
         <SidebarPanel
           activePanel={activePanel}
           onClose={handlePanelClose}
-          onTopoFlyTarget={(footprint) => {
-            setLidarEnabled(true);
-            setTopoFlyTarget(footprint);
-          }}
+          onTopoFlyTarget={setTopoFlyTarget}
           logsView={logsView}
           onLogsViewChange={setLogsView}
           mapsView={mapsView}
@@ -1810,7 +1697,6 @@ function App() {
           topoExportsLoaded={topoExportsLoaded}
           topoExportsError={topoExportsError}
           onRefetchTopoExports={refetchTopoExports}
-          setLidarJobToggles={setLidarJobToggles}
           onOpenTopo={() => setShowTopo(true)}
           onOpenExport={() => {
             setEditingGeoPdfTemplate(undefined);
@@ -1933,7 +1819,6 @@ function App() {
           }}
           onMapBoundsChange={(bounds) => {
             mapBoundsRef.current = bounds;
-            setMapBounds(bounds);
           }}
           selectingBbox={boxFor(boxPick) !== null}
           onBboxSelected={(bbox) => {
@@ -2012,17 +1897,7 @@ function App() {
         setShowWays={setShowWays}
         placeCount={places.length + sharedPlaces.length}
         wayCount={showWays ? wayCount : null}
-        lidarEnabled={lidarEnabled}
-        setLidarEnabled={setLidarEnabled}
-        lidarLayerToggles={lidarLayerToggles}
-        setLidarLayerToggles={setLidarLayerToggles}
-        lidarLayerOrder={lidarLayerOrder}
-        setLidarLayerOrder={setLidarLayerOrder}
-        unavailableTopoLayerNames={unavailableTopoLayerNames}
         completedTopoJobs={completedTopoJobs}
-        lidarJobToggles={lidarJobToggles}
-        setLidarJobToggles={setLidarJobToggles}
-        mapBounds={mapBounds}
         baseLayers={BASE_LAYERS}
         activeLayerId={activeLayerId}
         onActiveLayerChange={setActiveLayerId}

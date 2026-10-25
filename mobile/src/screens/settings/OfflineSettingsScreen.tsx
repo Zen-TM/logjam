@@ -220,11 +220,11 @@ export function OfflineSettingsScreen({
         />
         <PreferenceRow
           icon="lidar"
-          title="Finished LiDAR topos"
+          title="Finished sharpened areas"
           subtitle={
             needsAccount("autoTopo")
               ? accountText
-              : "LiDAR topos generated on Logjam Web download here automatically."
+              : "Sharpened areas made on Logjam Web download here automatically."
           }
           value={topoAutoDownload}
           ready={!needsAccount("autoTopo")}

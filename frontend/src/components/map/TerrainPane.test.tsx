@@ -7,12 +7,17 @@ afterEach(cleanup);
 
 const copy = MAP_TERRAIN.copy;
 
-function draw(activeLayerId = "protomaps", layers = TERRAIN_LAYER_DEFAULTS) {
+function draw(
+  activeLayerId = "protomaps",
+  layers: typeof TERRAIN_LAYER_DEFAULTS = TERRAIN_LAYER_DEFAULTS,
+  hasVegetation = false,
+) {
   const props = {
     layers,
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
+    hasVegetation,
   };
   render(<TerrainPane {...props} />);
   return props;
@@ -35,6 +40,20 @@ describe("the Terrain group on Logjam Web", () => {
     expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
     fireEvent.click(screen.getByRole("switch", { name: "Show contours" }));
     expect(props.onChange).toHaveBeenCalledWith("contours", false);
+  });
+
+  // Mutation: draw the row unconditionally, and a user with no vegetation
+  // layer is offered a switch that draws nothing.
+  it("offers Vegetation only when a sharpened area has the layer", () => {
+    draw();
+    expect(
+      screen.queryByRole("switch", { name: "Show vegetation" }),
+    ).toBeNull();
+    cleanup();
+    const props = draw("protomaps", undefined, true);
+    expect(screen.getAllByRole("switch")).toHaveLength(4);
+    fireEvent.click(screen.getByRole("switch", { name: "Show vegetation" }));
+    expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
   });
 
   it("opens the slope bands from the Slope row", () => {
@@ -77,7 +96,12 @@ describe("the Terrain group on Logjam Web", () => {
       (screen.getByRole("switch", { name }) as HTMLButtonElement).getAttribute(
         "aria-checked",
       );
-    const stored = { contours: true, slope: true, hillshade: true };
+    const stored = {
+      contours: true,
+      slope: true,
+      hillshade: true,
+      vegetation: true,
+    };
     draw("six-imagery", stored);
     expect(on("Show hillshade")).toBe("false");
     cleanup();

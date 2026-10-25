@@ -28,7 +28,11 @@ function savedOverlay(jobId: string, layer: string): MapArtifact {
 }
 
 function response(): CompletedOverlaysResponse {
-  const layerByName = Object.fromEntries(TOPO_LAYERS.map((l) => [l.name, l]));
+  const layer = (name: "hillshade" | "vegetation", pmtilesUrl: string) => ({
+    name,
+    format: TOPO_LAYERS.find((l) => l.name === name)!.format,
+    pmtilesUrl,
+  });
   return {
     expiresAt: "2026-07-24T00:00:00Z",
     jobs: [
@@ -37,61 +41,40 @@ function response(): CompletedOverlaysResponse {
         name: "Old job",
         createdAt: "2026-07-01T00:00:00Z",
         layers: [
-          {
-            name: LAYER_ORDER[0],
-            format: layerByName[LAYER_ORDER[0]].format,
-            pmtilesUrl: "https://s3/old-a",
-          },
-          {
-            name: LAYER_ORDER[1],
-            format: layerByName[LAYER_ORDER[1]].format,
-            pmtilesUrl: "https://s3/old-b",
-          },
+          layer("hillshade", "https://s3/old-a"),
+          layer("vegetation", "https://s3/old-b"),
         ],
       },
       {
         jobId: "new",
         name: "New job",
         createdAt: "2026-07-20T00:00:00Z",
-        layers: [
-          {
-            name: LAYER_ORDER[0],
-            format: layerByName[LAYER_ORDER[0]].format,
-            pmtilesUrl: "https://s3/new-a",
-          },
-        ],
+        layers: [layer("vegetation", "https://s3/new-b")],
       },
     ],
   };
 }
 
 describe("composeTopoOverlayRefs", () => {
-  it("renders nothing when no layers are enabled", () => {
-    expect(composeTopoOverlayRefs(response(), new Set())).toEqual([]);
-  });
-
-  it("orders layer-band outer, newest-job-first inner (web parity)", () => {
-    const enabled = new Set([
-      `old/${LAYER_ORDER[0]}`,
-      `new/${LAYER_ORDER[0]}`,
-      `old/${LAYER_ORDER[1]}`,
-    ]);
-    const refs = composeTopoOverlayRefs(response(), enabled);
+  // Mutation: compose every layer of a job and the retired hillshade overlay
+  // draws again over the Terrain group's own.
+  it("draws vegetation only, newest job first, with its presigned URL and credit", () => {
+    const refs = composeTopoOverlayRefs(response());
     expect(refs.map((r) => `${r.jobId}/${r.layer}`)).toEqual([
-      `new/${LAYER_ORDER[0]}`,
-      `old/${LAYER_ORDER[0]}`,
-      `old/${LAYER_ORDER[1]}`,
+      "new/vegetation",
+      "old/vegetation",
     ]);
+    expect(refs[0].remoteUrl).toBe("https://s3/new-b");
+    expect(refs[0].attribution).toBeTruthy();
   });
 
-  it("filters to enabled keys only and carries the presigned URL", () => {
-    const refs = composeTopoOverlayRefs(
-      response(),
-      new Set([`new/${LAYER_ORDER[0]}`]),
-    );
-    expect(refs).toHaveLength(1);
-    expect(refs[0].remoteUrl).toBe("https://s3/new-a");
-    expect(refs[0].attribution).toBeTruthy();
+  it("draws nothing for an area with no vegetation layer", () => {
+    const online = response();
+    online.jobs = online.jobs.map((job) => ({
+      ...job,
+      layers: job.layers.filter((l) => l.name !== "vegetation"),
+    }));
+    expect(composeTopoOverlayRefs(online)).toEqual([]);
   });
 });
 
@@ -107,14 +90,13 @@ describe("mergeSavedOverlayJobs", () => {
       name: LAYER_ORDER[0],
       pmtilesUrl: "",
     });
-    // The synthetic job composes into a renderable ref when enabled.
-    const refs = composeTopoOverlayRefs(
-      merged,
-      new Set([`saved/${LAYER_ORDER[0]}`]),
-    );
-    expect(refs.map((r) => `${r.jobId}/${r.layer}`)).toEqual([
-      `saved/${LAYER_ORDER[0]}`,
+    // The synthetic job composes into a renderable ref.
+    const saved = mergeSavedOverlayJobs(null, [
+      savedOverlay("saved", "vegetation"),
     ]);
+    expect(
+      composeTopoOverlayRefs(saved).map((r) => `${r.jobId}/${r.layer}`),
+    ).toEqual(["saved/vegetation"]);
   });
 
   // Mutation: drop the syncRole check in shared's lidarJobSharePromise, and
@@ -143,7 +125,7 @@ describe("mergeSavedOverlayJobs", () => {
 
   it("appends a saved layer to an online job missing that layer", () => {
     const merged = mergeSavedOverlayJobs(response(), [
-      savedOverlay("new", LAYER_ORDER[1]),
+      savedOverlay("new", LAYER_ORDER[0]),
     ]);
     const newJob = merged.jobs.find((j) => j.jobId === "new")!;
     expect(newJob.layers.map((l) => l.name).sort()).toEqual(
@@ -160,14 +142,19 @@ describe("mergeSavedOverlayJobs", () => {
     ]);
     expect(merged.jobs).toEqual([]);
     const online = response();
-    online.jobs[0].layers.push({
-      name: "contours",
-      format: "vector",
-      pmtilesUrl: "https://s3/old-contours",
-    });
-    expect(composeTopoOverlayRefs(online, new Set(["old/contours"]))).toEqual(
-      [],
-    );
+    online.jobs = [
+      {
+        ...online.jobs[0],
+        layers: [
+          {
+            name: "vegetation",
+            format: "vector",
+            pmtilesUrl: "https://s3/old-vegetation",
+          },
+        ],
+      },
+    ];
+    expect(composeTopoOverlayRefs(online)).toEqual([]);
   });
 
   it("returns the online list unchanged when there are no saved artifacts", () => {

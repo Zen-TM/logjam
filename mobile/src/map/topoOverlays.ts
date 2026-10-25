@@ -1,9 +1,7 @@
 // Compose the /topo-jobs/completed-overlays response into ordered
-// LogicalLayerRefs — the Logjam GPS counterpart of Logjam Web's combinedTopoLayers
-// (frontend/src/components/App.tsx): z-order is layer-order outer loop
-// (TOPO_LAYERS order), newest-job-first inner loop. Pure; vitest-tested.
+// LogicalLayerRefs — the Logjam GPS counterpart of Logjam Web's
+// vegetationLayers (frontend/src/components/App.tsx). Pure; vitest-tested.
 import {
-  TOPO_LAYERS,
   overlayAttributionLines,
   type TopoLayerFormat,
   type TopoLayerName,
@@ -104,35 +102,30 @@ export function mergeSavedOverlayJobs(
 }
 
 /**
- * Flatten enabled job layers into resolver refs in render z-order (first =
- * bottom). `enabled` holds "<jobId>/<layerName>" keys; an empty set renders
- * nothing.
+ * Flatten every job's vegetation layer into resolver refs in render z-order
+ * (first = bottom): the only layer of a sharpened area that is an overlay, the
+ * rest drawing through the Terrain group. Newest job first, matching web.
  */
 export function composeTopoOverlayRefs(
   response: CompletedOverlaysResponse,
-  enabled: ReadonlySet<string>,
 ): TopoOverlayRef[] {
-  // Newest job first within each layer band (matches web).
   const jobsNewestFirst = [...response.jobs].sort((a, b) =>
     b.createdAt.localeCompare(a.createdAt),
   );
-  const refs: TopoOverlayRef[] = [];
-  for (const layer of TOPO_LAYERS) {
-    for (const job of jobsNewestFirst) {
-      const match = job.layers.find((l) => l.name === layer.name);
-      if (!match || match.format !== "raster") continue;
-      if (!enabled.has(`${job.jobId}/${layer.name}`)) continue;
-      refs.push({
-        kind: "topo-overlay",
+  return jobsNewestFirst.flatMap((job) => {
+    const match = job.layers.find((l) => l.name === "vegetation");
+    if (!match || match.format !== "raster") return [];
+    return [
+      {
+        kind: "topo-overlay" as const,
         jobId: job.jobId,
-        layer: layer.name,
+        layer: match.name,
         format: match.format,
         remoteUrl: match.pmtilesUrl,
-        attribution: overlayAttributionLines([layer.name]).join(" "),
-      });
-    }
-  }
-  return refs;
+        attribution: overlayAttributionLines([match.name]).join(" "),
+      },
+    ];
+  });
 }
 
 /**

@@ -48,7 +48,7 @@ describe("signOutConfirm", () => {
         "3 changes not yet synced. These are lost for good.",
         "2 saved map regions (250 MB)",
         "1 imported GeoPDF. An imported file can only come back from the original file.",
-        "4 LiDAR topos",
+        "4 sharpened areas",
       ],
       keeps: "Your synced places and trips stay in your account.",
       canSyncFirst: false,
@@ -57,7 +57,7 @@ describe("signOutConfirm", () => {
 
   it("leaves out a kind with nothing in it", () => {
     const confirm = signOutConfirm({ ...none, topos: 1 }, true);
-    expect(confirm?.lines).toEqual(["1 LiDAR topo"]);
+    expect(confirm?.lines).toEqual(["1 sharpened area"]);
   });
 
   it("says a single change is lost in the singular", () => {
@@ -97,7 +97,7 @@ describe("signOutConfirm", () => {
     const confirm = signOutConfirm({ ...none, topos: 1 }, true, true)!;
     const body = signOutConfirmBody(confirm).split("\n");
     expect(body[0]).toMatch(/^Every other phone and browser/);
-    expect(body).toContain("• 1 LiDAR topo");
+    expect(body).toContain("• 1 sharpened area");
     expect(copyViolations(signOutConfirmBody(confirm))).toEqual([]);
   });
 

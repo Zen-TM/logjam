@@ -63,7 +63,6 @@ import {
 import {
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
-  TOPO_LAYERS,
   TRACK_MIME_TYPES,
   compassPointFor,
   distinctTripTypes,
@@ -89,6 +88,7 @@ import {
   TERRAIN_LAYER_KEYS,
   terrainBeforeIds,
   type TerrainLayerKey,
+  type TerrainSwitchKey,
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
@@ -224,7 +224,6 @@ import {
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
-import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
@@ -304,10 +303,6 @@ import {
 } from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import {
-  listEnabledOverlayKeys,
-  setOverlayEnabled,
-} from "../offline/registryDb";
 import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -897,7 +892,7 @@ export function MapScreen({
   }, []);
   const [terrainLayers, setTerrainLayersState] = useState(readTerrainLayers);
   const chooseTerrainLayer = useCallback(
-    (key: TerrainLayerKey, on: boolean) => {
+    (key: TerrainSwitchKey, on: boolean) => {
       setTerrainLayersState((prev) => {
         const next = { ...prev, [key]: on };
         setTerrainLayers(next);
@@ -1033,7 +1028,6 @@ export function MapScreen({
   >(() => new Set<string>());
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
-  const [showOverlays, setShowOverlays] = useState(true);
   const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(
     null,
   );
@@ -1096,19 +1090,8 @@ export function MapScreen({
     writeSnapMode(mode);
   }, []);
   const mapRef = useRef<MapRef>(null);
-  // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
-  // downloaded overlay stays visible across a cold offline launch; toggles
-  // write through. Saved overlays are auto-enabled on download.
-  const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  // Re-read on focus (not just mount): the Saved screen's "Save offline"
-  // action auto-enables an overlay by writing overlay_enabled directly, and
-  // that table has no change listener (unlike the artifact registry) — a
-  // focus refresh is how a Map screen that stayed mounted in the background
-  // picks up an overlay saved while the user was on the Saved tab.
   // The compass switch lives in Settings, on another tab, so its value is
-  // re-read on focus alongside the overlays rather than only at mount.
+  // re-read on focus rather than only at mount.
   const [compassEnabled, setCompassEnabled] = useState(isCompassEnabled);
   // The Map settings page writes these five and lives on another tab, so they
   // are re-read on focus alongside the compass rather than only at mount. All
@@ -1152,38 +1135,8 @@ export function MapScreen({
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
       setSpeedElevationEnabled(isSpeedElevationEnabled());
-      listEnabledOverlayKeys()
-        .then((keys) => setEnabledOverlays(new Set(keys)))
-        .catch(console.error);
     }, []),
   );
-  // Which areas are hidden wholesale — the "where" axis of the overlay matrix
-  // (topoAreaMuting.ts). Independent of the per-cell enabled set above, so
-  // unmuting an area restores whatever layers were selected for it.
-  const [mutedAreas, setMutedAreas] =
-    useState<ReadonlySet<string>>(readMutedTopoAreas);
-  const setAreasMuted = useCallback((areaIds: string[], muted: boolean) => {
-    setMutedAreas((prev) => {
-      const next = new Set(prev);
-      for (const areaId of areaIds) {
-        if (muted) next.add(areaId);
-        else next.delete(areaId);
-      }
-      writeMutedTopoAreas(next);
-      return next;
-    });
-  }, []);
-  // Toggle one overlay on/off, persisting the change.
-  const toggleOverlay = useCallback((key: string) => {
-    setEnabledOverlays((prev) => {
-      const next = new Set(prev);
-      const enabled = !next.has(key);
-      if (enabled) next.add(key);
-      else next.delete(key);
-      setOverlayEnabled(key, enabled).catch(console.error);
-      return next;
-    });
-  }, []);
   // Follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
@@ -1355,7 +1308,7 @@ export function MapScreen({
   const isGuest = useAccountState().accountState === "guest";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     !isGuest,
   );
   // The sharpened areas the user can see: the Terrain group reads each one's
@@ -1532,16 +1485,10 @@ export function MapScreen({
 
   const overlayRefs = useMemo(
     () =>
-      // A muted area draws nothing, whatever its cells say — the "where" gate
-      // applied after the "what" (topoAreaMuting.ts). The kind's own master is
-      // a third gate ON TOP of both, so switching the band off and on again
-      // brings back exactly the layer/area picks that were showing.
-      showOverlays
-        ? composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
-            (ref) => !mutedAreas.has(ref.jobId),
-          )
-        : [],
-    [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
+      // Only the vegetation layer is an overlay now; the rest of a sharpened
+      // area draws through the Terrain group.
+      terrainLayers.vegetation ? composeTopoOverlayRefs(mergedOverlays) : [],
+    [mergedOverlays, terrainLayers.vegetation],
   );
 
   // "Show only these on the map" — the Places screen's filter, opt-in, handed
@@ -2713,22 +2660,8 @@ export function MapScreen({
           setVectorImportVisible(focus.reveal.key, true).catch(console.error);
           break;
         case "overlay": {
-          // Reveal the whole job: every layer enabled and the area unmuted.
-          // SavedScreen's item key for this category is `overlay:<jobId>`
-          // (SavedScreen.tsx's registry-row prefix) — strip it back to the raw
-          // jobId that mergedOverlays.jobs and setAreasMuted both key on.
-          const jobId = focus.reveal.key.replace(/^overlay:/, "");
-          for (const job of mergedOverlays.jobs) {
-            if (job.jobId !== jobId) continue;
-            for (const layer of job.layers) {
-              const key = `${job.jobId}/${layer.name}`;
-              setEnabledOverlays((prev) =>
-                prev.has(key) ? prev : new Set(prev).add(key),
-              );
-              setOverlayEnabled(key, true).catch(console.error);
-            }
-          }
-          setAreasMuted([jobId], false);
+          // The only overlay is the Terrain tab's vegetation switch.
+          chooseTerrainLayer("vegetation", true);
           break;
         }
         case "region":
@@ -2750,14 +2683,7 @@ export function MapScreen({
     if (focus.basemapId) {
       setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
     }
-  }, [
-    focus?.nonce,
-    focus,
-    chooseBasemap,
-    fitCameraToBbox,
-    mergedOverlays,
-    setAreasMuted,
-  ]);
+  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, chooseTerrainLayer]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Once per restored draft — the user's own panning owns the
@@ -4103,21 +4029,6 @@ export function MapScreen({
       setOptionsImportId(importId);
     },
     [addToolPoint, collectingPoints],
-  );
-
-  // The layer sheet groups these two ways at once — by layer across every area,
-  // and by area — so each entry carries both its area and its layer rather than
-  // one pre-joined label to be parsed back apart.
-  const overlayList = mergedOverlays.jobs.flatMap((job) =>
-    job.layers.map((layer) => ({
-      key: `${job.jobId}/${layer.name}`,
-      areaId: job.jobId,
-      areaLabel: job.name ?? job.jobId.slice(0, 8),
-      layer: layer.name,
-      layerLabel:
-        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ??
-        layer.name,
-    })),
   );
 
   /**
@@ -5569,14 +5480,10 @@ export function MapScreen({
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}
-        overlays={overlayList}
-        enabledOverlays={enabledOverlays}
-        onToggleOverlay={toggleOverlay}
-        mutedAreas={mutedAreas}
-        onSetAreasMuted={setAreasMuted}
+        hasVegetation={mergedOverlays.jobs.some((job) =>
+          job.layers.some((layer) => layer.name === "vegetation"),
+        )}
         layers={layerToggles}
-        showOverlays={showOverlays}
-        onShowOverlaysChange={setShowOverlays}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {

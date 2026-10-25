@@ -105,10 +105,30 @@ export function terrainBeforeIds(
   return pairs;
 }
 
-/** What a map shows before the user touches a switch: contours and slope. */
+/**
+ * Every switch of the Terrain tab: the layers above, and the sharpened areas'
+ * optional vegetation layer, which is drawn from their own archives rather
+ * than stacked into the basemap, so it is not a `TerrainLayerKey`.
+ */
+export const TERRAIN_SWITCH_KEYS = [
+  ...TERRAIN_LAYER_KEYS,
+  "vegetation",
+] as const;
+
+export type TerrainSwitchKey = (typeof TERRAIN_SWITCH_KEYS)[number];
+
+/**
+ * What a map shows before the user touches a switch: contours and slope, and any vegetation layer, which the owner asked for when they made the
+ * area.
+ */
 export const TERRAIN_LAYER_DEFAULTS: Readonly<
-  Record<TerrainLayerKey, boolean>
-> = { contours: true, slope: true, hillshade: false };
+  Record<TerrainSwitchKey, boolean>
+> = {
+  contours: true,
+  slope: true,
+  hillshade: false,
+  vegetation: true,
+};
 
 /**
  * The switches as stored on a device, with anything missing or not a boolean
@@ -116,19 +136,19 @@ export const TERRAIN_LAYER_DEFAULTS: Readonly<
  */
 export function normalizeTerrainLayers(
   value: unknown,
-): Record<TerrainLayerKey, boolean> {
+): Record<TerrainSwitchKey, boolean> {
   const stored =
     typeof value === "object" && value !== null
       ? (value as Record<string, unknown>)
       : {};
   return Object.fromEntries(
-    TERRAIN_LAYER_KEYS.map((key) => [
+    TERRAIN_SWITCH_KEYS.map((key) => [
       key,
       typeof stored[key] === "boolean"
         ? stored[key]
         : TERRAIN_LAYER_DEFAULTS[key],
     ]),
-  ) as Record<TerrainLayerKey, boolean>;
+  ) as Record<TerrainSwitchKey, boolean>;
 }
 
 const CLEAR = "rgba(0,0,0,0)";
