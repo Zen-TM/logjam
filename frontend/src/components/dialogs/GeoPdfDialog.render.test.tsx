@@ -583,8 +583,9 @@ describe("Export an area, for GIS", () => {
     ).toBeTruthy();
   });
 
-  // The render tests open it on a GIS format. Mutation: ignore `openWithGis`.
-  it("opens on GeoTIFF with For GIS open from the Exports view", () => {
+  // No caller passes `openWithGis` now (the Exports view was its last); the prop
+  // goes with the dialog rework. Mutation: ignore `openWithGis`.
+  it("opens on GeoTIFF with For GIS open when asked", () => {
     render(dialog({ open: true, openWithGis: true }));
     expect(
       screen

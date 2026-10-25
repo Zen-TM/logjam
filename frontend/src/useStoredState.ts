@@ -18,6 +18,10 @@ import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
  * without web storage (SSR, hardened private mode) lands in the existing catch
  * rather than throwing a ReferenceError before reaching it.
  *
+ * `isValid` guards a stored value whose type has since narrowed (a removed
+ * member of a union): one it rejects reads as absent, so a tab open across the
+ * deploy gets the default, not a state nothing renders.
+ *
  * The storage area is read once on mount, like `key` — no call site swaps
  * either at runtime.
  */
@@ -25,12 +29,15 @@ export function useStoredState<T>(
   key: string,
   defaultValue: T,
   storage?: Storage,
+  isValid?: (stored: unknown) => stored is T,
 ): [T, Dispatch<SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
       const raw = (storage ?? localStorage).getItem(key);
       if (raw === null) return defaultValue;
-      return JSON.parse(raw) as T;
+      const stored: unknown = JSON.parse(raw);
+      if (isValid && !isValid(stored)) return defaultValue;
+      return stored as T;
     } catch {
       try {
         (storage ?? localStorage).removeItem(key);

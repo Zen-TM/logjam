@@ -33,6 +33,7 @@ import type {
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import {
   PANEL_TITLES,
+  isMapsView,
   type LogsView,
   type MapsView,
   type PanelId,
