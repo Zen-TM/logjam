@@ -41,10 +41,12 @@ describe("chipFill", () => {
       const { tokens } = THEME_SCHEMES[id];
       for (const hue of [...IDENTITY_HUES, tokens.accent, tokens.neutral]) {
         const fill = chipFill(hue, tokens);
-        expect(
-          contrastRatio(fill, tokens.card),
-          `${id} ${hue}→${fill}`,
-        ).toBeGreaterThanOrEqual(3);
+        for (const ground of [tokens.card, tokens.page]) {
+          expect(
+            contrastRatio(fill, ground),
+            `${id} ${hue}→${fill}`,
+          ).toBeGreaterThanOrEqual(3);
+        }
         expect(
           contrastRatio(tokens.onFill, fill),
           `${id} ${hue}→${fill}`,

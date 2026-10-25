@@ -33,8 +33,9 @@ function shifted(hex: string, end: 0 | 255, t: number): string {
 
 /**
  * What a selected chip is filled with: the hue, moved just far enough that it
- * stands 3:1 off the unselected chip (the scheme's `card`) beside it and off the `page` behind a chip on its own, WCAG
- * 1.4.11, since a chip shows it is selected by its fill alone. Away from the
+ * stands 3:1 off the unselected chip (the scheme's `card`) beside it and off
+ * the `page` behind a chip on its own, WCAG 1.4.11, since a chip shows it is
+ * selected by its fill alone. Away from the
  * card first (darker on a pale card, lighter on a dark one), the other way only
  * when that can't reach it; the hue itself when it already does. The label on
  * it stays `onFill` at 4.5:1: the luminance this stops at is above the ink's
