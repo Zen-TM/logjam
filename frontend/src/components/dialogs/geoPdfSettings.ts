@@ -86,9 +86,13 @@ export function readSettings(
   ) {
     const known = s.overlays.filter((o) => VALID_GEOPDF_OVERLAY_NAMES.has(o));
     // A list of names that have all gone is stale, not a choice of none.
-    if (known.length > 0 || s.overlays.length === 0) out.overlays = known;
+    if (known.length > 0 || s.overlays.length === 0) {
+      out.overlays = known;
+      // Whether Terrain was pinned only means something with the list it pinned.
+      if (typeof s.terrainPinned === "boolean")
+        out.terrainPinned = s.terrainPinned;
+    }
   }
-  if (typeof s.terrainPinned === "boolean") out.terrainPinned = s.terrainPinned;
   for (const key of ["compass", "scaleText", "scaleBar"] as const)
     if (typeof s[key] === "boolean") out[key] = s[key];
   if (

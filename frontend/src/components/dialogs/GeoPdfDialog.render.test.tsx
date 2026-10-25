@@ -185,6 +185,39 @@ describe("GeoPdfDialog, remembers the last settings", () => {
     expect(paper("1:25,000").ariaChecked).toBe("true");
   });
 
+  const slopeOn = () =>
+    (screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement)
+      .checked;
+
+  // Mutation: drop `if (c.terrainPinned) setTerrainFollowsMap(false)` and a
+  // pinned choice follows the map again; or pin whatever overlays are stored.
+  it("pins Terrain only when it was pinned", () => {
+    const open = (terrainPinned: boolean) => {
+      localStorage.setItem(
+        GEOPDF_SETTINGS_KEY,
+        JSON.stringify({ overlays: ["contours"], terrainPinned }),
+      );
+      render(dialog({ open: true }));
+    };
+    open(true);
+    expect(slopeOn()).toBe(false);
+    cleanup();
+    open(false);
+    expect(slopeOn()).toBe(true);
+  });
+
+  // Mutation: stop passing the dialog's own base layers to `readSettings`.
+  it("takes a stored base layer the dialog offers, not one it does not", () => {
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ baseLayer: "six-imagery" }),
+    );
+    render(dialog({ open: true }));
+    expect(screen.getByRole("radio", { name: "Imagery" }).ariaChecked).toBe(
+      "true",
+    );
+  });
+
   it("opens on the defaults when what is stored is not JSON", () => {
     localStorage.setItem(GEOPDF_SETTINGS_KEY, "{oops");
     render(dialog({ open: true }));

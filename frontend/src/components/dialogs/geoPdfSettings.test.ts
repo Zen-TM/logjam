@@ -113,6 +113,16 @@ describe("readSettings", () => {
     expect(read({ overlays: ["features", "gone"] })).toEqual({});
   });
 
+  // Mutation: read `terrainPinned` outside the accepted-list branch, and the
+  // dialog opens with Terrain pinned to seeds nobody chose.
+  it("drops the pin with an overlay list that is all stale", () => {
+    expect(read({ overlays: ["gone"], terrainPinned: true })).toEqual({});
+    expect(read({ overlays: ["contours"], terrainPinned: true })).toEqual({
+      overlays: ["contours"],
+      terrainPinned: true,
+    });
+  });
+
   it("keeps an empty list as a choice of none", () => {
     expect(read({ overlays: [] })).toEqual({ overlays: [] });
   });
@@ -122,6 +132,9 @@ describe("readSettings", () => {
     expect(read({ gridLines: null })).toEqual({ gridLines: null });
   });
 
+  // Mutation: accept any string, and a stored "osm" selects no chip yet is
+  // still printed. The dialog passes the list it offers (the render test
+  // "opens on the defaults…" holds the wiring).
   it("takes a base layer only from the ones the dialog offers", () => {
     expect(read({ baseLayer: "six-imagery" })).toEqual({
       baseLayer: "six-imagery",

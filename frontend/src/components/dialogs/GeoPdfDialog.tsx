@@ -271,7 +271,8 @@ function GeoPdfDialog({
   );
   const [selectedOverlays, setSelectedOverlays] =
     useState<Set<string>>(seedOverlays);
-  // Until a Terrain layer is ticked or the last settings applied (`shownOverlays`).
+  // Until the user ticks or unticks a Terrain layer, or applies remembered
+  // settings that did (`shownOverlays`).
   const [terrainFollowsMap, setTerrainFollowsMap] = useState(true);
 
   // Map elements
