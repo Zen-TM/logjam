@@ -1228,9 +1228,17 @@ function GeoPdfDialog({
               focusedFieldRef={gisFocused}
               edgesOpen={gisEdgesOpen}
               onEdgesOpenChange={setGisEdgesOpen}
-              onCoordModeChange={(coordMode) =>
-                setExtentState(applyCoordModeChange(extentState, coordMode))
-              }
+              onCoordModeChange={(coordMode) => {
+                // The text moves with the mode (see the GeoPDF chip).
+                if (gisArea)
+                  setGisRaw({
+                    n: extentFieldText("n", { ...gisArea, coordMode }),
+                    s: extentFieldText("s", { ...gisArea, coordMode }),
+                    e: extentFieldText("e", { ...gisArea, coordMode }),
+                    w: extentFieldText("w", { ...gisArea, coordMode }),
+                  });
+                setExtentState(applyCoordModeChange(extentState, coordMode));
+              }}
               onAreaChange={(area) => {
                 setGisBox(area);
                 markDirty();
@@ -1433,11 +1441,20 @@ function GeoPdfDialog({
                             className={classes.railCell}
                             options={COORD_OPTIONS}
                             value={extentState.coordMode}
-                            onChange={(coordMode) =>
-                              setExtentState(
-                                applyCoordModeChange(extentState, coordMode),
-                              )
-                            }
+                            onChange={(coordMode) => {
+                              const next = applyCoordModeChange(
+                                extentState,
+                                coordMode,
+                              );
+                              // The text moves with the mode, not in the
+                              // effect after it, or a render checks metres
+                              // as degrees.
+                              setRawN(extentFieldText("n", next));
+                              setRawS(extentFieldText("s", next));
+                              setRawE(extentFieldText("e", next));
+                              setRawW(extentFieldText("w", next));
+                              setExtentState(next);
+                            }}
                           />
                         </SettingsRow>
                         <SettingsRow

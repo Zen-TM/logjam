@@ -644,3 +644,52 @@ describe("Export an area, for GIS", () => {
     expect(screen.getByText("9.3 km × 11.1 km")).toBeTruthy();
   });
 });
+
+// Switching Coordinates rewrites the edge text in the same step as the mode,
+// or one render checks metres as degrees and every edge flashes an error.
+// A MutationObserver sees that render even though the effect heals it before
+// the test looks. Mutation: refresh the edge text in an effect on the
+// extent (or the GIS box) again instead of in the mode handler.
+describe("GeoPdfDialog, switching Coordinates", () => {
+  const flashes = (open: () => void) => {
+    const seen: string[] = [];
+    const observer = new MutationObserver(() => {});
+    open();
+    observer.observe(document.body, { childList: true, subtree: true });
+    for (const mode of ["E/N", "Lat/Lon", "E/N"])
+      fireEvent.click(screen.getByRole("radio", { name: mode }));
+    for (const record of observer.takeRecords())
+      for (const node of record.addedNodes)
+        if (
+          node instanceof Element &&
+          (node.getAttribute("role") === "alert" ||
+            node.querySelector('[role="alert"]'))
+        )
+          seen.push(node.textContent ?? "");
+    observer.disconnect();
+    return seen;
+  };
+  const withEdges = () => {
+    const details = screen.getByText("Exact edges").closest("details")!;
+    details.open = true;
+  };
+
+  it("flashes no error on the GeoPDF edges", () => {
+    expect(
+      flashes(() => {
+        render(dialog({ open: true, areaSeed: seed }));
+        withEdges();
+      }),
+    ).toEqual([]);
+  });
+
+  it("flashes no error on the GIS edges", () => {
+    expect(
+      flashes(() => {
+        render(dialog({ open: true, areaSeed: seed }));
+        chooseGis("GeoTIFF");
+        withEdges();
+      }),
+    ).toEqual([]);
+  });
+});
