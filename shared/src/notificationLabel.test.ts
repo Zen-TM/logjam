@@ -94,16 +94,12 @@ describe("notificationLabel", () => {
     ).toBe("bob shared an item with you");
   });
 
-  it("labels topo completion, with OSM warning when flagged", () => {
+  it("labels topo completion", () => {
     expect(
       notificationLabel(notification("topo_complete", { jobName: "Kanangra" })),
     ).toEqual({
       text: "Kanangra map ready",
     });
-    const withWarning = notificationLabel(
-      notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
-    );
-    expect(withWarning.detail).toMatch(/Roads and labels/);
   });
 
   // Mutation: uppercase the format again, and it reads "GPKG export ready".

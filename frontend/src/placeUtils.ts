@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type {
   ScopedCustomFieldDef,
@@ -2005,7 +2005,7 @@ export type {
 
 // ── Vector style (live, per-user) ─────────────────────────────
 
-import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+import type { TopoExportJobView } from "@logjam/shared";
 
 // ── Topo exports (Stage 2 on-demand pipeline) ────────────────
 
@@ -2152,106 +2152,6 @@ export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {
 
 export function deleteGeoPdfJob(id: string): Promise<void> {
   return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
-}
-
-export function useVectorStyle(enabled: boolean) {
-  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    apiFetch<VectorStyleSettings>("/vector-style")
-      .then((v) => {
-        setVectorStyle(v);
-        setError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(messageFromError(err, "Couldn't load vector style."));
-      })
-      .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  const save = useCallback(
-    async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
-      const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
-        method: "PUT",
-        body: next,
-      });
-      setVectorStyle(saved);
-      return saved;
-    },
-    [],
-  );
-
-  return { vectorStyle, loading, error, refetch, save };
-}
-
-const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
-
-// useLiveVectorStyle: wraps useVectorStyle to give a single, app-level source of
-// truth for the vector style. The returned `vectorStyle` updates optimistically
-// the instant `setVectorStyle` is called (so the map repaints live), while the
-// server PUT is debounced. This lets the LiDAR Topos panel be a controlled editor
-// whose edits flow straight to the MapLibre overlay without a page refresh.
-export function useLiveVectorStyle(enabled: boolean): {
-  vectorStyle: VectorStyleSettings | null;
-  setVectorStyle: (next: VectorStyleSettings) => void;
-  loadError: string | null;
-  saveError: string | null;
-} {
-  const {
-    vectorStyle: serverStyle,
-    error: loadError,
-    save,
-  } = useVectorStyle(enabled);
-  const [liveStyle, setLiveStyle] = useState<VectorStyleSettings | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Seed the live style once from the server value; never clobber an in-flight
-  // edit on a later server refetch (the saved value already equals the draft).
-  if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
-
-  const setVectorStyle = useCallback(
-    (next: VectorStyleSettings) => {
-      setLiveStyle(next);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        save(next)
-          .then(() => setSaveError(null))
-          .catch((err) => {
-            console.error(err);
-            setSaveError(messageFromError(err, "Couldn't save vector style."));
-          });
-      }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
-    },
-    [save],
-  );
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    [],
-  );
-
-  return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
 // Renders `v3a4 III`, omitting unset segments. Re-exported from

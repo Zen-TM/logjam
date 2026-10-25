@@ -53,7 +53,6 @@ import {
   useNotifications,
   useTripLogs,
   useCurrentUser,
-  useLiveVectorStyle,
   useTopoExports,
   useGeoPdfJobs,
   fetchCurrentUser,
@@ -821,11 +820,6 @@ function App() {
     refetchTripLogs();
     refetch();
   }, [refetchTripLogs, refetch]);
-  const {
-    vectorStyle,
-    setVectorStyle: setLiveVectorStyle,
-    saveError: vectorStyleSaveError,
-  } = useLiveVectorStyle(loadsUserData);
 
   // Trip-log definitions, read from the same row-grain endpoint as the place
   // ones. A trip field carries scoping too (`tripTypes`, the trip's own tags),
@@ -858,9 +852,6 @@ function App() {
   useEffect(() => {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
-  useEffect(() => {
-    if (vectorStyleSaveError) toast.error(vectorStyleSaveError);
-  }, [vectorStyleSaveError, toast]);
 
   useEffect(() => {
     if (!authenticated) return;
@@ -1871,8 +1862,6 @@ function App() {
           onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
           placeTypes={placeTypes}
           onPlaceTypesChange={setPlaceTypes}
-          vectorStyle={vectorStyle}
-          onVectorStyleChange={setLiveVectorStyle}
           collapseToPeek={mapInteractionActive}
         />
       </div>
@@ -1968,7 +1957,6 @@ function App() {
           topoLayers={mapTopoLayers}
           sharpenedAreas={sharpenedAreas}
           slopeBands={slopeBands.drawn}
-          vectorStyle={vectorStyle}
           activeLayerId={mapLayerId}
           selectingGeoPdfExtent={selectingGeoPdfExtent}
           geoPdfPaperAspect={geoPdfPaperAspect}

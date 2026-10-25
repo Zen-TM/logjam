@@ -3,11 +3,7 @@
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
 import { useCallback, useEffect, useState } from "react";
-import {
-  messageFromError,
-  type TripLogCustomFieldDef,
-  type VectorStyleSettings,
-} from "@logjam/shared";
+import { messageFromError, type TripLogCustomFieldDef } from "@logjam/shared";
 
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 import type { TNotification, TUser } from "./types";
@@ -47,10 +43,6 @@ export function markNotificationRead(id: string): Promise<void> {
 
 export function markAllNotificationsRead(): Promise<void> {
   return apiFetch<void>("/notifications/read-all", { method: "PATCH" });
-}
-
-export function getVectorStyle(): Promise<VectorStyleSettings> {
-  return apiFetch<VectorStyleSettings>("/vector-style");
 }
 
 // ── Custom fields (trip logs AND places) ────────────────────────────────────

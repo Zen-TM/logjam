@@ -65,7 +65,6 @@ import {
   demCredits,
   TOPO_LAYERS,
   TRACK_MIME_TYPES,
-  VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   distinctTripTypes,
   draftAnchorIndices,
@@ -106,7 +105,7 @@ import {
 } from "./routeDraftStore";
 import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
-import { getVectorStyle, useApiQuery } from "../api/queries";
+import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   useMirrorPlaces,
@@ -344,7 +343,6 @@ import {
   topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
-  type TopoOverlayRef,
 } from "./topoOverlays";
 import {
   MAX_PINCH_ZOOM,
@@ -364,11 +362,7 @@ import {
   ROUTES_FLOOR,
 } from "./layerOrder";
 import { mapDataAttribution } from "./mapDataCredits";
-import {
-  TopoIconImages,
-  TopoVectorOverlay,
-  topoVectorLayerIds,
-} from "./TopoVectorOverlay";
+import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 
 /** The shared expression builder's untyped result, as MLRN types the paint. */
 type ColorReliefColor = NonNullable<
@@ -542,12 +536,6 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
 };
 
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
-
-// Contour layers get contour styling; every other vector layer is the OSM
-// features set (web parity: `id.includes("contours")`).
-function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
-  return ref.layer === "contours" ? "contours" : "features";
-}
 
 /**
  * The user's own position marker.
@@ -1369,15 +1357,6 @@ export function MapScreen({
     "Couldn't load topo overlays.",
     !isGuest,
   );
-  // Server-side vector style (same one the web map + exports use); defaults
-  // until it loads / when offline.
-  const vectorStyleQuery = useApiQuery(
-    getVectorStyle,
-    "Couldn't load map style.",
-    !isGuest,
-  );
-  const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
-
   // The sharpened areas the user can see: the Terrain group reads each one's
   // own archive inside it (sourceResolver.ts `routeTerrain`), with the epoch
   // the list was asked in, so a sign-out wipe running while the map is still
@@ -4476,7 +4455,7 @@ export function MapScreen({
   }));
   const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
     contours: contoursResolved.flatMap((r) =>
-      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+      topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
     ),
     slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
@@ -4505,11 +4484,7 @@ export function MapScreen({
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
-      resolved.flatMap((r) =>
-        ref.format === "vector"
-          ? topoVectorLayerIds(overlayKind(ref), `topo-${r.key}`, vectorStyle)
-          : [`topo-layer-${r.key}`],
-      ),
+      resolved.flatMap((r) => [`topo-layer-${r.key}`]),
     ),
     ...geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
       resolved.map(() => `geopdf-layer-${geoPdf.id}`),
@@ -4626,8 +4601,6 @@ export function MapScreen({
         onLongPress={handleMapLongPress}
       >
         <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
-        {/* Bundled point-feature icons for vector overlays. */}
-        <TopoIconImages />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
@@ -4719,7 +4692,6 @@ export function MapScreen({
         {contoursResolved.map((r) => (
           <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
             <TopoVectorOverlay
-              kind="contours"
               idPrefix={`nsw-contours-${r.key}`}
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
@@ -4730,29 +4702,17 @@ export function MapScreen({
           </ResolvedSource>
         ))}
 
-        {/* Topo overlays: raster = one translucent RasterLayer; vector =
-            the full contour/feature layer stack styled by the user's
-            server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
+        {/* Topo overlays: one translucent RasterLayer each. */}
         {overlayMounts.flatMap(({ ref, resolved }) =>
           resolved.map((r) => (
             <ResolvedSource key={r.key} resolved={r}>
-              {ref.format === "vector" ? (
-                <TopoVectorOverlay
-                  kind={overlayKind(ref)}
-                  idPrefix={`topo-${r.key}`}
-                  sourceID={sourceIdFor(r.key)}
-                  beforeIds={groundBefore}
-                  vectorStyle={vectorStyle}
-                />
-              ) : (
-                <Layer
-                  key={`topo-layer-${r.key}`}
-                  type="raster"
-                  id={`topo-layer-${r.key}`}
-                  beforeId={groundBefore[`topo-layer-${r.key}`]}
-                  style={{ rasterOpacity: 0.8 }}
-                />
-              )}
+              <Layer
+                key={`topo-layer-${r.key}`}
+                type="raster"
+                id={`topo-layer-${r.key}`}
+                beforeId={groundBefore[`topo-layer-${r.key}`]}
+                style={{ rasterOpacity: 0.8 }}
+              />
             </ResolvedSource>
           )),
         )}

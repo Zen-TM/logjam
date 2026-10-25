@@ -32,7 +32,7 @@ export type CompletedOverlaysResponse = {
      * network anyway.
      */
     syncRole?: "owner" | "shared";
-    /** A sharpened job's area; absent on a legacy job and on a synthetic one. */
+    /** A sharpened job's area; absent while the job is still marked and on a synthetic one. */
     sharpened?: SharpenedOverlay;
     /** The ground the job covers, as the server sends it (absent on a synthetic job). */
     footprint?: { coordinates: unknown } | null;

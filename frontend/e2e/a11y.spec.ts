@@ -600,9 +600,7 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  test("Maps: every view, a row menu, the topo style sheet and its colour", async ({
-    page,
-  }) => {
+  test("Maps: every view and a row menu", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Maps", exact: true }).click();
     const aside = page.locator("aside");
@@ -642,27 +640,6 @@ test.describe("desktop", () => {
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");
-
-    // How topos draw opens BESIDE the page, and its colours are free pickers.
-    await aside.getByRole("button", { name: "Topo style" }).click();
-    const sheet = page.getByRole("region", { name: "Topo style" });
-    await expect(sheet.getByRole("slider", { name: "Label size" })).toBeVisible(
-      { timeout: 15_000 },
-    );
-    await expectNoViolations(page, "aside");
-    const major = sheet.getByRole("button", { name: /^Major colour:/ });
-    await major.click();
-    await expect(page.getByRole("slider", { name: "Hue" })).toBeVisible();
-    await expectNoViolations(
-      page,
-      "[role='dialog'][aria-label='Major colour']",
-    );
-    await page.keyboard.press("Escape");
-    await expect(major).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(
-      aside.getByRole("button", { name: "Topo style" }),
-    ).toBeFocused();
   });
 
   test("Sharpen an area, its ELVIS steps and its Vegetation choice", async ({

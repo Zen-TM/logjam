@@ -135,7 +135,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 | One choice from a few | `ChipRail` |
 | Several from a vocabulary the user extends | `ChipPicker` |
 | An item in a set / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card` |
-| A colour | `ColourField`: `palette` for an identity hue, free only for a topo style |
+| A colour | `ColourField`: `palette` for an identity hue, free only for the slope scale |
 | A bounded multiplier | `RangeField` |
 | A field that points at a place | `PlacePicker`, never a `<select>` or the network |
 | A dense settings line | `SettingsRow`, with `InfoTip` for what the words cannot say |

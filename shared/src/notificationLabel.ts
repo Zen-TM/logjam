@@ -106,9 +106,6 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: str(p.jobName)
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
-        ...(p.osmFailed === true && {
-          detail: "Roads and labels didn't download. Try again.",
-        }),
       };
     case "topo_failed":
       return {

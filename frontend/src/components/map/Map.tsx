@@ -129,21 +129,12 @@ import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
   extentFromCentreAndSize,
-  OSM_LINE_FEATURE_KEYS,
-  OSM_POINT_FEATURE_KEYS,
-  OSM_POINT_ICON,
-  OSM_POINT_ICON_NATURAL_PX,
-  iconTargetPx,
   rgbaCssFromHex,
   contourWidthStops,
-  featureLineWidthStops,
   TERRARIUM,
   slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
-  type OsmFeatureKey,
-  type OsmPointFeatureKey,
-  type OsmFeatureStyle,
   type SlopeBand,
   type VectorStyleSettings,
   metersPerPixel,
@@ -263,17 +254,6 @@ export const BASE_LAYERS = BASEMAP_CATALOG.filter(
   attribution: entry.attributionHtml,
 }));
 
-/** The statewide contours have their own fixed look (shared nswContours.ts). */
-function paintStyleFor(
-  entryId: string,
-  style: VectorStyleSettings,
-  basemapId: string,
-): VectorStyleSettings {
-  return entryId === TERRAIN_ENTRIES.contours.id
-    ? nswContourStyle(basemapId)
-    : style;
-}
-
 /**
  * Mounts the self-hosted Protomaps vector basemap: one PMTiles source plus the
  * generated @protomaps/basemaps layer set.
@@ -356,32 +336,11 @@ function rgbaCss(hex: string): string {
   return rgbaCssFromHex(hex);
 }
 
-// Pixel width interpolate(z12 → z18) for line features. widthZ18 is the
-// reference width in pixels at the maximum-detail zoom.
-function lineWidthInterp(widthZ18: number): maplibregl.ExpressionSpecification {
-  const { z12, z18 } = featureLineWidthStops(widthZ18);
-  return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
-}
-
 // Contour width is specified in ground metres by the user; convert to a pixel
 // width via the shared stops (default 18 m → ≈2.25 px, default 8 m → ≈1 px).
 function contourPixelWidth(widthM: number): maplibregl.ExpressionSpecification {
   const { z12, z18 } = contourWidthStops(widthM);
   return ["interpolate", ["linear"], ["zoom"], 12, z12, 18, z18];
-}
-
-// icon-size for a point category: scale the 24×24 source PNG so its on-screen
-// edge ≈ iconTargetPx (mirrors the Python/MBTiles sizing) across z12→z18.
-function iconSizeInterp(sizeZ18: number): maplibregl.ExpressionSpecification {
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    12,
-    iconTargetPx(sizeZ18, 12) / OSM_POINT_ICON_NATURAL_PX,
-    18,
-    iconTargetPx(sizeZ18, 18) / OSM_POINT_ICON_NATURAL_PX,
-  ];
 }
 
 // Place map labels: ellipsize a name past this length so a pathological
@@ -395,42 +354,6 @@ const PLACE_LABEL_FIELD: maplibregl.ExpressionSpecification = [
   ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
   ["get", "name"],
 ];
-
-// Fallback when vectorStyle has not yet loaded — keeps the legacy default look
-// rather than rendering invisible layers.
-const VECTOR_STYLE_FALLBACK: VectorStyleSettings = {
-  contours: {
-    majorColour: "#503c28dc",
-    minorColour: "#785a3ca0",
-    majorWidthM: 18,
-    minorWidthM: 8,
-  },
-  features: {
-    waterway: { enabled: true, colour: "#2878dcdc", widthZ18: 3 },
-    track: { enabled: true, colour: "#a0641edc", widthZ18: 2 },
-    road: { enabled: true, colour: "#505050e6", widthZ18: 4 },
-    building: { enabled: true, colour: "#a08c78c8", widthZ18: 2 },
-    power: { enabled: true, colour: "#c8a000c8", widthZ18: 1 },
-    campsite: { enabled: true, colour: "#00a050e6", widthZ18: 14 },
-    peak: { enabled: true, colour: "#503214f0", widthZ18: 12 },
-    spring: { enabled: true, colour: "#1e5ad2e6", widthZ18: 8 },
-    gate: { enabled: true, colour: "#464646dc", widthZ18: 10 },
-    cave: { enabled: true, colour: "#3c1e0ae6", widthZ18: 10 },
-    bridge: { enabled: false, colour: "#403028e6", widthZ18: 3 },
-    ford: { enabled: false, colour: "#1e90ffe6", widthZ18: 8 },
-    waterfall: { enabled: false, colour: "#1e6ad2f0", widthZ18: 10 },
-    trailhead: { enabled: false, colour: "#a04020e6", widthZ18: 12 },
-    viewpoint: { enabled: false, colour: "#806020e6", widthZ18: 12 },
-    hut: { enabled: false, colour: "#503820e6", widthZ18: 12 },
-  },
-  labelScale: 1,
-};
-
-const OSM_LINE_KEY_SET = new Set<OsmFeatureKey>(OSM_LINE_FEATURE_KEYS);
-
-function feat(vs: VectorStyleSettings, key: OsmFeatureKey): OsmFeatureStyle {
-  return vs.features[key];
-}
 
 // Base label-size bump for the live map, independent of the user's labelScale
 // slider. Topo labels read too small at the bare 9→12px ramp; 1.75 lifts them to
@@ -446,17 +369,13 @@ function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
   return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
 }
 
-// Apply every user-controllable colour/width to one topo entry's vector layers
-// in place via setPaintProperty. This is the single source of the style→paint
-// mapping: it's called both when layers are first created (structural effect)
-// and on every live VectorStyleSettings change (paint effect), so colour/width
-// edits never require dropping and recreating layers. Each set is guarded by
-// getLayer, so it's a no-op for a layer that doesn't exist (disabled category,
-// raster entry, or not yet created).
-function applyVectorPaint(
+// Paint the statewide contours in place via setPaintProperty. Called when the
+// layers are first created and again when the basemap changes, so neither
+// recreates them. Each set is guarded by getLayer, so it's a no-op for a layer
+// that doesn't exist yet.
+function applyContourPaint(
   map: maplibregl.Map,
   entryId: string,
-  isContours: boolean,
   vs: VectorStyleSettings,
 ): void {
   const setPaint = (
@@ -479,76 +398,37 @@ function applyVectorPaint(
     if (map.getLayer(lid)) map.setLayoutProperty(lid, "text-size", sizeExpr);
   };
 
-  if (isContours) {
-    setPaint(
-      `topo-${entryId}-minor`,
-      "line-color",
-      rgbaCss(vs.contours.minorColour),
-    );
-    setPaint(
-      `topo-${entryId}-minor`,
-      "line-width",
-      contourPixelWidth(vs.contours.minorWidthM),
-    );
-    setPaint(
-      `topo-${entryId}-major`,
-      "line-color",
-      rgbaCss(vs.contours.majorColour),
-    );
-    setPaint(
-      `topo-${entryId}-major`,
-      "line-width",
-      contourPixelWidth(vs.contours.majorWidthM),
-    );
-    setPaint(
-      `topo-${entryId}-labels`,
-      "text-color",
-      rgbaCss(vs.contours.majorColour),
-    );
-    setPaint(
-      `topo-${entryId}-labels`,
-      "text-halo-color",
-      contourLabelHalo(vs.contours.majorColour),
-    );
-    setLabelSize(`topo-${entryId}-labels`);
-    return;
-  }
-
-  // Line features with name labels — label text follows the line colour.
-  for (const key of ["waterway", "track", "road"] as const) {
-    const colour = rgbaCss(feat(vs, key).colour);
-    setPaint(`topo-${entryId}-${key}`, "line-color", colour);
-    setPaint(
-      `topo-${entryId}-${key}`,
-      "line-width",
-      lineWidthInterp(feat(vs, key).widthZ18),
-    );
-    setPaint(`topo-${entryId}-${key}-label`, "text-color", colour);
-    setLabelSize(`topo-${entryId}-${key}-label`);
-  }
-
-  // Power lines: raw pixel width (no zoom interpolation), no labels.
   setPaint(
-    `topo-${entryId}-power`,
+    `topo-${entryId}-minor`,
     "line-color",
-    rgbaCss(feat(vs, "power").colour),
+    rgbaCss(vs.contours.minorColour),
   );
-  setPaint(`topo-${entryId}-power`, "line-width", feat(vs, "power").widthZ18);
-
-  // Buildings: translucent fill + matching outline, no width control.
-  const buildingColour = rgbaCss(feat(vs, "building").colour);
-  setPaint(`topo-${entryId}-building`, "fill-color", buildingColour);
-  setPaint(`topo-${entryId}-building`, "fill-outline-color", buildingColour);
-
-  // Point feature name labels follow the category colour (icons are fixed PNGs).
-  for (const key of OSM_POINT_FEATURE_KEYS) {
-    setPaint(
-      `topo-${entryId}-${key}-label`,
-      "text-color",
-      rgbaCss(feat(vs, key).colour),
-    );
-    setLabelSize(`topo-${entryId}-${key}-label`);
-  }
+  setPaint(
+    `topo-${entryId}-minor`,
+    "line-width",
+    contourPixelWidth(vs.contours.minorWidthM),
+  );
+  setPaint(
+    `topo-${entryId}-major`,
+    "line-color",
+    rgbaCss(vs.contours.majorColour),
+  );
+  setPaint(
+    `topo-${entryId}-major`,
+    "line-width",
+    contourPixelWidth(vs.contours.majorWidthM),
+  );
+  setPaint(
+    `topo-${entryId}-labels`,
+    "text-color",
+    rgbaCss(vs.contours.majorColour),
+  );
+  setPaint(
+    `topo-${entryId}-labels`,
+    "text-halo-color",
+    contourLabelHalo(vs.contours.majorColour),
+  );
+  setLabelSize(`topo-${entryId}-labels`);
 }
 
 /**
@@ -648,7 +528,6 @@ function Map({
   topoLayers,
   sharpenedAreas,
   slopeBands,
-  vectorStyle,
   activeLayerId,
   selectingGeoPdfExtent,
   geoPdfPaperAspect,
@@ -758,7 +637,6 @@ function Map({
   sharpenedAreas?: readonly SharpenedOverlay[];
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
-  vectorStyle?: VectorStyleSettings | null;
   activeLayerId: string;
   selectingGeoPdfExtent?: boolean;
   geoPdfPaperAspect?: number;
@@ -843,18 +721,8 @@ function Map({
   const isTouchInput = useMediaQuery("(pointer: coarse)");
   const pickVerb = isTouchInput ? "Tap" : "Click";
   const prevTopoKeyRef = useRef<string>("");
-  const prevEnabledKeyRef = useRef<string>("");
 
-  // Live vector style read by the structural topo effect without being a dep
-  // (so colour/width edits don't recreate layers — the paint effect handles
-  // those). The structural effect re-runs only when `enabledKey` flips.
-  const vectorStyleRef = useRef(vectorStyle);
   const slopeBandsRef = useRef(slopeBands);
-  const enabledKey = vectorStyle
-    ? Object.values(vectorStyle.features)
-        .map((f) => (f.enabled ? "1" : "0"))
-        .join("")
-    : "";
 
   // Keep refs up to date for use inside event handlers
   const selectPlaceRef = useRef(selectPlace);
@@ -1028,9 +896,6 @@ function Map({
     onTopoSourceUnavailableRef.current = onTopoSourceUnavailable;
   }, [onTopoSourceUnavailable]);
 
-  useEffect(() => {
-    vectorStyleRef.current = vectorStyle;
-  }, [vectorStyle]);
   useEffect(() => {
     slopeBandsRef.current = slopeBands;
   }, [slopeBands]);
@@ -2487,14 +2352,12 @@ function Map({
     onBox: (bbox) => onFilterAreaSelected?.(bbox),
   });
 
-  // Lazily register point-feature icons. MapLibre fires `styleimagemissing`
-  // when a symbol layer references an icon-image that isn't loaded yet; we load
-  // the PNG from /topo-icons and addImage it, then MapLibre re-renders. This
-  // avoids any ordering coupling with the topo-layer effect below.
+  // Lazily register the route arrowhead. MapLibre fires `styleimagemissing`
+  // when a symbol layer references an icon-image that isn't loaded yet; this
+  // avoids any ordering coupling with the route layers.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
-    const PREFIX = "topo-icon-";
     const onMissing = (e: { id: string }) => {
       const id = e.id;
       // The route arrowhead. Registered as an SDF, which is what lets ONE image
@@ -2532,18 +2395,6 @@ function Map({
         arrow.src = ROUTE_ARROW_SDF_URI;
         return;
       }
-      if (!id || !id.startsWith(PREFIX) || map.hasImage(id)) return;
-      const key = id.slice(PREFIX.length) as OsmPointFeatureKey;
-      const meta = OSM_POINT_ICON[key];
-      if (!meta) return;
-      const img = new Image(
-        OSM_POINT_ICON_NATURAL_PX,
-        OSM_POINT_ICON_NATURAL_PX,
-      );
-      img.onload = () => {
-        if (!map.hasImage(id)) map.addImage(id, img);
-      };
-      img.src = `/topo-icons/${meta.file}`;
     };
     map.on("styleimagemissing", onMissing);
     return () => {
@@ -2551,19 +2402,15 @@ function Map({
     };
   }, [mapLoaded]);
 
-  // Topo overlay layers (PMTiles — raster and vector). STRUCTURAL pass: adds and
-  // removes sources/layers when the layer set or a per-category `enabled` flag
-  // changes. Colour/width are NOT applied here — they come from the paint pass
-  // below — so colour-picker drags never recreate layers. Reads the style from a
-  // ref so colour/width edits don't retrigger this effect; it re-runs only when
-  // `enabledKey` flips.
+  // Topo overlay layers (PMTiles — raster and vector): adds and removes
+  // sources/layers when the layer set changes.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     const layers = topoLayers ?? [];
-    const vs = vectorStyleRef.current ?? VECTOR_STYLE_FALLBACK;
+    const vs = nswContourStyle(activeLayerId);
 
-    // Skip if the layer set and enabled flags are unchanged (avoids flicker from
+    // Skip if the layer set is unchanged (avoids flicker from
     // new array references with identical contents).
     // Over the vector basemap the Terrain group goes inside it, under its roads
     // and labels (shared TERRAIN_BASEMAP_ANCHORS). Every other topo layer, and
@@ -2571,11 +2418,7 @@ function Map({
     const inBasemap =
       BASE_LAYERS.find((b) => b.id === activeLayerId)?.kind === "vector";
     const topoKey =
-      layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") +
-      "::" +
-      enabledKey +
-      "::" +
-      inBasemap;
+      layers.map((l) => `${l.id}:${l.pmtilesUrl}`).join("|") + "::" + inBasemap;
     if (topoKey === prevTopoKeyRef.current) return;
     prevTopoKeyRef.current = topoKey;
 
@@ -2603,13 +2446,7 @@ function Map({
         .layers.map((l) => l.id)
         .filter((lid) => lid.startsWith(`topo-${entryId}-`));
 
-    // Remove layers/sources no longer in topoLayers. Additionally, when an
-    // enable/disable toggle changed, drop every feature layer so they're
-    // re-created below per the current `enabled` flags (sources stay — only
-    // layers rebuild, no PMTiles refetch). Contour and raster layers persist;
-    // their look updates via the paint pass.
-    const structureChanged = prevEnabledKeyRef.current !== enabledKey;
-    prevEnabledKeyRef.current = enabledKey;
+    // Remove layers/sources no longer in topoLayers.
     const allTopoLayerIds = map
       .getStyle()
       .layers.map((l) => l.id)
@@ -2620,15 +2457,7 @@ function Map({
       const dashIdx = withoutPrefix.indexOf("-");
       if (dashIdx < 0) continue;
       const entryId = withoutPrefix.slice(0, dashIdx);
-      const isContourChild =
-        lid.endsWith("-minor") ||
-        lid.endsWith("-major") ||
-        lid.endsWith("-labels");
-      const isFeatureChild =
-        !lid.endsWith("-raster") && !lid.endsWith("-dem") && !isContourChild;
-      const drop =
-        !activeIds.has(entryId) || (structureChanged && isFeatureChild);
-      if (drop && map.getLayer(lid)) map.removeLayer(lid);
+      if (!activeIds.has(entryId) && map.getLayer(lid)) map.removeLayer(lid);
     }
     // Remove orphaned sources
     for (const entryId of [
@@ -2729,9 +2558,8 @@ function Map({
           });
         }
       } else {
-        // Vector layers — detect source type by id suffix
-        const isContours = id.includes("contours");
-        if (isContours) {
+        // The only vector entry is the statewide contours.
+        {
           // Minor contours (5m + 10m): elevation not divisible by 50
           const minorId = `topo-${id}-minor`;
           if (!map.getLayer(minorId)) {
@@ -2784,226 +2612,14 @@ function Map({
               },
             });
           }
-        } else {
-          // OSM features vector source — one layer per category. Per-category
-          // `enabled` skips the addLayer call entirely, so toggling a category
-          // off removes it from the map on the next structural run. Only static
-          // paint (dasharrays) is set here; colour and width are applied by
-          // applyVectorPaint so live edits don't recreate layers.
-          type FeatureLayerSpec = {
-            key: OsmFeatureKey;
-            suffix: string;
-            filter: maplibregl.ExpressionSpecification;
-            style: object;
-          };
-          const featureLayers: FeatureLayerSpec[] = [
-            {
-              key: "waterway",
-              suffix: "waterway",
-              filter: ["==", ["get", "_category"], "waterway"],
-              style: { type: "line" },
-            },
-            {
-              key: "track",
-              suffix: "track",
-              filter: ["==", ["get", "_category"], "track"],
-              style: {
-                type: "line",
-                paint: { "line-dasharray": [4, 2] },
-              },
-            },
-            {
-              key: "road",
-              suffix: "road",
-              filter: ["==", ["get", "_category"], "road"],
-              style: { type: "line" },
-            },
-            {
-              key: "building",
-              // Buildings get a translucent fill of the configured colour and a
-              // matching outline (both applied by applyVectorPaint).
-              suffix: "building",
-              filter: ["==", ["get", "_category"], "building"],
-              style: { type: "fill" },
-            },
-            {
-              key: "power",
-              suffix: "power",
-              filter: ["==", ["get", "_category"], "power"],
-              style: {
-                type: "line",
-                paint: { "line-dasharray": [3, 4] },
-              },
-            },
-          ];
-          for (const { key, suffix, filter, style } of featureLayers) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${suffix}`;
-            if (!map.getLayer(lid)) {
-              map.addLayer({
-                id: lid,
-                source: srcId,
-                "source-layer": "features",
-                filter,
-                ...style,
-              } as maplibregl.LayerSpecification);
-            }
-          }
-          void OSM_LINE_KEY_SET; // silence unused-import warning until line widths use it.
-
-          // Feature name labels for line categories (waterway, track, road).
-          // Label colour follows the line colour from VectorStyleSettings so a
-          // user re-tinting "tracks" gets matching label text without a second
-          // colour picker.
-          const featureLabelLayers: {
-            key: OsmFeatureKey;
-            suffix: string;
-            filter: maplibregl.ExpressionSpecification;
-          }[] = [
-            {
-              key: "waterway",
-              suffix: "waterway-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "waterway"],
-                ["has", "name"],
-              ],
-            },
-            {
-              key: "track",
-              suffix: "track-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "track"],
-                ["has", "name"],
-              ],
-            },
-            {
-              key: "road",
-              suffix: "road-label",
-              filter: [
-                "all",
-                ["==", ["get", "_category"], "road"],
-                ["any", ["has", "name"], ["has", "ref"]],
-              ],
-            },
-          ];
-          for (const { key, suffix, filter } of featureLabelLayers) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${suffix}`;
-            if (!map.getLayer(lid)) {
-              map.addLayer({
-                id: lid,
-                type: "symbol",
-                source: srcId,
-                "source-layer": "features",
-                filter,
-                minzoom: 12,
-                layout: {
-                  "text-field": [
-                    "coalesce",
-                    ["get", "name"],
-                    ["get", "ref"],
-                    "",
-                  ],
-                  "text-font": ["Noto Sans Medium"],
-                  "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                  "symbol-placement": "line",
-                  // Looser bend tolerance so curvy creeks/tracks still
-                  // get a label instead of only their straight stretches.
-                  "text-max-angle": 60,
-                },
-                paint: {
-                  "text-halo-color": "rgba(255,255,255,0.8)",
-                  "text-halo-width": 1.5,
-                },
-              });
-            }
-          }
-
-          // Point features → fixed PNG icons (one symbol layer per enabled
-          // category). Icons aren't user-recolourable; size mirrors the Python
-          // pipeline so they match the MBTiles export. Missing images are loaded
-          // lazily via the `styleimagemissing` handler above.
-          for (const key of OSM_POINT_FEATURE_KEYS) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${key}`;
-            if (map.getLayer(lid)) continue;
-            map.addLayer({
-              id: lid,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "features",
-              filter: ["==", ["get", "_category"], key],
-              minzoom: key === "gate" ? 12 : 10,
-              layout: {
-                "icon-image": `topo-icon-${key}`,
-                "icon-size": iconSizeInterp(OSM_POINT_ICON[key].sizeZ18),
-                "icon-allow-overlap": true,
-              },
-            });
-          }
-
-          // Name labels for point features at z12+. Peaks also show elevation.
-          // Label colour follows the category colour from VectorStyleSettings.
-          for (const key of OSM_POINT_FEATURE_KEYS) {
-            if (!feat(vs, key).enabled) continue;
-            const lid = `topo-${id}-${key}-label`;
-            if (map.getLayer(lid)) continue;
-            const textField: maplibregl.ExpressionSpecification =
-              key === "peak"
-                ? [
-                    "case",
-                    ["all", ["has", "name"], ["has", "ele"]],
-                    [
-                      "concat",
-                      ["get", "name"],
-                      "\n",
-                      ["to-string", ["get", "ele"]],
-                      " m",
-                    ],
-                    ["has", "name"],
-                    ["get", "name"],
-                    ["has", "ele"],
-                    ["concat", ["to-string", ["get", "ele"]], " m"],
-                    "",
-                  ]
-                : ["coalesce", ["get", "name"], ""];
-            map.addLayer({
-              id: lid,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "features",
-              filter: ["==", ["get", "_category"], key],
-              minzoom: 12,
-              layout: {
-                "text-field": textField,
-                "text-font": ["Noto Sans Medium"],
-                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                "text-anchor": "top",
-                "text-offset": [0, 0.8],
-                "text-optional": true,
-              },
-              paint: {
-                "text-halo-color": "rgba(255,255,255,0.85)",
-                "text-halo-width": 1.5,
-              },
-            });
-          }
         }
       }
     });
 
     // Paint freshly created (or rebuilt) layers with the current style so they
     // never flash a default colour before the paint effect runs.
-    for (const { id } of layers) {
-      applyVectorPaint(
-        map,
-        id,
-        id.includes("contours"),
-        paintStyleFor(id, vs, activeLayerIdRef.current),
-      );
-    }
+    if (layers.some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
+      applyContourPaint(map, TERRAIN_ENTRIES.contours.id, vs);
 
     // In the topoLayers order, each entry's layers as a group.
     stackTopoLayers(
@@ -3021,25 +2637,18 @@ function Map({
         ) as Record<TerrainLayerKey, string[]>,
         PROTOMAPS_LAYER_PREFIX,
       );
-  }, [topoLayers, enabledKey, mapLoaded, activeLayerId]);
+  }, [topoLayers, mapLoaded, activeLayerId]);
 
-  // PAINT pass: apply live colour/width to existing topo layers in place. Runs on
-  // every vectorStyle change (including colour-picker drags) without recreating
-  // layers — so editing is smooth and triggers no PMTiles refetch. setPaintProperty
-  // calls are no-ops for layers that don't exist (guarded inside applyVectorPaint).
+  // The contours' look follows the basemap: a paint change, never a new layer.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
-    const map = mapRef.current;
-    const vs = vectorStyle ?? VECTOR_STYLE_FALLBACK;
-    for (const { id } of topoLayers ?? []) {
-      applyVectorPaint(
-        map,
-        id,
-        id.includes("contours"),
-        paintStyleFor(id, vs, activeLayerId),
+    if ((topoLayers ?? []).some(({ id }) => id === TERRAIN_ENTRIES.contours.id))
+      applyContourPaint(
+        mapRef.current,
+        TERRAIN_ENTRIES.contours.id,
+        nswContourStyle(activeLayerId),
       );
-    }
-  }, [topoLayers, vectorStyle, mapLoaded, activeLayerId]);
+  }, [topoLayers, mapLoaded, activeLayerId]);
 
   // The slope bands, live, the same way: a paint change, never a new layer.
   useEffect(() => {

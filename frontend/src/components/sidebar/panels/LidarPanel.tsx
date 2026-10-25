@@ -12,15 +12,12 @@
 // the layer (DESIGN.md), which keeps the switch in Layers → LiDAR topos rather
 // than duplicating it here.
 //
-// How topos draw their vector layers opens beside the page as a sheet
-// (`TopoStyleSheet`), so the map stays in view while it changes.
 import { useMemo, useState } from "react";
 import {
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
   type SharePromiseKind,
-  type VectorStyleSettings,
 } from "@logjam/shared";
 import {
   apiFetch,
@@ -50,23 +47,15 @@ import {
 import {
   MAP_IDENTITY,
   formatDay,
-  isOlderLidarJob,
   plural,
   topoLabel,
   toposBeingMade,
 } from "./mapsModel";
 import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
-import TopoStyleSheet from "./TopoStyleSheet";
-import { usePanelSheet } from "./usePanelSheet";
-import { useIsMobile } from "../../../useIsMobile";
 import classes from "./MapsPanel.module.css";
 
 const MAKE_LABEL = LIDAR_JOB_COPY.make;
-
-/** A sharpened job and an older LiDAR topo, told apart in the list. */
-const identityOf = (job: CompletedTopoJob) =>
-  job.sharpened ? MAP_IDENTITY.sharpened : MAP_IDENTITY.topo;
 
 export default function LidarPanel({
   views,
@@ -81,10 +70,6 @@ export default function LidarPanel({
   onRefetchCompletedTopoJobs,
   onDismissActiveJob,
   onQuotaChanged,
-  vectorStyle,
-  onVectorStyleChange,
-  onSheetOpenChange,
-  onExpandSheet,
 }: {
   /** The Maps view switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
@@ -107,19 +92,9 @@ export default function LidarPanel({
   onRefetchCompletedTopoJobs: () => void;
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
-  vectorStyle: VectorStyleSettings | null;
-  onVectorStyleChange: (next: VectorStyleSettings) => void;
-  /** Told when the style sheet opens or closes, so the map insets for it. */
-  onSheetOpenChange: (open: boolean) => void;
-  onExpandSheet?: () => void;
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
-  const { sheetOpen, openSheet } = usePanelSheet({
-    onOpenChange: onSheetOpenChange,
-    onExpandSheet,
-  });
-  const isNarrow = useIsMobile();
   // Non-null = the topo whose share dialog is open, named as its row names it.
   const [shareJob, setShareJob] = useState<{
     id: string;
@@ -243,13 +218,6 @@ export default function LidarPanel({
       }
       actions={
         <>
-          <IconButton
-            icon="colour"
-            label="Topo style"
-            tone={sheetOpen ? "filled" : "default"}
-            aria-expanded={sheetOpen}
-            onClick={() => openSheet(!sheetOpen)}
-          />
           <Menu
             label={MAKE_LABEL}
             placement="bottom-end"
@@ -321,12 +289,12 @@ export default function LidarPanel({
               title={label}
               // A named topo keeps its date beneath; an unnamed one IS its date.
               subtitle={job.name ? formatDay(job.createdAt) : undefined}
-              description={identityOf(job).label}
+              description={MAP_IDENTITY.sharpened.label}
               leading={
                 <IconTile
-                  icon={identityOf(job).icon}
-                  hue={identityOf(job).hue}
-                  label={identityOf(job).label}
+                  icon={MAP_IDENTITY.sharpened.icon}
+                  hue={MAP_IDENTITY.sharpened.hue}
+                  label={MAP_IDENTITY.sharpened.label}
                 />
               }
               onOpen={
@@ -336,9 +304,6 @@ export default function LidarPanel({
               }
               trailing={
                 <>
-                  {isOlderLidarJob(job) && (
-                    <StatusPill label="Old" tone="outline" />
-                  )}
                   {job.syncRole !== "owner" && (
                     <StatusPill label="Shared" tone="outline" />
                   )}
@@ -365,31 +330,15 @@ export default function LidarPanel({
     </div>
   );
 
-  const sheet = sheetOpen && (
-    <TopoStyleSheet
-      value={vectorStyle}
-      onChange={onVectorStyleChange}
-      onClose={() => openSheet(false)}
-    />
-  );
-
   return (
     <div className={classes.root}>
-      {/* Narrow web: the sheet takes the page's place, as every page's does. */}
-      {isNarrow && sheet ? (
-        sheet
-      ) : (
-        <>
-          {hero}
-          <div className={classes.rails}>{views}</div>
-          {list}
-          <MakingFooter
-            items={beingMade}
-            onDismiss={(item) => onDismissActiveJob(item.id)}
-          />
-          {sheet}
-        </>
-      )}
+      {hero}
+      <div className={classes.rails}>{views}</div>
+      {list}
+      <MakingFooter
+        items={beingMade}
+        onDismiss={(item) => onDismissActiveJob(item.id)}
+      />
 
       {shareJob && (
         <ShareDialog

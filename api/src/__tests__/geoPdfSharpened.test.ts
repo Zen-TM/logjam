@@ -56,7 +56,7 @@ import {
 // routing slope or contours through the area (alice's page is green); not
 // crediting the area for a layer it drew, or crediting it for one it did not
 // (the credited layers); drawing a sharpened job's slope archive in the
-// legacy-job loop (alice's spot is the raw terrarium colour); logging the
+// per-job vegetation loop (alice's spot is the raw terrarium colour); logging the
 // area's id or key when its archive is missing.
 
 // The credit lines are worded in geoPdfTerrain.unit.test.ts; this file checks

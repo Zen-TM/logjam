@@ -5,7 +5,6 @@ import {
   registerFont,
   type Canvas,
   type CanvasRenderingContext2D,
-  type Image,
 } from "canvas";
 import PDFDocument from "pdfkit";
 import type {
@@ -13,8 +12,6 @@ import type {
   SlopeBand,
   TerrainLayerKey,
   VectorStyleSettings,
-  OsmFeatureStyle,
-  OsmPointFeatureKey,
 } from "@logjam/shared";
 import {
   getPaperDimensions,
@@ -26,12 +23,8 @@ import {
   GEOPDF_BASE_LAYER_CONFIG,
   overlayAttributionLines,
   extractionCreditLine,
-  OSM_POINT_FEATURE_KEYS,
-  OSM_POINT_ICON,
-  iconTargetPx,
   rgbaCssFromHex,
   contourWidthStops,
-  featureLineWidthStops,
   lerpZoom,
   contourLabelHalo,
   drawsNswContours,
@@ -80,8 +73,6 @@ import {
   type TileCoord,
   type TileToMapTransform,
 } from "@logjam/shared";
-import { TOPO_LAYERS } from "../constants/topoLayers";
-import type { TopoLayerName } from "../constants/topoLayers";
 import { AppError } from "../middleware/errorHandler";
 import prisma from "./prisma";
 import { logger, safeErrorForLog } from "../lib/logger";
@@ -127,16 +118,10 @@ const MM_PER_INCH = 25.4;
 // to scale CSS-pixel style values (font/line/dash) up to the print canvas.
 const STYLE_DPI = 96;
 const CONCURRENCY = 8;
-const LINE_LABEL_MIN_DISTANCE = 450; // px — min spacing between named line-feature labels (tracks, rivers, ...)
 const CONTOUR_LABEL_MIN_DISTANCE = 450; // px — min spacing between contour elevation labels
 
 const SCALE_BAR_DISTANCES = [100, 250, 500, 1000, 2000, 5000, 10000];
 const DEG_TO_RAD = Math.PI / 180;
-
-// Point-feature icon PNGs, bundled under api/assets/topo-icons (Dockerfile COPY).
-// __dirname resolves to api/src/services in dev and /app/dist/services in prod;
-// "../../assets" therefore lands on api/assets and /app/assets respectively.
-const ICON_DIR = path.resolve(__dirname, "../../assets/topo-icons");
 
 // ── Embedded overlay font ────────────────────────────────────────────────────
 // Source Sans 3 (SIL OFL), bundled under api/assets/fonts (Dockerfile COPY).
@@ -169,35 +154,6 @@ const ACCENT = "#9C5A2E"; // sparse flourishes (iron-oxide brown)
 const TN_COLOR = "#a23b34"; // true north — muted brick red
 const GN_COLOR = "#3f5d7a"; // grid north — muted slate blue
 const MN_COLOR = "#3f6b46"; // magnetic north — muted forest green
-
-/**
- * Pre-load the PNG icons for every enabled point category into a synchronously
- * accessible cache. Must happen before the (sync) per-feature render loop since
- * `loadImage` is async. Failures are logged and skipped (icon simply omitted).
- */
-async function loadPointIcons(
-  vectorStyle: VectorStyleSettings,
-): Promise<Map<OsmPointFeatureKey, Image>> {
-  const cache = new Map<OsmPointFeatureKey, Image>();
-  await Promise.all(
-    OSM_POINT_FEATURE_KEYS.filter((k) => vectorStyle.features[k]?.enabled).map(
-      async (key) => {
-        try {
-          const img = await loadImage(
-            path.join(ICON_DIR, OSM_POINT_ICON[key].file),
-          );
-          cache.set(key, img);
-        } catch (e) {
-          logger.warn(
-            { icon: key, err: safeErrorForLog(e) },
-            "GeoPDF: failed to load icon",
-          );
-        }
-      },
-    ),
-  );
-  return cache;
-}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -442,14 +398,6 @@ export async function generateGeoPdf(
       nativeH,
     );
 
-    // Sort by canonical TOPO_LAYERS index so hillshade is always at the
-    // bottom and vector layers (contours, features) are always on top, regardless
-    // of the order the user selected them.
-    const canonicalOrder: string[] = TOPO_LAYERS.map((l) => l.name);
-    const sortedOverlays = [...config.overlays].sort(
-      (a, b) => canonicalOrder.indexOf(a) - canonicalOrder.indexOf(b),
-    );
-
     // Look up the user's completed topo jobs and filter to those whose
     // footprint bbox overlaps the export extent. Older jobs render first so
     // newer ones land on top. Jobs without a stored footprint fall through
@@ -477,11 +425,6 @@ export async function generateGeoPdf(
     // they always appear on top of every line.
     const pendingLabels: PendingLabel[] = [];
     const placedLabelPositions: Array<{ x: number; y: number }> = [];
-
-    // Point-feature icons must be loaded before the sync per-feature render loop.
-    const iconCache = config.overlays.includes("features")
-      ? await loadPointIcons(vectorStyle)
-      : new Map<OsmPointFeatureKey, Image>();
 
     // The Terrain group comes first, under every LiDAR job's own layers, as
     // Logjam Web stacks them: shading, slope, then contours. Each tile comes
@@ -590,7 +533,6 @@ export async function generateGeoPdf(
           vectorPxScale,
           // The map's own look for these lines, not the user's LiDAR style.
           nswContourStyle(config.baseLayer),
-          iconCache,
           placedLabelPositions,
           pendingLabels,
         );
@@ -601,53 +543,28 @@ export async function generateGeoPdf(
       }
     }
 
-    for (const overlayName of sortedOverlays as TopoLayerName[]) {
-      const layerDef = TOPO_LAYERS.find((l) => l.name === overlayName);
-      if (!layerDef) continue;
+    // A job's own layer is its vegetation; its slope and contours are its
+    // terrain archives, drawn above. Guard: the owner case in
+    // geoPdfSharpened.test.ts.
+    if (config.overlays.includes("vegetation")) {
       for (const job of overlappingJobs) {
-        // A sharpened job's slope and contours are its terrain archives,
-        // drawn above; only a legacy layer it also made (vegetation) is drawn
-        // here. Guard: the owner case in geoPdfSharpened.test.ts.
-        if (job.sharpen != null && overlayName !== "vegetation") continue;
-        const pmtilesKey = `outputs/${job.id}/${overlayName}.pmtiles`;
-        const source = new S3Source(topoBucket, pmtilesKey, s3);
-        const archive = new PMTiles(source);
+        const archive = new PMTiles(
+          new S3Source(topoBucket, `outputs/${job.id}/vegetation.pmtiles`, s3),
+        );
         try {
-          let drew = 0;
-          if (layerDef.format === "vector") {
-            drew = await fetchAndDrawPMTilesVectorDirect(
-              mapCtx,
-              overlayTransform.tiles,
-              archive,
-              overlayTransform,
-              overlayName,
-              styleZoom,
-              vectorPxScale,
-              vectorStyle,
-              iconCache,
-              placedLabelPositions,
-              pendingLabels,
-            );
-          } else {
-            drew = await fetchAndDrawPMTilesRasterDirect(
-              mapCtx,
-              overlayTransform.tiles,
-              archive,
-              overlayTransform,
-            );
-          }
-          if (drew > 0) renderedOverlays.add(overlayName);
+          const drew = await fetchAndDrawPMTilesRasterDirect(
+            mapCtx,
+            overlayTransform.tiles,
+            archive,
+            overlayTransform,
+          );
+          if (drew > 0) renderedOverlays.add("vegetation");
         } catch (e) {
-          // A job may legitimately lack a given layer (e.g. Mode-A jobs skip
-          // vegetation). Treat S3 404 / PMTiles errors as "this job doesn't
-          // contribute this overlay" and continue.
+          // A job with no vegetation (its area was all terrain) has no
+          // archive: a 404 or PMTiles error means it contributes nothing.
           logger.warn(
-            {
-              overlay: overlayName,
-              jobId: job.id,
-              err: safeErrorForLog(e),
-            },
-            "GeoPDF: skipping overlay for job",
+            { jobId: job.id, err: safeErrorForLog(e) },
+            "GeoPDF: skipping vegetation for job",
           );
         }
       }
@@ -1072,7 +989,6 @@ async function fetchAndDrawPMTilesVectorDirect(
   styleZoom: number,
   pxScale: number,
   vectorStyle: VectorStyleSettings,
-  iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
 ): Promise<number> {
@@ -1105,7 +1021,6 @@ async function fetchAndDrawPMTilesVectorDirect(
             transform.scaleX,
             transform.scaleY,
             vectorStyle,
-            iconCache,
             placedLabels,
             pendingLabels,
           );
@@ -1188,7 +1103,6 @@ function renderVectorFeature(
   transformScaleX = 1,
   transformScaleY = 1,
   vectorStyle: VectorStyleSettings,
-  iconCache: Map<OsmPointFeatureKey, Image>,
   placedLabels: Array<{ x: number; y: number }> = [],
   pendingLabels: PendingLabel[] = [],
 ) {
@@ -1211,23 +1125,6 @@ function renderVectorFeature(
       geomType,
       props,
       vectorStyle,
-      placedLabels,
-      pendingLabels,
-    );
-  } else if (layerName === "features") {
-    renderOsmFeature(
-      ctx,
-      feature,
-      dx,
-      dy,
-      styleZoom,
-      pxScale,
-      scaleX,
-      scaleY,
-      geomType,
-      props,
-      vectorStyle,
-      iconCache,
       placedLabels,
       pendingLabels,
     );
@@ -1322,261 +1219,6 @@ function renderContourFeature(
         color: labelColor,
       });
     }
-  }
-}
-
-const POINT_KEY_SET = new Set<string>(OSM_POINT_FEATURE_KEYS);
-
-/** Buffer a name label at the midpoint of the longest ring of a line feature. */
-function bufferLineLabel(
-  geometry: { x: number; y: number }[][],
-  dx: number,
-  dy: number,
-  scaleX: number,
-  scaleY: number,
-  styleZoom: number,
-  pxScale: number,
-  text: string,
-  color: string,
-  placedLabels: Array<{ x: number; y: number }>,
-  pendingLabels: PendingLabel[],
-  labelScale: number,
-) {
-  if (styleZoom < 14 || !text) return;
-  let ring: { x: number; y: number }[] | null = null;
-  for (const r of geometry) if (!ring || r.length > ring.length) ring = r;
-  if (!ring || ring.length < 2) return;
-  const mid = Math.floor(ring.length / 2);
-  const mx = dx + ring[mid].x * scaleX;
-  const my = dy + ring[mid].y * scaleY;
-  if (
-    placedLabels.some(
-      (p) => Math.hypot(p.x - mx, p.y - my) < LINE_LABEL_MIN_DISTANCE,
-    )
-  )
-    return;
-  placedLabels.push({ x: mx, y: my });
-  const prev = mid > 0 ? mid - 1 : 0;
-  const next = mid < ring.length - 1 ? mid + 1 : ring.length - 1;
-  const ax = (ring[next].x - ring[prev].x) * scaleX;
-  const ay = (ring[next].y - ring[prev].y) * scaleY;
-  let angle = Math.atan2(ay, ax);
-  if (angle > Math.PI / 2) angle -= Math.PI;
-  if (angle < -Math.PI / 2) angle += Math.PI;
-  pendingLabels.push({
-    x: mx,
-    y: my,
-    angle,
-    text,
-    fontSize: labelFontSize(styleZoom, pxScale, labelScale),
-    haloWidth: 1.5 * pxScale,
-    color,
-  });
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderOsmFeature(
-  ctx: CanvasRenderingContext2D,
-  feature: VectorTileFeature,
-  dx: number,
-  dy: number,
-  styleZoom: number,
-  pxScale: number,
-  scaleX: number,
-  scaleY: number,
-  geomType: number,
-  props: Record<string, unknown>,
-  vectorStyle: VectorStyleSettings,
-  iconCache: Map<OsmPointFeatureKey, Image>,
-  placedLabels: Array<{ x: number; y: number }> = [],
-  pendingLabels: PendingLabel[] = [],
-) {
-  const category = String(props._category ?? "");
-  const style = (
-    vectorStyle.features as Record<string, OsmFeatureStyle | undefined>
-  )[category];
-  if (!style || !style.enabled) return; // per-category enable mirrors the overlay
-  const geometry = feature.loadGeometry();
-  const colour = rgbaCssFromHex(style.colour);
-
-  // Point categories → fixed PNG icon (+ optional name label at z14+).
-  if (POINT_KEY_SET.has(category)) {
-    if (geomType !== 1) return;
-    const key = category as OsmPointFeatureKey;
-    const minzoom = key === "gate" ? 14 : 12;
-    if (styleZoom < minzoom) return;
-    const icon = iconCache.get(key);
-    const t = iconTargetPx(OSM_POINT_ICON[key].sizeZ18, styleZoom) * pxScale;
-    const name = typeof props.name === "string" ? props.name : "";
-    for (const ring of geometry) {
-      for (const pt of ring) {
-        const px = dx + pt.x * scaleX;
-        const py = dy + pt.y * scaleY;
-        if (icon) ctx.drawImage(icon, px - t / 2, py - t / 2, t, t);
-        if (styleZoom >= 14) {
-          let text = name;
-          if (key === "peak") {
-            const ele = props.ele;
-            const eleStr =
-              ele !== undefined && ele !== null && `${ele}`.trim() !== ""
-                ? `${ele} m`
-                : "";
-            text = [name, eleStr].filter(Boolean).join("\n");
-          }
-          if (text) {
-            pendingLabels.push({
-              x: px,
-              y: py + t / 2 + interpZoom(styleZoom, 14, 7, 18, 9) * pxScale,
-              angle: 0,
-              text,
-              fontSize: labelFontSize(
-                styleZoom,
-                pxScale,
-                vectorStyle.labelScale ?? 1,
-              ),
-              haloWidth: 1.5 * pxScale,
-              color: colour,
-            });
-          }
-        }
-      }
-    }
-    return;
-  }
-
-  // Line / fill categories.
-  switch (category) {
-    case "waterway":
-    case "road": {
-      const s = featureLineWidthStops(style.widthZ18);
-      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: colour,
-        width: lerpZoom(styleZoom, s.z12, s.z18) * pxScale,
-      });
-      const label =
-        category === "road"
-          ? (typeof props.name === "string" && props.name) ||
-            (typeof props.ref === "string" ? props.ref : "")
-          : typeof props.name === "string"
-            ? props.name
-            : "";
-      bufferLineLabel(
-        geometry,
-        dx,
-        dy,
-        scaleX,
-        scaleY,
-        styleZoom,
-        pxScale,
-        label,
-        colour,
-        placedLabels,
-        pendingLabels,
-        vectorStyle.labelScale ?? 1,
-      );
-      break;
-    }
-    case "track": {
-      const s = featureLineWidthStops(style.widthZ18);
-      // MapLibre line-dasharray units are multiples of the line width, so scale
-      // the [4,2] pattern by the final canvas width to match the overlay.
-      const width = lerpZoom(styleZoom, s.z12, s.z18) * pxScale;
-      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: colour,
-        width,
-        dash: [4 * width, 2 * width],
-      });
-      const label = typeof props.name === "string" ? props.name : "";
-      bufferLineLabel(
-        geometry,
-        dx,
-        dy,
-        scaleX,
-        scaleY,
-        styleZoom,
-        pxScale,
-        label,
-        colour,
-        placedLabels,
-        pendingLabels,
-        vectorStyle.labelScale ?? 1,
-      );
-      break;
-    }
-    case "power": {
-      // Power lines use a constant pixel width (matches the overlay). Dasharray
-      // [3,4] is in line-width units → scale by the final canvas width.
-      const width = style.widthZ18 * pxScale;
-      drawLineFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-        color: colour,
-        width,
-        dash: [3 * width, 4 * width],
-      });
-      break;
-    }
-    case "building":
-      if (geomType === 3) {
-        drawFillFeature(ctx, geometry, dx, dy, scaleX, scaleY, {
-          fill: colour,
-          outline: colour,
-        });
-      }
-      break;
-    default:
-      // Other categories (e.g. bridge) have no live overlay layer — skip to
-      // stay consistent with the on-screen map.
-      break;
-  }
-}
-
-function drawLineFeature(
-  ctx: CanvasRenderingContext2D,
-  geometry: { x: number; y: number }[][],
-  dx: number,
-  dy: number,
-  scaleX: number,
-  scaleY: number,
-  style: { color: string; width: number; dash?: number[] },
-) {
-  ctx.strokeStyle = style.color;
-  ctx.lineWidth = style.width;
-  ctx.setLineDash(style.dash ?? []);
-  for (const ring of geometry) {
-    ctx.beginPath();
-    for (let j = 0; j < ring.length; j++) {
-      const px = dx + ring[j].x * scaleX;
-      const py = dy + ring[j].y * scaleY;
-      if (j === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.stroke();
-  }
-  ctx.setLineDash([]);
-}
-
-function drawFillFeature(
-  ctx: CanvasRenderingContext2D,
-  geometry: { x: number; y: number }[][],
-  dx: number,
-  dy: number,
-  scaleX: number,
-  scaleY: number,
-  style: { fill: string; outline: string },
-) {
-  for (const ring of geometry) {
-    ctx.beginPath();
-    for (let j = 0; j < ring.length; j++) {
-      const px = dx + ring[j].x * scaleX;
-      const py = dy + ring[j].y * scaleY;
-      if (j === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fillStyle = style.fill;
-    ctx.fill();
-    ctx.strokeStyle = style.outline;
-    ctx.lineWidth = 1;
-    ctx.stroke();
   }
 }
 

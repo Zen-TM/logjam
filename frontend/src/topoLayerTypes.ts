@@ -47,7 +47,7 @@ export type CompletedTopoJob = {
     format: TopoLayerFormat;
     pmtilesUrl: string;
   }[];
-  /** A sharpened job's area and archive URLs; absent for a legacy job. */
+  /** A sharpened job's area and archive URLs; absent while the job is still marked. */
   sharpened?: SharpenedOverlay;
 };
 
