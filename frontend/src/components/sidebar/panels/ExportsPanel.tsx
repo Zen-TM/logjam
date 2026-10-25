@@ -1,5 +1,5 @@
 // Maps → Exports: the files made by Export an area (and, until their 7 days
-// run out, exports of older LiDAR topos), and the exports still being made.
+// run out, exports of LiDAR topos), and the exports still being made.
 import { useCallback, useMemo } from "react";
 import { type TopoExportJobView } from "@logjam/shared";
 import { deleteTopoExport } from "../../../placeUtils";

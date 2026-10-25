@@ -151,6 +151,25 @@ describe("mergeSavedOverlayJobs", () => {
     );
   });
 
+  // Mutation: drop the `sourceType !== "raster"` skip in mergeSavedOverlayJobs
+  // (or the `match.format` one in composeTopoOverlayRefs), and a saved vector
+  // overlay mounts as a raster layer on a vector source.
+  it("lists no job for a saved vector overlay, and draws none", () => {
+    const merged = mergeSavedOverlayJobs(null, [
+      savedOverlay("old", "contours"),
+    ]);
+    expect(merged.jobs).toEqual([]);
+    const online = response();
+    online.jobs[0].layers.push({
+      name: "contours",
+      format: "vector",
+      pmtilesUrl: "https://s3/old-contours",
+    });
+    expect(composeTopoOverlayRefs(online, new Set(["old/contours"]))).toEqual(
+      [],
+    );
+  });
+
   it("returns the online list unchanged when there are no saved artifacts", () => {
     expect(mergeSavedOverlayJobs(response(), [])).toEqual(response());
   });

@@ -10,7 +10,7 @@ steps as plain AWS CLI commands.
 | Target | What changes | What does not |
 |---|---|---|
 | `api` | Elastic Beanstalk goes back to the application version labelled with the commit sha, and the ECS task definitions that run the API image (listed in `infra/scripts/pin-release.sh`) are repinned to that sha's image | The database. There are no down-migrations: the schema stays at the newer version, which is why every migration must be expand/contract ([ADR 0003](../decisions/0003-pre-deploy-migrations-expand-contract.md)) and why CI runs `rollback-compat` on migration PRs |
-| `frontend` | `index.html` is replaced by the copy kept at `releases/<sha>/index.html` in the frontend bucket | Hashed assets: every release's assets stay in the bucket for at least 30 days, so the old `index.html` finds its files. Unhashed files from `frontend/public/` (`privacy.html`, `tos.html`, `manifest.webmanifest`, `topo-icons/`, `templates/`) are not restored: they keep the newer release's content |
+| `frontend` | `index.html` is replaced by the copy kept at `releases/<sha>/index.html` in the frontend bucket | Hashed assets: every release's assets stay in the bucket for at least 30 days, so the old `index.html` finds its files. Unhashed files from `frontend/public/` (`privacy.html`, `tos.html`, `manifest.webmanifest`, `templates/`) are not restored: they keep the newer release's content |
 | `worker` | The topo task definitions (listed in `infra/scripts/pin-release.sh`) are repinned to the `logjam-topo-worker:<sha>` image | Anything already running: a rollback affects the next task launched |
 
 Limits:

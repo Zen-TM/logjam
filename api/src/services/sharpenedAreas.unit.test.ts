@@ -53,7 +53,7 @@ describe("sharpenedAreaFrom", () => {
 
   // Mutation: accept a result of an unknown version, a mark the worker has
   // not replaced, a zmax with no archive, or one with no credit.
-  it("is no area for a legacy job, a job still marked, or a result it cannot read", () => {
+  it("is no area for a row with no mark, a job still marked, or a result it cannot read", () => {
     expect(sharpenedAreaFrom(row(null))).toBeNull();
     expect(sharpenedAreaFrom(row({ v: 1, vegetation: true }))).toBeNull();
     expect(sharpenedAreaFrom(row({ ...result, v: 2 }))).toBeNull();

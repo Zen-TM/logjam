@@ -1302,7 +1302,7 @@ function buildTrips(): SeedTrip[] {
 //
 // A COMPLETE job has its outputs in S3 behind it, as a vector file does: the
 // topo ones are tiny real PMTiles archives (seedArchives.ts) at the keys the
-// rows name, and a GeoPDF's result is the PDF Logjam's own generator wrote
+// row's `sharpen` names, and a GeoPDF's result is the PDF Logjam's own generator wrote
 // (shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf). Every size a row states
 // is the length of the bytes uploaded.
 
@@ -1328,7 +1328,15 @@ const TOPO_FOOTPRINT = {
     ],
   ],
 };
-/** A made-up contour across the tile, in tile units (extent 4096). */
+/** The z16 tile of the sharpened heights and slope, and the z14 one of its contours. */
+const SHARP_TILE = tileAt(16, 150.3179, -33.6563);
+const CONTOUR_TILE = tileAt(14, 150.3179, -33.6563);
+const CONTOUR_BOUNDS = tileBounds(
+  CONTOUR_TILE.z,
+  CONTOUR_TILE.x,
+  CONTOUR_TILE.y,
+);
+/** A made-up contour across the contour tile, in tile units (extent 4096). */
 const CONTOUR_LINE: [number, number][] = [
   [0, 2600],
   [1200, 2100],
@@ -1337,47 +1345,64 @@ const CONTOUR_LINE: [number, number][] = [
 ];
 /** The same line in degrees, so an export of the layer matches its tile. */
 const CONTOUR_LONLAT = CONTOUR_LINE.map(([x, y]) => [
-  TOPO_BOUNDS[0] + (x / 4096) * (TOPO_BOUNDS[2] - TOPO_BOUNDS[0]),
-  TOPO_BOUNDS[3] - (y / 4096) * (TOPO_BOUNDS[3] - TOPO_BOUNDS[1]),
+  CONTOUR_BOUNDS[0] + (x / 4096) * (CONTOUR_BOUNDS[2] - CONTOUR_BOUNDS[0]),
+  CONTOUR_BOUNDS[3] - (y / 4096) * (CONTOUR_BOUNDS[3] - CONTOUR_BOUNDS[1]),
 ]);
 
 type SeededObject = { key: string; body: Buffer | string; contentType: string };
 
-const TOPO_LAYER_ARCHIVES = [
-  { name: "hillshade", tile: flatPng(150), type: "png" as const },
-  { name: "slope", tile: flatPng(95), type: "png" as const },
+const SHARPEN_ARCHIVES = [
+  {
+    name: "heights",
+    ...SHARP_TILE,
+    tile: flatPng(150),
+    type: "png" as const,
+  },
+  { name: "slope", ...SHARP_TILE, tile: flatPng(95), type: "png" as const },
   {
     name: "contours",
+    ...CONTOUR_TILE,
     tile: lineVectorTile("contours", CONTOUR_LINE),
     type: "mvt" as const,
   },
-].map((layer) => ({
-  ...layer,
-  archive: singleTilePmtiles({ ...TOPO_TILE, ...layer }),
-}));
+].map((layer) => ({ ...layer, archive: singleTilePmtiles(layer) }));
 
-/** The outputs of a complete job: its rows' `s3OutputKeys` and the objects. */
-function topoOutputs(jobId: string) {
-  const keys = TOPO_LAYER_ARCHIVES.map((layer) => ({
-    name: layer.name,
-    // No COG: a raster layer's COG is what an export reads, and building one is
-    // the worker's job. An export of a seeded topo is therefore refused as
-    // "made before exports existed"; the completed export seeded below has its
-    // result and needs no source. Nor can it be drawn on a new GeoPDF: the
-    // archive is one z12 tile and the renderer reads z16.
-    cogKey: null,
-    pmtilesKey: `outputs/${jobId}/${layer.name}.pmtiles`,
-  }));
-  const objects: SeededObject[] = TOPO_LAYER_ARCHIVES.map((layer, i) => ({
-    key: keys[i].pmtilesKey,
+/**
+ * A complete sharpened job's `sharpen` result and the objects behind it, in the
+ * shape topo/worker.py stores (shared/src/__fixtures__/sharpen-result.json).
+ * The z15 block is the whole z14 tile around the heights tile.
+ */
+function sharpenedJob(jobId: string) {
+  const x0 = Math.floor(SHARP_TILE.x / 4) * 2;
+  const y0 = Math.floor(SHARP_TILE.y / 4) * 2;
+  const keys = Object.fromEntries(
+    SHARPEN_ARCHIVES.map((layer) => [
+      layer.name,
+      `outputs/${jobId}/${layer.name}.pmtiles`,
+    ]),
+  );
+  const [west, , , north] = tileBounds(15, x0, y0);
+  const [, south, east] = tileBounds(15, x0 + 1, y0 + 1);
+  const objects: SeededObject[] = SHARPEN_ARCHIVES.map((layer) => ({
+    key: keys[layer.name],
     body: layer.archive,
     contentType: "application/octet-stream",
   }));
   return {
-    keys,
+    sharpen: {
+      v: 1,
+      zmax: 16,
+      tiles15: [x0, y0, x0 + 1, y0 + 1],
+      coverage: [west, south, east, north],
+      ground: "class-2",
+      extracted: "March 2025",
+      credit: "Elevation: made up for Logjam's seed data.",
+      keys,
+      vegetation: false,
+    },
     objects,
     bytes: BigInt(
-      TOPO_LAYER_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
+      SHARPEN_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
     ),
   };
 }
@@ -2106,8 +2131,8 @@ async function main() {
 
   const aliceTopo = fid(1);
   const bobTopo = fid(4);
-  const aliceTopoOutputs = topoOutputs(aliceTopo);
-  const bobTopoOutputs = topoOutputs(bobTopo);
+  const aliceTopoOutputs = sharpenedJob(aliceTopo);
+  const bobTopoOutputs = sharpenedJob(bobTopo);
   // What a finished run costs the owner's monthly credits is its elapsed time
   // (lib/computeCredits.ts): the worker's own `wallSeconds` for a complete
   // topo, `updatedAt - startedAt` for a failed one. Both are minutes here, as
@@ -2128,8 +2153,8 @@ async function main() {
   });
   await prisma.topoJob.createMany({
     data: [
-      // Complete: what Logjam Web's Maps page and GeoPDF dialog need to draw a
-      // topo and offer it as a layer.
+      // Complete and sharpened: what Logjam Web's Maps page, Terrain group and
+      // GeoPDF dialog need to show an area and draw its terrain.
       {
         id: aliceTopo,
         userId: ALICE_ID,
@@ -2139,9 +2164,9 @@ async function main() {
         tileCount: 1,
         estimatedSeconds: 600,
         outputTileCount: 1,
-        s3OutputKeys: aliceTopoOutputs.keys,
+        s3OutputKeys: [],
+        sharpen: aliceTopoOutputs.sharpen,
         outputBytes: aliceTopoOutputs.bytes,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(300),
         pipelineMetrics: pipelineMetrics(300),
         ...topoRun(285, 300),
@@ -2167,9 +2192,9 @@ async function main() {
         tileCount: 1,
         estimatedSeconds: 600,
         outputTileCount: 1,
-        s3OutputKeys: bobTopoOutputs.keys,
+        s3OutputKeys: [],
+        sharpen: bobTopoOutputs.sharpen,
         outputBytes: bobTopoOutputs.bytes,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(400),
         pipelineMetrics: pipelineMetrics(300),
         ...topoRun(385, 300),
@@ -2539,7 +2564,6 @@ async function main() {
           jobId: aliceTopo,
           jobName: "Grand Canyon LiDAR",
           footprint: TOPO_FOOTPRINT,
-          osmFailed: false,
         },
         read: true,
         createdAt: ago(285),

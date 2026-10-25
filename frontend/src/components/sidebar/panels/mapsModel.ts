@@ -42,8 +42,7 @@ export const MAP_IDENTITY: Record<
     hue: "var(--hue-overlay)",
     label: "LiDAR topo",
   },
-  // A LiDAR job of the newer kind: the Terrain layers made sharper over its
-  // area. Beside it, "LiDAR topo" is what an older job is called.
+  // A finished LiDAR job: the Terrain layers made sharper over its area.
   sharpened: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
@@ -252,14 +251,4 @@ export function newestFirst<T extends { createdAt: string }>(
   return [...items].sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );
-}
-
-/**
- * Whether a LiDAR job is of the older kind, worth saying so beside it: a job
- * without a sharpened area is an older LiDAR topo (mapsModel.test.ts).
- */
-export function isOlderLidarJob(
-  job: Pick<CompletedTopoJob, "sharpened">,
-): boolean {
-  return !job.sharpened;
 }

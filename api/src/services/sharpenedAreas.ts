@@ -21,7 +21,7 @@ const isNum = (v: unknown): v is number =>
 /**
  * An area from a completed job's `sharpen` column (topo/sharpen.py's result
  * plus the archive keys topo/worker.py adds), or null for a row that is not
- * one: a legacy job, or a result this build cannot read. Each key must lie
+ * one: a job still marked, or a result this build cannot read. Each key must lie
  * under the job's own outputs, so a bad row can never point the API's role
  * at another object. Guard: `sharpenedAreas.unit.test.ts`.
  */

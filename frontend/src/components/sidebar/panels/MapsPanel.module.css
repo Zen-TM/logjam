@@ -1,6 +1,5 @@
 /* Maps gives the panel body its full height: the hero and the view switch are
-   pinned, and only the list scrolls (DESIGN.md). Shared by the Maps page's
-   views and the topo style sheet, which are one page. */
+   pinned, and only the list scrolls (DESIGN.md). */
 .root {
   flex: 1;
   min-height: 0;
@@ -84,73 +83,4 @@
   margin: 0;
   text-align: center;
   color: var(--color-text-muted);
-}
-
-/* Topo style is a TABLE: what the line is, its colour, its width, and — for an
-   OSM feature — its switch. A grid, so every column lines up under the one
-   heading that names it, whatever the row's text does. */
-.styleTable {
-  display: grid;
-  grid-template-columns: 1fr var(--control-lg) 7ch;
-  align-items: center;
-  column-gap: 10px;
-  row-gap: 6px;
-}
-
-.switchTable {
-  grid-template-columns: 1fr var(--control-lg) 7ch var(--switch-width);
-}
-
-/* A point has no width: its symbol is fixed, and the switch is the only thing
-   to set. */
-.symbolTable {
-  grid-template-columns: 1fr var(--control-lg) var(--switch-width);
-}
-
-.head {
-  composes: meta from "../../../textRoles.generated.module.css";
-  color: var(--color-text-muted);
-  text-align: center;
-  white-space: nowrap;
-}
-
-.rowText {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.rowName {
-  composes: body from "../../../textRoles.generated.module.css";
-  color: var(--color-text);
-}
-
-/* An OSM tag query is as long as it is (roads name six values) and it is a
-   reference, not a sentence: two lines of it in a column narrowed by three
-   controls, then an ellipsis. The FULL string is still the switch's accessible
-   description, so nothing is lost to a reader. */
-.rowHint {
-  composes: detail from "../../../textRoles.generated.module.css";
-  color: var(--color-text-muted);
-  overflow-wrap: anywhere;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-}
-
-/* A width box fills its column; its label is the heading above it. */
-.widthBox > input {
-  width: 100%;
-  text-align: right;
-}
-
-/* The map's own symbol, centred in the column the colours are in. */
-.pointIcon {
-  justify-self: center;
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
 }

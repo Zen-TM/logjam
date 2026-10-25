@@ -1,6 +1,5 @@
 // Sharpened areas: a LiDAR job whose output is the statewide terrain formats
-// at the survey's own cell (topo/sharpen.py), instead of the styled layers of
-// a legacy job. Each one is a private DEM source, and every map tile comes
+// at the survey's own cell (topo/sharpen.py). Each one is a private DEM source, and every map tile comes
 // from exactly one archive: the statewide one or one area's.
 // docs/decisions/0040-a-sharpened-area-is-a-private-dem-source.md
 //

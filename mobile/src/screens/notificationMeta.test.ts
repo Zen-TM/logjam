@@ -61,14 +61,6 @@ describe("notificationMeta", () => {
     expect(notificationMeta(notification("topo_failed")).icon).toBe("warning");
   });
 
-  it("keeps a completion with a warning as a completion", () => {
-    // A finished topo job whose OSM fetch failed still produced a map.
-    const meta = notificationMeta(
-      notification("topo_complete", { osmFailed: true }),
-    );
-    expect(meta.kind).toBe("topo");
-  });
-
   it("gives an unknown type a glyph rather than nothing", () => {
     const meta = notificationMeta(
       notification("something_new_from_the_server"),

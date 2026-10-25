@@ -9,7 +9,8 @@ import prisma from "../services/prisma";
 // No auth header = alice. These tests deliberately exercise only launch-free
 // surfaces (auth, list, validation, ownership, the uploading-state lifecycle) —
 // they never drive POST /:id/start to a real launch, which would spawn a
-// MiniStack worker container.
+// MiniStack worker container — except "/start marks the job to sharpen",
+// which does, and deletes the job (stopping the task) when it is done.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // Note: no unauthenticated-401 case — the integration suite runs only under
@@ -99,6 +100,63 @@ describe("topo-jobs route (fake auth)", () => {
     // Gone after delete.
     const goneRes = await request(API_URL).get(`/topo-jobs/${jobId}`).set(AUTH);
     expect(goneRes.status).toBe(404);
+  });
+
+  // A stored ZIP of one empty point-cloud file: all /start reads of it is the
+  // central directory.
+  function oneLazZip(name: string): Buffer {
+    const nameBytes = Buffer.from(name);
+    const local = Buffer.alloc(30 + nameBytes.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(nameBytes.length, 26);
+    nameBytes.copy(local, 30);
+    const central = Buffer.alloc(46 + nameBytes.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(nameBytes.length, 28);
+    nameBytes.copy(central, 46);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(1, 8);
+    eocd.writeUInt16LE(1, 10);
+    eocd.writeUInt32LE(central.length, 12);
+    eocd.writeUInt32LE(local.length, 16);
+    return Buffer.concat([local, central, eocd]);
+  }
+
+  // The worker refuses a job with no mark (OLD_JOB), and only CI's topo-e2e
+  // would otherwise notice /start forgetting it. This one does launch the
+  // worker (on a ZIP it cannot read), so it runs where the stack has ECS.
+  // Mutation: delete `sharpen: sharpenMark(...)` from /start.
+  it("/start marks the job to sharpen", async () => {
+    const createRes = await request(API_URL)
+      .post("/topo-jobs")
+      .set(AUTH)
+      .send({ jobName: "topo-start-mark-test" });
+    expect(createRes.status).toBe(201);
+    const { jobId, uploadUrl } = createRes.body;
+    try {
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/zip" },
+        body: oneLazZip("Kanangra201804-LID2-C3-AHD_2400004_56_0001_0001.laz"),
+      });
+      expect(put.status).toBe(200);
+      expect(
+        (await prisma.topoJob.findUnique({ where: { id: jobId } }))?.sharpen,
+      ).toBeNull();
+
+      // 200 when the stack launches the worker, 500 when it cannot: the mark
+      // is stored before either.
+      const startRes = await request(API_URL)
+        .post(`/topo-jobs/${jobId}/start`)
+        .set(AUTH);
+      expect([200, 500]).toContain(startRes.status);
+      expect(
+        (await prisma.topoJob.findUnique({ where: { id: jobId } }))?.sharpen,
+      ).toEqual({ v: 1, vegetation: expect.any(Boolean) });
+    } finally {
+      await request(API_URL).delete(`/topo-jobs/${jobId}`).set(AUTH);
+    }
   });
 
   it("a sharee polling the detail endpoint gets status fields, never the owner id or raw S3 keys", async () => {

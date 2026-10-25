@@ -473,7 +473,7 @@ model TopoJob {
   autoExportedAt      DateTime? @map("auto_exported_at")
   s3InputKey          String?   @map("s3_input_key")
   s3OutputKeys        Json?     @map("s3_output_keys")
-  // Null on a legacy job. /start writes { v: 1, vegetation } to mark a job to
+  // /start writes { v: 1, vegetation } to mark a job to
   // sharpen (topo/sharpen.py), and the worker replaces the mark with its
   // result: { v, zmax, tiles15, coverage, ground, extracted, keys, vegetation }.
   sharpen             Json?

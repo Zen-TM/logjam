@@ -76,7 +76,6 @@ describe("shownOverlays", () => {
   it("leaves no Terrain layer among the LiDAR-only ones", () => {
     expect(LIDAR_ONLY_OVERLAYS.map((layer) => layer.name)).toEqual([
       "vegetation",
-      "features",
     ]);
   });
 });

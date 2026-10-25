@@ -25,7 +25,6 @@ import type {
 import type {
   RegionBbox,
   StandaloneFile,
-  VectorStyleSettings,
   TopoExportJobView,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -163,8 +162,6 @@ function SidebarPanel({
   placeTypes,
   onPlaceTypesChange,
   // Vector styles
-  vectorStyle,
-  onVectorStyleChange,
   // Mobile: collapse the bottom sheet to peek during map-pick flows
   collapseToPeek,
 }: {
@@ -293,8 +290,6 @@ function SidebarPanel({
   onPlaceTypesChange: (types: TPlaceType[]) => void;
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Vector styles
-  vectorStyle: VectorStyleSettings | null;
-  onVectorStyleChange: (next: VectorStyleSettings) => void;
   // Mobile
   collapseToPeek: boolean;
 }) {
@@ -459,8 +454,6 @@ function SidebarPanel({
           <LidarPanel
             views={mapsViewRail}
             topoJobsLoaded={topoJobsLoaded}
-            onSheetOpenChange={onFiltersOpenChange}
-            onExpandSheet={expandSheetToFull}
             friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
@@ -471,8 +464,6 @@ function SidebarPanel({
             onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
             onDismissActiveJob={onDismissActiveJob}
             onQuotaChanged={onQuotaChanged}
-            vectorStyle={vectorStyle}
-            onVectorStyleChange={onVectorStyleChange}
           />
         )}
         {activePanel === "friends" && (
