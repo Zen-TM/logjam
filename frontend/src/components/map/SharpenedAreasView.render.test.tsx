@@ -58,13 +58,14 @@ const job = (over: Partial<CompletedTopoJob>): CompletedTopoJob => ({
   ...over,
 });
 
-function draw(jobs: CompletedTopoJob[]) {
+function draw(jobs: CompletedTopoJob[], loaded = true) {
   const props = {
     onBack: vi.fn(),
     onClose: vi.fn(),
     activeTopoJobs: [],
     completedTopoJobs: jobs,
     friends: [],
+    loaded,
     onSharpen: vi.fn(),
     onExportArea: vi.fn(),
     onFlyTo: vi.fn(),
@@ -115,6 +116,14 @@ describe("the sharpened areas view", () => {
     expect(
       screen.getByRole("menuitem", { name: "Export this area…" }),
     ).toBeTruthy();
+  });
+
+  // Mutation: drop the `loaded` gate and the view says "None yet." while the
+  // first fetch is still out.
+  it("says it is loading, not empty, until the first fetch settles", () => {
+    draw([], false);
+    expect(screen.getByText("Loading your sharpened areas…")).toBeTruthy();
+    expect(screen.queryByText(/None yet/)).toBeNull();
   });
 
   it("arms the pick from the Sharpen an area button", () => {

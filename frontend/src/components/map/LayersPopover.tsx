@@ -101,6 +101,7 @@ export default function LayersPopover({
   mapView,
   onImportFile,
   startView,
+  sharpenedLoaded,
   activeTopoJobs,
   friends,
   onSharpen,
@@ -132,8 +133,14 @@ export default function LayersPopover({
   mapView: { lng: number; lat: number; zoom: number } | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
-  /** Where to open instead of the Overlays tab, until the popover is closed. */
-  startView: "sharpened" | null;
+  /**
+   * A request to open on a sub-view instead of where the popover was. Each
+   * request is a new object, so asking again for the same view navigates
+   * again (Back, then the Inbox's Show once more).
+   */
+  startView: { view: "sharpened" } | null;
+  /** False until the first fetch of sharpened areas settles (shared/DESIGN.md §11). */
+  sharpenedLoaded: boolean;
   activeTopoJobs: TopoJob[];
   friends: TFriend[];
   /** Arms the pick for a new sharpened area, as the Make a map menu does. */
@@ -145,11 +152,17 @@ export default function LayersPopover({
   onQuotaChanged: () => void;
 }) {
   const [view, setView] = useState<View>("overlays");
-  // A new start view, set with `open` in one render, takes the popover there.
+  // However it closes (the button toggles `open` itself), the next opening
+  // starts on Overlays; a start request made in the same render wins.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setView("overlays");
+  }
   const [seenStartView, setSeenStartView] = useState(startView);
   if (seenStartView !== startView) {
     setSeenStartView(startView);
-    if (startView) setView(startView);
+    if (startView) setView(startView.view);
   }
 
   // Only a sharpened area made with the vegetation layer has one to switch.
@@ -186,6 +199,7 @@ export default function LayersPopover({
           activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
           friends={friends}
+          loaded={sharpenedLoaded}
           onSharpen={() => {
             close();
             onSharpen();
@@ -250,7 +264,9 @@ export default function LayersPopover({
                   activeLayerId={activeLayerId}
                   onOpenSlopeBands={() => setView("slopeBands")}
                   hasVegetation={hasVegetation}
-                  sharpenedCount={completedTopoJobs.length}
+                  sharpenedCount={
+                    sharpenedLoaded ? completedTopoJobs.length : null
+                  }
                   onOpenSharpened={() => setView("sharpened")}
                 />
               ),
@@ -335,7 +351,8 @@ export function TerrainPane({
   onOpenSlopeBands: () => void;
   /** Whether any sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
-  sharpenedCount: number;
+  /** Null until the first fetch settles. */
+  sharpenedCount: number | null;
   onOpenSharpened: () => void;
 }) {
   // One shape for all three, so the Slope row's chevron is the only difference.
@@ -402,7 +419,11 @@ export function TerrainPane({
     sharpenedAreas: () => (
       <Row
         key="sharpenedAreas"
-        title={`${terrainCopy.sharpenedAreas} · ${sharpenedCount}`}
+        title={
+          sharpenedCount === null
+            ? terrainCopy.sharpenedAreas
+            : `${terrainCopy.sharpenedAreas} · ${sharpenedCount}`
+        }
         onOpen={onOpenSharpened}
       />
     ),

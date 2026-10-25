@@ -191,9 +191,9 @@ function App() {
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
   // The Inbox's "Show" opens the popover on the sharpened areas.
-  const [layersStartView, setLayersStartView] = useState<"sharpened" | null>(
-    null,
-  );
+  const [layersStartView, setLayersStartView] = useState<{
+    view: "sharpened";
+  } | null>(null);
   const layersButtonRef = useRef<HTMLButtonElement>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
@@ -359,8 +359,11 @@ function App() {
   const loadsUserData = authenticated && consentSettled;
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
-  const { jobs: completedTopoJobs, refetch: refetchCompletedTopoJobs } =
-    useCompletedTopoJobs(loadsUserData, authenticated);
+  const {
+    jobs: completedTopoJobs,
+    loaded: completedTopoJobsLoaded,
+    refetch: refetchCompletedTopoJobs,
+  } = useCompletedTopoJobs(loadsUserData, authenticated);
   // One toast for the whole session, however many vegetation sources fail.
   const topoUnavailableToastShownRef = useRef(false);
 
@@ -1548,7 +1551,7 @@ function App() {
           onClose={handlePanelClose}
           onTopoFlyTarget={setTopoFlyTarget}
           onShowSharpened={() => {
-            setLayersStartView("sharpened");
+            setLayersStartView({ view: "sharpened" });
             setLayersOpen(true);
           }}
           logsView={logsView}
@@ -1888,12 +1891,10 @@ function App() {
       <LayersPopover
         onImportFile={() => setShowUnifiedImport(true)}
         open={layersOpen}
-        onClose={() => {
-          setLayersOpen(false);
-          setLayersStartView(null);
-        }}
+        onClose={() => setLayersOpen(false)}
         anchorRef={layersButtonRef}
         startView={layersStartView}
+        sharpenedLoaded={completedTopoJobsLoaded}
         activeTopoJobs={activeTopoJobs}
         friends={friends}
         onSharpen={() => setShowTopo(true)}

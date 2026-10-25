@@ -24,6 +24,7 @@ import {
   Button,
   IconButton,
   IconTile,
+  LoadingState,
   Menu,
   Row,
   StatusPill,
@@ -45,6 +46,7 @@ export default function SharpenedAreasView({
   activeTopoJobs,
   completedTopoJobs,
   friends,
+  loaded,
   onSharpen,
   onExportArea,
   onFlyTo,
@@ -58,6 +60,8 @@ export default function SharpenedAreasView({
   completedTopoJobs: CompletedTopoJob[];
   /** Friends a completed area can be shared with. */
   friends: TFriend[];
+  /** False until the first fetch of completed areas settles (shared/DESIGN.md §11). */
+  loaded: boolean;
   /** Arms the pick, as the Make a map menu does. */
   onSharpen: () => void;
   /** Export an area, over a sharpened area's footprint. */
@@ -145,7 +149,10 @@ export default function SharpenedAreasView({
     // A topo is only ever shared DIRECTLY — it has no place to inherit
     // visibility from — so a shared row always has a share of its own to drop
     // (api/src/lib/shareAccess.unit.test.ts).
-    const confirm = removeShareConfirm({ kindLabel: "topo", itemName: label });
+    const confirm = removeShareConfirm({
+      kindLabel: "sharpened area",
+      itemName: label,
+    });
     return [
       ...exportEntry,
       { id: "remove-sep", separator: true },
@@ -182,18 +189,21 @@ export default function SharpenedAreasView({
         <IconButton icon="back" label="Back to terrain" onClick={onBack} />
         <div className={classes.titleBlock}>
           <span className={classes.title}>Sharpened areas</span>
-          <span className={classes.subtitle}>
-            {completedTopoJobs.length === 1
-              ? "1 area"
-              : `${completedTopoJobs.length} areas`}
-          </span>
+          {loaded && (
+            <span className={classes.subtitle}>
+              {completedTopoJobs.length === 1
+                ? "1 area"
+                : `${completedTopoJobs.length} areas`}
+            </span>
+          )}
         </div>
         <IconButton icon="close" label="Close" onClick={onClose} />
       </div>
       <div className={classes.body}>
-        {completedTopoJobs.length === 0 && (
+        {!loaded && <LoadingState label="Loading your sharpened areas…" />}
+        {loaded && completedTopoJobs.length === 0 && (
           <div className={classes.emptyLine}>
-            <span>None yet.</span>
+            <span>None yet. Pick an area and sharpen it.</span>
           </div>
         )}
         {completedTopoJobs.map((job) => {
