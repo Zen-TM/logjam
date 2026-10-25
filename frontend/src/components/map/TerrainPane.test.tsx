@@ -7,9 +7,9 @@ afterEach(cleanup);
 
 const copy = MAP_TERRAIN.copy;
 
-function draw(activeLayerId = "protomaps") {
+function draw(activeLayerId = "protomaps", layers = TERRAIN_LAYER_DEFAULTS) {
   const props = {
-    layers: TERRAIN_LAYER_DEFAULTS,
+    layers,
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
@@ -68,5 +68,25 @@ describe("the Terrain group on Logjam Web", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(false);
+  });
+
+  // Mutation: read `layers[key]` alone as `checked`, and a stored-on switch
+  // shows ON over a basemap that draws nothing for it.
+  it("reads off while a basemap disables it, and on again elsewhere", () => {
+    const on = (name: string) =>
+      (screen.getByRole("switch", { name }) as HTMLButtonElement).getAttribute(
+        "aria-checked",
+      );
+    const stored = { contours: true, slope: true, hillshade: true };
+    draw("six-imagery", stored);
+    expect(on("Show hillshade")).toBe("false");
+    cleanup();
+    draw("six-topo", stored);
+    expect(on("Show contours")).toBe("false");
+    expect(on("Show slope")).toBe("true");
+    cleanup();
+    draw("protomaps", stored);
+    expect(on("Show contours")).toBe("true");
+    expect(on("Show hillshade")).toBe("true");
   });
 });

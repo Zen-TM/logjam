@@ -393,7 +393,9 @@ export function TerrainPane({
           <>
             {extra}
             <Toggle
-              checked={layers[key]}
+              // Off while nothing can draw it; the stored choice returns with
+              // the basemap that can.
+              checked={layers[key] && !printed && !shadowed}
               onChange={(on) => onChange(key, on)}
               label={`Show ${title.toLowerCase()}`}
               disabled={printed || shadowed}

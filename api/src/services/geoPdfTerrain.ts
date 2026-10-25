@@ -16,6 +16,8 @@
 // in this file logs.
 import {
   DEM_NO_DATA_BELOW,
+  drawsNswContours,
+  drawsNswHillshade,
   lat2tileY,
   lon2tileX,
   metersPerPixel,
@@ -416,4 +418,27 @@ export function terrainCreditLines(
     ...[...areas].map(([area, layers]) => terrainCredit(layers, area.credit)),
   ].filter((line): line is string => line !== null);
   return [...new Set(lines)];
+}
+
+/**
+ * Which of the statewide shade and contours a print draws: the ones in its
+ * overlays, minus those its base sheet already carries (imagery its own
+ * shadows, a topographic sheet its own contours). A saved request, an older
+ * client or a direct call can ask for either over any sheet, so the renderer
+ * decides, not the dialog. Guard: `geoPdfTerrain.unit.test.ts` ("overlaysDrawn").
+ */
+export function overlaysDrawn(config: {
+  baseLayer: string;
+  overlays: readonly string[];
+}): { hillshade: boolean; contours: boolean } {
+  return {
+    hillshade: drawsNswHillshade(
+      config.baseLayer,
+      config.overlays.includes("hillshade"),
+    ),
+    contours: drawsNswContours(
+      config.baseLayer,
+      config.overlays.includes("contours"),
+    ),
+  };
 }

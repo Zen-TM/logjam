@@ -13,6 +13,7 @@ import {
   type SharpenedArea,
   AREA_EXPORT_TOO_LARGE,
   GEOPDF_TOO_LARGE,
+  MAP_TERRAIN,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
 import { apiFetch } from "../../placeUtils";
@@ -97,6 +98,7 @@ function dialog({
   sharpenedAreas?: SharpenedArea[];
   onPickArea?: () => void;
   pendingArea?: TBbox | null;
+  terrainLayers?: typeof TERRAIN_LAYER_DEFAULTS;
 }) {
   return (
     <ToastProvider>
@@ -308,6 +310,45 @@ describe("GeoPdfDialog, the Terrain layers", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
     expect(contours().disabled).toBe(false);
     expect(contours().checked).toBe(true);
+  });
+
+  // Mutation: drop `shadowed` from the Hillshade checkbox (it stays ticked and
+  // enabled over photographs), or drop the `.filter` on submit (a hillshade
+  // chosen on the topo sheet is still sent over imagery).
+  it("keeps hillshade off imagery: disabled, unticked, and not sent", async () => {
+    vi.mocked(apiFetch).mockClear();
+    render(
+      dialog({
+        open: true,
+        pendingExtent: {
+          north: -33.7,
+          south: -33.75,
+          east: 150.35,
+          west: 150.3,
+        },
+        pendingScale: 25000,
+        terrainLayers: { ...TERRAIN_LAYER_DEFAULTS, hillshade: true },
+      }),
+    );
+    const hillshade = () =>
+      screen.getByRole("checkbox", { name: /Hillshade/ }) as HTMLInputElement;
+    expect(hillshade().disabled).toBe(false);
+    expect(hillshade().checked).toBe(true);
+
+    fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
+    expect(hillshade().disabled).toBe(true);
+    expect(hillshade().checked).toBe(false);
+    expect(screen.getByText(MAP_TERRAIN.copy.hillshadeImagery)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => {
+      const post = vi
+        .mocked(apiFetch)
+        .mock.calls.find(([path]) => path === "/geo-pdf");
+      expect(post).toBeTruthy();
+      const body = (post![1] as { body: { overlays: string[] } }).body;
+      expect(body.overlays).not.toContain("hillshade");
+    });
   });
 });
 
