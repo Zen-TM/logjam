@@ -139,9 +139,6 @@ export const SCHEMA_SQL = `
           altitudeAccuracyM  REAL,
           PRIMARY KEY (trackId, seq)
         );
-        CREATE TABLE IF NOT EXISTS overlay_enabled (
-          overlayKey TEXT PRIMARY KEY
-        );
         -- The route being drawn right now, so an OS kill mid-draw doesn't
         -- lose it. At most one row (id = 1). Lives HERE rather than in
         -- logjam-prefs.db because it holds coordinates: this database is
@@ -158,6 +155,9 @@ export const SCHEMA_SQL = `
         -- downloads are discovered by reading the region directory directly,
         -- so the file is the checkpoint.
         DROP TABLE IF EXISTS region_download;
+        -- Likewise overlay_enabled: which topo overlay cells were switched on.
+        -- The one overlay left is the Terrain tab's vegetation switch.
+        DROP TABLE IF EXISTS overlay_enabled;
         -- Legacy waypoint table cleanup is handled by migrateLegacyWaypoints,
         -- which drains surviving rows into the sync mirror and drops the table
         -- itself. Do not DROP TABLE here: this SQL runs on every open ahead of

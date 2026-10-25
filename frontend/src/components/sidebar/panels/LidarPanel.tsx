@@ -7,10 +7,8 @@
 // visible.
 //
 // A topo's body CENTRES the map on it (DESIGN.md, "Opening a thing centres
-// the map on it"), and turns LiDAR topos on so there is something there to see.
-// Whether a topo is DRAWN is not this page's business: visibility belongs to
-// the layer (DESIGN.md), which keeps the switch in Layers → LiDAR topos rather
-// than duplicating it here.
+// the map on it"). A sharpened area is drawn by the Terrain group, so whether
+// it is drawn is not this page's business.
 import { useMemo, useState } from "react";
 import {
   LIDAR_JOB_COPY,
@@ -62,7 +60,6 @@ export default function LidarPanel({
   completedTopoJobs,
   topoJobsLoaded,
   friends,
-  setLidarJobToggles,
   onOpenTopo,
   onExportArea,
   onTopoFlyTarget,
@@ -78,12 +75,6 @@ export default function LidarPanel({
   topoJobsLoaded: boolean;
   /** Friends a completed topo can be shared with. */
   friends: TFriend[];
-  /** Only to forget a deleted topo's visibility; the switch itself is in Layers. */
-  setLidarJobToggles: (
-    v:
-      | Record<string, boolean>
-      | ((prev: Record<string, boolean>) => Record<string, boolean>),
-  ) => void;
   onOpenTopo: () => void;
   /** Export an area, over a topo's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
@@ -150,11 +141,6 @@ export default function LidarPanel({
                 try {
                   await apiFetch(`/topo-jobs/${job.jobId}`, {
                     method: "DELETE",
-                  });
-                  setLidarJobToggles((previous) => {
-                    const next = { ...previous };
-                    delete next[job.jobId];
-                    return next;
                   });
                   onRefetchCompletedTopoJobs();
                   onQuotaChanged();

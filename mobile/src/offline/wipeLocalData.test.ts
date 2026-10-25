@@ -136,7 +136,6 @@ describe("wipeAllLocalData", () => {
       "track_point",
       "geo_pdf_import",
       "route_draft",
-      "overlay_enabled",
     ]) {
       expect(events).toContain(`sql:DELETE FROM ${table}`);
     }

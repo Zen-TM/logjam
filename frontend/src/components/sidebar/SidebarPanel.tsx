@@ -107,7 +107,6 @@ function SidebarPanel({
   topoExportsLoaded,
   topoExportsError,
   onRefetchTopoExports,
-  setLidarJobToggles,
   onOpenTopo,
   onOpenExport,
   onExportArea,
@@ -214,11 +213,6 @@ function SidebarPanel({
   topoExportsLoaded: boolean;
   topoExportsError: string | null;
   onRefetchTopoExports: () => void;
-  setLidarJobToggles: (
-    v:
-      | Record<string, boolean>
-      | ((prev: Record<string, boolean>) => Record<string, boolean>),
-  ) => void;
   onOpenTopo: () => void;
   /** Export an area, from the Exports view. */
   onOpenExport: () => void;
@@ -457,7 +451,6 @@ function SidebarPanel({
             friends={friends}
             activeTopoJobs={activeTopoJobs}
             completedTopoJobs={completedTopoJobs}
-            setLidarJobToggles={setLidarJobToggles}
             onOpenTopo={onOpenTopo}
             onExportArea={onExportArea}
             onTopoFlyTarget={onTopoFlyTarget}

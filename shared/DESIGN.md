@@ -327,7 +327,7 @@ renumber.
   it. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now.
-- **Overlays divide by what a thing is** (Places, Ways, LiDAR topos). Whose
+- **Overlays divide by what a thing is** (Places, Ways). Whose
   it is lives on the thing: the shared ring, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.

@@ -179,8 +179,8 @@ function GuestExplainer({
         what you&apos;ve already recorded.
       </Text>
       <Text style={styles.body}>
-        Sharing with friends and LiDAR maps from Logjam Web need an account.
-        Downloaded topos work without one.
+        Sharing with friends and sharpened areas from Logjam Web need an
+        account. Downloaded topos work without one.
       </Text>
       {/* "Continue anyway" is this panel's submit — a failure to store the
           choice belongs directly above it (shared/DESIGN.md §11). */}

@@ -5,7 +5,7 @@
 // tiny synchronous store, for the same reason — the map's FIRST frame has to be
 // the right one, and a basemap that swaps a beat after the screen appears
 // re-fetches every tile it just drew.
-import { normalizeTerrainLayers, type TerrainLayerKey } from "@logjam/shared";
+import { normalizeTerrainLayers, type TerrainSwitchKey } from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
 import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
@@ -24,7 +24,7 @@ export function readBasemapPreference(): BasemapId {
 const TERRAIN_LAYERS_PREF_KEY = "mapTerrainLayers";
 
 /** The Terrain group's switches (shared terrain.ts), defaults where unset. */
-export function readTerrainLayers(): Record<TerrainLayerKey, boolean> {
+export function readTerrainLayers(): Record<TerrainSwitchKey, boolean> {
   try {
     return normalizeTerrainLayers(
       JSON.parse(readPref(TERRAIN_LAYERS_PREF_KEY) ?? "null"),
@@ -35,7 +35,7 @@ export function readTerrainLayers(): Record<TerrainLayerKey, boolean> {
 }
 
 export function setTerrainLayers(
-  layers: Record<TerrainLayerKey, boolean>,
+  layers: Record<TerrainSwitchKey, boolean>,
 ): boolean {
   return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }

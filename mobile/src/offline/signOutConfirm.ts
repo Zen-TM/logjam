@@ -82,7 +82,7 @@ const LINES: { loss: Loss; text: (n: number, c: SignOutCounts) => string }[] = [
     text: (n) =>
       `${pluralCount(n, "imported GeoPDF")}. An imported file can only come back from the original file.`,
   },
-  { loss: "topos", text: (n) => pluralCount(n, "LiDAR topo") },
+  { loss: "topos", text: (n) => pluralCount(n, "sharpened area") },
 ];
 
 /**

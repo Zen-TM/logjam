@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
-import { TERRAIN_LAYER_KEYS } from "../terrain.js";
+import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
@@ -611,12 +611,14 @@ describe("the map's layers", () => {
     ]);
   });
 
-  // Mutation: reorder the contract's rows or TERRAIN_LAYER_KEYS alone, and a
+  // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(TERRAIN_LAYER_KEYS);
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(
+      TERRAIN_SWITCH_KEYS,
+    );
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
-      ...TERRAIN_LAYER_KEYS,
+      ...TERRAIN_SWITCH_KEYS,
       "slopeBands",
     ]);
   });
@@ -737,14 +739,12 @@ describe("the map's overlays list", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
-      "lidarTopos",
       "importFile",
     ]);
     expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
       "places",
       "ways",
       "geoPdfs",
-      "lidarTopos",
       "importFile",
     ]);
   });

@@ -151,12 +151,15 @@ describe("the statewide slope and hillshade", () => {
 });
 
 describe("normalizeTerrainLayers", () => {
-  it("reads nothing stored as the defaults: contours and slope", () => {
+  // Mutation: default vegetation to false and a sharpened area's vegetation
+  // layer, which its owner asked for, is hidden until the user finds the switch.
+  it("reads nothing stored as the defaults: contours, slope and any vegetation", () => {
     expect(normalizeTerrainLayers(null)).toEqual(TERRAIN_LAYER_DEFAULTS);
     expect(TERRAIN_LAYER_DEFAULTS).toEqual({
       contours: true,
       slope: true,
       hillshade: false,
+      vegetation: true,
     });
   });
 
@@ -165,7 +168,11 @@ describe("normalizeTerrainLayers", () => {
       contours: false,
       slope: true,
       hillshade: false,
+      vegetation: true,
     });
+    expect(normalizeTerrainLayers({ vegetation: false }).vegetation).toBe(
+      false,
+    );
   });
 });
 

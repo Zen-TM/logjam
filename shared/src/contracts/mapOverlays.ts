@@ -20,14 +20,12 @@ export const MAP_OVERLAYS = {
       reason:
         "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web draws them from its Maps panel.",
     },
-    { key: "lidarTopos" },
     { key: "importFile" },
   ],
   copy: {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
     geoPdfs: "GeoPDF maps",
-    lidarTopos: MAP_LAYERS.copy.lidarTopos,
     importFile: MAP_LAYERS.copy.importFile,
   },
 } as const satisfies ScreenContract;

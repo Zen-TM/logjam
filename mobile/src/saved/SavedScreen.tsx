@@ -264,7 +264,11 @@ const CATEGORY_META: Record<
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
-  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "lidar" },
+  overlay: {
+    label: "Sharpened area",
+    plural: "Sharpened areas",
+    icon: "lidar",
+  },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
   // Routes you drew, as opposed to files you brought in. Kept a separate
   // category rather than folded into "import": a route is editable in place and
@@ -2259,7 +2263,7 @@ export function SavedScreen({
               down, which is more like each other than either is like a
               basemap download. */}
           <Row
-            title="LiDAR topos from my account"
+            title="Sharpened areas from my account"
             icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
@@ -2630,12 +2634,12 @@ function EmptyPanel({
       hint: "Without a saved region the map is blank once you lose signal.",
     },
     overlay: {
-      title: "No LiDAR topos here",
+      title: "No sharpened areas here",
       hint: isGuest
-        ? "LiDAR topos are generated on Logjam Web and need a Logjam account."
+        ? "Logjam Web makes sharpened areas, and they need a Logjam account."
         : online
-          ? "Save topo overlays you make on Logjam Web for offline use."
-          : "Connect to see the overlays on your account.",
+          ? "Save the sharpened areas you make on Logjam Web for offline use."
+          : "Connect to see the sharpened areas on your account.",
     },
     geoPdf: {
       title: "No GeoPDF maps",

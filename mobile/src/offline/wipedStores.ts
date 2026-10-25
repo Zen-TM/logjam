@@ -66,7 +66,6 @@ export const OFFLINE_TABLE_FATE = {
   track_point: { loses: ["recordings"] },
   track_point_rejected: { loses: ["recordings"] },
   track: { loses: ["recordings"] },
-  overlay_enabled: { keeps: "Which overlays are switched on: a view setting." },
   route_draft: { loses: ["routeDraft"] },
 } as const satisfies Record<string, StoreFate>;
 

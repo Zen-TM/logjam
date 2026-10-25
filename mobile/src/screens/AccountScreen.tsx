@@ -133,8 +133,8 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         />
         <Row
           icon="lidar"
-          title="LiDAR maps"
-          subtitle="Import topos from Logjam Web"
+          title="Sharpened areas"
+          subtitle="Save the areas you sharpen on Logjam Web"
         />
 
         <SectionHeader title="Get an account" />
