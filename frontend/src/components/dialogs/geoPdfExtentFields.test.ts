@@ -18,8 +18,6 @@ const baseState: ExtentState = {
   west: 150.2,
   scale: 25000,
   coordMode: "latlon",
-  lockMode: "scale",
-  pivot: "mc",
 };
 
 const values = (over: Partial<Record<"n" | "s" | "e" | "w", string>>) => ({

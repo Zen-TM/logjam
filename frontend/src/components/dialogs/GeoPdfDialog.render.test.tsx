@@ -290,6 +290,50 @@ describe("GeoPdfDialog, Type the edges", () => {
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
   });
 
+  // Typing an edge moves the box: the opposite edge follows by the same step
+  // and East and West refit the paper. Mutation: make `applyNorthChange` set
+  // only the north edge (a resize), and South stays put.
+  it("moves the box when a GeoPDF edge is typed, the other edges following", () => {
+    render(
+      dialog({
+        open: true,
+        pendingExtent: {
+          north: -33.7,
+          south: -33.75,
+          east: 150.35,
+          west: 150.3,
+        },
+        pendingScale: 25000,
+      }),
+    );
+    typeEdges();
+    const edge = (name: string) =>
+      Number.parseFloat(
+        (screen.getByRole("textbox", { name }) as HTMLInputElement).value,
+      );
+    const before = {
+      south: edge("South"),
+      east: edge("East"),
+      west: edge("West"),
+    };
+
+    const north = screen.getByRole("textbox", { name: "North" });
+    fireEvent.change(north, { target: { value: "-33.69" } });
+    fireEvent.blur(north);
+
+    expect(edge("North")).toBeCloseTo(-33.69, 5);
+    expect(edge("South")).toBeCloseTo(before.south + 0.01, 5);
+    // The paper's ratio refits the other axis, about its centre.
+    expect(edge("East") - edge("West")).not.toBeCloseTo(
+      before.east - before.west,
+      5,
+    );
+    expect((edge("East") + edge("West")) / 2).toBeCloseTo(
+      (before.east + before.west) / 2,
+      5,
+    );
+  });
+
   // The lock and the pivot are gone: typing an edge moves the box. Mutation:
   // bring either control back.
   it("has no pivot or lock, and shows the four edges", () => {
@@ -377,7 +421,7 @@ describe("GeoPdfDialog, the Terrain layers", () => {
   it("offers contours over imagery, and says the topo sheet prints its own", () => {
     render(dialog({ open: true }));
     expect(contours().disabled).toBe(true);
-    expect(screen.getByText("Contours: This map prints its own.")).toBeTruthy();
+    expect(screen.getByText("This map prints its own contours.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
     expect(contours().disabled).toBe(false);
@@ -412,7 +456,7 @@ describe("GeoPdfDialog, the Terrain layers", () => {
     expect(hillshade().disabled).toBe(true);
     expect(pressed()).toBe(false);
     expect(
-      screen.getByText(`Hillshade: ${MAP_TERRAIN.copy.hillshadeImagery}.`),
+      screen.getByText(`${MAP_TERRAIN.copy.hillshadeImagery}.`),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));

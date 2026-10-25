@@ -267,6 +267,7 @@ export function ChipRail<T extends string>({
   onChange,
   trailing,
   className,
+  hint,
 }: {
   /** The group's accessible name — "Place type", "Status". */
   label: string;
@@ -276,7 +277,11 @@ export function ChipRail<T extends string>({
   /** Rendered after the group, inside the scroller (an "add" chip). */
   trailing?: ReactNode;
   className?: string;
+  /** One plain sentence under the rail about the choice made, read with the
+   *  group (shared/DESIGN.md §12). */
+  hint?: string;
 }) {
+  const hintId = useId();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [edges, setEdges] = useState({ start: false, end: false });
@@ -356,45 +361,53 @@ export function ChipRail<T extends string>({
   }
 
   return (
-    <div
-      className={[classes.rail, className].filter(Boolean).join(" ")}
-      data-fade-start={edges.start}
-      data-fade-end={edges.end}
-    >
+    <>
       <div
-        ref={scrollerRef}
-        className={classes.scroller}
-        onScroll={updateEdges}
+        className={[classes.rail, className].filter(Boolean).join(" ")}
+        data-fade-start={edges.start}
+        data-fade-end={edges.end}
       >
-        {/* tabIndex -1: the chips are the tab stop; the group only hears their keys. */}
         <div
-          role="radiogroup"
-          aria-label={label}
-          tabIndex={-1}
-          className={classes.group}
-          onKeyDown={onKeyDown}
+          ref={scrollerRef}
+          className={classes.scroller}
+          onScroll={updateEdges}
         >
-          {options.map((option, index) => (
-            <Chip
-              key={option.value}
-              ref={(chip) => {
-                chipRefs.current[index] = chip;
-              }}
-              role="radio"
-              aria-checked={option.value === value}
-              tabIndex={index === tabStop ? 0 : -1}
-              disabled={option.disabled}
-              label={option.label}
-              count={option.count}
-              icon={option.icon}
-              hue={option.hue}
-              active={option.value === value}
-              onClick={() => onChange(option.value)}
-            />
-          ))}
+          {/* tabIndex -1: the chips are the tab stop; the group only hears their keys. */}
+          <div
+            role="radiogroup"
+            aria-label={label}
+            aria-describedby={hint ? hintId : undefined}
+            tabIndex={-1}
+            className={classes.group}
+            onKeyDown={onKeyDown}
+          >
+            {options.map((option, index) => (
+              <Chip
+                key={option.value}
+                ref={(chip) => {
+                  chipRefs.current[index] = chip;
+                }}
+                role="radio"
+                aria-checked={option.value === value}
+                tabIndex={index === tabStop ? 0 : -1}
+                disabled={option.disabled}
+                label={option.label}
+                count={option.count}
+                icon={option.icon}
+                hue={option.hue}
+                active={option.value === value}
+                onClick={() => onChange(option.value)}
+              />
+            ))}
+          </div>
+          {trailing}
         </div>
-        {trailing}
       </div>
-    </div>
+      {hint && (
+        <p id={hintId} className={classes.pickerHint}>
+          {hint}
+        </p>
+      )}
+    </>
   );
 }

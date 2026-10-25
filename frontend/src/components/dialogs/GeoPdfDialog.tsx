@@ -120,7 +120,6 @@ const ORIENTATION_OPTIONS: ChipOption<Orientation>[] = [
   { value: "landscape", label: "Landscape" },
 ];
 
-// The lock only decides what typing an edge does, so it is named for that.
 const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
   ...SCALE_PRESETS.map((scale) => ({
     value: `${scale}` as ScaleChoice,
@@ -180,8 +179,6 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
   west: 0,
   scale: 25000,
   coordMode: "latlon",
-  lockMode: "scale",
-  pivot: "mc",
 };
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -292,8 +289,8 @@ function GeoPdfDialog({
   const [gisLayers, setGisLayers] = useState<ReadonlySet<AreaExportLayer>>(
     () => new Set(AREA_EXPORT_LAYERS),
   );
-  // Its Exact edges: what is typed, held here so Make it can refuse an edge
-  // that shows an error, and whether they are open.
+  // Its typed edges, held here so Make it can refuse an edge that shows an
+  // error, and whether they are the view showing.
   const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
   const [gisAreaView, setGisAreaView] = useState<AreaView>("map");
@@ -334,8 +331,9 @@ function GeoPdfDialog({
   const [rawScale, setRawScale] = useState("");
   // Other was pressed: its field stays open even at a preset's number.
   const [scaleOtherPicked, setScaleOtherPicked] = useState(false);
-  // Exact edges starts closed on every open; Make it opens it when a field
-  // inside needs fixing, so the field the banner points at can be seen.
+  // The area view starts on the map on every open; Make it switches to Type
+  // the edges when a field there needs fixing, so the field the banner points
+  // at can be seen.
   const [areaView, setAreaView] = useState<AreaView>("map");
 
   // The last settings, applied over the form once per genuine open. A field
@@ -484,12 +482,13 @@ function GeoPdfDialog({
     () => ownJobInArea(completedTopoJobs, extentState),
     [completedTopoJobs, extentState],
   );
-  // Why a Terrain chip is off on this sheet, or null when it is on offer.
+  // Why a Terrain chip is off on this sheet, as the sentence the group's hint
+  // says, or null when it is on offer.
   const offReason = (key: TerrainLayerKey): string | null =>
     key === "contours" && contoursPrintedHere(selectedBaseLayer, lidarOverlap)
-      ? MAP_TERRAIN.copy.contoursPrinted
+      ? "This map prints its own contours."
       : key === "hillshade" && hillshadeShadowedHere(selectedBaseLayer)
-        ? MAP_TERRAIN.copy.hillshadeImagery
+        ? `${MAP_TERRAIN.copy.hillshadeImagery}.`
         : null;
   const overlays = useMemo(
     () =>
@@ -835,10 +834,8 @@ function GeoPdfDialog({
                 setFormat(next);
                 setError(null);
               }}
+              hint={gisFormat ? GIS_FORMAT_NOTES[gisFormat] : undefined}
             />
-            {gisFormat && (
-              <p className={classes.note}>{GIS_FORMAT_NOTES[gisFormat]}</p>
-            )}
           </section>
 
           {gisFormat ? (
@@ -1200,12 +1197,9 @@ function GeoPdfDialog({
                   )}
                   onToggle={toggleOverlay}
                   hint={
-                    TERRAIN_LAYER_KEYS.flatMap((key) => {
-                      const reason = offReason(key);
-                      return reason
-                        ? [`${MAP_TERRAIN.copy[key]}: ${reason}.`]
-                        : [];
-                    }).join(" ") || undefined
+                    TERRAIN_LAYER_KEYS.map(offReason)
+                      .filter(Boolean)
+                      .join(" ") || undefined
                   }
                 />
                 <ChipPicker
@@ -1433,7 +1427,7 @@ const EDGE_OF: Record<ExtentFieldKey, keyof TBbox> = {
 
 /**
  * A GIS format's area and layers. The area is a free box, drawn on the map or
- * typed edge by edge, so there is no paper, scale or pivot; its size shows,
+ * typed edge by edge, so there is no paper or scale; its size shows,
  * never its corners (shared/DESIGN.md §13).
  */
 function AreaExportFields({

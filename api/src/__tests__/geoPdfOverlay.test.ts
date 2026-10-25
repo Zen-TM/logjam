@@ -55,8 +55,6 @@ const PAPER: ExtentState = {
   west: 0,
   scale: 25000,
   coordMode: "latlon",
-  lockMode: "scale",
-  pivot: "mc",
 };
 // Katoomba's latitude, out in the Tasman Sea: no statewide archive has a tile
 // there, so a job's overlay is the only thing a page can paint, whatever a
