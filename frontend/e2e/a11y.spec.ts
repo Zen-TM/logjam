@@ -692,7 +692,7 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Export an area: GeoPDF, its extent grid, and For GIS", async ({
+  test("Export an area: GeoPDF, its edges, and a GIS format", async ({
     page,
   }) => {
     await openApp(page);
@@ -711,12 +711,9 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Exact edges opens the four edges, the pivot radiogroup and two more
-    // rails in the same scrolling body.
-    await dialog.getByText("Exact edges").click();
-    await expect(
-      dialog.getByRole("radiogroup", { name: "Pivot" }),
-    ).toBeVisible();
+    // Type the edges swaps the map button for the four edges.
+    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
     // Other opens the typed scale under the presets.
@@ -733,13 +730,11 @@ test.describe("desktop", () => {
 
     await dialog.getByRole("radio", { name: "A4" }).click();
 
-    // For GIS swaps the paper for a free box, its edges and the format's layers.
-    await dialog.getByText("For GIS").click();
+    // A GIS format swaps the paper for a free box, its edges and the
+    // format's layers.
     await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
-    await expect(
-      dialog.getByRole("checkbox", { name: "Heights" }),
-    ).toBeVisible();
-    await dialog.getByText("Exact edges").click();
+    await expect(dialog.getByRole("button", { name: "Heights" })).toBeVisible();
+    await dialog.getByRole("radio", { name: "Type the edges" }).click();
     await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 

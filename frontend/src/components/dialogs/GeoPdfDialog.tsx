@@ -41,7 +41,6 @@ import type {
   PaperSize,
   Orientation,
   CoordMode,
-  PivotPoint,
 } from "@logjam/shared";
 import {
   getPaperDimensions,
@@ -54,7 +53,6 @@ import {
   applyScaleChange,
   applyPaperChange,
   applyOrientationChange,
-  applyPivotChange,
   applyCoordModeChange,
   extentFromCentreAndSize,
 } from "@logjam/shared";
@@ -95,9 +93,9 @@ import {
 import {
   Button,
   Checkbox,
+  ChipPicker,
   ChipRail,
   Dialog,
-  InfoTip,
   SectionHeader,
   SettingsRow,
   TextField,
@@ -112,21 +110,6 @@ import classes from "./GeoPdfDialog.module.css";
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const PAPER_SIZES: PaperSize[] = ["A2", "A3", "A4", "A5", "custom"];
-// The pivot's nine points, in reading order, with the name a reader hears:
-// the grid SHOWS which corner is anchored, so the words are the control's
-// accessible name rather than a caption under it (DESIGN.md).
-const PIVOT_POINTS: { value: PivotPoint; label: string }[] = [
-  { value: "tl", label: "Top left" },
-  { value: "tc", label: "Top centre" },
-  { value: "tr", label: "Top right" },
-  { value: "ml", label: "Middle left" },
-  { value: "mc", label: "Centre" },
-  { value: "mr", label: "Middle right" },
-  { value: "bl", label: "Bottom left" },
-  { value: "bc", label: "Bottom centre" },
-  { value: "br", label: "Bottom right" },
-];
-
 const PAPER_OPTIONS: ChipOption<PaperSize>[] = PAPER_SIZES.map((size) => ({
   value: size,
   label: size === "custom" ? "Custom" : size,
@@ -138,11 +121,6 @@ const ORIENTATION_OPTIONS: ChipOption<Orientation>[] = [
 ];
 
 // The lock only decides what typing an edge does, so it is named for that.
-const LOCK_OPTIONS: ChipOption<ExtentState["lockMode"]>[] = [
-  { value: "scale", label: "Moves the box" },
-  { value: "position", label: "Resizes it" },
-];
-
 const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
   ...SCALE_PRESETS.map((scale) => ({
     value: `${scale}` as ScaleChoice,
@@ -151,19 +129,16 @@ const SCALE_OPTIONS: ChipOption<ScaleChoice>[] = [
   { value: "other", label: "Other" },
 ];
 
-/** What is made: a GeoPDF, or under For GIS one of the area formats. */
+/** What is made: a GeoPDF, or one of the area formats for GIS. */
 type FormatChoice = "geopdf" | AreaExportFormat;
 
-const GEOPDF_OPTION: ChipOption<FormatChoice>[] = [
+const FORMAT_OPTIONS: ChipOption<FormatChoice>[] = [
   { value: "geopdf", label: "GeoPDF" },
-];
-
-const GIS_OPTIONS: ChipOption<FormatChoice>[] = AREA_EXPORT_FORMATS.map(
-  (format) => ({
+  ...AREA_EXPORT_FORMATS.map((format) => ({
     value: format,
     label: EXPORT_FORMAT_LABELS[format],
-  }),
-);
+  })),
+];
 
 const GIS_FORMAT_NOTES: Record<AreaExportFormat, string> = {
   geotiff:
@@ -178,12 +153,22 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "enNorthing", label: "E/N" },
 ];
 
-const LOCK_TOOLTIP =
-  "Moves the box keeps the scale; Resizes it keeps the opposite edge and changes the scale.";
+/** How the area is set: framed on the map, or typed as four edges. */
+type AreaView = "map" | "edges";
+
+const AREA_VIEW_OPTIONS: ChipOption<AreaView>[] = [
+  { value: "map", label: "On the map" },
+  { value: "edges", label: "Type the edges" },
+];
+
+// The Overlays group's chips that are not layers of the map.
+const MY_PLACES = "my-places";
+const SHARED_PLACES = "shared-places";
+const SHARED_PLACES_HINT =
+  "Shared places are ones a friend shared with you, not with whoever you hand the PDF to.";
+
 const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
-const PIVOT_TOOLTIP =
-  "The part of the box that stays put while the rest of it moves.";
 const SCALE_TOOLTIP = `1:${(25000).toLocaleString()} means 1 cm on the paper is 250 m on the ground.`;
 
 const DEFAULT_EXTENT_STATE: ExtentState = {
@@ -216,7 +201,6 @@ function GeoPdfDialog({
   places,
   sharedPlaces,
   onJobQueued,
-  openWithGis,
   areaSeed,
   onPickArea,
   pendingArea,
@@ -244,8 +228,6 @@ function GeoPdfDialog({
   places?: TPlace[];
   sharedPlaces?: TPlace[];
   onJobQueued?: (job: GeoPdfJobView) => void;
-  /** Open on GeoTIFF with For GIS open, as the Exports page does. */
-  openWithGis?: boolean;
   /** The box this opening was given (a selection's, a topo's footprint), which
    *  a GIS format's area starts from. */
   areaSeed?: TBbox | null;
@@ -302,10 +284,8 @@ function GeoPdfDialog({
     false,
   );
 
-  // What is made: GeoPDF with For GIS closed, unless `openWithGis` (the render
-  // tests "opens on GeoPDF with For GIS closed" and "opens on GeoTIFF").
+  // What is made: a GeoPDF on every open (the render test "opens on GeoPDF").
   const [format, setFormat] = useState<FormatChoice>("geopdf");
-  const [gisOpen, setGisOpen] = useState(false);
   // A GIS format's box, once drawn or typed; until then it starts from the
   // opening's box, else the GeoPDF's.
   const [gisBox, setGisBox] = useState<TBbox | null>(null);
@@ -316,7 +296,7 @@ function GeoPdfDialog({
   // that shows an error, and whether they are open.
   const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
-  const [gisEdgesOpen, setGisEdgesOpen] = useState(false);
+  const [gisAreaView, setGisAreaView] = useState<AreaView>("map");
   // Make it was pressed with something missing: a requirement shows from then
   // on, where a limit shows live (shared/DESIGN.md §11).
   const [gisTried, setGisTried] = useState(false);
@@ -356,7 +336,7 @@ function GeoPdfDialog({
   const [scaleOtherPicked, setScaleOtherPicked] = useState(false);
   // Exact edges starts closed on every open; Make it opens it when a field
   // inside needs fixing, so the field the banner points at can be seen.
-  const [edgesOpen, setEdgesOpen] = useState(false);
+  const [areaView, setAreaView] = useState<AreaView>("map");
 
   // The last settings, applied over the form once per genuine open. A field
   // the stored value lacks keeps the seed already set.
@@ -406,8 +386,7 @@ function GeoPdfDialog({
       setReturningFromMapSelect(false);
       if (!seededView) {
         setSeededView(true);
-        setFormat(openWithGis ? "geotiff" : "geopdf");
-        setGisOpen(openWithGis ?? false);
+        setFormat("geopdf");
         setSelectedBaseLayer(seedBaseLayer(activeLayerId));
         setSelectedOverlays(seedOverlays());
         setTerrainFollowsMap(true);
@@ -449,11 +428,11 @@ function GeoPdfDialog({
       setRawW("");
       setRawScale("");
       setScaleOtherPicked(false);
-      setEdgesOpen(false);
+      setAreaView("map");
       setGisBox(null);
       setGisLayers(new Set(AREA_EXPORT_LAYERS));
       setGisRaw(NO_EDGES_TYPED);
-      setGisEdgesOpen(false);
+      setGisAreaView("map");
       setGisTried(false);
       setDirty(false);
     }
@@ -505,6 +484,13 @@ function GeoPdfDialog({
     () => ownJobInArea(completedTopoJobs, extentState),
     [completedTopoJobs, extentState],
   );
+  // Why a Terrain chip is off on this sheet, or null when it is on offer.
+  const offReason = (key: TerrainLayerKey): string | null =>
+    key === "contours" && contoursPrintedHere(selectedBaseLayer, lidarOverlap)
+      ? MAP_TERRAIN.copy.contoursPrinted
+      : key === "hillshade" && hillshadeShadowedHere(selectedBaseLayer)
+        ? MAP_TERRAIN.copy.hillshadeImagery
+        : null;
   const overlays = useMemo(
     () =>
       shownOverlays(
@@ -646,7 +632,7 @@ function GeoPdfDialog({
       gisChosenLayers.length === 0
     ) {
       setGisTried(true);
-      if (edgeError) setGisEdgesOpen(true);
+      if (edgeError) setGisAreaView("edges");
       setError("A field below needs fixing first.");
       return;
     }
@@ -680,7 +666,7 @@ function GeoPdfDialog({
       tooLarge
     ) {
       if (!extentValid || hasExtentFieldError(extentInputErrors))
-        setEdgesOpen(true);
+        setAreaView("edges");
       setError("A field below needs fixing first.");
       return;
     }
@@ -840,41 +826,19 @@ function GeoPdfDialog({
 
           <section className={classes.group}>
             <SectionHeader title="Format" />
-            {/* Named for what it holds, beside For GIS: the choice spans the
-                  two groups, so neither claims it all (the render test "names
-                  the GeoPDF group"). */}
             <ChipRail
-              label="For print"
+              label="Format"
               className={classes.railCell}
-              options={GEOPDF_OPTION}
+              options={FORMAT_OPTIONS}
               value={format}
               onChange={(next) => {
                 setFormat(next);
                 setError(null);
               }}
             />
-            <details
-              className={classes.edges}
-              open={gisOpen}
-              onToggle={(event) => setGisOpen(event.currentTarget.open)}
-            >
-              <summary className={classes.edgesSummary}>For GIS</summary>
-              <div className={classes.group}>
-                <ChipRail
-                  label="For GIS"
-                  className={classes.railCell}
-                  options={GIS_OPTIONS}
-                  value={format}
-                  onChange={(next) => {
-                    setFormat(next);
-                    setError(null);
-                  }}
-                />
-                {gisFormat && (
-                  <p className={classes.note}>{GIS_FORMAT_NOTES[gisFormat]}</p>
-                )}
-              </div>
-            </details>
+            {gisFormat && (
+              <p className={classes.note}>{GIS_FORMAT_NOTES[gisFormat]}</p>
+            )}
           </section>
 
           {gisFormat ? (
@@ -893,8 +857,8 @@ function GeoPdfDialog({
               }}
               edgeErrors={gisEdgeErrors}
               focusedFieldRef={gisFocused}
-              edgesOpen={gisEdgesOpen}
-              onEdgesOpenChange={setGisEdgesOpen}
+              areaView={gisAreaView}
+              onAreaViewChange={setGisAreaView}
               onCoordModeChange={(coordMode) => {
                 // The text moves with the mode (see the GeoPDF chip).
                 if (gisArea)
@@ -1065,34 +1029,33 @@ function GeoPdfDialog({
                 )}
                 <FieldError message={scaleInputError} />
 
-                <SettingsRow label="Area">
-                  <div className={classes.areaCell}>
-                    <span className={classes.areaSize}>
-                      {sheetSizeLabel(
-                        (extentState.scale * mapMm.w) / 1000,
-                        (extentState.scale * mapMm.h) / 1000,
-                      )}
-                    </span>
-                    <Button
-                      icon="pickArea"
-                      compact
-                      variant="outline"
-                      onClick={handleSelectOnMap}
-                    >
-                      Pick on the map
-                    </Button>
-                  </div>
-                </SettingsRow>
-                <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
-
-                <details
-                  className={classes.edges}
-                  open={edgesOpen}
-                  onToggle={(event) => setEdgesOpen(event.currentTarget.open)}
-                >
-                  <summary className={classes.edgesSummary}>
-                    Exact edges
-                  </summary>
+                <ChipRail
+                  label="Set the area"
+                  className={classes.railCell}
+                  options={AREA_VIEW_OPTIONS}
+                  value={areaView}
+                  onChange={setAreaView}
+                />
+                {areaView === "map" ? (
+                  <SettingsRow label="Area">
+                    <div className={classes.areaCell}>
+                      <span className={classes.areaSize}>
+                        {sheetSizeLabel(
+                          (extentState.scale * mapMm.w) / 1000,
+                          (extentState.scale * mapMm.h) / 1000,
+                        )}
+                      </span>
+                      <Button
+                        icon="pickArea"
+                        compact
+                        variant="outline"
+                        onClick={handleSelectOnMap}
+                      >
+                        Pick on the map
+                      </Button>
+                    </div>
+                  </SettingsRow>
+                ) : (
                   <div className={classes.group}>
                     <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
                       <ChipRail
@@ -1105,9 +1068,8 @@ function GeoPdfDialog({
                             extentState,
                             coordMode,
                           );
-                          // The text moves with the mode, not in the
-                          // effect after it, or a render checks metres
-                          // as degrees.
+                          // The text moves with the mode, not in the effect after it, or a
+                          // render checks metres as degrees.
                           setRawN(extentFieldText("n", next));
                           setRawS(extentFieldText("s", next));
                           setRawE(extentFieldText("e", next));
@@ -1116,19 +1078,7 @@ function GeoPdfDialog({
                         }}
                       />
                     </SettingsRow>
-                    <SettingsRow label="Typing an edge" tooltip={LOCK_TOOLTIP}>
-                      <ChipRail
-                        label="Typing an edge"
-                        className={classes.railCell}
-                        options={LOCK_OPTIONS}
-                        value={extentState.lockMode}
-                        onChange={(lockMode) =>
-                          setExtentState({ ...extentState, lockMode })
-                        }
-                      />
-                    </SettingsRow>
-                    {/* The four edges laid out where they are on the map, with
-                        the point they move around in the middle of them. */}
+                    {/* The four edges laid out where they are on the map. Typing one moves the box, and the other three follow. */}
                     <div className={classes.extentGrid}>
                       <div className={classes.extentNorth}>
                         <ExtentField
@@ -1173,37 +1123,6 @@ function GeoPdfDialog({
                           valid={extentInputErrors.w === null}
                           markDirty={markDirty}
                         />
-                      </div>
-                      <div className={classes.extentCenter}>
-                        <span className={classes.pivotLabel}>
-                          Pivot
-                          <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
-                        </span>
-                        <div
-                          className={classes.pivotGrid}
-                          role="radiogroup"
-                          aria-label="Pivot"
-                        >
-                          {PIVOT_POINTS.map((point) => (
-                            <button
-                              key={point.value}
-                              type="button"
-                              role="radio"
-                              aria-checked={extentState.pivot === point.value}
-                              aria-label={point.label}
-                              className={
-                                extentState.pivot === point.value
-                                  ? classes.pivotButtonActive
-                                  : classes.pivotButton
-                              }
-                              onClick={() =>
-                                setExtentState(
-                                  applyPivotChange(extentState, point.value),
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
                       </div>
                       <div className={classes.extentEast}>
                         <ExtentField
@@ -1251,7 +1170,8 @@ function GeoPdfDialog({
                       </div>
                     </div>
                   </div>
-                </details>
+                )}
+                <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
               </section>
 
               <section className={classes.group}>
@@ -1268,56 +1188,54 @@ function GeoPdfDialog({
                     }}
                   />
                 </SettingsRow>
-                <p className={classes.groupLabel}>{MAP_TERRAIN.title}</p>
-                <div className={classes.checkList}>
-                  {TERRAIN_LAYER_KEYS.map((key) => {
-                    const printed =
-                      key === "contours" &&
-                      contoursPrintedHere(selectedBaseLayer, lidarOverlap);
-                    const shadowed =
-                      key === "hillshade" &&
-                      hillshadeShadowedHere(selectedBaseLayer);
-                    return (
-                      <Checkbox
-                        key={key}
-                        label={MAP_TERRAIN.copy[key]}
-                        description={
-                          printed
-                            ? MAP_TERRAIN.copy.contoursPrinted
-                            : shadowed
-                              ? MAP_TERRAIN.copy.hillshadeImagery
-                              : undefined
-                        }
-                        disabled={printed || shadowed}
-                        checked={!printed && !shadowed && overlays.has(key)}
-                        onChange={() => toggleOverlay(key)}
-                      />
-                    );
-                  })}
-                </div>
-                <p className={classes.groupLabel}>Overlays</p>
-                <div className={classes.checkList}>
-                  {lidarOverlap &&
-                    LIDAR_ONLY_OVERLAYS.map((layer) => (
-                      <Checkbox
-                        key={layer.name}
-                        label={layer.label}
-                        checked={overlays.has(layer.name)}
-                        onChange={() => toggleOverlay(layer.name)}
-                      />
-                    ))}
-                  <Checkbox
-                    label="My places"
-                    checked={showOwnedPlacesOnPdf}
-                    onChange={setShowOwnedPlacesOnPdf}
-                  />
-                  <Checkbox
-                    label="Shared places"
-                    description="A friend shared these with you, not with whoever you hand the PDF to."
-                    checked={showSharedPlacesOnPdf}
-                    onChange={setShowSharedPlacesOnPdf}
-                  />
-                </div>
+                <ChipPicker
+                  label={MAP_TERRAIN.title}
+                  options={TERRAIN_LAYER_KEYS.map((key) => ({
+                    value: key,
+                    label: MAP_TERRAIN.copy[key],
+                    disabled: offReason(key) !== null,
+                  }))}
+                  selected={TERRAIN_LAYER_KEYS.filter(
+                    (key) => offReason(key) === null && overlays.has(key),
+                  )}
+                  onToggle={toggleOverlay}
+                  hint={
+                    TERRAIN_LAYER_KEYS.flatMap((key) => {
+                      const reason = offReason(key);
+                      return reason
+                        ? [`${MAP_TERRAIN.copy[key]}: ${reason}.`]
+                        : [];
+                    }).join(" ") || undefined
+                  }
+                />
+                <ChipPicker
+                  label="Overlays"
+                  options={[
+                    ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : []).map(
+                      (layer) => ({
+                        value: layer.name,
+                        label: layer.label,
+                      }),
+                    ),
+                    { value: MY_PLACES, label: "My places" },
+                    { value: SHARED_PLACES, label: "Shared places" },
+                  ]}
+                  selected={[
+                    ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : [])
+                      .map((layer) => layer.name)
+                      .filter((name) => overlays.has(name)),
+                    ...(showOwnedPlacesOnPdf ? [MY_PLACES] : []),
+                    ...(showSharedPlacesOnPdf ? [SHARED_PLACES] : []),
+                  ]}
+                  onToggle={(value) => {
+                    if (value === MY_PLACES)
+                      setShowOwnedPlacesOnPdf(!showOwnedPlacesOnPdf);
+                    else if (value === SHARED_PLACES)
+                      setShowSharedPlacesOnPdf(!showSharedPlacesOnPdf);
+                    else toggleOverlay(value);
+                  }}
+                  hint={SHARED_PLACES_HINT}
+                />
               </section>
 
               <section className={classes.group}>
@@ -1527,8 +1445,8 @@ function AreaExportFields({
   onDraft,
   edgeErrors,
   focusedFieldRef,
-  edgesOpen,
-  onEdgesOpenChange,
+  areaView,
+  onAreaViewChange,
   onCoordModeChange,
   onAreaChange,
   onPick,
@@ -1545,8 +1463,8 @@ function AreaExportFields({
   onDraft: (which: ExtentFieldKey, value: string) => void;
   edgeErrors: ExtentFieldErrors;
   focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
-  edgesOpen: boolean;
-  onEdgesOpenChange: (open: boolean) => void;
+  areaView: AreaView;
+  onAreaViewChange: (view: AreaView) => void;
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
@@ -1562,79 +1480,89 @@ function AreaExportFields({
     <>
       <section className={classes.group}>
         <SectionHeader title="Area" />
-        <SettingsRow label="Area">
-          <div className={classes.areaCell}>
-            <span className={classes.areaSize}>
-              {size
-                ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
-                : "None yet"}
-            </span>
-            <Button icon="pickArea" compact variant="outline" onClick={onPick}>
-              Pick on the map
-            </Button>
-          </div>
-        </SettingsRow>
-        <FieldError message={areaError} />
         {area && (
-          <details
-            className={classes.edges}
-            open={edgesOpen}
-            onToggle={(event) => onEdgesOpenChange(event.currentTarget.open)}
-          >
-            <summary className={classes.edgesSummary}>Exact edges</summary>
-            <div className={classes.group}>
-              <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
-                <ChipRail
-                  label="Coordinates"
-                  className={classes.railCell}
-                  options={COORD_OPTIONS}
-                  value={coordMode}
-                  onChange={onCoordModeChange}
-                />
-              </SettingsRow>
-              <div className={classes.extentGrid}>
-                {EDGE_FIELDS.map((field) => (
-                  <div key={field.which} className={classes[field.cell]}>
-                    <ExtentField
-                      which={field.which}
-                      label={coordMode === "latlon" ? field.latlon : field.en}
-                      value={raw[field.which]}
-                      error={edgeErrors[field.which]}
-                      focusedFieldRef={focusedFieldRef}
-                      onDraft={(next) => onDraft(field.which, next)}
-                      onCommit={(degrees) =>
-                        onAreaChange({
-                          ...area,
-                          [EDGE_OF[field.which]]: degrees,
-                        })
-                      }
-                      parse={(value) =>
-                        parseExtentField(field.which, value, edges)
-                      }
-                      valid={!hasExtentFieldError(edgeErrors)}
-                      markDirty={() => {}}
-                    />
-                  </div>
-                ))}
-              </div>
+          <ChipRail
+            label="Set the area"
+            className={classes.railCell}
+            options={AREA_VIEW_OPTIONS}
+            value={areaView}
+            onChange={onAreaViewChange}
+          />
+        )}
+        {(!area || areaView === "map") && (
+          <SettingsRow label="Area">
+            <div className={classes.areaCell}>
+              <span className={classes.areaSize}>
+                {size
+                  ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
+                  : "None yet"}
+              </span>
+              <Button
+                icon="pickArea"
+                compact
+                variant="outline"
+                onClick={onPick}
+              >
+                Pick on the map
+              </Button>
             </div>
-          </details>
+          </SettingsRow>
+        )}
+        <FieldError message={areaError} />
+        {area && areaView === "edges" && (
+          <div className={classes.group}>
+            <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+              <ChipRail
+                label="Coordinates"
+                className={classes.railCell}
+                options={COORD_OPTIONS}
+                value={coordMode}
+                onChange={onCoordModeChange}
+              />
+            </SettingsRow>
+            <div className={classes.extentGrid}>
+              {EDGE_FIELDS.map((field) => (
+                <div key={field.which} className={classes[field.cell]}>
+                  <ExtentField
+                    which={field.which}
+                    label={coordMode === "latlon" ? field.latlon : field.en}
+                    value={raw[field.which]}
+                    error={edgeErrors[field.which]}
+                    focusedFieldRef={focusedFieldRef}
+                    onDraft={(next) => onDraft(field.which, next)}
+                    onCommit={(degrees) =>
+                      onAreaChange({
+                        ...area,
+                        [EDGE_OF[field.which]]: degrees,
+                      })
+                    }
+                    parse={(value) =>
+                      parseExtentField(field.which, value, edges)
+                    }
+                    valid={!hasExtentFieldError(edgeErrors)}
+                    markDirty={() => {}}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </section>
 
       <section className={classes.group}>
         <SectionHeader title="Layers" />
-        <div className={classes.checkList}>
-          {AREA_EXPORT_LAYERS_BY_FORMAT[format].map((layer) => (
-            <Checkbox
-              key={layer}
-              label={LAYER_LABELS[layer]}
-              checked={layers.has(layer)}
-              onChange={() => onToggleLayer(layer)}
-            />
-          ))}
-        </div>
-        <FieldError message={noLayers ? "Pick at least one layer." : null} />
+        <ChipPicker
+          label="Include"
+          options={AREA_EXPORT_LAYERS_BY_FORMAT[format].map((layer) => ({
+            value: layer,
+            label: LAYER_LABELS[layer],
+          }))}
+          selected={AREA_EXPORT_LAYERS_BY_FORMAT[format].filter((layer) =>
+            layers.has(layer),
+          )}
+          onToggle={(layer) => onToggleLayer(layer as AreaExportLayer)}
+          error={noLayers ? "Pick at least one layer." : null}
+        />
         {sharpenedInside > 0 && (
           <p className={classes.note}>
             {sharpenedInside === 1

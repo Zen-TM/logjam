@@ -76,7 +76,6 @@ function dialog({
   pendingScale?: number | null;
   completedTopoJobs?: CompletedTopoJob[];
   areaSeed?: TBbox | null;
-  openWithGis?: boolean;
   sharpenedAreas?: SharpenedArea[];
   onPickArea?: () => void;
   pendingArea?: TBbox | null;
@@ -186,8 +185,9 @@ describe("GeoPdfDialog, remembers the last settings", () => {
   });
 
   const slopeOn = () =>
-    (screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement)
-      .checked;
+    screen
+      .getByRole("button", { name: "Slope" })
+      .getAttribute("aria-pressed") === "true";
 
   // Mutation: drop `if (c.terrainPinned) setTerrainFollowsMap(false)` and a
   // pinned choice follows the map again; or pin whatever overlays are stored.
@@ -266,23 +266,41 @@ describe("GeoPdfDialog, drawing the area", () => {
   });
 });
 
-const edges = () =>
-  screen.getByText("Exact edges").closest("details") as HTMLDetailsElement;
+const typeEdges = () =>
+  fireEvent.click(screen.getByRole("radio", { name: "Type the edges" }));
+const isTypingEdges = () =>
+  screen
+    .getByRole("radio", { name: "Type the edges" })
+    .getAttribute("aria-checked") === "true";
 
-// Coordinates, the lock, the edges and the pivot wait behind Exact edges,
-// which starts closed; Make it opens it when a field inside needs fixing, or
-// the banner would point at a field nobody can see. With no map centre the
-// seeded extent is all zeros, so North is not above South. Mutation: drop
-// `setEdgesOpen(true)` from handleGenerate.
-describe("GeoPdfDialog, Exact edges", () => {
-  it("starts closed and opens on Make it when an edge needs fixing", () => {
+// Coordinates and the edges wait behind Type the edges, which starts on the
+// map; Make it switches to it when a field inside needs fixing, or the banner
+// would point at a field nobody can see. With no map centre the seeded extent
+// is all zeros, so North is not above South. Mutation: drop
+// `setAreaView("edges")` from handleGenerate.
+describe("GeoPdfDialog, Type the edges", () => {
+  it("starts on the map and switches on Make it when an edge needs fixing", () => {
     render(dialog({ open: true }));
-    expect(edges().open).toBe(false);
+    expect(isTypingEdges()).toBe(false);
+    expect(screen.queryByRole("textbox", { name: "North" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
 
-    expect(edges().open).toBe(true);
+    expect(isTypingEdges()).toBe(true);
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
+  });
+
+  // The lock and the pivot are gone: typing an edge moves the box. Mutation:
+  // bring either control back.
+  it("has no pivot or lock, and shows the four edges", () => {
+    render(dialog({ open: true }));
+    typeEdges();
+    expect(screen.queryByRole("radiogroup", { name: "Pivot" })).toBeNull();
+    expect(
+      screen.queryByRole("radiogroup", { name: "Typing an edge" }),
+    ).toBeNull();
+    for (const name of ["North", "South", "East", "West"])
+      expect(screen.getByRole("textbox", { name })).toBeTruthy();
   });
 });
 
@@ -351,22 +369,22 @@ describe("GeoPdfDialog, a map too large to draw", () => {
 
 // The statewide contours stay off a sheet that prints its own, as on the map,
 // so with no LiDAR job in the area the switch could draw nothing. Mutation:
-// drop the `printed` gate from the Contours checkbox.
+// drop the `printed` gate from the Contours chip.
 describe("GeoPdfDialog, the Terrain layers", () => {
   const contours = () =>
-    screen.getByRole("checkbox", { name: /Contours/ }) as HTMLInputElement;
+    screen.getByRole("button", { name: "Contours" }) as HTMLButtonElement;
 
   it("offers contours over imagery, and says the topo sheet prints its own", () => {
     render(dialog({ open: true }));
     expect(contours().disabled).toBe(true);
-    expect(screen.getByText("This map prints its own")).toBeTruthy();
+    expect(screen.getByText("Contours: This map prints its own.")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
     expect(contours().disabled).toBe(false);
-    expect(contours().checked).toBe(true);
+    expect(contours().getAttribute("aria-pressed")).toBe("true");
   });
 
-  // Mutation: drop `shadowed` from the Hillshade checkbox (it stays ticked and
+  // Mutation: drop the hillshade reason from `offReason` (it stays ticked and
   // enabled over photographs), or drop the `.filter` on submit (a hillshade
   // chosen on the topo sheet is still sent over imagery).
   it("keeps hillshade off imagery: disabled, unticked, and not sent", async () => {
@@ -385,14 +403,17 @@ describe("GeoPdfDialog, the Terrain layers", () => {
       }),
     );
     const hillshade = () =>
-      screen.getByRole("checkbox", { name: /Hillshade/ }) as HTMLInputElement;
+      screen.getByRole("button", { name: "Hillshade" }) as HTMLButtonElement;
+    const pressed = () => hillshade().getAttribute("aria-pressed") === "true";
     expect(hillshade().disabled).toBe(false);
-    expect(hillshade().checked).toBe(true);
+    expect(pressed()).toBe(true);
 
     fireEvent.click(screen.getByRole("radio", { name: "Imagery" }));
     expect(hillshade().disabled).toBe(true);
-    expect(hillshade().checked).toBe(false);
-    expect(screen.getByText(MAP_TERRAIN.copy.hillshadeImagery)).toBeTruthy();
+    expect(pressed()).toBe(false);
+    expect(
+      screen.getByText(`Hillshade: ${MAP_TERRAIN.copy.hillshadeImagery}.`),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await vi.waitFor(() => {
@@ -438,7 +459,8 @@ describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
     west: 150.3,
   };
   const hillshade = () =>
-    screen.getByRole("checkbox", { name: /^Hillshade/ }) as HTMLInputElement;
+    screen.getByRole("button", { name: "Hillshade" }) as HTMLButtonElement;
+  const on = () => hillshade().getAttribute("aria-pressed") === "true";
   const at = (pendingExtent: TBbox) =>
     dialog({
       open: true,
@@ -449,24 +471,43 @@ describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
 
   it("follows the area until the user chooses", () => {
     const { rerender } = render(at(away));
-    expect(hillshade().checked).toBe(false);
+    expect(on()).toBe(false);
     rerender(at(overJob));
-    expect(hillshade().checked).toBe(true);
+    expect(on()).toBe(true);
 
     fireEvent.click(hillshade());
     rerender(at(away));
     rerender(at(overJob));
-    expect(hillshade().checked).toBe(false);
+    expect(on()).toBe(false);
+  });
+});
+
+// Shared places are opt-in on a printable artifact: a friend consented to
+// seeing them in Logjam, not to being named on a PDF. Mutation: start the
+// chip pressed, or drop its hint.
+describe("GeoPdfDialog, the Overlays group", () => {
+  it("starts with My places on and Shared places off, and says why", () => {
+    render(dialog({ open: true }));
+    const pressed = (name: string) =>
+      screen.getByRole("button", { name }).getAttribute("aria-pressed");
+    expect(pressed("My places")).toBe("true");
+    expect(pressed("Shared places")).toBe("false");
+    expect(
+      screen.getByText(/not with whoever you hand the PDF to/),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Shared places" }));
+    expect(pressed("Shared places")).toBe("true");
   });
 });
 
 const seed: TBbox = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
 
 function chooseGis(format: "GeoTIFF" | "GeoPackage" | "MBTiles") {
-  const forGis = screen.getByText("For GIS").closest("details")!;
-  forGis.open = true;
   fireEvent.click(screen.getByRole("radio", { name: format }));
 }
+
+const layer = (name: string) => screen.getByRole("button", { name });
 
 const exportPosts = () =>
   vi
@@ -475,25 +516,23 @@ const exportPosts = () =>
     .map(([, init]) => (init as { body: unknown }).body);
 
 describe("Export an area, for GIS", () => {
-  // Mutation: start `format` at a GIS format, or `gisOpen` at true.
-  it("opens on GeoPDF with For GIS closed", () => {
+  // Mutation: start `format` at a GIS format.
+  it("opens on GeoPDF", () => {
     render(dialog({ open: true }));
     expect(
       screen
         .getByRole("radio", { name: "GeoPDF" })
         .getAttribute("aria-checked"),
     ).toBe("true");
-    expect(screen.getByText("For GIS").closest("details")!.open).toBe(false);
   });
 
-  // The choice spans two groups, so neither may claim the whole of it: with
-  // a GIS format chosen, a screen reader would hear "Format" with nothing
-  // checked. Mutation: name the GeoPDF group "Format" again.
-  it("names the GeoPDF group for what it holds, beside For GIS", () => {
+  // One rail holds all four formats. Mutation: split them into two groups
+  // again, and a screen reader hears a "Format" with nothing checked.
+  it("offers every format in one Format group", () => {
     render(dialog({ open: true }));
-    const print = screen.getByRole("radiogroup", { name: "For print" });
-    expect(within(print).getByRole("radio", { name: "GeoPDF" })).toBeTruthy();
-    expect(screen.getByRole("radiogroup", { name: "For GIS" })).toBeTruthy();
+    const format = screen.getByRole("radiogroup", { name: "Format" });
+    for (const name of ["GeoPDF", "GeoTIFF", "GeoPackage", "MBTiles"])
+      expect(within(format).getByRole("radio", { name })).toBeTruthy();
   });
 
   // A GIS file is a free box: no paper, and only the layers the format holds.
@@ -502,12 +541,12 @@ describe("Export an area, for GIS", () => {
     render(dialog({ open: true, areaSeed: seed }));
     chooseGis("GeoTIFF");
     expect(screen.queryByRole("radiogroup", { name: "Paper size" })).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Heights" })).toBeTruthy();
-    expect(screen.queryByRole("checkbox", { name: "Contours" })).toBeNull();
+    expect(layer("Heights")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Contours" })).toBeNull();
 
     chooseGis("MBTiles");
-    expect(screen.queryByRole("checkbox", { name: "Heights" })).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Contours" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Heights" })).toBeNull();
+    expect(layer("Contours")).toBeTruthy();
   });
 
   // Mutation: post the GeoPDF's extent instead of the box, or send a layer
@@ -516,7 +555,7 @@ describe("Export an area, for GIS", () => {
     vi.mocked(apiFetch).mockClear();
     render(dialog({ open: true, areaSeed: seed }));
     chooseGis("GeoPackage");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Heights" }));
+    fireEvent.click(layer("Heights"));
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
 
     await vi.waitFor(() =>
@@ -549,21 +588,20 @@ describe("Export an area, for GIS", () => {
 
   // An edge left wrong is not committed, so the box underneath is the last
   // good one. Mutation: drop the edge-error check from handleExportArea.
-  it("sends nothing while an edge shows an error, and opens Exact edges", () => {
+  it("sends nothing while an edge shows an error, and switches to Type the edges", () => {
     vi.mocked(apiFetch).mockClear();
     render(dialog({ open: true, areaSeed: seed }));
     chooseGis("GeoTIFF");
-    const gisEdges = screen.getByText("Exact edges").closest("details")!;
-    gisEdges.open = true;
+    typeEdges();
     const north = screen.getByRole("textbox", { name: "North" });
     fireEvent.change(north, { target: { value: "-34" } });
     fireEvent.blur(north);
-    gisEdges.open = false;
+    fireEvent.click(screen.getByRole("radio", { name: "On the map" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
     expect(exportPosts()).toEqual([]);
-    expect(screen.getByText("Exact edges").closest("details")!.open).toBe(true);
+    expect(isTypingEdges()).toBe(true);
   });
 
   // The file takes in the readable areas inside its box (the API decides the
@@ -599,25 +637,13 @@ describe("Export an area, for GIS", () => {
     ).toBeTruthy();
   });
 
-  // No caller passes `openWithGis` now (the Exports view was its last); the prop
-  // goes with the dialog rework. Mutation: ignore `openWithGis`.
-  it("opens on GeoTIFF with For GIS open when asked", () => {
-    render(dialog({ open: true, openWithGis: true }));
-    expect(
-      screen
-        .getByRole("radio", { name: "GeoTIFF" })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(screen.getByText("For GIS").closest("details")!.open).toBe(true);
-  });
-
   // A requirement shows on Make it, a limit live (shared/DESIGN.md §11).
   // Mutation: drop the `gisTried` gate on "Pick at least one layer."
   it("asks for a layer only once Make it is pressed without one", () => {
     render(dialog({ open: true, areaSeed: seed }));
     chooseGis("GeoTIFF");
     for (const name of ["Heights", "Slope", "Hillshade"])
-      fireEvent.click(screen.getByRole("checkbox", { name }));
+      fireEvent.click(layer(name));
     expect(screen.queryByText("Pick at least one layer.")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
@@ -686,10 +712,7 @@ describe("GeoPdfDialog, switching Coordinates", () => {
     observer.disconnect();
     return seen;
   };
-  const withEdges = () => {
-    const details = screen.getByText("Exact edges").closest("details")!;
-    details.open = true;
-  };
+  const withEdges = typeEdges;
 
   it("flashes no error on the GeoPDF edges", () => {
     expect(
