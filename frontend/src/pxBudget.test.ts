@@ -30,7 +30,7 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/ChangeEmailDialog.module.css": 1,
   "components/dialogs/CustomFieldInput.module.css": 1,
   "components/dialogs/DeleteAccountDialog.module.css": 1,
-  "components/dialogs/GeoPdfDialog.module.css": 10,
+  "components/dialogs/GeoPdfDialog.module.css": 8,
   "components/dialogs/ImportResultSummary.module.css": 6,
   "components/dialogs/MatchReview.module.css": 7,
   "components/dialogs/OnboardingChoiceDialog.module.css": 1,

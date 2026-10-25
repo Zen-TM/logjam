@@ -20,12 +20,11 @@ async function openApp(page: Page) {
   });
 }
 
-/** Map tools → Export an area → For GIS → GeoTIFF → Pick on the map: the
+/** Map tools → Export an area → GeoTIFF → Pick on the map: the
  *  dialog hides and the box tool waits for the export's box. */
 async function abandonGisPick(page: Page) {
   await mapTool(page, ["Make a map", "Export an area"]);
   const dialog = page.locator("dialog[open]");
-  await dialog.getByText("For GIS").click();
   await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
   await dialog.getByRole("button", { name: "Pick on the map" }).click();
   await expect(page.locator("dialog[open]")).toHaveCount(0);
@@ -66,10 +65,6 @@ test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
     "aria-checked",
     "true",
   );
-  await expect(dialog.getByText("For GIS").locator("..")).not.toHaveAttribute(
-    "open",
-    "",
-  );
 });
 
 test("Make on the GeoPDFs page after an abandoned GIS pick opens a GeoPDF form", async ({
@@ -91,7 +86,5 @@ test("Make on the GeoPDFs page after an abandoned GIS pick opens a GeoPDF form",
   await expect(
     dialog.getByRole("radiogroup", { name: "Paper size" }),
   ).toBeVisible();
-  await expect(dialog.getByRole("checkbox", { name: "Heights" })).toHaveCount(
-    0,
-  );
+  await expect(dialog.getByRole("button", { name: "Heights" })).toHaveCount(0);
 });

@@ -261,8 +261,6 @@ export async function generateGeoPdf(
     west: 0,
     scale: 0,
     coordMode: "latlon",
-    lockMode: "scale",
-    pivot: "mc",
   });
   const widthPt = mmToPt(paper.w);
   const heightPt = mmToPt(paper.h);

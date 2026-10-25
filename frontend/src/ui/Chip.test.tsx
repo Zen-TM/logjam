@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { Chip } from "./Chip";
+import { Chip, ChipRail } from "./Chip";
 
 afterEach(cleanup);
 
@@ -31,5 +31,51 @@ describe("Chip", () => {
     document.documentElement.style.removeProperty("--hue-waypoint");
     expect(fill.toLowerCase()).toMatch(/^#[0-9a-f]{6}$/);
     expect(fill.toLowerCase()).not.toBe("#d98170");
+  });
+});
+
+describe("ChipRail", () => {
+  const options = [
+    { value: "a", label: "A" },
+    { value: "b", label: "B" },
+  ];
+  // jsdom has no ResizeObserver or scrollIntoView.
+  globalThis.ResizeObserver ??= class {
+    observe() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+  Element.prototype.scrollIntoView = () => {};
+
+  // Mutation: drop `aria-describedby`, and a screen reader hears the choice
+  // without the sentence about it.
+  it("shows its hint and describes the group with it", () => {
+    render(
+      <ChipRail
+        label="Format"
+        options={options}
+        value="a"
+        onChange={() => {}}
+        hint="A note about A."
+      />,
+    );
+    expect(
+      screen
+        .getByRole("radiogroup", { name: "Format" })
+        .getAttribute("aria-describedby"),
+    ).toBe(screen.getByText("A note about A.").id);
+  });
+
+  it("has no description without a hint", () => {
+    render(
+      <ChipRail
+        label="Format"
+        options={options}
+        value="a"
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getByRole("radiogroup").getAttribute("aria-describedby"),
+    ).toBeNull();
   });
 });

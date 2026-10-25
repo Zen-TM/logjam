@@ -79,8 +79,6 @@ const PAPER: ExtentState = {
   west: 0,
   scale: 25000,
   coordMode: "latlon",
-  lockMode: "scale",
-  pivot: "mc",
 };
 const map = getMapDimensions(PAPER);
 const EXTENT = extentFromCentreAndSize(

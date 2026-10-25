@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   type ExtentState,
-  type PivotPoint,
   getPaperDimensions,
   mapAspectRatio,
   calcScale,
@@ -13,7 +12,6 @@ import {
   applyScaleChange,
   applyPaperChange,
   applyOrientationChange,
-  applyPivotChange,
   applyCoordModeChange,
   detectMgaZone,
   toEastingNorthing,
@@ -35,8 +33,6 @@ function baseState(overrides?: Partial<ExtentState>): ExtentState {
     west: 150.28,
     scale: 25000,
     coordMode: "latlon",
-    lockMode: "scale",
-    pivot: "mc",
     ...overrides,
   };
 }
@@ -95,42 +91,18 @@ describe("getPaperDimensions", () => {
 // ── applyNorthChange ─────────────────────────────────────────────────────────
 
 describe("applyNorthChange", () => {
-  describe("Lock Scale mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`pans with pivot=${pivot}, preserving scale and ratio`, () => {
-        const state = baseState({ lockMode: "scale", pivot });
-        const height = state.north - state.south;
-        const newNorth = state.north + 0.01;
-        const result = applyNorthChange(state, newNorth);
+  it("pans, preserving scale and ratio", () => {
+    const state = baseState();
+    const height = state.north - state.south;
+    const newNorth = state.north + 0.01;
+    const result = applyNorthChange(state, newNorth);
 
-        // Height should be preserved (pan)
-        expect(result.north - result.south).toBeCloseTo(height, 6);
-        // South should have moved by the same delta
-        expect(result.south).toBeCloseTo(state.south + 0.01, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
-  });
-
-  describe("Lock Position mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`adjusts scale with pivot=${pivot}, preserving ratio`, () => {
-        const state = baseState({ lockMode: "position", pivot });
-        const newNorth = state.north + 0.01;
-        const result = applyNorthChange(state, newNorth);
-
-        // North changed, south stays
-        expect(result.north).toBeCloseTo(newNorth, 6);
-        expect(result.south).toBeCloseTo(state.south, 6);
-        // Scale should have changed
-        expect(result.scale).not.toBeCloseTo(state.scale, 0);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
+    // Height should be preserved (pan)
+    expect(result.north - result.south).toBeCloseTo(height, 6);
+    // South should have moved by the same delta
+    expect(result.south).toBeCloseTo(state.south + 0.01, 6);
+    assertRatioInvariant(result);
+    assertValidBounds(result);
   });
 
   it("rejects newNorth <= south", () => {
@@ -143,37 +115,16 @@ describe("applyNorthChange", () => {
 // ── applySouthChange ─────────────────────────────────────────────────────────
 
 describe("applySouthChange", () => {
-  describe("Lock Scale mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`pans with pivot=${pivot}, preserving scale and ratio`, () => {
-        const state = baseState({ lockMode: "scale", pivot });
-        const height = state.north - state.south;
-        const newSouth = state.south - 0.01;
-        const result = applySouthChange(state, newSouth);
+  it("pans, preserving scale and ratio", () => {
+    const state = baseState();
+    const height = state.north - state.south;
+    const newSouth = state.south - 0.01;
+    const result = applySouthChange(state, newSouth);
 
-        expect(result.north - result.south).toBeCloseTo(height, 6);
-        expect(result.north).toBeCloseTo(state.north - 0.01, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
-  });
-
-  describe("Lock Position mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`adjusts scale with pivot=${pivot}, preserving ratio`, () => {
-        const state = baseState({ lockMode: "position", pivot });
-        const newSouth = state.south - 0.01;
-        const result = applySouthChange(state, newSouth);
-
-        expect(result.south).toBeCloseTo(newSouth, 6);
-        expect(result.north).toBeCloseTo(state.north, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
+    expect(result.north - result.south).toBeCloseTo(height, 6);
+    expect(result.north).toBeCloseTo(state.north - 0.01, 6);
+    assertRatioInvariant(result);
+    assertValidBounds(result);
   });
 
   it("rejects newSouth >= north", () => {
@@ -186,37 +137,16 @@ describe("applySouthChange", () => {
 // ── applyEastChange ──────────────────────────────────────────────────────────
 
 describe("applyEastChange", () => {
-  describe("Lock Scale mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`pans with pivot=${pivot}, preserving scale and ratio`, () => {
-        const state = baseState({ lockMode: "scale", pivot });
-        const width = state.east - state.west;
-        const newEast = state.east + 0.01;
-        const result = applyEastChange(state, newEast);
+  it("pans, preserving scale and ratio", () => {
+    const state = baseState();
+    const width = state.east - state.west;
+    const newEast = state.east + 0.01;
+    const result = applyEastChange(state, newEast);
 
-        expect(result.east - result.west).toBeCloseTo(width, 6);
-        expect(result.west).toBeCloseTo(state.west + 0.01, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
-  });
-
-  describe("Lock Position mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`adjusts scale with pivot=${pivot}, preserving ratio`, () => {
-        const state = baseState({ lockMode: "position", pivot });
-        const newEast = state.east + 0.01;
-        const result = applyEastChange(state, newEast);
-
-        expect(result.east).toBeCloseTo(newEast, 6);
-        expect(result.west).toBeCloseTo(state.west, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
+    expect(result.east - result.west).toBeCloseTo(width, 6);
+    expect(result.west).toBeCloseTo(state.west + 0.01, 6);
+    assertRatioInvariant(result);
+    assertValidBounds(result);
   });
 
   it("rejects newEast <= west", () => {
@@ -229,37 +159,16 @@ describe("applyEastChange", () => {
 // ── applyWestChange ──────────────────────────────────────────────────────────
 
 describe("applyWestChange", () => {
-  describe("Lock Scale mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`pans with pivot=${pivot}, preserving scale and ratio`, () => {
-        const state = baseState({ lockMode: "scale", pivot });
-        const width = state.east - state.west;
-        const newWest = state.west - 0.01;
-        const result = applyWestChange(state, newWest);
+  it("pans, preserving scale and ratio", () => {
+    const state = baseState();
+    const width = state.east - state.west;
+    const newWest = state.west - 0.01;
+    const result = applyWestChange(state, newWest);
 
-        expect(result.east - result.west).toBeCloseTo(width, 6);
-        expect(result.east).toBeCloseTo(state.east - 0.01, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
-  });
-
-  describe("Lock Position mode", () => {
-    const pivots: PivotPoint[] = ["tl", "mc", "br"];
-    for (const pivot of pivots) {
-      it(`adjusts scale with pivot=${pivot}, preserving ratio`, () => {
-        const state = baseState({ lockMode: "position", pivot });
-        const newWest = state.west - 0.01;
-        const result = applyWestChange(state, newWest);
-
-        expect(result.west).toBeCloseTo(newWest, 6);
-        expect(result.east).toBeCloseTo(state.east, 6);
-        assertRatioInvariant(result);
-        assertValidBounds(result);
-      });
-    }
+    expect(result.east - result.west).toBeCloseTo(width, 6);
+    expect(result.east).toBeCloseTo(state.east - 0.01, 6);
+    assertRatioInvariant(result);
+    assertValidBounds(result);
   });
 
   it("rejects newWest >= east", () => {
@@ -272,8 +181,8 @@ describe("applyWestChange", () => {
 // ── applyScaleChange ─────────────────────────────────────────────────────────
 
 describe("applyScaleChange", () => {
-  it("expands around centre pivot", () => {
-    const state = baseState({ pivot: "mc" });
+  it("expands around the centre", () => {
+    const state = baseState();
     const centreLatBefore = (state.north + state.south) / 2;
     const centreLonBefore = (state.east + state.west) / 2;
 
@@ -296,48 +205,15 @@ describe("applyScaleChange", () => {
     expect(result.scale).toBe(50000);
   });
 
-  it("expands around corner pivot tl (top-left fixed)", () => {
-    const state = baseState({ pivot: "tl" });
-    const result = applyScaleChange(state, 50000);
-
-    // Top-left should be fixed
-    expect(result.north).toBeCloseTo(state.north, 6);
-    expect(result.west).toBeCloseTo(state.west, 6);
-    // Bottom-right should move outward
-    expect(result.south).toBeLessThan(state.south);
-    expect(result.east).toBeGreaterThan(state.east);
-
-    assertRatioInvariant(result);
-    assertValidBounds(result);
-  });
-
-  it("expands around edge pivot tc (top edge fixed)", () => {
-    const state = baseState({ pivot: "tc" });
-    const centreLonBefore = (state.east + state.west) / 2;
-
-    const result = applyScaleChange(state, 50000);
-
-    // Top should be fixed
-    expect(result.north).toBeCloseTo(state.north, 6);
-    // Bottom moves down
-    expect(result.south).toBeLessThan(state.south);
-    // E/W expand equally — centre lon preserved
-    const centreLonAfter = (result.east + result.west) / 2;
-    expect(centreLonAfter).toBeCloseTo(centreLonBefore, 4);
-
-    assertRatioInvariant(result);
-    assertValidBounds(result);
-  });
-
-  it("contracts around br pivot when scale decreases", () => {
-    const state = baseState({ pivot: "br" });
+  it("contracts around the centre when scale decreases", () => {
+    const state = baseState();
     const result = applyScaleChange(state, 10000);
 
-    // Bottom-right should be fixed
-    expect(result.south).toBeCloseTo(state.south, 6);
-    expect(result.east).toBeCloseTo(state.east, 6);
-    // Area should be smaller
     expect(result.north - result.south).toBeLessThan(state.north - state.south);
+    expect((result.north + result.south) / 2).toBeCloseTo(
+      (state.north + state.south) / 2,
+      4,
+    );
 
     assertRatioInvariant(result);
     assertValidBounds(result);
@@ -354,7 +230,7 @@ describe("applyScaleChange", () => {
 
 describe("applyPaperChange", () => {
   it("changes from A4 to A3, preserving scale", () => {
-    const state = baseState({ pivot: "mc" });
+    const state = baseState();
     const result = applyPaperChange(state, "A3");
 
     // Scale should be approximately preserved
@@ -369,7 +245,7 @@ describe("applyPaperChange", () => {
   });
 
   it("changes to A5, preserving scale", () => {
-    const state = baseState({ pivot: "mc" });
+    const state = baseState();
     const result = applyPaperChange(state, "A5");
 
     // Area should be smaller (A5 < A4)
@@ -380,7 +256,7 @@ describe("applyPaperChange", () => {
   });
 
   it("changes to custom ratio", () => {
-    const state = baseState({ pivot: "mc" });
+    const state = baseState();
     const result = applyPaperChange(state, "custom", { w: 300, h: 300 });
 
     // 300:300 is square → map should be approximately square
@@ -396,7 +272,7 @@ describe("applyPaperChange", () => {
 
 describe("applyOrientationChange", () => {
   it("swaps from portrait to landscape", () => {
-    const state = baseState({ orientation: "portrait", pivot: "mc" });
+    const state = baseState({ orientation: "portrait" });
     const result = applyOrientationChange(state, "landscape");
 
     expect(result.orientation).toBe("landscape");
@@ -417,22 +293,6 @@ describe("applyOrientationChange", () => {
     const state = baseState({ orientation: "landscape" });
     const result = applyOrientationChange(state, "landscape");
     expect(result).toEqual(state);
-  });
-});
-
-// ── applyPivotChange ─────────────────────────────────────────────────────────
-
-describe("applyPivotChange", () => {
-  it("changes pivot without affecting extents", () => {
-    const state = baseState({ pivot: "mc" });
-    const result = applyPivotChange(state, "tl");
-
-    expect(result.pivot).toBe("tl");
-    expect(result.north).toBe(state.north);
-    expect(result.south).toBe(state.south);
-    expect(result.east).toBe(state.east);
-    expect(result.west).toBe(state.west);
-    expect(result.scale).toBe(state.scale);
   });
 });
 
@@ -514,44 +374,22 @@ describe("gridConvergence", () => {
 // ── Invariant: ratio preserved across all mutations ──────────────────────────
 
 describe("ratio invariant across all mutations", () => {
-  const allPivots: PivotPoint[] = [
-    "tl",
-    "tc",
-    "tr",
-    "ml",
-    "mc",
-    "mr",
-    "bl",
-    "bc",
-    "br",
-  ];
+  it("holds after applyScaleChange", () => {
+    const result = applyScaleChange(baseState(), 50000);
+    assertRatioInvariant(result);
+    assertValidBounds(result);
+  });
 
-  for (const pivot of allPivots) {
-    it(`holds after applyScaleChange with pivot=${pivot}`, () => {
-      const state = baseState({ pivot });
-      const result = applyScaleChange(state, 50000);
+  it("holds after applyNorthChange and applyEastChange", () => {
+    const state = baseState();
+    for (const result of [
+      applyNorthChange(state, state.north + 0.02),
+      applyEastChange(state, state.east + 0.02),
+    ]) {
       assertRatioInvariant(result);
       assertValidBounds(result);
-    });
-  }
-
-  for (const pivot of allPivots) {
-    it(`holds after applyNorthChange (Lock Position) with pivot=${pivot}`, () => {
-      const state = baseState({ lockMode: "position", pivot });
-      const result = applyNorthChange(state, state.north + 0.02);
-      assertRatioInvariant(result);
-      assertValidBounds(result);
-    });
-  }
-
-  for (const pivot of allPivots) {
-    it(`holds after applyEastChange (Lock Position) with pivot=${pivot}`, () => {
-      const state = baseState({ lockMode: "position", pivot });
-      const result = applyEastChange(state, state.east + 0.02);
-      assertRatioInvariant(result);
-      assertValidBounds(result);
-    });
-  }
+    }
+  });
 
   it("holds after paper change A4→A2", () => {
     const state = baseState();
@@ -568,7 +406,7 @@ describe("ratio invariant across all mutations", () => {
   });
 
   it("holds after chained mutations", () => {
-    let state = baseState({ pivot: "tl", lockMode: "position" });
+    let state = baseState();
     state = applyScaleChange(state, 50000);
     assertRatioInvariant(state);
     state = applyNorthChange(state, state.north + 0.05);
