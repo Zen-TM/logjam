@@ -15,6 +15,19 @@ import {
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
 import { Icon, type Glyph } from "./Icon";
+import { chipFill } from "@logjam/shared";
+import { useSchemeTokens } from "../themePreferences";
+
+/** A `var(--hue-x)` hue as the hex it names (they sit on `:root`, whatever the
+ *  scheme); anything the browser can't resolve is returned as given. */
+function cssHue(hue: string | undefined): string | undefined {
+  const name = hue?.match(/^var\((--[\w-]+)\)$/)?.[1];
+  if (!name) return hue;
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+    hue
+  );
+}
 
 /**
  * The pill behind every chip surface: filter rails, sort choices, sub-mode
@@ -46,6 +59,10 @@ export function Chip({
   starred?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }) {
+  const tokens = useSchemeTokens();
+  // Selected is the fill alone, so the fill is moved off the unselected chip's
+  // card until it stands 3:1 apart (`chipFill`); the hue elsewhere is unmoved.
+  const fill = chipFill(cssHue(hue) ?? tokens.accent, tokens);
   return (
     <button
       ref={ref}
@@ -58,7 +75,7 @@ export function Chip({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={hue ? ({ ...style, "--chip-hue": hue } as CSSProperties) : style}
+      style={{ ...style, "--chip-hue": fill } as CSSProperties}
       // The badge is aria-hidden, so the count joins the name with a pause
       // rather than running into the label ("Canyon241").
       aria-label={count != null ? `${label}, ${count}` : undefined}

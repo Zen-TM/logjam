@@ -3,6 +3,7 @@ export * from "./mapZoom.js";
 export * from "./geoPdfConfig.js";
 export * from "./geoPdfBaseLayers.js";
 export * from "./themeSchemes.js";
+export * from "./chipFill.js";
 export * from "./tripLogFields.js";
 export * from "./tripName.js";
 export * from "./tripFilter.js";

@@ -162,8 +162,13 @@ renumber.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.
+- **A selected chip's fill is `chipFill(hue, scheme)`, not the hue**: the hue
+  moved just far enough to stand 3:1 off the unselected chip beside it, since
+  the fill is all that shows it is selected. Tiles, avatars and map marks keep
+  the hue as declared. Guard: `shared/src/chipFill.test.ts` walks every scheme
+  and hue.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
-  a shape. Selected is an accent edge and a check, not a tint.
+  a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
 - **Controls over a photo are black and white on a scrim**, not theme

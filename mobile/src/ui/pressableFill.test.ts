@@ -74,7 +74,7 @@ describe("a selected chip is its fill alone", () => {
   });
 
   it("fills with its hue, accent by default, not the button's card", () => {
-    expect(chip).toContain("const tint = hue ?? theme.accent;");
+    expect(chip).toContain("chipFill(hue ?? theme.accent, theme)");
     expect(chip).toContain(
       "active && { backgroundColor: tint, borderColor: tint }",
     );
