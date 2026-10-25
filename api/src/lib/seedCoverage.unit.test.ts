@@ -36,8 +36,6 @@ const WRITTEN_NESTED: Record<string, RegExp> = {
 
 /** Deliberately empty, with the reason. */
 const NOT_SEEDED: Record<string, string> = {
-  GeoPdfTemplate:
-    "removed feature: nothing writes it any more, and the table drops a release later (ADR 0003)",
   ImportSnapshot:
     "written only by an import that merges into an existing row; the seed makes no import batch",
   EgressLogCursor:

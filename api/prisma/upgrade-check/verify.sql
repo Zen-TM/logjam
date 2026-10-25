@@ -5,43 +5,6 @@
 
 \set ON_ERROR_STOP on
 
-SELECT to_regclass('upgrade_check.baseline') IS NOT NULL AS applies \gset
-\if :applies
-
-CREATE TEMP TABLE after AS
-SELECT * FROM (VALUES
-  ('users',             (SELECT count(*) FROM users)),
-  ('geo_pdf_templates', (SELECT count(*) FROM geo_pdf_templates))
-) AS t(metric, value);
-
-\echo 'upgrade-check after head migrations (base -> after):'
-SELECT b.metric, b.value AS base, a.value AS after FROM upgrade_check.baseline b
-  LEFT JOIN after a USING (metric) ORDER BY b.metric;
-
-DO $$
-DECLARE users_then BIGINT; users_now BIGINT; templates_now BIGINT;
-BEGIN
-  SELECT value INTO users_then FROM upgrade_check.baseline WHERE metric = 'users';
-  SELECT value INTO users_now FROM after WHERE metric = 'users';
-  SELECT value INTO templates_now FROM after WHERE metric = 'geo_pdf_templates';
-  -- Red if the DELETE is removed from the migration.
-  IF templates_now <> 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % GeoPDF templates survived the migration', templates_now;
-  END IF;
-  -- The migration deletes templates and nothing else.
-  IF users_now <> users_then THEN
-    RAISE EXCEPTION 'upgrade-check: users went % -> %', users_then, users_now;
-  END IF;
-END $$;
-\echo 'upgrade-check: every GeoPDF template deleted, users untouched'
-
-DROP SCHEMA upgrade_check CASCADE;
-\echo 'upgrade-check: data carried across'
-
-\else
-\echo 'upgrade-check: no baseline captured — release-specific checks skipped.'
-\endif
-
 -- Every user's storage is what it was less their live exports, never below 0.
 -- Mutation: drop the migration's UPDATE and the fixture user stays at 5000
 -- instead of 2500.
@@ -57,4 +20,5 @@ BEGIN
     RAISE EXCEPTION 'upgrade-check: % user(s) not uncharged for their exports', bad;
   END IF;
 END $$;
+DROP SCHEMA upgrade_check CASCADE;
 \endif

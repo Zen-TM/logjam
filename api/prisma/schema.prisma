@@ -43,7 +43,6 @@ model User {
   topoExportJobs          TopoExportJob[]
   geoPdfJobs              GeoPdfJob[]
   tripLogs                TripLog[]
-  geoPdfTemplates         GeoPdfTemplate[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
   placeLinks              PlaceLink[]
@@ -598,20 +597,6 @@ model GeoPdfJob {
 
   @@index([userId, createdAt])
   @@map("geo_pdf_jobs")
-}
-
-model GeoPdfTemplate {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  config    Json
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("geo_pdf_templates")
 }
 
 model TopoTemplate {
