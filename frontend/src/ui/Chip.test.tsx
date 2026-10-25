@@ -19,4 +19,17 @@ describe("Chip", () => {
     expect(fill("Waypoint").toLowerCase()).not.toBe("#d98170");
     expect(fill("Scrub").toLowerCase()).toBe("#bed9b5");
   });
+
+  // Mutation: make `cssHue` return `hue` as given, and a chip handed
+  // `var(--hue-…)` (most callers) silently gets the unshifted fill.
+  it("resolves a var(--hue-*) hue from :root before moving it", () => {
+    document.documentElement.style.setProperty("--hue-waypoint", "#D98170");
+    render(<Chip label="Pin" active hue="var(--hue-waypoint)" />);
+    const fill = screen
+      .getByRole("button", { name: "Pin" })
+      .style.getPropertyValue("--chip-hue");
+    document.documentElement.style.removeProperty("--hue-waypoint");
+    expect(fill.toLowerCase()).toMatch(/^#[0-9a-f]{6}$/);
+    expect(fill.toLowerCase()).not.toBe("#d98170");
+  });
 });

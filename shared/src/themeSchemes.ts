@@ -266,7 +266,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       lineStrong: "#7A857C",
       text: "#252A26",
       textMuted: "#4C554D",
-      accent: "#6B9173",
+      accent: "#778D7C",
       warning: "#C2735A",
       success: "#7E8E3E",
       neutral: "#B3BBAE",

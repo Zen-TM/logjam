@@ -33,9 +33,10 @@ const hueAngle = (hex: string) => {
 
 describe("chipFill", () => {
   // Mutation: return `hue` unchanged, and a selected chip in Ghost Gum is
-  // 1.5:1 against the unselected one beside it (WCAG 1.4.11).
+  // 1.5:1 against the unselected one beside it (WCAG 1.4.11); or measure the
+  // card alone, and a lone chip on the page falls to 2.7:1.
   it.each(THEME_SCHEME_ORDER)(
-    "%s: every hue and the scheme's own accent and neutral stand 3:1 off the card, with 4.5:1 ink",
+    "%s: every hue and the scheme's own accent and neutral stand 3:1 off the card and the page, with 4.5:1 ink",
     (id) => {
       const { tokens } = THEME_SCHEMES[id];
       for (const hue of [...IDENTITY_HUES, tokens.accent, tokens.neutral]) {

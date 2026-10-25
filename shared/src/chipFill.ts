@@ -33,7 +33,7 @@ function shifted(hex: string, end: 0 | 255, t: number): string {
 
 /**
  * What a selected chip is filled with: the hue, moved just far enough that it
- * stands 3:1 off the unselected chip (the scheme's `card`) beside it, WCAG
+ * stands 3:1 off the unselected chip (the scheme's `card`) beside it and off the `page` behind a chip on its own, WCAG
  * 1.4.11, since a chip shows it is selected by its fill alone. Away from the
  * card first (darker on a pale card, lighter on a dark one), the other way only
  * when that can't reach it; the hue itself when it already does. The label on
@@ -46,15 +46,21 @@ function shifted(hex: string, end: 0 | 255, t: number): string {
  */
 export function chipFill(
   hue: string,
-  tokens: Pick<ThemeTokens, "card" | "onFill">,
+  tokens: Pick<ThemeTokens, "card" | "page" | "onFill">,
 ): string {
+  // The unselected chip is the card, but a lone chip on a page-level rail has
+  // only the page behind it, so the fill clears whichever it is nearer to.
   const ok = (fill: string) =>
-    contrastRatio(fill, tokens.card) >= 3 &&
-    contrastRatio(tokens.onFill, fill) >= 4.5;
+    Math.min(
+      contrastRatio(fill, tokens.card),
+      contrastRatio(fill, tokens.page),
+    ) >= 3 && contrastRatio(tokens.onFill, fill) >= 4.5;
   // Only a plain hex can be measured; anything else is drawn as given.
   if (!/^#[0-9a-f]{6}$/i.test(hue) || ok(hue)) return hue;
   const ends: (0 | 255)[] =
-    luminance(hue) >= luminance(tokens.card) ? [255, 0] : [0, 255];
+    luminance(hue) >= (luminance(tokens.card) + luminance(tokens.page)) / 2
+      ? [255, 0]
+      : [0, 255];
   for (const end of ends) {
     for (let t = 0.01; t <= 1; t += 0.01) {
       const fill = shifted(hue, end, t);
