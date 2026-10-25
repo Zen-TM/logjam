@@ -216,6 +216,17 @@ describe("GeoPdfDialog, remembers the last settings", () => {
     expect(screen.getByRole("radio", { name: "Imagery" }).ariaChecked).toBe(
       "true",
     );
+    cleanup();
+
+    // "osm" is a valid GeoPDF layer the dialog has no chip for.
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ baseLayer: "osm" }),
+    );
+    render(dialog({ open: true }));
+    expect(screen.getByRole("radio", { name: "Topo" }).ariaChecked).toBe(
+      "true",
+    );
   });
 
   it("opens on the defaults when what is stored is not JSON", () => {

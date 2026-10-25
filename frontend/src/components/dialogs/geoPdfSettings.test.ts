@@ -134,7 +134,8 @@ describe("readSettings", () => {
 
   // Mutation: accept any string, and a stored "osm" selects no chip yet is
   // still printed. The dialog passes the list it offers (the render test
-  // "opens on the defaults…" holds the wiring).
+  // "takes a stored base layer the dialog offers, not one it does not" holds
+  // the wiring).
   it("takes a base layer only from the ones the dialog offers", () => {
     expect(read({ baseLayer: "six-imagery" })).toEqual({
       baseLayer: "six-imagery",
