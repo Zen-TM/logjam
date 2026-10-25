@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import type { Canvas } from "canvas";
@@ -14,7 +13,6 @@ import {
   type GeoPdfConfig,
 } from "@logjam/shared";
 import {
-  AUTH,
   TILE_GREEN,
   colourAt,
   mapImage,
@@ -33,7 +31,7 @@ import {
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { latToMercY, computeZoom, TARGET_DPI } from "@logjam/shared";
-import { API_URL, ALICE_ID } from "./_actors";
+import { ALICE_ID } from "./_actors";
 
 // Requires the topo bucket. Each test makes its own completed topo job, with
 // ONE vegetation tile in S3 at the zoom the page renders at: a GeoPDF reads overlays at its
