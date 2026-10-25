@@ -35,7 +35,8 @@ export function settingsOf(config: GeoPdfConfig): GeoPdfSettings {
     paperSize: config.paperSize,
     orientation: config.orientation,
     ...(config.customRatio ? { customRatio: config.customRatio } : {}),
-    scale: config.scale,
+    // Typing an edge leaves a float (24999.999…) that no preset chip matches.
+    scale: Math.round(config.scale),
     baseLayer: config.baseLayer,
     overlays: config.overlays,
     compass: config.elements.compass,

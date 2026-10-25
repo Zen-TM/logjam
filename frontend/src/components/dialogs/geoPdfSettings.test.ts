@@ -35,6 +35,14 @@ describe("settingsOf", () => {
   });
 });
 
+describe("settingsOf, the scale", () => {
+  // Mutation: store config.scale as it is, and a scale left at 24999.999…
+  // by a typed edge opens on Other instead of 1:25,000.
+  it("is a whole number", () => {
+    expect(settingsOf({ ...config, scale: 24999.999999995 }).scale).toBe(25000);
+  });
+});
+
 describe("readSettings", () => {
   it("drops each field that no longer validates and keeps the rest", () => {
     expect(
