@@ -95,7 +95,7 @@ describe("useStoredState", () => {
       ),
     );
     expect(result.current[0]).toBe("geopdfs");
-    sessionStorage.setItem("logjam.mapsView", '"lidar"');
+    sessionStorage.setItem("logjam.mapsView", '"geopdfs"');
     const again = renderHook(() =>
       useStoredState<MapsView>(
         "logjam.mapsView",
@@ -104,6 +104,17 @@ describe("useStoredState", () => {
         isMapsView,
       ),
     );
-    expect(again.result.current[0]).toBe("lidar");
+    expect(again.result.current[0]).toBe("geopdfs");
+    // Retired views, whichever release retired them, read as the default.
+    sessionStorage.setItem("logjam.mapsView", '"lidar"');
+    const old = renderHook(() =>
+      useStoredState<MapsView>(
+        "logjam.mapsView",
+        "geopdfs",
+        sessionStorage,
+        isMapsView,
+      ),
+    );
+    expect(old.result.current[0]).toBe("geopdfs");
   });
 });

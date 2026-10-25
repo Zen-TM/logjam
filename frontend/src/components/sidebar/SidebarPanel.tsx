@@ -28,7 +28,6 @@ import type {
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
@@ -54,9 +53,7 @@ const LOGS_VIEWS = [
   { value: "stats", label: "Stats" },
 ] as const;
 
-const MAPS_VIEWS = [
-  { value: "geopdfs", label: "GeoPDFs" },
-] as const;
+const MAPS_VIEWS = [{ value: "geopdfs", label: "GeoPDFs" }] as const;
 
 function SidebarPanel({
   activePanel,
@@ -95,7 +92,6 @@ function SidebarPanel({
   geoPdfTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
-  completedTopoJobs,
   onQuotaChanged,
   currentUser,
   currentUserError,
@@ -188,8 +184,6 @@ function SidebarPanel({
   onCreateGeoPdfTemplate: () => void;
   geoPdfTemplateRefetch: number;
   geoPdfJobsRefetch: number;
-  // LiDAR
-  completedTopoJobs: CompletedTopoJob[];
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch

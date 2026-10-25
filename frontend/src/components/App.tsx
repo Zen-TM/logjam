@@ -1694,7 +1694,6 @@ function App() {
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
-          completedTopoJobs={completedTopoJobs}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           currentUserError={currentUserError}
