@@ -583,7 +583,7 @@ describe("Export an area, for GIS", () => {
     ).toBeTruthy();
   });
 
-  // Maps, Exports opens it on a GIS format. Mutation: ignore `openWithGis`.
+  // The render tests open it on a GIS format. Mutation: ignore `openWithGis`.
   it("opens on GeoTIFF with For GIS open from the Exports view", () => {
     render(dialog({ open: true, openWithGis: true }));
     expect(
