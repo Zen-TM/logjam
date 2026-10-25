@@ -775,7 +775,7 @@ export function SavedScreen({
 
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);

@@ -63,7 +63,6 @@ import {
 import {
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
-  TOPO_LAYERS,
   TRACK_MIME_TYPES,
   compassPointFor,
   distinctTripTypes,
@@ -304,7 +303,6 @@ import {
 } from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import {} from "../offline/registryDb";
 import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -1310,7 +1308,7 @@ export function MapScreen({
   const isGuest = useAccountState().accountState === "guest";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     !isGuest,
   );
   // The sharpened areas the user can see: the Terrain group reads each one's
