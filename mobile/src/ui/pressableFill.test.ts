@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 //
 // Mutations that turn it red: give a StatusPill style a `backgroundColor` (e.g.
 // an accent tone); drop `backgroundColor: theme.card` from Button's base;
-// drop the check from an active Chip.
+// see the last block.
 const source = (name: string) =>
   readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
 
@@ -60,8 +60,23 @@ describe("an add chip is dashed", () => {
   });
 });
 
-describe("a selected chip is not a button", () => {
-  it("leads with a check as well as its fill", () => {
-    expect(source("Chip.tsx")).toContain('<Icon idea="done"');
+// A selected chip is shown by its fill and nothing else, so selecting never
+// changes its width, and the fill is the chip's hue, never the card colour a
+// button wears. Its accent against the card is held >= 3:1 (WCAG 1.4.11) in
+// every scheme by scripts/wcag-contrast.mjs ("accent on card").
+// Mutations: put `<Icon idea="done"` back in Chip.tsx; paint the active fill
+// `theme.card`; default `tint` to something other than `theme.accent`.
+describe("a selected chip is its fill alone", () => {
+  const chip = source("Chip.tsx");
+
+  it("draws no check", () => {
+    expect(chip).not.toContain('idea="done"');
+  });
+
+  it("fills with its hue, accent by default, not the button's card", () => {
+    expect(chip).toContain("const tint = hue ?? theme.accent;");
+    expect(chip).toContain(
+      "active && { backgroundColor: tint, borderColor: tint }",
+    );
   });
 });

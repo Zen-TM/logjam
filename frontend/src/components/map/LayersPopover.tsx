@@ -236,7 +236,7 @@ export default function LayersPopover({
               className={classes.grow}
               options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
                 key === "basemap"
-                  ? { value: key, label: copy.tabBasemap, icon: "map" as const }
+                  ? { value: key, label: copy.tabBasemap }
                   : key === "terrain"
                     ? { value: key, label: copy.tabTerrain }
                     : {

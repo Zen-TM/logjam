@@ -114,7 +114,8 @@ renumber.
   Exempt: text fields, switches, the surfaces themselves and the map's chrome.
 - **Small things follow it.** A button wears the card fill; a surface's one
   primary action wears the accent. A status pill is read, so it has no fill:
-  words with a dot or a glyph. A selected chip looks like neither. A badge on
+  words with a dot or a glyph. A selected chip looks like neither: its fill
+  shows it, with no check, so selecting never changes its width. A badge on
   something pressable (an unread count, a chip's tally) keeps its fill.
 - **A pill is never narrower than it is tall.**
 - **Things that look alike behave alike**; a thing that behaves differently
