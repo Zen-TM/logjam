@@ -28,9 +28,7 @@ export interface GeoPdfConfig {
 
 // ── Allowlists ────────────────────────────────────────────────────────────────
 // Single source of truth for what a GeoPdfConfig may contain. Used both to
-// validate a live render request (routes/geoPdf.ts) and to validate a stored
-// GeoPdfTemplate.config (routes/geoPdfTemplates.ts) so a saved template can
-// never become a stored-injection vector for the server-side renderer.
+// validate a live render request (routes/geoPdf.ts).
 
 export const VALID_GEOPDF_PAPER_SIZES = new Set<string>([
   "A2",
@@ -49,38 +47,27 @@ export const VALID_GEOPDF_BASE_LAYERS = new Set<string>([
   "six-imagery",
 ]);
 
-// The Terrain group's layers (the statewide ones, and a LiDAR job's own of
-// the same name) and the two only a job draws. Declared, not derived from
-// TOPO_LAYERS, which LiDAR jobs are leaving: a stored template naming one of
-// these must keep validating. Guard: geoPdfConfig.test.ts.
+// The Terrain group's layers (the statewide ones, and a sharpened area's own
+// of the same name) and the vegetation only a sharpened area draws. Guard:
+// geoPdfConfig.test.ts.
 export const VALID_GEOPDF_OVERLAY_NAMES = new Set<string>([
   ...TERRAIN_LAYER_KEYS,
   "vegetation",
-  "features",
 ]);
 
 /**
- * Core validator for the security-relevant fields of a GeoPdfConfig against the
- * allowlists above. Returns the first error message, or null if valid.
- *
- * `requireExtent` distinguishes the two callers: a live render request must pin
- * an extent (validateGeoPdfConfig), while a stored GeoPdfTemplate.config
- * intentionally omits it (validateGeoPdfTemplateConfig) — a template captures
- * layout/layer prefs without binding to a map region. An extent, when present,
- * is validated either way so a template can never become a stored-injection
- * vector for the server-side renderer.
+ * Validate a live GeoPDF render request: the security-relevant fields of a
+ * GeoPdfConfig against the allowlists above. Returns the first error message,
+ * or null if valid.
  */
-function validateGeoPdfConfigCore(
-  input: unknown,
-  requireExtent: boolean,
-): string | null {
+export function validateGeoPdfConfig(input: unknown): string | null {
   if (!input || typeof input !== "object") {
     return "config must be an object";
   }
   const config = input as Partial<GeoPdfConfig>;
 
   const missing: string[] = [];
-  if (requireExtent && !config.extent) missing.push("extent");
+  if (!config.extent) missing.push("extent");
   if (!config.baseLayer) missing.push("baseLayer");
   if (!config.paperSize) missing.push("paperSize");
   if (missing.length > 0) {
@@ -141,22 +128,6 @@ function validateGeoPdfConfigCore(
   }
 
   return null;
-}
-
-/**
- * Validate a live GeoPDF render request — `extent` is mandatory.
- */
-export function validateGeoPdfConfig(input: unknown): string | null {
-  return validateGeoPdfConfigCore(input, true);
-}
-
-/**
- * Validate a stored GeoPdfTemplate.config — `extent` is optional (a template
- * captures layout/layers without pinning a region), but every other field is
- * enforced identically to a live render request.
- */
-export function validateGeoPdfTemplateConfig(input: unknown): string | null {
-  return validateGeoPdfConfigCore(input, false);
 }
 
 // Status lifecycle for an async GeoPDF render job. Mirrors ExportStatus on

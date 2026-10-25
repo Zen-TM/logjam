@@ -14,8 +14,7 @@ const TERRAIN: readonly string[] = TERRAIN_LAYER_KEYS;
 
 /** The overlays a job alone can draw, in the order the renderer stacks them. */
 export const LIDAR_ONLY_OVERLAYS = TOPO_LAYERS.filter(
-  // `features` is still a valid name, so a stored template keeps validating,
-  // but nothing draws it.
+  // Nothing draws `features`, and the API refuses it.
   (layer) => !TERRAIN.includes(layer.name) && layer.name !== "features",
 );
 

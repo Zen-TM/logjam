@@ -3,7 +3,6 @@ import { TOPO_LAYERS } from "./topoSettings.js";
 import {
   validateGeoPdfConfig,
   VALID_GEOPDF_OVERLAY_NAMES,
-  validateGeoPdfTemplateConfig,
   type GeoPdfConfig,
 } from "./geoPdfConfig.js";
 
@@ -122,56 +121,20 @@ describe("validateGeoPdfConfig", () => {
   });
 });
 
-describe("validateGeoPdfTemplateConfig", () => {
-  it("accepts a config with no extent (a template omits it)", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    expect(validateGeoPdfTemplateConfig(c)).toBeNull();
-  });
-
-  it("accepts a fully valid config that does include an extent", () => {
-    expect(validateGeoPdfTemplateConfig(validConfig())).toBeNull();
-  });
-
-  it("still requires baseLayer and paperSize", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    delete c.baseLayer;
-    expect(validateGeoPdfTemplateConfig(c)).toMatch(
-      /Missing required fields: baseLayer/,
-    );
-  });
-
-  it("still validates an extent when one is present", () => {
-    const c = validConfig();
-    c.extent.north = -33.7; // below south
-    expect(validateGeoPdfTemplateConfig(c)).toMatch(/north must be > south/);
-  });
-
-  it("still enforces the base-layer allowlist", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    expect(
-      validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" }),
-    ).toBe("Invalid base layer: evil-tiles");
-  });
-});
-
 describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
-  // Logjam Web offers and sends every TOPO_LAYERS name. Mutation: add a layer
-  // to TOPO_LAYERS only, and every GeoPDF from Logjam Web is refused.
+  // Logjam Web offers and sends every TOPO_LAYERS name but `features`, which
+  // nothing draws. Mutation: add a layer to TOPO_LAYERS only, and every GeoPDF
+  // from Logjam Web is refused.
   it("holds every layer Logjam Web can send", () => {
     for (const layer of TOPO_LAYERS)
-      expect(VALID_GEOPDF_OVERLAY_NAMES.has(layer.name)).toBe(true);
+      if (layer.name !== "features")
+        expect(VALID_GEOPDF_OVERLAY_NAMES.has(layer.name)).toBe(true);
   });
 
-  // The wire names stored templates carry. Mutation: build the list from
-  // TOPO_LAYERS again and drop a layer from it, and a saved template naming
-  // that layer stops validating.
-  it("is the five names a GeoPDF has always sent", () => {
+  // Mutation: put `features` back, and a request names an overlay nothing draws.
+  it("is the Terrain group and vegetation, nothing else", () => {
     expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
       "contours",
-      "features",
       "hillshade",
       "slope",
       "vegetation",

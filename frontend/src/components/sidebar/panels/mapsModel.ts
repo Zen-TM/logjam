@@ -19,12 +19,11 @@ import { type Glyph } from "../../../ui";
 /**
  * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a GeoPDF
  * is a page of paper, a LiDAR topo is terrain in the eucalypt `overlay` hue.
- * What is made FROM a thing wears that thing's hue with its own glyph — a
- * template is the settings a map is made with — so a row says both what it is
- * and what it belongs to.
+ * What is made FROM a thing wears that thing's hue with its own glyph, so a
+ * row says both what it is and what it belongs to.
  */
 export const MAP_IDENTITY: Record<
-  "geoPdf" | "topo" | "sharpened" | "geoPdfTemplate",
+  "geoPdf" | "topo" | "sharpened",
   {
     icon: Glyph;
     hue: string;
@@ -42,11 +41,6 @@ export const MAP_IDENTITY: Record<
     icon: "lidar",
     hue: "var(--hue-overlay)",
     label: LIDAR_JOB_COPY.noun,
-  },
-  geoPdfTemplate: {
-    icon: "template",
-    hue: "var(--hue-geo-pdf)",
-    label: "GeoPDF template",
   },
 };
 

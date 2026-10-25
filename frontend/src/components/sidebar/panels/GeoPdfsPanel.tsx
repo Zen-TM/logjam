@@ -1,11 +1,10 @@
-// Maps → GeoPDFs: the printable maps the user has made, the ones still being
-// made, and the templates they are made from.
+// Maps → GeoPDFs: the printable maps the user has made, and the ones still
+// being made.
 //
 // The page answers "what maps have I made, and what is still being made?"
-// (shared/DESIGN.md §2). Its hero counts the finished GeoPDFs; a TAB each for the maps
-// and the templates they are made from prevents templates being buried under
-// older GeoPDFs; and what is still being made is pinned under both so in-flight
-// progress stays immediately visible.
+// (shared/DESIGN.md §2). Its hero counts the finished GeoPDFs, and what is
+// still being made is pinned under the list so in-flight progress stays
+// immediately visible.
 //
 // A GeoPDF's body DOWNLOADS it. A PDF has nowhere in this app to open to — the
 // list view carries no extent to centre the map on — and in a browser opening a
@@ -13,7 +12,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { removeShareConfirm } from "@logjam/shared";
 import {
-  apiFetch,
   deleteGeoPdfJob,
   getEntityShares,
   shareEntityWith,
@@ -24,10 +22,8 @@ import {
 import { messageFromError } from "../../../errors/messageFromError";
 import { useToast } from "../../feedback/ToastProvider";
 import ShareDialog from "../../dialogs/ShareDialog";
-import type { GeoPdfTemplate } from "../../dialogs/GeoPdfDialog";
 import {
   Button,
-  ChipRail,
   EmptyState,
   Hero,
   IconButton,
@@ -51,16 +47,9 @@ import { MakingFooter } from "./MapsParts";
 import { useConfirm } from "./useConfirm";
 import classes from "./MapsPanel.module.css";
 
-/** The two lists this view holds, one tab each. */
-type GeoPdfTab = "maps" | "templates";
-
 export default function GeoPdfsPanel({
   views,
   onOpenGeoPdf,
-  onOpenGeoPdfWithTemplate,
-  onEditGeoPdfTemplate,
-  onCreateGeoPdfTemplate,
-  refetchTrigger,
   geoPdfJobsRefetch,
   friends,
   loadsUserData,
@@ -68,10 +57,6 @@ export default function GeoPdfsPanel({
   /** The Maps view switch, drawn under this view's hero (DESIGN.md). */
   views: React.ReactNode;
   onOpenGeoPdf: () => void;
-  onOpenGeoPdfWithTemplate: (id: string) => void;
-  onEditGeoPdfTemplate: (template: GeoPdfTemplate) => void;
-  onCreateGeoPdfTemplate: () => void;
-  refetchTrigger: number;
   geoPdfJobsRefetch: number;
   /** Friends a generated GeoPDF can be shared with. */
   friends: TFriend[];
@@ -82,11 +67,6 @@ export default function GeoPdfsPanel({
 }): React.JSX.Element {
   const toast = useToast();
   const { ask, dialog } = useConfirm();
-  // Which tab of the view is showing. Panel-local: which list you were reading
-  // is not worth remembering past a page change.
-  const [tab, setTab] = useState<GeoPdfTab>("maps");
-  const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
-  const [templatesLoaded, setTemplatesLoaded] = useState(false);
   // Non-null = the GeoPDF whose share dialog is open, with the row's own words
   // so the dialog's title matches what was pressed.
   const [shareJob, setShareJob] = useState<{
@@ -108,19 +88,6 @@ export default function GeoPdfsPanel({
   useEffect(() => {
     if (jobsError) toast.error(jobsError);
   }, [jobsError, toast]);
-
-  useEffect(() => {
-    // The template list is user data too: behind the consent gate it is one
-    // more request the gate exists to hold (GeoPdfsPanel.render.test.tsx).
-    if (!loadsUserData) return;
-    apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
-      .then(setTemplates)
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
-      })
-      .finally(() => setTemplatesLoaded(true));
-  }, [toast, refetchTrigger, loadsUserData]);
 
   const deleteJob = useCallback(
     async (id: string) => {
@@ -177,7 +144,7 @@ export default function GeoPdfsPanel({
             ask({
               title: `Delete ${label}?`,
               message:
-                "The PDF is deleted from your account, and friends you shared it with lose it too. The template it was made with stays.",
+                "The PDF is deleted from your account, and friends you shared it with lose it too.",
               confirmLabel: "Delete",
               run: () => deleteJob(job.id),
             }),
@@ -221,53 +188,6 @@ export default function GeoPdfsPanel({
     ];
   };
 
-  const templateEntries = (template: GeoPdfTemplate): MenuEntry[] => [
-    {
-      id: "make",
-      label: "Make a GeoPDF with this",
-      icon: "geoPdf",
-      onSelect: () => onOpenGeoPdfWithTemplate(template.id),
-    },
-    {
-      id: "edit",
-      label: "Edit…",
-      icon: "edit",
-      onSelect: () => onEditGeoPdfTemplate(template),
-    },
-    { id: "delete-sep", separator: true },
-    {
-      id: "delete",
-      label: "Delete",
-      icon: "delete",
-      danger: true,
-      onSelect: () =>
-        ask({
-          title: `Delete the template “${template.name}”?`,
-          message:
-            "The template is deleted. GeoPDFs already made with it stay.",
-          confirmLabel: "Delete",
-          run: async () => {
-            try {
-              await apiFetch(`/geo-pdf-templates/${template.id}`, {
-                method: "DELETE",
-              });
-              setTemplates((previous) =>
-                previous.filter((each) => each.id !== template.id),
-              );
-            } catch (err) {
-              console.error(err);
-              toast.error(
-                messageFromError(
-                  err,
-                  "Couldn't delete template. Please try again.",
-                ),
-              );
-            }
-          },
-        }),
-    },
-  ];
-
   const hero = (
     <Hero
       title={
@@ -278,44 +198,14 @@ export default function GeoPdfsPanel({
             : plural(made.length, "GeoPDF")
       }
       actions={
-        <Menu
-          label="Make a GeoPDF"
-          placement="bottom-end"
-          entries={[
-            {
-              id: "make",
-              label: "Make a GeoPDF",
-              icon: "geoPdf",
-              onSelect: onOpenGeoPdf,
-            },
-            {
-              id: "template",
-              label: "New template…",
-              icon: "add",
-              onSelect: onCreateGeoPdfTemplate,
-            },
-          ]}
-          trigger={(props) => (
-            <Button
-              {...props}
-              compact
-              variant="filled"
-              icon="add"
-              trailingIcon="expand"
-            >
-              Make
-            </Button>
-          )}
-        />
+        <Button compact variant="filled" icon="add" onClick={onOpenGeoPdf}>
+          Make
+        </Button>
       }
     />
   );
 
-  const nothingYet =
-    jobsLoaded &&
-    templatesLoaded &&
-    jobs.length === 0 &&
-    templates.length === 0;
+  const nothingYet = jobsLoaded && jobs.length === 0;
 
   // The same button is the empty state's and the end of the list's.
   const makeGeoPdfButton = (
@@ -339,123 +229,71 @@ export default function GeoPdfsPanel({
     </div>
   ) : (
     <div className={classes.list}>
-      {tab === "maps" && (
-        <section className={classes.section} aria-labelledby="maps-geopdfs">
-          {/* The tab is the heading: a chip that says "Maps 12" over a heading
-            that says "GEOPDFS 12" is the same line drawn twice. */}
-          <h3 id="maps-geopdfs" className="visually-hidden">
-            GeoPDFs
-          </h3>
-          {/* Kept via `expireCompletedGeoPdfJobs` on the same TTL as topo
+      <section className={classes.section} aria-labelledby="maps-geopdfs">
+        <h3 id="maps-geopdfs" className="visually-hidden">
+          GeoPDFs
+        </h3>
+        {/* Kept via `expireCompletedGeoPdfJobs` on the same TTL as topo
             exports; explaining the retention prevents a vanishing GeoPDF from
             reading as data loss. */}
-          <p className={classes.note}>
-            {made.length === 0 ? "None finished yet. " : ""}Kept for 7 days
-            after they're made — download one to keep it.
-          </p>
-          {made.map((job) => {
-            const label = geoPdfLabel(job);
-            return (
-              <Row
-                key={job.id}
-                data-geopdf-id={job.id}
-                title={label}
-                subtitle={fileSubtitle({
-                  bytes: job.resultBytes,
-                  createdAt: job.createdAt,
-                })}
-                description={MAP_IDENTITY.geoPdf.label}
-                leading={
-                  <IconTile
-                    icon="geoPdf"
-                    hue={MAP_IDENTITY.geoPdf.hue}
-                    label={MAP_IDENTITY.geoPdf.label}
-                  />
-                }
-                // A real anchor, so middle-click and "save as" work.
-                href={job.downloadUrl ?? undefined}
-                download=""
-                trailing={
-                  <>
-                    {job.syncRole !== "owner" && (
-                      <StatusPill label="Shared" tone="outline" />
-                    )}
-                    <Menu
-                      label={`Actions for ${label}`}
-                      title={label}
-                      placement="right-start"
-                      entries={entriesFor(job)}
-                      trigger={(props) => (
-                        <IconButton
-                          {...props}
-                          icon="overflow"
-                          label={`Actions for ${label}`}
-                        />
-                      )}
-                    />
-                  </>
-                }
-              />
-            );
-          })}
-          {/* The server caps the list; say so rather than letting older GeoPDFs
-            quietly not exist (shared/DESIGN.md §11). */}
-          {jobsTotal != null && jobsTotal > jobs.length && (
-            <p className={classes.note}>
-              Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}.
-              Older ones aren’t loaded.
-            </p>
-          )}
-        </section>
-      )}
-
-      {tab === "templates" && (
-        <section
-          className={classes.section}
-          aria-labelledby="maps-geopdf-templates"
-        >
-          <h3 id="maps-geopdf-templates" className="visually-hidden">
-            Templates
-          </h3>
-          {templatesLoaded && templates.length === 0 && (
-            <p className={classes.note}>
-              A template keeps paper, scale and layers to make the next GeoPDF
-              with.
-            </p>
-          )}
-          {templates.map((template) => (
+        <p className={classes.note}>
+          {made.length === 0 ? "None finished yet. " : ""}Kept for 7 days after
+          they're made — download one to keep it.
+        </p>
+        {made.map((job) => {
+          const label = geoPdfLabel(job);
+          return (
             <Row
-              key={template.id}
-              title={template.name}
-              description={MAP_IDENTITY.geoPdfTemplate.label}
+              key={job.id}
+              data-geopdf-id={job.id}
+              title={label}
+              subtitle={fileSubtitle({
+                bytes: job.resultBytes,
+                createdAt: job.createdAt,
+              })}
+              description={MAP_IDENTITY.geoPdf.label}
               leading={
                 <IconTile
-                  icon={MAP_IDENTITY.geoPdfTemplate.icon}
-                  hue={MAP_IDENTITY.geoPdfTemplate.hue}
-                  label={MAP_IDENTITY.geoPdfTemplate.label}
+                  icon="geoPdf"
+                  hue={MAP_IDENTITY.geoPdf.hue}
+                  label={MAP_IDENTITY.geoPdf.label}
                 />
               }
-              // What a template is FOR: making a GeoPDF with it.
-              onOpen={() => onOpenGeoPdfWithTemplate(template.id)}
+              // A real anchor, so middle-click and "save as" work.
+              href={job.downloadUrl ?? undefined}
+              download=""
               trailing={
-                <Menu
-                  label={`Actions for ${template.name}`}
-                  title={template.name}
-                  placement="right-start"
-                  entries={templateEntries(template)}
-                  trigger={(props) => (
-                    <IconButton
-                      {...props}
-                      icon="overflow"
-                      label={`Actions for ${template.name}`}
-                    />
+                <>
+                  {job.syncRole !== "owner" && (
+                    <StatusPill label="Shared" tone="outline" />
                   )}
-                />
+                  <Menu
+                    label={`Actions for ${label}`}
+                    title={label}
+                    placement="right-start"
+                    entries={entriesFor(job)}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Actions for ${label}`}
+                      />
+                    )}
+                  />
+                </>
               }
             />
-          ))}
-        </section>
-      )}
+          );
+        })}
+        {/* The server caps the list; say so rather than letting older GeoPDFs
+            quietly not exist (shared/DESIGN.md §11). */}
+        {jobsTotal != null && jobsTotal > jobs.length && (
+          <p className={classes.note}>
+            Showing your {jobs.length} most recent GeoPDFs of {jobsTotal}. Older
+            ones aren’t loaded.
+          </p>
+        )}
+      </section>
       <ListEnd>{makeGeoPdfButton}</ListEnd>
     </div>
   );
@@ -463,24 +301,7 @@ export default function GeoPdfsPanel({
   return (
     <div className={classes.root}>
       {hero}
-      <div className={classes.rails}>
-        {views}
-        {!nothingYet && jobsLoaded && (
-          <ChipRail
-            label="GeoPDFs view"
-            options={[
-              { value: "maps", label: "Maps", count: made.length },
-              {
-                value: "templates",
-                label: "Templates",
-                count: templatesLoaded ? templates.length : undefined,
-              },
-            ]}
-            value={tab}
-            onChange={setTab}
-          />
-        )}
-      </div>
+      <div className={classes.rails}>{views}</div>
       {list}
       <MakingFooter
         items={beingMade}
