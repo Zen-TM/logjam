@@ -180,13 +180,20 @@ function App() {
     "logs",
     sessionStorage,
   );
-  const [mapsView, setMapsView] = useStoredState<MapsView>(
+  const [storedMapsView, setMapsView] = useStoredState<string>(
     "logjam.mapsView",
     "geopdfs",
     sessionStorage,
   );
+  // A session that stored the retired "lidar" view reads as the first one.
+  const mapsView: MapsView =
+    storedMapsView === "exports" ? "exports" : "geopdfs";
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
+  // The Inbox's "Show" opens the popover on the sharpened areas.
+  const [layersStartView, setLayersStartView] = useState<"sharpened" | null>(
+    null,
+  );
   const layersButtonRef = useRef<HTMLButtonElement>(null);
   // Vector by default: same OSM cartography as the old raster default, drawn
   // locally rather than fetched as pictures, and it carries the labels at every
@@ -352,11 +359,8 @@ function App() {
   const loadsUserData = authenticated && consentSettled;
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
-  const {
-    jobs: completedTopoJobs,
-    loaded: completedTopoJobsLoaded,
-    refetch: refetchCompletedTopoJobs,
-  } = useCompletedTopoJobs(loadsUserData, authenticated);
+  const { jobs: completedTopoJobs, refetch: refetchCompletedTopoJobs } =
+    useCompletedTopoJobs(loadsUserData, authenticated);
   // One toast for the whole session, however many vegetation sources fail.
   const topoUnavailableToastShownRef = useRef(false);
 
@@ -1543,6 +1547,10 @@ function App() {
           activePanel={activePanel}
           onClose={handlePanelClose}
           onTopoFlyTarget={setTopoFlyTarget}
+          onShowSharpened={() => {
+            setLayersStartView("sharpened");
+            setLayersOpen(true);
+          }}
           logsView={logsView}
           onLogsViewChange={setLogsView}
           mapsView={mapsView}
@@ -1689,15 +1697,12 @@ function App() {
           }}
           geoPdfTemplateRefetch={geoPdfTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
-          activeTopoJobs={activeTopoJobs}
           completedTopoJobs={completedTopoJobs}
-          topoJobsLoaded={completedTopoJobsLoaded}
           topoExports={topoExports}
           topoExportsTotal={topoExportsTotal}
           topoExportsLoaded={topoExportsLoaded}
           topoExportsError={topoExportsError}
           onRefetchTopoExports={refetchTopoExports}
-          onOpenTopo={() => setShowTopo(true)}
           onOpenExport={() => {
             setEditingGeoPdfTemplate(undefined);
             setInitialGeoPdfTemplateId(null);
@@ -1706,12 +1711,6 @@ function App() {
             setExportOpensWithGis(true);
             setShowGeoPdf(true);
           }}
-          onExportArea={(job) => {
-            const bounds = job.footprint && footprintBounds(job.footprint);
-            if (bounds) makeMap(bounds, "geopdf");
-          }}
-          onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
-          onDismissActiveJob={handleDismissActiveTopoJob}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           currentUserError={currentUserError}
@@ -1889,8 +1888,23 @@ function App() {
       <LayersPopover
         onImportFile={() => setShowUnifiedImport(true)}
         open={layersOpen}
-        onClose={() => setLayersOpen(false)}
+        onClose={() => {
+          setLayersOpen(false);
+          setLayersStartView(null);
+        }}
         anchorRef={layersButtonRef}
+        startView={layersStartView}
+        activeTopoJobs={activeTopoJobs}
+        friends={friends}
+        onSharpen={() => setShowTopo(true)}
+        onExportArea={(job) => {
+          const bounds = job.footprint && footprintBounds(job.footprint);
+          if (bounds) makeMap(bounds, "geopdf");
+        }}
+        onFlyToArea={setTopoFlyTarget}
+        onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
+        onDismissActiveJob={handleDismissActiveTopoJob}
+        onQuotaChanged={refetchCurrentUser}
         showPlaces={showPlaces}
         setShowPlaces={setShowPlaces}
         showWays={showWays}

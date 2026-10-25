@@ -17,6 +17,8 @@ export function useEscape(
     if (!element) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // An open menu inside this layer is the innermost one: it closes itself.
+      if ((event.target as Element).closest('[role="menu"]')) return;
       event.preventDefault();
       event.stopPropagation();
       handleEscape();

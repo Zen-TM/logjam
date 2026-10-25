@@ -28,7 +28,7 @@ import type {
   TopoExportJobView,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
-import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
+import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
@@ -36,7 +36,6 @@ import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
-import LidarPanel from "./panels/LidarPanel";
 import ExportsPanel from "./panels/ExportsPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
@@ -60,13 +59,13 @@ const LOGS_VIEWS = [
 const MAPS_VIEWS = [
   { value: "geopdfs", label: "GeoPDFs" },
   { value: "exports", label: "Exports" },
-  { value: "lidar", label: "LiDAR topos" },
 ] as const;
 
 function SidebarPanel({
   activePanel,
   onClose,
   onTopoFlyTarget,
+  onShowSharpened,
   logsView,
   onLogsViewChange,
   mapsView,
@@ -99,19 +98,13 @@ function SidebarPanel({
   geoPdfTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
-  activeTopoJobs,
   completedTopoJobs,
-  topoJobsLoaded,
   topoExports,
   topoExportsTotal,
   topoExportsLoaded,
   topoExportsError,
   onRefetchTopoExports,
-  onOpenTopo,
   onOpenExport,
-  onExportArea,
-  onRefetchCompletedTopoJobs,
-  onDismissActiveJob,
   onQuotaChanged,
   currentUser,
   currentUserError,
@@ -167,6 +160,8 @@ function SidebarPanel({
   activePanel: PanelId | null;
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  /** Opens the Layers popover on Terrain → Sharpened areas. */
+  onShowSharpened: () => void;
   logsView: LogsView;
   onLogsViewChange: (view: LogsView) => void;
   mapsView: MapsView;
@@ -203,23 +198,15 @@ function SidebarPanel({
   geoPdfTemplateRefetch: number;
   geoPdfJobsRefetch: number;
   // LiDAR
-  activeTopoJobs: TopoJob[];
   completedTopoJobs: CompletedTopoJob[];
-  /** False until the first fetch of completed topos settles. */
-  topoJobsLoaded: boolean;
   topoExports: TopoExportJobView[];
   topoExportsTotal: number | null;
   /** False until the first fetch of exports settles (shared/DESIGN.md §11). */
   topoExportsLoaded: boolean;
   topoExportsError: string | null;
   onRefetchTopoExports: () => void;
-  onOpenTopo: () => void;
   /** Export an area, from the Exports view. */
   onOpenExport: () => void;
-  /** Export an area over a topo's footprint. */
-  onExportArea: (job: CompletedTopoJob) => void;
-  onRefetchCompletedTopoJobs: () => void;
-  onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
@@ -444,21 +431,6 @@ function SidebarPanel({
             onOpenExport={onOpenExport}
           />
         )}
-        {activePanel === "maps" && mapsView === "lidar" && (
-          <LidarPanel
-            views={mapsViewRail}
-            topoJobsLoaded={topoJobsLoaded}
-            friends={friends}
-            activeTopoJobs={activeTopoJobs}
-            completedTopoJobs={completedTopoJobs}
-            onOpenTopo={onOpenTopo}
-            onExportArea={onExportArea}
-            onTopoFlyTarget={onTopoFlyTarget}
-            onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
-            onDismissActiveJob={onDismissActiveJob}
-            onQuotaChanged={onQuotaChanged}
-          />
-        )}
         {activePanel === "friends" && (
           <FriendsPanel
             friends={friends}
@@ -481,6 +453,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
+            onShowSharpened={onShowSharpened}
           />
         )}
         {activePanel === "logs" && logsView === "stats" && (

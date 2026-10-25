@@ -156,6 +156,7 @@ function NotificationsPanel({
   setActivePanel,
   onMapsViewChange,
   onTopoFlyTarget,
+  onShowSharpened,
 }: {
   notifications: TNotification[];
   notificationsLoaded: boolean;
@@ -170,6 +171,8 @@ function NotificationsPanel({
   setActivePanel: (panel: PanelId | null) => void;
   onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  /** Opens the Layers popover on Terrain → Sharpened areas. */
+  onShowSharpened: () => void;
 }) {
   const toast = useToast();
   const dayIdPrefix = useId();
@@ -410,8 +413,12 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
-    if (destination.mapsView) onMapsViewChange(destination.mapsView);
-    setActivePanel(destination.panel);
+    if (destination.kind === "sharpened") {
+      onShowSharpened();
+    } else {
+      if (destination.mapsView) onMapsViewChange(destination.mapsView);
+      setActivePanel(destination.panel);
+    }
     // Opening a topo fits the map to it, from here as from its own row: the map
     // sits beside the page, so there is no verb for it (shared/DESIGN.md §3).
     const footprint = n.payload.footprint as GeoJsonPolygonal | undefined;

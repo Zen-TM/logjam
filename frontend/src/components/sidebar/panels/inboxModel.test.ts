@@ -26,11 +26,12 @@ describe("inboxDestination", () => {
     });
   });
 
-  // Mutation: route a finished export back to "lidar", which no longer lists it.
-  it("sends a finished map to the Maps view that lists it", () => {
+  // Mutation: route a finished sharpened area back to a Maps view, which no
+  // longer lists it.
+  it("sends a finished map to where it is listed", () => {
     expect(
       inboxDestination(notification("topo_complete", { jobId: "j1" })),
-    ).toMatchObject({ panel: "maps", mapsView: "lidar" });
+    ).toEqual({ kind: "sharpened", label: "Show" });
     expect(
       inboxDestination(
         notification("topo_export_complete", { status: "completed" }),

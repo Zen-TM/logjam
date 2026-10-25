@@ -619,6 +619,7 @@ describe("the map's layers", () => {
     );
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
       ...TERRAIN_SWITCH_KEYS,
+      "sharpenedAreas",
       "slopeBands",
     ]);
   });

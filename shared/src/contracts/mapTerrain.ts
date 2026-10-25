@@ -14,6 +14,12 @@ export const MAP_TERRAIN = {
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
     {
+      key: "sharpenedAreas",
+      on: "web",
+      reason:
+        "Making, sharing and deleting sharpened areas is planning, done at home: Logjam GPS draws the ones the account has and saves them from Saved.",
+    },
+    {
       key: "slopeBands",
       on: "web",
       reason:
@@ -25,6 +31,7 @@ export const MAP_TERRAIN = {
     slope: "Slope",
     hillshade: "Hillshade",
     vegetation: "Vegetation",
+    sharpenedAreas: "Sharpened areas",
     vegetationHint:
       "Scrub density for bushbashing: denser reads darker. Orange crosshatching is ground burnt since the survey.",
     slopeBands: "Slope bands",

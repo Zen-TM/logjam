@@ -18,6 +18,8 @@ function draw(
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
     hasVegetation,
+    sharpenedCount: 2,
+    onOpenSharpened: vi.fn(),
   };
   render(<TerrainPane {...props} />);
   return props;
@@ -54,6 +56,12 @@ describe("the Terrain group on Logjam Web", () => {
     expect(screen.getAllByRole("switch")).toHaveLength(4);
     fireEvent.click(screen.getByRole("switch", { name: "Show vegetation" }));
     expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
+  });
+
+  it("counts the sharpened areas and opens them", () => {
+    const props = draw();
+    fireEvent.click(screen.getByText(`${copy.sharpenedAreas} · 2`));
+    expect(props.onOpenSharpened).toHaveBeenCalled();
   });
 
   it("opens the slope bands from the Slope row", () => {
