@@ -55,7 +55,7 @@ export SENTRY_DISABLE_AUTO_UPLOAD=true
 
 # The whole generated tree, not the bundle task's own folder: that path changes
 # between React Native versions, and a delete that misses it ships a stale bundle.
-bundle_dir="android/app/build/generated/assets"
+generated_assets="android/app/build/generated/assets"
 apk="android/app/build/outputs/apk/release/app-release.apk"
 
 # The plugin writes into android/, which is prebuild-generated, so prebuild has
@@ -68,7 +68,7 @@ echo "==> prebuild (android)"
 npx expo prebuild --platform android --no-install
 
 echo "==> forcing a fresh JS bundle (.env is not a gradle input)"
-rm -rf "$bundle_dir"
+rm -rf "$generated_assets"
 
 echo "==> assembleRelease"
 (cd android && ./gradlew assembleRelease --max-workers=1)
