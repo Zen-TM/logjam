@@ -13,7 +13,9 @@ const TERRAIN: readonly string[] = TERRAIN_LAYER_KEYS;
 
 /** The overlays a job alone can draw, in the order the renderer stacks them. */
 export const LIDAR_ONLY_OVERLAYS = TOPO_LAYERS.filter(
-  (layer) => !TERRAIN.includes(layer.name),
+  // `features` is still a valid name, so a stored template keeps validating,
+  // but nothing draws it.
+  (layer) => !TERRAIN.includes(layer.name) && layer.name !== "features",
 );
 
 /** What a new GeoPDF opens with, before the Terrain group's own rule. */

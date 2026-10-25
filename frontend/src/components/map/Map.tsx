@@ -2559,59 +2559,57 @@ function Map({
         }
       } else {
         // The only vector entry is the statewide contours.
-        {
-          // Minor contours (5m + 10m): elevation not divisible by 50
-          const minorId = `topo-${id}-minor`;
-          if (!map.getLayer(minorId)) {
-            map.addLayer({
-              id: minorId,
-              type: "line",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 14,
-            });
-          }
-          // Major contours (50m): elevation divisible by 50
-          const majorId = `topo-${id}-major`;
-          if (!map.getLayer(majorId)) {
-            map.addLayer({
-              id: majorId,
-              type: "line",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            });
-          }
-          // Elevation labels on major contours at z12+
-          const labelsId = `topo-${id}-labels`;
-          if (!map.getLayer(labelsId)) {
-            map.addLayer({
-              id: labelsId,
-              type: "symbol",
-              source: srcId,
-              "source-layer": "contours",
-              filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-              minzoom: 12,
-              layout: {
-                "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
-                "text-font": ["Noto Sans Medium"],
-                "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
-                "symbol-placement": "line",
-                // LAZ-derived contours are VERY knobbly — even 90° left few
-                // placement spots until z18, then labels flooded in at once. The
-                // real fix is smoothing the geometry in the topo pipeline; until
-                // then 150° lets labels place along the wiggly runs at low zoom
-                // (they follow the curve, so they read a little jagged). Bump the
-                // pipeline-side smoothing if this looks too messy.
-                "text-max-angle": 150,
-              },
-              paint: {
-                "text-halo-color": "rgba(255, 255, 255, 0.8)",
-                "text-halo-width": 1.5,
-              },
-            });
-          }
+        // Minor contours (5m + 10m): elevation not divisible by 50
+        const minorId = `topo-${id}-minor`;
+        if (!map.getLayer(minorId)) {
+          map.addLayer({
+            id: minorId,
+            type: "line",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: 14,
+          });
+        }
+        // Major contours (50m): elevation divisible by 50
+        const majorId = `topo-${id}-major`;
+        if (!map.getLayer(majorId)) {
+          map.addLayer({
+            id: majorId,
+            type: "line",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+          });
+        }
+        // Elevation labels on major contours at z12+
+        const labelsId = `topo-${id}-labels`;
+        if (!map.getLayer(labelsId)) {
+          map.addLayer({
+            id: labelsId,
+            type: "symbol",
+            source: srcId,
+            "source-layer": "contours",
+            filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: 12,
+            layout: {
+              "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
+              "text-font": ["Noto Sans Medium"],
+              "text-size": labelTextSizeExpr(vs.labelScale ?? 1),
+              "symbol-placement": "line",
+              // LAZ-derived contours are VERY knobbly — even 90° left few
+              // placement spots until z18, then labels flooded in at once. The
+              // real fix is smoothing the geometry in the topo pipeline; until
+              // then 150° lets labels place along the wiggly runs at low zoom
+              // (they follow the curve, so they read a little jagged). Bump the
+              // pipeline-side smoothing if this looks too messy.
+              "text-max-angle": 150,
+            },
+            paint: {
+              "text-halo-color": "rgba(255, 255, 255, 0.8)",
+              "text-halo-width": 1.5,
+            },
+          });
         }
       }
     });

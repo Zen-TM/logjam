@@ -9,7 +9,8 @@ import prisma from "../services/prisma";
 // No auth header = alice. These tests deliberately exercise only launch-free
 // surfaces (auth, list, validation, ownership, the uploading-state lifecycle) —
 // they never drive POST /:id/start to a real launch, which would spawn a
-// MiniStack worker container.
+// MiniStack worker container — except "/start marks the job to sharpen",
+// which does, and deletes the job (stopping the task) when it is done.
 const AUTH = { Authorization: "Bearer fake-token" } as const;
 
 // Note: no unauthenticated-401 case — the integration suite runs only under

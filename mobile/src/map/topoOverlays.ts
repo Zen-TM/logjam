@@ -72,6 +72,9 @@ export function mergeSavedOverlayJobs(
 
   for (const artifact of artifacts) {
     if (artifact.kind !== "topo-overlay") continue;
+    // Only a raster overlay draws now; an older vector one saved on the phone
+    // stays on disk, unlisted, until the user deletes it.
+    if (artifact.sourceType !== "raster") continue;
     if (coveredKeys.has(artifact.logicalKey)) continue;
     const slash = artifact.logicalKey.indexOf("/");
     if (slash < 0) continue;
@@ -117,7 +120,7 @@ export function composeTopoOverlayRefs(
   for (const layer of TOPO_LAYERS) {
     for (const job of jobsNewestFirst) {
       const match = job.layers.find((l) => l.name === layer.name);
-      if (!match) continue;
+      if (!match || match.format !== "raster") continue;
       if (!enabled.has(`${job.jobId}/${layer.name}`)) continue;
       refs.push({
         kind: "topo-overlay",

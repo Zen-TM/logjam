@@ -11,7 +11,6 @@
 // Whether a topo is DRAWN is not this page's business: visibility belongs to
 // the layer (DESIGN.md), which keeps the switch in Layers → LiDAR topos rather
 // than duplicating it here.
-//
 import { useMemo, useState } from "react";
 import {
   LIDAR_JOB_COPY,

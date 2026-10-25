@@ -38,9 +38,9 @@ import { API_URL, ALICE_ID } from "./_actors";
 
 // Requires the seed's saved GeoPDF template (api/prisma/seed.ts, "f" 10) and
 // the topo bucket. Each test makes its own completed topo job, with ONE vegetation
-// tile in S3 at the zoom the page renders at: the seed's archives hold only z12,
-// the zoom Logjam Web's map draws a topo at, and a GeoPDF reads overlays at its
-// print zoom (z16 or deeper at 1:25,000). The worker reads the archive from S3
+// tile in S3 at the zoom the page renders at: a GeoPDF reads overlays at its
+// print zoom (z16 or deeper at 1:25,000), which a tile at any other zoom
+// would not answer. The worker reads the archive from S3
 // for real, as in prod. The tile is flat grey (150) on a flat green base layer
 // (_geoPdfRun.ts), so a painted overlay is a grey block in the page image.
 vi.mock("../services/email", () => ({ sendEmail: vi.fn() }));
