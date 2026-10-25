@@ -128,3 +128,13 @@ export function useThemePreferences() {
   }
   return context;
 }
+
+/**
+ * The active scheme's tokens, for a leaf that computes from them (`Chip`).
+ * Unlike `useThemePreferences` it works outside the provider, where the scheme
+ * is the default one, so a component under test needs no wrapper.
+ */
+export function useSchemeTokens() {
+  const context = useContext(ThemePreferencesContext);
+  return THEME_SCHEMES[context?.schemeId ?? DEFAULT_THEME_SCHEME_ID].tokens;
+}
