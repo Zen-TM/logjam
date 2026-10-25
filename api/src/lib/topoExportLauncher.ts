@@ -17,6 +17,10 @@ import type {
 // Cap to prevent users from flooding ECS with queued exports.
 export const MAX_QUEUED_PER_USER = 5;
 
+// Exports are not charged to storage, so this is what bounds the files one
+// user holds at a time (they expire in 7 days).
+export const MAX_LIVE_PER_USER = 20;
+
 export interface CreateAndLaunchExportInput {
   userId: string;
   sourceJobIds: string[];
@@ -82,6 +86,15 @@ export async function createAndLaunchTopoExport(
       throw new AppError(
         429,
         say`You can run ${MAX_QUEUED_PER_USER} exports at a time. Wait for one to finish.`,
+      );
+    }
+    const live = await tx.topoExportJob.count({
+      where: { userId: input.userId, status: { not: "failed" } },
+    });
+    if (live >= MAX_LIVE_PER_USER) {
+      throw new AppError(
+        429,
+        say`You have ${MAX_LIVE_PER_USER} exports already. They are deleted after 7 days, so try again once one expires.`,
       );
     }
     return tx.topoExportJob.create({

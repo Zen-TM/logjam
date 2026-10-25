@@ -25,7 +25,6 @@ import type {
 import type {
   RegionBbox,
   StandaloneFile,
-  TopoExportJobView,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
@@ -36,7 +35,6 @@ import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import GeoPdfsPanel from "./panels/GeoPdfsPanel";
-import ExportsPanel from "./panels/ExportsPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
@@ -58,7 +56,6 @@ const LOGS_VIEWS = [
 
 const MAPS_VIEWS = [
   { value: "geopdfs", label: "GeoPDFs" },
-  { value: "exports", label: "Exports" },
 ] as const;
 
 function SidebarPanel({
@@ -99,12 +96,6 @@ function SidebarPanel({
   geoPdfJobsRefetch,
   // LiDAR
   completedTopoJobs,
-  topoExports,
-  topoExportsTotal,
-  topoExportsLoaded,
-  topoExportsError,
-  onRefetchTopoExports,
-  onOpenExport,
   onQuotaChanged,
   currentUser,
   currentUserError,
@@ -199,14 +190,6 @@ function SidebarPanel({
   geoPdfJobsRefetch: number;
   // LiDAR
   completedTopoJobs: CompletedTopoJob[];
-  topoExports: TopoExportJobView[];
-  topoExportsTotal: number | null;
-  /** False until the first fetch of exports settles (shared/DESIGN.md §11). */
-  topoExportsLoaded: boolean;
-  topoExportsError: string | null;
-  onRefetchTopoExports: () => void;
-  /** Export an area, from the Exports view. */
-  onOpenExport: () => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
@@ -416,19 +399,6 @@ function SidebarPanel({
             refetchTrigger={geoPdfTemplateRefetch}
             geoPdfJobsRefetch={geoPdfJobsRefetch}
             loadsUserData={loadsUserData}
-          />
-        )}
-        {activePanel === "maps" && mapsView === "exports" && (
-          <ExportsPanel
-            views={mapsViewRail}
-            topoExports={topoExports}
-            topoExportsTotal={topoExportsTotal}
-            loaded={topoExportsLoaded}
-            error={topoExportsError}
-            completedTopoJobs={completedTopoJobs}
-            onRefetchTopoExports={onRefetchTopoExports}
-            onQuotaChanged={onQuotaChanged}
-            onOpenExport={onOpenExport}
           />
         )}
         {activePanel === "friends" && (

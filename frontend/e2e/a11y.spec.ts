@@ -613,15 +613,6 @@ test.describe("desktop", () => {
       }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
-
-    await aside.getByRole("radio", { name: "Exports" }).click();
-    await expect(
-      aside.getByRole("heading", {
-        level: 2,
-        name: /^(No exports yet|\d+ exports?)$/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "aside");
   });
 
   test("Layers → Terrain → Sharpened areas, and a row menu", async ({

@@ -895,7 +895,7 @@ function GeoPdfDialog({
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
       toast.success(
-        "Export queued. It turns up in Maps, Exports, and downloads itself when it's ready.",
+        "Making your export. It comes to your Inbox, and downloads itself if this tab is still open.",
       );
       onExportQueued?.();
       onClose();

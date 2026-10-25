@@ -296,9 +296,16 @@ stateDiagram-v2
 ```
 
 A user can delete a `completed` or `failed` job, not a `queued` or `running`
-one. The topo-jobs bucket also expires `exports/` after 7 days as a
-backstop; the sweep's own expiry is the one that returns the user's storage
-quota.
+one. The topo-jobs bucket also expires `exports/` after 7 days as a backstop.
+
+A finished or failed export comes to the owner's Inbox (`topo_export_complete`,
+with its format and size) and, if they opted in, their email. Both link to
+`/?export=<id>`, which mints a fresh download URL and checks egress when it is
+opened: a presigned URL would be dead within hours. Logjam Web has no list of
+exports. An export is not charged to storage, because the owner can't see or
+delete it and it is gone in 7 days; its download is charged to egress. A GeoPDF
+is charged, and the sweep gives that back. One user holds at most
+`MAX_LIVE_PER_USER` exports at a time (`topoExportLauncher.ts`).
 
 ## How a change reaches prod
 

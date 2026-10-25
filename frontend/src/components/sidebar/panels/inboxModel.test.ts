@@ -34,11 +34,6 @@ describe("inboxDestination", () => {
     ).toEqual({ kind: "sharpened", label: "Show" });
     expect(
       inboxDestination(
-        notification("topo_export_complete", { status: "completed" }),
-      ),
-    ).toMatchObject({ panel: "maps", mapsView: "exports" });
-    expect(
-      inboxDestination(
         notification("geo_pdf_complete", { status: "completed" }),
       ),
     ).toMatchObject({
@@ -56,6 +51,16 @@ describe("inboxDestination", () => {
         notification("topo_export_complete", { status: "failed" }),
       ),
     ).toBeNull();
+  });
+
+  // An export is a file the row's Download hands over; Maps no longer lists
+  // it. Mutation: send it to a Maps view again and this is not null.
+  it("goes nowhere for an export, finished or failed", () => {
+    for (const status of ["completed", "failed"]) {
+      expect(
+        inboxDestination(notification("topo_export_complete", { status })),
+      ).toBeNull();
+    }
   });
 
   it("goes nowhere for a file send, which the row itself answers", () => {

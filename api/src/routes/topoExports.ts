@@ -34,10 +34,6 @@ import {
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
 import { createAndLaunchTopoExport } from "../lib/topoExportLauncher";
-import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
 import { assertHasEgressQuota } from "../lib/egressQuota";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { visibleSharpenedAreas } from "../services/sharpenedAreas";
@@ -124,14 +120,6 @@ router.post(
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
 
-    // Entry gate: every byte-producing flow checks storage quota at
-    // submission. The worker charges result_bytes unconditionally on
-    // completion, so without this an over-quota user could keep accruing.
-    // No pre-render size estimate exists, so this is the same soft gate the
-    // other flows use (in-flight work may still finish past quota, bounded by
-    // the per-user concurrency cap).
-    await assertHasStorageQuota(user.id);
-
     const area = areaRequestSchema.safeParse(req.body);
     if (!area.success) {
       throw malformed(area.error.issues[0]?.message ?? "Invalid area export");
@@ -212,7 +200,13 @@ router.get(
     const row = await prisma.topoExportJob.findFirst({
       where: { id: getParam(req.params.id), userId: user.id },
     });
-    if (!row) throw new AppError(404, say`Couldn't find that export.`);
+    // The link in an email or the Inbox outlives the file, so say why.
+    if (!row) {
+      throw new AppError(
+        404,
+        say`That export has expired or was deleted. Exports are kept for 7 days.`,
+      );
+    }
     // An export artefact is one of the largest single objects the app serves,
     // and this endpoint exists to re-mint an expired URL — i.e. it is the
     // deliberate "download it again" action. Owner-scoped above, so the caller
@@ -244,19 +238,14 @@ router.delete(
       );
     }
 
-    // Delete the S3 object and reclaim the storage quota in the same
-    // transaction as the row delete so a completed export never orphans bytes.
+    // An export is not charged to storage (it is gone in 7 days), so there is
+    // no quota to give back.
     if (row.status === "completed" && row.resultKey) {
       await s3.send(
         new DeleteObjectCommand({ Bucket: TOPO_BUCKET, Key: row.resultKey }),
       );
     }
-    await prisma.$transaction(async (tx) => {
-      if (row.status === "completed" && row.resultBytes) {
-        await decrementStorageUsed(user.id, row.resultBytes, tx);
-      }
-      await tx.topoExportJob.delete({ where: { id: row.id } });
-    });
+    await prisma.topoExportJob.delete({ where: { id: row.id } });
     res.status(204).send();
   },
 );

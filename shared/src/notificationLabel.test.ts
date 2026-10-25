@@ -131,6 +131,18 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "PDF export failed", detail: "boom" });
   });
 
+  // Mutation: drop the size branch and the detail line vanishes.
+  it("gives a finished export its size when it has one", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", {
+          format: "geotiff",
+          resultBytes: 5 * 1024 ** 2,
+        }),
+      ),
+    ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
+  });
+
   it("labels geo_pdf completion and failure", () => {
     expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe(
       "GeoPDF ready",
