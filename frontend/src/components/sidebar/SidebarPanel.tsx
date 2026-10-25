@@ -28,7 +28,6 @@ import type {
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
@@ -86,10 +85,6 @@ function SidebarPanel({
   onSharePlaces,
   // GeoPDFs
   onOpenGeoPdf,
-  onOpenGeoPdfWithTemplate,
-  onEditGeoPdfTemplate,
-  onCreateGeoPdfTemplate,
-  geoPdfTemplateRefetch,
   geoPdfJobsRefetch,
   // LiDAR
   onQuotaChanged,
@@ -179,10 +174,6 @@ function SidebarPanel({
   onSharePlaces: (ids: string[]) => void;
   // GeoPDFs
   onOpenGeoPdf: () => void;
-  onOpenGeoPdfWithTemplate: (id: string) => void;
-  onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
-  onCreateGeoPdfTemplate: () => void;
-  geoPdfTemplateRefetch: number;
   geoPdfJobsRefetch: number;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
@@ -387,10 +378,6 @@ function SidebarPanel({
             views={mapsViewRail}
             friends={friends}
             onOpenGeoPdf={onOpenGeoPdf}
-            onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
-            onEditGeoPdfTemplate={onEditGeoPdfTemplate}
-            onCreateGeoPdfTemplate={onCreateGeoPdfTemplate}
-            refetchTrigger={geoPdfTemplateRefetch}
             geoPdfJobsRefetch={geoPdfJobsRefetch}
             loadsUserData={loadsUserData}
           />

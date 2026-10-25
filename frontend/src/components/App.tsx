@@ -13,7 +13,6 @@ import type {
 } from "./dialogs/TopoDialog";
 import { routeMadeTopoJob } from "./dialogs/topoUpload";
 import GeoPdfDialog from "./dialogs/GeoPdfDialog";
-import type { GeoPdfTemplate } from "./dialogs/GeoPdfDialog";
 import PlaceDialog from "./dialogs/PlaceDialog";
 import UnifiedImportDialog from "./dialogs/UnifiedImportDialog";
 import OnboardingChoiceDialog from "./dialogs/OnboardingChoiceDialog";
@@ -324,7 +323,7 @@ function App() {
   // (`freshExportDialog`), because a pick the dialog left for may never return:
   // another product can take the box tool over it. e2e/export-area.spec.ts (run
   // in CI; App has no render harness) holds the mechanism through two of its
-  // callers, Map tools → Export an area and Maps → GeoPDFs → New template.
+  // callers, Map tools → Export an area and Maps → GeoPDFs → Make.
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -408,17 +407,6 @@ function App() {
     bearing: number;
     pitch: number;
   } | null>("logjam.mapView", null);
-
-  // GeoPDF template editing state (undefined = normal mode, null = new template, object = edit)
-  const [editingGeoPdfTemplate, setEditingGeoPdfTemplate] = useState<
-    GeoPdfTemplate | null | undefined
-  >(undefined);
-  // ID to pre-select when opening GeoPdfDialog in normal mode
-  const [initialGeoPdfTemplateId, setInitialGeoPdfTemplateId] = useState<
-    string | null
-  >(null);
-  // Bumped after template save/delete to trigger panel refetch
-  const [geoPdfTemplateRefetch, setGeoPdfTemplateRefetch] = useState(0);
 
   // Bumped when a GeoPDF job is queued, to trigger the panel's job list refetch
   const [geoPdfJobsRefetch, setGeoPdfJobsRefetch] = useState(0);
@@ -1386,8 +1374,6 @@ function App() {
     freshExportDialog();
     setExportAreaSeed(bounds);
     setBoxPick((pick) => endBox(pick, "export"));
-    setEditingGeoPdfTemplate(undefined);
-    setInitialGeoPdfTemplateId(null);
     setGeoPdfPaperAspect(210 / 297);
     setGeoPdfPaperDimensions({ w: 210, h: 297 });
     setGeoPdfInitialExtent(bounds);
@@ -1439,8 +1425,6 @@ function App() {
           icon: "export",
           onSelect: () => {
             setBoxPick((pick) => endBox(pick, "export"));
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(null);
             freshExportDialog();
             setShowGeoPdf(true);
           },
@@ -1488,8 +1472,6 @@ function App() {
         open={showGeoPdf}
         onClose={() => {
           setShowGeoPdf(false);
-          setEditingGeoPdfTemplate(undefined);
-          setInitialGeoPdfTemplateId(null);
           setExportAreaSeed(null);
           setPendingExportBox(null);
           setBoxPick((pick) => endBox(pick, "export"));
@@ -1514,15 +1496,6 @@ function App() {
         mapCenter={mapCenter}
         places={places}
         sharedPlaces={sharedPlaces}
-        templateMode={editingGeoPdfTemplate !== undefined}
-        editingTemplate={editingGeoPdfTemplate ?? undefined}
-        onTemplateSaved={() => {
-          setEditingGeoPdfTemplate(undefined);
-          setBoxPick((pick) => endBox(pick, "export"));
-          setShowGeoPdf(false);
-          setGeoPdfTemplateRefetch((n) => n + 1);
-        }}
-        initialTemplateId={initialGeoPdfTemplateId}
         onJobQueued={handleGeoPdfJobQueued}
         areaSeed={exportAreaSeed}
         onPickArea={() => {
@@ -1669,36 +1642,15 @@ function App() {
           openFiltersRequested={openFiltersRequested}
           onOpenFiltersConsumed={consumeOpenFilters}
           onOpenGeoPdf={() => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(null);
             freshExportDialog();
             setShowGeoPdf(true);
           }}
-          onOpenGeoPdfWithTemplate={(id) => {
-            setEditingGeoPdfTemplate(undefined);
-            setInitialGeoPdfTemplateId(id);
-            freshExportDialog();
-            setShowGeoPdf(true);
-          }}
-          onEditGeoPdfTemplate={(t) => {
-            setEditingGeoPdfTemplate(t);
-            setInitialGeoPdfTemplateId(null);
-            freshExportDialog();
-            setShowGeoPdf(true);
-          }}
-          onCreateGeoPdfTemplate={() => {
-            setEditingGeoPdfTemplate(null);
-            setInitialGeoPdfTemplateId(null);
-            freshExportDialog();
-            setShowGeoPdf(true);
-          }}
-          geoPdfTemplateRefetch={geoPdfTemplateRefetch}
           geoPdfJobsRefetch={geoPdfJobsRefetch}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           currentUserError={currentUserError}
           onRetryCurrentUser={refetchCurrentUser}
-          // The GeoPDFs view fetches its own lists (jobs and templates) — the
+          // The GeoPDFs view fetches its own list (the jobs) — the
           // same gate as every hook above, so a pending or stale consent holds
           // them too.
           loadsUserData={loadsUserData}

@@ -14,8 +14,7 @@ const TERRAIN: readonly string[] = TERRAIN_LAYER_KEYS;
 
 /** The overlays a job alone can draw, in the order the renderer stacks them. */
 export const LIDAR_ONLY_OVERLAYS = TOPO_LAYERS.filter(
-  // `features` is still a valid name, so a stored template keeps validating,
-  // but nothing draws it.
+  // Nothing draws `features`, and the API refuses it.
   (layer) => !TERRAIN.includes(layer.name) && layer.name !== "features",
 );
 
@@ -60,8 +59,8 @@ export function ownJobInArea(
 
 /**
  * The overlays the form shows and sends. Until the user ticks or unticks a
- * Terrain layer (or a template sets them), each one follows the map: on where
- * the map shows it (shared/DESIGN.md §11, a preview shows the result as it
+ * Terrain layer (or applies remembered settings that did), each one follows
+ * the map: on where the map shows it (shared/DESIGN.md §11, a preview shows the result as it
  * will be made), and on wherever a job of theirs in the area draws its own,
  * which it printed before the statewide layers existed.
  *

@@ -4,8 +4,7 @@ import { test, expect, type Page } from "@playwright/test";
 // and expects that box back. App holds the opening's own state (which format
 // it starts on, the box it was opened over), and this is the only test of
 // that wiring: App has no render harness (it pulls in maplibre). Red when an
-// abandoned pick leaks into the next opening, which then starts on GeoTIFF;
-// in template mode that form has no Save that works.
+// abandoned pick leaks into the next opening, which then starts on GeoTIFF.
 
 // Local only: it needs fake auth and a seeded API, as a11y.spec.ts does.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
@@ -73,7 +72,7 @@ test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
   );
 });
 
-test("a template opened after an abandoned GIS pick is a GeoPDF template", async ({
+test("Make on the GeoPDFs page after an abandoned GIS pick opens a GeoPDF form", async ({
   page,
 }) => {
   await openApp(page);
@@ -85,14 +84,10 @@ test("a template opened after an abandoned GIS pick is a GeoPDF template", async
   const aside = page.locator("aside");
   await aside.getByRole("radio", { name: "GeoPDFs" }).click();
   await aside.getByRole("button", { name: /^Make/ }).first().click();
-  await page.getByRole("menuitem", { name: "New template…" }).click();
 
-  // Mutation: let `freshExportDialog` skip its key bump, and template mode
-  // opens on GeoTIFF with no paper and a Save that does nothing.
+  // Mutation: let `freshExportDialog` skip its key bump, and the form opens
+  // on GeoTIFF with no paper.
   const dialog = page.locator("dialog[open]");
-  await expect(
-    dialog.getByRole("heading", { name: "New template" }),
-  ).toBeVisible();
   await expect(
     dialog.getByRole("radiogroup", { name: "Paper size" }),
   ).toBeVisible();

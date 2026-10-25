@@ -17,7 +17,9 @@ const purgeSource = read("src", "routes", "users.ts");
 
 // Rows with no data of their own beyond the link to the account, which the
 // cascade removes; the purge deliberately has no line for them.
-const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient"];
+// GeoPdfTemplate: nothing writes it any more; its rows go with the user until
+// the table drops (ADR 0003).
+const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient", "GeoPdfTemplate"];
 
 /** model name -> its `User` relation lines (the ones that name the owner). */
 function modelsRelatedToUser(): Map<string, string[]> {

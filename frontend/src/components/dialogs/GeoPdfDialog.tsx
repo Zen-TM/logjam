@@ -8,15 +8,7 @@
 // (App's frame), and everything else only matters once the worker renders it —
 // so the whole dialog is one form with a Make it at the end, unlike the topo
 // settings beside it (DESIGN.md).
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TBbox } from "../map/Map";
 import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
 import {
@@ -88,6 +80,11 @@ import {
   type TerrainLayerKey,
 } from "@logjam/shared";
 import { useStoredState } from "../../useStoredState";
+import {
+  GEOPDF_SETTINGS_KEY,
+  readSettings,
+  settingsOf,
+} from "./geoPdfSettings";
 import { buildPlaceMarkers } from "./geoPdfPlaceMarkers";
 import {
   SCALE_PRESETS,
@@ -102,7 +99,6 @@ import {
   Dialog,
   InfoTip,
   SectionHeader,
-  Select,
   SettingsRow,
   TextField,
   type ChipOption,
@@ -112,18 +108,6 @@ import {
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
-
-export type GeoPdfTemplateConfig = Omit<GeoPdfConfig, "extent"> & {
-  scale?: number;
-};
-
-export type GeoPdfTemplate = {
-  id: string;
-  name: string;
-  config: GeoPdfTemplateConfig;
-  createdAt: string;
-  updatedAt: string;
-};
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -231,10 +215,6 @@ function GeoPdfDialog({
   mapCenter,
   places,
   sharedPlaces,
-  templateMode,
-  editingTemplate,
-  onTemplateSaved,
-  initialTemplateId,
   onJobQueued,
   openWithGis,
   areaSeed,
@@ -263,10 +243,6 @@ function GeoPdfDialog({
   mapCenter?: { lat: number; lng: number } | null;
   places?: TPlace[];
   sharedPlaces?: TPlace[];
-  templateMode?: boolean;
-  editingTemplate?: GeoPdfTemplate | null;
-  onTemplateSaved?: () => void;
-  initialTemplateId?: string | null;
   onJobQueued?: (job: GeoPdfJobView) => void;
   /** Open on GeoTIFF with For GIS open, as the Exports page does. */
   openWithGis?: boolean;
@@ -285,16 +261,9 @@ function GeoPdfDialog({
   // ── State ────────────────────────────────────────────────────────────────
 
   const toast = useToast();
-  const formId = useId();
 
   const [extentState, setExtentState] =
     useState<ExtentState>(DEFAULT_EXTENT_STATE);
-  const [templates, setTemplates] = useState<GeoPdfTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null,
-  );
-  const [templateName, setTemplateName] = useState("");
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Layers
   const [selectedBaseLayer, setSelectedBaseLayer] = useState(() =>
@@ -302,7 +271,8 @@ function GeoPdfDialog({
   );
   const [selectedOverlays, setSelectedOverlays] =
     useState<Set<string>>(seedOverlays);
-  // Until a Terrain layer is ticked or a template applied (`shownOverlays`).
+  // Until the user ticks or unticks a Terrain layer, or applies remembered
+  // settings that did (`shownOverlays`).
   const [terrainFollowsMap, setTerrainFollowsMap] = useState(true);
 
   // Map elements
@@ -313,6 +283,12 @@ function GeoPdfDialog({
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
   const [gridLinesEnabled, setGridLinesEnabled] = useState(false);
   const [gridLinesMode, setGridLinesMode] = useState<CoordMode>("latlon");
+
+  // Last settings: remembered when a GeoPDF is made, never its title or area.
+  const [stored, setStored] = useStoredState<unknown>(
+    GEOPDF_SETTINGS_KEY,
+    null,
+  );
 
   // Place overlays. Persisted so a deliberate opt-in survives reopen.
   // Shared places default OFF: a friend consented to in-app
@@ -351,29 +327,23 @@ function GeoPdfDialog({
 
   // Unsaved-changes tracking. Explicit dirty flag (not snapshot-diffing) —
   // state here is seeded by three programmatic writers at unpredictable
-  // times (open-time map-view seed, async launch-template apply, the map
+  // times (open-time map-view seed, the stored-settings apply, the map
   // round-trip reopen), so a diff-against-baseline approach would false-
   // positive on every seed. Only handlers that represent a direct user
   // interaction with the form set this; programmatic seeds/resets never do.
   const [dirty, setDirty] = useState(false);
   const markDirty = useCallback(() => setDirty(true), []);
 
-  // Template mode name
-  const [editTemplateName, setEditTemplateName] = useState("");
-  // Under whichever template-name field is showing; only one is at a time.
-  const [nameError, setNameError] = useState<string | null>(null);
-
   // Set when the dialog closes for "Select on map": that close is a round trip,
   // so the close keeps state and the per-session init guards instead of
   // resetting them. Cleared when the dialog reopens.
   const [returningFromMapSelect, setReturningFromMapSelect] = useState(false);
 
-  // Per-session init guards. A template (and the map-view seed) auto-fills the
+  // Per-session init guard. The last settings and the map-view seed fill the
   // dialog ONCE per genuine open; after that the user is free to edit fields and
   // those edits must survive (e.g. across a "Select on map" round trip) until the
   // dialog is genuinely closed. Reset only in the genuine-close branch below.
   const [seededView, setSeededView] = useState(false);
-  const [appliedTemplate, setAppliedTemplate] = useState(false);
 
   // Raw string state for extent/scale inputs (deferred recalculation)
   const focusedField = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
@@ -388,44 +358,40 @@ function GeoPdfDialog({
   // inside needs fixing, so the field the banner points at can be seen.
   const [edgesOpen, setEdgesOpen] = useState(false);
 
-  // A template's settings, applied over the form: the launch template (once
-  // per genuine open) and the template being edited in template mode.
-  function applyTemplateConfig(c: GeoPdfTemplate["config"]) {
+  // The last settings, applied over the form once per genuine open. A field
+  // the stored value lacks keeps the seed already set.
+  function applyLastSettings() {
+    const c = readSettings(
+      stored,
+      BASE_LAYER_OPTIONS.map((option) => option.value),
+    );
     setExtentState((prev: ExtentState) => {
       let updated = {
         ...prev,
-        paperSize: c.paperSize,
-        orientation: c.orientation,
-        ...(c.customRatio ? { customRatio: c.customRatio } : {}),
+        ...(c.paperSize ? { paperSize: c.paperSize } : {}),
+        ...(c.orientation ? { orientation: c.orientation } : {}),
       };
-      updated = applyPaperChange(updated, c.paperSize, c.customRatio);
+      if (c.paperSize)
+        updated = applyPaperChange(updated, c.paperSize, c.customRatio);
       if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
       return updated;
     });
-    setSelectedBaseLayer(c.baseLayer);
-    setSelectedOverlays(new Set(c.overlays));
-    setTerrainFollowsMap(false);
-    if (c.elements.title !== undefined) {
-      setTitleEnabled(true);
-      setTitleText(c.elements.title);
-    } else {
-      setTitleEnabled(false);
-    }
-    setCompassEnabled(c.elements.compass);
-    setScaleTextEnabled(c.elements.scaleText);
-    setScaleBarEnabled(c.elements.scaleBar);
-    if (c.elements.gridLines !== undefined) {
-      setGridLinesEnabled(true);
-      setGridLinesMode(c.elements.gridLines);
-    } else {
-      setGridLinesEnabled(false);
+    if (c.baseLayer) setSelectedBaseLayer(c.baseLayer);
+    if (c.overlays) setSelectedOverlays(new Set(c.overlays));
+    if (c.terrainPinned) setTerrainFollowsMap(false);
+    if (c.compass !== undefined) setCompassEnabled(c.compass);
+    if (c.scaleText !== undefined) setScaleTextEnabled(c.scaleText);
+    if (c.scaleBar !== undefined) setScaleBarEnabled(c.scaleBar);
+    if (c.gridLines !== undefined) {
+      setGridLinesEnabled(c.gridLines !== null);
+      if (c.gridLines) setGridLinesMode(c.gridLines);
     }
   }
 
   // ── Open and close ───────────────────────────────────────────────────────
-  // Three steps that follow props, run during render in this order (the
-  // order the effects they replaced ran in): the open/close transition, the
-  // template being edited, then a confirmed map pick.
+  // Steps that follow props, run during render in this order (the order the
+  // effects they replaced ran in): the open/close transition, then a
+  // confirmed map pick.
 
   // On a genuine close, reset everything; the map round-trip close keeps it.
   // On open, seed layers + extent from the current map view, once per genuine
@@ -445,6 +411,7 @@ function GeoPdfDialog({
         setSelectedBaseLayer(seedBaseLayer(activeLayerId));
         setSelectedOverlays(seedOverlays());
         setTerrainFollowsMap(true);
+        applyLastSettings();
         const center = mapCenter;
         if (center) {
           setExtentState((prev) => {
@@ -465,11 +432,7 @@ function GeoPdfDialog({
       }
     } else if (!returningFromMapSelect) {
       setSeededView(false);
-      setAppliedTemplate(false);
       setExtentState(DEFAULT_EXTENT_STATE);
-      setSelectedTemplateId(null);
-      setTemplateName("");
-      setShowSaveTemplate(false);
       setTitleEnabled(false);
       setTitleText("");
       setCompassEnabled(true);
@@ -480,7 +443,6 @@ function GeoPdfDialog({
       // Place-marker toggles are deliberately NOT reset — they persist via
       // localStorage so the user's explicit choice carries across sessions.
       setError(null);
-      setEditTemplateName("");
       setRawN("");
       setRawS("");
       setRawE("");
@@ -497,37 +459,10 @@ function GeoPdfDialog({
     }
   }
 
-  // Populate fields from editingTemplate when entering template mode. Keyed on
-  // the template's id, not the object (a refetch hands over a fresh copy of the
-  // same template), and skipped on the reopen after "Select on map", which is a
-  // round trip, not a new open: the edits made before the pick must survive it.
-  const editingTemplateId = editingTemplate?.id ?? null;
-  const [templatePopulatedFor, setTemplatePopulatedFor] = useState({
-    open: false,
-    templateMode,
-    editingTemplateId,
-  });
-  if (
-    open !== templatePopulatedFor.open ||
-    templateMode !== templatePopulatedFor.templateMode ||
-    editingTemplateId !== templatePopulatedFor.editingTemplateId
-  ) {
-    setTemplatePopulatedFor({ open, templateMode, editingTemplateId });
-    if (open && templateMode && !returningFromMapSelect) {
-      if (editingTemplate) {
-        setEditTemplateName(editingTemplate.name);
-        applyTemplateConfig(editingTemplate.config);
-      } else {
-        // New template — reset to defaults
-        setEditTemplateName("");
-      }
-    }
-  }
-
   // Populate extent from map selection — always receives both extent and scale.
   // This fires only when the user actually confirms a pick on the map (App
   // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
-  // open-time seed and template-apply steps — it represents real user work
+  // open-time seed and settings-apply steps — it represents real user work
   // and must mark the form dirty.
   const [pendingAppliedFor, setPendingAppliedFor] = useState({
     pendingExtent: null as TBbox | null,
@@ -565,52 +500,20 @@ function GeoPdfDialog({
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
-  // Apply the launch template once per genuine open. On the map round-trip
-  // reopen appliedTemplate is still set, so the user's edits are not
-  // overwritten. An effect event, so the fetch reads the gate as it is when
-  // the list arrives without refetching when it flips.
-  const applyLaunchTemplate = useEffectEvent((list: GeoPdfTemplate[]) => {
-    if (!initialTemplateId || appliedTemplate) return;
-    const t = list.find((x) => x.id === initialTemplateId);
-    if (!t) return;
-    setAppliedTemplate(true);
-    setSelectedTemplateId(t.id);
-    applyTemplateConfig(t.config);
-  });
-
-  // Fetch templates on open (only in normal mode)
-  useEffect(() => {
-    if (!open || templateMode) return;
-    apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates")
-      .then((list) => {
-        setTemplates(list);
-        applyLaunchTemplate(list);
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load GeoPDF templates."));
-      });
-  }, [open, templateMode, initialTemplateId, toast]);
-
-  // A template has no area, so every LiDAR layer is offered there.
+  // LiDAR layers are offered where one of the user's jobs lies in the area.
   const lidarOverlap = useMemo(
-    () => templateMode || ownJobInArea(completedTopoJobs, extentState),
-    [completedTopoJobs, extentState, templateMode],
+    () => ownJobInArea(completedTopoJobs, extentState),
+    [completedTopoJobs, extentState],
   );
-  // A template's Terrain layers follow the map, and turn on only if the user
-  // has a job of their own anywhere (an area of nothing counts every one).
-  const jobInArea = templateMode
-    ? ownJobInArea(completedTopoJobs, NO_AREA)
-    : lidarOverlap;
   const overlays = useMemo(
     () =>
       shownOverlays(
         selectedOverlays,
         terrainFollowsMap,
         terrainLayers,
-        jobInArea,
+        lidarOverlap,
       ),
-    [selectedOverlays, terrainFollowsMap, terrainLayers, jobInArea],
+    [selectedOverlays, terrainFollowsMap, terrainLayers, lidarOverlap],
   );
 
   // Sync raw strings from extentState whenever extentState changes,
@@ -659,145 +562,6 @@ function GeoPdfDialog({
     );
   }, [extentState, onSelectOnMap, selectedBaseLayer]);
 
-  const handleTemplateSelect = useCallback(
-    (id: string) => {
-      setSelectedTemplateId(id);
-      const tmpl = templates.find((t) => t.id === id);
-      if (!tmpl) return;
-      // Selecting a template is itself a deliberate choice worth guarding,
-      // distinct from the launch-template auto-apply effect which must not
-      // set this (that one fires once per genuine open, unprompted).
-      setDirty(true);
-      const c = tmpl.config;
-      setExtentState((prev: ExtentState) => {
-        let updated = {
-          ...prev,
-          paperSize: c.paperSize,
-          orientation: c.orientation,
-          ...(c.customRatio ? { customRatio: c.customRatio } : {}),
-        };
-        updated = applyPaperChange(updated, c.paperSize, c.customRatio);
-        if (c.scale !== undefined) {
-          updated = applyScaleChange(updated, c.scale);
-        }
-        return updated;
-      });
-      setSelectedBaseLayer(c.baseLayer);
-      setSelectedOverlays(new Set(c.overlays));
-      setTerrainFollowsMap(false);
-      if (c.elements.title !== undefined) {
-        setTitleEnabled(true);
-        setTitleText(c.elements.title);
-      } else {
-        setTitleEnabled(false);
-      }
-      setCompassEnabled(c.elements.compass);
-      setScaleTextEnabled(c.elements.scaleText);
-      setScaleBarEnabled(c.elements.scaleBar);
-      if (c.elements.gridLines !== undefined) {
-        setGridLinesEnabled(true);
-        setGridLinesMode(c.elements.gridLines);
-      } else {
-        setGridLinesEnabled(false);
-      }
-    },
-    [templates],
-  );
-
-  const buildTemplateConfig = useCallback(
-    (): GeoPdfTemplateConfig => ({
-      paperSize: extentState.paperSize,
-      orientation: extentState.orientation,
-      ...(extentState.customRatio
-        ? { customRatio: extentState.customRatio }
-        : {}),
-      scale: extentState.scale,
-      baseLayer: selectedBaseLayer,
-      overlays: [...overlays].map((id) =>
-        id.startsWith("master-") ? id.slice("master-".length) : id,
-      ),
-      elements: {
-        ...(titleEnabled ? { title: titleText } : {}),
-        compass: compassEnabled,
-        scaleText: scaleTextEnabled,
-        scaleBar: scaleBarEnabled,
-        ...(gridLinesEnabled ? { gridLines: gridLinesMode } : {}),
-      },
-    }),
-    [
-      extentState,
-      selectedBaseLayer,
-      overlays,
-      titleEnabled,
-      titleText,
-      compassEnabled,
-      scaleTextEnabled,
-      scaleBarEnabled,
-      gridLinesEnabled,
-      gridLinesMode,
-    ],
-  );
-
-  const handleSaveTemplate = useCallback(async () => {
-    if (!templateName.trim()) {
-      setNameError("Name this template first.");
-      return;
-    }
-    const config = buildTemplateConfig();
-    setError(null);
-    try {
-      await apiFetch("/geo-pdf-templates", {
-        method: "POST",
-        body: { name: templateName.trim(), config },
-      });
-      setShowSaveTemplate(false);
-      setTemplateName("");
-      const updated = await apiFetch<GeoPdfTemplate[]>("/geo-pdf-templates");
-      setTemplates(updated);
-      toast.success("Template saved.");
-    } catch (err) {
-      console.error(err);
-      setError(
-        messageFromError(err, "Couldn't save template. Please try again."),
-      );
-    }
-  }, [templateName, buildTemplateConfig, toast]);
-
-  const handleSaveTemplateMode = useCallback(async () => {
-    if (!editTemplateName.trim()) {
-      setNameError("Name this template first.");
-      return;
-    }
-    const config = buildTemplateConfig();
-    setError(null);
-    try {
-      if (editingTemplate) {
-        await apiFetch(`/geo-pdf-templates/${editingTemplate.id}`, {
-          method: "PATCH",
-          body: { name: editTemplateName.trim(), config },
-        });
-      } else {
-        await apiFetch("/geo-pdf-templates", {
-          method: "POST",
-          body: { name: editTemplateName.trim(), config },
-        });
-      }
-      toast.success("Template saved.");
-      onTemplateSaved?.();
-    } catch (err) {
-      console.error(err);
-      setError(
-        messageFromError(err, "Couldn't save template. Please try again."),
-      );
-    }
-  }, [
-    editTemplateName,
-    editingTemplate,
-    buildTemplateConfig,
-    onTemplateSaved,
-    toast,
-  ]);
-
   const extentValid =
     extentState.north > extentState.south &&
     extentState.east > extentState.west &&
@@ -814,7 +578,6 @@ function GeoPdfDialog({
   const scaleInputError = scaleFieldError(rawScale);
   // A limit shows live (shared/DESIGN.md §11), in the API's own words.
   const tooLarge =
-    !templateMode &&
     extentValid &&
     geoPdfTooLarge(extentState, extentState.scale, selectedBaseLayer);
 
@@ -971,6 +734,12 @@ function GeoPdfDialog({
         method: "POST",
         body: config,
       });
+      setStored(
+        settingsOf(config, {
+          overlays: selectedOverlays,
+          terrainPinned: !terrainFollowsMap,
+        }),
+      );
       toast.success(
         "GeoPDF queued — download will appear in the GeoPDFs panel.",
       );
@@ -1000,6 +769,9 @@ function GeoPdfDialog({
     showOwnedPlacesOnPdf,
     showSharedPlacesOnPdf,
     onJobQueued,
+    setStored,
+    selectedOverlays,
+    terrainFollowsMap,
     toast,
     onClose,
     extentValid,
@@ -1024,117 +796,22 @@ function GeoPdfDialog({
   // Esc / backdrop / X / Cancel route through this so a dirty form prompts
   // before discarding. "Select on map" bypasses it entirely (it calls
   // onSelectOnMap, never onClose/requestClose — App flips `open` to false
-  // itself for that round trip). A successful Generate/Save-Template also
-  // bypasses it by calling the raw onClose/onTemplateSaved directly.
+  // itself for that round trip). A successful Generate also bypasses it by
+  // calling the raw onClose directly.
   const guard = useUnsavedChangesGuard(dirty, onClose);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
   const mapMm = getMapDimensions(extentState);
-  const title = templateMode
-    ? editingTemplate
-      ? "Edit template"
-      : "New template"
-    : "Export an area";
 
   return (
     <>
       <Dialog
         open={open}
-        title={title}
+        title="Export an area"
         size="large"
         dismissible={!generating}
         onClose={guard.requestClose}
-        // Pinned: which template this form came from, and the button that turns
-        // the whole form into one, both act on everything below rather than on
-        // the section on screen (DESIGN.md). In template mode the NAME is
-        // what the dialog is about, so it sits here for the same reason.
-        toolbar={
-          format !== "geopdf" ? undefined : templateMode ? (
-            <form
-              id={formId}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleSaveTemplateMode();
-              }}
-            >
-              <TextField
-                label="Template name"
-                value={editTemplateName}
-                error={nameError}
-                data-autofocus
-                onChange={(event) => {
-                  setEditTemplateName(event.target.value);
-                  setNameError(null);
-                  markDirty();
-                }}
-              />
-            </form>
-          ) : (
-            <div className={classes.templateLine}>
-              {showSaveTemplate ? (
-                <>
-                  <TextField
-                    label="Template name"
-                    hideLabel
-                    className={classes.templateField}
-                    placeholder="Name this template"
-                    value={templateName}
-                    error={nameError}
-                    // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
-                    autoFocus
-                    onChange={(event) => {
-                      setTemplateName(event.target.value);
-                      setNameError(null);
-                      markDirty();
-                    }}
-                  />
-                  <Button variant="filled" compact onClick={handleSaveTemplate}>
-                    Save
-                  </Button>
-                  <Button
-                    compact
-                    onClick={() => {
-                      setShowSaveTemplate(false);
-                      setTemplateName("");
-                      setNameError(null);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Select
-                    label="Template"
-                    hideLabel
-                    className={classes.templateField}
-                    value={selectedTemplateId ?? ""}
-                    onChange={(event) => {
-                      if (event.target.value)
-                        handleTemplateSelect(event.target.value);
-                      else setSelectedTemplateId(null);
-                    }}
-                  >
-                    <option value="">No template</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </Select>
-                  <Button
-                    compact
-                    variant="outline"
-                    onClick={() => setShowSaveTemplate(true)}
-                  >
-                    Save as a template
-                  </Button>
-                </>
-              )}
-            </div>
-          )
-        }
         footer={
           <>
             <Button
@@ -1146,19 +823,13 @@ function GeoPdfDialog({
             >
               Cancel
             </Button>
-            {templateMode ? (
-              <Button type="submit" form={formId} variant="filled">
-                Save
-              </Button>
-            ) : (
-              <Button
-                variant="filled"
-                busy={generating}
-                onClick={gisFormat ? handleExportArea : handleGenerate}
-              >
-                Make it
-              </Button>
-            )}
+            <Button
+              variant="filled"
+              busy={generating}
+              onClick={gisFormat ? handleExportArea : handleGenerate}
+            >
+              Make it
+            </Button>
           </>
         }
       >
@@ -1167,48 +838,44 @@ function GeoPdfDialog({
 
           {error && <ErrorBanner message={error} />}
 
-          {!templateMode && (
-            <section className={classes.group}>
-              <SectionHeader title="Format" />
-              {/* Named for what it holds, beside For GIS: the choice spans the
+          <section className={classes.group}>
+            <SectionHeader title="Format" />
+            {/* Named for what it holds, beside For GIS: the choice spans the
                   two groups, so neither claims it all (the render test "names
                   the GeoPDF group"). */}
-              <ChipRail
-                label="For print"
-                className={classes.railCell}
-                options={GEOPDF_OPTION}
-                value={format}
-                onChange={(next) => {
-                  setFormat(next);
-                  setError(null);
-                }}
-              />
-              <details
-                className={classes.edges}
-                open={gisOpen}
-                onToggle={(event) => setGisOpen(event.currentTarget.open)}
-              >
-                <summary className={classes.edgesSummary}>For GIS</summary>
-                <div className={classes.group}>
-                  <ChipRail
-                    label="For GIS"
-                    className={classes.railCell}
-                    options={GIS_OPTIONS}
-                    value={format}
-                    onChange={(next) => {
-                      setFormat(next);
-                      setError(null);
-                    }}
-                  />
-                  {gisFormat && (
-                    <p className={classes.note}>
-                      {GIS_FORMAT_NOTES[gisFormat]}
-                    </p>
-                  )}
-                </div>
-              </details>
-            </section>
-          )}
+            <ChipRail
+              label="For print"
+              className={classes.railCell}
+              options={GEOPDF_OPTION}
+              value={format}
+              onChange={(next) => {
+                setFormat(next);
+                setError(null);
+              }}
+            />
+            <details
+              className={classes.edges}
+              open={gisOpen}
+              onToggle={(event) => setGisOpen(event.currentTarget.open)}
+            >
+              <summary className={classes.edgesSummary}>For GIS</summary>
+              <div className={classes.group}>
+                <ChipRail
+                  label="For GIS"
+                  className={classes.railCell}
+                  options={GIS_OPTIONS}
+                  value={format}
+                  onChange={(next) => {
+                    setFormat(next);
+                    setError(null);
+                  }}
+                />
+                {gisFormat && (
+                  <p className={classes.note}>{GIS_FORMAT_NOTES[gisFormat]}</p>
+                )}
+              </div>
+            </details>
+          </section>
 
           {gisFormat ? (
             <AreaExportFields
@@ -1263,8 +930,7 @@ function GeoPdfDialog({
           ) : (
             <>
               {/* Paper, orientation and scale set the area's size; the map sets
-              where it is. A template keeps the first three and has no where,
-              so the area itself is absent in template mode. */}
+              where it is. */}
               <section className={classes.group}>
                 <SectionHeader title="Area" />
                 <SettingsRow label="Paper">
@@ -1399,213 +1065,193 @@ function GeoPdfDialog({
                 )}
                 <FieldError message={scaleInputError} />
 
-                {!templateMode && (
-                  <>
-                    <SettingsRow label="Area">
-                      <div className={classes.areaCell}>
-                        <span className={classes.areaSize}>
-                          {sheetSizeLabel(
-                            (extentState.scale * mapMm.w) / 1000,
-                            (extentState.scale * mapMm.h) / 1000,
-                          )}
-                        </span>
-                        <Button
-                          icon="pickArea"
-                          compact
-                          variant="outline"
-                          onClick={handleSelectOnMap}
-                        >
-                          Pick on the map
-                        </Button>
-                      </div>
-                    </SettingsRow>
-                    <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
-
-                    <details
-                      className={classes.edges}
-                      open={edgesOpen}
-                      onToggle={(event) =>
-                        setEdgesOpen(event.currentTarget.open)
-                      }
+                <SettingsRow label="Area">
+                  <div className={classes.areaCell}>
+                    <span className={classes.areaSize}>
+                      {sheetSizeLabel(
+                        (extentState.scale * mapMm.w) / 1000,
+                        (extentState.scale * mapMm.h) / 1000,
+                      )}
+                    </span>
+                    <Button
+                      icon="pickArea"
+                      compact
+                      variant="outline"
+                      onClick={handleSelectOnMap}
                     >
-                      <summary className={classes.edgesSummary}>
-                        Exact edges
-                      </summary>
-                      <div className={classes.group}>
-                        <SettingsRow
-                          label="Coordinates"
-                          tooltip={COORD_TOOLTIP}
-                        >
-                          <ChipRail
-                            label="Coordinates"
-                            className={classes.railCell}
-                            options={COORD_OPTIONS}
-                            value={extentState.coordMode}
-                            onChange={(coordMode) => {
-                              const next = applyCoordModeChange(
-                                extentState,
-                                coordMode,
-                              );
-                              // The text moves with the mode, not in the
-                              // effect after it, or a render checks metres
-                              // as degrees.
-                              setRawN(extentFieldText("n", next));
-                              setRawS(extentFieldText("s", next));
-                              setRawE(extentFieldText("e", next));
-                              setRawW(extentFieldText("w", next));
-                              setExtentState(next);
-                            }}
-                          />
-                        </SettingsRow>
-                        <SettingsRow
-                          label="Typing an edge"
-                          tooltip={LOCK_TOOLTIP}
-                        >
-                          <ChipRail
-                            label="Typing an edge"
-                            className={classes.railCell}
-                            options={LOCK_OPTIONS}
-                            value={extentState.lockMode}
-                            onChange={(lockMode) =>
-                              setExtentState({ ...extentState, lockMode })
-                            }
-                          />
-                        </SettingsRow>
-                        {/* The four edges laid out where they are on the map, with
+                      Pick on the map
+                    </Button>
+                  </div>
+                </SettingsRow>
+                <FieldError message={tooLarge ? GEOPDF_TOO_LARGE : null} />
+
+                <details
+                  className={classes.edges}
+                  open={edgesOpen}
+                  onToggle={(event) => setEdgesOpen(event.currentTarget.open)}
+                >
+                  <summary className={classes.edgesSummary}>
+                    Exact edges
+                  </summary>
+                  <div className={classes.group}>
+                    <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
+                      <ChipRail
+                        label="Coordinates"
+                        className={classes.railCell}
+                        options={COORD_OPTIONS}
+                        value={extentState.coordMode}
+                        onChange={(coordMode) => {
+                          const next = applyCoordModeChange(
+                            extentState,
+                            coordMode,
+                          );
+                          // The text moves with the mode, not in the
+                          // effect after it, or a render checks metres
+                          // as degrees.
+                          setRawN(extentFieldText("n", next));
+                          setRawS(extentFieldText("s", next));
+                          setRawE(extentFieldText("e", next));
+                          setRawW(extentFieldText("w", next));
+                          setExtentState(next);
+                        }}
+                      />
+                    </SettingsRow>
+                    <SettingsRow label="Typing an edge" tooltip={LOCK_TOOLTIP}>
+                      <ChipRail
+                        label="Typing an edge"
+                        className={classes.railCell}
+                        options={LOCK_OPTIONS}
+                        value={extentState.lockMode}
+                        onChange={(lockMode) =>
+                          setExtentState({ ...extentState, lockMode })
+                        }
+                      />
+                    </SettingsRow>
+                    {/* The four edges laid out where they are on the map, with
                         the point they move around in the middle of them. */}
-                        <div className={classes.extentGrid}>
-                          <div className={classes.extentNorth}>
-                            <ExtentField
-                              which="n"
-                              label={
-                                extentState.coordMode === "latlon"
-                                  ? "North"
-                                  : "N (northing)"
+                    <div className={classes.extentGrid}>
+                      <div className={classes.extentNorth}>
+                        <ExtentField
+                          which="n"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "North"
+                              : "N (northing)"
+                          }
+                          value={rawN}
+                          error={extentInputErrors.n}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawN}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyNorthChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("n", raw, extentState)
+                          }
+                          valid={extentInputErrors.n === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentWest}>
+                        <ExtentField
+                          which="w"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "West"
+                              : "W (easting)"
+                          }
+                          value={rawW}
+                          error={extentInputErrors.w}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawW}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyWestChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("w", raw, extentState)
+                          }
+                          valid={extentInputErrors.w === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentCenter}>
+                        <span className={classes.pivotLabel}>
+                          Pivot
+                          <InfoTip label="the pivot" content={PIVOT_TOOLTIP} />
+                        </span>
+                        <div
+                          className={classes.pivotGrid}
+                          role="radiogroup"
+                          aria-label="Pivot"
+                        >
+                          {PIVOT_POINTS.map((point) => (
+                            <button
+                              key={point.value}
+                              type="button"
+                              role="radio"
+                              aria-checked={extentState.pivot === point.value}
+                              aria-label={point.label}
+                              className={
+                                extentState.pivot === point.value
+                                  ? classes.pivotButtonActive
+                                  : classes.pivotButton
                               }
-                              value={rawN}
-                              error={extentInputErrors.n}
-                              focusedFieldRef={focusedField}
-                              onDraft={setRawN}
-                              onCommit={(deg) =>
-                                setExtentState((s) => applyNorthChange(s, deg))
+                              onClick={() =>
+                                setExtentState(
+                                  applyPivotChange(extentState, point.value),
+                                )
                               }
-                              parse={(raw) =>
-                                parseExtentField("n", raw, extentState)
-                              }
-                              valid={extentInputErrors.n === null}
-                              markDirty={markDirty}
                             />
-                          </div>
-                          <div className={classes.extentWest}>
-                            <ExtentField
-                              which="w"
-                              label={
-                                extentState.coordMode === "latlon"
-                                  ? "West"
-                                  : "W (easting)"
-                              }
-                              value={rawW}
-                              error={extentInputErrors.w}
-                              focusedFieldRef={focusedField}
-                              onDraft={setRawW}
-                              onCommit={(deg) =>
-                                setExtentState((s) => applyWestChange(s, deg))
-                              }
-                              parse={(raw) =>
-                                parseExtentField("w", raw, extentState)
-                              }
-                              valid={extentInputErrors.w === null}
-                              markDirty={markDirty}
-                            />
-                          </div>
-                          <div className={classes.extentCenter}>
-                            <span className={classes.pivotLabel}>
-                              Pivot
-                              <InfoTip
-                                label="the pivot"
-                                content={PIVOT_TOOLTIP}
-                              />
-                            </span>
-                            <div
-                              className={classes.pivotGrid}
-                              role="radiogroup"
-                              aria-label="Pivot"
-                            >
-                              {PIVOT_POINTS.map((point) => (
-                                <button
-                                  key={point.value}
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={
-                                    extentState.pivot === point.value
-                                  }
-                                  aria-label={point.label}
-                                  className={
-                                    extentState.pivot === point.value
-                                      ? classes.pivotButtonActive
-                                      : classes.pivotButton
-                                  }
-                                  onClick={() =>
-                                    setExtentState(
-                                      applyPivotChange(
-                                        extentState,
-                                        point.value,
-                                      ),
-                                    )
-                                  }
-                                />
-                              ))}
-                            </div>
-                          </div>
-                          <div className={classes.extentEast}>
-                            <ExtentField
-                              which="e"
-                              label={
-                                extentState.coordMode === "latlon"
-                                  ? "East"
-                                  : "E (easting)"
-                              }
-                              value={rawE}
-                              error={extentInputErrors.e}
-                              focusedFieldRef={focusedField}
-                              onDraft={setRawE}
-                              onCommit={(deg) =>
-                                setExtentState((s) => applyEastChange(s, deg))
-                              }
-                              parse={(raw) =>
-                                parseExtentField("e", raw, extentState)
-                              }
-                              valid={extentInputErrors.e === null}
-                              markDirty={markDirty}
-                            />
-                          </div>
-                          <div className={classes.extentSouth}>
-                            <ExtentField
-                              which="s"
-                              label={
-                                extentState.coordMode === "latlon"
-                                  ? "South"
-                                  : "S (northing)"
-                              }
-                              value={rawS}
-                              error={extentInputErrors.s}
-                              focusedFieldRef={focusedField}
-                              onDraft={setRawS}
-                              onCommit={(deg) =>
-                                setExtentState((s) => applySouthChange(s, deg))
-                              }
-                              parse={(raw) =>
-                                parseExtentField("s", raw, extentState)
-                              }
-                              valid={extentInputErrors.s === null}
-                              markDirty={markDirty}
-                            />
-                          </div>
+                          ))}
                         </div>
                       </div>
-                    </details>
-                  </>
-                )}
+                      <div className={classes.extentEast}>
+                        <ExtentField
+                          which="e"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "East"
+                              : "E (easting)"
+                          }
+                          value={rawE}
+                          error={extentInputErrors.e}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawE}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applyEastChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("e", raw, extentState)
+                          }
+                          valid={extentInputErrors.e === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                      <div className={classes.extentSouth}>
+                        <ExtentField
+                          which="s"
+                          label={
+                            extentState.coordMode === "latlon"
+                              ? "South"
+                              : "S (northing)"
+                          }
+                          value={rawS}
+                          error={extentInputErrors.s}
+                          focusedFieldRef={focusedField}
+                          onDraft={setRawS}
+                          onCommit={(deg) =>
+                            setExtentState((s) => applySouthChange(s, deg))
+                          }
+                          parse={(raw) =>
+                            parseExtentField("s", raw, extentState)
+                          }
+                          valid={extentInputErrors.s === null}
+                          markDirty={markDirty}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
               </section>
 
               <section className={classes.group}>

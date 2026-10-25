@@ -774,7 +774,6 @@ router.delete(
       prisma.importSnapshot.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.place.deleteMany({ where: { ownerId: user.id } }),
-      prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
       // Routes store their geometry on the row, so there is no S3 leg here.

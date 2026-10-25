@@ -23,7 +23,6 @@ import {
   RASTER_TEMPLATE_DEFAULTS,
   VECTOR_STYLE_DEFAULTS,
   validateGeoPdfConfig,
-  validateGeoPdfTemplateConfig,
   validateRasterTemplateSettings,
   type GeoPdfConfig,
   enforceCanyoningTag,
@@ -1425,15 +1424,6 @@ const GEO_PDF_CONFIG: GeoPdfConfig = {
     scaleBar: false,
   },
 };
-/** A layout only: a template holds no extent. */
-const GEO_PDF_TEMPLATE_CONFIG: Omit<GeoPdfConfig, "extent"> = {
-  paperSize: "A4",
-  orientation: "portrait",
-  scale: 25000,
-  baseLayer: "six-topo",
-  overlays: ["hillshade"],
-  elements: { compass: true, scaleText: true, scaleBar: true },
-};
 
 /** Puts seeded objects in a bucket; best effort for the reason uploadSeededFiles gives. */
 async function uploadObjects(
@@ -1492,7 +1482,6 @@ async function main() {
     prisma.topoJob.deleteMany(),
     prisma.topoExportJob.deleteMany(),
     prisma.geoPdfJob.deleteMany(),
-    prisma.geoPdfTemplate.deleteMany(),
     prisma.topoTemplate.deleteMany(),
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
@@ -2321,14 +2310,9 @@ async function main() {
     ],
   });
 
-  // Templates of both kinds, validated so the seed holds no config the API
-  // would refuse: the GeoPDF one as its route validates it, the topo one as
-  // POST /topo-jobs validates a job's settings (topo templates have no route
-  // left; these rows are kept for the data export and account deletion).
-  assertValid(
-    "the GeoPDF template",
-    validateGeoPdfTemplateConfig(GEO_PDF_TEMPLATE_CONFIG),
-  );
+  // Topo templates, validated as POST /topo-jobs validates a job's settings
+  // (they have no route left; these rows are kept for the data export and
+  // account deletion).
   const topoTemplateConfig = validateRasterTemplateSettings({
     ...RASTER_TEMPLATE_DEFAULTS,
     hillshade: { ...RASTER_TEMPLATE_DEFAULTS.hillshade, azimuth: 270 },
@@ -2338,22 +2322,6 @@ async function main() {
       `seed: the topo template is invalid: ${topoTemplateConfig.errors.join("; ")}`,
     );
   }
-  await prisma.geoPdfTemplate.createMany({
-    data: [
-      {
-        id: fid(10),
-        userId: ALICE_ID,
-        name: "A4 portrait with hillshade",
-        config: GEO_PDF_TEMPLATE_CONFIG as object,
-      },
-      {
-        id: fid(11),
-        userId: BOB_ID,
-        name: "Bob's A4",
-        config: { ...GEO_PDF_TEMPLATE_CONFIG, overlays: [] } as object,
-      },
-    ],
-  });
   await prisma.topoTemplate.createMany({
     data: [
       {
@@ -2664,7 +2632,7 @@ async function main() {
     `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
       `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
-      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 2 topo templates, ` +
       `2 file sends, 1 invite, 4 tombstones, 1 announcement, ` +
       `${NOTIFICATION_TYPES.length} notification types`,
   );

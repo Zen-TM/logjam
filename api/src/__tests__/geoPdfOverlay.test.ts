@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import request from "supertest";
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import type { Canvas } from "canvas";
@@ -14,7 +13,6 @@ import {
   type GeoPdfConfig,
 } from "@logjam/shared";
 import {
-  AUTH,
   TILE_GREEN,
   colourAt,
   mapImage,
@@ -24,7 +22,6 @@ import {
 } from "./_geoPdfRun";
 // Subpath import: geoPdfImport is kept out of the shared barrel (pdf-lib).
 import { parseGeoPdfGeoref } from "@logjam/shared/dist/geoPdfImport/parseGeoref.js";
-import { seedId } from "../../prisma/seedIds";
 import {
   flatPng,
   singleTilePmtiles,
@@ -34,11 +31,10 @@ import {
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { latToMercY, computeZoom, TARGET_DPI } from "@logjam/shared";
-import { API_URL, ALICE_ID } from "./_actors";
+import { ALICE_ID } from "./_actors";
 
-// Requires the seed's saved GeoPDF template (api/prisma/seed.ts, "f" 10) and
-// the topo bucket. Each test makes its own completed topo job, with ONE vegetation
-// tile in S3 at the zoom the page renders at: a GeoPDF reads overlays at its
+// Requires the topo bucket. Each test makes its own completed topo job, with
+// ONE vegetation tile in S3 at the zoom the page renders at: a GeoPDF reads overlays at its
 // print zoom (z16 or deeper at 1:25,000), which a tile at any other zoom
 // would not answer. The worker reads the archive from S3
 // for real, as in prod. The tile is flat grey (150) on a flat green base layer
@@ -222,24 +218,23 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
     }
   }, 150_000);
 
-  it("renders a saved template over a completed topo job", async () => {
+  it("renders a stored layout over a completed topo job", async () => {
     const tiles = stubTileServer("six-topo");
-    const templates = await request(API_URL)
-      .get("/geo-pdf-templates")
-      .set(AUTH);
-    expect(templates.status).toBe(200);
-    const template = templates.body.find(
-      (t: { id: string }) => t.id === seedId("f", 10),
-    );
-    expect(template).toBeDefined();
-
-    // What Logjam Web does: the template's layout plus the extent on the map.
-    const extent = extentFor(template.config);
-    const topo = await topoTileUnder(extent, template.config.scale);
+    // What Logjam Web sends: the dialog's layout plus the extent on the map.
+    const layout = {
+      paperSize: "A4",
+      orientation: "portrait",
+      scale: 25000,
+      baseLayer: "six-topo",
+      overlays: ["hillshade"],
+      elements: { compass: true, scaleText: true, scaleBar: true },
+    } as const;
+    const extent = extentFor(layout);
+    const topo = await topoTileUnder(extent, layout.scale);
     try {
       const { pdf } = await renderGeoPdf({
-        ...template.config,
-        overlays: [...template.config.overlays, "vegetation"],
+        ...layout,
+        overlays: [...layout.overlays, "vegetation"],
         extent,
       });
       expect(
@@ -247,9 +242,9 @@ describe("GeoPDF overlay render over a completed topo job (alice)", () => {
         "a worker container rendered: unset ECS_SUBNETS",
       ).toBeGreaterThan(0);
       const image = await mapImage(pdf);
-      // The page is the template's A4 portrait, and the job's vegetation is painted.
+      // The page is the layout's A4 portrait, and the job's vegetation is painted.
       const page = (await parseGeoPdfGeoref(pdf)).pages[0];
-      const a4 = getPaperDimensions({ ...PAPER, ...template.config });
+      const a4 = getPaperDimensions({ ...PAPER, ...layout });
       expect(Math.abs(page.pageWidthPt - a4.w * MM_TO_PT)).toBeLessThan(1);
       expect(Math.abs(page.pageHeightPt - a4.h * MM_TO_PT)).toBeLessThan(1);
       expect(isGrey(colourAt(image, topo.fx, topo.fy))).toBe(true);

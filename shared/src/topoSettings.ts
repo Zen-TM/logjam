@@ -22,8 +22,8 @@
 // as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
 // (email download), not a map layer. Everything TS-side derives from this list
 // (TopoLayerKey) except the GeoPDF
-// overlay allowlist, which is declared so stored templates keep validating and
-// must hold every name here (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
+// overlay allowlist, which is declared and must hold every name here but
+// `features` (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
 // frontend/src/topoLayerTypes.ts are thin re-exports.
 
 // `surveyPick` declares, per layer, which survey to prefer when an ELVIS ZIP

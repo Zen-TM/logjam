@@ -17,34 +17,15 @@ import {
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
 import { apiFetch } from "../../placeUtils";
-import GeoPdfDialog, { type GeoPdfTemplate } from "./GeoPdfDialog";
+import GeoPdfDialog from "./GeoPdfDialog";
+import { GEOPDF_SETTINGS_KEY } from "./geoPdfSettings";
 import type { TBbox } from "../map/Map";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import { ToastProvider } from "../feedback/ToastProvider";
 
-const template = {
-  id: "t1",
-  name: "Template one",
-  config: {
-    paperSize: "A4",
-    orientation: "portrait",
-    scale: 25000,
-    baseLayer: "six-topo",
-    overlays: [],
-    elements: {
-      title: "From the template",
-      compass: true,
-      scaleText: true,
-      scaleBar: true,
-    },
-  },
-  createdAt: "2026-01-01T00:00:00.000Z",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-} as unknown as GeoPdfTemplate;
-
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
-  apiFetch: vi.fn(async () => [template]),
+  apiFetch: vi.fn(async () => ({})),
 }));
 
 // Map.tsx pulls in maplibre and a Vite virtual module; the dialog reads only
@@ -78,7 +59,11 @@ HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  vi.mocked(apiFetch).mockClear();
+});
 
 function dialog({
   open,
@@ -87,9 +72,6 @@ function dialog({
 }: {
   open: boolean;
   onSelectOnMap?: (...args: unknown[]) => void;
-  templateMode?: boolean;
-  editingTemplate?: GeoPdfTemplate | null;
-  initialTemplateId?: string | null;
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
   completedTopoJobs?: CompletedTopoJob[];
@@ -117,59 +99,140 @@ function dialog({
   );
 }
 
-const titleBox = () =>
-  screen.getByRole("textbox", { name: "Map title" }) as HTMLInputElement;
-
-// A template fills the form once per genuine open. "Select on map" closes the
-// dialog and reopens it, which is not a new open: edits made before the pick
-// must survive it. Mutation for the launch-template case: drop the
-// `appliedTemplate` gate in `applyLaunchTemplate`. (The template-mode step's
-// round-trip guard has no UI route to test: template mode offers no
-// Select on map.)
+// The form is filled once per genuine open. "Select on map" closes the dialog
+// and reopens it, which is not a new open: edits made before the pick must
+// survive it. Mutation: drop the `seededView` gate around the open-time seed.
 describe("GeoPdfDialog, across a Select on map round trip", () => {
-  it("keeps edits made over a launch template", async () => {
+  it("keeps edits made before the pick", async () => {
     let selectOnMap = () => {};
-    const props = {
-      initialTemplateId: "t1",
-      onSelectOnMap: () => selectOnMap(),
-    };
+    const props = { onSelectOnMap: () => selectOnMap() };
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ paperSize: "A3" }),
+    );
     const { rerender } = render(dialog({ open: true, ...props }));
-    await vi.waitFor(() => expect(titleBox().value).toBe("From the template"));
+    fireEvent.click(screen.getByRole("radio", { name: "A5" }));
 
-    fireEvent.change(titleBox(), { target: { value: "My edit" } });
     selectOnMap = () => rerender(dialog({ open: false, ...props }));
     fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
     rerender(dialog({ open: true, ...props }));
-    await vi.waitFor(() => expect(titleBox().value).toBe("My edit"));
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(titleBox().value).toBe("My edit");
+    expect(paper("A5").ariaChecked).toBe("true");
+  });
+});
+
+const paper = (name: string) => screen.getByRole("radio", { name });
+const extent: TBbox = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
+const posted = () =>
+  vi
+    .mocked(apiFetch)
+    .mock.calls.filter(([path]) => path === "/geo-pdf")
+    .map(([, init]) => (init as { body: unknown }).body);
+
+// The last settings come back, and only they. Mutations: store the whole
+// config (the title and extent land in localStorage); stop reading it back on
+// open.
+describe("GeoPdfDialog, remembers the last settings", () => {
+  async function makeOne() {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }));
+    fireEvent.click(paper("A3"));
+    fireEvent.click(paper("Landscape"));
+    fireEvent.click(paper("Imagery"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Scale bar" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Title" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Map title" }), {
+      target: { value: "Secret Gorge" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() =>
+      expect(localStorage.getItem(GEOPDF_SETTINGS_KEY)).not.toBe("null"),
+    );
+    expect(posted()).toHaveLength(1);
+    cleanup();
+  }
+
+  it("opens on them after a GeoPDF is made", async () => {
+    await makeOne();
+    render(dialog({ open: true }));
+    expect(paper("A3").ariaChecked).toBe("true");
+    expect(paper("Landscape").ariaChecked).toBe("true");
+    expect(paper("Imagery").ariaChecked).toBe("true");
+    expect(
+      (screen.getByRole("checkbox", { name: "Scale bar" }) as HTMLInputElement)
+        .checked,
+    ).toBe(false);
+    // The scale is part of them, the title and area are not.
+    expect(paper("1:50,000").ariaChecked).toBe("true");
+    expect(screen.queryByRole("textbox", { name: "Map title" })).toBeNull();
   });
 
-  // The step that fills the form from the template being edited keys on
-  // template ID rather than the template object, so a fresh copy of the same
-  // template (a refetch) does not wipe the form. Mutation: key
-  // `templatePopulatedFor` on `editingTemplate` instead of
-  // `editingTemplate?.id`.
-  it("keeps edits to a template when it is handed over again", async () => {
-    const props = { templateMode: true };
-    const { rerender } = render(
-      dialog({ open: true, editingTemplate: template, ...props }),
-    );
-    expect(titleBox().value).toBe("From the template");
-
-    fireEvent.change(titleBox(), { target: { value: "My edit" } });
-    rerender(
-      dialog({ open: true, editingTemplate: { ...template }, ...props }),
-    );
-
-    expect(titleBox().value).toBe("My edit");
+  it("never stores the title or the area", async () => {
+    await makeOne();
+    const json = localStorage.getItem(GEOPDF_SETTINGS_KEY)!;
+    expect(json).toBeTruthy();
+    for (const secret of ["Secret", "33.6", "150.2", "extent", "title"])
+      expect(json).not.toContain(secret);
   });
 
-  it("fills the form from a template when it is opened", () => {
-    render(
-      dialog({ open: true, editingTemplate: template, templateMode: true }),
+  it("falls back to the defaults for a value that no longer validates", () => {
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ paperSize: "A0", orientation: "landscape", scale: "x" }),
     );
-    expect(titleBox().value).toBe("From the template");
+    render(dialog({ open: true }));
+    expect(paper("A4").ariaChecked).toBe("true");
+    expect(paper("Landscape").ariaChecked).toBe("true");
+    expect(paper("1:25,000").ariaChecked).toBe("true");
+  });
+
+  const slopeOn = () =>
+    (screen.getByRole("checkbox", { name: /^Slope/ }) as HTMLInputElement)
+      .checked;
+
+  // Mutation: drop `if (c.terrainPinned) setTerrainFollowsMap(false)` and a
+  // pinned choice follows the map again; or pin whatever overlays are stored.
+  it("pins Terrain only when it was pinned", () => {
+    const open = (terrainPinned: boolean) => {
+      localStorage.setItem(
+        GEOPDF_SETTINGS_KEY,
+        JSON.stringify({ overlays: ["contours"], terrainPinned }),
+      );
+      render(dialog({ open: true }));
+    };
+    open(true);
+    expect(slopeOn()).toBe(false);
+    cleanup();
+    open(false);
+    expect(slopeOn()).toBe(true);
+  });
+
+  // Mutation: stop passing the dialog's own base layers to `readSettings`.
+  it("takes a stored base layer the dialog offers, not one it does not", () => {
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ baseLayer: "six-imagery" }),
+    );
+    render(dialog({ open: true }));
+    expect(screen.getByRole("radio", { name: "Imagery" }).ariaChecked).toBe(
+      "true",
+    );
+    cleanup();
+
+    // "osm" is a valid GeoPDF layer the dialog has no chip for.
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ baseLayer: "osm" }),
+    );
+    render(dialog({ open: true }));
+    expect(screen.getByRole("radio", { name: "Topo" }).ariaChecked).toBe(
+      "true",
+    );
+  });
+
+  it("opens on the defaults when what is stored is not JSON", () => {
+    localStorage.setItem(GEOPDF_SETTINGS_KEY, "{oops");
+    render(dialog({ open: true }));
+    expect(paper("A4").ariaChecked).toBe("true");
   });
 });
 
@@ -220,15 +283,6 @@ describe("GeoPdfDialog, Exact edges", () => {
 
     expect(edges().open).toBe(true);
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
-  });
-
-  // A template has no area. Mutation: drop the `!templateMode` gate.
-  it("is absent, with the area, in template mode", () => {
-    render(dialog({ open: true, templateMode: true }));
-    expect(screen.queryByText("Exact edges")).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Pick on the map" }),
-    ).toBeNull();
   });
 });
 
@@ -403,44 +457,6 @@ describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
     rerender(at(away));
     rerender(at(overJob));
     expect(hillshade().checked).toBe(false);
-  });
-});
-
-// A new template has no area: its Terrain layers follow the map's switches,
-// and a job's own layers turn them on only for a user who has one. Mutation:
-// hand `shownOverlays` the template's `lidarOverlap` (always true), and a
-// user with no LiDAR job saves slope and shading for every sheet.
-describe("GeoPdfDialog, a new template's Terrain layers", () => {
-  const hillshade = () =>
-    screen.getByRole("checkbox", { name: /^Hillshade/ }) as HTMLInputElement;
-  const ownJob = {
-    syncRole: "owner",
-    footprint: {
-      type: "Polygon",
-      coordinates: [
-        [
-          [150.31, -33.75],
-          [150.33, -33.75],
-          [150.33, -33.71],
-          [150.31, -33.75],
-        ],
-      ],
-    },
-  } as CompletedTopoJob;
-
-  it("follows the map for a user with no job", () => {
-    render(dialog({ open: true, templateMode: true }));
-    expect(hillshade().checked).toBe(false);
-  });
-
-  // Mutation: drop ownJobInArea's empty-area branch (or give a template
-  // `jobInArea = false`), and a user with a job of their own gets a template
-  // with Terrain off.
-  it("turns on for a user with a job of their own", () => {
-    render(
-      dialog({ open: true, templateMode: true, completedTopoJobs: [ownJob] }),
-    );
-    expect(hillshade().checked).toBe(true);
   });
 });
 

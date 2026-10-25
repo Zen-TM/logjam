@@ -692,7 +692,7 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Export an area: GeoPDF, its template mode and extent grid, and For GIS", async ({
+  test("Export an area: GeoPDF, its extent grid, and For GIS", async ({
     page,
   }) => {
     await openApp(page);
@@ -700,7 +700,6 @@ test.describe("desktop", () => {
     const aside = page.locator("aside");
     await aside.getByRole("radio", { name: "GeoPDFs" }).click();
     await aside.getByRole("button", { name: /^Make/ }).first().click();
-    await page.getByRole("menuitem", { name: "Make a GeoPDF" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
@@ -732,14 +731,7 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Naming a template swaps the pinned line for a field, Save and Cancel.
     await dialog.getByRole("radio", { name: "A4" }).click();
-    await dialog.getByRole("button", { name: "Save as a template" }).click();
-    await expect(
-      dialog.getByRole("textbox", { name: "Template name" }),
-    ).toBeFocused();
-    await expectNoViolations(page, "dialog");
-    await dialog.getByRole("button", { name: "Cancel" }).first().click();
 
     // For GIS swaps the paper for a free box, its edges and the format's layers.
     await dialog.getByText("For GIS").click();
