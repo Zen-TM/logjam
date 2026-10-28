@@ -5,7 +5,7 @@
 // the file holds the statewide terrain over it (`AreaExportFields`).
 //
 // Nothing here is live — the paper is drawn on the map while you pick an area
-// (App's frame), and everything else only matters once the worker renders it —
+// (App's frame), and everything else only matters once Make it renders it —
 // so the whole dialog is one form with a Make it at the end, unlike the topo
 // settings beside it (DESIGN.md).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,10 @@ import {
   shownOverlays,
 } from "./geoPdfOverlays";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
-import { apiFetch, type TPlace, type GeoPdfJobView } from "../../placeUtils";
+import { apiFetch, type TPlace } from "../../placeUtils";
+import { loadGeoPdfClient } from "./loadGeoPdfClient";
+import { downloadBlob } from "../../download";
+import { vegetationUrlsFor } from "./geoPdfVegetation";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -37,6 +40,7 @@ import {
   type ExtentFieldValues,
 } from "./geoPdfExtentFields";
 import type {
+  SlopeBand,
   ExtentState,
   PaperSize,
   Orientation,
@@ -102,7 +106,9 @@ import {
   type ChipOption,
   ErrorBanner,
   FieldError,
+  ProgressBar,
 } from "../../ui";
+import type { GeoPdfProgress } from "../../geoPdf/client";
 import classes from "./GeoPdfDialog.module.css";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -183,6 +189,15 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+const RENDER_FAILED =
+  "Couldn't make the GeoPDF. Check your connection, or try another base map.";
+
+const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
+  preparing: "Getting the map ready.",
+  drawing: "Drawing the map.",
+  finishing: "Putting the PDF together.",
+};
+
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
 
 function GeoPdfDialog({
@@ -197,7 +212,8 @@ function GeoPdfDialog({
   mapCenter,
   places,
   sharedPlaces,
-  onJobQueued,
+  slopeBands,
+  topoJobsLoaded = true,
   areaSeed,
   onPickArea,
   pendingArea,
@@ -224,7 +240,11 @@ function GeoPdfDialog({
   mapCenter?: { lat: number; lng: number } | null;
   places?: TPlace[];
   sharedPlaces?: TPlace[];
-  onJobQueued?: (job: GeoPdfJobView) => void;
+  /** The account's slope bands, as the map draws the statewide slope. */
+  slopeBands: readonly SlopeBand[];
+  /** Whether `completedTopoJobs` has settled: a render waits for it, so a
+   *  sharpened area is never left off for being slow to load. */
+  topoJobsLoaded?: boolean;
   /** The box this opening was given (a selection's, a topo's footprint), which
    *  a GIS format's area starts from. */
   areaSeed?: TBbox | null;
@@ -301,6 +321,9 @@ function GeoPdfDialog({
   // Generation
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set while a GeoPDF renders in this tab; aborting it is what Cancel does.
+  const [progress, setProgress] = useState<GeoPdfProgress | null>(null);
+  const renderAbort = useRef<AbortController | null>(null);
 
   // Unsaved-changes tracking. Explicit dirty flag (not snapshot-diffing) —
   // state here is seeded by three programmatic writers at unpredictable
@@ -714,26 +737,42 @@ function GeoPdfDialog({
       config.placeMarkers = markers;
     }
 
+    const controller = new AbortController();
+    renderAbort.current = controller;
+    setProgress({ phase: "preparing", done: 0, total: 0, fraction: 0 });
     try {
-      const job = await apiFetch<GeoPdfJobView>("/geo-pdf", {
-        method: "POST",
-        body: config,
-      });
-      setStored(
-        settingsOf(config, {
-          overlays: selectedOverlays,
-          terrainPinned: !terrainFollowsMap,
-        }),
+      const { renderGeoPdf } = await loadGeoPdfClient();
+      const result = await renderGeoPdf(
+        {
+          config,
+          slopeBands,
+          areas: completedTopoJobs.flatMap((job) => job.sharpened ?? []),
+          vegetationUrls: vegetationUrlsFor(completedTopoJobs, config.extent),
+          origin: location.origin,
+        },
+        { onProgress: setProgress, signal: controller.signal },
       );
-      toast.success(
-        "GeoPDF queued — download will appear in the GeoPDFs panel.",
-      );
-      onJobQueued?.(job);
-      onClose();
+      if (result.ok) {
+        downloadBlob(result.pdf, result.fileName);
+        setStored(
+          settingsOf(config, {
+            overlays: selectedOverlays,
+            terrainPinned: !terrainFollowsMap,
+          }),
+        );
+        toast.success("Your GeoPDF is downloading.");
+        onClose();
+      } else if (result.reason === "too-large") {
+        setError(GEOPDF_TOO_LARGE);
+      } else if (result.reason === "failed") {
+        setError(RENDER_FAILED);
+      }
     } catch (e) {
       console.error(e);
-      setError(messageFromError(e, "Couldn't queue GeoPDF. Please try again."));
+      setError(RENDER_FAILED);
     } finally {
+      renderAbort.current = null;
+      setProgress(null);
       setGenerating(false);
     }
   }, [
@@ -753,7 +792,8 @@ function GeoPdfDialog({
     sharedPlaces,
     showOwnedPlacesOnPdf,
     showSharedPlacesOnPdf,
-    onJobQueued,
+    slopeBands,
+    completedTopoJobs,
     setStored,
     selectedOverlays,
     terrainFollowsMap,
@@ -785,6 +825,17 @@ function GeoPdfDialog({
   // calling the raw onClose directly.
   const guard = useUnsavedChangesGuard(dirty, onClose);
 
+  // The renderer is its own chunk: start fetching it on open, so Make it
+  // doesn't wait. A failure here resurfaces when Make it imports it again.
+  useEffect(() => {
+    if (open) loadGeoPdfClient().catch(() => {});
+  }, [open]);
+  // Closing the dialog, however it closes, ends a render in progress.
+  useEffect(() => {
+    if (!open) renderAbort.current?.abort();
+  }, [open]);
+  useEffect(() => () => renderAbort.current?.abort(), []);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   const mapMm = getMapDimensions(extentState);
@@ -795,22 +846,24 @@ function GeoPdfDialog({
         open={open}
         title="Export an area"
         size="large"
-        dismissible={!generating}
+        dismissible={!generating || progress !== null}
         onClose={guard.requestClose}
         footer={
           <>
             <Button
-              onClick={guard.requestClose}
-              disabled={generating}
-              disabledReason={
-                gisFormat ? "Starting the export…" : "Making your GeoPDF…"
+              onClick={
+                progress
+                  ? () => renderAbort.current?.abort()
+                  : guard.requestClose
               }
+              disabled={generating && !progress}
+              disabledReason="Starting the export…"
             >
               Cancel
             </Button>
             <Button
               variant="filled"
-              busy={generating}
+              busy={generating || (!gisFormat && !topoJobsLoaded)}
               onClick={gisFormat ? handleExportArea : handleGenerate}
             >
               Make it
@@ -822,6 +875,18 @@ function GeoPdfDialog({
           <p className={classes.wideHint}>This is easier on a bigger screen.</p>
 
           {error && <ErrorBanner message={error} />}
+          {progress && (
+            <div className={classes.progress}>
+              <ProgressBar
+                label="Making your GeoPDF"
+                value={progress.fraction * 100}
+              />
+              <p className={classes.note}>
+                <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
+                {Math.round(progress.fraction * 100)}%
+              </p>
+            </div>
+          )}
 
           <section className={classes.group}>
             <SectionHeader title="Format" />

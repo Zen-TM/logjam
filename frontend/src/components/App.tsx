@@ -1406,6 +1406,8 @@ function App() {
         mapCenter={mapCenter}
         places={places}
         sharedPlaces={sharedPlaces}
+        slopeBands={slopeBands.drawn}
+        topoJobsLoaded={completedTopoJobsLoaded}
         areaSeed={exportAreaSeed}
         onPickArea={() => {
           setShowGeoPdf(false);

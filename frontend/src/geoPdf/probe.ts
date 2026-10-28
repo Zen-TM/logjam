@@ -1,4 +1,5 @@
 import {
+  canvasRows,
   planStrips,
   STRIP_MAX_PX,
   STRIP_ROW_MULTIPLE,
@@ -23,12 +24,15 @@ export type CanvasLimits = {
 export const TILE_CANVAS_ALLOWANCE_PX = 2_000_000;
 
 /**
- * Every canvas alive at once while `strip` renders: the strip canvas, the
- * same-size scratch canvas terrain composites through, and the tile decode
- * allowance.
+ * Every canvas alive at once while `strip` renders. The renderer allocates
+ * the strip canvas (`canvasRows`, with the halo above it), then a same-size
+ * scratch canvas terrain composites through, and the tile decode allowance;
+ * the scratch canvas is freed before the cropped `renderHeight` canvas the
+ * JPEG is encoded from, so the peak is the first two (the crop beside the
+ * strip canvas is smaller).
  */
 export function peakCanvasPx(mapWidth: number, strip: Strip): number {
-  return 2 * mapWidth * strip.renderHeight + TILE_CANVAS_ALLOWANCE_PX;
+  return 2 * mapWidth * canvasRows(strip) + TILE_CANVAS_ALLOWANCE_PX;
 }
 
 export type PlanCheck = { ok: true; strips: Strip[] } | { ok: false };

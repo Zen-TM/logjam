@@ -354,7 +354,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/export-area.spec.ts --workers=1
+        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts --workers=1
       # Writes to the seeded account and Undoes it, which leaves sync
       # tombstones (frontend/AGENTS.md): after the integration suite, never
       # before it.
@@ -401,6 +401,13 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm test
+      # The in-browser GeoPDF renderer against a dev-only bench page with
+      # every network read stubbed: no API, no tile server. Runner Chrome.
+      - name: Playwright GeoPDF renderer
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/geopdf-render.spec.ts --workers=1
 
   mobile:
     needs: changes
