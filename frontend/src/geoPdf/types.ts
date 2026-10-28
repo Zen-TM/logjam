@@ -55,6 +55,13 @@ export type RenderTimings = {
   mapPx: [number, number];
 };
 
+/** The map as drawn before JPEG, strip by strip, overlap rows included. */
+export type RenderPixels = {
+  width: number;
+  height: number;
+  strips: { y: number; rows: number; owned: number; data: ArrayBuffer }[];
+};
+
 export type WorkerRequest = {
   type: "render";
   input: GeoPdfRenderInput;
@@ -70,7 +77,7 @@ export type WorkerMessage =
       type: "done";
       pdf: Uint8Array<ArrayBuffer>;
       timings: RenderTimings;
-      pixels?: { width: number; height: number; data: ArrayBuffer };
+      pixels?: RenderPixels;
     }
   | { type: "refused" }
   | { type: "failed" };

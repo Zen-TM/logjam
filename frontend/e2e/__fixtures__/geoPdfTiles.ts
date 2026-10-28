@@ -248,6 +248,17 @@ export function pmtiles(tiles: ArchiveTile[], tileType: 1 | 2): Buffer {
   return Buffer.concat([header, root, meta, ...sorted.map((t) => t.data)]);
 }
 
+/** A height archive whose every tile is bytes no decoder reads. */
+export function unreadableHeights(): Buffer {
+  const cx = lon2x(CENTRE.lon, 15);
+  const cy = lat2y(CENTRE.lat, 15);
+  const tiles: ArchiveTile[] = [];
+  for (let y = cy - 7; y <= cy + 7; y++)
+    for (let x = cx - 7; x <= cx + 7; x++)
+      tiles.push({ z: 15, x, y, data: Buffer.from("not a png") });
+  return pmtiles(tiles, 2);
+}
+
 /** The three statewide archives round CENTRE, built once. */
 export function statewideArchives() {
   const tilesAt = (z: number, radius: number) => {

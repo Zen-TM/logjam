@@ -2,6 +2,7 @@ import { GEOPDF_PADDING_MM, PAPER_SIZES_MM } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 import { checkPlan, peakCanvasPx, TILE_CANVAS_ALLOWANCE_PX } from "./probe";
 import {
+  canvasRows,
   planStrips,
   STRIP_MAX_PX,
   STRIP_OVERLAP_ROWS,
@@ -47,7 +48,7 @@ describe("planStrips", () => {
   // mutation: drop the `* STRIP_ROW_MULTIPLE` rounding -> heights stop being multiples of 16
   // mutation: tile y with `index * ownable` instead of the equalised height -> gaps or overlap in coverage
   // mutation: drop the overlap clip `mapHeight - y` -> the last strip draws past the map
-  // mutation: size strips as height <= maxRows (forgetting the overlap) -> width*renderHeight exceeds the max
+  // mutation: size strips as height <= maxRows (forgetting the overlap or the halo) -> width*canvasRows exceeds the max
   it.each([
     [4000, 9001, STRIP_MAX_PX],
     [a3.w, a3.h, STRIP_MAX_PX],
@@ -68,7 +69,7 @@ describe("planStrips", () => {
       } else {
         expect(st.renderHeight).toBe(st.height);
       }
-      expect(w * st.renderHeight).toBeLessThanOrEqual(max);
+      expect(w * canvasRows(st)).toBeLessThanOrEqual(max);
       y += st.height;
     }
     expect(y).toBe(h);
@@ -76,13 +77,15 @@ describe("planStrips", () => {
 
   // mutation: start the count at ceil(h / maxRows) instead of from the overlap-aware height -> more strips than needed or too tall
   it("uses the fewest strips", () => {
-    // maxRows 100 -> a strip owns 80 rows; 160 rows need 2, 161 need 3.
+    // maxRows 100: two strips of 80 each draw 96 rows; a third strip would sit
+    // in the middle (+ 32), so 161 rows need 3 strips of 64.
     expect(planStrips(10, 160, 1000)).toHaveLength(2);
     expect(planStrips(10, 161, 1000)).toHaveLength(3);
   });
 
-  it("rejects rows too wide for a 16-row strip plus its overlap", () => {
-    expect(() => planStrips(1000, 100, 31_999)).toThrow(RangeError);
+  it("rejects rows too wide for a 16-row strip plus its overlap and halo", () => {
+    expect(() => planStrips(1000, 100, 47_999)).toThrow(RangeError);
+    expect(planStrips(1000, 100, 48_000).length).toBeGreaterThan(1);
     expect(() => planStrips(0, 100, 1000)).toThrow(RangeError);
   });
 });
@@ -117,10 +120,34 @@ describe("checkPlan", () => {
 
   // mutation: peakCanvasPx without the factor 2 (scratch) or the allowance
   it("peak counts the strip, a same-size scratch canvas and the tile allowance", () => {
-    const strip = { index: 0, y: 0, height: 100, renderHeight: 116 };
-    expect(peakCanvasPx(1000, strip)).toBe(
+    const first = { index: 0, y: 0, height: 100, renderHeight: 116 };
+    expect(peakCanvasPx(1000, first)).toBe(
       2 * 1000 * 116 + TILE_CANVAS_ALLOWANCE_PX,
     );
+    // After the first, the canvas also has the halo above it.
+    const next = { index: 1, y: 100, height: 100, renderHeight: 116 };
+    expect(peakCanvasPx(1000, next)).toBe(
+      2 * 1000 * 132 + TILE_CANVAS_ALLOWANCE_PX,
+    );
+  });
+
+  // The halo above a strip after the first is part of its canvas. At 1000 px
+  // wide and a 100 000 px limit the plan that forgot the halo owned 80 rows a
+  // strip, and a middle strip's canvas was 80 + 16 + 16 = 112 rows: over.
+  // mutation: drop the halo from planStrips' extra rows -> a middle strip's canvas passes the limit
+  it("counts the halo: no canvas of the plan passes the single-canvas limit", () => {
+    for (const [w, h, max] of [
+      [1000, 3000, 100_000],
+      [1000, 3000, 101_000],
+      [800, 5000, 80_000],
+      [1000, 3000, 1_000_000],
+    ] as const) {
+      const c = checkPlan(w, h, { ...m, maxCanvasPx: max });
+      expect(c.ok).toBe(true);
+      if (c.ok)
+        for (const s of c.strips)
+          expect(w * canvasRows(s)).toBeLessThanOrEqual(max);
+    }
   });
 
   it("is not ok for an unplannable width", () => {
