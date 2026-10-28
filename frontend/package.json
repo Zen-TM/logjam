@@ -16,6 +16,7 @@
     "tokens": "node scripts/generate-tokens.mjs"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
     "@logjam/shared": "file:../shared",
     "@protomaps/basemaps": "5.7.2",
     "@tmcw/togeojson": "^7.1.3",
