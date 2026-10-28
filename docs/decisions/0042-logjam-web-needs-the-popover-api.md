@@ -27,7 +27,7 @@ The in-browser GeoPDF renderer (#602) relies on newer features too, such as
 ## Decision
 
 - The floor is **Safari 17 (iOS 17), Chrome 114, Firefox 125**.
-- `frontend/public/browser-check.js` runs before the app bundle. Without
+- `frontend/browser-check.js` runs before the app bundle. Without
   `popover` on `HTMLElement.prototype` it replaces `#root` with one static page
   saying Logjam Web needs a newer browser, and `main.tsx` mounts nothing. It is
   a same-origin classic script, because the production CSP has

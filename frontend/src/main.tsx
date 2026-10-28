@@ -22,7 +22,7 @@ if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   });
 }
 
-// No #root: public/browser-check.js replaced it with the "needs a newer
+// No #root: browser-check.js replaced it with the "needs a newer
 // browser" page. Test: src/browserCheck.test.ts.
 const root = document.getElementById("root");
 if (root)
