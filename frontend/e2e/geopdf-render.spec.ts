@@ -7,14 +7,22 @@ import {
   chooseMainViewport,
 } from "@logjam/shared/dist/geoPdfImport/parseGeoref.js";
 import { buildGeoTransform } from "@logjam/shared/dist/geoPdfImport/transform.js";
-import { baseTilePng, statewideArchives } from "./__fixtures__/geoPdfTiles";
+import {
+  baseTilePng,
+  statewideArchives,
+  unreadableHeights,
+} from "./__fixtures__/geoPdfTiles";
 
 // The in-browser GeoPDF renderer, driven through the dev-only bench page
 // (geopdf-bench.html) with every network read stubbed: made-up base tiles and
 // PMTiles archives, so it needs no API and no tile server.
 //
 // Mutations, each turning a test below red (checked by hand when written):
-//  - seams: give planTerrain's blocks no halo (r0/r1 without the +/-1 tile row)
+//  - seams, at a DEM tile edge: set DEM_HALO_TILE_ROWS and DEM_READ_MARGIN_PX
+//    in terrain.ts both to 0 (each alone is covered by the other, so only
+//    the pair is red here; terrain.test.ts is red on the halo alone)
+//  - seams: resample the terrain from the wrong source row (render.ts, the
+//    `block.r0 * TILE_SIZE` argument to resampleGrid)
 //  - refusal: drop the `checkPlan` call in render.ts
 //  - pixel check: drop the `opaque(...)` test in render.ts's strip loop
 //  - cancel: have the client wait for the worker instead of terminating it
@@ -35,7 +43,11 @@ const ARCHIVE_PATHS: Record<string, Buffer> = {
 type Seen = { tiles: number; archives: number };
 
 /** Answer every read the renderer makes from the fixtures, counting them. */
-async function stubNetwork(page: Page, opts: { delayMs?: number } = {}) {
+async function stubNetwork(
+  page: Page,
+  opts: { delayMs?: number; unreadableHeights?: boolean } = {},
+) {
+  const broken = opts.unreadableHeights ? unreadableHeights() : null;
   const seen: Seen = { tiles: 0, archives: 0 };
   const delay = () =>
     opts.delayMs ? new Promise((r) => setTimeout(r, opts.delayMs)) : null;
@@ -56,7 +68,10 @@ async function stubNetwork(page: Page, opts: { delayMs?: number } = {}) {
   });
   await page.route("**/master/**", async (route: Route) => {
     const path = new URL(route.request().url()).pathname.slice(1);
-    const body = ARCHIVE_PATHS[path];
+    const body =
+      broken && path === NSW_HILLSHADE.archivePath
+        ? broken
+        : ARCHIVE_PATHS[path];
     if (!body) return route.fulfill({ status: 404 });
     seen.archives++;
     await delay();
@@ -99,6 +114,36 @@ test.describe("the in-browser GeoPDF renderer", () => {
       expect(r).toMatchObject({ ok: true });
     });
   }
+
+  // A strip whose last rows fall on the last row of a DEM tile: with no halo
+  // and no read margin its block ends there and the resample clamps where the
+  // whole map's grid does not. Terrain alone, so the tolerance can be strict
+  // (nothing but a fault is more than a level out), and every rendered row is
+  // compared, the overlap under the next strip too.
+  test("a strip ending on a DEM tile edge matches the one-strip render", async ({
+    page,
+  }) => {
+    await stubNetwork(page);
+    await openBench(page);
+    const r = await page.evaluate(async () => {
+      const extent = await window.geoPdfBench.extentAtDemTileEdge(
+        "shade",
+        700_000,
+      );
+      return window.geoPdfBench.seamCheck(
+        "shade",
+        700_000,
+        {
+          extent,
+          placeMarkers: [],
+          elements: { compass: false, scaleText: false, scaleBar: false },
+        },
+        true,
+      );
+    });
+    expect(r.strips).toBeGreaterThan(3);
+    expect(r).toMatchObject({ ok: true, over3: 0 });
+  });
 
   test("refuses a map this browser cannot draw before it asks for a tile", async ({
     page,
@@ -161,6 +206,47 @@ test.describe("the in-browser GeoPDF renderer", () => {
     expect(waited.ms).toBeLessThan(1000);
     await page.getByRole("button", { name: "Ping" }).click();
     await expect(page.locator("#pings")).toHaveText("1");
+  });
+
+  test("cached canvas limits that are too small are probed again before a refusal", async ({
+    page,
+  }) => {
+    await stubNetwork(page);
+    await openBench(page);
+    const key = "logjam.geoPdf.canvasLimits.v1";
+    const r = await page.evaluate(
+      async ([key]) => {
+        // A cache from a browser that could draw almost nothing.
+        localStorage.setItem(
+          key!,
+          JSON.stringify({
+            ua: navigator.userAgent,
+            limits: { maxCanvasPx: 10_000, maxTotalPx: 20_000, maxWidth: 100 },
+          }),
+        );
+        const run = await window.geoPdfBench.run("shade");
+        return { run, cached: JSON.parse(localStorage.getItem(key!)!) };
+      },
+      [key],
+    );
+    expect(r.run.ok).toBe(true);
+    // And what it found replaced the stale numbers.
+    expect(r.cached.limits.maxCanvasPx).toBeGreaterThan(1_000_000);
+  });
+
+  // Mutation: credit a layer for arrived bytes, or skip the all-unreadable
+  // check in render.ts: the map then prints without its shading and says so
+  // in no way.
+  test("a terrain layer whose every tile is unreadable is a failure, not a missing layer", async ({
+    page,
+  }) => {
+    await stubNetwork(page, { unreadableHeights: true });
+    await openBench(page);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.run("shade", { returnPdf: true }),
+    );
+    expect(r).toMatchObject({ ok: false, reason: "failed" });
+    expect(r.pdfBase64).toBeUndefined();
   });
 
   test("progress never goes back and ends at 1", async ({ page }) => {

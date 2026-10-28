@@ -4,13 +4,18 @@
 // button is for a person. Point it at the dev proxy for real tiles, or stub
 // the network (e2e/geopdf-render.spec.ts) for a run with none.
 import {
+  computeTileToMapTransform,
+  computeZoom,
   extentFromCentreAndSize,
+  geoPdfMaxNativeZoom,
+  TARGET_DPI,
   getMapDimensions,
   RASTER_TEMPLATE_DEFAULTS,
   type GeoPdfConfig,
 } from "@logjam/shared";
 import { runGeoPdfRender } from "./client";
-import type { RenderDebug, RenderTimings } from "./types";
+import { planStrips } from "./strips";
+import type { RenderDebug, RenderPixels, RenderTimings } from "./types";
 
 // An obviously generic point inside the NSW coverage; no place is named.
 const CENTRE = { lat: -30, lon: 150 };
@@ -93,7 +98,7 @@ async function run(
     /** Fields to change in the scenario's config. */
     config?: Partial<GeoPdfConfig>;
   } = {},
-): Promise<BenchRun & { pixels?: Uint8Array }> {
+): Promise<BenchRun & { pixels?: RenderPixels }> {
   const scenario = SCENARIOS[name];
   if (!scenario) throw new Error("unknown scenario");
   const config = { ...scenario, ...opts.config };
@@ -113,7 +118,7 @@ async function run(
       debug: opts.debug,
     },
   );
-  const out: BenchRun & { pixels?: Uint8Array } = {
+  const out: BenchRun & { pixels?: RenderPixels } = {
     ok: result.ok,
     progress,
     extent: config.extent,
@@ -132,49 +137,71 @@ async function run(
       bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     out.pdfBase64 = btoa(bin);
   }
-  if (result.pixels) out.pixels = new Uint8Array(result.pixels.data);
+  if (result.pixels) out.pixels = result.pixels;
   return out;
 }
 
 // Anti-aliased stroke edges can land a few levels apart; a missing halo is
 // tens of levels over whole rows.
-const SEAM_MAX_DELTA = 12;
-const SEAM_OVER_FRACTION = 0.0005;
+const LOOSE = { maxDelta: 12, overFraction: 0.0005 };
+// Terrain and tiles alone differ by one level at most, so any pixel past
+// three is a fault, even a single row of them.
+const STRICT = { maxDelta: 3, overFraction: 0 };
 
-/** Render with `maxStripPx` and with one strip; are the map pixels the same? */
+/**
+ * Render with `maxStripPx` and with one strip; are the map pixels the same?
+ * Strict compares every rendered row of every strip, the overlap under the
+ * next strip included: it is where a block edge shows.
+ */
 async function seamCheck(
   name: string,
   maxStripPx: number,
   config?: Partial<GeoPdfConfig>,
+  strict = false,
 ) {
+  const tolerance = strict ? STRICT : LOOSE;
   const many = await run(name, {
     config,
     debug: { collectPixels: true, maxStripPx },
   });
   const one = await run(name, { config, debug: { collectPixels: true } });
   if (!many.pixels || !one.pixels)
-    return { ok: false, strips: 0, firstDiff: -1, differing: 0 };
-  let firstDiff = -1;
-  let differing = 0;
+    return {
+      ok: false,
+      strips: 0,
+      oneStrip: 0,
+      maxDelta: -1,
+      over3: -1,
+      samples: [],
+    };
+  const w = one.pixels.width;
+  const whole = new Uint8Array(one.pixels.strips[0]!.data);
   let maxDelta = 0;
   let over3 = 0;
-  const [w] = one.timings!.mapPx;
-  // A few differing pixels, to see what kind of fault it is.
+  let differing = 0;
+  let compared = 0;
   const samples: { x: number; y: number; many: number[]; one: number[] }[] = [];
-  for (let i = 0; i < one.pixels.length; i++) {
-    if (many.pixels[i] !== one.pixels[i]) {
-      if (firstDiff < 0) firstDiff = i;
+  for (const strip of many.pixels.strips) {
+    // Strict: every rendered row. Otherwise the owned rows only, as the last
+    // row of a canvas draws strokes a little differently and is hidden.
+    const rows = strict ? strip.rows : strip.owned;
+    const got = new Uint8Array(strip.data, 0, rows * w * 4);
+    const want = whole.subarray(strip.y * w * 4, (strip.y + rows) * w * 4);
+    compared += got.length;
+    for (let i = 0; i < got.length; i++) {
+      const delta = Math.abs(got[i]! - want[i]!);
+      if (delta === 0) continue;
       differing++;
-      const delta = Math.abs(many.pixels[i]! - one.pixels[i]!);
       maxDelta = Math.max(maxDelta, delta);
-      if (delta > 3) over3++;
+      if (delta <= 3) continue;
+      over3++;
       const p = i >> 2;
-      if (samples.length < 60 && Math.abs(many.pixels[i]! - one.pixels[i]!) > 3)
+      if (samples.length < 20)
         samples.push({
           x: p % w,
-          y: Math.floor(p / w),
-          many: [...many.pixels.subarray(p * 4, p * 4 + 4)],
-          one: [...one.pixels.subarray(p * 4, p * 4 + 4)],
+          y: strip.y + Math.floor(p / w),
+          many: [...got.subarray(p * 4, p * 4 + 4)],
+          one: [...want.subarray(p * 4, p * 4 + 4)],
         });
     }
   }
@@ -183,19 +210,85 @@ async function seamCheck(
     // differ by a level or two with the device coordinate (float32); our own
     // terrain maths cannot (terrain.test.ts). A real seam is far larger.
     ok:
-      maxDelta <= SEAM_MAX_DELTA &&
-      over3 <= one.pixels.length * SEAM_OVER_FRACTION &&
-      many.pixels.length === one.pixels.length,
+      maxDelta <= tolerance.maxDelta &&
+      over3 <= compared * tolerance.overFraction,
     maxDelta,
     over3,
+    differing,
     strips: many.timings!.strips,
     oneStrip: one.timings!.strips,
-    firstDiff,
-    differing,
-    // Row of the first difference, to see if it sits on a strip seam.
-    firstDiffRow: firstDiff < 0 ? -1 : Math.floor(firstDiff / 4 / w),
     samples,
   };
+}
+
+const DEM_TILE_PX = 256;
+
+/**
+ * A copy of the scenario's extent, nudged north-south so that the bottom
+ * rendered row of its first strip (`maxStripPx`) falls on the last DEM row of
+ * a tile: the one place a DEM block with no halo and no read margin would
+ * clamp where the whole map's grid does not. A guard for that is only a guard
+ * if a test reaches it, and strips do not line up so by chance.
+ */
+function extentAtDemTileEdge(
+  name: string,
+  maxStripPx: number,
+): GeoPdfConfig["extent"] {
+  const base = SCENARIOS[name]!;
+  const geometry = (shift: number) => {
+    const e = {
+      ...base.extent,
+      north: base.extent.north + shift,
+      south: base.extent.south + shift,
+    };
+    const lat = (e.north + e.south) / 2;
+    const zoom = computeZoom(
+      base.scale,
+      lat,
+      TARGET_DPI,
+      geoPdfMaxNativeZoom(base.baseLayer),
+    );
+    const p = computeTileToMapTransform(
+      zoom,
+      e.north,
+      e.south,
+      e.east,
+      e.west,
+      1,
+      1,
+    );
+    const w = Math.round(p.srcW);
+    const h = Math.round(p.srcH);
+    const strips = planStrips(w, h, maxStripPx);
+    const dem = Math.min(zoom, 15);
+    const t = computeTileToMapTransform(
+      dem,
+      e.north,
+      e.south,
+      e.east,
+      e.west,
+      w,
+      h,
+    );
+    const bottom = strips[0]!.y + strips[0]!.renderHeight;
+    const v = (bottom - 0.5) / t.scaleY + t.offsetY - 0.5;
+    // How far past the last row of a tile the strip's bottom read falls.
+    const phase = ((v % DEM_TILE_PX) + DEM_TILE_PX) % DEM_TILE_PX;
+    return { e, off: Math.abs(phase - (DEM_TILE_PX - 0.6)) };
+  };
+  let best = { shift: 0, off: Infinity };
+  // A tile of z15 is about 0.0082 degrees tall: scan it, then refine.
+  for (let pass = 0, span = 0.0083, centre = 0.00415; pass < 3; pass++) {
+    const step = span / 200;
+    for (let i = 0; i <= 200; i++) {
+      const shift = centre - span / 2 + i * step;
+      const { off } = geometry(shift);
+      if (off < best.off) best = { shift, off };
+    }
+    centre = best.shift;
+    span = step * 4;
+  }
+  return geometry(best.shift).e;
 }
 
 declare global {
@@ -203,11 +296,17 @@ declare global {
     geoPdfBench: {
       run: typeof run;
       seamCheck: typeof seamCheck;
+      extentAtDemTileEdge: typeof extentAtDemTileEdge;
       scenarios: string[];
     };
   }
 }
-window.geoPdfBench = { run, seamCheck, scenarios: Object.keys(SCENARIOS) };
+window.geoPdfBench = {
+  run,
+  seamCheck,
+  extentAtDemTileEdge,
+  scenarios: Object.keys(SCENARIOS),
+};
 
 const select = document.getElementById("scenario") as HTMLSelectElement;
 for (const name of Object.keys(SCENARIOS)) select.add(new Option(name, name));
