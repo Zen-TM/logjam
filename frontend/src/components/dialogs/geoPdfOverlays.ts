@@ -22,6 +22,35 @@ export const LIDAR_ONLY_OVERLAYS = TOPO_LAYERS.filter(
 export const seedOverlays = (): Set<string> =>
   new Set(LIDAR_ONLY_OVERLAYS.map((layer) => layer.name));
 
+type Box = { north: number; south: number; east: number; west: number };
+
+/** Whether a job's footprint overlaps the box. A job with no footprint, or
+ *  none with coordinates, counts as overlapping, as on the server. */
+export function footprintOverlaps(
+  job: Pick<CompletedTopoJob, "footprint">,
+  area: Box,
+): boolean {
+  if (!job.footprint) return true;
+  const rings =
+    job.footprint.type === "Polygon"
+      ? job.footprint.coordinates
+      : job.footprint.coordinates.flat();
+  let [west, south, east, north] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of rings.flat()) {
+    west = Math.min(west, x!);
+    east = Math.max(east, x!);
+    south = Math.min(south, y!);
+    north = Math.max(north, y!);
+  }
+  if (!Number.isFinite(west)) return true;
+  return (
+    east > area.west &&
+    west < area.east &&
+    north > area.south &&
+    south < area.north
+  );
+}
+
 /**
  * Whether a job the renderer draws, the user's own, lies in the area. True
  * when a job has no stored footprint or the area is not set yet: never
@@ -34,27 +63,7 @@ export function ownJobInArea(
   const own = jobs.filter((job) => job.syncRole === "owner");
   if (own.length === 0) return false;
   if (area.north <= area.south || area.east <= area.west) return true;
-  return own.some((job) => {
-    if (!job.footprint) return true;
-    const rings =
-      job.footprint.type === "Polygon"
-        ? job.footprint.coordinates
-        : job.footprint.coordinates.flat();
-    let [west, south, east, north] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (const [x, y] of rings.flat()) {
-      west = Math.min(west, x!);
-      east = Math.max(east, x!);
-      south = Math.min(south, y!);
-      north = Math.max(north, y!);
-    }
-    if (!Number.isFinite(west)) return true;
-    return (
-      east > area.west &&
-      west < area.east &&
-      north > area.south &&
-      south < area.north
-    );
-  });
+  return own.some((job) => footprintOverlaps(job, area));
 }
 
 /**
