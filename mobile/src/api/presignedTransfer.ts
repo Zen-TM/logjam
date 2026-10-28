@@ -1,5 +1,6 @@
 // The presigned-S3 legs of the three-phase flows: the "Send a copy" upload,
-// the received-file download, and the GeoPDF download. They deliberately do
+// the received-file download, and the downloads of media and the place
+// registry. They deliberately do
 // NOT go through apiFetch — the URL is signed, so an Authorization header on it
 // is both pointless and a token where none is needed — which also means
 // apiFetch's 15 s abort ("observed on hardware (Pixel 9, airplane mode) where a

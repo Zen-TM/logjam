@@ -12,7 +12,6 @@ import {
   mintFriendInviteToken,
 } from "../src/lib/friendInviteToken";
 import {
-  GEO_PDF_FAILURE_MESSAGE,
   TOPO_EXPORT_STOPPED_MESSAGE,
   TOPO_UNREADABLE_MESSAGE,
 } from "../src/lib/failureCopy";
@@ -22,9 +21,7 @@ import {
   FRIEND_INVITE_TTL_DAYS,
   RASTER_TEMPLATE_DEFAULTS,
   VECTOR_STYLE_DEFAULTS,
-  validateGeoPdfConfig,
   validateRasterTemplateSettings,
-  type GeoPdfConfig,
   enforceCanyoningTag,
   linksCanyon,
   friendInviteUrl,
@@ -1301,8 +1298,7 @@ function buildTrips(): SeedTrip[] {
 //
 // A COMPLETE job has its outputs in S3 behind it, as a vector file does: the
 // topo ones are tiny real PMTiles archives (seedArchives.ts) at the keys the
-// row's `sharpen` names, and a GeoPDF's result is the PDF Logjam's own generator wrote
-// (shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf). Every size a row states
+// row's `sharpen` names. Every size a row states
 // is the length of the bytes uploaded.
 
 /** Minted per seed run; the invite row stores only its hash, as the route does. */
@@ -1406,25 +1402,6 @@ function sharpenedJob(jobId: string) {
   };
 }
 
-const GEO_PDF_FIXTURE = readFileSync(
-  join(__dirname, "../../shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf"),
-);
-/** The config that fixture was rendered from (see its README). */
-const GEO_PDF_CONFIG: GeoPdfConfig = {
-  paperSize: "A5",
-  orientation: "landscape",
-  extent: { north: -33.6, south: -33.7, east: 150.3, west: 150.2 },
-  scale: 25000,
-  baseLayer: "osm-topo",
-  overlays: [],
-  elements: {
-    title: "Wollemi test sheet",
-    compass: false,
-    scaleText: false,
-    scaleBar: false,
-  },
-};
-
 /** Puts seeded objects in a bucket; best effort for the reason uploadSeededFiles gives. */
 async function uploadObjects(
   bucketVar: "S3_BUCKET_MEDIA" | "S3_BUCKET_TOPO",
@@ -1481,7 +1458,6 @@ async function main() {
     prisma.announcement.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.topoExportJob.deleteMany(),
-    prisma.geoPdfJob.deleteMany(),
     prisma.topoTemplate.deleteMany(),
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
@@ -1502,7 +1478,6 @@ async function main() {
         email: "alice@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
-        uiPreferences: { autoDownloadGeoPdfs: false },
       },
       {
         id: BOB_ID,
@@ -2142,7 +2117,7 @@ async function main() {
   });
   await prisma.topoJob.createMany({
     data: [
-      // Complete and sharpened: what Logjam Web's Maps page, Terrain group and
+      // Complete and sharpened: what Logjam Web's Terrain group and
       // GeoPDF dialog need to show an area and draw its terrain.
       {
         id: aliceTopo,
@@ -2240,70 +2215,12 @@ async function main() {
     ],
   });
 
-  assertValid("the GeoPDF config", validateGeoPdfConfig(GEO_PDF_CONFIG));
-  const geoPdfDone = fid(7);
-  const bobGeoPdf = fid(9);
-  const geoPdfResult = (id: string) => ({
-    resultKey: `exports/geo-pdf/${id}/logjam-export.pdf`,
-    resultBytes: BigInt(GEO_PDF_FIXTURE.length),
-  });
-  await prisma.geoPdfJob.createMany({
-    data: [
-      {
-        id: geoPdfDone,
-        userId: ALICE_ID,
-        config: GEO_PDF_CONFIG as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "completed",
-        ...geoPdfResult(geoPdfDone),
-        startedAt: ago(60),
-        createdAt: ago(62),
-        completedAt: ago(58),
-      },
-      {
-        id: fid(8),
-        userId: ALICE_ID,
-        config: {
-          ...GEO_PDF_CONFIG,
-          elements: { ...GEO_PDF_CONFIG.elements, title: "Failed test sheet" },
-        } as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "failed",
-        errorMessage: GEO_PDF_FAILURE_MESSAGE,
-        startedAt: ago(50),
-        createdAt: ago(52),
-        completedAt: ago(48),
-      },
-      {
-        id: bobGeoPdf,
-        userId: BOB_ID,
-        config: GEO_PDF_CONFIG as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "completed",
-        ...geoPdfResult(bobGeoPdf),
-        startedAt: ago(90),
-        createdAt: ago(92),
-        completedAt: ago(88),
-      },
-    ],
-  });
-
   await prisma.share.createMany({
     data: [
       {
         id: seedId("8", 4),
         entityType: "topoJob",
         entityId: bobTopo,
-        sharedById: BOB_ID,
-        sharedWithId: ALICE_ID,
-      },
-      {
-        id: seedId("8", 5),
-        entityType: "geoPdfJob",
-        entityId: bobGeoPdf,
         sharedById: BOB_ID,
         sharedWithId: ALICE_ID,
       },
@@ -2416,11 +2333,6 @@ async function main() {
       body: exportFile,
       contentType: "application/geo+json",
     },
-    ...[geoPdfDone, bobGeoPdf].map((id) => ({
-      key: geoPdfResult(id).resultKey,
-      body: GEO_PDF_FIXTURE,
-      contentType: "application/pdf",
-    })),
   ]);
   await uploadObjects("S3_BUCKET_MEDIA", [
     {
@@ -2569,29 +2481,6 @@ async function main() {
         read: false,
         createdAt: ago(280),
       },
-      // api/src/worker/geoPdfWorker.ts: both outcomes use this type
-      {
-        userId: ALICE_ID,
-        type: "geo_pdf_complete",
-        payload: {
-          geoPdfJobId: geoPdfDone,
-          status: "completed",
-          errorMessage: null,
-        },
-        read: false,
-        createdAt: ago(58),
-      },
-      {
-        userId: ALICE_ID,
-        type: "geo_pdf_complete",
-        payload: {
-          geoPdfJobId: fid(8),
-          status: "failed",
-          errorMessage: GEO_PDF_FAILURE_MESSAGE,
-        },
-        read: false,
-        createdAt: ago(48),
-      },
       // lib/egressMeter.ts: the two numbers, stringified
       {
         userId: ALICE_ID,
@@ -2630,9 +2519,9 @@ async function main() {
 
   console.log(
     `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
+      `(1 incoming to alice), 3 direct shares (2 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
-      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 2 topo templates, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 2 topo templates, ` +
       `2 file sends, 1 invite, 4 tombstones, 1 announcement, ` +
       `${NOTIFICATION_TYPES.length} notification types`,
   );

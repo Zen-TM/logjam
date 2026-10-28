@@ -15,7 +15,7 @@
 // from the baseline anywhere, naming the table: a sweep that missed a table
 // or kind of row is red, not silent.
 //
-// Not covered: S3 objects in MiniStack (media, sends, GeoPDFs, topo outputs)
+// Not covered: S3 objects in MiniStack (media, sends, topo outputs)
 // and ECS tasks. They are orphaned by the row sweep and harmless to a rerun,
 // since nothing lists a bucket; MiniStack's volume is wiped by `make reset`.
 

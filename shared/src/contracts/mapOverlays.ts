@@ -18,7 +18,7 @@ export const MAP_OVERLAYS = {
       key: "geoPdfs",
       on: "gps",
       reason:
-        "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web draws them from its Maps panel.",
+        "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
     },
     { key: "importFile" },
   ],

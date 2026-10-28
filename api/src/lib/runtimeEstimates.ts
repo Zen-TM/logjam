@@ -1,4 +1,4 @@
-// Adaptive runtime estimators for all three worker pipelines: fit a per-unit
+// Adaptive runtime estimators for the two worker pipelines: fit a per-unit
 // rate from
 // recent completed jobs' actual runtimes, falling back to a configurable
 // cold-start default below a minimum-samples threshold, so the estimate
@@ -10,13 +10,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../services/prisma";
 import { getEnv } from "./env";
-import { logger, safeErrorForLog } from "./logger";
-import { geoPdfMaxNativeZoom, geoPdfNativeMegapixels } from "@logjam/shared";
-import {
-  estimateRuntimeSeconds,
-  type JobActual,
-  type GeoPdfConfig,
-} from "@logjam/shared";
+import { estimateRuntimeSeconds, type JobActual } from "@logjam/shared";
 
 const env = getEnv();
 
@@ -26,7 +20,6 @@ const SHARPEN_DEFAULT_SECONDS_PER_TILE = 150;
 
 // Fixed per-job floor added on top of the fitted rate term.
 const EXPORT_OVERHEAD_SECONDS = 30; // task launch + S3 shuffle floor
-const GEO_PDF_OVERHEAD_SECONDS = 15; // task launch + S3 shuffle floor
 
 /**
  * Adaptive processing-time estimate (seconds) for a topo export of
@@ -73,68 +66,6 @@ export async function estimateExportSeconds(
       env.TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE,
     minSamples: env.TOPO_EXPORT_ESTIMATE_MIN_SAMPLES,
     overheadSeconds: EXPORT_OVERHEAD_SECONDS,
-  });
-}
-
-/**
- * Adaptive processing-time estimate (seconds) for a GeoPDF render of the given
- * config. Sized by native render-canvas megapixels (paper-independent — see
- * geoPdfNativeMegapixels), the only size signal known at submit time.
- */
-export async function estimateGeoPdfSeconds(
-  config: GeoPdfConfig,
-): Promise<number | null> {
-  const megapixels = geoPdfNativeMegapixels(
-    config.extent,
-    config.scale,
-    geoPdfMaxNativeZoom(config.baseLayer),
-  );
-
-  const recent = await prisma.geoPdfJob.findMany({
-    where: {
-      status: "completed",
-      startedAt: { not: null },
-      completedAt: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-    select: {
-      config: true,
-      startedAt: true,
-      completedAt: true,
-    },
-  });
-
-  const actuals: JobActual[] = [];
-  for (const row of recent) {
-    if (!row.startedAt || !row.completedAt) continue;
-    const wallSeconds =
-      (row.completedAt.getTime() - row.startedAt.getTime()) / 1000;
-    if (!(wallSeconds > 0)) continue;
-    try {
-      const rowConfig = row.config as unknown as GeoPdfConfig;
-      const rowMegapixels = geoPdfNativeMegapixels(
-        rowConfig.extent,
-        rowConfig.scale,
-        geoPdfMaxNativeZoom(rowConfig.baseLayer),
-      );
-      if (!Number.isFinite(rowMegapixels) || rowMegapixels <= 0) continue;
-      actuals.push({ inputTileCount: rowMegapixels, wallSeconds });
-    } catch (err) {
-      // Malformed/legacy stored config (missing/non-numeric extent or scale) —
-      // skip this row rather than let one bad historical row break the estimate.
-      logger.warn(
-        { err: safeErrorForLog(err) },
-        "geo_pdf_estimate_history_row_skipped",
-      );
-    }
-  }
-
-  return estimateRuntimeSeconds(actuals, megapixels, {
-    defaultSecondsPerInputTile:
-      env.GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL,
-    minSamples: env.GEO_PDF_ESTIMATE_MIN_SAMPLES,
-    overheadSeconds: GEO_PDF_OVERHEAD_SECONDS,
   });
 }
 

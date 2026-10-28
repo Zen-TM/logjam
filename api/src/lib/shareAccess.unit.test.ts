@@ -95,7 +95,7 @@ describe("getJobRole", () => {
     expect(await getJobRole(OWNER, "topoJob", job)).toBe("owner");
     expect(await getJobRole(OTHER, "topoJob", job)).toBe("none");
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
-    expect(await getJobRole(OTHER, "geoPdfJob", job)).toBe("shared");
+    expect(await getJobRole(OTHER, "topoJob", job)).toBe("shared");
   });
 });
 
@@ -265,13 +265,12 @@ describe("revokeAllSharesBetween", () => {
       { id: "s1", entityType: "route", entityId: "rt-0", sharedWithId: EX },
       { id: "s2", entityType: "route", entityId: "rt-1", sharedWithId: ME },
       { id: "s3", entityType: "topoJob", entityId: "tj-1", sharedWithId: EX },
-      { id: "s4", entityType: "geoPdfJob", entityId: "gp-1", sharedWithId: EX },
     ]);
     await revokeAllSharesBetween(tx as never, ME, EX);
 
-    // All four Share rows go — a job share is revoked as hard as a route.
+    // All three Share rows go — a job share is revoked as hard as a route.
     expect(tx.share.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ["s1", "s2", "s3", "s4"] } },
+      where: { id: { in: ["s1", "s2", "s3"] } },
     });
     // Jobs are not delta-synced, so they get no tombstone (they reconcile on
     // the next list fetch); routes do, one per losing recipient.

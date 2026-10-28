@@ -79,11 +79,6 @@ import {
 } from "./savedKeys";
 import { shareMark, sharedWithLabel } from "./shareMark";
 import { formatBytes, formatMinutes } from "../format";
-import {
-  getGeoPdfJob,
-  listGeoPdfJobs,
-  type GeoPdfJobView,
-} from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
@@ -126,7 +121,6 @@ import {
 import {
   GEOPDF_ERRORS,
   importGeoPdfFromPicker,
-  importGeoPdfFromUrl,
   resumeGeoPdfImport,
 } from "../geopdf/importPipeline";
 import {
@@ -427,8 +421,7 @@ export function SavedScreen({
    * spelled — and `nonce` is what makes following the same pointer twice pulse
    * twice, since this tab stays mounted.
    *
-   * A key that matches nothing (an item deleted since, a GeoPDF job already
-   * imported under a local id) simply does not pulse: the filter beside it is
+   * A key that matches nothing (an item deleted since) simply does not pulse: the filter beside it is
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
@@ -497,9 +490,6 @@ export function SavedScreen({
   const { accountState } = useAccountState();
   const lidarReady =
     capabilityStatus("lidarOverlays", accountState, online).status ===
-    "available";
-  const accountGeoPdfReady =
-    capabilityStatus("accountGeoPdf", accountState, online).status ===
     "available";
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
@@ -954,54 +944,6 @@ export function SavedScreen({
     );
   }, []);
 
-  // Import your own server-generated GeoPDFs: list the account's completed
-  // jobs on demand (online-only), then stream a chosen one's presigned bytes
-  // into the same on-device pipeline. Loaded lazily on a tap, not on mount.
-  const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
-  const [accountJobsLoading, setAccountJobsLoading] = useState(false);
-
-  // The caller raises `accountJobsLoading` first: the tap below, or the render
-  // that sees a notification's arrival (see "An arrival that NAMES a row").
-  const fetchAccountGeoPdfs = useCallback(
-    () =>
-      listGeoPdfJobs()
-        .then((jobs) => {
-          const completed = jobs.filter((job) => job.status === "completed");
-          setAccountJobs(completed);
-          setFilter("geoPdf");
-          if (completed.length === 0)
-            info("No generated GeoPDFs on your account yet.");
-        })
-        .catch((err: unknown) => {
-          console.error(err);
-          fail(messageFromError(err, "Couldn't load your GeoPDFs."));
-        })
-        .finally(() => setAccountJobsLoading(false)),
-    [fail, info],
-  );
-  const loadAccountGeoPdfs = useCallback(() => {
-    setAccountJobsLoading(true);
-    void fetchAccountGeoPdfs();
-  }, [fetchAccountGeoPdfs]);
-
-  const handleImportAccountGeoPdf = useCallback((job: GeoPdfJobView) => {
-    const label = job.title ?? "GeoPDF";
-    void runGeoPdfImport(label, async (onProgress, token) => {
-      // Re-presign right before download — the listed URL may have expired
-      // while this list was open.
-      const fresh = await getGeoPdfJob(job.id);
-      if (!fresh.downloadUrl)
-        throw new Error("This GeoPDF isn't ready to download.");
-      return importGeoPdfFromUrl(
-        fresh.title ?? "Logjam GeoPDF",
-        fresh.downloadUrl,
-        onProgress,
-        token,
-      );
-    });
-    setFilter("geoPdf");
-  }, []);
-
   // --- Tracks ---
   const { tracks } = useTracks();
   const savedTracks = tracks.filter((track) => track.state === "done");
@@ -1416,8 +1358,7 @@ export function SavedScreen({
     (visibleItems.some((item) => item.key === highlightKey) ||
       downloadableJobs.some(
         (job) => savedOverlayKey(job.jobId) === highlightKey,
-      ) ||
-      (accountJobs ?? []).some((job) => job.id === highlightKey));
+      ));
   const pulsedForNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!highlightPresent || pulsedForNonce.current === highlightNonce) return;
@@ -1449,21 +1390,6 @@ export function SavedScreen({
     });
   }, [highlightKey, highlightNonce, highlightPresent, pulse]);
 
-  // An arrival that NAMES a row is the tap the lazy account list was waiting
-  // for. Without this the GeoPDF a notification points at is behind an "Import
-  // a GeoPDF" button, on a tab whose empty state says there is nothing here.
-  const autoLoadKey =
-    highlightKey && filter === "geoPdf" && accountJobs == null
-      ? `${highlightNonce}:${highlightKey}`
-      : null;
-  const [autoLoadedFor, setAutoLoadedFor] = useState<string | null>(null);
-  if (autoLoadKey !== autoLoadedFor) {
-    setAutoLoadedFor(autoLoadKey);
-    if (autoLoadKey !== null) setAccountJobsLoading(true);
-  }
-  useEffect(() => {
-    if (autoLoadKey !== null) void fetchAccountGeoPdfs();
-  }, [autoLoadKey, fetchAccountGeoPdfs]);
   // The search field itself follows the same "nothing to search" rule the tag
   // rail already did: hidden when the active tab holds no rows, so an empty
   // panel gets the whole screen body.
@@ -2140,53 +2066,6 @@ export function SavedScreen({
           </>
         ) : null}
 
-        {filter === "geoPdf" &&
-        accountJobs != null &&
-        accountJobs.length > 0 ? (
-          <>
-            <SectionHeader title="In your Logjam account" />
-            {accountJobs.map((job) => (
-              // Keyed by the JOB id, which is what a "GeoPDF ready"
-              // notification carries. Once imported the row is a local import
-              // with an id of its own and the pointer stops matching — the
-              // filter is still right, and nothing pulses.
-              <PulseSlot
-                key={job.id}
-                active={pulsingKey === job.id}
-                opacity={pulse}
-                onMeasure={scrollToPulse}
-              >
-                <Row
-                  title={job.title ?? "Untitled GeoPDF"}
-                  // Its home is the map but it is not on the phone: the one
-                  // obvious job is bringing it here, as its button does.
-                  onPress={
-                    geoPdfBusy
-                      ? undefined
-                      : () => handleImportAccountGeoPdf(job)
-                  }
-                  subtitle={
-                    job.resultBytes != null
-                      ? formatBytes(job.resultBytes)
-                      : undefined
-                  }
-                  icon="geoPdf"
-                  hue={assetHue.geoPdf}
-                  right={
-                    <IconButton
-                      icon="download"
-                      accessibilityLabel={`Import ${job.title ?? "this GeoPDF"} to this device`}
-                      color={theme.accent}
-                      disabled={geoPdfBusy}
-                      onPress={() => handleImportAccountGeoPdf(job)}
-                    />
-                  }
-                />
-              </PulseSlot>
-            ))}
-          </>
-        ) : null}
-
         {/* The list ends with the button its empty state offers (the same one),
             so adding is where the eye ends up after scrolling to the bottom. */}
         <SavedListEnd
@@ -2240,28 +2119,8 @@ export function SavedScreen({
               handleImportGeoPdf();
             }}
           />
-          <Row
-            title={
-              accountJobsLoading
-                ? "Loading your GeoPDFs…"
-                : "GeoPDFs from my account"
-            }
-            icon="sync"
-            hue={assetHue.geoPdf}
-            {...capabilityRowProps("accountGeoPdf", accountState, online)}
-            onPress={
-              accountGeoPdfReady && !accountJobsLoading
-                ? () => {
-                    setAddSheetOpen(false);
-                    loadAccountGeoPdfs();
-                  }
-                : undefined
-            }
-          />
-          {/* Under the other "from my account" row rather than up with the
-              regions: both are things you generated on the web and are pulling
-              down, which is more like each other than either is like a
-              basemap download. */}
+          {/* Not up with the regions: this is something you made on the web and
+              are pulling down, which is less like a basemap download. */}
           <Row
             title="Sharpened areas from my account"
             icon="lidar"
@@ -2643,9 +2502,7 @@ function EmptyPanel({
     },
     geoPdf: {
       title: "No GeoPDF maps",
-      hint: isGuest
-        ? "Import a GeoPDF from this phone. An account is needed to pull one from Logjam Web."
-        : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
+      hint: "Import a GeoPDF from this phone's storage.",
     },
     import: {
       title: "No imported files",

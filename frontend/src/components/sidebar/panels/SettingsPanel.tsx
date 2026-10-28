@@ -14,7 +14,6 @@ import {
 
 import {
   updateNotificationPreferences,
-  updateUserPreferences,
   type TPlaceType,
   type TUser,
 } from "../../../placeUtils";
@@ -79,15 +78,11 @@ function SettingsPanel({
     null,
   );
   // WHICH switch is in flight, not THAT one is: a single boolean would disable
-  // all five for the length of the request, and five switches greying and
+  // all four for the length of the request, and four switches greying and
   // un-greying together reads as the whole list flickering.
   const [notifSavingKey, setNotifSavingKey] = useState<
     keyof NotificationPreferences | null
   >(null);
-  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<
-    boolean | null
-  >(null);
-  const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -100,9 +95,6 @@ function SettingsPanel({
         ...DEFAULT_NOTIFICATION_PREFERENCES,
         ...(currentUser.uiPreferences?.notifications ?? {}),
       });
-      setAutoDownloadGeoPdfs(
-        currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
-      );
     }
   }
 
@@ -129,25 +121,6 @@ function SettingsPanel({
       );
     } finally {
       setNotifSavingKey((current) => (current === key ? null : current));
-    }
-  }
-
-  async function handleToggleAutoDownload() {
-    if (autoDownloadGeoPdfs === null) return;
-    const previous = autoDownloadGeoPdfs;
-    const next = !autoDownloadGeoPdfs;
-    setAutoDownloadGeoPdfs(next);
-    setAutoDownloadSaving(true);
-    try {
-      await updateUserPreferences({ autoDownloadGeoPdfs: next });
-    } catch (err) {
-      console.error(err);
-      setAutoDownloadGeoPdfs(previous);
-      toast.error(
-        messageFromError(err, "Couldn't save that download setting."),
-      );
-    } finally {
-      setAutoDownloadSaving(false);
     }
   }
 
@@ -206,19 +179,6 @@ function SettingsPanel({
               onChange={() => handleToggleNotif(key)}
             />
           ))
-        )}
-
-        <SectionHeader title="Downloads" />
-        {autoDownloadGeoPdfs === null ? (
-          <LoadingState />
-        ) : (
-          <SwitchRow
-            title="Download GeoPDFs automatically when they finish generating"
-            checked={autoDownloadGeoPdfs}
-            disabled={autoDownloadSaving}
-            disabledReason="Saving…"
-            onChange={handleToggleAutoDownload}
-          />
         )}
       </>
     ),

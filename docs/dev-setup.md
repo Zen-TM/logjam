@@ -179,7 +179,7 @@ pull request.
 |---|---|
 | Starting work | `make dev`, then the two app servers |
 | You edited `shared/` | `make shared`, then restart the API (and Metro) |
-| You changed worker code (`topo/`, the GeoPDF worker) | `make build-workers` |
+| You changed worker code (`topo/`) | `make build-workers` |
 | You want a clean database | `make reset` (wipes the volumes, re-migrates and re-seeds) |
 | Stopping for the day | `make down` (keeps the data) |
 

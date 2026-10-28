@@ -17,7 +17,7 @@ that goes wrong between deploys.
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
-| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, GeoPDF, pre-deploy migrate, place registry) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
+| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
 | `logjam-place-registry-not-launched` | EventBridge Scheduler's call to start the monthly build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
@@ -87,7 +87,7 @@ meantime.
 3. If a worker deploy just ran, roll the worker back
    ([rollback.md](rollback.md)).
 
-A maintainer announcement runs on the `logjam-geo-pdf-worker` family and
+A maintainer announcement runs on the `logjam-api-script` family and
 exits 1 when the script refuses a message, cannot find one to retract, or
 fails ([announcements.md](announcements.md)). Its event carries the
 announce command in `detail.overrides`; that failure is the script's, not

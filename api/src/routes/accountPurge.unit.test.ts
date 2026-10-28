@@ -98,11 +98,7 @@ describe("account-delete purge covers every notification type", () => {
       "egress_quota_exceeded",
       "egress_quota_warning",
     ],
-    "api/src/lib/topoJobReaper.ts": [
-      "topo_failed",
-      "topo_export_complete",
-      "geo_pdf_complete",
-    ],
+    "api/src/lib/topoJobReaper.ts": ["topo_failed", "topo_export_complete"],
     "api/src/routes/bulkShare.ts": ["place_shared"],
     "api/src/routes/fileSends.ts": ["file_sent"],
     "api/src/routes/friendInvites.ts": ["friend_request_accepted"],
@@ -110,7 +106,6 @@ describe("account-delete purge covers every notification type", () => {
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],
     "api/src/scripts/announce.ts": ["announcement"],
-    "api/src/worker/geoPdfWorker.ts": ["geo_pdf_complete"],
     "topo/worker.py": ["topo_complete", "topo_failed"],
     "topo/export_worker.py": ["topo_export_complete"],
   };
@@ -124,7 +119,6 @@ describe("account-delete purge covers every notification type", () => {
     "topo_complete",
     "topo_failed",
     "topo_export_complete",
-    "geo_pdf_complete",
     // From no user: the maintainer's script, one row per recipient.
     "announcement",
   ];

@@ -23,20 +23,9 @@ import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
-import type {
-  TFilters,
-  TPlace,
-  TPlaceType,
-  GeoPdfJobView,
-} from "../placeUtils";
+import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
-import {
-  PANEL_TITLES,
-  isMapsView,
-  type LogsView,
-  type MapsView,
-  type PanelId,
-} from "./sidebar/panels";
+import { PANEL_TITLES, type LogsView, type PanelId } from "./sidebar/panels";
 import {
   usePlaces,
   usePlaceTracks,
@@ -53,7 +42,6 @@ import {
   useTripLogs,
   useCurrentUser,
   useTopoExports,
-  useGeoPdfJobs,
   fetchCurrentUser,
   getCustomFields,
   getPlaceTypes,
@@ -179,14 +167,6 @@ function App() {
     "logjam.logsView",
     "logs",
     sessionStorage,
-  );
-  // A session that stored a view since retired ("lidar", "exports") reads as
-  // the first one.
-  const [mapsView, setMapsView] = useStoredState<MapsView>(
-    "logjam.mapsView",
-    "geopdfs",
-    sessionStorage,
-    isMapsView,
   );
   // What is on the map is a popover over the map, not a page.
   const [layersOpen, setLayersOpen] = useState(false);
@@ -322,8 +302,8 @@ function App() {
   // A new key for every opening that is not a pick coming back
   // (`freshExportDialog`), because a pick the dialog left for may never return:
   // another product can take the box tool over it. e2e/export-area.spec.ts (run
-  // in CI; App has no render harness) holds the mechanism through two of its
-  // callers, Map tools → Export an area and Maps → GeoPDFs → Make.
+  // in CI; App has no render harness) holds the mechanism through its Map tools
+  // caller.
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -407,9 +387,6 @@ function App() {
     bearing: number;
     pitch: number;
   } | null>("logjam.mapView", null);
-
-  // Bumped when a GeoPDF job is queued, to trigger the panel's job list refetch
-  const [geoPdfJobsRefetch, setGeoPdfJobsRefetch] = useState(0);
 
   // Place fly-to target
   const [flyToPlace, setFlyToPlace] = useState<{
@@ -827,12 +804,6 @@ function App() {
     refetch: refetchTopoExports,
   } = useTopoExports(loadsUserData);
 
-  // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
-  // auto-download works even when the Generated PDFs panel is closed. The hook
-  // self-throttles: it only polls while a job is queued/running.
-  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } =
-    useGeoPdfJobs(loadsUserData);
-
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
   // pre-existing export, and never download the same one twice.
@@ -879,32 +850,6 @@ function App() {
       }
     }
   }, [authenticated, topoExports, topoExportsLoading]);
-
-  // Auto-download GeoPDFs that this tab queued during this session. Arming is
-  // in-memory only: a job id is added to armedGeoPdfJobIds when queued here, and
-  // the ref is empty on a fresh load, so pre-existing completed jobs returned by
-  // GET /geo-pdf are never armed and never auto-download (the new-browser bug).
-  const armedGeoPdfJobIds = useRef<Set<string>>(new Set());
-  const autoDownloadedGeoPdfJobIds = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    for (const job of geoPdfJobs) {
-      if (!armedGeoPdfJobIds.current.has(job.id)) continue;
-      if (job.status === "failed") {
-        armedGeoPdfJobIds.current.delete(job.id);
-        continue;
-      }
-      if (
-        job.status === "completed" &&
-        job.downloadUrl &&
-        !autoDownloadedGeoPdfJobIds.current.has(job.id)
-      ) {
-        autoDownloadedGeoPdfJobIds.current.add(job.id);
-        armedGeoPdfJobIds.current.delete(job.id);
-        triggerDownload(job.downloadUrl);
-        toast.success("GeoPDF downloaded.");
-      }
-    }
-  }, [geoPdfJobs, toast]);
 
   // Poll non-terminal jobs every 10 s; fire snackbar on completion
   useEffect(() => {
@@ -966,22 +911,7 @@ function App() {
     [refetchCurrentUser, toast],
   );
 
-  const handleGeoPdfJobQueued = useCallback(
-    (job: GeoPdfJobView) => {
-      setGeoPdfJobsRefetch((n) => n + 1);
-      // Arm for auto-download if the user hasn't disabled it (default on).
-      if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
-        armedGeoPdfJobIds.current.add(job.id);
-      }
-      // Kick the App-level poller so it picks up the freshly queued job and starts
-      // polling toward completion (the panel may be closed).
-      refetchGeoPdfJobs();
-    },
-    [currentUser, refetchGeoPdfJobs],
-  );
-
-  // Capture completion-email deep links on mount (?topoJob / ?export /
-  // ?geoPdfJob), stash in sessionStorage so they survive a Cognito sign-in
+  // Capture completion-email deep links on mount (?topoJob / ?export), stash in sessionStorage so they survive a Cognito sign-in
   // redirect, then clean the URL once.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -996,11 +926,6 @@ function App() {
     const exportId = params.get("export");
     if (exportId) {
       sessionStorage.setItem("pendingExportId", exportId);
-      matched = true;
-    }
-    const geoPdfJobId = params.get("geoPdfJob");
-    if (geoPdfJobId) {
-      sessionStorage.setItem("pendingGeoPdfJobId", geoPdfJobId);
       matched = true;
     }
     if (matched) window.history.replaceState({}, "", window.location.pathname);
@@ -1079,22 +1004,6 @@ function App() {
         toast.error(messageFromError(err, "Couldn't load the export."));
       });
   }, [loadsUserData, toast]);
-
-  // Resolve a stashed ?geoPdfJob=<id> deep link: open the GeoPDFs panel, whose
-  // job list carries per-item download buttons (and auto-download for jobs this
-  // tab queued). Refetch so a just-finished job shows immediately.
-  useEffect(() => {
-    if (!loadsUserData) return;
-    const geoPdfJobId = sessionStorage.getItem("pendingGeoPdfJobId");
-    if (!geoPdfJobId) return;
-    sessionStorage.removeItem("pendingGeoPdfJobId");
-    // Not derivable in render: the id is read from, and consumed in,
-    // sessionStorage, once, when user data starts loading.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActivePanel("maps");
-    setMapsView("geopdfs");
-    setGeoPdfJobsRefetch((n) => n + 1);
-  }, [loadsUserData, setMapsView]);
 
   // First login (empty account): offer a non-forced onboarding choice once,
   // after the first place fetch completes. The user picks RopeWiki, file
@@ -1496,7 +1405,6 @@ function App() {
         mapCenter={mapCenter}
         places={places}
         sharedPlaces={sharedPlaces}
-        onJobQueued={handleGeoPdfJobQueued}
         areaSeed={exportAreaSeed}
         onPickArea={() => {
           setShowGeoPdf(false);
@@ -1523,8 +1431,6 @@ function App() {
           }}
           logsView={logsView}
           onLogsViewChange={setLogsView}
-          mapsView={mapsView}
-          onMapsViewChange={setMapsView}
           onStartDrawingRoute={startDrawingRoute}
           waysLoaded={waysLoaded}
           allRoutes={routes}
@@ -1641,19 +1547,10 @@ function App() {
           }}
           openFiltersRequested={openFiltersRequested}
           onOpenFiltersConsumed={consumeOpenFilters}
-          onOpenGeoPdf={() => {
-            freshExportDialog();
-            setShowGeoPdf(true);
-          }}
-          geoPdfJobsRefetch={geoPdfJobsRefetch}
           onQuotaChanged={refetchCurrentUser}
           currentUser={currentUser}
           currentUserError={currentUserError}
           onRetryCurrentUser={refetchCurrentUser}
-          // The GeoPDFs view fetches its own list (the jobs) — the
-          // same gate as every hook above, so a pending or stale consent holds
-          // them too.
-          loadsUserData={loadsUserData}
           friends={friends}
           friendRequests={friendRequests}
           onRefetchFriends={refetchFriends}

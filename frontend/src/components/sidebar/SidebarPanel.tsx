@@ -7,7 +7,6 @@ import {
   isDraftPanel,
   PANEL_TITLES,
   type LogsView,
-  type MapsView,
   type PanelId,
 } from "./panels";
 import type {
@@ -32,7 +31,6 @@ import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
-import GeoPdfsPanel from "./panels/GeoPdfsPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
@@ -52,8 +50,6 @@ const LOGS_VIEWS = [
   { value: "stats", label: "Stats" },
 ] as const;
 
-const MAPS_VIEWS = [{ value: "geopdfs", label: "GeoPDFs" }] as const;
-
 function SidebarPanel({
   activePanel,
   onClose,
@@ -61,8 +57,6 @@ function SidebarPanel({
   onShowSharpened,
   logsView,
   onLogsViewChange,
-  mapsView,
-  onMapsViewChange,
   onStartDrawingRoute,
   waysLoaded,
   // Places
@@ -83,15 +77,11 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
-  // GeoPDFs
-  onOpenGeoPdf,
-  geoPdfJobsRefetch,
   // LiDAR
   onQuotaChanged,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
-  loadsUserData,
   // Friends
   friends,
   friendRequests,
@@ -146,8 +136,6 @@ function SidebarPanel({
   onShowSharpened: () => void;
   logsView: LogsView;
   onLogsViewChange: (view: LogsView) => void;
-  mapsView: MapsView;
-  onMapsViewChange: (view: MapsView) => void;
   onStartDrawingRoute: () => void;
   /** False until all three of Ways' fetches settle. */
   waysLoaded: boolean;
@@ -172,18 +160,12 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
-  // GeoPDFs
-  onOpenGeoPdf: () => void;
-  geoPdfJobsRefetch: number;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
-  /** App's consent-gate decision, handed to the GeoPDFs view so its own
-   *  fetches wait for it (`loadsUserData` there). */
-  loadsUserData: boolean;
   // Friends
   friends: TFriend[];
   friendRequests: TFriendRequest[];
@@ -332,14 +314,6 @@ function SidebarPanel({
       onChange={onLogsViewChange}
     />
   );
-  const mapsViewRail = (
-    <ChipRail
-      label="Maps view"
-      options={MAPS_VIEWS}
-      value={mapsView}
-      onChange={onMapsViewChange}
-    />
-  );
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
@@ -373,15 +347,6 @@ function SidebarPanel({
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "maps" && mapsView === "geopdfs" && (
-          <GeoPdfsPanel
-            views={mapsViewRail}
-            friends={friends}
-            onOpenGeoPdf={onOpenGeoPdf}
-            geoPdfJobsRefetch={geoPdfJobsRefetch}
-            loadsUserData={loadsUserData}
-          />
-        )}
         {activePanel === "friends" && (
           <FriendsPanel
             friends={friends}
@@ -402,7 +367,6 @@ function SidebarPanel({
             onRefetchFriends={onRefetchFriends}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
-            onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
             onShowSharpened={onShowSharpened}
           />

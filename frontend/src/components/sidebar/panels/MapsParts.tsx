@@ -1,4 +1,4 @@
-// The rows the Maps page's views share for what is still being made. The
+// The rows for what is still being made. The
 // views of one page must not draw the same row two ways.
 import { useState } from "react";
 import {

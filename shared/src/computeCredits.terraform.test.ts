@@ -28,7 +28,6 @@ const MIB_PER_GIB = 1024;
 const FAMILY_TO_KIND: Record<string, WorkerKind> = {
   "logjam-topo-worker": "topo",
   "logjam-topo-export-worker": "topoExport",
-  "logjam-geo-pdf-worker": "geoPdf",
 };
 
 type ParsedTaskDef = { family: string; cpu: number; memory: number };

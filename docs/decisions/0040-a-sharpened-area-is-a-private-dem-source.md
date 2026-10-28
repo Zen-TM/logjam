@@ -82,7 +82,16 @@ found three problems:
   draws it on a map, only for its owner and the users it is shared with
   directly. Guards: `api/src/routes/topoExports.unit.test.ts` (only the
   caller's readable areas in the box) and
-  `api/src/__tests__/geoPdfSharpened.test.ts`. Everything else above stands.
+  `api/src/__tests__/sharpenedAreas.test.ts` (what the overlays route serves).
+  Everything else above stands.
+- **Update 2026-10-29: a GeoPDF is made in the browser and is not shared.**
+  [0043](0043-geopdfs-render-in-the-browser.md) moved the render to Logjam
+  Web, which draws the areas `GET /topo-jobs/completed-overlays` returns to
+  the signed-in user, so the set it can draw is the set that route serves.
+  No job is stored, so a GeoPDF cannot be shared in Logjam; the file is its
+  maker's alone and reaches anyone else only if the maker hands it on. The
+  server render's guard went with it; `sharpenedAreas.test.ts` holds the
+  route. Everything else above stands.
 
 Guards:
 - `shared/src/sharpen.test.ts`: the precedence, the routing at each edge of
@@ -163,4 +172,5 @@ Guards:
   It would keep a sharee's print inside Logjam's circle, at the cost of a
   column on `geo_pdf_jobs` the worker writes and a refusal on the GeoPDF's
   share. Rejected by the maintainer (2026-10-24, the update above): the
-  terrain is not secret, and a downloaded file leaves Logjam anyway.
+  terrain is not secret, and a downloaded file leaves Logjam anyway. Moot
+  since 2026-10-29: GeoPDFs are not shared.

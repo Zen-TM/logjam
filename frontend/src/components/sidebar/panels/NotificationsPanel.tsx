@@ -51,13 +51,12 @@ import {
   declineFileSend,
   declineFriendRequest,
   deleteNotification,
-  getGeoPdfJob,
   getTopoExport,
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../placeUtils";
 import { triggerDownload } from "../../../download";
-import type { MapsView, PanelId } from "../panels";
+import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import AnnouncementDialog from "../../dialogs/AnnouncementDialog";
@@ -92,7 +91,6 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   people: "friends",
   topo: "lidar",
   export: "export",
-  geoPdf: "geoPdf",
   message: "info",
   problem: "warning",
 };
@@ -106,7 +104,6 @@ const KIND_HUE: Record<NotificationKind, string> = {
   people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
-  geoPdf: "var(--hue-geo-pdf)",
   message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };
@@ -154,7 +151,6 @@ function NotificationsPanel({
   onRefetchFriends,
   setSelectedPlaceID,
   setActivePanel,
-  onMapsViewChange,
   onTopoFlyTarget,
   onShowSharpened,
 }: {
@@ -169,7 +165,6 @@ function NotificationsPanel({
   onRefetchFriends: () => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
-  onMapsViewChange: (view: MapsView) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
@@ -416,7 +411,6 @@ function NotificationsPanel({
     if (destination.kind === "sharpened") {
       onShowSharpened();
     } else {
-      if (destination.mapsView) onMapsViewChange(destination.mapsView);
       setActivePanel(destination.panel);
     }
     // Opening a topo fits the map to it, from here as from its own row: the map
@@ -687,31 +681,6 @@ function NotificationsPanel({
               n,
               async () => (await getTopoExport(exportJobId)).downloadUrl,
               "Couldn't download the export.",
-            )
-          }
-        >
-          Download
-        </Button>
-      );
-    }
-    const geoPdfJobId = payloadString(n, "geoPdfJobId");
-    if (
-      n.type === "geo_pdf_complete" &&
-      n.payload.status === "completed" &&
-      geoPdfJobId
-    ) {
-      return (
-        <Button
-          compact
-          variant="outline"
-          icon="download"
-          disabled={selecting}
-          disabledReason="Not while selecting"
-          onClick={() =>
-            void downloadJobFile(
-              n,
-              async () => (await getGeoPdfJob(geoPdfJobId)).downloadUrl,
-              "Couldn't download the GeoPDF.",
             )
           }
         >

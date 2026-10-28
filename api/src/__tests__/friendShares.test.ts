@@ -17,8 +17,8 @@ import {
 // Sharing-audit surface: GET/DELETE /friends/:id/shares.
 //
 // BOTH SHARE TABLES. The payload speaks the (entityType, entityId) pair the
-// bulk share speaks, and covers the `Share` table too (route / topo /
-// GeoPDF) — so the phone's per-friend screen can list everything a friend can
+// bulk share speaks, and covers the `Share` table too (route / topo) —
+// so the phone's per-friend screen can list everything a friend can
 // see rather than the places alone.
 //
 // Requires `make dev` (Postgres + MiniStack + API on :8080) with AUTH_MODE=fake.
@@ -152,7 +152,7 @@ describe("GET /friends/:id/shares — the audit surface", () => {
     expect(placeIdsIn(body.sharedWithYou)).toContain(SHARED_PLACE_ID);
   });
 
-  // THE UNION. A route/topo/GeoPDF share lives in the `Share` table: an audit
+  // THE UNION. A route/topo share lives in the `Share` table: an audit
   // lists these items alongside places so a friend holding them does not see
   // "nothing shared".
   it("lists a directly-shared ROUTE alongside the places, in both directions", async () => {

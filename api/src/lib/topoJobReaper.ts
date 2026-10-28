@@ -5,7 +5,6 @@ import prisma from "../services/prisma";
 import { sendPushToUser, type PushData } from "../services/push";
 import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
-import { decrementStorageUsed } from "./storageQuota";
 import { deleteTopoJobObjects } from "./topoUpload";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
@@ -15,7 +14,6 @@ import { normalizeUserUiPreferences, say } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
-import { deleteSharesFor } from "./shareAccess";
 
 // Stuck-job reaper for both topo pipelines.
 //
@@ -59,7 +57,6 @@ import { deleteSharesFor } from "./shareAccess";
 // anything (see the attempt_count comment in schema.prisma).
 const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
 const REAPER_EXPORT_MESSAGE = TOPO_EXPORT_STOPPED_MESSAGE;
-const REAPER_GEO_PDF_MESSAGE = say`This GeoPDF was stopped because it took too long. Make it again to try again.`;
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -172,13 +169,13 @@ type ReapEntry = {
   payload: Prisma.InputJsonValue;
   push: PushData;
   /**
-   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` /
-   * `exportEmail` / `geoPdfEmail` mean "finishes or fails", so a reaped job
+   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` and
+   * `exportEmail` mean "finishes or fails", so a reaped job
    * mails the same users a worker-detected failure would (no new pref key).
    * `reason` is the generic REAPER_* message: the reaper never knows more.
    */
   email: {
-    pref: "topoEmail" | "exportEmail" | "geoPdfEmail";
+    pref: "topoEmail" | "exportEmail";
     subject: string;
     headline: string;
     reason: string;
@@ -189,7 +186,7 @@ type ReapEntry = {
 
 /**
  * Best-effort failure email per reaped row. Same shape as the workers' own
- * failure mail (geoPdfWorker.ts / export_worker.py): logo header, one-line
+ * failure mail (export_worker.py): logo header, one-line
  * reason, FRONTEND_URL deep link — a reaped-job email must not read as a
  * different species from a worker-sent one.
  *
@@ -414,28 +411,6 @@ function exportJobEntry(row: {
   };
 }
 
-/** Mirrors worker/geoPdfWorker.ts's failure notification + push type. */
-function geoPdfJobEntry(row: { id: string; userId: string }): ReapEntry {
-  return {
-    userId: row.userId,
-    type: "geo_pdf_complete",
-    payload: {
-      geoPdfJobId: row.id,
-      status: "failed",
-      errorMessage: REAPER_GEO_PDF_MESSAGE,
-    },
-    push: { type: "geo_pdf_failed", geoPdfJobId: row.id },
-    email: {
-      pref: "geoPdfEmail",
-      // Same subject geoPdfWorker.ts's failure mail uses.
-      subject: "GeoPDF failed — Logjam",
-      headline: "Your GeoPDF could not be generated.",
-      reason: REAPER_GEO_PDF_MESSAGE,
-      deepLink: `geoPdfJob=${row.id}`,
-    },
-  };
-}
-
 /**
  * One reaper pass over both job tables. Returns the number of rows THIS pass
  * claimed (see claimAndNotify — an overlapping instance's rows don't count).
@@ -549,54 +524,6 @@ export async function reapStuckTopoJobs(
     );
   }
 
-  // geo_pdf_jobs · queued: anchored on createdAt (mirrors topo_export_jobs).
-  const geoPdfQueuedCutoff = new Date(
-    now.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS,
-  );
-  const queuedGeoPdfJobs = await prisma.geoPdfJob.findMany({
-    where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
-    select: { id: true, userId: true },
-  });
-  reaped += await claimAndNotify(
-    queuedGeoPdfJobs,
-    (id) =>
-      prisma.geoPdfJob.updateMany({
-        where: { id, status: "queued" },
-        data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
-      }),
-    geoPdfJobEntry,
-  );
-
-  // geo_pdf_jobs · running: anchored on startedAt (createdAt fallback).
-  const geoPdfRunningCutoff = new Date(
-    now.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS,
-  );
-  const overdueGeoPdfJobs = await prisma.geoPdfJob.findMany({
-    where: {
-      status: "running",
-      OR: [
-        { startedAt: { lt: geoPdfRunningCutoff } },
-        { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
-      ],
-    },
-    select: { id: true, userId: true, ecsTaskArn: true },
-  });
-  if (overdueGeoPdfJobs.length > 0) {
-    reaped += await claimAndNotify(
-      overdueGeoPdfJobs,
-      (id) =>
-        prisma.geoPdfJob.updateMany({
-          where: { id, status: "running" },
-          data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
-        }),
-      geoPdfJobEntry,
-    );
-    await stopTasksBestEffort(
-      overdueGeoPdfJobs,
-      "geo_pdf_reaper_stop_task_failed",
-    );
-  }
-
   return reaped;
 }
 
@@ -641,55 +568,6 @@ export async function expireCompletedExports(
       logger.error(
         { err: safeErrorForLog(err), id: row.id },
         "topo_export_expiry_failed",
-      );
-    }
-  }
-  return expired;
-}
-
-/**
- * GeoPdfJob expiry sweep — same shape as expireCompletedExports, reusing
- * TOPO_EXPORT_TTL_MS (0 disables). Completed jobs older than the cutoff are
- * removed: S3 object deleted, storage charge decremented, row removed in one
- * transaction. Per-row failures are logged and skipped so one bad row can't
- * wedge the others.
- */
-export async function expireCompletedGeoPdfJobs(
-  now: Date = new Date(),
-): Promise<number> {
-  const env = getEnv();
-  if (env.TOPO_EXPORT_TTL_MS === 0) return 0;
-  const bucket = env.S3_BUCKET_TOPO ?? "";
-
-  const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
-  const expiredRows = await prisma.geoPdfJob.findMany({
-    where: { status: "completed", completedAt: { lt: cutoff } },
-    select: { id: true, userId: true, resultKey: true, resultBytes: true },
-  });
-
-  let expired = 0;
-  for (const row of expiredRows) {
-    try {
-      if (row.resultKey) {
-        await s3.send(
-          new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
-        );
-      }
-      await prisma.$transaction(async (tx) => {
-        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
-        // Same transaction as the row delete: Share.entityId is polymorphic, so
-        // Postgres cannot cascade — without this the rows outlive the job and
-        // keep the recipient's notification resolvable to a dead id.
-        await deleteSharesFor(tx, "geoPdfJob", [row.id]);
-        await tx.geoPdfJob.delete({ where: { id: row.id } });
-      });
-      expired += 1;
-    } catch (err) {
-      // Scrub before logging: an S3/Prisma error can embed the result key, and
-      // the result key can name a place (root privacy rule).
-      logger.error(
-        { ...safeErrorForLog(err), id: row.id },
-        "geo_pdf_expiry_failed",
       );
     }
   }
@@ -754,16 +632,6 @@ export function startTopoJobReaper(): () => void {
           "topo_export_expiry_sweep_failed",
         );
       });
-    expireCompletedGeoPdfJobs()
-      .then((count) => {
-        if (count > 0) logger.info({ count }, "geo_pdf_jobs_expired");
-      })
-      .catch((err) => {
-        logger.error(
-          { err: safeErrorForLog(err) },
-          "geo_pdf_expiry_sweep_failed",
-        );
-      });
     sweepOrphanedMediaUploads().catch((err) => {
       logger.error({ err: safeErrorForLog(err) }, "media_orphan_sweep_failed");
     });
@@ -816,8 +684,6 @@ export function startTopoJobReaper(): () => void {
       exportQueuedTimeoutMs: env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
       exportRunningTimeoutMs: env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
       exportTtlMs: env.TOPO_EXPORT_TTL_MS,
-      geoPdfQueuedTimeoutMs: env.GEO_PDF_QUEUED_TIMEOUT_MS,
-      geoPdfRunningTimeoutMs: env.GEO_PDF_RUNNING_TIMEOUT_MS,
     },
     "topo_job_reaper_started",
   );

@@ -260,8 +260,8 @@ export function useSharePanel({
   // Does the account hold this row yet? A route drawn in the field, a waypoint
   // dropped on the trail or a place added offline has a `create` op still in
   // the outbox, so `/shares/<kind>/<id>` 404s — the panel's door closes with
-  // the reason, AND `useSharing` never fires the doomed lookup. Kinds the phone
-  // cannot create (a LiDAR topo, a GeoPDF job) are never in this set.
+  // the reason, AND `useSharing` never fires the doomed lookup. A kind the phone
+  // cannot create (a LiDAR topo) is never in this set.
   const pendingCreates = usePendingCreateIds();
   const shareRowId = placeId ?? entityId;
   const onServer = shareRowId == null || !pendingCreates.has(shareRowId);

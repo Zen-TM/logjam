@@ -33,7 +33,6 @@ import type { DbClient } from "./storageQuota";
 const VCPUS = {
   topo: WORKER_SPECS.topo.vcpus,
   topoExport: WORKER_SPECS.topoExport.vcpus,
-  geoPdf: WORKER_SPECS.geoPdf.vcpus,
 };
 
 /**
@@ -81,18 +80,6 @@ export async function getMonthlyCreditUsage(
         / 60.0
       )
       FROM topo_export_jobs
-      WHERE user_id = ${userId}
-        AND started_at IS NOT NULL
-        AND started_at >= ${monthStart}
-
-      UNION ALL
-
-      SELECT CEIL(
-        ${VCPUS.geoPdf}::numeric
-        * EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - started_at))
-        / 60.0
-      )
-      FROM geo_pdf_jobs
       WHERE user_id = ${userId}
         AND started_at IS NOT NULL
         AND started_at >= ${monthStart}

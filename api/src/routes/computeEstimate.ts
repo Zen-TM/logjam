@@ -1,4 +1,4 @@
-// Pre-submit cost estimate, shared by all three worker pipelines.
+// Pre-submit cost estimate, for the LiDAR topo pipeline.
 //
 // Every dialog that launches a worker needs to answer the same question before
 // the user commits: "what will this cost me, and have I got it?" One endpoint
@@ -14,15 +14,8 @@ import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import { malformed } from "../middleware/errorHandler";
 import { resolveUser as getUser } from "../lib/resolveUser";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
-import {
-  estimateGeoPdfSeconds,
-  estimateTopoSeconds,
-} from "../lib/runtimeEstimates";
-import {
-  estimateCredits,
-  validateGeoPdfConfig,
-  type GeoPdfConfig,
-} from "@logjam/shared";
+import { estimateTopoSeconds } from "../lib/runtimeEstimates";
+import { estimateCredits } from "@logjam/shared";
 
 const router = Router();
 
@@ -30,10 +23,6 @@ const requestSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("topo"),
     tileCount: z.number().int().nonnegative().nullable(),
-  }),
-  z.object({
-    kind: z.literal("geoPdf"),
-    config: z.unknown(),
   }),
 ]);
 
@@ -58,17 +47,6 @@ router.post(
       case "topo":
         estimatedSeconds = await estimateTopoSeconds(request.tileCount);
         break;
-
-      case "geoPdf": {
-        const configError = validateGeoPdfConfig(
-          request.config as GeoPdfConfig,
-        );
-        if (configError) throw malformed(configError);
-        estimatedSeconds = await estimateGeoPdfSeconds(
-          request.config as GeoPdfConfig,
-        );
-        break;
-      }
     }
 
     const usage = await getMonthlyCreditUsage(

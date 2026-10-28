@@ -567,10 +567,10 @@ model TopoExportJob {
   @@map("topo_export_jobs")
 }
 
-// Async GeoPDF generation (mirrors TopoExportJob). Submitted via POST
-// /geo-pdf, rendered by ECS task `logjam-geo-pdf-worker`
-// (api/src/worker/geoPdfWorker.ts), uploaded to
-// s3://BUCKET/exports/geo-pdf/{id}/logjam-export.pdf.
+// No longer read or written: GeoPDFs render in the browser (ADR 0043). The
+// table is emptied by 20261027000000_delete_geo_pdf_jobs and dropped, with
+// this model, a release later (ADR 0003): the image still serving during the
+// deploy swap reads it.
 model GeoPdfJob {
   id                  String    @id @default(uuid())
   userId              String    @map("user_id")
@@ -771,7 +771,7 @@ model DeviceToken {
 }
 
 // Direct, per-item sharing for the things that are not places: waypoints,
-// routes, LiDAR topo jobs, GeoPDF jobs. A row is a LIVE, REVOCABLE view of a
+// routes, LiDAR topo jobs. A row is a LIVE, REVOCABLE view of a
 // record the sender still owns — contrast FileSend below, which hands over a
 // copy and cannot be taken back.
 //

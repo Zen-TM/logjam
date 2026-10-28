@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useStoredState } from "./useStoredState";
-import { isMapsView, type MapsView } from "./components/sidebar/panels";
 
 beforeEach(() => {
   localStorage.clear();
@@ -81,40 +80,18 @@ describe("useStoredState", () => {
     });
   });
 
-  // A tab open across the deploy that removed the Exports view still holds
-  // "exports". Mutation: drop the isValid check and it comes back, and Maps
-  // renders no panel and no rail.
+  // A tab open across a deploy that retired a view still holds its name.
+  // Mutation: drop the isValid check and the retired name comes back.
   it("reads a stored value its guard rejects as the default", () => {
-    sessionStorage.setItem("logjam.mapsView", '"exports"');
-    const { result } = renderHook(() =>
-      useStoredState<MapsView>(
-        "logjam.mapsView",
-        "geopdfs",
-        sessionStorage,
-        isMapsView,
-      ),
-    );
-    expect(result.current[0]).toBe("geopdfs");
-    sessionStorage.setItem("logjam.mapsView", '"geopdfs"');
-    const again = renderHook(() =>
-      useStoredState<MapsView>(
-        "logjam.mapsView",
-        "geopdfs",
-        sessionStorage,
-        isMapsView,
-      ),
-    );
-    expect(again.result.current[0]).toBe("geopdfs");
-    // Retired views, whichever release retired them, read as the default.
-    sessionStorage.setItem("logjam.mapsView", '"lidar"');
-    const old = renderHook(() =>
-      useStoredState<MapsView>(
-        "logjam.mapsView",
-        "geopdfs",
-        sessionStorage,
-        isMapsView,
-      ),
-    );
-    expect(old.result.current[0]).toBe("geopdfs");
+    type View = "current";
+    const isView = (stored: unknown): stored is View => stored === "current";
+    const read = () =>
+      renderHook(() =>
+        useStoredState<View>("k", "current", sessionStorage, isView),
+      ).result.current[0];
+    sessionStorage.setItem("k", '"retired"');
+    expect(read()).toBe("current");
+    sessionStorage.setItem("k", '"current"');
+    expect(read()).toBe("current");
   });
 });

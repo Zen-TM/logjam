@@ -83,7 +83,6 @@ export type TUser = {
     tripLogCustomFields?: TripLogCustomFieldDef[];
     placeCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
-    autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
     slopeBands?: SlopeBand[];

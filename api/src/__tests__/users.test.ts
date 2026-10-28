@@ -121,7 +121,7 @@ describe("users routes (fake auth = alice)", () => {
   });
 
   it("PATCH /users/me updates the email notification preferences and restores them", async () => {
-    const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
+    const keys = ["topoEmail", "exportEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const original: Record<string, boolean> = Object.fromEntries(
       keys.map((k) => [k, before.body.uiPreferences.notifications[k]]),
@@ -288,7 +288,6 @@ describe("users routes (fake auth = alice)", () => {
       "itemSharesReceived",
       "fileSendsSent",
       "fileSendsReceived",
-      "geoPdfJobs",
       "devices",
     ]) {
       expect(Array.isArray(res.body[section]), section).toBe(true);

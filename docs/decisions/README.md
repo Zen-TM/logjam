@@ -138,3 +138,4 @@ supersede instead.
 | [0040](0040-a-sharpened-area-is-a-private-dem-source.md) | A sharpened area is a private DEM source, and each map tile comes from one archive | 2026-10-23 | Accepted |
 | [0041](0041-a-session-lasts-ten-years-and-sign-out-everywhere-ends-it.md) | A Cognito session lasts ten years, and Sign out everywhere is how one ends | 2026-10-24 | Accepted |
 | [0042](0042-logjam-web-needs-the-popover-api.md) | Logjam Web needs the Popover API: Safari 17, Chrome 114, Firefox 125, and a static page below that | 2026-10-29 | Accepted |
+| [0043](0043-geopdfs-render-in-the-browser.md) | GeoPDFs render in the browser, and nothing about one reaches the server | 2026-10-29 | Accepted |

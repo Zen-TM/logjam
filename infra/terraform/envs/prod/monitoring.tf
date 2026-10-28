@@ -301,7 +301,7 @@ resource "aws_cloudwatch_log_metric_filter" "worker_failures" {
 }
 
 # Three in an hour. Every failed job exits 1 (topo/worker.py,
-# topo/export_worker.py, api/src/worker/geoPdfWorker.ts), so one bad upload is
+# topo/export_worker.py), so one bad upload is
 # one failure, and a user retrying it twice more is worth a look too. Jobs are
 # rare, so a broken worker image may take hours to fail three times; the user
 # is told of each failure meanwhile.

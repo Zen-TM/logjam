@@ -237,10 +237,9 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
       # A stub that answers OK (started below): no CI run reaches Expo.
       EXPO_PUSH_URL: http://localhost:9099
-      # No ECS_SUBNETS: an empty list makes POST /geo-pdf leave the job
-      # `queued` and /topo-jobs/:id/start leave it `pending` instead of calling
-      # RunTask, which MiniStack here (S3 only, no Docker socket) cannot serve.
-      # geoPdfRender.test.ts runs the worker itself.
+      # No ECS_SUBNETS: an empty list makes /topo-jobs/:id/start leave the job
+      # `pending` instead of calling RunTask, which MiniStack here (S3 only, no
+      # Docker socket) cannot serve.
       ECS_SECURITY_GROUPS: sg-local
       # The global limiter is 300 req/60s keyed by IP for pre-auth requests, so
       # the whole suite shares ONE bucket and a full run brushes the cap. Raise

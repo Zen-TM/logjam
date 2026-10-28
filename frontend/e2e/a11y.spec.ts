@@ -600,21 +600,6 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  test("Maps: every view", async ({ page }) => {
-    await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
-    // Loaded, not the placeholder title ("GeoPDFs" while the list is loading).
-    await expect(
-      aside.getByRole("heading", {
-        level: 2,
-        name: /^(No GeoPDFs yet|\d+ GeoPDFs?)$/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "aside");
-  });
-
   test("Layers → Terrain → Sharpened areas, and a row menu", async ({
     page,
   }) => {
@@ -696,10 +681,12 @@ test.describe("desktop", () => {
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
-    await aside.getByRole("button", { name: /^Make/ }).first().click();
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Tools" })
+      .getByText("Make a map")
+      .click();
+    await page.getByRole("menuitem", { name: "Export an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(

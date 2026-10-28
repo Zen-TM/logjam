@@ -11,7 +11,7 @@
 //
 // Any endpoint that answers half of that question answers it wrong.
 // Nothing outside this file decides whether a user may see a route, topo
-// job or GeoPDF job. Guard: api/src/lib/shareAccess.unit.test.ts.
+// job. Guard: api/src/lib/shareAccess.unit.test.ts.
 //
 // PRIVACY: denial is 404, never 403, for a user with no access — the status
 // must not confirm that an id exists to someone who cannot see it. A recipient
@@ -41,7 +41,6 @@ export type ShareRole = "owner" | "shared" | "none";
 const NOT_FOUND_MESSAGE: Record<SharableEntityType, UserSentence> = {
   route: say`Couldn't find that route.`,
   topoJob: say`Couldn't find that LiDAR map.`,
-  geoPdfJob: say`Couldn't find that GeoPDF.`,
 };
 
 /**
@@ -111,12 +110,12 @@ export async function hasPlaceInheritedAccess(
 }
 
 /**
- * A topo or GeoPDF job's role. These have no place link and never had any
+ * A topo job's role. It has no place link and never had any
  * visibility rule before direct sharing, so a Share row is the whole answer.
  */
 export async function getJobRole(
   userId: string,
-  entityType: "topoJob" | "geoPdfJob",
+  entityType: "topoJob",
   job: { id: string; userId: string },
 ): Promise<ShareRole> {
   if (job.userId === userId) return "owner";
@@ -187,18 +186,6 @@ export async function loadEntityRole(
           }
         : null;
     }
-    case "geoPdfJob": {
-      const row = await prisma.geoPdfJob.findUnique({
-        where: { id: entityId },
-        select: { id: true, userId: true },
-      });
-      return row
-        ? {
-            ownerId: row.userId,
-            role: await getJobRole(userId, "geoPdfJob", row),
-          }
-        : null;
-    }
   }
 }
 
@@ -261,7 +248,7 @@ export async function deleteSharesFor(
  * rest.
  *
  * Two different promises, so two different rules:
- *   - `Share` (route / topo job / GeoPDF job) is a LIVE view of a
+ *   - `Share` (route / topo job) is a LIVE view of a
  *     record the owner still holds, so all of it goes.
  *   - `FileSend` handed the recipient a COPY. Only rows they have not taken yet
  *     (`status = "pending"`) are still live access and are revoked; an accepted
@@ -451,14 +438,9 @@ export async function filterOwnedEntityIds(
           where: { ...where, ownerId: userId },
           select,
         })
-      : entityType === "topoJob"
-        ? await prisma.topoJob.findMany({
-            where: { ...where, userId },
-            select,
-          })
-        : await prisma.geoPdfJob.findMany({
-            where: { ...where, userId },
-            select,
-          });
+      : await prisma.topoJob.findMany({
+          where: { ...where, userId },
+          select,
+        });
   return new Set(rows.map((row) => row.id));
 }

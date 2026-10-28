@@ -78,28 +78,9 @@ describe("notificationDestination", () => {
     ).toBeNull();
     expect(
       notificationDestination(
-        notification("geo_pdf_complete", {
-          geoPdfJobId: "g1",
-          status: "failed",
-        }),
-      ),
-    ).toBeNull();
-    expect(
-      notificationDestination(
         notification("topo_export_skipped", { reason: "x" }),
       ),
     ).toBeNull();
-  });
-
-  it("points a rendered GeoPDF at its account row", () => {
-    expect(
-      notificationDestination(
-        notification("geo_pdf_complete", {
-          geoPdfJobId: "g2",
-          status: "completed",
-        }),
-      ),
-    ).toMatchObject({ filter: "geoPdf", highlightKey: "g2" });
   });
 
   it("only points at a sent file once it has been kept, and by its kind", () => {

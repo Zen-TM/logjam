@@ -35,9 +35,6 @@ describe("notificationMeta", () => {
     expect(notificationMeta(notification("topo_complete")).hue).toBe(
       notificationHue.topo,
     );
-    expect(notificationMeta(notification("geo_pdf_complete")).hue).toBe(
-      notificationHue.geoPdf,
-    );
     expect(notificationMeta(notification("friend_request")).kind).toBe(
       "people",
     );
@@ -50,10 +47,6 @@ describe("notificationMeta", () => {
       notificationMeta(
         notification("topo_export_complete", { status: "failed" }),
       ).kind,
-    ).toBe("problem");
-    expect(
-      notificationMeta(notification("geo_pdf_complete", { status: "failed" }))
-        .kind,
     ).toBe("problem");
     expect(notificationMeta(notification("topo_export_skipped")).kind).toBe(
       "problem",

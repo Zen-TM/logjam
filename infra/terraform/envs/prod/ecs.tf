@@ -1,5 +1,6 @@
-# ECS task definitions for the three on-demand Fargate workers, the
-# pre-deploy migrate one-shot and the monthly place registry build. Workers are
+# ECS task definitions for the two on-demand Fargate workers, the
+# pre-deploy migrate one-shot, the monthly place registry build and the API
+# script runner for one-off maintainer scripts. Workers are
 # launched via RunTask (api/src/lib/ecsRunTask.ts), the place registry by its
 # schedule below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
@@ -22,9 +23,14 @@
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
 
-resource "aws_ecs_task_definition" "geo_pdf_worker" {
+# One-off maintainer scripts on the live API image, with the application's
+# database role (docs/operations/announcements.md). It was the GeoPDF worker's
+# task definition until GeoPDFs moved to the browser (ADR 0043); the scripts
+# only ever borrowed it. Every run overrides the command, so the default one
+# refuses rather than start a second API.
+resource "aws_ecs_task_definition" "api_script" {
   container_definitions = jsonencode([{
-    command = ["node", "dist/worker/geoPdfWorker.js"]
+    command = ["sh", "-c", "echo 'logjam-api-script needs a command override' >&2; exit 1"]
     environment = [{
       name  = "AUTH_MODE"
       value = "cognito"
@@ -57,10 +63,10 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "noreply@notifications.logjamnsw.com"
       }, {
       name = "ECS_SECURITY_GROUPS"
-      # Dedicated worker SG. Vestigial here (geoPdfWorker is a leaf, never
-      # calls RunTask) but kept in sync so no stale default-SG id lingers in
-      # a committed task def. The operative value is the EB env property of
-      # the same name (operator-owned).
+      # Dedicated worker SG. Vestigial here (a script never calls RunTask)
+      # but kept in sync so no stale default-SG id lingers in a committed
+      # task def. The operative value is the EB env property of the same name
+      # (operator-owned).
       value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
@@ -88,13 +94,13 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       logDriver = "awslogs"
       options = {
         awslogs-create-group  = "true"
-        awslogs-group         = "/ecs/logjam-geo-pdf-worker"
+        awslogs-group         = "/ecs/logjam-api-script"
         awslogs-region        = "ap-southeast-2"
         awslogs-stream-prefix = "ecs"
       }
     }
     mountPoints  = []
-    name         = "geo-pdf-worker"
+    name         = "api-script"
     portMappings = []
     secrets = [{
       name      = "DB_PASSWORD"
@@ -112,7 +118,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
   cpu                      = "1024"
   enable_fault_injection   = false
   execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
-  family                   = "logjam-geo-pdf-worker"
+  family                   = "logjam-api-script"
   memory                   = "4096"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]

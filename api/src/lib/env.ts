@@ -65,15 +65,14 @@ const baseSchema = z.object({
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
-  ECS_GEO_PDF_TASK_DEF: z.string().default("logjam-geo-pdf-worker"),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Transactional email (Resend). Only the geoPdfWorker sends from the Node
-  // side; the API server itself sends none. Both optional so a worker with no
-  // key configured degrades to a no-op send (services/email.ts) instead of
-  // crashing — mirrors the Python workers' guard. FRONTEND_URL builds the
+  // Transactional email (Resend). Only the topo job reaper sends from the Node
+  // side. Both optional so a process with no key configured degrades to a
+  // no-op send (services/email.ts) instead of crashing — mirrors the Python
+  // workers' guard. FRONTEND_URL builds the
   // completion-email deep link.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
@@ -136,14 +135,6 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(3),
-  // Adaptive runtime estimator for GeoPDF jobs (lib/runtimeEstimates.ts): fitted
-  // per-megapixel rate (native render-canvas size) from recent completed jobs.
-  // Falls back to this cold-start rate below MIN_SAMPLES.
-  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce
-    .number()
-    .positive()
-    .default(6),
-  GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Account-wide ceiling on concurrently running worker vCPUs
   // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
   // service quota (30 in ap-southeast-2) so excess load becomes a retryable
@@ -197,20 +188,6 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(604_800_000), // 7 days
-  // GeoPdfJob sweeps (mirrors TOPO_REAPER_EXPORT_*_TIMEOUT_MS): queued rows
-  // older than the QUEUED timeout (task never placed/started) and running
-  // rows older than the RUNNING timeout (worker SIGKILLed before its terminal
-  // write) are force-failed.
-  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(900_000), // 15 min
-  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(1_800_000), // 30 min
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
   // called — no Media row exists) are orphans in S3 with no quota charge.
   // Objects older than this with no confirmed row are deleted by the periodic
@@ -255,9 +232,6 @@ const baseSchema = z.object({
   RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
   // Same contract for the import limiter (bulkImportLimitMax).
   RATE_LIMIT_BULK_IMPORT_MAX: z.coerce.number().int().positive().optional(),
-  // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
-  // CLI entrypoint); unset in the API process.
-  GEO_PDF_JOB_ID: z.string().optional(),
   // Commit the image was built from, baked in by api/Dockerfile's GIT_SHA
   // build arg; GET /meta reports it so a deploy can prove what is serving.
   // Not a sha regex: a build without the arg bakes in "", and a malformed

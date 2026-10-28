@@ -54,15 +54,15 @@ export async function removeSharedPlace(placeId: string): Promise<void> {
 }
 
 /**
- * Stop seeing a waypoint, route, LiDAR topo or GeoPDF shared with you directly.
+ * Stop seeing a waypoint, route or LiDAR topo shared with you directly.
  *
  * Only ever called where `sharedRowVisibility` says "direct": a waypoint or
  * route that is on this phone because it is LINKED to a shared place has no
  * share row of its own, and the server would answer 404. Those are removed by
  * removing the place, which is what the sheets point at instead.
  *
- * Topo and GeoPDF jobs are not delta-synced entities, so there is nothing in
- * the mirror to drop — their lists refetch.
+ * A topo job is not a delta-synced entity, so there is nothing in
+ * the mirror to drop — its list refetches.
  */
 export async function removeSharedEntity(
   entityType: SharableEntityType,
