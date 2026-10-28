@@ -168,6 +168,18 @@ export default defineConfig(({ mode }) => {
     ],
     // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
     build: { target: ["safari17", "chrome114", "firefox125"] },
+    // The GeoPDF render worker (src/geoPdf/worker.ts) imports these only from a
+    // worker, which the dependency scan does not follow. Found at run time,
+    // each makes the dev server re-optimise and reload the page mid-render.
+    optimizeDeps: {
+      include: [
+        "@cantoo/pdf-lib",
+        "@mapbox/vector-tile",
+        "geomagnetism",
+        "pbf",
+        "pmtiles",
+      ],
+    },
     resolve: {
       alias: {
         "@styles": path.resolve(import.meta.dirname, "src/styles"),

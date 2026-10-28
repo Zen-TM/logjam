@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoPDF bench</title>
+  </head>
+  <body>
+    <!-- Dev only: Vite builds index.html alone, so this is never shipped.
+         Renders fixed, made-up extents and shows where the time went; see
+         src/geoPdf/bench.ts. -->
+    <h1>GeoPDF bench</h1>
+    <p>
+      <label>Scenario <select id="scenario"></select></label>
+      <button id="run" type="button">Render</button>
+      <button id="ping" type="button">Ping</button>
+      <output id="pings">0</output>
+    </p>
+    <pre id="out"></pre>
+    <script type="module" src="/src/geoPdf/bench.ts"></script>
+  </body>
+</html>

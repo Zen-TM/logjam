@@ -2,7 +2,8 @@
 export const STRIP_ROW_MULTIPLE = 16;
 /**
  * Each strip but the last is drawn this many rows taller than it owns, so the
- * next strip covers the overlap and the PDF has no anti-aliased hairline.
+ * next strip covers the overlap and the PDF has no anti-aliased hairline. The
+ * same count of rows is drawn above every strip after the first and cropped.
  */
 export const STRIP_OVERLAP_ROWS = 16;
 /** Below the 16.7 MP single-canvas cap of iOS Safari (16.6 MP measured on #602). */
@@ -19,11 +20,21 @@ export type Strip = {
 };
 
 /**
- * The fewest strips that each draw within `maxStripPx`, tiling
- * [0, mapHeight) by `height`. A map that fits is one strip. Every strip but
- * the last owns the same height. Throws RangeError when it cannot be
+ * The rows a strip's canvas has when drawn: its `renderHeight`, and for every
+ * strip after the first a halo of `STRIP_OVERLAP_ROWS` above it, drawn and
+ * cropped off because a canvas draws its outermost row differently (see
+ * render.ts, `drawnRows`).
+ */
+export function canvasRows(strip: Strip): number {
+  return strip.renderHeight + (strip.y > 0 ? STRIP_OVERLAP_ROWS : 0);
+}
+
+/**
+ * The fewest strips that each draw within `maxStripPx` (counting `canvasRows`),
+ * tiling [0, mapHeight) by `height`. A map that fits is one strip. Every strip
+ * but the last owns the same height. Throws RangeError when it cannot be
  * planned: a bad size, or rows so wide that a 16-row strip plus its overlap
- * (32 rows) still exceeds `maxStripPx`.
+ * and halo (48 rows) still exceeds `maxStripPx`.
  */
 export function planStrips(
   mapWidth: number,
@@ -37,15 +48,21 @@ export function planStrips(
   if (mapHeight <= maxRows) {
     return [{ index: 0, y: 0, height: mapHeight, renderHeight: mapHeight }];
   }
-  const ownable =
-    Math.floor((maxRows - STRIP_OVERLAP_ROWS) / STRIP_ROW_MULTIPLE) *
-    STRIP_ROW_MULTIPLE;
-  if (ownable < STRIP_ROW_MULTIPLE) {
-    throw new RangeError("planStrips: map is too wide for any strip");
+  // A strip's canvas is its height plus the overlap below it (not the last)
+  // plus the halo above it (not the first): two strips need 16 extra rows, three
+  // or more need 32 for a middle one.
+  let count = 2;
+  let height = 0;
+  for (; ; count++) {
+    height =
+      Math.ceil(mapHeight / count / STRIP_ROW_MULTIPLE) * STRIP_ROW_MULTIPLE;
+    const extra = count === 2 ? STRIP_OVERLAP_ROWS : 2 * STRIP_OVERLAP_ROWS;
+    if (height + extra <= maxRows) break;
+    // Strips cannot get shorter than one 16-row unit.
+    if (height <= STRIP_ROW_MULTIPLE) {
+      throw new RangeError("planStrips: map is too wide for any strip");
+    }
   }
-  const count = Math.ceil(mapHeight / ownable);
-  const height =
-    Math.ceil(mapHeight / count / STRIP_ROW_MULTIPLE) * STRIP_ROW_MULTIPLE;
   return Array.from({ length: count }, (_, index) => {
     const y = index * height;
     const last = index === count - 1;
