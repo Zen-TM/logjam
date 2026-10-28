@@ -131,6 +131,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
+    // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
+    build: { target: ["safari17", "chrome114", "firefox125"] },
     resolve: {
       alias: {
         "@styles": path.resolve(import.meta.dirname, "src/styles"),
