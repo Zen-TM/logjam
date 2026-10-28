@@ -7,6 +7,11 @@
 - **No router:** navigation is `activePanel` (`components/sidebar/panels.ts`);
   a panel never imports from `Map.tsx`, it gets callbacks from `App.tsx`.
 
+- **Browser floor: Safari 17, Chrome 114, Firefox 125** (the Popover API).
+  Use no newer platform feature without raising it; raising it takes the ADR,
+  `build.target` in `vite.config.ts` and `browser-check.js` together.
+  [0042](../docs/decisions/0042-logjam-web-needs-the-popover-api.md)
+
 ## Data
 
 - **Every user-data hook and boot effect takes the consent gate's `settled`**
