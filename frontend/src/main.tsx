@@ -22,14 +22,18 @@ if (import.meta.env.VITE_AUTH_MODE !== "fake") {
   });
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RootErrorBoundary>
-      <ThemePreferencesProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </ThemePreferencesProvider>
-    </RootErrorBoundary>
-  </StrictMode>,
-);
+// No #root: browser-check.js replaced it with the "needs a newer
+// browser" page. Test: src/browserCheck.test.ts.
+const root = document.getElementById("root");
+if (root)
+  createRoot(root).render(
+    <StrictMode>
+      <RootErrorBoundary>
+        <ThemePreferencesProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemePreferencesProvider>
+      </RootErrorBoundary>
+    </StrictMode>,
+  );
