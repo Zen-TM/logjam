@@ -29,7 +29,7 @@ describe("browser-check.js", () => {
       .popover;
   });
 
-  // Red if the check is removed, or tests the user agent instead of the API.
+  // Red if the check is removed.
   it("replaces #root with the newer-browser page when the Popover API is missing", () => {
     run(false);
     expect(document.getElementById("root")).toBeNull();
@@ -67,4 +67,18 @@ describe("browserCheckPlugin", () => {
       plugin.transformIndexHtml.handler('<script src="/browser-check.js">'),
     ).toBe(`<script src="/${emitted[0]}">`);
   });
+});
+
+// The floor is written in vite.config.ts's build.target and in the page's
+// copy. Red if build.target changes without the copy.
+it("the page names the browsers build.target builds for", () => {
+  const config = readFileSync("vite.config.ts", "utf8");
+  const target = /target: \[([^\]]*)\]/.exec(config)?.[1] ?? "";
+  const names = { safari: "Safari", chrome: "Chrome", firefox: "Firefox" };
+  const floor = [...target.matchAll(/"(safari|chrome|firefox)(\d+)"/g)].map(
+    ([, engine, version]) =>
+      `${names[engine as keyof typeof names]} ${version}`,
+  );
+  expect(floor).toHaveLength(3);
+  for (const browser of floor) expect(script).toContain(browser);
 });

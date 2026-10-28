@@ -18,7 +18,7 @@
     "margin:0;background:" + (dark ? "#1c1a18" : "#fff");
   page.innerHTML =
     '<h1 style="font-size:1.5rem;margin:0 0 12px">Logjam Web needs a newer browser</h1>' +
-    '<p style="margin:0">Logjam Web needs Safari 17, Chrome 114 or Firefox 125, or newer. Update your browser, or open Logjam Web in another one.</p>';
+    '<p style="margin:0">Logjam Web needs Safari 17, Chrome 114 or Firefox 125, or a later version. Update this browser, or open Logjam Web on another device.</p>';
   // main.tsx mounts only when #root exists.
   root.replaceWith(page);
 })();

@@ -38,8 +38,8 @@ The in-browser GeoPDF renderer (#602) relies on newer features too, such as
   with it.
 - Raising the floor means changing this ADR, `build.target` and the check
   together.
-- Guard: `frontend/src/browserCheck.test.ts` (red if the check is removed or
-  inverted). Nothing automated holds `build.target` equal to the floor.
+- Guard: `frontend/src/browserCheck.test.ts`, red if the check is removed or
+  inverted, or if `build.target` names a browser the page does not.
 
 ## Consequences
 
