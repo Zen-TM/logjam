@@ -75,7 +75,7 @@ export function useSharing({
    * answers 404. It closes the door with `needs-upload` in place of the
    * subtitle AND keeps the load from firing: a dimmed row that still fetches
    * has fixed half of it. Defaults true for the kinds that can only come from
-   * the server (a LiDAR topo, a GeoPDF job).
+   * the server (a LiDAR topo).
    */
   onServer?: boolean;
   enabled?: boolean;

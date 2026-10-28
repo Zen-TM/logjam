@@ -38,6 +38,8 @@ const WRITTEN_NESTED: Record<string, RegExp> = {
 const NOT_SEEDED: Record<string, string> = {
   ImportSnapshot:
     "written only by an import that merges into an existing row; the seed makes no import batch",
+  GeoPdfJob:
+    "removed feature: nothing writes it any more, and the table drops a release later (ADR 0003)",
   EgressLogCursor:
     "written by the egress sweeper as it reads S3 access logs, which MiniStack does not deliver; the seed only clears it",
 };

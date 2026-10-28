@@ -3,7 +3,6 @@
 // One answer per job, because the jobs cost wildly different amounts
 // and the honest default differs per job:
 //
-// - GEOPDF auto-download: tens of megabytes per file, Wi-Fi by default.
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
 // - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
 //   in placeRegistry.ts, Wi-Fi by default.
@@ -23,15 +22,9 @@ import NetInfo from "@react-native-community/netinfo";
 import { readPref, writePref } from "../prefsDb";
 
 /** The jobs whose data cost the user can govern. */
-export type MeteredJob =
-  | "geoPdfDownload"
-  | "topoDownload"
-  | "placeNames"
-  | "sync"
-  | "mediaUpload";
+export type MeteredJob = "topoDownload" | "placeNames" | "sync" | "mediaUpload";
 
 const KEYS: Record<MeteredJob, string> = {
-  geoPdfDownload: "meteredGeoPdfDownload",
   topoDownload: "meteredTopoDownload",
   placeNames: "meteredPlaceNames",
   sync: "meteredSync",
@@ -42,7 +35,6 @@ const KEYS: Record<MeteredJob, string> = {
 
 /** Per-job default for "may run on mobile data". */
 const DEFAULTS: Record<MeteredJob, boolean> = {
-  geoPdfDownload: false,
   topoDownload: false,
   placeNames: false,
   sync: true,

@@ -120,8 +120,32 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
+  // An old client (ADR 0022) still sends the retired GeoPDF preferences. They
+  // must not fail the whole request. Mutation: make the body validation strict,
+  // or have isNotificationPreferences reject unknown keys, and this is a 400.
+  it("PATCH /users/me ignores the retired GeoPDF preferences an old client sends", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.notifications.topoEmail;
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({
+          autoDownloadGeoPdfs: true,
+          notifications: { geoPdfEmail: true, topoEmail: !original },
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.notifications.topoEmail).toBe(!original);
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ notifications: { topoEmail: original } });
+    }
+  });
+
   it("PATCH /users/me updates the email notification preferences and restores them", async () => {
-    const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
+    const keys = ["topoEmail", "exportEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const original: Record<string, boolean> = Object.fromEntries(
       keys.map((k) => [k, before.body.uiPreferences.notifications[k]]),
@@ -288,7 +312,6 @@ describe("users routes (fake auth = alice)", () => {
       "itemSharesReceived",
       "fileSendsSent",
       "fileSendsReceived",
-      "geoPdfJobs",
       "devices",
     ]) {
       expect(Array.isArray(res.body[section]), section).toBe(true);

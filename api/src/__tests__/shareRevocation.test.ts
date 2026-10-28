@@ -15,7 +15,7 @@ import {
 // Revocation, from the side that loses access:
 //
 //   - Unfriending must revoke EVERY share type in both directions
-//     (place, route, topo job, GeoPDF job) plus file sends the recipient
+//     (place, route, topo job) plus file sends the recipient
 //     has not taken yet — while leaving accepted sends alone, because those
 //     are copies the recipient already owns.
 //   - A place_shared notification must stop resolving the place name once the

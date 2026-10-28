@@ -65,7 +65,7 @@ make announce ARGS="send /path/to/message.md --yes"
 ### In prod
 
 The script is in the API image, so it runs as a one-off Fargate task on the
-`logjam-geo-pdf-worker` task definition: that definition runs the live API
+`logjam-geo-pdf-worker` task definition (it no longer renders GeoPDFs; the name stays, [0043](../decisions/0043-geopdfs-render-in-the-browser.md)): that definition runs the live API
 image (pinned by every deploy) with the API's environment and database
 credentials, and reaches the internet for the pushes. Only the command
 changes; the message travels in an environment variable. This needs the
@@ -78,7 +78,7 @@ audit log ([DATA-ACCESS-POLICY.md](../DATA-ACCESS-POLICY.md)).
 
 A run that exits 1 (a refused message, a retract that finds nothing, an
 error) is a stopped task with a non-zero exit in `logjam-cluster`, so it
-counts towards the `logjam-worker-failures` alarm like a failed GeoPDF job,
+counts towards the `logjam-worker-failures` alarm like a failed export,
 and its event, overrides and message included, is kept in
 `/aws/events/logjam-worker-failures`. Three in an hour page; the alarm's
 runbook says what to do ([alarms.md](alarms.md#logjam-worker-failures)).

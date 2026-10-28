@@ -75,8 +75,6 @@ export function sharePromise(kind: SharePromiseKind | "selection"): string {
     // What is true of both kinds, for a row whose kind isn't known.
     case "lidarJob":
       return `Friends you pick can see this on their map. Only you can delete it. ${STOP}`;
-    case "geoPdfJob":
-      return `Friends you pick can view and download this GeoPDF, but can't delete it. ${STOP}`;
     case "selection":
       return `Friends you pick can view and export these, but can't change them. ${STOP}`;
   }

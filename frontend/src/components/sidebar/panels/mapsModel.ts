@@ -1,36 +1,30 @@
-// What the Maps page says about each map, out of the component so it is checked
-// (DESIGN.md).
+// What the Sharpened areas view says about each map, out of the component so it
+// is checked (DESIGN.md).
 //
-// The page answers "what maps have I made, and what is still being made?"
+// The view answers "what maps have I made, and what is still being made?"
 // (shared/DESIGN.md §2). The second half of that question is `beingMade`: every job the
-// user is still waiting on — a GeoPDF or a topo — as one kind
+// user is still waiting on, as one kind
 // of row, newest first, with the words for where it has got to. The tile's glyph
 // and hue already say which kind a row is, and a list that scrolls has no
 // reason to hide its fourth item.
-import {
-  formatBytes,
-  formatMinutes,
-  type GeoPdfJobView,
-  LIDAR_JOB_COPY,
-} from "@logjam/shared";
+import { formatBytes, formatMinutes, LIDAR_JOB_COPY } from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
 
 /**
- * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a GeoPDF
- * is a page of paper, a LiDAR topo is terrain in the eucalypt `overlay` hue.
+ * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a
+ * LiDAR topo is terrain in the eucalypt `overlay` hue.
  * What is made FROM a thing wears that thing's hue with its own glyph, so a
  * row says both what it is and what it belongs to.
  */
 export const MAP_IDENTITY: Record<
-  "geoPdf" | "topo" | "sharpened",
+  "topo" | "sharpened",
   {
     icon: Glyph;
     hue: string;
     label: string;
   }
 > = {
-  geoPdf: { icon: "geoPdf", hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
   topo: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
@@ -61,7 +55,7 @@ export function downloadFile(url: string): void {
 /** One job still on its way, whichever kind it is. */
 export type MakingItem = {
   key: string;
-  kind: "geoPdf" | "topo";
+  kind: "topo";
   id: string;
   title: string;
   /** Where it has got to, in words ("Queued", "Processing · about 21 min"). */
@@ -77,25 +71,6 @@ export function formatDay(iso: string): string {
     month: "short",
     year: "numeric",
   });
-}
-
-/** "8 Sept 2026, 3:41 pm" — for a name made from a date, where two made the
- *  same day would otherwise read identically. */
-function formatDayAndTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-/** A GeoPDF's name: its map title, or when it was made. */
-export function geoPdfLabel(
-  job: Pick<GeoPdfJobView, "title" | "createdAt">,
-): string {
-  return job.title ?? `GeoPDF · ${formatDayAndTime(job.createdAt)}`;
 }
 
 /** A topo's name: what the user called it, or the day it was made. */
@@ -129,27 +104,6 @@ function withEstimate(verb: string, estimatedSeconds: number | null): string {
   return estimatedSeconds != null && estimatedSeconds > 0
     ? `${verb} · ${formatMinutes(estimatedSeconds)}`
     : verb;
-}
-
-export function geoPdfsBeingMade(jobs: readonly GeoPdfJobView[]): MakingItem[] {
-  return newestFirst(
-    jobs
-      .filter((job) => job.status !== "completed")
-      .map((job) => ({
-        key: `geoPdf-${job.id}`,
-        kind: "geoPdf" as const,
-        id: job.id,
-        title: geoPdfLabel(job),
-        detail:
-          job.status === "queued"
-            ? "Queued"
-            : job.status === "running"
-              ? withEstimate("Making", job.estimatedSeconds)
-              : (job.errorMessage ?? FAILED),
-        failed: job.status === "failed",
-        createdAt: job.createdAt,
-      })),
-  );
 }
 
 export function toposBeingMade(

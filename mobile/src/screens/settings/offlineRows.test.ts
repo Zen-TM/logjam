@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import { offlineRowNeedsAccount, type OfflineRow } from "./offlineRows";
 
 const ROWS: OfflineRow[] = [
-  "autoGeoPdf",
   "autoTopo",
-  "geoPdfDownload",
   "topoDownload",
   "placeNames",
   "sync",

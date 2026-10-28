@@ -18,7 +18,7 @@ resource "aws_ecs_cluster" "local" {
 }
 
 locals {
-  # Shared by all three workers. In-network hostnames (postgres / ministack).
+  # Shared by both workers. In-network hostnames (postgres / ministack).
   worker_common_env = [
     { name = "AWS_REGION", value = "ap-southeast-2" },
     # Explicit dummy creds: MiniStack injects AWS_CONTAINER_CREDENTIALS_FULL_URI
@@ -72,31 +72,6 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
   }])
   cpu                      = "4096"
   memory                   = "8192"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-}
-
-resource "aws_ecs_task_definition" "geo_pdf_worker" {
-  family = "logjam-geo-pdf-worker"
-  container_definitions = jsonencode([{
-    name      = "geo-pdf-worker"
-    image     = "logjam-api:latest"
-    essential = true
-    command   = ["node", "dist/worker/geoPdfWorker.js"]
-    environment = concat(local.worker_common_env, [
-      { name = "S3_BUCKET_MEDIA", value = module.media.bucket_id },
-      { name = "TOPO_CDN_BASE_URL", value = "http://ministack:4566/${module.topo.bucket_id}" },
-      { name = "AUTH_MODE", value = "fake" },
-      { name = "FAKE_USER_SUB", value = "fake-alice-sub" },
-      { name = "NODE_ENV", value = "development" },
-      { name = "CORS_ORIGIN", value = "http://localhost:5173" },
-      # Prod image bundles the RDS CA → prisma.ts would force TLS; local Postgres
-      # has no SSL. Force a plain connection (see api/src/services/prisma.ts).
-      { name = "DATABASE_SSL", value = "disable" },
-    ])
-  }])
-  cpu                      = "1024"
-  memory                   = "4096"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
 }

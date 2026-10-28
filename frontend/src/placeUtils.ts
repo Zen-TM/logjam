@@ -779,9 +779,7 @@ export type ComputeEstimate = {
   wouldExceed: boolean;
 };
 
-export type ComputeEstimateRequest =
-  | { kind: "topo"; tileCount: number | null }
-  | { kind: "geoPdf"; config: unknown };
+export type ComputeEstimateRequest = { kind: "topo"; tileCount: number | null };
 
 export function fetchComputeEstimate(
   request: ComputeEstimateRequest,
@@ -851,7 +849,6 @@ export function updateUserPreferences(
     // are rows, written through the row-grain calls below; sending them here
     // is a 400 naming the replacement rather than a silent no-op.
     notifications: Partial<NotificationPreferences>;
-    autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
     slopeBands: SlopeBand[];
   }>,
@@ -1719,7 +1716,7 @@ export function getPlaceShares(placeId: string): Promise<TPlaceShare[]> {
 }
 
 // ── Direct sharing, non-place entities ───────────────────────
-// Waypoints, routes, LiDAR topo jobs and GeoPDF jobs. A live, read-only view
+// Waypoints, routes and LiDAR topo jobs. A live, read-only view
 // the owner can revoke — NOT the same promise as a sent copy below.
 
 export type TEntityShare = {
@@ -1824,8 +1821,8 @@ export function declineFileSend(fileSendId: string): Promise<void> {
 // The row shape is `FriendShareRow` in shared/src/sharing.ts — (entityType,
 // entityId, name, sharedAt), the same pair a bulk share speaks, because the
 // payload covers every shareable kind and not just places. THIS panel still
-// renders places only (it filters on `entityType`), so waypoint/route/topo/
-// GeoPDF shares are visible on Logjam GPS and not here yet.
+// renders places only (it filters on `entityType`), so waypoint/route/topo
+// shares are visible on Logjam GPS and not here yet.
 export type TFriendShareRow = FriendShareRow;
 export type TFriendShares = FriendShares;
 
@@ -2017,7 +2014,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  // True once the first fetch has settled, as useGeoPdfJobs' is.
+  // True once the first fetch has settled, either way.
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -2077,81 +2074,6 @@ export function deleteTopoExport(id: string): Promise<void> {
 
 export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
-}
-
-// ── GeoPDF jobs (async export pipeline) ──────────────────────
-
-export type { GeoPdfJobView } from "@logjam/shared";
-import type { GeoPdfJobView } from "@logjam/shared";
-
-// Polls every `pollMs` while enabled AND at least one job is in progress
-// (queued/running), mirroring useTopoExports.
-export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
-  const [jobs, setJobs] = useState<GeoPdfJobView[]>([]);
-  // True total (pre server-side list cap); null until known.
-  const [total, setTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  // True once the first fetch has settled, either way. `loading` alone starts
-  // false, so a list reading it would flash "nothing yet" before any request.
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
-      .then(({ data, total }) => {
-        if (!cancelled) {
-          setJobs(data.jobs);
-          setTotal(total);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load GeoPDF jobs."));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoaded(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, fetchCount]);
-
-  const hasInProgress = jobs.some(
-    (j) => j.status === "queued" || j.status === "running",
-  );
-  useEffect(() => {
-    if (!enabled || pollMs <= 0 || !hasInProgress) return;
-    const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
-    return () => clearInterval(id);
-  }, [enabled, pollMs, hasInProgress]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, total, loading, loaded, error, refetch };
-}
-
-export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {
-  return apiFetch<GeoPdfJobView>(`/geo-pdf/${id}`);
-}
-
-export function deleteGeoPdfJob(id: string): Promise<void> {
-  return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
 }
 
 // Renders `v3a4 III`, omitting unset segments. Re-exported from

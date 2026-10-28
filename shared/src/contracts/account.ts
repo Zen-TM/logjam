@@ -25,7 +25,7 @@ export const ACCOUNT = {
     storage: "Storage",
     storageHint: "photos, videos and LiDAR maps",
     credits: "Processing credits this month",
-    creditsHint: "LiDAR maps, exports and GeoPDFs",
+    creditsHint: "LiDAR maps and exports",
     signIn: "Sign-in",
     email: "Email",
     yourData: "Your data",

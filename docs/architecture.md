@@ -115,7 +115,7 @@ definitions are in `envs/prod/ecs.tf`:
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
 | `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
 | `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
-| `logjam-geo-pdf-worker` | API | `api/src/worker/geoPdfWorker.ts` | `POST /geo-pdf` (`GEO_PDF_JOB_ID`) |
+| `logjam-geo-pdf-worker` | API | a one-off maintainer script (`api/src/scripts/`); it no longer renders GeoPDFs, and the name stays | the maintainer, by hand ([announcements](operations/announcements.md#in-prod)) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
 The job workers write their results straight to Postgres and S3, then
@@ -132,7 +132,7 @@ and CloudFront reads them through origin access control:
 | Bucket | Holds | `terraform output` |
 |---|---|---|
 | media | photos and other trip media; "Send a copy" files (expire after 8 days) | `s3_bucket_media` |
-| topo-jobs | LiDAR ZIP uploads, job outputs, exports and GeoPDFs, the `/master/*` basemap | `s3_bucket_topo` |
+| topo-jobs | LiDAR ZIP uploads, job outputs, exports, the `/master/*` basemap | `s3_bucket_topo` |
 | frontend | the Logjam Web build | `s3_bucket_frontend` |
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
@@ -246,7 +246,7 @@ task. The worker claims the row by a guarded status change (`… WHERE status =
 or reaped while its task was starting is claimed by nobody, and the worker
 exits without doing anything. Apart from the worker, only the sweep and the
 owner deleting a job move it out of an in-progress state. The sweep's
-timeouts are the `TOPO_REAPER_*` and `GEO_PDF_*` variables in
+timeouts are the `TOPO_REAPER_*` variables in
 `api/src/lib/env.ts`. When the sweep fails a job, it stops the job's task by
 the task ARN saved on the row.
 
@@ -278,17 +278,18 @@ rule aborts any parts left behind two days after the upload began. Deleting a jo
 it, stops its task and then removes the row. Deleting also fails the exports
 queued from the job, and is refused while one of its exports is running.
 
-### Exports and GeoPDFs
+### Exports
 
-Topo exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`)
-and GeoPDFs (`api/src/routes/geoPdf.ts`, `api/src/worker/geoPdfWorker.ts`)
-share one state machine:
+Exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`) follow
+one state machine. A GeoPDF is not a job: Logjam Web renders it in the browser
+and nothing about it reaches the API
+([0043](decisions/0043-geopdfs-render-in-the-browser.md)).
 
 ```mermaid
 stateDiagram-v2
-  [*] --> queued: POST /topo-exports or /geo-pdf
+  [*] --> queued: POST /topo-exports
   queued --> running: worker claims the job
-  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or (export) its source topo job was deleted
+  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or its source topo job was deleted
   running --> completed: file uploaded to the topo-jobs bucket
   running --> failed: worker error, or the sweep's running timeout
   completed --> [*]: the sweep deletes the file and the row<br/>after TOPO_EXPORT_TTL_MS
@@ -303,8 +304,7 @@ with its format and size) and, if they opted in, their email. Both link to
 `/?export=<id>`, which mints a fresh download URL and checks egress when it is
 opened: a presigned URL would be dead within hours. Logjam Web has no list of
 exports. An export is not charged to storage, because the owner can't see or
-delete it and it is gone in 7 days; its download is charged to egress. A GeoPDF
-is charged, and the sweep gives that back. One user holds at most
+delete it and it is gone in 7 days; its download is charged to egress. One user holds at most
 `MAX_LIVE_PER_USER` exports at a time (`topoExportLauncher.ts`).
 
 ## How a change reaches prod

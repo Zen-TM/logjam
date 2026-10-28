@@ -31,7 +31,6 @@ PUSH_TITLES = {
     "topo_failed": "Topo processing failed",
     "topo_export_complete": "Topo export finished",
     "topo_export_skipped": "Auto-export skipped",
-    "geo_pdf_complete": "GeoPDF finished",
 }
 GENERIC_TITLE = "Logjam notification"
 
@@ -48,7 +47,6 @@ ALLOWED_DATA_KEYS = {
     "placeId",
     "jobId",
     "exportId",
-    "geoPdfJobId",
     "entityType",
     "entityId",
     "fileSendId",

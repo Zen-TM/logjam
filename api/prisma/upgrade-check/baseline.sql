@@ -21,25 +21,36 @@
 
 \set ON_ERROR_STOP on
 
--- 20261025120000_topo_export_uncharge: live completed exports were charged to
--- storage, and the migration gives that back. Off once the base has it.
+-- 20261027000000_delete_geo_pdf_jobs: every GeoPDF job goes with its shares and
+-- notifications, and the completed ones' storage charge is given back. Off once
+-- the base has it.
 SELECT NOT EXISTS (
   SELECT 1 FROM _prisma_migrations
-   WHERE migration_name = '20261025120000_topo_export_uncharge'
-) AS uncharge_applies \gset
-\if :uncharge_applies
+   WHERE migration_name = '20261027000000_delete_geo_pdf_jobs'
+) AS geo_pdf_applies \gset
+\if :geo_pdf_applies
 \if :{?fixtures}
 INSERT INTO users (id, cognito_id, username, email, storage_used_bytes) VALUES
-  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid', 5000);
-INSERT INTO topo_export_jobs (id, user_id, status, format, bundling, layers, source_job_ids, vector_style_snapshot, result_bytes) VALUES
-  ('upgrade-fixture-export-1', 'upgrade-fixture-x', 'completed', 'geotiff', 'per-layer', '{}', '{}', '{}', 1500),
-  ('upgrade-fixture-export-2', 'upgrade-fixture-x', 'completed', 'geotiff', 'per-layer', '{}', '{}', '{}', 1000),
-  ('upgrade-fixture-export-3', 'upgrade-fixture-x', 'failed',    'geotiff', 'per-layer', '{}', '{}', '{}', NULL);
+  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid', 5000),
+  ('upgrade-fixture-y', 'upgrade-fixture-y-sub', 'upgrade_y', 'y@upgrade.invalid', 0);
+INSERT INTO geo_pdf_jobs (id, user_id, config, vector_style_snapshot, status, result_bytes) VALUES
+  ('upgrade-fixture-pdf-1', 'upgrade-fixture-x', '{}', '{}', 'completed', 1500),
+  ('upgrade-fixture-pdf-2', 'upgrade-fixture-x', '{}', '{}', 'completed', 1000),
+  ('upgrade-fixture-pdf-3', 'upgrade-fixture-x', '{}', '{}', 'failed', NULL);
+INSERT INTO shares (id, entity_type, entity_id, shared_by_id, shared_with_id) VALUES
+  ('upgrade-fixture-share-1', 'geoPdfJob', 'upgrade-fixture-pdf-1', 'upgrade-fixture-x', 'upgrade-fixture-y'),
+  ('upgrade-fixture-share-2', 'route', 'upgrade-fixture-route', 'upgrade-fixture-x', 'upgrade-fixture-y');
+INSERT INTO notifications (id, user_id, type, payload) VALUES
+  ('upgrade-fixture-note-1', 'upgrade-fixture-y', 'geo_pdf_complete', '{}'),
+  ('upgrade-fixture-note-2', 'upgrade-fixture-y', 'announcement', '{}');
 \endif
 CREATE SCHEMA IF NOT EXISTS upgrade_check;
-CREATE TABLE upgrade_check.export_uncharge AS
+CREATE TABLE upgrade_check.geo_pdf_uncharge AS
 SELECT u.id AS user_id,
-       GREATEST(0, u.storage_used_bytes - coalesce(sum(e.result_bytes) FILTER (WHERE e.status = 'completed'), 0)) AS expected
-  FROM users u LEFT JOIN topo_export_jobs e ON e.user_id = u.id
+       GREATEST(0, u.storage_used_bytes - coalesce(sum(g.result_bytes) FILTER (WHERE g.status = 'completed'), 0)) AS expected
+  FROM users u LEFT JOIN geo_pdf_jobs g ON g.user_id = u.id
  GROUP BY u.id, u.storage_used_bytes;
+CREATE TABLE upgrade_check.kept AS
+SELECT (SELECT count(*) FROM shares WHERE entity_type <> 'geoPdfJob') AS shares,
+       (SELECT count(*) FROM notifications WHERE type <> 'geo_pdf_complete') AS notifications;
 \endif

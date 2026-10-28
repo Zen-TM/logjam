@@ -409,8 +409,6 @@ const notificationHues = (
     topo: assetHue.overlay,
     /** Topo exports — the waterhole blue of the vector files they produce. */
     export: assetHue.import,
-    /** GeoPDFs — as in Saved. */
-    geoPdf: assetHue.geoPdf,
     /** A maintainer message: about Logjam itself, so the scheme accent. */
     message: theme.accent,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in

@@ -2,7 +2,7 @@ import { MAP_MEASURE } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
- * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Maps (GeoPDFs) ·
+ * Places · Logs (and Stats) · Ways (routes, tracks, imports) ·
  * Friends, then Inbox · Account · Settings. What is on
  * the map is not a page: it is the Layers control over the map.
  */
@@ -10,7 +10,6 @@ export type PanelId =
   | "places"
   | "logs"
   | "ways"
-  | "maps"
   | "friends"
   | "inbox"
   | "account"
@@ -42,7 +41,6 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   places: "Places",
   logs: "Logs",
   ways: "Ways",
-  maps: "Maps",
   friends: "Friends",
   inbox: "Inbox",
   account: "Account",
@@ -57,6 +55,3 @@ export const PANEL_TITLES: Record<PanelId, string> = {
 /** A page with several views swaps its content in place under one rail of
  *  chips, rather than being several pages. */
 export type LogsView = "logs" | "stats";
-export type MapsView = "geopdfs";
-export const isMapsView = (stored: unknown): stored is MapsView =>
-  stored === "geopdfs";

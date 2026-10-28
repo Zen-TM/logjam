@@ -38,7 +38,7 @@ export type AccountState = "guest" | "linked";
  * sorts its own rows (`screens/settings/offlineRows.ts`).
  */
 export type Capability =
-  /** Sharing a place, waypoint, route, topo or GeoPDF with another user. */
+  /** Sharing a place, waypoint, route or topo with another user. */
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
@@ -51,8 +51,6 @@ export type Capability =
   | "inbox"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
-  /** GeoPDFs generated on the user's Logjam Web account. A LOCAL pdf import is not this. */
-  | "accountGeoPdf"
   /** Location search through our API (POST /places/search), for a phone
    *  without the place registry. Searching the phone's own copy is not this. */
   | "placeSearch"
@@ -87,7 +85,6 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   friends: true,
   inbox: false,
   lidarOverlays: true,
-  accountGeoPdf: true,
   placeSearch: true,
   serverPrefs: true,
   pushNotifications: true,
@@ -133,7 +130,6 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   friends: "Friends",
   inbox: "The inbox",
   lidarOverlays: "LiDAR overlays",
-  accountGeoPdf: "Account GeoPDFs",
   placeSearch: "Location search",
   serverPrefs: "This preference",
   pushNotifications: "Push notifications",

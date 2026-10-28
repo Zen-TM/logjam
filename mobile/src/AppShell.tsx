@@ -51,7 +51,6 @@ import {
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
-import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { BackgroundToast } from "./BackgroundToast";
@@ -826,8 +825,8 @@ export function AppShell({
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
   // Sync triggers: initial cycle, app foreground, connectivity regained, and
-  // the same three moments for the GeoPDF and topo auto-downloads (Settings →
-  // Offline and storage; autoDownload.ts says why not a timer) and the place
+  // the same three moments for the topo auto-download (Settings →
+  // Offline and storage; topoAutoDownload.ts says why not a timer) and the place
   // names for search. Torn down on sign-out (shell unmount).
   //
   // A guest registers none of the account-backed ones. This is the
@@ -837,14 +836,12 @@ export function AppShell({
   // could only ever 401 would also mean a failing sync every foreground, and a
   // permanently red sync health line on the More tab. Guard:
   // `shellTriggers.test.ts`. The place names go to a guest too
-  // (shellTriggers.ts). The two auto-downloads keep their own
-  // registrations: separate switches and connection policies, and a combined
-  // runner would make one's failure the other's.
+  // (shellTriggers.ts). The topo auto-download keeps its own
+  // registration, apart from sync's.
   useEffect(
     () =>
       registerShellTriggers(accountState, {
         sync: registerSyncTriggers,
-        geoPdfAutoDownload: registerGeoPdfAutoDownload,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
       }),

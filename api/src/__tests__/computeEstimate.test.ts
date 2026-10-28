@@ -34,6 +34,7 @@ describe("POST /compute-estimate — validation", () => {
         })
       ).status,
     ).toBe(400);
+    // A GeoPDF is rendered in the browser, so no longer estimated.
     expect((await estimate({ kind: "geoPdf", config: {} })).status).toBe(400);
     expect((await estimate({ kind: "geoPdf" })).status).toBe(400);
   });

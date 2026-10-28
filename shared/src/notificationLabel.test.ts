@@ -143,20 +143,6 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
   });
 
-  it("labels geo_pdf completion and failure", () => {
-    expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe(
-      "GeoPDF ready",
-    );
-    expect(
-      notificationLabel(
-        notification("geo_pdf_complete", {
-          status: "failed",
-          errorMessage: "no extent",
-        }),
-      ),
-    ).toEqual({ text: "Couldn't create GeoPDF", detail: "no extent" });
-  });
-
   it("degrades gracefully on missing payload fields", () => {
     expect(notificationLabel(notification("friend_request")).text).toBe(
       "Someone sent you a friend request",

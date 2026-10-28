@@ -332,7 +332,6 @@ router.patch(
       username,
       themeSchemeId,
       notifications,
-      autoDownloadGeoPdfs,
       importMergePolicy,
       copyPlaceMedia,
       slopeBands,
@@ -341,7 +340,6 @@ router.patch(
       username?: unknown;
       themeSchemeId?: unknown;
       notifications?: unknown;
-      autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
       slopeBands?: unknown;
@@ -392,7 +390,6 @@ router.patch(
     if (
       themeSchemeId !== undefined ||
       notifications !== undefined ||
-      autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined ||
       copyPlaceMedia !== undefined ||
       slopeBands !== undefined
@@ -411,12 +408,6 @@ router.patch(
         !isNotificationPreferences(notifications)
       ) {
         throw malformed("Invalid notifications");
-      }
-      if (
-        autoDownloadGeoPdfs !== undefined &&
-        typeof autoDownloadGeoPdfs !== "boolean"
-      ) {
-        throw malformed("Invalid autoDownloadGeoPdfs");
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
@@ -452,7 +443,6 @@ router.patch(
               },
             }
           : {}),
-        ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
         ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
         ...(importMergePolicy !== undefined
@@ -533,7 +523,6 @@ router.delete(
     const [
       topoJobs,
       topoExportJobs,
-      geoPdfJobs,
       media,
       ownedPlaces,
       friendships,
@@ -549,10 +538,6 @@ router.delete(
       prisma.topoExportJob.findMany({
         where: { userId: user.id },
         select: { id: true, resultKey: true },
-      }),
-      prisma.geoPdfJob.findMany({
-        where: { userId: user.id },
-        select: { id: true },
       }),
       // linkedType/linkedId feed the sync-tombstone fan-out below (which
       // place each media row belonged to).
@@ -639,13 +624,6 @@ router.delete(
       ...topoJobs.map(({ id }) => deleteTopoJobObjects(TOPO_BUCKET, id)),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
-      ),
-      // GeoPDF outputs live under exports/geo-pdf/{jobId}/ (geoPdfWorker
-      // resultKeyFor). Delete the whole per-job prefix, not just the recorded
-      // resultKey, so an object uploaded by a running/failed job before its row
-      // was recorded is still purged.
-      ...geoPdfJobs.map(({ id }) =>
-        deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
       // Sent copies live in the MEDIA bucket under file-sends/{senderId}/.
       // One prefix delete covers every send, including one whose upload was

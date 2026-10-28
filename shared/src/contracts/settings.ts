@@ -79,7 +79,6 @@ export const NOTIFICATION_PREFERENCES = [
     group: "email",
     what: "a LiDAR map export finishes or fails",
   },
-  { key: "geoPdfEmail", group: "email", what: "a GeoPDF finishes or fails" },
   {
     key: "friendRequestInApp",
     group: "inApp",

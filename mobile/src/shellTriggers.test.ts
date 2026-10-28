@@ -11,7 +11,6 @@ function registrars() {
   };
   const fns = {
     sync: arm("sync"),
-    geoPdfAutoDownload: arm("geoPdfAutoDownload"),
     topoAutoDownload: arm("topoAutoDownload"),
     placeRegistryRefresh: arm("placeRegistryRefresh"),
   };
@@ -30,7 +29,7 @@ describe("registerShellTriggers", () => {
   });
 
   // Red if a guest arms a trigger that could only 401 (ADR 0007).
-  it("arms sync and the auto-downloads only once linked", () => {
+  it("arms sync and the auto-download only once linked", () => {
     const guest = registrars();
     registerShellTriggers("guest", guest.fns);
     expect(guest.calls).toEqual(["placeRegistryRefresh"]);
@@ -38,7 +37,6 @@ describe("registerShellTriggers", () => {
     const linked = registrars();
     registerShellTriggers("linked", linked.fns);
     expect([...linked.calls].sort()).toEqual([
-      "geoPdfAutoDownload",
       "placeRegistryRefresh",
       "sync",
       "topoAutoDownload",
@@ -48,6 +46,6 @@ describe("registerShellTriggers", () => {
   it("tears down everything it armed", () => {
     const { fns, cleanup } = registrars();
     registerShellTriggers("linked", fns)();
-    expect(cleanup).toHaveBeenCalledTimes(4);
+    expect(cleanup).toHaveBeenCalledTimes(3);
   });
 });

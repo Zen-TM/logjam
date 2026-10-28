@@ -7,7 +7,7 @@
 // is no room for both, and this is a page you go and read.
 //
 // EVERY KIND THE PAYLOAD CARRIES. The audit covers every kind the payload
-// carries (places, routes, LiDAR topos and GeoPDFs) rather than a subset. Which
+// carries (places, routes and LiDAR topos) rather than a subset. Which
 // rows get which verb is `buildShareCards` in @logjam/shared, the same call
 // Logjam GPS makes.
 //
@@ -97,7 +97,6 @@ const KIND_IDENTITY: Record<
   place: { icon: "place", hue: "var(--hue-shared)" },
   route: { icon: "route", hue: "var(--hue-route)" },
   topoJob: { icon: "lidar", hue: "var(--hue-overlay)" },
-  geoPdfJob: { icon: "geoPdf", hue: "var(--hue-geo-pdf)" },
 };
 
 /* CONFIRMATION SCALES WITH BLAST RADIUS × COST OF RECOVERY, which is why the

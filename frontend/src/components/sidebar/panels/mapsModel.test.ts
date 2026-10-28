@@ -1,27 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { GeoPdfJobView } from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
-import {
-  fileSubtitle,
-  geoPdfLabel,
-  geoPdfsBeingMade,
-  toposBeingMade,
-} from "./mapsModel";
-
-const geoPdf = (overrides: Partial<GeoPdfJobView>): GeoPdfJobView => ({
-  id: "g",
-  status: "completed",
-  title: null,
-  estimatedSeconds: null,
-  resultBytes: null,
-  errorMessage: null,
-  createdAt: "2026-09-10T05:00:00.000Z",
-  completedAt: null,
-  downloadUrl: null,
-  downloadExpiresAt: null,
-  syncRole: "owner",
-  ...overrides,
-});
+import { fileSubtitle, toposBeingMade } from "./mapsModel";
 
 const topo = (overrides: Partial<TopoJob>): TopoJob => ({
   id: "t",
@@ -38,36 +17,7 @@ const topo = (overrides: Partial<TopoJob>): TopoJob => ({
   ...overrides,
 });
 
-describe("what the Maps page is still making", () => {
-  it("leaves finished GeoPDFs out, and says where each of the rest has got to", () => {
-    const items = geoPdfsBeingMade([
-      geoPdf({ id: "done" }),
-      geoPdf({ id: "queued", status: "queued", title: "Grose" }),
-      geoPdf({ id: "running", status: "running", estimatedSeconds: 300 }),
-      geoPdf({
-        id: "failed",
-        status: "failed",
-        errorMessage: "Failed to launch GeoPDF job.",
-      }),
-    ]);
-    expect(items.map((item) => [item.id, item.detail, item.failed])).toEqual([
-      ["queued", "Queued", false],
-      ["running", "Making · about 5 min", false],
-      ["failed", "Failed to launch GeoPDF job.", true],
-    ]);
-  });
-
-  // A row made before the estimator existed has no number to quote, and a
-  // zero is not an estimate.
-  it("quotes no time it does not have", () => {
-    const [unknown, zero] = geoPdfsBeingMade([
-      geoPdf({ status: "running" }),
-      geoPdf({ status: "running", estimatedSeconds: 0 }),
-    ]);
-    expect(unknown.detail).toBe("Making");
-    expect(zero.detail).toBe("Making");
-  });
-
+describe("what the Sharpened areas view is still making", () => {
   it("lists topos still on their way, newest first", () => {
     const items = toposBeingMade([
       topo({
@@ -95,14 +45,7 @@ describe("what the Maps page is still making", () => {
   });
 });
 
-describe("what a finished map is called", () => {
-  it("names an untitled GeoPDF by when it was made, to the minute", () => {
-    expect(geoPdfLabel(geoPdf({ title: "Wollangambe 1:25k" }))).toBe(
-      "Wollangambe 1:25k",
-    );
-    expect(geoPdfLabel(geoPdf({}))).toMatch(/^GeoPDF · .*2026.*\d:\d\d/);
-  });
-
+describe("what a finished map says about itself", () => {
   it("gives a file's size in the phone's words, and leaves out what it does not know", () => {
     expect(
       fileSubtitle({

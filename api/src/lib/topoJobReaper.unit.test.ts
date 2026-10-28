@@ -8,7 +8,6 @@ vi.mock("../services/prisma", () => ({
       findMany: vi.fn(),
       delete: vi.fn(),
     },
-    geoPdfJob: { updateMany: vi.fn(), findMany: vi.fn() },
     notification: { create: vi.fn(), createMany: vi.fn() },
     deviceToken: { findMany: vi.fn() },
     user: { findMany: vi.fn() },
@@ -34,7 +33,6 @@ import {
   reapStuckTopoJobs,
   sweepAbandonedTopoUploads,
   expireCompletedExports,
-  expireCompletedGeoPdfJobs,
   progressStallDeadline,
   absoluteProcessingDeadline,
   isProcessingDead,
@@ -56,11 +54,6 @@ const exportFindMany = (
 ).topoExportJob.findMany;
 const exportDelete = (prisma as unknown as { topoExportJob: { delete: Mock } })
   .topoExportJob.delete;
-const geoPdfUpdateMany = (
-  prisma as unknown as { geoPdfJob: { updateMany: Mock } }
-).geoPdfJob.updateMany;
-const geoPdfFindMany = (prisma as unknown as { geoPdfJob: { findMany: Mock } })
-  .geoPdfJob.findMany;
 const ecsSend = (ecs as unknown as { send: Mock }).send;
 const s3Send = (s3 as unknown as { send: Mock }).send;
 const transaction = (prisma as unknown as { $transaction: Mock }).$transaction;
@@ -93,12 +86,10 @@ function stageByStatus(mock: Mock, rowsByStatus: Record<string, unknown[]>) {
 }
 
 // Transaction client handed to the expiry sweep's interactive callback.
-const txGeoPdfDelete = vi.fn();
 const txExecuteRaw = vi.fn();
 const txShareDeleteMany = vi.fn();
 const txClient = {
   $executeRaw: txExecuteRaw,
-  geoPdfJob: { delete: txGeoPdfDelete },
   share: { deleteMany: txShareDeleteMany },
   notification: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
 };
@@ -111,12 +102,9 @@ beforeEach(() => {
   jobFindMany.mockReset().mockResolvedValue([]);
   exportUpdateMany.mockReset().mockResolvedValue({ count: 0 });
   exportFindMany.mockReset().mockResolvedValue([]);
-  geoPdfUpdateMany.mockReset().mockResolvedValue({ count: 0 });
-  geoPdfFindMany.mockReset().mockResolvedValue([]);
   ecsSend.mockReset().mockResolvedValue({});
   s3Send.mockReset().mockResolvedValue({});
   exportDelete.mockReset().mockResolvedValue({});
-  txGeoPdfDelete.mockReset().mockResolvedValue({});
   txExecuteRaw.mockReset().mockResolvedValue(1);
   txShareDeleteMany.mockReset().mockResolvedValue({ count: 0 });
   notificationCreate.mockReset().mockResolvedValue({});
@@ -552,12 +540,8 @@ describe("reapStuckTopoJobs — legacy prod row shapes (gap 6)", () => {
       running: [{ id: "e", userId: "u1", format: "gpkg", ecsTaskArn: null }],
     });
     exportUpdateMany.mockResolvedValue({ count: 1 });
-    stageByStatus(geoPdfFindMany, {
-      running: [{ id: "g", userId: "u1", ecsTaskArn: null }],
-    });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
 
-    await expect(reapStuckTopoJobs(NOW)).resolves.toBeGreaterThanOrEqual(3);
+    await expect(reapStuckTopoJobs(NOW)).resolves.toBeGreaterThanOrEqual(2);
     expect(ecsSend).not.toHaveBeenCalled();
   });
 });
@@ -630,13 +614,11 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
     expect(count).toBe(1);
   });
 
-  it("uses each pipeline's own notification type for exports and GeoPDFs", async () => {
+  it("writes an export's own notification type, with the failure in the payload", async () => {
     stageByStatus(exportFindMany, {
       queued: [{ id: "e1", userId: "u2", format: "geotiff" }],
     });
     exportUpdateMany.mockResolvedValue({ count: 1 });
-    stageByStatus(geoPdfFindMany, { queued: [{ id: "g1", userId: "u3" }] });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
 
     await reapStuckTopoJobs(NOW);
 
@@ -646,9 +628,6 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
     const exportRow = written.find(
       (r: { userId: string }) => r.userId === "u2",
     );
-    const geoPdfRow = written.find(
-      (r: { userId: string }) => r.userId === "u3",
-    );
     // Types both clients already render, with the failure carried in the
     // payload exactly as the Python/TS workers write it.
     expect(exportRow.type).toBe("topo_export_complete");
@@ -656,8 +635,6 @@ describe("reapStuckTopoJobs — notifies the owners of reaped jobs", () => {
       status: "failed",
       format: "geotiff",
     });
-    expect(geoPdfRow.type).toBe("geo_pdf_complete");
-    expect(geoPdfRow.payload).toMatchObject({ status: "failed" });
   });
 
   it("does not abort the sweep when the notification write fails", async () => {
@@ -707,22 +684,17 @@ describe("reapStuckTopoJobs — emails the owners of reaped jobs", () => {
     }
   });
 
-  it("uses each pipeline's own subject and pref", async () => {
+  it("uses an export's own subject", async () => {
     stageByStatus(exportFindMany, {
       queued: [{ id: "e1", userId: "u1", format: "geotiff" }],
     });
     exportUpdateMany.mockResolvedValue({ count: 1 });
-    stageByStatus(geoPdfFindMany, { queued: [{ id: "g1", userId: "u1" }] });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
     userFindMany.mockResolvedValue([RECIPIENT]);
 
     await reapStuckTopoJobs(NOW);
 
     const subjects = emailSend.mock.calls.map((call) => call[0].subject);
-    expect(subjects).toEqual([
-      "Topo export failed — GEOTIFF",
-      "GeoPDF failed — Logjam",
-    ]);
+    expect(subjects).toEqual(["Topo export failed — GEOTIFF"]);
   });
 
   // The house dedup rule: mailing the READ set would double-send from two
@@ -883,157 +855,6 @@ describe("expireCompletedExports", () => {
       const count = await expireCompletedExports(NOW);
       expect(count).toBe(0);
       expect(exportFindMany).not.toHaveBeenCalled();
-    } finally {
-      liveEnv.TOPO_EXPORT_TTL_MS = original;
-    }
-  });
-});
-
-// ── reapStuckTopoJobs — geo_pdf_jobs (mirrors topo_export_jobs) ─────────────
-
-describe("reapStuckTopoJobs — geo_pdf_jobs", () => {
-  it("fails queued GeoPDF jobs older than the queued timeout, anchored on createdAt", async () => {
-    stageByStatus(geoPdfFindMany, { queued: [{ id: "q1", userId: "u1" }] });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
-
-    await reapStuckTopoJobs(NOW);
-
-    const queuedRead = geoPdfFindMany.mock.calls[0][0];
-    expect(queuedRead.where.status).toBe("queued");
-    expect(queuedRead.where.createdAt.lt).toEqual(
-      new Date(NOW.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS),
-    );
-    const queuedUpdate = geoPdfUpdateMany.mock.calls[0][0];
-    expect(queuedUpdate.where.status).toBe("queued");
-    expect(queuedUpdate.where.id).toBe("q1");
-    expect(queuedUpdate.data.status).toBe("failed");
-  });
-
-  it("selects running GeoPDF jobs on startedAt with a createdAt fallback", async () => {
-    await reapStuckTopoJobs(NOW);
-    // calls[0] is the queued-id read; calls[1] is the running select.
-    const runningWhere = geoPdfFindMany.mock.calls[1][0].where;
-    const cutoff = new Date(NOW.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS);
-    expect(runningWhere.status).toBe("running");
-    expect(runningWhere.OR).toEqual([
-      { startedAt: { lt: cutoff } },
-      { startedAt: null, createdAt: { lt: cutoff } },
-    ]);
-  });
-
-  it("force-fails overdue running GeoPDF jobs status-guarded and stops their tasks", async () => {
-    stageByStatus(geoPdfFindMany, {
-      running: [
-        { id: "g1", userId: "u1", ecsTaskArn: "arn:task/g1" },
-        { id: "g2", userId: "u1", ecsTaskArn: null },
-      ],
-    });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
-
-    const count = await reapStuckTopoJobs(NOW);
-
-    expect(geoPdfUpdateMany.mock.calls.map((call) => call[0].where.id)).toEqual(
-      ["g1", "g2"],
-    );
-    const runningUpdate = geoPdfUpdateMany.mock.calls[0][0];
-    expect(runningUpdate.where.status).toBe("running");
-    expect(ecsSend).toHaveBeenCalledTimes(1);
-    expect(ecsSend.mock.calls[0][0].input).toMatchObject({
-      task: "arn:task/g1",
-    });
-    expect(count).toBe(2);
-  });
-
-  it("includes geo_pdf_jobs counts in the total reaped", async () => {
-    stageByStatus(geoPdfFindMany, {
-      queued: ["q1", "q2", "q3", "q4"].map((id) => ({ id, userId: "u1" })),
-    });
-    geoPdfUpdateMany.mockResolvedValue({ count: 1 });
-    const count = await reapStuckTopoJobs(NOW);
-    // queued (4 claimed); the running read returns [] so nothing else runs.
-    expect(count).toBe(4);
-  });
-});
-
-// ── expireCompletedGeoPdfJobs (mirrors expireCompletedExports) ──────────────
-
-describe("expireCompletedGeoPdfJobs", () => {
-  const expiredRow = {
-    id: "geo-1",
-    userId: "u1",
-    resultKey: "exports/geo-pdf/geo-1/logjam-export.pdf",
-    resultBytes: 5678n,
-  };
-
-  it("selects only completed rows past the TTL", async () => {
-    await expireCompletedGeoPdfJobs(NOW);
-    expect(geoPdfFindMany).toHaveBeenCalledTimes(1);
-    const where = geoPdfFindMany.mock.calls[0][0].where;
-    expect(where.status).toBe("completed");
-    expect(where.completedAt.lt).toEqual(
-      new Date(NOW.getTime() - env.TOPO_EXPORT_TTL_MS),
-    );
-  });
-
-  it("deletes the S3 object, then decrements quota and deletes the row in one tx", async () => {
-    geoPdfFindMany.mockResolvedValue([expiredRow]);
-
-    const count = await expireCompletedGeoPdfJobs(NOW);
-
-    expect(count).toBe(1);
-    expect(s3Send).toHaveBeenCalledTimes(1);
-    expect(s3Send.mock.calls[0][0].input).toMatchObject({
-      Key: "exports/geo-pdf/geo-1/logjam-export.pdf",
-    });
-    expect(transaction).toHaveBeenCalledTimes(1);
-    expect(txExecuteRaw).toHaveBeenCalledTimes(1);
-    expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-1" } });
-    // Share rows are purged in the same transaction as the row delete:
-    // Share.entityId is polymorphic, so nothing cascades.
-    expect(txShareDeleteMany).toHaveBeenCalledWith({
-      where: { entityType: "geoPdfJob", entityId: { in: ["geo-1"] } },
-    });
-    expect(s3Send.mock.invocationCallOrder[0]).toBeLessThan(
-      transaction.mock.invocationCallOrder[0],
-    );
-  });
-
-  it("cleans up rows without a resultKey and skips the S3 call", async () => {
-    geoPdfFindMany.mockResolvedValue([{ ...expiredRow, resultKey: null }]);
-    const count = await expireCompletedGeoPdfJobs(NOW);
-    expect(count).toBe(1);
-    expect(s3Send).not.toHaveBeenCalled();
-    expect(txGeoPdfDelete).toHaveBeenCalledTimes(1);
-  });
-
-  it("an S3 failure skips that row but does not abort the sweep", async () => {
-    geoPdfFindMany.mockResolvedValue([
-      expiredRow,
-      {
-        ...expiredRow,
-        id: "geo-2",
-        resultKey: "exports/geo-pdf/geo-2/logjam-export.pdf",
-      },
-    ]);
-    s3Send
-      .mockRejectedValueOnce(new Error("transient"))
-      .mockResolvedValueOnce({});
-
-    const count = await expireCompletedGeoPdfJobs(NOW);
-
-    expect(count).toBe(1);
-    expect(txGeoPdfDelete).toHaveBeenCalledTimes(1);
-    expect(txGeoPdfDelete).toHaveBeenCalledWith({ where: { id: "geo-2" } });
-  });
-
-  it("TOPO_EXPORT_TTL_MS=0 disables the sweep entirely (shared with exports)", async () => {
-    const liveEnv = getEnv() as { TOPO_EXPORT_TTL_MS: number };
-    const original = liveEnv.TOPO_EXPORT_TTL_MS;
-    liveEnv.TOPO_EXPORT_TTL_MS = 0;
-    try {
-      const count = await expireCompletedGeoPdfJobs(NOW);
-      expect(count).toBe(0);
-      expect(geoPdfFindMany).not.toHaveBeenCalled();
     } finally {
       liveEnv.TOPO_EXPORT_TTL_MS = original;
     }

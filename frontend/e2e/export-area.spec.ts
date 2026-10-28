@@ -66,25 +66,3 @@ test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
     "true",
   );
 });
-
-test("Make on the GeoPDFs page after an abandoned GIS pick opens a GeoPDF form", async ({
-  page,
-}) => {
-  await openApp(page);
-  await abandonGisPick(page);
-  // A topo takes the box tool over, which leaves the rail live again.
-  // `LIDAR_JOB_COPY.make`.
-  await mapTool(page, ["Make a map", "Sharpen an area"]);
-  await page.getByRole("button", { name: "Maps", exact: true }).click();
-  const aside = page.locator("aside");
-  await aside.getByRole("radio", { name: "GeoPDFs" }).click();
-  await aside.getByRole("button", { name: /^Make/ }).first().click();
-
-  // Mutation: let `freshExportDialog` skip its key bump, and the form opens
-  // on GeoTIFF with no paper.
-  const dialog = page.locator("dialog[open]");
-  await expect(
-    dialog.getByRole("radiogroup", { name: "Paper size" }),
-  ).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "Heights" })).toHaveCount(0);
-});

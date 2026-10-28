@@ -28,7 +28,7 @@ export interface GeoPdfConfig {
 
 // ── Allowlists ────────────────────────────────────────────────────────────────
 // Single source of truth for what a GeoPdfConfig may contain. Used both to
-// validate a live render request (routes/geoPdf.ts).
+// validate a render request (Logjam Web's GeoPDF dialog and renderer).
 
 export const VALID_GEOPDF_PAPER_SIZES = new Set<string>([
   "A2",
@@ -128,37 +128,4 @@ export function validateGeoPdfConfig(input: unknown): string | null {
   }
 
   return null;
-}
-
-// Status lifecycle for an async GeoPDF render job. Mirrors ExportStatus on
-// TopoExportJob — kept as its own type so the two pipelines can diverge.
-export type GeoPdfJobStatus = "queued" | "running" | "completed" | "failed";
-
-// Server-side view of a GeoPdfJob row returned to the client. Mirrors the
-// Prisma model with serializable dates and the BigInt cast away.
-export interface GeoPdfJobView {
-  id: string;
-  status: GeoPdfJobStatus;
-  // The map title from the job config, if one was set — shown (truncated) in
-  // the generated-PDFs list. Null when the job had no title.
-  title: string | null;
-  // Adaptive processing-time estimate (seconds) computed at create. Null on
-  // legacy rows where no estimate was recorded — display falls back to a
-  // static "Generating…" label.
-  estimatedSeconds: number | null;
-  resultBytes: number | null;
-  errorMessage: string | null;
-  createdAt: string;
-  completedAt: string | null;
-  downloadUrl: string | null; // presigned, set only when status=completed
-  downloadExpiresAt: string | null;
-  // Whether this row belongs to the caller or reached them through a direct
-  // share. Same convention as the topo-job and waypoint/route delta rows: a
-  // 'shared' job is READ-ONLY, and the clients use this to withhold Share and
-  // Delete rather than rendering buttons the API answers with 403.
-  //
-  // The owner's user id is deliberately NOT exposed — the role is the whole
-  // answer, and a recipient has no business learning who owns a job from a
-  // list row.
-  syncRole: "owner" | "shared";
 }

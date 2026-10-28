@@ -84,15 +84,12 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
   page.on("request", (r) => {
     if (made) after.push(new URL(r.url()).origin);
   });
-  // The print's extent, title and markers would reach the API only in a
-  // POST; the GeoPDFs panel's list (a GET) still loads until it is removed.
+  // The print's extent, title and markers must not reach the API: no request
+  // of any method to a /geo-pdf path (the job routes and their list are gone).
   const geoPdfPosts: string[] = [];
   page.on("request", (r) => {
-    if (
-      r.method() === "POST" &&
-      new URL(r.url()).pathname.startsWith("/geo-pdf")
-    )
-      geoPdfPosts.push(r.url());
+    if (new URL(r.url()).pathname.startsWith("/geo-pdf"))
+      geoPdfPosts.push(`${r.method()} ${r.url()}`);
   });
 
   await page.goto("/");

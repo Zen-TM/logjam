@@ -74,7 +74,6 @@ export type ThemeScheme = {
 export type NotificationPreferences = {
   topoEmail: boolean;
   exportEmail: boolean;
-  geoPdfEmail: boolean;
   friendRequestInApp: boolean;
   shareInApp: boolean;
 };
@@ -82,7 +81,6 @@ export type NotificationPreferences = {
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   topoEmail: true,
   exportEmail: true,
-  geoPdfEmail: true,
   friendRequestInApp: true,
   shareInApp: true,
 };
@@ -92,7 +90,6 @@ export type UserUiPreferences = {
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   placeCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
-  autoDownloadGeoPdfs: boolean;
   importMergePolicy?: import("./mergePlace.js").PlaceMergePolicy;
   /**
    * Whether saving a copy of a shared place brings that place's place-level
@@ -130,7 +127,6 @@ export function isNotificationPreferences(
   for (const key of [
     "topoEmail",
     "exportEmail",
-    "geoPdfEmail",
     "friendRequestInApp",
     "shareInApp",
   ] as const) {
@@ -155,10 +151,6 @@ function normalizeNotificationPreferences(
       typeof prefs.exportEmail === "boolean"
         ? prefs.exportEmail
         : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
-    geoPdfEmail:
-      typeof prefs.geoPdfEmail === "boolean"
-        ? prefs.geoPdfEmail
-        : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
     friendRequestInApp:
       typeof prefs.friendRequestInApp === "boolean"
         ? prefs.friendRequestInApp
@@ -375,10 +367,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     );
     const placeCustomFields = normalizeCustomFieldDefs(prefs.placeCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
-    const autoDownloadGeoPdfs =
-      typeof prefs.autoDownloadGeoPdfs === "boolean"
-        ? prefs.autoDownloadGeoPdfs
-        : true;
     const importMergePolicy = normalizeImportMergePolicy(
       prefs.importMergePolicy,
     );
@@ -391,7 +379,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       tripLogCustomFields,
       placeCustomFields,
       notifications,
-      autoDownloadGeoPdfs,
       copyPlaceMedia,
       slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
     };
@@ -404,7 +391,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     tripLogCustomFields: [],
     placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
-    autoDownloadGeoPdfs: true,
     copyPlaceMedia: true,
     slopeBands: defaultSlopeBands(),
   };

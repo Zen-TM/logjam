@@ -30,14 +30,13 @@ const SHARED_ITEM_NOUN: Record<string, string> = {
   waypoint: "a waypoint",
   route: "a route",
   topoJob: "a LiDAR topo",
-  geoPdfJob: "a GeoPDF",
 };
 
 /**
  * Every type a Notification row is stored with, one declaration. The labels
  * below branch on them, the dev seed writes one row of each
  * (api/src/lib/seedCoverage.unit.test.ts), and the label test checks each has a
- * branch. `bulk_shared` and `geo_pdf_failed` are push-only titles and never rows.
+ * branch. `bulk_shared` is a push-only title and never a row.
  */
 export const NOTIFICATION_TYPES = [
   "friend_request",
@@ -49,7 +48,6 @@ export const NOTIFICATION_TYPES = [
   "topo_failed",
   "topo_export_complete",
   "topo_export_skipped",
-  "geo_pdf_complete",
   "egress_quota_warning",
   "egress_quota_exceeded",
   "announcement",
@@ -137,14 +135,6 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: "Auto-export didn't run",
         ...(str(p.reason) && { detail: str(p.reason)! }),
       };
-    case "geo_pdf_complete":
-      if (p.status === "failed") {
-        return {
-          text: "Couldn't create GeoPDF",
-          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
-        };
-      }
-      return { text: "GeoPDF ready" };
     // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
     // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
@@ -195,7 +185,6 @@ export type NotificationKind =
   | "people"
   | "topo"
   | "export"
-  | "geoPdf"
   | "message"
   | "problem";
 
@@ -230,8 +219,6 @@ export function notificationKind(n: TNotification): NotificationKind {
       return failed ? "problem" : "export";
     case "topo_export_skipped":
       return "problem";
-    case "geo_pdf_complete":
-      return failed ? "problem" : "geoPdf";
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
