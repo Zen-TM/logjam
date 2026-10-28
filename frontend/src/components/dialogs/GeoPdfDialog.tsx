@@ -189,6 +189,9 @@ const DEFAULT_EXTENT_STATE: ExtentState = {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
+const RENDER_FAILED =
+  "Couldn't make the GeoPDF. Check your connection, or try another base map.";
+
 const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
   preparing: "Getting the map ready.",
   drawing: "Drawing the map.",
@@ -762,15 +765,11 @@ function GeoPdfDialog({
       } else if (result.reason === "too-large") {
         setError(GEOPDF_TOO_LARGE);
       } else if (result.reason === "failed") {
-        setError(
-          "Couldn't make the GeoPDF. Check your connection, or try another base map.",
-        );
+        setError(RENDER_FAILED);
       }
     } catch (e) {
       console.error(e);
-      setError(
-        "Couldn't make the GeoPDF. Check your connection, or try another base map.",
-      );
+      setError(RENDER_FAILED);
     } finally {
       renderAbort.current = null;
       setProgress(null);
@@ -858,9 +857,7 @@ function GeoPdfDialog({
                   : guard.requestClose
               }
               disabled={generating && !progress}
-              disabledReason={
-                gisFormat ? "Starting the export…" : "Making your GeoPDF…"
-              }
+              disabledReason="Starting the export…"
             >
               Cancel
             </Button>
@@ -884,8 +881,8 @@ function GeoPdfDialog({
                 label="Making your GeoPDF"
                 value={progress.fraction * 100}
               />
-              <p className={classes.note} role="status">
-                {PHASE_TEXT[progress.phase]}{" "}
+              <p className={classes.note}>
+                <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
                 {Math.round(progress.fraction * 100)}%
               </p>
             </div>

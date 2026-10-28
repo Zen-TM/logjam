@@ -842,7 +842,8 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     await vi.waitFor(() =>
       expect(bar.getAttribute("aria-valuenow")).toBe("25"),
     );
-    expect(screen.getByRole("status").textContent).toContain("25%");
+    // The live region holds only the phase; the percent is the bar's value.
+    expect(screen.getByRole("status").textContent).toBe("Drawing the map.");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await vi.waitFor(() => expect(signal?.aborted).toBe(true));
@@ -874,6 +875,54 @@ describe("GeoPdfDialog, rendering in this tab", () => {
         "Couldn't make the GeoPDF. Check your connection, or try another base map.",
       ),
     ).toBeTruthy();
+  });
+
+  const jobOf = (id: string, syncRole: "owner" | "shared", createdAt: string) =>
+    ({
+      jobId: id,
+      syncRole,
+      createdAt,
+      footprint: null,
+      layers: [
+        { name: "vegetation", format: "raster", pmtilesUrl: `https://v/${id}` },
+      ],
+      sharpened: { id: `${id}-area` },
+    }) as unknown as CompletedTopoJob;
+
+  // Mutations: pass every job's vegetation (the shared job's leaks into the
+  // PDF); pass no areas (a sharee's sharpened terrain is dropped).
+  it("draws only the user's own vegetation, but every readable sharpened area", async () => {
+    make({
+      open: true,
+      completedTopoJobs: [
+        jobOf("mine", "owner", "2026-01-01"),
+        jobOf("theirs", "shared", "2026-01-02"),
+      ],
+    });
+    await vi.waitFor(() => expect(rendered()).toHaveLength(1));
+    const input = rendered()[0]!;
+    expect(input.vegetationUrls).toEqual(["https://v/mine"]);
+    expect(input.areas.map((a) => (a as { id: string }).id)).toEqual([
+      "mine-area",
+      "theirs-area",
+    ]);
+  });
+
+  // Mutation: drop `!topoJobsLoaded` from the button's busy term, and a render
+  // starts before the sharpened areas are known.
+  it("waits for the completed jobs before rendering", async () => {
+    const props = { pendingExtent: extent, pendingScale: 50000 };
+    const { rerender } = render(
+      dialog({ open: true, topoJobsLoaded: false, ...props }),
+    );
+    const makeIt = screen.getByRole("button", { name: "Make it" });
+    expect(makeIt.getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(makeIt);
+    expect(rendered()).toHaveLength(0);
+
+    rerender(dialog({ open: true, topoJobsLoaded: true, ...props }));
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => expect(rendered()).toHaveLength(1));
   });
 
   it("aborts a render when the dialog closes", async () => {
