@@ -51,6 +51,7 @@ import {
   terrainReadKey,
   type TerrainTileRead,
 } from "./terrain";
+import type { TileCache } from "./cache";
 import { planTerrainBlocks, printGeometry } from "./plan";
 import { bandRows, type TerrainBand } from "./terrainJobs";
 import { TerrainPool } from "./terrainPool";
@@ -107,6 +108,8 @@ export type RenderEnv = {
   onLimits: (limits: CanvasLimits) => void;
   onProgress: (progress: GeoPdfProgress) => void;
   debug?: RenderDebug;
+  /** The persistent tile cache, where this browser has one. */
+  cache?: TileCache | null;
 };
 
 export type RenderOutput = {
@@ -360,7 +363,10 @@ async function renderInner(
   const archiveAt = (url: string) => {
     let a = archives.get(url);
     if (!a) {
-      a = openArchive(url, signal);
+      a = openArchive(url, signal, {
+        store: env.cache ?? null,
+        origin: input.origin,
+      });
       archives.set(url, a);
     }
     return a;
@@ -1098,6 +1104,9 @@ async function renderInner(
   phase = "finishing";
   report(true);
   const pdfStart = performance.now();
+  // The cache keeps its index while the PDF is written; the client ends the
+  // worker as soon as the PDF is back.
+  const cacheFlushed = env.cache?.flush();
   const pdf = await buildGeoPdf({
     pageWidthPt: widthPt,
     pageHeightPt: heightPt,
@@ -1108,6 +1117,7 @@ async function renderInner(
     extent,
     title: config.elements.title,
   });
+  await cacheFlushed;
   timings.pdfMs = performance.now() - pdfStart;
   finished = 1;
   report(true);

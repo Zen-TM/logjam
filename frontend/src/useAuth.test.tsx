@@ -20,10 +20,13 @@ vi.mock("aws-amplify/auth", () => ({
   resetPassword: vi.fn(),
   confirmResetPassword: vi.fn(),
 }));
+const setSessionExpiredHandler = vi.hoisted(() => vi.fn());
+const clearTileCache = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("./placeUtils", () => ({
   apiFetch: vi.fn(),
-  setSessionExpiredHandler: vi.fn(),
+  setSessionExpiredHandler,
 }));
+vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
 vi.mock("./tripDraft", () => ({ clearTripDraft }));
 
 import { useAuth } from "./useAuth";
@@ -55,6 +58,42 @@ describe("signOut", () => {
     expect(amplify.signOut).toHaveBeenCalledWith({ global: false });
     expect(reload).toHaveBeenCalledOnce();
   });
+
+  // The GeoPDF tile cache shows which areas a user printed, so it goes with
+  // the session down every exit. Mutation: drop `clearTileCache()` from
+  // endSession and the first test goes red; from the expiry handler, the
+  // second; from the mount check, the third.
+  it("empties the GeoPDF tile cache before it reloads", async () => {
+    const { result } = await signedIn();
+    reload.mockImplementation(() =>
+      expect(clearTileCache).toHaveBeenCalledOnce(),
+    );
+    await act(() => result.current.signOut());
+    expect(clearTileCache).toHaveBeenCalledOnce();
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("empties it when the session expires mid-use", async () => {
+    await signedIn();
+    const expire = setSessionExpiredHandler.mock.calls
+      .map(([handler]) => handler)
+      .find((handler) => typeof handler === "function");
+    expect(expire).toBeTypeOf("function");
+    act(() => expire());
+    expect(clearTileCache).toHaveBeenCalledOnce();
+  });
+
+  it("empties it when the tab opens with no session", async () => {
+    amplify.fetchAuthSession.mockResolvedValue({ tokens: undefined });
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(clearTileCache).toHaveBeenCalledOnce();
+  });
+
+  it("keeps it while signed in", async () => {
+    await signedIn();
+    expect(clearTileCache).not.toHaveBeenCalled();
+  });
 });
 
 describe("signOutEverywhere", () => {
@@ -84,6 +123,7 @@ describe("signOutEverywhere", () => {
     });
     expect(amplify.signOut).toHaveBeenCalledWith({ global: true });
     expect(clearTripDraft).toHaveBeenCalledOnce();
+    expect(clearTileCache).toHaveBeenCalledOnce();
     expect(reload).toHaveBeenCalledOnce();
   });
 });

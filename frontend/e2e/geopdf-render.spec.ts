@@ -78,12 +78,14 @@ async function stubNetwork(
     const m = /bytes=(\d+)-(\d+)/.exec(
       route.request().headers()["range"] ?? "",
     );
-    if (!m) return route.fulfill({ status: 200, body });
+    // A version, as CloudFront serves one: the persistent cache files tiles under it.
+    const etag = `"fixture-${body.length}"`;
+    if (!m) return route.fulfill({ status: 200, headers: { etag }, body });
     const a = Number(m[1]);
     const b = Math.min(Number(m[2]), body.length - 1);
     await route.fulfill({
       status: 206,
-      headers: { "content-range": `bytes ${a}-${b}/${body.length}` },
+      headers: { "content-range": `bytes ${a}-${b}/${body.length}`, etag },
       body: body.subarray(a, b + 1),
     });
   });
@@ -294,6 +296,40 @@ test.describe("the in-browser GeoPDF renderer", () => {
     for (let i = 1; i < r.progress.length; i++)
       expect(r.progress[i]!).toBeGreaterThanOrEqual(r.progress[i - 1]!);
     expect(r.progress.at(-1)).toBe(1);
+  });
+
+  // The dialog's prefetch plans its reads with the renderer's own planning
+  // code. Mutation: plan only the top rows of the map (the `whole` span in
+  // plan.ts's `statewideReads`): the render then asks the network for tiles
+  // the prefetch did not keep.
+  test("a render after a prefetch asks the network for the archive headers only", async ({
+    page,
+  }) => {
+    const seen = await stubNetwork(page);
+    await openBench(page);
+    await page.evaluate(() => window.geoPdfBench.prefetch("contours"));
+    const afterPrefetch = seen.archives;
+    // Heights are not in the contours scenario: slope and contours, each opened once.
+    expect(afterPrefetch).toBeGreaterThan(3);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.run("contours", { debug: { maxStripPx: 700_000 } }),
+    );
+    expect(r.ok).toBe(true);
+    expect(seen.archives - afterPrefetch).toBe(2);
+  });
+
+  test("the second render of the same area is warm: only headers cross the network", async ({
+    page,
+  }) => {
+    const seen = await stubNetwork(page);
+    await openBench(page);
+    const first = await page.evaluate(() => window.geoPdfBench.run("shade"));
+    expect(first.ok).toBe(true);
+    const cold = seen.archives;
+    const second = await page.evaluate(() => window.geoPdfBench.run("shade"));
+    expect(second.ok).toBe(true);
+    // Heights and slope, one header each.
+    expect(seen.archives - cold).toBe(2);
   });
 
   test("the PDF parses as a GeoPDF with the extent that was asked for", async ({

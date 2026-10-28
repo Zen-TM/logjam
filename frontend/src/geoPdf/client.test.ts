@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GeoPdfRenderInput } from "./types";
-import { runGeoPdfRender, WATCHDOG_MS } from "./client";
+import { prefetchGeoPdf, runGeoPdfRender, WATCHDOG_MS } from "./client";
 
 const input = {
   config: { elements: {} },
@@ -96,5 +96,39 @@ describe("runGeoPdfRender", () => {
     await vi.advanceTimersByTimeAsync(2000);
     await expect(result).resolves.toEqual({ ok: false, reason: "failed" });
     expect(made[0]!.terminate).toHaveBeenCalled();
+  });
+});
+
+describe("prefetchGeoPdf", () => {
+  const setConnection = (saveData: boolean | undefined) =>
+    vi.stubGlobal("navigator", { connection: { saveData } });
+
+  // Mutation: drop the `saveData` test in client.ts, and a person who asked
+  // for less data gets a background download.
+  it("does nothing when the browser asks for less data", () => {
+    stubWorker();
+    setConnection(true);
+    const onEnd = vi.fn();
+    prefetchGeoPdf(input, onEnd)();
+    expect(made).toHaveLength(0);
+    expect(onEnd).toHaveBeenCalled();
+  });
+
+  it("starts a worker with the input, and ending it ends the worker", () => {
+    stubWorker();
+    setConnection(false);
+    const stop = prefetchGeoPdf(input);
+    expect(made).toHaveLength(1);
+    expect(made[0]!.postMessage).toHaveBeenCalledWith({ input });
+    stop();
+    expect(made[0]!.terminate).toHaveBeenCalled();
+  });
+
+  it("is quiet when no worker can be made", () => {
+    stubWorker({ construct: new Error("blocked") });
+    setConnection(undefined);
+    const onEnd = vi.fn();
+    expect(() => prefetchGeoPdf(input, onEnd)()).not.toThrow();
+    expect(onEnd).toHaveBeenCalled();
   });
 });

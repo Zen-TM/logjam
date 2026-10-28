@@ -15,7 +15,7 @@ import {
   type GeoPdfConfig,
 } from "@logjam/shared";
 import { PMTiles } from "pmtiles";
-import { runGeoPdfRender } from "./client";
+import { prefetchGeoPdf, runGeoPdfRender } from "./client";
 import { planStrips } from "./strips";
 import type { RenderDebug, RenderPixels, RenderTimings } from "./types";
 
@@ -120,6 +120,17 @@ function inputFor(config: GeoPdfConfig) {
     vegetationUrls: [],
     origin: location.origin,
   };
+}
+
+/** The dialog's background prefetch for a scenario: resolves when it ends. */
+async function prefetch(name: string): Promise<number> {
+  const scenario = name === "a3" ? await a3Scenario() : SCENARIOS[name];
+  if (!scenario) throw new Error("unknown scenario");
+  const start = performance.now();
+  await new Promise<void>((done) => {
+    prefetchGeoPdf(inputFor(scenario), done);
+  });
+  return performance.now() - start;
 }
 
 async function run(
@@ -345,6 +356,7 @@ declare global {
   interface Window {
     geoPdfBench: {
       run: typeof run;
+      prefetch: typeof prefetch;
       seamCheck: typeof seamCheck;
       poolCheck: typeof poolCheck;
       extentAtDemTileEdge: typeof extentAtDemTileEdge;
@@ -354,6 +366,7 @@ declare global {
 }
 window.geoPdfBench = {
   run,
+  prefetch,
   seamCheck,
   poolCheck,
   extentAtDemTileEdge,

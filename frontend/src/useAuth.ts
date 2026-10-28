@@ -12,6 +12,7 @@ import {
 import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
+import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
@@ -48,10 +49,17 @@ export function useAuth() {
         if (session.tokens?.idToken) {
           setState("authenticated");
         } else {
+          // Whoever was here last is signed out, however it came about (a
+          // session that lapsed while the tab was shut): their GeoPDF tiles
+          // go with it.
+          void clearTileCache();
           setState("signIn");
         }
       })
-      .catch(() => setState("signIn"));
+      .catch(() => {
+        void clearTileCache();
+        setState("signIn");
+      });
   }, []);
 
   // Listen for mid-session token-refresh failures from apiFetch. When the
@@ -61,6 +69,7 @@ export function useAuth() {
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     setSessionExpiredHandler(() => {
+      void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;
         setError("Your session has expired. Please sign in again.");
@@ -213,6 +222,8 @@ export function useAuth() {
     // root AGENTS.md). Cleared before the network call so a signOut failure
     // can't strand it.
     clearTripDraft();
+    // The GeoPDF tile cache shows which areas were printed: same line.
+    await clearTileCache();
     // amplifySignOut can reject (storage error, network hiccup during global
     // revoke, an Amplify internal error) — without the try/catch, the
     // rejection propagates into an onClick handler that ignores promises, so

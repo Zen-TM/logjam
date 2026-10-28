@@ -13,11 +13,15 @@ import { RootErrorBoundary } from "./RootErrorBoundary";
 const mocks = vi.hoisted(() => ({
   signOut: vi.fn(async () => {}),
   clearTripDraft: vi.fn(),
+  clearTileCache: vi.fn(async () => {}),
   reload: vi.fn(),
 }));
 
 vi.mock("aws-amplify/auth", () => ({ signOut: mocks.signOut }));
 vi.mock("../../tripDraft", () => ({ clearTripDraft: mocks.clearTripDraft }));
+vi.mock("../../geoPdf/cache", () => ({
+  clearTileCache: mocks.clearTileCache,
+}));
 
 function Thrower(): never {
   throw new Error("render exploded");
@@ -26,6 +30,7 @@ function Thrower(): never {
 beforeEach(() => {
   mocks.signOut.mockClear();
   mocks.clearTripDraft.mockClear();
+  mocks.clearTileCache.mockClear();
   mocks.reload.mockClear();
   // jsdom cannot navigate: give the recovery verbs somewhere to land.
   Object.defineProperty(window, "location", {
@@ -87,6 +92,8 @@ describe("RootErrorBoundary", () => {
     // The draft must not outlive the session down ANY exit, and this exit
     // bypasses useAuth — which is why it repeats the clear.
     await vi.waitFor(() => expect(mocks.clearTripDraft).toHaveBeenCalled());
+    // Mutation: drop the clearTileCache call in handleSignOut.
+    await vi.waitFor(() => expect(mocks.clearTileCache).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalled());
   });

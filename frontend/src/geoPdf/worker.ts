@@ -1,5 +1,6 @@
 // The render worker's entry: one render per worker. The client terminates it
 // to cancel, so nothing here listens for a cancel.
+import { tileCache } from "./cache";
 import { renderGeoPdf, TooLarge } from "./render";
 import type { WorkerMessage, WorkerRequest } from "./types";
 
@@ -16,6 +17,7 @@ scope.onmessage = async (e) => {
       signal: new AbortController().signal,
       limits,
       debug,
+      cache: tileCache(),
       onLimits: (l) => scope.postMessage({ type: "limits", limits: l }),
       onProgress: (progress) =>
         scope.postMessage({ type: "progress", progress }),

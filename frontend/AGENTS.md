@@ -18,6 +18,11 @@
   (`src/consent.ts`) as its `enabled` argument, never `authenticated`, or data
   loads behind the gate.
 - **A date-only value** (stored UTC midnight) formats with `timeZone: "UTC"`.
+- **Every sign-out path clears what the browser kept of a user's work:** the
+  trip draft and the GeoPDF tile cache (`geoPdf/cache.ts`). The paths are
+  `endSession` and the session-expired handler in `useAuth.ts`, and
+  `RootErrorBoundary`; a new store of the kind joins all three. Guards:
+  `useAuth.test.tsx`, `RootErrorBoundary.test.tsx`.
 
 ## Testing
 

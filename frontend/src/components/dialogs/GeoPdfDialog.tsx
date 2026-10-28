@@ -198,6 +198,8 @@ const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
   finishing: "Putting the PDF together.",
 };
 
+/** How long the area, scale and layers stand still before tiles are prefetched. */
+const PREFETCH_AFTER_MS = 1000;
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
 
 function GeoPdfDialog({
@@ -680,6 +682,74 @@ function GeoPdfDialog({
     }
   };
 
+  // What a GeoPDF draws over its base sheet. A hillshade chosen on another
+  // sheet is kept, not drawn over imagery.
+  const printedOverlays = useMemo(
+    () =>
+      [...overlays]
+        .filter(
+          (id) =>
+            id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer),
+        )
+        .map((id) =>
+          id.startsWith("master-") ? id.slice("master-".length) : id,
+        ),
+    [overlays, selectedBaseLayer],
+  );
+
+  // Warm the persistent tile cache while the dialog is open: once the area,
+  // scale and layers have stood still for a second, the statewide tiles this
+  // print reads are fetched in the background, so Make it often starts warm.
+  // It stops the moment anything changes, Make it is pressed or the dialog
+  // closes, so it never competes with a render. Never a third-party tile.
+  const stopPrefetch = useRef<(() => void) | null>(null);
+  const prefetching =
+    open && format === "geopdf" && !generating && extentValid && !tooLarge;
+  useEffect(() => {
+    if (!prefetching) return;
+    const timer = setTimeout(() => {
+      loadGeoPdfClient()
+        .then((client) => {
+          stopPrefetch.current = client.prefetchGeoPdf({
+            config: {
+              paperSize: extentState.paperSize,
+              orientation: extentState.orientation,
+              ...(extentState.customRatio
+                ? { customRatio: extentState.customRatio }
+                : {}),
+              extent: {
+                north: extentState.north,
+                south: extentState.south,
+                east: extentState.east,
+                west: extentState.west,
+              },
+              scale: extentState.scale,
+              baseLayer: selectedBaseLayer,
+              overlays: printedOverlays,
+              elements: { compass: false, scaleText: false, scaleBar: false },
+            },
+            slopeBands,
+            areas: completedTopoJobs.flatMap((job) => job.sharpened ?? []),
+            vegetationUrls: [],
+            origin: location.origin,
+          });
+        })
+        .catch(() => {});
+    }, PREFETCH_AFTER_MS);
+    return () => {
+      clearTimeout(timer);
+      stopPrefetch.current?.();
+      stopPrefetch.current = null;
+    };
+  }, [
+    prefetching,
+    extentState,
+    selectedBaseLayer,
+    printedOverlays,
+    slopeBands,
+    completedTopoJobs,
+  ]);
+
   const handleGenerate = useCallback(async () => {
     if (
       !extentValid ||
@@ -692,6 +762,9 @@ function GeoPdfDialog({
       setError("A field below needs fixing first.");
       return;
     }
+    // A prefetch must not share the link with the render it was meant to help.
+    stopPrefetch.current?.();
+    stopPrefetch.current = null;
     setGenerating(true);
     setError(null);
     const config: GeoPdfConfig = {
@@ -708,15 +781,7 @@ function GeoPdfDialog({
       },
       scale: extentState.scale,
       baseLayer: selectedBaseLayer,
-      // A hillshade chosen on another sheet is kept, not drawn over imagery.
-      overlays: [...overlays]
-        .filter(
-          (id) =>
-            id !== "hillshade" || !hillshadeShadowedHere(selectedBaseLayer),
-        )
-        .map((id) =>
-          id.startsWith("master-") ? id.slice("master-".length) : id,
-        ),
+      overlays: printedOverlays,
       elements: {
         ...(titleEnabled ? { title: titleText } : {}),
         compass: compassEnabled,
@@ -778,7 +843,7 @@ function GeoPdfDialog({
   }, [
     extentState,
     selectedBaseLayer,
-    overlays,
+    printedOverlays,
     titleEnabled,
     titleText,
     compassEnabled,

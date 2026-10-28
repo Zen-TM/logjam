@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { signOut } from "aws-amplify/auth";
+import { clearTileCache } from "../../geoPdf/cache";
 import { clearTripDraft } from "../../tripDraft";
 import BrandMark from "../brand/BrandMark";
 import { Button } from "../../ui";
@@ -43,6 +44,7 @@ export class RootErrorBoundary extends Component<Props, State> {
     // This is a second sign-out path that bypasses useAuth, so it repeats the
     // draft clear — a draft must not outlive the session down *any* exit.
     clearTripDraft();
+    await clearTileCache();
     try {
       await signOut();
     } catch (err) {
