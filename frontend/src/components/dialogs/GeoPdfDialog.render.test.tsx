@@ -17,6 +17,8 @@ import {
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
 import { apiFetch } from "../../placeUtils";
+import type { GeoPdfProgress, GeoPdfRenderInput } from "../../geoPdf/types";
+import { downloadBlob } from "../../download";
 import GeoPdfDialog from "./GeoPdfDialog";
 import { GEOPDF_SETTINGS_KEY } from "./geoPdfSettings";
 import type { TBbox } from "../map/Map";
@@ -27,6 +29,24 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   apiFetch: vi.fn(async () => ({})),
 }));
+
+// The renderer is its own chunk and needs a worker; tests drive its answer.
+const renderGeoPdf = vi.hoisted(() => vi.fn());
+vi.mock("./loadGeoPdfClient", () => ({
+  loadGeoPdfClient: async () => ({ renderGeoPdf }),
+}));
+vi.mock("../../download", () => ({ downloadBlob: vi.fn() }));
+type RenderOpts = {
+  signal?: AbortSignal;
+  onProgress?: (p: GeoPdfProgress) => void;
+};
+const okResult = {
+  ok: true as const,
+  pdf: new Blob(["%PDF"]),
+  fileName: "logjam-geopdf.pdf",
+};
+const rendered = () =>
+  renderGeoPdf.mock.calls.map(([input]) => input as GeoPdfRenderInput);
 
 // Map.tsx pulls in maplibre and a Vite virtual module; the dialog reads only
 // its base-layer list.
@@ -63,10 +83,14 @@ afterEach(() => {
   cleanup();
   localStorage.clear();
   vi.mocked(apiFetch).mockClear();
+  renderGeoPdf.mockReset();
+  renderGeoPdf.mockResolvedValue(okResult);
+  vi.mocked(downloadBlob).mockClear();
 });
 
 function dialog({
   open,
+  onClose = () => {},
   onSelectOnMap = () => {},
   ...props
 }: {
@@ -75,6 +99,8 @@ function dialog({
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
   completedTopoJobs?: CompletedTopoJob[];
+  topoJobsLoaded?: boolean;
+  onClose?: () => void;
   areaSeed?: TBbox | null;
   sharpenedAreas?: SharpenedArea[];
   onPickArea?: () => void;
@@ -85,13 +111,14 @@ function dialog({
     <ToastProvider>
       <GeoPdfDialog
         open={open}
-        onClose={() => {}}
+        onClose={onClose}
         onSelectOnMap={onSelectOnMap}
         pendingExtent={null}
         pendingScale={null}
         activeLayerId="six-topo"
         terrainLayers={TERRAIN_LAYER_DEFAULTS}
         completedTopoJobs={[]}
+        slopeBands={[]}
         {...props}
       />
     </ToastProvider>
@@ -122,11 +149,7 @@ describe("GeoPdfDialog, across a Select on map round trip", () => {
 
 const paper = (name: string) => screen.getByRole("radio", { name });
 const extent: TBbox = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
-const posted = () =>
-  vi
-    .mocked(apiFetch)
-    .mock.calls.filter(([path]) => path === "/geo-pdf")
-    .map(([, init]) => (init as { body: unknown }).body);
+const posted = () => rendered().map((input) => input.config);
 
 // The last settings come back, and only they. Mutations: store the whole
 // config (the title and extent land in localStorage); stop reading it back on
@@ -461,12 +484,8 @@ describe("GeoPdfDialog, the Terrain layers", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await vi.waitFor(() => {
-      const post = vi
-        .mocked(apiFetch)
-        .mock.calls.find(([path]) => path === "/geo-pdf");
-      expect(post).toBeTruthy();
-      const body = (post![1] as { body: { overlays: string[] } }).body;
-      expect(body.overlays).not.toContain("hillshade");
+      expect(rendered()).toHaveLength(1);
+      expect(rendered()[0]!.config.overlays).not.toContain("hillshade");
     });
   });
 });
@@ -775,5 +794,97 @@ describe("GeoPdfDialog, switching Coordinates", () => {
         withEdges();
       }),
     ).toEqual([]);
+  });
+});
+
+// Make it renders in this tab. Mutations: POST /geo-pdf again; let Cancel close
+// the dialog or skip `abort()`; save settings or download on a failed render.
+describe("GeoPdfDialog, rendering in this tab", () => {
+  const make = (props: Parameters<typeof dialog>[0] = { open: true }) => {
+    render(dialog({ pendingExtent: extent, pendingScale: 50000, ...props }));
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+  };
+
+  it("downloads, saves the settings and closes, with no /geo-pdf request", async () => {
+    const onClose = vi.fn();
+    make({ open: true, onClose });
+    await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(downloadBlob).toHaveBeenCalledWith(
+      okResult.pdf,
+      "logjam-geopdf.pdf",
+    );
+    expect(localStorage.getItem(GEOPDF_SETTINGS_KEY)).not.toBeNull();
+    expect(
+      vi.mocked(apiFetch).mock.calls.filter(([p]) => p === "/geo-pdf"),
+    ).toEqual([]);
+  });
+
+  it("shows progress, and Cancel aborts it and keeps the dialog open", async () => {
+    const onClose = vi.fn();
+    let signal: AbortSignal | undefined;
+    renderGeoPdf.mockImplementation(
+      (_input: unknown, opts: RenderOpts) =>
+        new Promise((resolve) => {
+          signal = opts.signal;
+          opts.onProgress?.({
+            phase: "drawing",
+            done: 1,
+            total: 4,
+            fraction: 0.25,
+          });
+          opts.signal?.addEventListener("abort", () =>
+            resolve({ ok: false, reason: "cancelled" }),
+          );
+        }),
+    );
+    make({ open: true, onClose });
+    const bar = await screen.findByRole("progressbar");
+    await vi.waitFor(() =>
+      expect(bar.getAttribute("aria-valuenow")).toBe("25"),
+    );
+    expect(screen.getByRole("status").textContent).toContain("25%");
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("progressbar")).toBeNull(),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(downloadBlob).not.toHaveBeenCalled();
+  });
+
+  it("says so when the map is too large, and when the render fails", async () => {
+    renderGeoPdf.mockResolvedValueOnce({
+      ok: false,
+      reason: "too-large",
+    });
+    make();
+    expect(await screen.findByText(GEOPDF_TOO_LARGE)).toBeTruthy();
+    expect(downloadBlob).not.toHaveBeenCalled();
+    expect(localStorage.getItem(GEOPDF_SETTINGS_KEY) ?? "null").toBe("null");
+
+    renderGeoPdf.mockResolvedValueOnce({
+      ok: false,
+      reason: "failed",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(
+      await screen.findByText(
+        "Couldn't make the GeoPDF. Check your connection, or try another base map.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("aborts a render when the dialog closes", async () => {
+    let signal: AbortSignal | undefined;
+    renderGeoPdf.mockImplementation((_i: unknown, opts: RenderOpts) => {
+      signal = opts.signal;
+      return new Promise(() => {});
+    });
+    make();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    cleanup();
+    expect(signal?.aborted).toBe(true);
   });
 });

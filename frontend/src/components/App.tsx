@@ -23,12 +23,7 @@ import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
-import type {
-  TFilters,
-  TPlace,
-  TPlaceType,
-  GeoPdfJobView,
-} from "../placeUtils";
+import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
 import type { ScopedCustomFieldDef, StandaloneFile } from "@logjam/shared";
 import {
   PANEL_TITLES,
@@ -830,8 +825,7 @@ function App() {
   // GeoPDF jobs are also polled here (in addition to the sidebar panel) so
   // auto-download works even when the Generated PDFs panel is closed. The hook
   // self-throttles: it only polls while a job is queued/running.
-  const { jobs: geoPdfJobs, refetch: refetchGeoPdfJobs } =
-    useGeoPdfJobs(loadsUserData);
+  const { jobs: geoPdfJobs } = useGeoPdfJobs(loadsUserData);
 
   // Auto-download exports that complete during this session. Snapshot the
   // exports already completed on first successful fetch so we never download a
@@ -964,20 +958,6 @@ function App() {
       }
     },
     [refetchCurrentUser, toast],
-  );
-
-  const handleGeoPdfJobQueued = useCallback(
-    (job: GeoPdfJobView) => {
-      setGeoPdfJobsRefetch((n) => n + 1);
-      // Arm for auto-download if the user hasn't disabled it (default on).
-      if (currentUser?.uiPreferences?.autoDownloadGeoPdfs ?? true) {
-        armedGeoPdfJobIds.current.add(job.id);
-      }
-      // Kick the App-level poller so it picks up the freshly queued job and starts
-      // polling toward completion (the panel may be closed).
-      refetchGeoPdfJobs();
-    },
-    [currentUser, refetchGeoPdfJobs],
   );
 
   // Capture completion-email deep links on mount (?topoJob / ?export /
@@ -1496,7 +1476,8 @@ function App() {
         mapCenter={mapCenter}
         places={places}
         sharedPlaces={sharedPlaces}
-        onJobQueued={handleGeoPdfJobQueued}
+        slopeBands={slopeBands.drawn}
+        topoJobsLoaded={completedTopoJobsLoaded}
         areaSeed={exportAreaSeed}
         onPickArea={() => {
           setShowGeoPdf(false);

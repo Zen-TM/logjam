@@ -184,3 +184,10 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+/* Under the error banner while a GeoPDF renders in this tab. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

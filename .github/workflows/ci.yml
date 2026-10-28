@@ -355,7 +355,7 @@ jobs:
         working-directory: frontend
         env:
           VITE_AUTH_MODE: fake
-        run: npx playwright test e2e/export-area.spec.ts --workers=1
+        run: npx playwright test e2e/export-area.spec.ts e2e/geopdf-dialog.spec.ts --workers=1
       # Writes to the seeded account and Undoes it, which leaves sync
       # tombstones (frontend/AGENTS.md): after the integration suite, never
       # before it.
