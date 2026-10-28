@@ -84,10 +84,15 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
   page.on("request", (r) => {
     if (made) after.push(new URL(r.url()).origin);
   });
-  const geoPdfRequests: string[] = [];
+  // The print's extent, title and markers would reach the API only in a
+  // POST; the GeoPDFs panel's list (a GET) still loads until it is removed.
+  const geoPdfPosts: string[] = [];
   page.on("request", (r) => {
-    if (new URL(r.url()).pathname === "/geo-pdf")
-      geoPdfRequests.push(r.method());
+    if (
+      r.method() === "POST" &&
+      new URL(r.url()).pathname.startsWith("/geo-pdf")
+    )
+      geoPdfPosts.push(r.url());
   });
 
   await page.goto("/");
@@ -128,7 +133,7 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
   const path = await file.path();
   const head = (await import("node:fs")).readFileSync(path).subarray(0, 5);
   expect(head.toString("latin1")).toBe("%PDF-");
-  expect(geoPdfRequests).toEqual([]);
+  expect(geoPdfPosts).toEqual([]);
   for (const origin of after)
     expect(
       ALLOWED_AFTER_MAKE.some((ok) => origin.startsWith(ok)),
