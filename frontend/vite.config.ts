@@ -96,6 +96,36 @@ export function maplibreWorkerPlugin(
   };
 }
 
+// browser-check.js in public/ would be served `immutable` under a fixed name
+// (deploy-frontend.yml), so a later edit would never reach a cached browser.
+// It stays a classic script, outside the bundle, so an engine too old to
+// parse the bundle still runs it (ADR 0042); the build names it by its hash.
+// Test: src/browserCheck.test.ts.
+export function browserCheckPlugin(
+  file = path.resolve(import.meta.dirname, "browser-check.js"),
+): Plugin {
+  const fileName = () => {
+    const hash = createHash("sha256").update(fs.readFileSync(file));
+    return `assets/browser-check-${hash.digest("hex").slice(0, 10)}.js`;
+  };
+  return {
+    name: "browser-check",
+    apply: "build",
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html) =>
+        html.replace('src="/browser-check.js"', `src="/${fileName()}"`),
+    },
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: fileName(),
+        source: fs.readFileSync(file),
+      });
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   // DEV_MASTER_URL (frontend/.env) points the /master proxy at MiniStack's
   // topo bucket, so dev maps read local archives. Unset, it stays the prod CDN:
@@ -130,7 +160,14 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
+    plugins: [
+      react(),
+      cspMetaPlugin(),
+      maplibreWorkerPlugin(),
+      browserCheckPlugin(),
+    ],
+    // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
+    build: { target: ["safari17", "chrome114", "firefox125"] },
     resolve: {
       alias: {
         "@styles": path.resolve(import.meta.dirname, "src/styles"),
