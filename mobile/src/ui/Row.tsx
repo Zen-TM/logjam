@@ -46,7 +46,7 @@ export function Row({
   accessibilityLabel,
   // TWO lines for the title, and that is a text-size rule rather than a taste
   // one: at a large OS font setting (or a large in-app multiplier) a one-line
-  // cap turns "Auto-download finished GeoPDFs" into "Auto-download finis…"
+  // cap turns "Auto-download finished sharpened areas" into "Auto-download finis…"
   // with no way to read the rest. A row that grows is legible; a row that
   // truncates is a dead end. Two rather than unlimited, because a title is
   // often a user-supplied NAME and a pasted paragraph should not become a

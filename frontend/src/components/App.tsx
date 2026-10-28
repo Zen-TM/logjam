@@ -911,8 +911,9 @@ function App() {
     [refetchCurrentUser, toast],
   );
 
-  // Capture completion-email deep links on mount (?topoJob / ?export), stash in sessionStorage so they survive a Cognito sign-in
-  // redirect, then clean the URL once.
+  // Capture completion-email deep links on mount (?topoJob / ?export), stash
+  // in sessionStorage so they survive a Cognito sign-in redirect, then clean
+  // the URL once.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let matched = false;

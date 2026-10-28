@@ -1,6 +1,6 @@
 // THE sharing panel. One component, both verbs, every kind of item.
 //
-// Places, waypoints, routes, LiDAR topos, GeoPDFs, imports and recorded
+// Places, waypoints, routes, LiDAR topos, imports and recorded
 // tracks all render this — from Saved's item sheet, the route sheet, the track
 // sheet, the map's waypoint sheet and the place detail screen. The only
 // per-kind parts are the API calls behind `target` and the sentence describing

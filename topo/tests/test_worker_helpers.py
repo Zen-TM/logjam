@@ -116,8 +116,8 @@ class TestWantsEmail(unittest.TestCase):
         self.assertFalse(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
     def test_explicit_true_is_respected(self):
-        row = {"ui_preferences": {"notifications": {"geoPdfEmail": True}}}
-        self.assertTrue(wants_email(_FakeConn(row), "u1", "geoPdfEmail"))
+        row = {"ui_preferences": {"notifications": {"topoEmail": True}}}
+        self.assertTrue(wants_email(_FakeConn(row), "u1", "topoEmail"))
 
     def test_non_bool_value_defaults_true(self):
         row = {"ui_preferences": {"notifications": {"topoEmail": "yes"}}}

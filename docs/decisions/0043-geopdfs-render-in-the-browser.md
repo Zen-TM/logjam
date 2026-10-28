@@ -31,9 +31,12 @@ and a copy of the user's print on our side.
   notification and no estimate.
 - **The server path is gone:** the `/geo-pdf` job routes, the worker, the generator
   and its terrain and vector-tile modules, GeoPDF's credit, quota, egress and
-  reaper paths, the `logjam-geo-pdf-worker` task definition's role (its
-  definition now serves one-off maintainer scripts as `logjam-api-script`), and
-  its Docker assets.
+  reaper paths, the GeoPDF worker's job, and its Docker assets. The
+  `logjam-geo-pdf-worker` task definition and its log group stay, unchanged:
+  maintainer announcements and the legacy-topo purge run one-off scripts on it
+  (`docs/operations/announcements.md`), and `infra/scripts/pin-release.sh` names
+  the family, so a rename would make every API deploy depend on a Terraform
+  apply. A rename can be its own later change.
 - **Job history and GeoPDF sharing are gone:** `geoPdfJob` is not a
   `SHARABLE_ENTITY_TYPES` member, so a sharee can no longer see a GeoPDF
   (sharing a place still shares the map). Guard:
@@ -45,7 +48,9 @@ and a copy of the user's print on our side.
   deletes every `geo_pdf_jobs` row, its shares and its notifications, and gives
   back the storage the completed ones were charged. The empty table and its
   Prisma model drop a release later, because the image serving during the
-  deploy swap still reads them (0003). Guard: `prisma/upgrade-check/`.
+  deploy swap still reads them (0003). A job queued on that old image after the
+  DELETE runs, and completed, stays charged; the migration that drops the table
+  repeats the refund-then-delete first. Guard: `prisma/upgrade-check/`.
 - **`GET /geo-pdf` answers `{ jobs: [] }`** (`routes/geoPdfRetired.ts`) because a
   Logjam GPS build is supported until three months after its successor ships
   (0022), and an old build asks for the list. It goes three months after the
@@ -68,7 +73,8 @@ and a copy of the user's print on our side.
   GeoPDF waiting on the phone from a laptop. A phone or a laptop that cannot
   hold the canvas refuses what the server would have drawn. People below the
   browser floor cannot print at all.
-- **Neutral:** PDFs already in that `geo-pdf` exports folder are not deleted by this
+- **Neutral:** the prod Terraform plan for this change touches no GeoPDF task
+  definition or log group. PDFs already in that `geo-pdf` exports folder are not deleted by this
   change; the topo bucket's 7-day `exports/` lifecycle rule collects them. The
   maintainer may remove them sooner by hand. The `geo_pdf_jobs` table and model
   drop in a later release. The `autoDownloadGeoPdfs` and `geoPdfEmail`

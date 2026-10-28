@@ -28,7 +28,7 @@ export interface GeoPdfConfig {
 
 // ── Allowlists ────────────────────────────────────────────────────────────────
 // Single source of truth for what a GeoPdfConfig may contain. Used both to
-// validate a live render request (routes/geoPdf.ts).
+// validate a render request (Logjam Web's GeoPDF dialog and renderer).
 
 export const VALID_GEOPDF_PAPER_SIZES = new Set<string>([
   "A2",

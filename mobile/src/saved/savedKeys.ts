@@ -27,7 +27,7 @@ export type SavedCategory = (typeof SAVED_CATEGORIES)[number];
  *
  * One rule, and it fits in a sentence the user can hold: **things you made
  * sync, maps you downloaded stay on this device.** Routes, imports and
- * recordings are the user's own records. Regions, LiDAR topos and GeoPDFs are
+ * recordings are the user's own records. Regions, LiDAR topos and imported GeoPDFs are
  * map material obtained from somewhere else — re-downloadable anywhere,
  * enormous, and pointless to copy between devices.
  *

@@ -5,6 +5,9 @@
 -- refunding in the same release. The previous image can still queue one until
 -- it is replaced; that straggler goes with the table, which drops a release
 -- later along with its Prisma model (ADR 0003).
+-- A job queued on the old image after this runs, and completed, stays charged
+-- to storage: the migration that drops the table repeats the refund-then-delete
+-- before dropping it.
 UPDATE users
    SET storage_used_bytes = GREATEST(0, storage_used_bytes - charged.bytes)
   FROM (

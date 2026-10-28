@@ -2,9 +2,9 @@
 //
 // Kept pure so the projection math (the part most prone to silent edge-case
 // errors at high zoom / extreme latitude) is unit-testable without pulling in
-// canvas, PDFKit, PMTiles, AWS, or Prisma. The api's generateGeoPdf renders
-// with them, and Logjam Web's GeoPDF dialog asks `geoPdfTooLarge` the same
-// question the renderer does, so a refusal shows before anything is queued.
+// canvas, PDF writers, PMTiles or the network. Logjam Web's GeoPDF renderer
+// uses them, and its dialog asks `geoPdfTooLarge` the same question the
+// renderer does, so a refusal shows before anything is drawn.
 import { GEOPDF_BASE_LAYER_CONFIG } from "./geoPdfBaseLayers.js";
 import { say } from "./userSentence.js";
 
@@ -14,8 +14,8 @@ const DEG_TO_RAD = Math.PI / 180;
 export const TILE_SIZE = 256;
 
 // Reference DPI for zoom selection — this sets how many source pixels per mm
-// we aim for, which determines the tile zoom level. Used both by the renderer
-// (generateGeoPdf.ts) and by the runtime-size estimator (geoPdfNativeMegapixels).
+// we aim for, which determines the tile zoom level. Used by Logjam Web's
+// GeoPDF renderer and by its size estimate (geoPdfNativeMegapixels).
 export const TARGET_DPI = 300;
 
 const MIN_ZOOM = 8;
