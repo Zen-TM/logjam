@@ -130,6 +130,8 @@ export function hillshadePixels(
   zoom: number,
   tileY: number,
   out: Uint8ClampedArray = new Uint8ClampedArray(grid.width * grid.height * 4),
+  /** Rows of the whole grid above this one, when it is a band of a larger one. */
+  rowOffset = 0,
 ): Uint8ClampedArray {
   const { values, width, height } = grid;
   // Below z15 MapLibre steepens the shading, which makes up for the coarser
@@ -146,7 +148,7 @@ export function hillshadePixels(
   const T = DEM_NO_DATA_BELOW;
 
   for (let y = 0; y < height; y++) {
-    const lat = tileY2lat(tileY + (y + 0.5) / TILE_SIZE, zoom);
+    const lat = tileY2lat(tileY + (y + rowOffset + 0.5) / TILE_SIZE, zoom);
     const cosLat = Math.cos(lat * DEG_TO_RAD);
     // The grid's own edge reads as if its edge pixel repeated.
     const rowM = (y > 0 ? y - 1 : 0) * width;
@@ -178,16 +180,22 @@ export function hillshadePixels(
         continue;
       const dx = stored((c + f + f + i - (a + d + d + g)) / divisor) / cosLat;
       const dy = stored((g + h + h + i - (a + b + b + c)) / divisor) / cosLat;
-      const slope = Math.atan(0.625 * Math.hypot(dx, dy));
+      // The shader takes sin and cos of atan(0.625 × |gradient|). With
+      // t = 0.625 × |gradient| those are t / √(1+t²) and 1 / √(1+t²): one
+      // square root where an atan, a sin and a cos were, which is most of the
+      // loop. The same numbers, to within the last bit of a double (the bytes
+      // test in terrain.test.ts).
+      const t = 0.625 * Math.sqrt(dx * dx + dy * dy);
+      const cosSlope = 1 / Math.sqrt(1 + t * t);
+      const shadeAlpha = t * cosSlope;
+      const alpha = (1 - cosSlope) * (1 - shadeAlpha) + shadeAlpha;
+      if (alpha <= 0) continue;
       const aspect =
         dx !== 0 ? Math.atan2(dy, -dx) : (Math.PI / 2) * (dy > 0 ? 1 : -1);
       // At exaggeration 0.5 the shader's scaled slope is the slope itself.
       const shade = Math.abs(
         glslMod((aspect + azimuth) / Math.PI + 0.5, 2) - 1,
       );
-      const shadeAlpha = Math.sin(slope);
-      const alpha = (1 - Math.cos(slope)) * (1 - shadeAlpha) + shadeAlpha;
-      if (alpha <= 0) continue;
       const grey = (255 * shade * shadeAlpha) / alpha;
       const o = (row0 + x) * 4;
       out[o] = out[o + 1] = out[o + 2] = grey;

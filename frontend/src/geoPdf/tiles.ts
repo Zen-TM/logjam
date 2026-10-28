@@ -15,8 +15,15 @@ const RETRY_DELAY_MS = 250;
 // Reads in flight at once, per host class. Declared once, here.
 export const HOST_LIMITS = {
   // Same-origin statewide archives, behind CloudFront on HTTP/2: our own
-  // distribution, and the live map already reads it like this.
-  statewide: 24,
+  // distribution, and the live map already reads it like this. This counts
+  // tile reads, and tiles stored side by side go out as one request
+  // (`RangeSource`), so far fewer requests than this are ever in flight.
+  // Chosen by timing an A3 1:25 000 print over a simulated link, 6 to 96:
+  // at 100 Mbps and 150 ms the wait for tiles was 4.3 s at 6, 1.1 s at 24,
+  // 0.8 s at 48 and 0.7 s at 96; at 10 Mbps and 100 ms it was 3.1 s at 24
+  // and 48 and 3.7 s at 96, where the first strip's tiles queue behind the
+  // rest. 48 is within 0.15 s of the best on both links.
+  statewide: 48,
   // Presigned S3 archives (sharpened areas, vegetation): the user's own data
   // from our bucket, HTTP/1.1 keep-alive pools in browsers sit near this.
   presigned: 16,
@@ -245,23 +252,42 @@ export async function fetchBytes(
   return attempt(url, headers, signal, maxBytes);
 }
 
-/** A PMTiles source over `fetchBytes`: ranges, retry and abort as above. */
+/**
+ * The most one merged range read asks for. A clustered archive stores
+ * neighbouring tiles side by side, so tiles read together are often one
+ * contiguous run; this keeps one request from growing without end.
+ */
+export const MAX_MERGED_BYTES = 4 * 1024 * 1024;
+
+type Wanted = {
+  offset: number;
+  length: number;
+  resolve: (r: Fetched) => void;
+  reject: (e: unknown) => void;
+};
+
+/**
+ * A PMTiles source over `fetchBytes`: ranges, retry and abort as above.
+ *
+ * Reads asked for in the same tick that sit end to end in the archive go out
+ * as one request, and the answer is cut back into the reads.
+ */
 class RangeSource implements Source {
   private url: string;
   private signal: AbortSignal;
+  private wanted: Wanted[] = [];
+  private flushing = false;
   constructor(url: string, signal: AbortSignal) {
     this.url = url;
     this.signal = signal;
   }
+
   async getBytes(
     offset: number,
     length: number,
     signal?: AbortSignal,
   ): Promise<RangeResponse> {
-    const res = await fetchBytes(this.url, signal ?? this.signal, {
-      offset,
-      length,
-    });
+    const res = await this.fetchMerged(offset, length, signal ?? this.signal);
     if (res.status >= 300) throw new Error(`Bad response code: ${res.status}`);
     return {
       data: res.bytes,
@@ -270,6 +296,81 @@ class RangeSource implements Source {
       expires: res.headers.get("expires") ?? undefined,
     };
   }
+
+  private fetchMerged(
+    offset: number,
+    length: number,
+    signal: AbortSignal,
+  ): Promise<Fetched> {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(aborted());
+      this.wanted.push({ offset, length, resolve, reject });
+      if (this.flushing) return;
+      this.flushing = true;
+      // After the reads of this tick have all been asked for.
+      setTimeout(() => this.flush(), 0);
+    });
+  }
+
+  private flush() {
+    const wanted = this.wanted.sort((a, b) => a.offset - b.offset);
+    this.wanted = [];
+    this.flushing = false;
+    let run: Wanted[] = [];
+    let end = -1;
+    const send = () => {
+      if (run.length > 0) this.send(run);
+      run = [];
+    };
+    for (const w of wanted) {
+      const total = run.length > 0 ? w.offset + w.length - run[0]!.offset : 0;
+      if (w.offset !== end || total > MAX_MERGED_BYTES) send();
+      run.push(w);
+      end = w.offset + w.length;
+    }
+    send();
+  }
+
+  private send(run: Wanted[]) {
+    if (run.length === 1) {
+      const w = run[0]!;
+      fetchBytes(this.url, this.signal, w).then(w.resolve, w.reject);
+      return;
+    }
+    const start = run[0]!.offset;
+    const last = run[run.length - 1]!;
+    fetchBytes(this.url, this.signal, {
+      offset: start,
+      length: last.offset + last.length - start,
+    }).then(
+      (res) => {
+        if (
+          res.status >= 300 ||
+          res.bytes.byteLength !== last.offset + last.length - start
+        ) {
+          // The merged read failed: ask for each on its own.
+          for (const w of run)
+            fetchBytes(this.url, this.signal, w).then(w.resolve, w.reject);
+          return;
+        }
+        for (const w of run) {
+          w.resolve({
+            status: res.status,
+            headers: res.headers,
+            bytes: res.bytes.slice(
+              w.offset - start,
+              w.offset - start + w.length,
+            ),
+          });
+        }
+      },
+      () => {
+        for (const w of run)
+          fetchBytes(this.url, this.signal, w).then(w.resolve, w.reject);
+      },
+    );
+  }
+
   // Only used as a cache key inside this PMTiles instance.
   getKey() {
     return this.url;

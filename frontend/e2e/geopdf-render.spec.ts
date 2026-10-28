@@ -115,6 +115,24 @@ test.describe("the in-browser GeoPDF renderer", () => {
     });
   }
 
+  // The terrain's helper workers cut a strip into bands. Mutation: take the
+  // latitude of a band's rows from its first row (terrainJobs.ts, the
+  // `rowOffset` argument), or read a DEM row fewer in `bandRows`: the pixels
+  // differ from a render with no helpers.
+  for (const scenario of ["shade", "contours"]) {
+    test(`terrain helpers draw the same pixels as none: ${scenario}`, async ({
+      page,
+    }) => {
+      await stubNetwork(page);
+      await openBench(page);
+      const r = await page.evaluate(
+        (name) => window.geoPdfBench.poolCheck(name),
+        scenario,
+      );
+      expect(r).toMatchObject({ ok: true, differing: 0 });
+    });
+  }
+
   // A strip whose last rows fall on the last row of a DEM tile: with no halo
   // and no read margin its block ends there and the resample clamps where the
   // whole map's grid does not. Terrain alone, so the tolerance can be strict

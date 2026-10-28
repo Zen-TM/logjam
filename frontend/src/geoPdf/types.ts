@@ -33,6 +33,8 @@ export type RenderDebug = {
   limits?: CanvasLimits;
   /** Behave as if the strip's pixel check read back wrong. */
   failPixelCheck?: boolean;
+  /** Do the terrain pixel work here, with no helper workers. */
+  noPool?: boolean;
   /** Return the map's pixels as drawn, before JPEG. */
   collectPixels?: boolean;
 };

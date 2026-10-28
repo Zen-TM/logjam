@@ -8,11 +8,13 @@ import {
   computeZoom,
   extentFromCentreAndSize,
   geoPdfMaxNativeZoom,
+  NSW_HILLSHADE,
   TARGET_DPI,
   getMapDimensions,
   RASTER_TEMPLATE_DEFAULTS,
   type GeoPdfConfig,
 } from "@logjam/shared";
+import { PMTiles } from "pmtiles";
 import { runGeoPdfRender } from "./client";
 import { planStrips } from "./strips";
 import type { RenderDebug, RenderPixels, RenderTimings } from "./types";
@@ -23,12 +25,13 @@ const CENTRE = { lat: -30, lon: 150 };
 function config(
   over: Partial<GeoPdfConfig> & Pick<GeoPdfConfig, "baseLayer" | "overlays">,
   scale = 25000,
+  paper: { paperSize: "A5" | "A3"; orientation: "portrait" | "landscape" } = {
+    paperSize: "A5",
+    orientation: "portrait",
+  },
+  centre = CENTRE,
 ): GeoPdfConfig {
-  const base = {
-    paperSize: "A5" as const,
-    orientation: "portrait" as const,
-    scale,
-  };
+  const base = { ...paper, scale };
   const map = getMapDimensions({
     ...base,
     north: 0,
@@ -40,8 +43,8 @@ function config(
   return {
     ...base,
     extent: extentFromCentreAndSize(
-      CENTRE.lat,
-      CENTRE.lon,
+      centre.lat,
+      centre.lon,
       scale * (map.w / 1000),
       scale * (map.h / 1000),
     ),
@@ -53,7 +56,7 @@ function config(
       gridLines: "latlon",
     },
     placeMarkers: [
-      { lat: CENTRE.lat, lon: CENTRE.lon, name: "Marker", color: "owned" },
+      { lat: centre.lat, lon: centre.lon, name: "Marker", color: "owned" },
     ],
     ...over,
   };
@@ -75,6 +78,26 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
   ),
 };
 
+/**
+ * A3 landscape at 1:25 000 (about 17 MP, the #602 timing target) centred on
+ * the middle of the served height archive's coverage: for timing against a
+ * dev copy of the statewide archives, so no coordinate is written down here.
+ */
+async function a3Scenario(scale = 25000): Promise<GeoPdfConfig> {
+  const header = await new PMTiles(
+    `${location.origin}/${NSW_HILLSHADE.archivePath}`,
+  ).getHeader();
+  return config(
+    { baseLayer: "six-base", overlays: ["hillshade", "slope"] },
+    scale,
+    { paperSize: "A3", orientation: "landscape" },
+    {
+      lat: (header.minLat + header.maxLat) / 2,
+      lon: (header.minLon + header.maxLon) / 2,
+    },
+  );
+}
+
 export type BenchRun = {
   ok: boolean;
   reason?: string;
@@ -89,6 +112,16 @@ export type BenchRun = {
   wallMs: number;
 };
 
+function inputFor(config: GeoPdfConfig) {
+  return {
+    config,
+    slopeBands: RASTER_TEMPLATE_DEFAULTS.slope.bands,
+    areas: [],
+    vegetationUrls: [],
+    origin: location.origin,
+  };
+}
+
 async function run(
   name: string,
   opts: {
@@ -99,25 +132,16 @@ async function run(
     config?: Partial<GeoPdfConfig>;
   } = {},
 ): Promise<BenchRun & { pixels?: RenderPixels }> {
-  const scenario = SCENARIOS[name];
+  const scenario = name === "a3" ? await a3Scenario() : SCENARIOS[name];
   if (!scenario) throw new Error("unknown scenario");
   const config = { ...scenario, ...opts.config };
   const progress: number[] = [];
   const start = performance.now();
-  const result = await runGeoPdfRender(
-    {
-      config,
-      slopeBands: RASTER_TEMPLATE_DEFAULTS.slope.bands,
-      areas: [],
-      vegetationUrls: [],
-      origin: location.origin,
-    },
-    {
-      onProgress: (p) => progress.push(p.fraction),
-      signal: opts.signal,
-      debug: opts.debug,
-    },
-  );
+  const result = await runGeoPdfRender(inputFor(config), {
+    onProgress: (p) => progress.push(p.fraction),
+    signal: opts.signal,
+    debug: opts.debug,
+  });
   const out: BenchRun & { pixels?: RenderPixels } = {
     ok: result.ok,
     progress,
@@ -221,6 +245,24 @@ async function seamCheck(
   };
 }
 
+/**
+ * Render with the terrain helper workers and with none: are the map's pixels
+ * the same, byte for byte? Both draw in one strip, so only the pool differs.
+ */
+async function poolCheck(name: string) {
+  const pooled = await run(name, { debug: { collectPixels: true } });
+  const alone = await run(name, {
+    debug: { collectPixels: true, noPool: true },
+  });
+  if (!pooled.pixels || !alone.pixels) return { ok: false, differing: -1 };
+  const a = new Uint8Array(pooled.pixels.strips[0]!.data);
+  const b = new Uint8Array(alone.pixels.strips[0]!.data);
+  let differing = a.length === b.length ? 0 : -1;
+  if (differing === 0)
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differing++;
+  return { ok: differing === 0, differing, bytes: a.length };
+}
+
 const DEM_TILE_PX = 256;
 
 /**
@@ -296,6 +338,7 @@ declare global {
     geoPdfBench: {
       run: typeof run;
       seamCheck: typeof seamCheck;
+      poolCheck: typeof poolCheck;
       extentAtDemTileEdge: typeof extentAtDemTileEdge;
       scenarios: string[];
     };
@@ -304,12 +347,14 @@ declare global {
 window.geoPdfBench = {
   run,
   seamCheck,
+  poolCheck,
   extentAtDemTileEdge,
-  scenarios: Object.keys(SCENARIOS),
+  scenarios: [...Object.keys(SCENARIOS), "a3"],
 };
 
 const select = document.getElementById("scenario") as HTMLSelectElement;
-for (const name of Object.keys(SCENARIOS)) select.add(new Option(name, name));
+for (const name of window.geoPdfBench.scenarios)
+  select.add(new Option(name, name));
 const out = document.getElementById("out") as HTMLPreElement;
 const pings = document.getElementById("pings") as HTMLOutputElement;
 document.getElementById("run")!.addEventListener("click", async () => {
