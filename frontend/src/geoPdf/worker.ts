@@ -21,7 +21,7 @@ scope.onmessage = async (e) => {
         scope.postMessage({ type: "progress", progress }),
     });
     const transfer: Transferable[] = [out.pdf.buffer as ArrayBuffer];
-    if (out.pixels) transfer.push(out.pixels.data);
+    if (out.pixels) for (const s of out.pixels.strips) transfer.push(s.data);
     scope.postMessage(
       {
         type: "done",

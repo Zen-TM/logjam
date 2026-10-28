@@ -12,7 +12,10 @@
 //  - contour labels are placed once over the whole map, in tile order;
 //  - tiles are drawn in a fixed order.
 // Guard: e2e/geopdf-render.spec.ts compares a multi-strip render with a
-// one-strip one pixel for pixel.
+// one-strip one. It goes red with the terrain resampled from the wrong row, and
+// with DEM_HALO_TILE_ROWS and DEM_READ_MARGIN_PX (terrain.ts) both set to 0 (its
+// "DEM tile edge" case; each alone is covered by the other, and
+// terrain.test.ts goes red on the halo alone).
 //
 // PRIVACY: nothing here logs. See tiles.ts.
 import {
@@ -38,7 +41,7 @@ import {
 import type { PMTiles } from "pmtiles";
 import { buildGeoPdf, type GeoPdfPageInput } from "./pdf";
 import { checkPlan, probeCanvasLimits, type CanvasLimits } from "./probe";
-import { planStrips, STRIP_OVERLAP_ROWS, type Strip } from "./strips";
+import { canvasRows, planStrips, type Strip } from "./strips";
 import {
   areasOnPage,
   contourTilesBySource,
@@ -60,6 +63,7 @@ import {
   type TerrainTileRead,
 } from "./terrain";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
+import { upperBoundTerrainLines } from "./credits";
 import { loadMapFonts } from "./fonts";
 import {
   displayZoomForScale,
@@ -116,7 +120,12 @@ export type RenderEnv = {
 export type RenderOutput = {
   pdf: Uint8Array;
   timings: RenderTimings;
-  pixels?: { width: number; height: number; data: ArrayBuffer };
+  pixels?: {
+    width: number;
+    height: number;
+    /** Each strip's rendered rows (overlap included), RGBA. */
+    strips: { y: number; rows: number; owned: number; data: ArrayBuffer }[];
+  };
 };
 
 const JPEG_QUALITY = 0.95;
@@ -143,10 +152,20 @@ type TileEntry = {
   promise: Promise<TileBytes> | null;
 };
 
+/** What decoding a terrain tile came to: not tried, usable, unreadable, or no tile. */
+const UNKNOWN = 0;
+const OK = 1;
+const BAD = 2;
+const EMPTY = 3;
+
 type TerrainEntry = {
   read: TerrainTileRead;
   last: number;
-  promise: Promise<TileBytes>;
+  /** Settles when the read has, either way; the bytes are in `bytes`. */
+  promise: Promise<void>;
+  /** The compressed tile, until it is decoded (then let go). */
+  bytes: ArrayBuffer | null;
+  status: typeof UNKNOWN | typeof OK | typeof BAD | typeof EMPTY;
   decoded: Float32Array | null;
 };
 
@@ -160,7 +179,11 @@ type TerrainPlan = {
   entries: Map<string, TerrainEntry>;
   /** Per strip: the DEM tile rows it draws from (halo included) and its reads. */
   blocks: { r0: number; r1: number; reads: TerrainTileRead[] }[];
-  drew: Set<string>;
+  /** Sources with a tile that decoded: what is credited. */
+  credited: Set<string>;
+  /** Tiles that arrived, and those of them that decoded. */
+  arrived: number;
+  decodedOk: number;
   paint: (
     grid: DemGrid,
     zoom: number,
@@ -180,13 +203,27 @@ const aborted = () => new DOMException("aborted", "AbortError");
  * and then cropped off.
  */
 const drawnRows = (s: Strip) => {
-  const above = s.y > 0 ? STRIP_OVERLAP_ROWS : 0;
+  const above = canvasRows(s) - s.renderHeight;
   return { from: s.y - above, to: s.y + s.renderHeight, above };
 };
 
 export async function renderGeoPdf(
   input: GeoPdfRenderInput,
   env: RenderEnv,
+): Promise<RenderOutput> {
+  const cleanups: (() => void)[] = [];
+  try {
+    return await renderInner(input, env, cleanups);
+  } finally {
+    // On every way out, an abort or a refusal included.
+    for (const cleanup of cleanups) cleanup();
+  }
+}
+
+async function renderInner(
+  input: GeoPdfRenderInput,
+  env: RenderEnv,
+  cleanups: (() => void)[],
 ): Promise<RenderOutput> {
   const { signal, debug } = env;
   const check = () => {
@@ -245,12 +282,23 @@ export async function renderGeoPdf(
     throw new TooLarge();
   }
   let limits = debug?.limits ?? env.limits;
+  let probedNow = false;
   if (!limits) {
     limits = await probeCanvasLimits();
     env.onLimits(limits);
+    probedNow = true;
   }
   check();
-  const plan = checkPlan(nativeW, nativeH, limits);
+  let plan = checkPlan(nativeW, nativeH, limits);
+  if (!plan.ok && !probedNow && !debug?.limits) {
+    // The cached limits never expire, and a browser update or a freer device
+    // can raise them: probe once more before refusing, and let the client
+    // keep what this finds.
+    limits = await probeCanvasLimits();
+    env.onLimits(limits);
+    check();
+    plan = checkPlan(nativeW, nativeH, limits);
+  }
   if (!plan.ok) throw new TooLarge();
   let strips: Strip[] = plan.strips;
   if (debug?.maxStripPx)
@@ -460,7 +508,6 @@ export async function renderGeoPdf(
     const rows = last.y - t.minTileY + 1;
     const read = terrainTileReader(areas, archiveLayer);
     const entries = new Map<string, TerrainEntry>();
-    const drew = new Set<string>();
     const blocks: TerrainPlan["blocks"] = [];
     const firstOf = new Map<string, number>();
     for (const strip of strips) {
@@ -484,24 +531,31 @@ export async function renderGeoPdf(
         if (entries.has(k)) continue;
         const src = sourceArchive(archiveLayer, r.source);
         const first = firstOf.get(k)!;
-        const promise = src
-          ? track(
-              key,
-              fetcher.archive(
-                src[1],
-                src[0],
-                r.z,
-                r.x,
-                r.y,
-                first * PER_STRIP + RANK[key],
-              ),
-            ).then((b) => {
-              if (b) drew.add(r.source);
-              return b;
-            })
-          : Promise.resolve(null);
-        entries.set(k, { read: r, last: strip.index, promise, decoded: null });
-        creditReads.push(promise);
+        const entry: TerrainEntry = {
+          read: r,
+          last: strip.index,
+          promise: Promise.resolve(),
+          bytes: null,
+          status: UNKNOWN,
+          decoded: null,
+        };
+        if (src) {
+          entry.promise = track(
+            key,
+            fetcher.archive(
+              src[1],
+              src[0],
+              r.z,
+              r.x,
+              r.y,
+              first * PER_STRIP + RANK[key],
+            ),
+          ).then((b) => {
+            entry.bytes = b;
+          });
+        }
+        entries.set(k, entry);
+        creditReads.push(entry.promise);
       }
     }
     return {
@@ -513,7 +567,9 @@ export async function renderGeoPdf(
       read,
       entries,
       blocks,
-      drew,
+      credited: new Set<string>(),
+      arrived: 0,
+      decodedOk: 0,
       paint,
     };
   };
@@ -582,7 +638,7 @@ export async function renderGeoPdf(
           ),
         );
         contourReads.push({ source, tile, promise });
-        creditReads.push(promise);
+        creditReads.push(promise.then(() => undefined));
       }
     }
   }
@@ -613,7 +669,7 @@ export async function renderGeoPdf(
           return b;
         });
         entries.push({ tile, rect, first, last, promise });
-        creditReads.push(promise);
+        creditReads.push(promise.then(() => undefined));
       }
       vegetation.push(state);
     }
@@ -651,9 +707,6 @@ export async function renderGeoPdf(
     upperTerrain.add("hillshade");
   if (terrainPlans.some((p) => p.key === "slope")) upperTerrain.add("slope");
   if (contourReads.length > 0) upperTerrain.add("contours");
-  const upperAreas = new Map(
-    areas.map((a) => [a, new Set(upperTerrain)] as const),
-  );
   const credit = (
     terrainLines: readonly string[],
     renderedOverlays: readonly string[],
@@ -668,7 +721,7 @@ export async function renderGeoPdf(
     nativeW,
     elementDpi,
     credit(
-      terrainCreditLines(upperTerrain, upperAreas),
+      upperBoundTerrainLines(upperTerrain, areas),
       wantVegetation ? ["vegetation"] : [],
     ),
   );
@@ -685,6 +738,9 @@ export async function renderGeoPdf(
 
   // ── Strips ───────────────────────────────────────────────────────────────
   const tileCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+  cleanups.push(() => {
+    tileCanvas.width = tileCanvas.height = 0;
+  });
   const tileCtx = tileCanvas.getContext("2d", { willReadFrequently: true })!;
   const decodeTerrainTile = async (bytes: ArrayBuffer) => {
     try {
@@ -704,14 +760,48 @@ export async function renderGeoPdf(
   const decodeImage = (bytes: ArrayBuffer) =>
     createImageBitmap(new Blob([bytes])).catch(() => null);
 
+  /**
+   * Decode an arrived terrain tile once: it is then usable (and credited), or
+   * unreadable for good; the compressed bytes are let go either way. Kept
+   * decoded only if a strip from `keepFrom` on still reads it.
+   */
+  const settleDecode = async (
+    p: TerrainPlan,
+    e: TerrainEntry,
+    keepFrom: number,
+  ) => {
+    if (e.status !== UNKNOWN) return;
+    const bytes = e.bytes;
+    e.bytes = null;
+    if (!bytes) {
+      e.status = EMPTY;
+      return;
+    }
+    p.arrived++;
+    const values = await decodeTerrainTile(bytes);
+    if (!values) {
+      e.status = BAD;
+      return;
+    }
+    e.status = OK;
+    p.decodedOk++;
+    p.credited.add(e.read.source);
+    if (e.last >= keepFrom) e.decoded = values;
+  };
+
   const jpegs: GeoPdfPageInput["strips"] = [];
-  const pixelsOut = debug?.collectPixels
-    ? new Uint8Array(nativeW * nativeH * 4)
-    : null;
+  const stripPixels: {
+    y: number;
+    rows: number;
+    owned: number;
+    data: ArrayBuffer;
+  }[] = [];
   let credited = false;
   const bump = (name: string, since: number) => {
     timings.drawBreakdownMs[name] =
       (timings.drawBreakdownMs[name] ?? 0) + (performance.now() - since);
+    // The client's watchdog hears from a live render between layers too.
+    report();
   };
   const place = {
     markers: config.placeMarkers && config.placeMarkers.length > 0,
@@ -744,6 +834,15 @@ export async function renderGeoPdf(
     const canvasH = span.to - span.from;
     if (reachesCredits && !credited) {
       await Promise.all(creditReads);
+      // What is credited is what decoded, so every terrain tile is tried now.
+      for (const p of terrainPlans) {
+        for (const e of p.entries.values())
+          await settleDecode(p, e, strip.index);
+        // A layer whose every tile is unreadable is a failure, not a layer
+        // quietly missing from the map.
+        if (p.arrived > 0 && p.decodedOk === 0)
+          throw new Error("terrain tiles unreadable");
+      }
       credited = true;
     }
     check();
@@ -796,16 +895,12 @@ export async function renderGeoPdf(
       for (const p of terrainPlans) {
         mark = performance.now();
         const block = p.blocks[strip.index]!;
+        for (const r of block.reads)
+          await settleDecode(p, p.entries.get(terrainReadKey(r))!, strip.index);
         const present = block.reads.some(
-          (r) => p.drew.has(r.source) && p.entries.get(terrainReadKey(r)),
+          (r) => p.entries.get(terrainReadKey(r))!.status === OK,
         );
         if (present) {
-          for (const r of block.reads) {
-            const e = p.entries.get(terrainReadKey(r))!;
-            if (e.decoded) continue;
-            const bytes = await e.promise;
-            if (bytes) e.decoded = await decodeTerrainTile(bytes);
-          }
           const decoded = new Map<string, Float32Array>();
           for (const [k, e] of p.entries)
             if (e.decoded) decoded.set(k, e.decoded);
@@ -873,6 +968,8 @@ export async function renderGeoPdf(
           });
         }
       }
+      for (const v of vegetation)
+        for (const e of v.entries) if (e.last <= strip.index) e.promise = null;
       bump("vegetation", mark);
       mark = performance.now();
       if (contours) drawContourLabels(ctx, contours, top, bottom);
@@ -919,8 +1016,8 @@ export async function renderGeoPdf(
           renderedOverlays.push("vegetation");
         const terrain = new Set<TerrainLayerKey>(drawnTerrain);
         for (const p of terrainPlans) {
-          if (p.drew.size > 0) terrain.add(p.key);
-          creditAreas(p.key, p.drew);
+          if (p.credited.size > 0) terrain.add(p.key);
+          creditAreas(p.key, p.credited);
         }
         drawAttribution(
           ctx,
@@ -959,9 +1056,15 @@ export async function renderGeoPdf(
       ) {
         throw new TooLarge();
       }
-      if (pixelsOut) {
-        const owned = octx.getImageData(0, 0, nativeW, strip.height).data;
-        pixelsOut.set(owned, strip.y * nativeW * 4);
+      if (debug?.collectPixels) {
+        // Every rendered row, the overlap under the next strip too.
+        const all = octx.getImageData(0, 0, nativeW, strip.renderHeight).data;
+        stripPixels.push({
+          y: strip.y,
+          rows: strip.renderHeight,
+          owned: strip.height,
+          data: all.buffer as ArrayBuffer,
+        });
       }
 
       // 6. JPEG.
@@ -993,7 +1096,6 @@ export async function renderGeoPdf(
     stripsDone++;
     report(true);
   }
-  tileCanvas.width = tileCanvas.height = 0;
 
   // A map of grey squares is not a map.
   if (baseEntries.length > 0 && baseOutcome.loaded === 0) {
@@ -1026,12 +1128,8 @@ export async function renderGeoPdf(
   return {
     pdf,
     timings,
-    pixels: pixelsOut
-      ? {
-          width: nativeW,
-          height: nativeH,
-          data: pixelsOut.buffer as ArrayBuffer,
-        }
+    pixels: debug?.collectPixels
+      ? { width: nativeW, height: nativeH, strips: stripPixels }
       : undefined,
   };
 }

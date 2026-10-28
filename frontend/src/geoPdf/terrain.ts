@@ -594,7 +594,8 @@ const DEM_READ_MARGIN_PX = 2;
  * The halo, in tile rows, beyond the DEM rows a strip reads. Every pixel a
  * strip reads then has the neighbours the whole map's grid gives it, so the
  * block's own edge (which repeats its edge pixel) never reaches the strip.
- * Guard: terrain.test.ts ("demBlockRows").
+ * Guard: terrain.test.ts ("demBlockRows"), and with `DEM_READ_MARGIN_PX` the
+ * e2e "DEM tile edge" case when both are 0.
  */
 export const DEM_HALO_TILE_ROWS = 1;
 
