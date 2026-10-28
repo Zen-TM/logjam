@@ -402,6 +402,13 @@ jobs:
       - name: Unit tests
         working-directory: frontend
         run: npm test
+      # The in-browser GeoPDF renderer against a dev-only bench page with
+      # every network read stubbed: no API, no tile server. Runner Chrome.
+      - name: Playwright GeoPDF renderer
+        working-directory: frontend
+        env:
+          VITE_AUTH_MODE: fake
+        run: npx playwright test e2e/geopdf-render.spec.ts --workers=1
 
   mobile:
     needs: changes
