@@ -1,10 +1,12 @@
-// What a GeoPDF reads, worked out from its config alone: the map's size and
-// zooms, and the DEM tiles each strip reads. Pure; nothing here touches the
-// network.
+// What a GeoPDF reads from the statewide archives, worked out from its
+// config alone. The renderer plans its strips from the same functions, and the
+// dialog's background prefetch (prefetch.ts) asks the same question before any
+// render, so both name the same tiles. Pure; nothing here touches the network.
 import {
   computeTileToMapTransform,
   computeZoom,
   geoPdfMaxNativeZoom,
+  NSW_CONTOURS,
   NSW_HILLSHADE,
   NSW_SLOPE,
   TARGET_DPI,
@@ -13,7 +15,12 @@ import {
   type TileToMapTransform,
 } from "@logjam/shared";
 import {
+  areasOnPage,
+  contourTilesBySource,
   demBlockRows,
+  nswContourZoom,
+  overlaysDrawn,
+  STATEWIDE,
   terrainReadZoom,
   terrainTileReader,
   terrainTileReads,
@@ -100,4 +107,60 @@ export function planTerrainBlocks(
     };
   });
   return { demZoom, t, cols, rows, read, blocks };
+}
+
+/** A read of a statewide archive: its path under the origin, and the tile. */
+export type StatewideRead = {
+  path: string;
+  z: number;
+  x: number;
+  y: number;
+};
+
+/**
+ * Every statewide tile a render of this config reads, each once: the heights
+ * for the hillshade, the slope, the contours. Reads an area serves are left
+ * out (they are presigned, never prefetched). The whole map is one span: the
+ * strips' blocks overlap by their halo and together cover exactly that.
+ */
+export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
+  const { config } = input;
+  const g = printGeometry(config);
+  if (!(g.nativeW > 0 && g.nativeH > 0)) return [];
+  const areas = areasOnPage(input.areas, config.extent);
+  const drawn = overlaysDrawn(config);
+  const out = new Map<string, StatewideRead>();
+  const add = (path: string, r: TileCoord) =>
+    out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
+  const whole = [{ from: 0, to: g.nativeH }];
+  const layers: [boolean, "heights" | "slope"][] = [
+    [drawn.hillshade, "heights"],
+    [config.overlays.includes("slope"), "slope"],
+  ];
+  for (const [wanted, archiveLayer] of layers) {
+    if (!wanted) continue;
+    const path =
+      archiveLayer === "heights"
+        ? NSW_HILLSHADE.archivePath
+        : NSW_SLOPE.archivePath;
+    for (const r of planTerrainBlocks(config, g, areas, archiveLayer, whole)
+      .blocks[0]!.reads)
+      if (r.source === STATEWIDE) add(path, r);
+  }
+  const contourZoom = nswContourZoom(config.scale, g.centreLat, g.overlayZoom);
+  if (contourZoom !== null && drawn.contours) {
+    const { north, south, east, west } = config.extent;
+    const t = computeTileToMapTransform(
+      contourZoom,
+      north,
+      south,
+      east,
+      west,
+      g.nativeW,
+      g.nativeH,
+    );
+    const tiles = contourTilesBySource(areas, t.tiles).get(STATEWIDE) ?? [];
+    for (const tile of tiles) add(NSW_CONTOURS.archivePath, tile);
+  }
+  return [...out.values()];
 }

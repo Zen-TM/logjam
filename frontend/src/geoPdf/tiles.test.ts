@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { geoPdfFileName } from "./client";
 import { pmtiles } from "../../e2e/__fixtures__/geoPdfTiles";
+import type { TileCache } from "./cache";
 import {
+  cacheableArchive,
   fetchBytes,
   hostClassOf,
   HOST_LIMITS,
@@ -275,5 +277,110 @@ describe("openArchive range merging", () => {
     expect(tiles.map((t) => t!.data.byteLength)).toEqual([40, 41, 42]);
     // header, the failed merged read, then three single reads.
     expect(asked).toHaveLength(5);
+  });
+});
+
+describe("cacheableArchive", () => {
+  it("accepts a same-origin statewide archive and nothing else", () => {
+    expect(cacheableArchive(`${ORIGIN}/master/dem/x.pmtiles`, ORIGIN)).toBe(
+      "master/dem/x.pmtiles",
+    );
+    expect(
+      cacheableArchive(
+        "https://b.s3.ap-southeast-2.amazonaws.com/k.pmtiles?X-Amz-Signature=1",
+        ORIGIN,
+      ),
+    ).toBeNull();
+    expect(
+      cacheableArchive("https://tile.openstreetmap.org/1/2/3.png", ORIGIN),
+    ).toBeNull();
+    expect(
+      cacheableArchive(`${ORIGIN}/master/dem/x.pmtiles?sig=abc`, ORIGIN),
+    ).toBeNull();
+    // A host that merely starts like the origin.
+    expect(
+      cacheableArchive(`${ORIGIN}.evil.example/x.pmtiles`, ORIGIN),
+    ).toBeNull();
+  });
+});
+
+describe("the persistent cache", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const fakeStore = () => {
+    const calls: string[] = [];
+    const kept = new Map<string, ArrayBuffer>();
+    const store = {
+      kept,
+      open: async (a: string) => void calls.push(`open ${a}`),
+      get: async (a: string, v: string, o: number, l: number) => {
+        calls.push(`get ${a}`);
+        return kept.get(`${a}|${v}|${o}|${l}`) ?? null;
+      },
+      put: async (
+        a: string,
+        v: string,
+        o: number,
+        l: number,
+        b: ArrayBuffer,
+      ) => {
+        calls.push(`put ${a}`);
+        kept.set(`${a}|${v}|${o}|${l}`, b);
+      },
+    } as unknown as TileCache;
+    return { store, calls };
+  };
+  const read = async (url: string, store: TileCache) => {
+    const archive = openArchive(url, pending(), { store, origin: ORIGIN });
+    await archive.getZxy(15, 0, 0);
+    // The write is not waited for by the read.
+    await new Promise((r) => setTimeout(r, 5));
+  };
+
+  // Mutation: delete the `cacheableArchive` test from openArchive, and the
+  // presigned and third-party reads below reach the store.
+  it("never keeps a presigned, third-party or signed URL", async () => {
+    serve(archiveBytes(), { etag: '"v1"' });
+    for (const url of [
+      "https://b.s3.ap-southeast-2.amazonaws.com/k.pmtiles",
+      "https://b.s3.ap-southeast-2.amazonaws.com/k.pmtiles?X-Amz-Signature=1",
+      "https://tiles.example/a.pmtiles",
+      `${ORIGIN}/master/a.pmtiles?token=1`,
+    ]) {
+      const { store, calls } = fakeStore();
+      await read(url, store);
+      expect(calls).toEqual([]);
+    }
+  });
+
+  it("keeps a statewide archive's tiles under its etag, and serves a repeat from the store", async () => {
+    const asked = serve(archiveBytes(), { etag: '"v1"' });
+    const { store, calls } = fakeStore();
+    await read(`${ORIGIN}/master/a.pmtiles`, store);
+    expect(calls).toContain("put master/a.pmtiles");
+    const before = asked.length;
+    await read(`${ORIGIN}/master/a.pmtiles`, store);
+    // Only the header is asked of the network again.
+    expect(asked.length - before).toBe(1);
+  });
+
+  // Mutation: drop the etag comparison in RangeSource.getBytes: the replaced
+  // archive's tile is filed under the old version.
+  it("never files a tile under a version it was not read at", async () => {
+    let answers = 0;
+    serve(archiveBytes(), { etag: () => (answers++ === 0 ? '"v1"' : '"v2"') });
+    const { store, calls } = fakeStore();
+    await read(`${ORIGIN}/master/a.pmtiles`, store);
+    expect(calls.filter((c) => c === "put master/a.pmtiles")).toHaveLength(1);
+    expect(answers).toBeGreaterThan(2);
+    const kept = (store as unknown as { kept: Map<string, unknown> }).kept;
+    expect([...kept.keys()].every((k) => k.includes('|"v2"|'))).toBe(true);
+  });
+
+  it("keeps nothing from a server that sends no etag: it cannot say what version it read", async () => {
+    serve(archiveBytes());
+    const { store, calls } = fakeStore();
+    await read(`${ORIGIN}/master/a.pmtiles`, store);
+    expect(calls).toEqual([]);
   });
 });

@@ -140,3 +140,42 @@ export function renderGeoPdf(
 ): Promise<GeoPdfResult> {
   return runGeoPdfRender(input, opts);
 }
+
+/**
+ * Warm the persistent tile cache for this render, in the background; returns
+ * what stops it. Skipped when the browser asks for less data. The dialog stops
+ * it when the extent changes, when Make it is pressed and when it closes.
+ */
+export function prefetchGeoPdf(
+  input: GeoPdfRenderInput,
+  onEnd?: () => void,
+): () => void {
+  const connection = (navigator as { connection?: { saveData?: boolean } })
+    .connection;
+  if (connection?.saveData) {
+    onEnd?.();
+    return () => {};
+  }
+  let worker: Worker | null = null;
+  try {
+    worker = new Worker(new URL("./prefetch.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    worker.onmessage = worker.onerror = () => {
+      worker?.terminate();
+      onEnd?.();
+    };
+    worker.postMessage({ input });
+  } catch {
+    // No worker: nothing to warm, and the render does not need it.
+    onEnd?.();
+  }
+  return () => {
+    try {
+      worker?.terminate();
+    } catch {
+      // already gone
+    }
+    worker = null;
+  };
+}

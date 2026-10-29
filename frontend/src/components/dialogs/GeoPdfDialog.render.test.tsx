@@ -5,7 +5,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   lat2tileY,
@@ -32,8 +32,14 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
 
 // The renderer is its own chunk and needs a worker; tests drive its answer.
 const renderGeoPdf = vi.hoisted(() => vi.fn());
+const prefetchGeoPdf = vi.hoisted(() => vi.fn());
+// A test holds the renderer chunk back by replacing `wait`.
+const clientGate = vi.hoisted(() => ({ wait: Promise.resolve() }));
 vi.mock("./loadGeoPdfClient", () => ({
-  loadGeoPdfClient: async () => ({ renderGeoPdf }),
+  loadGeoPdfClient: async () => {
+    await clientGate.wait;
+    return { renderGeoPdf, prefetchGeoPdf };
+  },
 }));
 vi.mock("../../download", () => ({ downloadBlob: vi.fn() }));
 type RenderOpts = {
@@ -85,6 +91,7 @@ afterEach(() => {
   vi.mocked(apiFetch).mockClear();
   renderGeoPdf.mockReset();
   renderGeoPdf.mockResolvedValue(okResult);
+  prefetchGeoPdf.mockReset();
   vi.mocked(downloadBlob).mockClear();
 });
 
@@ -935,5 +942,84 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     await vi.waitFor(() => expect(signal).toBeDefined());
     cleanup();
     expect(signal?.aborted).toBe(true);
+  });
+});
+
+// The tile cache is warmed while the dialog is open, and the warming gives way
+// to everything else. Mutations: start it with no wait (the first test); drop
+// both the `stopPrefetch` call in handleGenerate and `!generating` from
+// `prefetching` (the third); drop the effect's cleanup (the second and fourth).
+describe("GeoPdfDialog, warms the tile cache", () => {
+  const stop = vi.fn();
+  beforeEach(() => {
+    stop.mockClear();
+    prefetchGeoPdf.mockReturnValue(stop);
+  });
+  const prefetched = () => prefetchGeoPdf.mock.calls.length;
+  const settled = () =>
+    vi.waitFor(() => expect(prefetched()).toBeGreaterThan(0), {
+      timeout: 4000,
+    });
+
+  it("starts once the area has stood still, with the print's own layers", async () => {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }));
+    await new Promise((r) => setTimeout(r, 300));
+    expect(prefetched()).toBe(0);
+    await settled();
+    const [input] =
+      prefetchGeoPdf.mock.calls[prefetchGeoPdf.mock.calls.length - 1]!;
+    expect(input.config.extent).toEqual(extent);
+    expect(input.config.scale).toBe(25000);
+    expect(input.origin).toBe(location.origin);
+    // Only what the user may read: no vegetation (presigned) goes in.
+    expect(input.vegetationUrls).toEqual([]);
+  });
+
+  it("stops and starts over when the area changes", async () => {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }));
+    await settled();
+    fireEvent.click(paper("A3"));
+    expect(stop).toHaveBeenCalled();
+    await vi.waitFor(() => expect(prefetched()).toBe(2), { timeout: 4000 });
+  });
+
+  it("stops before Make it starts the render", async () => {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }));
+    await settled();
+    stop.mockClear();
+    renderGeoPdf.mockImplementation(async () => {
+      expect(stop).toHaveBeenCalled();
+      return okResult;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    expect(stop).toHaveBeenCalled();
+    await vi.waitFor(() => expect(renderGeoPdf).toHaveBeenCalled());
+  });
+
+  // Mutation: drop the `cancelled` test in the effect: the prefetch starts
+  // after the dialog is gone, with nobody to stop it.
+  it("starts nothing if it is cleaned up while the renderer chunk is loading", async () => {
+    let load!: () => void;
+    const gate = new Promise<void>((r) => (load = r));
+    clientGate.wait = gate;
+    const { rerender } = render(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }),
+    );
+    // The effect's timer has fired and is waiting on the chunk.
+    await new Promise((r) => setTimeout(r, 1300));
+    rerender(dialog({ open: false }));
+    load();
+    await new Promise((r) => setTimeout(r, 50));
+    clientGate.wait = Promise.resolve();
+    expect(prefetched()).toBe(0);
+  });
+
+  it("stops when the dialog closes", async () => {
+    const { rerender } = render(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }),
+    );
+    await settled();
+    rerender(dialog({ open: false }));
+    expect(stop).toHaveBeenCalled();
   });
 });

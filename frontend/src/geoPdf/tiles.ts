@@ -11,6 +11,7 @@ import {
   type RangeResponse,
   type Source,
 } from "pmtiles";
+import type { TileCache } from "./cache";
 
 /** Time one request, body included, may take. */
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -264,6 +265,18 @@ export async function fetchBytes(
  */
 export const MAX_MERGED_BYTES = 4 * 1024 * 1024;
 
+/**
+ * The archive's path (`master/dem/…`) where `url` may be kept in the
+ * persistent cache, else null. Only a statewide archive on our own origin
+ * qualifies: a presigned URL is a bearer credential for one user's data and a
+ * third-party tile is not ours to keep. Guard: tiles.test.ts ("never cached").
+ */
+export function cacheableArchive(url: string, origin: string): string | null {
+  if (hostClassOf(url, origin) !== "statewide") return null;
+  if (url.includes("?") || url.includes("#")) return null;
+  return url.slice(origin.length + 1);
+}
+
 type Wanted = {
   offset: number;
   length: number;
@@ -275,16 +288,26 @@ type Wanted = {
  * A PMTiles source over `fetchBytes`: ranges, retry and abort as above.
  *
  * Reads asked for in the same tick that sit end to end in the archive go out
- * as one request, and the answer is cut back into the reads.
+ * as one request, and the answer is cut back into the reads. Where a cache is
+ * given, a read is answered from it when it can be, and kept when it was not.
  */
 class RangeSource implements Source {
   private url: string;
   private signal: AbortSignal;
+  private cache: TileCache | null;
+  private archive: string | null;
   private wanted: Wanted[] = [];
   private flushing = false;
-  constructor(url: string, signal: AbortSignal) {
+  private opened = new Set<string>();
+  constructor(
+    url: string,
+    signal: AbortSignal,
+    cache: { store: TileCache; archive: string } | null,
+  ) {
     this.url = url;
     this.signal = signal;
+    this.cache = cache?.store ?? null;
+    this.archive = cache?.archive ?? null;
   }
 
   async getBytes(
@@ -293,6 +316,17 @@ class RangeSource implements Source {
     signal?: AbortSignal,
     etag?: string,
   ): Promise<RangeResponse> {
+    // The header (offset 0) is always asked of the network: its etag is the
+    // version every other cached read is filed under.
+    const cache = offset > 0 && etag ? this.cache : null;
+    if (cache && this.archive) {
+      if (!this.opened.has(etag!)) {
+        this.opened.add(etag!);
+        await cache.open(this.archive, etag!);
+      }
+      const hit = await cache.get(this.archive, etag!, offset, length);
+      if (hit) return { data: hit, etag };
+    }
     const res = await this.fetchMerged(offset, length, signal ?? this.signal);
     if (res.status >= 300) throw new Error(`Bad response code: ${res.status}`);
     // No If-Match is sent (CORS), so an archive replaced mid-render shows
@@ -300,6 +334,8 @@ class RangeSource implements Source {
     const got = res.headers.get("etag");
     if (etag && got && !got.startsWith("W/") && got !== etag)
       throw new EtagMismatch("archive changed while it was read");
+    if (cache && this.archive)
+      void cache.put(this.archive, etag!, offset, length, res.bytes);
     return {
       data: res.bytes,
       etag: res.headers.get("etag") ?? undefined,
@@ -388,9 +424,24 @@ class RangeSource implements Source {
   }
 }
 
-/** A PMTiles archive at `url`; one instance per archive per render. */
-export function openArchive(url: string, signal: AbortSignal): PMTiles {
-  return new PMTiles(new RangeSource(url, signal));
+/**
+ * A PMTiles archive at `url`; one instance per archive per render. With a
+ * `store` its reads are cached persistently, but only if `url` is a statewide
+ * archive of `origin` (`cacheableArchive`).
+ */
+export function openArchive(
+  url: string,
+  signal: AbortSignal,
+  persist?: { store: TileCache | null; origin: string },
+): PMTiles {
+  const archive = persist?.store ? cacheableArchive(url, persist.origin) : null;
+  return new PMTiles(
+    new RangeSource(
+      url,
+      signal,
+      archive && persist?.store ? { store: persist.store, archive } : null,
+    ),
+  );
 }
 
 /** A tile fetched, or null where there is none (a miss or a failure). */
@@ -401,10 +452,14 @@ export class TileFetcher {
   readonly scheduler: Scheduler;
   private signal: AbortSignal;
   private origin: string;
-  constructor(signal: AbortSignal, origin: string) {
+  constructor(
+    signal: AbortSignal,
+    origin: string,
+    limit?: (hostClass: string) => number,
+  ) {
     this.signal = signal;
     this.origin = origin;
-    this.scheduler = new Scheduler(signal);
+    this.scheduler = new Scheduler(signal, limit);
   }
 
   /** An XYZ tile over HTTP: its bytes, or null after the retry has failed. */
