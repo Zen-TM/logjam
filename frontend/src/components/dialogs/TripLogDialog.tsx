@@ -322,6 +322,10 @@ function TripLogDialog({
   // Who a draft is written for and offered to; null until Logjam Web has
   // loaded the signed-in user, when no draft is read or written.
   const currentUserId = useContext(CurrentUserIdContext);
+  // The user the draft slot was last checked for in this open. When the user
+  // loads late, changes or goes, the slot is checked again in the same render,
+  // so autosave never clears or overwrites a draft that was not yet offered.
+  const [draftCheckedFor, setDraftCheckedFor] = useState<string | null>(null);
   // One autosave-failure toast per open, not one per keystroke.
   const draftWarnedRef = useRef(false);
   // Whether the Dialog moves focus into the date field as it opens; settled by
@@ -354,6 +358,20 @@ function TripLogDialog({
         populateForm();
       }
     }
+  }
+
+  // The user arrived, changed or went (an expiry) while the form was open:
+  // check the slot for them now, and drop an offer made to someone else.
+  if (
+    open &&
+    !tripLog &&
+    openKey === populatedFor &&
+    draftCheckedFor !== currentUserId
+  ) {
+    setDraftCheckedFor(currentUserId);
+    setRestorableDraft(
+      currentUserId ? readTripDraft(currentUserId, new Date()) : null,
+    );
   }
 
   function populateForm() {
@@ -445,6 +463,7 @@ function TripLogDialog({
         ? null
         : readTripDraft(currentUserId, new Date());
     setRestorableDraft(foundDraft);
+    setDraftCheckedFor(currentUserId);
     setFocusDateWhenOpened(foundDraft === null);
     setError(null);
     setShowFieldErrors(false);

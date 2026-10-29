@@ -144,6 +144,15 @@ describe("parseTripDraft", () => {
     expect(parseTripDraft(JSON.stringify("a string"), NOW)).toBeNull();
   });
 
+  // Mutation: drop the ownerId check in parseTripDraft.
+  it("returns null for a record with no owner, or an empty one", () => {
+    const record = JSON.parse(validRaw());
+    delete record.ownerId;
+    expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
+    record.ownerId = "";
+    expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
+  });
+
   it("returns null for an expired draft", () => {
     const stale = new Date(NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS - 1);
     const s = serializeTripDraft(ALICE, form(), stale);
@@ -255,8 +264,9 @@ describe("storage wrappers", () => {
     expect(readTripDraft(ALICE, NOW)).toBeNull();
   });
 
-  // Mutation: drop the `ownerId` comparison in readTripDraft and the first two
-  // go red; drop the clearTripDraft() on a mismatch and the removal asserts do.
+  // Mutation: drop the `ownerId` comparison in readTripDraft (keep `parsed ===
+  // null`) and only this test goes red; drop the clearTripDraft() on a
+  // mismatch and its removal assert does.
   it("does not offer another user's draft, and removes it", () => {
     writeTripDraft(ALICE, form(), NOW);
     expect(readTripDraft(BOB, NOW)).toBeNull();
@@ -269,8 +279,9 @@ describe("storage wrappers", () => {
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).not.toBeNull();
   });
 
-  // Mutation: let parseTripDraft accept a record with no ownerId and an old
-  // record is offered to whoever signs in next.
+  // Mutation: this goes red only with BOTH the parseTripDraft ownerId check
+  // and the readTripDraft comparison dropped; either one alone still drops the
+  // record. parseTripDraft's own check is pinned in its describe block.
   it("drops a draft with no owner, as written before owners were recorded", () => {
     writeTripDraft(ALICE, form(), NOW);
     const record = JSON.parse(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)!);
