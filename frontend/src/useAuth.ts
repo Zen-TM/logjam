@@ -62,6 +62,13 @@ export function useAuth() {
       });
   }, []);
 
+  // The sign-in screen showing at all means nobody is signed in: the tile
+  // cache goes whenever it does. This runs after the dialog (and the workers
+  // it started) is gone, so it also covers a session that expired mid-render.
+  useEffect(() => {
+    if (state === "signIn") void clearTileCache();
+  }, [state]);
+
   // Listen for mid-session token-refresh failures from apiFetch. When the
   // refresh token has expired or been revoked, drop back to the sign-in
   // screen with an explanatory banner instead of leaving the UI in a
@@ -235,6 +242,9 @@ export function useAuth() {
     } catch (err) {
       console.error(err);
     }
+    // Once more: a render or prefetch worker may have written while the
+    // sign-out was in flight, and the reload does not end it first.
+    await clearTileCache();
     window.location.reload();
   }, []);
 

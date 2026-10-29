@@ -286,10 +286,12 @@ export class TileCache {
         ),
       };
       if (this.cleared) return;
-      await cache.put(INDEX_URL, new Response(JSON.stringify(index)));
+      // Clean before the write: a change during it must stay dirty.
       this.dirty = false;
+      await cache.put(INDEX_URL, new Response(JSON.stringify(index)));
     } catch {
       // Not written; the next change tries again.
+      this.dirty = true;
     }
   }
 

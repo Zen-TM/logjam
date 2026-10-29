@@ -707,9 +707,13 @@ function GeoPdfDialog({
     open && format === "geopdf" && !generating && extentValid && !tooLarge;
   useEffect(() => {
     if (!prefetching) return;
+    // Cleanup can run while the client chunk is still loading: a prefetch
+    // started after that would have nobody left to stop it.
+    let cancelled = false;
     const timer = setTimeout(() => {
       loadGeoPdfClient()
         .then((client) => {
+          if (cancelled) return;
           stopPrefetch.current = client.prefetchGeoPdf({
             config: {
               paperSize: extentState.paperSize,
@@ -737,6 +741,7 @@ function GeoPdfDialog({
         .catch(() => {});
     }, PREFETCH_AFTER_MS);
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       stopPrefetch.current?.();
       stopPrefetch.current = null;

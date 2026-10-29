@@ -33,8 +33,13 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
 // The renderer is its own chunk and needs a worker; tests drive its answer.
 const renderGeoPdf = vi.hoisted(() => vi.fn());
 const prefetchGeoPdf = vi.hoisted(() => vi.fn());
+// A test holds the renderer chunk back by replacing `wait`.
+const clientGate = vi.hoisted(() => ({ wait: Promise.resolve() }));
 vi.mock("./loadGeoPdfClient", () => ({
-  loadGeoPdfClient: async () => ({ renderGeoPdf, prefetchGeoPdf }),
+  loadGeoPdfClient: async () => {
+    await clientGate.wait;
+    return { renderGeoPdf, prefetchGeoPdf };
+  },
 }));
 vi.mock("../../download", () => ({ downloadBlob: vi.fn() }));
 type RenderOpts = {
@@ -989,6 +994,24 @@ describe("GeoPdfDialog, warms the tile cache", () => {
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(stop).toHaveBeenCalled();
     await vi.waitFor(() => expect(renderGeoPdf).toHaveBeenCalled());
+  });
+
+  // Mutation: drop the `cancelled` test in the effect: the prefetch starts
+  // after the dialog is gone, with nobody to stop it.
+  it("starts nothing if it is cleaned up while the renderer chunk is loading", async () => {
+    let load!: () => void;
+    const gate = new Promise<void>((r) => (load = r));
+    clientGate.wait = gate;
+    const { rerender } = render(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 25000 }),
+    );
+    // The effect's timer has fired and is waiting on the chunk.
+    await new Promise((r) => setTimeout(r, 1300));
+    rerender(dialog({ open: false }));
+    load();
+    await new Promise((r) => setTimeout(r, 50));
+    clientGate.wait = Promise.resolve();
+    expect(prefetched()).toBe(0);
   });
 
   it("stops when the dialog closes", async () => {

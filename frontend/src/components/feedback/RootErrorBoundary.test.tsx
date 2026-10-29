@@ -96,6 +96,8 @@ describe("RootErrorBoundary", () => {
     await vi.waitFor(() => expect(mocks.clearTileCache).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalled());
+    // Mutation: drop the clear after signOut in handleSignOut.
+    expect(mocks.clearTileCache).toHaveBeenCalledTimes(2);
   });
 
   it("reloads even when signing out fails, so a corrupt session is still escapable", async () => {

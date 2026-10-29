@@ -162,6 +162,54 @@ describe("TileCache", () => {
     await cache.clear();
   });
 
+  // Mutation: set `dirty = false` after the index write instead of before: a
+  // put during the write is then marked clean and never indexed.
+  it("keeps a change made during an index write dirty", async () => {
+    const { storage } = fakeStorage();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let writing: (() => void) | null = null;
+    const started = new Promise<void>((r) => (writing = r));
+    const real = storage.open.bind(storage);
+    const slow: CacheStorageLike = {
+      ...storage,
+      open: async (name) => {
+        const c = await real(name);
+        return {
+          ...c,
+          put: async (url, res) => {
+            if (url.endsWith("/index") && writing) {
+              writing();
+              writing = null;
+              await gate;
+            }
+            return c.put(url, res);
+          },
+        };
+      },
+    };
+    const cache = new TileCache(slow);
+    await cache.open(A, "v1");
+    await cache.put(A, "v1", 10, 3, bytes(3));
+    const flushing = cache.flush();
+    await started;
+    await cache.put(A, "v1", 20, 3, bytes(3));
+    release();
+    await flushing;
+    await cache.flush();
+    const reloaded = new TileCache(storage, 5);
+    await reloaded.open(A, "v1");
+    // Both entries are in the index (a rebuilt one would also hold both, so
+    // read it as stored: the second put must have been written by the second flush).
+    const stored = await (await storage.open("logjam-geopdf-tiles-v1")).match(
+      "https://geopdf-tiles.invalid/index",
+    );
+    const index = (await stored!.json()) as {
+      entries: Record<string, unknown>;
+    };
+    expect(Object.keys(index.entries)).toHaveLength(2);
+  });
+
   it("flushes on a timer after a change", async () => {
     vi.useFakeTimers();
     try {

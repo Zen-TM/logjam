@@ -311,6 +311,7 @@ describe("the persistent cache", () => {
     const calls: string[] = [];
     const kept = new Map<string, ArrayBuffer>();
     const store = {
+      kept,
       open: async (a: string) => void calls.push(`open ${a}`),
       get: async (a: string, v: string, o: number, l: number) => {
         calls.push(`get ${a}`);
@@ -361,6 +362,19 @@ describe("the persistent cache", () => {
     await read(`${ORIGIN}/master/a.pmtiles`, store);
     // Only the header is asked of the network again.
     expect(asked.length - before).toBe(1);
+  });
+
+  // Mutation: drop the etag comparison in RangeSource.getBytes: the replaced
+  // archive's tile is filed under the old version.
+  it("never files a tile under a version it was not read at", async () => {
+    let answers = 0;
+    serve(archiveBytes(), { etag: () => (answers++ === 0 ? '"v1"' : '"v2"') });
+    const { store, calls } = fakeStore();
+    await read(`${ORIGIN}/master/a.pmtiles`, store);
+    expect(calls.filter((c) => c === "put master/a.pmtiles")).toHaveLength(1);
+    expect(answers).toBeGreaterThan(2);
+    const kept = (store as unknown as { kept: Map<string, unknown> }).kept;
+    expect([...kept.keys()].every((k) => k.includes('|"v2"|'))).toBe(true);
   });
 
   it("keeps nothing from a server that sends no etag: it cannot say what version it read", async () => {

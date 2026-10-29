@@ -11,7 +11,6 @@ import {
   NSW_SLOPE,
   TARGET_DPI,
   type SharpenedOverlay,
-  type TerrainArchiveLayer,
   type TileCoord,
   type TileToMapTransform,
 } from "@logjam/shared";
@@ -134,9 +133,9 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
   const add = (path: string, r: TileCoord) =>
     out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
   const whole = [{ from: 0, to: g.nativeH }];
-  const layers: [boolean, "heights" | "slope", TerrainArchiveLayer][] = [
-    [drawn.hillshade, "heights", "heights"],
-    [config.overlays.includes("slope"), "slope", "slope"],
+  const layers: [boolean, "heights" | "slope"][] = [
+    [drawn.hillshade, "heights"],
+    [config.overlays.includes("slope"), "slope"],
   ];
   for (const [wanted, archiveLayer] of layers) {
     if (!wanted) continue;
