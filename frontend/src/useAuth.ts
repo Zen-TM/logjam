@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   signIn as amplifySignIn,
   signUp as amplifySignUp,
@@ -41,6 +41,12 @@ export function useAuth() {
   // Username is stored between sign-up and confirmation steps
   const [pendingUsername, setPendingUsername] = useState("");
 
+  // True when the session check itself failed (offline, say) and put the
+  // sign-in screen up with the refresh token still in localStorage: the user
+  // may be the same one, so their GeoPDF tiles stay (see the effect below).
+  // Reset by the next successful sign-in, which clears the cache first.
+  const sessionCheckFailed = useRef(false);
+
   // On mount, check if there's an existing valid session in localStorage.
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
@@ -57,16 +63,20 @@ export function useAuth() {
         }
       })
       .catch(() => {
-        void clearTileCache();
+        // Not known signed out: no clear here or after (sessionCheckFailed).
+        sessionCheckFailed.current = true;
         setState("signIn");
       });
   }, []);
 
-  // The sign-in screen showing at all means nobody is signed in: the tile
-  // cache goes whenever it does. This runs after the dialog (and the workers
-  // it started) is gone, so it also covers a session that expired mid-render.
+  // The sign-in screen showing means nobody is known to be signed in, so the
+  // tile cache goes, except when the session check failed. This runs after the
+  // dialog (and the workers it started) is gone, so it also covers a session
+  // that expired mid-render.
   useEffect(() => {
-    if (state === "signIn") void clearTileCache();
+    if (state === "signIn" && !sessionCheckFailed.current) {
+      void clearTileCache();
+    }
   }, [state]);
 
   // Listen for mid-session token-refresh failures from apiFetch. When the
@@ -95,6 +105,10 @@ export function useAuth() {
           setError(mapAuthNextStep(result.nextStep.signInStep));
           return false;
         }
+        // Whoever signs in starts with an empty tile cache, even after a
+        // failed session check that left the last user's in place.
+        await clearTileCache();
+        sessionCheckFailed.current = false;
         // Await provisioning before flipping to authenticated: GET /users/me
         // creates the User row on first login, and every other endpoint 404s
         // ("User not found") until that row exists. Flipping state first let
@@ -229,7 +243,8 @@ export function useAuth() {
     // root AGENTS.md). Cleared before the network call so a signOut failure
     // can't strand it.
     clearTripDraft();
-    // The GeoPDF tile cache shows which areas were printed: same line.
+    // The GeoPDF tile cache shows which areas were printed: same line. It
+    // clears here because the user is known to be signing out.
     await clearTileCache();
     // amplifySignOut can reject (storage error, network hiccup during global
     // revoke, an Amplify internal error) — without the try/catch, the

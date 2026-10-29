@@ -20,10 +20,13 @@
 - **A date-only value** (stored UTC midnight) formats with `timeZone: "UTC"`.
 - **Sign-out clears what the browser kept of a user's work.** The trip draft
   clears on the two explicit paths, `endSession` (`useAuth.ts`) and
-  `RootErrorBoundary`'s sign-out. The GeoPDF tile cache (`geoPdf/cache.ts`)
-  clears on those too, and whenever the sign-in screen shows (a session that
-  expired, a tab opened with no session). A new store of the kind joins them.
-  Guards: `useAuth.test.tsx`, `RootErrorBoundary.test.tsx`.
+  `RootErrorBoundary`'s sign-out, and records its writer's id: another user,
+  or a record with no id, is removed unread, so a lapsed session keeps its
+  own user's draft. The GeoPDF tile cache (`geoPdf/cache.ts`) clears on those
+  too, whenever someone is known signed out (no tokens, an expired session)
+  and at every sign-in; a session check that fails (offline) keeps it. A new
+  store of the kind joins them. Guards: `tripDraft.test.ts`,
+  `useAuth.test.tsx`, `RootErrorBoundary.test.tsx`.
 
 ## Testing
 

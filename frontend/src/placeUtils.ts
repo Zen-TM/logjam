@@ -794,6 +794,14 @@ export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
+  // Signed out (an expired session leaves Logjam Web mounted): the next person
+  // to sign in must never see this user's row, not even until their own
+  // /users/me answers. Reset during render, not in the effect.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (!enabled) setCurrentUser(null);
+  }
 
   useEffect(() => {
     if (!enabled) return;

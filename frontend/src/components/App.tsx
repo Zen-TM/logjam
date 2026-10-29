@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { CurrentUserIdContext } from "../CurrentUserIdContext";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { BASE_LAYERS, type SnapMode } from "./map/Map";
@@ -1352,564 +1353,574 @@ function App() {
     selectingExportBox;
 
   return (
-    <div className={classes.app}>
-      <a href="#main-content" className={classes.skipLink}>
-        Skip to map
-      </a>
-      <TopoDialog
-        open={showTopo}
-        onClose={() => {
-          setShowTopo(false);
-          setBoxPick((pick) => endBox(pick, "topo"));
-          // The dialog empties itself on a real close; the drawn area is held
-          // out here (going off to draw closes the dialog), so it has to be
-          // emptied with it or the next topo starts with the last one's box.
-          setPendingTopoBbox(null);
-        }}
-        onSelectBbox={() => {
-          setShowTopo(false);
-          setBoxPick((pick) => armBox(pick, "topo"));
-        }}
-        awaitingBbox={selectingTopoBbox}
-        pendingBbox={pendingTopoBbox}
-        onJobCreated={handleTopoJobCreated}
-        existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
-          .map((j) => j.name)
-          .filter((n): n is string => !!n)}
-      />
-      <GeoPdfDialog
-        key={exportDialogKey}
-        open={showGeoPdf}
-        onClose={() => {
-          setShowGeoPdf(false);
-          setExportAreaSeed(null);
-          setPendingExportBox(null);
-          setBoxPick((pick) => endBox(pick, "export"));
-        }}
-        onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
-          // The latest pick, every visit: the map follows the dialog.
-          setGeoPdfFramingLayer(baseLayerId ?? null);
-          setGeoPdfPaperAspect(aspect);
-          setGeoPdfPaperDimensions(paperDims);
-          setGeoPdfInitialExtent(extent);
-          setGeoPdfInitialScale(scale);
-          setShowGeoPdf(false);
-          setActivePanel(null);
-          setBoxPick((pick) => endBox(pick, "export"));
-          setSelectingGeoPdfExtent(true);
-        }}
-        pendingExtent={pendingGeoPdfExtent}
-        pendingScale={pendingGeoPdfScale}
-        activeLayerId={activeLayerId}
-        terrainLayers={terrainLayers}
-        completedTopoJobs={completedTopoJobs}
-        mapCenter={mapCenter}
-        places={places}
-        sharedPlaces={sharedPlaces}
-        slopeBands={slopeBands.drawn}
-        topoJobsLoaded={completedTopoJobsLoaded}
-        areaSeed={exportAreaSeed}
-        onPickArea={() => {
-          setShowGeoPdf(false);
-          setActivePanel(null);
-          setBoxPick((pick) => armBox(pick, "export"));
-        }}
-        pendingArea={pendingExportBox}
-        onExportQueued={refetchTopoExports}
-        sharpenedAreas={sharpenedAreas}
-      />
-      <div className={dimUI ? classes.dimmed : undefined}>
-        <NavRail
-          activePanel={activePanel}
-          onPanelChange={handlePanelChange}
-          badgeCounts={{ inbox: unreadCount }}
-        />
-        <SidebarPanel
-          activePanel={activePanel}
-          onClose={handlePanelClose}
-          onTopoFlyTarget={setTopoFlyTarget}
-          onShowSharpened={() => {
-            setLayersStartView({ view: "sharpened" });
-            setLayersOpen(true);
-          }}
-          logsView={logsView}
-          onLogsViewChange={setLogsView}
-          onStartDrawingRoute={startDrawingRoute}
-          waysLoaded={waysLoaded}
-          allRoutes={routes}
-          placeTracks={placeTracks}
-          standaloneFiles={standaloneFiles}
-          standaloneFilesError={standaloneFilesError}
-          onRetryStandaloneFiles={refetchStandaloneFiles}
-          onOpenWay={openWay}
-          currentUserId={currentUser?.id ?? null}
-          wayDetail={
-            selectedWay ? (
-              <WayDetailPanel
-                way={selectedWay}
-                route={selectedRoute}
-                file={
-                  standaloneFiles.find((each) => each.id === selectedWay.id) ??
-                  null
-                }
-                placeTrack={
-                  placeTracks.find((each) => each.mediaId === selectedWay.id) ??
-                  null
-                }
-                initialVerb={pendingWayVerb}
-                onVerbConsumed={() => setPendingWayVerb(null)}
-                friends={friends}
-                ownedPlaces={places}
-                sharedPlaces={sharedPlaces}
-                allRoutes={routes}
-                onBack={() => {
-                  setSelectedWay(null);
-                  setActivePanel("ways");
-                }}
-                onEdit={startEditingRoute}
-                onCopied={showCopiedRoute}
-                onChanged={() => {
-                  refetchRoutes();
-                  refetchStandaloneFiles();
-                  // A file linked to a place is drawn by the place-tracks layer
-                  // too, from its own copy of the colour.
-                  refetchPlaceTracks();
-                }}
-                onOpenPlace={(placeId) => {
-                  setSelectedPlaceID(placeId);
-                  setActivePanel("place-detail");
-                }}
-                onLogTrip={setLogTripFromTrack}
-                onDeleteFile={handleDeleteStandaloneFile}
-                routeHover={routeHover}
-              />
-            ) : null
-          }
-          drawPanel={
-            drawingRoute ? (
-              <RouteDrawPanel
-                points={routeDraft.points}
-                anchorCount={routeDraft.draft.anchors.length}
-                canUndo={routeDraft.canUndo}
-                atCap={routeDraft.atCap}
-                editingName={
-                  routes.find((r) => r.id === editingRouteId)?.name ?? null
-                }
-                color={drawColor}
-                onColorChange={setDrawColor}
-                onUndo={routeDraft.undo}
-                onClear={clearRouteGuard.requestClose}
-                onReverse={routeDraft.reverse}
-                routeHover={routeHover}
-                // Editing keeps the name it already has; naming belongs to
-                // CREATING a route.
-                onSave={() => {
-                  const existing = routes.find((r) => r.id === editingRouteId);
-                  if (existing) void saveDrawnRoute(existing.name);
-                  else setNamingRoute(true);
-                }}
-                onCancel={cancelRouteGuard.requestClose}
-                saving={savingRoute}
-                snapMode={snapMode}
-                onSnapModeChange={setSnapMode}
-              />
-            ) : null
-          }
-          measurePanel={
-            measuring ? (
-              <MeasurePanel
-                points={routeDraft.points}
-                anchorCount={routeDraft.draft.anchors.length}
-                canUndo={routeDraft.canUndo}
-                atCap={routeDraft.atCap}
-                onUndo={routeDraft.undo}
-                onClear={() => routeDraft.reset()}
-                onClose={() => setActivePanel(null)}
-                snapMode={snapMode}
-                onSnapModeChange={setSnapMode}
-              />
-            ) : null
-          }
-          places={places}
-          placesLoaded={placesLoaded}
-          placesTotal={placesTotal}
-          sharedPlaces={sharedPlaces}
-          onAddPlace={() => setShowAdd(true)}
-          onOpenUnifiedImport={() => setShowUnifiedImport(true)}
-          onSharePlaces={setSelectedAreaPlaceIds}
-          onMakeMap={makeMap}
-          onHoverPlace={placeHighlight.set}
-          onFiltersOpenChange={setSidebarSheetOpen}
-          onRefetch={refetch}
-          filters={filters}
-          onChangeFilters={setFilters}
-          onDrawFilterArea={startFilterAreaSelection}
-          onFilterToMapView={() => {
-            const bounds = mapBoundsRef.current;
-            if (bounds) setFilters({ ...filters, area: bounds });
-          }}
-          openFiltersRequested={openFiltersRequested}
-          onOpenFiltersConsumed={consumeOpenFilters}
-          onQuotaChanged={refetchCurrentUser}
-          currentUser={currentUser}
-          currentUserError={currentUserError}
-          onRetryCurrentUser={refetchCurrentUser}
-          friends={friends}
-          friendRequests={friendRequests}
-          onRefetchFriends={refetchFriends}
-          onRefetchShared={refetchShared}
-          notifications={notifications}
-          notificationsLoaded={notificationsLoaded}
-          notificationsError={notificationsError}
-          notificationsTotal={notificationsTotal}
-          onRefetchNotifications={refetchNotifications}
-          onOverrideNotificationRead={overrideNotificationRead}
-          setSelectedPlaceID={setSelectedPlaceID}
-          setActivePanel={setActivePanel}
-          place={place}
-          isOwnedPlace={isOwnedPlace}
-          onPickCoords={startPickingCoords}
-          pickingCoords={pickingCoords}
-          onCancelPickCoords={cancelPickingCoords}
-          tripLogs={tripLogs}
-          selectedTripLogId={selectedTripLogId}
-          setSelectedTripLogId={setSelectedTripLogId}
-          tripLogsTotal={tripLogsTotal}
-          tripLogsLoaded={tripLogsLoaded}
-          onRefetchTripLogs={refetchAfterTripWrite}
-          customFieldDefs={customFieldDefs}
-          onCustomFieldDefsChange={setCustomFieldDefs}
-          placeCustomFieldDefs={placeCustomFieldDefs}
-          onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
-          placeTypes={placeTypes}
-          onPlaceTypesChange={setPlaceTypes}
-          collapseToPeek={mapInteractionActive}
-        />
-      </div>
-      <main id="main-content" className={classes.main}>
-        <h1 className={classes.visuallyHidden}>Logjam place map</h1>
-        <Map
-          filters={filters}
-          places={places}
-          sharedPlaces={sharedPlaces}
-          showPlaces={showPlaces}
-          // One overlay for every line, so nothing has to be partitioned by
-          // ownership on the way to the map any more.
-          showWays={showWays}
-          placeTracks={placeTracks}
-          standaloneTracks={standaloneTracks}
-          routes={routes}
-          routeHover={routeHover}
-          selectRoute={(id) => {
-            const route = routes.find((r) => r.id === id);
-            if (route)
-              openWay(
-                wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
-              );
-          }}
-          onAddPlaceAt={(point) => {
-            setAddPlaceAt(point);
-            setShowAdd(true);
-          }}
-          // The point is the measurement's first, as a press on the map there
-          // would have made it.
-          onMeasureFrom={startMeasuring}
-          selectTrack={(mediaId) => {
-            const way = allWays.find(
-              (each) => each.kind !== "route" && each.id === mediaId,
-            );
-            if (way) openWay(way);
-          }}
-          drawingRoute={drawingRoute || measuring}
-          measuring={measuring}
-          // A measurement has no colour of its own: it draws in the accent.
-          drawColor={measuring ? undefined : (drawColor ?? undefined)}
-          drawPoints={routeDraft.points}
-          drawAnchorIndices={routeDraft.anchorIndices}
-          draft={routeDraft.draft}
-          editingRouteId={editingRouteId}
-          snapMode={snapMode}
-          onDrawPointAdd={routeDraft.addAnchor}
-          onDrawSnap={routeDraft.applySnap}
-          onDrawPointMove={routeDraft.moveAnchorAt}
-          onDrawPointDelete={routeDraft.deleteAnchorAt}
-          onDrawPointInsert={routeDraft.insertAnchorAt}
-          selectPlace={(id) => {
-            // A pin opens the place, wherever you pressed it from.
-            setSelectedPlaceID(id);
-            setActivePanel("place-detail");
-          }}
-          pickingCoords={pickingCoords}
-          onCoordsPicked={handleCoordsPicked}
-          onCancelPickCoords={cancelPickingCoords}
-          selectingFilterArea={selectingFilterArea}
-          onFilterAreaSelected={(bbox) => {
-            setSelectingFilterArea(false);
-            setFilters({ ...filters, area: bbox });
-            // Straight back to where the button was, with the filters open — the
-            // panel was closed to uncover the map, not dismissed.
-            setActivePanel("places");
-            setOpenFiltersRequested(true);
-          }}
-          onMapBoundsChange={(bounds) => {
-            mapBoundsRef.current = bounds;
-          }}
-          selectingBbox={boxFor(boxPick) !== null}
-          onBboxSelected={(bbox) => {
-            if (boxFor(boxPick) === "export") {
-              setPendingExportBox(bbox);
-              setBoxPick((pick) => endBox(pick, "export"));
-              setShowGeoPdf(true);
-              return;
-            }
-            setPendingTopoBbox(bbox);
+    <CurrentUserIdContext.Provider value={currentUser?.id ?? null}>
+      <div className={classes.app}>
+        <a href="#main-content" className={classes.skipLink}>
+          Skip to map
+        </a>
+        <TopoDialog
+          open={showTopo}
+          onClose={() => {
+            setShowTopo(false);
             setBoxPick((pick) => endBox(pick, "topo"));
-            setShowTopo(true);
+            // The dialog empties itself on a real close; the drawn area is held
+            // out here (going off to draw closes the dialog), so it has to be
+            // emptied with it or the next topo starts with the last one's box.
+            setPendingTopoBbox(null);
           }}
-          onBboxCancelled={
-            boxFor(boxPick) === "export"
+          onSelectBbox={() => {
+            setShowTopo(false);
+            setBoxPick((pick) => armBox(pick, "topo"));
+          }}
+          awaitingBbox={selectingTopoBbox}
+          pendingBbox={pendingTopoBbox}
+          onJobCreated={handleTopoJobCreated}
+          existingTopoNames={[...activeTopoJobs, ...completedTopoJobs]
+            .map((j) => j.name)
+            .filter((n): n is string => !!n)}
+        />
+        <GeoPdfDialog
+          key={exportDialogKey}
+          open={showGeoPdf}
+          onClose={() => {
+            setShowGeoPdf(false);
+            setExportAreaSeed(null);
+            setPendingExportBox(null);
+            setBoxPick((pick) => endBox(pick, "export"));
+          }}
+          onSelectOnMap={(aspect, paperDims, extent, scale, baseLayerId) => {
+            // The latest pick, every visit: the map follows the dialog.
+            setGeoPdfFramingLayer(baseLayerId ?? null);
+            setGeoPdfPaperAspect(aspect);
+            setGeoPdfPaperDimensions(paperDims);
+            setGeoPdfInitialExtent(extent);
+            setGeoPdfInitialScale(scale);
+            setShowGeoPdf(false);
+            setActivePanel(null);
+            setBoxPick((pick) => endBox(pick, "export"));
+            setSelectingGeoPdfExtent(true);
+          }}
+          pendingExtent={pendingGeoPdfExtent}
+          pendingScale={pendingGeoPdfScale}
+          activeLayerId={activeLayerId}
+          terrainLayers={terrainLayers}
+          completedTopoJobs={completedTopoJobs}
+          mapCenter={mapCenter}
+          places={places}
+          sharedPlaces={sharedPlaces}
+          slopeBands={slopeBands.drawn}
+          topoJobsLoaded={completedTopoJobsLoaded}
+          areaSeed={exportAreaSeed}
+          onPickArea={() => {
+            setShowGeoPdf(false);
+            setActivePanel(null);
+            setBoxPick((pick) => armBox(pick, "export"));
+          }}
+          pendingArea={pendingExportBox}
+          onExportQueued={refetchTopoExports}
+          sharpenedAreas={sharpenedAreas}
+        />
+        <div className={dimUI ? classes.dimmed : undefined}>
+          <NavRail
+            activePanel={activePanel}
+            onPanelChange={handlePanelChange}
+            badgeCounts={{ inbox: unreadCount }}
+          />
+          <SidebarPanel
+            activePanel={activePanel}
+            onClose={handlePanelClose}
+            onTopoFlyTarget={setTopoFlyTarget}
+            onShowSharpened={() => {
+              setLayersStartView({ view: "sharpened" });
+              setLayersOpen(true);
+            }}
+            logsView={logsView}
+            onLogsViewChange={setLogsView}
+            onStartDrawingRoute={startDrawingRoute}
+            waysLoaded={waysLoaded}
+            allRoutes={routes}
+            placeTracks={placeTracks}
+            standaloneFiles={standaloneFiles}
+            standaloneFilesError={standaloneFilesError}
+            onRetryStandaloneFiles={refetchStandaloneFiles}
+            onOpenWay={openWay}
+            currentUserId={currentUser?.id ?? null}
+            wayDetail={
+              selectedWay ? (
+                <WayDetailPanel
+                  way={selectedWay}
+                  route={selectedRoute}
+                  file={
+                    standaloneFiles.find(
+                      (each) => each.id === selectedWay.id,
+                    ) ?? null
+                  }
+                  placeTrack={
+                    placeTracks.find(
+                      (each) => each.mediaId === selectedWay.id,
+                    ) ?? null
+                  }
+                  initialVerb={pendingWayVerb}
+                  onVerbConsumed={() => setPendingWayVerb(null)}
+                  friends={friends}
+                  ownedPlaces={places}
+                  sharedPlaces={sharedPlaces}
+                  allRoutes={routes}
+                  onBack={() => {
+                    setSelectedWay(null);
+                    setActivePanel("ways");
+                  }}
+                  onEdit={startEditingRoute}
+                  onCopied={showCopiedRoute}
+                  onChanged={() => {
+                    refetchRoutes();
+                    refetchStandaloneFiles();
+                    // A file linked to a place is drawn by the place-tracks layer
+                    // too, from its own copy of the colour.
+                    refetchPlaceTracks();
+                  }}
+                  onOpenPlace={(placeId) => {
+                    setSelectedPlaceID(placeId);
+                    setActivePanel("place-detail");
+                  }}
+                  onLogTrip={setLogTripFromTrack}
+                  onDeleteFile={handleDeleteStandaloneFile}
+                  routeHover={routeHover}
+                />
+              ) : null
+            }
+            drawPanel={
+              drawingRoute ? (
+                <RouteDrawPanel
+                  points={routeDraft.points}
+                  anchorCount={routeDraft.draft.anchors.length}
+                  canUndo={routeDraft.canUndo}
+                  atCap={routeDraft.atCap}
+                  editingName={
+                    routes.find((r) => r.id === editingRouteId)?.name ?? null
+                  }
+                  color={drawColor}
+                  onColorChange={setDrawColor}
+                  onUndo={routeDraft.undo}
+                  onClear={clearRouteGuard.requestClose}
+                  onReverse={routeDraft.reverse}
+                  routeHover={routeHover}
+                  // Editing keeps the name it already has; naming belongs to
+                  // CREATING a route.
+                  onSave={() => {
+                    const existing = routes.find(
+                      (r) => r.id === editingRouteId,
+                    );
+                    if (existing) void saveDrawnRoute(existing.name);
+                    else setNamingRoute(true);
+                  }}
+                  onCancel={cancelRouteGuard.requestClose}
+                  saving={savingRoute}
+                  snapMode={snapMode}
+                  onSnapModeChange={setSnapMode}
+                />
+              ) : null
+            }
+            measurePanel={
+              measuring ? (
+                <MeasurePanel
+                  points={routeDraft.points}
+                  anchorCount={routeDraft.draft.anchors.length}
+                  canUndo={routeDraft.canUndo}
+                  atCap={routeDraft.atCap}
+                  onUndo={routeDraft.undo}
+                  onClear={() => routeDraft.reset()}
+                  onClose={() => setActivePanel(null)}
+                  snapMode={snapMode}
+                  onSnapModeChange={setSnapMode}
+                />
+              ) : null
+            }
+            places={places}
+            placesLoaded={placesLoaded}
+            placesTotal={placesTotal}
+            sharedPlaces={sharedPlaces}
+            onAddPlace={() => setShowAdd(true)}
+            onOpenUnifiedImport={() => setShowUnifiedImport(true)}
+            onSharePlaces={setSelectedAreaPlaceIds}
+            onMakeMap={makeMap}
+            onHoverPlace={placeHighlight.set}
+            onFiltersOpenChange={setSidebarSheetOpen}
+            onRefetch={refetch}
+            filters={filters}
+            onChangeFilters={setFilters}
+            onDrawFilterArea={startFilterAreaSelection}
+            onFilterToMapView={() => {
+              const bounds = mapBoundsRef.current;
+              if (bounds) setFilters({ ...filters, area: bounds });
+            }}
+            openFiltersRequested={openFiltersRequested}
+            onOpenFiltersConsumed={consumeOpenFilters}
+            onQuotaChanged={refetchCurrentUser}
+            currentUser={currentUser}
+            currentUserError={currentUserError}
+            onRetryCurrentUser={refetchCurrentUser}
+            friends={friends}
+            friendRequests={friendRequests}
+            onRefetchFriends={refetchFriends}
+            onRefetchShared={refetchShared}
+            notifications={notifications}
+            notificationsLoaded={notificationsLoaded}
+            notificationsError={notificationsError}
+            notificationsTotal={notificationsTotal}
+            onRefetchNotifications={refetchNotifications}
+            onOverrideNotificationRead={overrideNotificationRead}
+            setSelectedPlaceID={setSelectedPlaceID}
+            setActivePanel={setActivePanel}
+            place={place}
+            isOwnedPlace={isOwnedPlace}
+            onPickCoords={startPickingCoords}
+            pickingCoords={pickingCoords}
+            onCancelPickCoords={cancelPickingCoords}
+            tripLogs={tripLogs}
+            selectedTripLogId={selectedTripLogId}
+            setSelectedTripLogId={setSelectedTripLogId}
+            tripLogsTotal={tripLogsTotal}
+            tripLogsLoaded={tripLogsLoaded}
+            onRefetchTripLogs={refetchAfterTripWrite}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            placeCustomFieldDefs={placeCustomFieldDefs}
+            onPlaceCustomFieldDefsChange={setPlaceCustomFieldDefs}
+            placeTypes={placeTypes}
+            onPlaceTypesChange={setPlaceTypes}
+            collapseToPeek={mapInteractionActive}
+          />
+        </div>
+        <main id="main-content" className={classes.main}>
+          <h1 className={classes.visuallyHidden}>Logjam place map</h1>
+          <Map
+            filters={filters}
+            places={places}
+            sharedPlaces={sharedPlaces}
+            showPlaces={showPlaces}
+            // One overlay for every line, so nothing has to be partitioned by
+            // ownership on the way to the map any more.
+            showWays={showWays}
+            placeTracks={placeTracks}
+            standaloneTracks={standaloneTracks}
+            routes={routes}
+            routeHover={routeHover}
+            selectRoute={(id) => {
+              const route = routes.find((r) => r.id === id);
+              if (route)
+                openWay(
+                  wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
+                );
+            }}
+            onAddPlaceAt={(point) => {
+              setAddPlaceAt(point);
+              setShowAdd(true);
+            }}
+            // The point is the measurement's first, as a press on the map there
+            // would have made it.
+            onMeasureFrom={startMeasuring}
+            selectTrack={(mediaId) => {
+              const way = allWays.find(
+                (each) => each.kind !== "route" && each.id === mediaId,
+              );
+              if (way) openWay(way);
+            }}
+            drawingRoute={drawingRoute || measuring}
+            measuring={measuring}
+            // A measurement has no colour of its own: it draws in the accent.
+            drawColor={measuring ? undefined : (drawColor ?? undefined)}
+            drawPoints={routeDraft.points}
+            drawAnchorIndices={routeDraft.anchorIndices}
+            draft={routeDraft.draft}
+            editingRouteId={editingRouteId}
+            snapMode={snapMode}
+            onDrawPointAdd={routeDraft.addAnchor}
+            onDrawSnap={routeDraft.applySnap}
+            onDrawPointMove={routeDraft.moveAnchorAt}
+            onDrawPointDelete={routeDraft.deleteAnchorAt}
+            onDrawPointInsert={routeDraft.insertAnchorAt}
+            selectPlace={(id) => {
+              // A pin opens the place, wherever you pressed it from.
+              setSelectedPlaceID(id);
+              setActivePanel("place-detail");
+            }}
+            pickingCoords={pickingCoords}
+            onCoordsPicked={handleCoordsPicked}
+            onCancelPickCoords={cancelPickingCoords}
+            selectingFilterArea={selectingFilterArea}
+            onFilterAreaSelected={(bbox) => {
+              setSelectingFilterArea(false);
+              setFilters({ ...filters, area: bbox });
+              // Straight back to where the button was, with the filters open — the
+              // panel was closed to uncover the map, not dismissed.
+              setActivePanel("places");
+              setOpenFiltersRequested(true);
+            }}
+            onMapBoundsChange={(bounds) => {
+              mapBoundsRef.current = bounds;
+            }}
+            selectingBbox={boxFor(boxPick) !== null}
+            onBboxSelected={(bbox) => {
+              if (boxFor(boxPick) === "export") {
+                setPendingExportBox(bbox);
+                setBoxPick((pick) => endBox(pick, "export"));
+                setShowGeoPdf(true);
+                return;
+              }
+              setPendingTopoBbox(bbox);
+              setBoxPick((pick) => endBox(pick, "topo"));
+              setShowTopo(true);
+            }}
+            onBboxCancelled={
+              boxFor(boxPick) === "export"
+                ? () => {
+                    setBoxPick((pick) => endBox(pick, "export"));
+                    setShowGeoPdf(true);
+                  }
+                : undefined
+            }
+            topoLayers={mapTopoLayers}
+            sharpenedAreas={sharpenedAreas}
+            slopeBands={slopeBands.drawn}
+            activeLayerId={mapLayerId}
+            selectingGeoPdfExtent={selectingGeoPdfExtent}
+            geoPdfPaperAspect={geoPdfPaperAspect}
+            geoPdfPaperDimensions={geoPdfPaperDimensions}
+            geoPdfInitialExtent={geoPdfInitialExtent}
+            geoPdfInitialScale={geoPdfInitialScale}
+            onGeoPdfExtentConfirmed={(extent, scale) => {
+              setPendingGeoPdfExtent(extent);
+              setPendingGeoPdfScale(scale);
+              setSelectingGeoPdfExtent(false);
+              setShowGeoPdf(true);
+            }}
+            onGeoPdfExtentCancelled={() => {
+              setSelectingGeoPdfExtent(false);
+              setShowGeoPdf(true);
+            }}
+            onMapViewChange={(view) => setMapCenter(view)}
+            initialView={mapCenter}
+            topoFlyTarget={topoFlyTarget}
+            onTopoFlyConsumed={() => setTopoFlyTarget(null)}
+            flyToPlace={flyToPlace}
+            onFlyToPlaceConsumed={() => setFlyToPlace(null)}
+            panelOpen={activePanel !== null}
+            sheetOpen={sidebarSheetOpen}
+            placeHighlight={placeHighlight}
+            placeTypes={placeTypes}
+            layersButton={
+              <MapButton
+                ref={layersButtonRef}
+                icon="layers"
+                label="Layers"
+                expanded={layersOpen}
+                onClick={() => setLayersOpen((open) => !open)}
+              />
+            }
+            mapTools={mapTools}
+            notices={notices}
+            flyToBounds={flyToBounds}
+            onFlyToBoundsConsumed={() => setFlyToBounds(null)}
+            onTopoSourceUnavailable={handleTopoSourceUnavailable}
+          />
+        </main>
+
+        <LayersPopover
+          onImportFile={() => setShowUnifiedImport(true)}
+          open={layersOpen}
+          onClose={() => setLayersOpen(false)}
+          anchorRef={layersButtonRef}
+          startView={layersStartView}
+          sharpenedLoaded={completedTopoJobsLoaded}
+          activeTopoJobs={activeTopoJobs}
+          friends={friends}
+          onSharpen={() => setShowTopo(true)}
+          onExportArea={(job) => {
+            const bounds = job.footprint && footprintBounds(job.footprint);
+            if (bounds) makeMap(bounds, "geopdf");
+          }}
+          onFlyToArea={setTopoFlyTarget}
+          onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
+          onDismissActiveJob={handleDismissActiveTopoJob}
+          onQuotaChanged={refetchCurrentUser}
+          showPlaces={showPlaces}
+          setShowPlaces={setShowPlaces}
+          showWays={showWays}
+          setShowWays={setShowWays}
+          placeCount={places.length + sharedPlaces.length}
+          wayCount={showWays ? wayCount : null}
+          completedTopoJobs={completedTopoJobs}
+          baseLayers={BASE_LAYERS}
+          activeLayerId={activeLayerId}
+          onActiveLayerChange={setActiveLayerId}
+          terrainLayers={terrainLayers}
+          onTerrainLayerChange={setTerrainLayer}
+          slopeBands={slopeBands.bands}
+          onSlopeBandsChange={slopeBands.setBands}
+          mapView={mapCenter}
+        />
+
+        <FriendInviteDialog
+          enabled={loadsUserData}
+          onFriended={() => {
+            refetchFriends();
+            // A request waiting between the two is accepted by the link, and
+            // its Inbox row is gone on the server.
+            refetchNotifications();
+          }}
+        />
+
+        <ConfirmDialog
+          open={cancelRouteGuard.guardOpen}
+          // Editing and drawing lose different things, so they cannot share one
+          // sentence: abandoning an edit costs the changes, not the route.
+          title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
+          message={
+            editingRouteId
+              ? "Your changes to this route will be lost. The route itself is not deleted."
+              : "Your placed points will be lost. This cannot be undone."
+          }
+          confirmLabel="Discard"
+          confirmColor="error"
+          onConfirm={cancelRouteGuard.confirmDiscard}
+          onClose={() => {
+            // Keeping the route also drops whatever was waiting on its discard.
+            afterRouteCancel.current = null;
+            cancelRouteGuard.cancelDiscard();
+          }}
+        />
+
+        <ConfirmDialog
+          open={clearRouteGuard.guardOpen}
+          title="Clear this route?"
+          message="Your placed points will be lost. This cannot be undone."
+          confirmLabel="Clear"
+          confirmColor="error"
+          onConfirm={clearRouteGuard.confirmDiscard}
+          onClose={clearRouteGuard.cancelDiscard}
+        />
+
+        <RouteNameDialog
+          open={namingRoute}
+          initialName={
+            routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
+          }
+          busy={savingRoute}
+          onSave={(name) => void saveDrawnRoute(name)}
+          onClose={() => setNamingRoute(false)}
+        />
+
+        {selectingFilterArea && (
+          <div className={classes.selectAllButtons}>
+            <Button
+              compact
+              variant="filled"
+              onClick={cancelFilterAreaSelection}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+
+        {/* First-login onboarding choice */}
+        <OnboardingChoiceDialog
+          open={showOnboarding}
+          onLoaded={refetch}
+          onImportFiles={() => {
+            setShowOnboarding(false);
+            setImportedFromOnboarding(true);
+            setShowUnifiedImport(true);
+          }}
+          onStartEmpty={() => setShowOnboarding(false)}
+        />
+
+        {/* The trip form, opened from a track's "Log a trip". Mounted only while
+          it is open, so every open starts from the track it was asked for. */}
+        {logTripFromTrack && (
+          <TripLogDialog
+            open={!pickingCoords}
+            onClose={() => setLogTripFromTrack(null)}
+            onSaved={() => {
+              setLogTripFromTrack(null);
+              refetchAfterTripWrite();
+              refetchCurrentUser();
+            }}
+            places={places}
+            fromTrack={logTripFromTrack}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onPickCoords={startPickingCoords}
+            onPlaceCreated={refetch}
+          />
+        )}
+
+        {/* Unified file importer (places + logbooks) */}
+        <UnifiedImportDialog
+          open={showUnifiedImport && !pickingCoords}
+          onClose={() => {
+            setShowUnifiedImport(false);
+            setImportedFromOnboarding(false);
+          }}
+          onBack={
+            importedFromOnboarding
               ? () => {
-                  setBoxPick((pick) => endBox(pick, "export"));
-                  setShowGeoPdf(true);
+                  setShowUnifiedImport(false);
+                  setImportedFromOnboarding(false);
+                  setShowOnboarding(true);
                 }
               : undefined
           }
-          topoLayers={mapTopoLayers}
-          sharpenedAreas={sharpenedAreas}
-          slopeBands={slopeBands.drawn}
-          activeLayerId={mapLayerId}
-          selectingGeoPdfExtent={selectingGeoPdfExtent}
-          geoPdfPaperAspect={geoPdfPaperAspect}
-          geoPdfPaperDimensions={geoPdfPaperDimensions}
-          geoPdfInitialExtent={geoPdfInitialExtent}
-          geoPdfInitialScale={geoPdfInitialScale}
-          onGeoPdfExtentConfirmed={(extent, scale) => {
-            setPendingGeoPdfExtent(extent);
-            setPendingGeoPdfScale(scale);
-            setSelectingGeoPdfExtent(false);
-            setShowGeoPdf(true);
-          }}
-          onGeoPdfExtentCancelled={() => {
-            setSelectingGeoPdfExtent(false);
-            setShowGeoPdf(true);
-          }}
-          onMapViewChange={(view) => setMapCenter(view)}
-          initialView={mapCenter}
-          topoFlyTarget={topoFlyTarget}
-          onTopoFlyConsumed={() => setTopoFlyTarget(null)}
-          flyToPlace={flyToPlace}
-          onFlyToPlaceConsumed={() => setFlyToPlace(null)}
-          panelOpen={activePanel !== null}
-          sheetOpen={sidebarSheetOpen}
-          placeHighlight={placeHighlight}
-          placeTypes={placeTypes}
-          layersButton={
-            <MapButton
-              ref={layersButtonRef}
-              icon="layers"
-              label="Layers"
-              expanded={layersOpen}
-              onClick={() => setLayersOpen((open) => !open)}
-            />
-          }
-          mapTools={mapTools}
-          notices={notices}
-          flyToBounds={flyToBounds}
-          onFlyToBoundsConsumed={() => setFlyToBounds(null)}
-          onTopoSourceUnavailable={handleTopoSourceUnavailable}
-        />
-      </main>
-
-      <LayersPopover
-        onImportFile={() => setShowUnifiedImport(true)}
-        open={layersOpen}
-        onClose={() => setLayersOpen(false)}
-        anchorRef={layersButtonRef}
-        startView={layersStartView}
-        sharpenedLoaded={completedTopoJobsLoaded}
-        activeTopoJobs={activeTopoJobs}
-        friends={friends}
-        onSharpen={() => setShowTopo(true)}
-        onExportArea={(job) => {
-          const bounds = job.footprint && footprintBounds(job.footprint);
-          if (bounds) makeMap(bounds, "geopdf");
-        }}
-        onFlyToArea={setTopoFlyTarget}
-        onRefetchCompletedTopoJobs={refetchCompletedTopoJobs}
-        onDismissActiveJob={handleDismissActiveTopoJob}
-        onQuotaChanged={refetchCurrentUser}
-        showPlaces={showPlaces}
-        setShowPlaces={setShowPlaces}
-        showWays={showWays}
-        setShowWays={setShowWays}
-        placeCount={places.length + sharedPlaces.length}
-        wayCount={showWays ? wayCount : null}
-        completedTopoJobs={completedTopoJobs}
-        baseLayers={BASE_LAYERS}
-        activeLayerId={activeLayerId}
-        onActiveLayerChange={setActiveLayerId}
-        terrainLayers={terrainLayers}
-        onTerrainLayerChange={setTerrainLayer}
-        slopeBands={slopeBands.bands}
-        onSlopeBandsChange={slopeBands.setBands}
-        mapView={mapCenter}
-      />
-
-      <FriendInviteDialog
-        enabled={loadsUserData}
-        onFriended={() => {
-          refetchFriends();
-          // A request waiting between the two is accepted by the link, and
-          // its Inbox row is gone on the server.
-          refetchNotifications();
-        }}
-      />
-
-      <ConfirmDialog
-        open={cancelRouteGuard.guardOpen}
-        // Editing and drawing lose different things, so they cannot share one
-        // sentence: abandoning an edit costs the changes, not the route.
-        title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
-        message={
-          editingRouteId
-            ? "Your changes to this route will be lost. The route itself is not deleted."
-            : "Your placed points will be lost. This cannot be undone."
-        }
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={cancelRouteGuard.confirmDiscard}
-        onClose={() => {
-          // Keeping the route also drops whatever was waiting on its discard.
-          afterRouteCancel.current = null;
-          cancelRouteGuard.cancelDiscard();
-        }}
-      />
-
-      <ConfirmDialog
-        open={clearRouteGuard.guardOpen}
-        title="Clear this route?"
-        message="Your placed points will be lost. This cannot be undone."
-        confirmLabel="Clear"
-        confirmColor="error"
-        onConfirm={clearRouteGuard.confirmDiscard}
-        onClose={clearRouteGuard.cancelDiscard}
-      />
-
-      <RouteNameDialog
-        open={namingRoute}
-        initialName={
-          routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
-        }
-        busy={savingRoute}
-        onSave={(name) => void saveDrawnRoute(name)}
-        onClose={() => setNamingRoute(false)}
-      />
-
-      {selectingFilterArea && (
-        <div className={classes.selectAllButtons}>
-          <Button compact variant="filled" onClick={cancelFilterAreaSelection}>
-            Cancel
-          </Button>
-        </div>
-      )}
-
-      {/* First-login onboarding choice */}
-      <OnboardingChoiceDialog
-        open={showOnboarding}
-        onLoaded={refetch}
-        onImportFiles={() => {
-          setShowOnboarding(false);
-          setImportedFromOnboarding(true);
-          setShowUnifiedImport(true);
-        }}
-        onStartEmpty={() => setShowOnboarding(false)}
-      />
-
-      {/* The trip form, opened from a track's "Log a trip". Mounted only while
-          it is open, so every open starts from the track it was asked for. */}
-      {logTripFromTrack && (
-        <TripLogDialog
-          open={!pickingCoords}
-          onClose={() => setLogTripFromTrack(null)}
-          onSaved={() => {
-            setLogTripFromTrack(null);
-            refetchAfterTripWrite();
-            refetchCurrentUser();
-          }}
           places={places}
-          fromTrack={logTripFromTrack}
           customFieldDefs={customFieldDefs}
           onCustomFieldDefsChange={setCustomFieldDefs}
-          existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+          placeCustomFieldDefs={placeCustomFieldDefs}
+          placeTypes={placeTypes}
+          currentUser={currentUser}
+          onRefetchPlaces={refetch}
+          onRefetchTripLogs={refetchTripLogs}
           onPickCoords={startPickingCoords}
-          onPlaceCreated={refetch}
         />
-      )}
 
-      {/* Unified file importer (places + logbooks) */}
-      <UnifiedImportDialog
-        open={showUnifiedImport && !pickingCoords}
-        onClose={() => {
-          setShowUnifiedImport(false);
-          setImportedFromOnboarding(false);
-        }}
-        onBack={
-          importedFromOnboarding
-            ? () => {
-                setShowUnifiedImport(false);
-                setImportedFromOnboarding(false);
-                setShowOnboarding(true);
-              }
-            : undefined
-        }
-        places={places}
-        customFieldDefs={customFieldDefs}
-        onCustomFieldDefsChange={setCustomFieldDefs}
-        placeCustomFieldDefs={placeCustomFieldDefs}
-        placeTypes={placeTypes}
-        currentUser={currentUser}
-        onRefetchPlaces={refetch}
-        onRefetchTripLogs={refetchTripLogs}
-        onPickCoords={startPickingCoords}
-      />
+        {/* Add place dialog */}
+        <PlaceDialog
+          place={null}
+          open={showAdd && !pickingCoords}
+          initialCoords={addPlaceAt}
+          onClose={() => {
+            setShowAdd(false);
+            setAddPlaceAt(null);
+          }}
+          onSaved={refetch}
+          onPickCoords={startPickingCoords}
+          onCancelPickCoords={cancelPickingCoords}
+          customFieldDefs={placeCustomFieldDefs}
+          onCustomFieldDefsChange={setPlaceCustomFieldDefs}
+          placeTypes={placeTypes}
+        />
 
-      {/* Add place dialog */}
-      <PlaceDialog
-        place={null}
-        open={showAdd && !pickingCoords}
-        initialCoords={addPlaceAt}
-        onClose={() => {
-          setShowAdd(false);
-          setAddPlaceAt(null);
-        }}
-        onSaved={refetch}
-        onPickCoords={startPickingCoords}
-        onCancelPickCoords={cancelPickingCoords}
-        customFieldDefs={placeCustomFieldDefs}
-        onCustomFieldDefsChange={setPlaceCustomFieldDefs}
-        placeTypes={placeTypes}
-      />
-
-      <SelectedPlacesDialog
-        open={selectedAreaPlaceIds.length > 0}
-        selectedPlaces={selectedAreaPlaces}
-        placeCustomFieldDefs={placeCustomFieldDefs}
-        availablePlaces={allPlaces}
-        ownedPlaceIds={ownedPlaceIds}
-        friends={friends}
-        onClose={() => setSelectedAreaPlaceIds([])}
-        onDeleted={refetch}
-        onQuotaChanged={refetchCurrentUser}
-        onRemovePlace={(id) =>
-          setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
-        }
-        onAddPlace={(id) =>
-          setSelectedAreaPlaceIds((ids) =>
-            ids.includes(id) ? ids : [...ids, id],
-          )
-        }
-      />
-    </div>
+        <SelectedPlacesDialog
+          open={selectedAreaPlaceIds.length > 0}
+          selectedPlaces={selectedAreaPlaces}
+          placeCustomFieldDefs={placeCustomFieldDefs}
+          availablePlaces={allPlaces}
+          ownedPlaceIds={ownedPlaceIds}
+          friends={friends}
+          onClose={() => setSelectedAreaPlaceIds([])}
+          onDeleted={refetch}
+          onQuotaChanged={refetchCurrentUser}
+          onRemovePlace={(id) =>
+            setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
+          }
+          onAddPlace={(id) =>
+            setSelectedAreaPlaceIds((ids) =>
+              ids.includes(id) ? ids : [...ids, id],
+            )
+          }
+        />
+      </div>
+    </CurrentUserIdContext.Provider>
   );
 }
 

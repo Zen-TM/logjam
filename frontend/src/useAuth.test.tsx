@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const amplify = vi.hoisted(() => ({
   signOut: vi.fn(),
+  signIn: vi.fn(),
   fetchAuthSession: vi.fn(),
 }));
 const clearTripDraft = vi.hoisted(() => vi.fn());
@@ -13,7 +14,6 @@ const reload = vi.hoisted(() => vi.fn());
 
 vi.mock("aws-amplify/auth", () => ({
   ...amplify,
-  signIn: vi.fn(),
   signUp: vi.fn(),
   confirmSignUp: vi.fn(),
   resendSignUpCode: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock("aws-amplify/auth", () => ({
 const setSessionExpiredHandler = vi.hoisted(() => vi.fn());
 const clearTileCache = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("./placeUtils", () => ({
-  apiFetch: vi.fn(),
+  apiFetch: vi.fn(async () => ({})),
   setSessionExpiredHandler,
 }));
 vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
@@ -35,6 +35,7 @@ import { useAuth } from "./useAuth";
 beforeEach(() => {
   vi.stubEnv("VITE_AUTH_MODE", "cognito");
   vi.clearAllMocks();
+  clearTileCache.mockImplementation(async () => {});
   amplify.signOut.mockResolvedValue(undefined);
   amplify.fetchAuthSession.mockResolvedValue({ tokens: { idToken: {} } });
   Object.defineProperty(window, "location", {
@@ -60,10 +61,10 @@ describe("signOut", () => {
   });
 
   // The GeoPDF tile cache shows which areas a user printed, so it goes with
-  // the session down every exit. Mutation: drop `clearTileCache()` from
-  // endSession and the first test goes red. The expiry and no-session paths
-  // are covered twice over (their own call, and the `state === "signIn"`
-  // effect), so drop both to turn those tests red.
+  // the session down every exit that is known to be one. Mutation: drop
+  // `clearTileCache()` from endSession and the first test goes red. The expiry
+  // and no-session paths are covered twice over (their own call, and the
+  // `state === "signIn"` effect), so drop both to turn those tests red.
   it("empties the GeoPDF tile cache before it reloads", async () => {
     const { result } = await signedIn();
     reload.mockImplementation(() => expect(clearTileCache).toHaveBeenCalled());
@@ -113,6 +114,34 @@ describe("signOut", () => {
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.state).toBe("signIn"));
     expect(clearTileCache).toHaveBeenCalled();
+  });
+
+  // Mutation: restore `void clearTileCache()` in the mount `.catch`, or drop
+  // the `sessionCheckFailed` guard on the `state === "signIn"` effect: either
+  // clears the cache of a user who is still signed in, just offline.
+  it("keeps it when the session check itself fails", async () => {
+    amplify.fetchAuthSession.mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    act(() => result.current.goToSignUp());
+    act(() => result.current.goToSignIn());
+    expect(clearTileCache).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop `await clearTileCache()` from handleSignIn and someone else
+  // signing in after a failed check inherits the last user's cache.
+  it("empties it at a successful sign-in, before the state flips", async () => {
+    amplify.fetchAuthSession.mockRejectedValue(new Error("offline"));
+    amplify.signIn.mockResolvedValue({ isSignedIn: true });
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(clearTileCache).not.toHaveBeenCalled();
+    clearTileCache.mockImplementation(async () => {
+      expect(result.current.state).toBe("signIn");
+    });
+    await act(() => result.current.signIn("bob", "pw"));
+    expect(clearTileCache).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe("authenticated");
   });
 
   it("keeps it while signed in", async () => {
