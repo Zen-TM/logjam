@@ -79,7 +79,8 @@ An accepted ADR changes in three ways only:
 
 - **A moved path or renamed symbol** is corrected in place, unmarked, in the
   change that moved it: this directory is found by searching for the paths a
-  change touches. Guard: `shared/src/adrReferences.test.ts`.
+  change touches. Guard: `shared/src/adrReferences.test.ts`, which also fails
+  on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
   "(updated YYYY-MM-DD)".
 - **A narrow exception, or a reason that no longer holds,** is a bullet under
