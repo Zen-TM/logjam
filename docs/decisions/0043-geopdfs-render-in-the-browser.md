@@ -61,6 +61,14 @@ and a copy of the user's print on our side.
   Firefox 125) is what lets the renderer assume `OffscreenCanvas` in a worker.
 - Raising the canvas cap or adding a server render back needs this ADR changed.
   No test holds the absence of a server renderer; review does.
+- **Update 2026-10-29: Logjam Web keeps the statewide archive tiles a print
+  read in the browser's Cache API, so a repeat print starts warm.** That is an
+  on-device record of which areas were printed, so it holds same-origin
+  statewide archives only, never a presigned or third-party URL, and is cleared
+  at sign-out and at sign-in. Nothing leaves the device, so "stored or sent to
+  the API" still holds for the GeoPDF itself. Guards:
+  `frontend/src/geoPdf/tiles.test.ts`, `frontend/src/useAuth.test.tsx`.
+  Everything else above stands.
 
 ## Consequences
 
@@ -104,3 +112,6 @@ and a copy of the user's print on our side.
   break of a request a supported build makes (0022). Rejected for the stub above.
 - **Drop the table in the same release.** Rejected by 0003: the old image still
   reads it during the swap.
+- **No persistent tile cache, so every print is cold.** Rejected by the update
+  above: a repeat print of the same area re-reads the same ranges, and the
+  cache costs only an on-device record that sign-out and sign-in clear.

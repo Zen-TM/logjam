@@ -20,8 +20,14 @@
  *   they abandoned, and past a week they won't.
  * - **Bounded.** Notes are unbounded user text; a draft that can't fit the cap
  *   is reported to the caller, never silently dropped.
- * - **Cleared on sign-out** — see `useAuth.ts`. A draft must not outlive the
- *   session on a shared device.
+ * - **One owner.** The record carries the id of the user who wrote it, and a
+ *   read by anyone else (or a record with no owner, from before this field)
+ *   removes it instead of offering it. That is what holds on a shared device
+ *   when a session lapses without a sign-out: the next person to sign in is
+ *   never offered the last one's place names, and the same user's unsaved
+ *   work survives an expiry.
+ * - **Also cleared on sign-out** — `useAuth.ts` and `RootErrorBoundary.tsx`.
+ *   Guards: `tripDraft.test.ts`, `useAuth.test.tsx`.
  */
 
 export const TRIP_DRAFT_STORAGE_KEY = "logjam.tripDraft";
@@ -55,6 +61,8 @@ export type TripDraft = {
   version: number;
   /** Only "create" is ever written — see the module comment. */
   mode: "create";
+  /** The id of the user who wrote it; a read by anyone else drops it. */
+  ownerId: string;
   /** ISO timestamp of the last autosave. */
   savedAt: string;
   form: TripDraftForm;
@@ -95,12 +103,14 @@ export function isTripDraftExpired(savedAt: string, now: Date): boolean {
  * when it exceeds the cap — the caller surfaces that rather than dropping it.
  */
 export function serializeTripDraft(
+  ownerId: string,
   form: TripDraftForm,
   savedAt: Date,
 ): { status: "ok"; raw: string } | { status: "too-large"; chars: number } {
   const draft: TripDraft = {
     version: TRIP_DRAFT_VERSION,
     mode: "create",
+    ownerId,
     savedAt: savedAt.toISOString(),
     form,
   };
@@ -137,8 +147,8 @@ function parseCreating(value: unknown): TripDraftForm["creating"] | undefined {
 
 /**
  * Parse a stored record, returning null for anything that must not be restored:
- * corrupt JSON, a shape from another version, a non-create draft, or an expired
- * one. Every field is checked — this input is persisted, so it survives across
+ * corrupt JSON, a shape from another version, a non-create draft, one with no
+ * owner, or an expired one. Every field is checked — this input is persisted, so it survives across
  * builds and is writable by anything running on the origin.
  */
 export function parseTripDraft(
@@ -157,6 +167,7 @@ export function parseTripDraft(
   if (record.version !== TRIP_DRAFT_VERSION) return null;
   // The guard against restoring a create draft into an edit of another trip.
   if (record.mode !== "create") return null;
+  if (typeof record.ownerId !== "string" || record.ownerId === "") return null;
   if (typeof record.savedAt !== "string") return null;
   if (isTripDraftExpired(record.savedAt, now)) return null;
 
@@ -179,6 +190,7 @@ export function parseTripDraft(
   return {
     version: TRIP_DRAFT_VERSION,
     mode: "create",
+    ownerId: record.ownerId,
     savedAt: record.savedAt,
     form: {
       date: f.date,
@@ -198,10 +210,10 @@ export function parseTripDraft(
 // private modes.
 
 /**
- * Read the stored draft, dropping (and clearing) anything unrestorable. Never
- * throws.
+ * Read the stored draft for `ownerId`, dropping (and clearing) anything
+ * unrestorable, including another user's. Never throws.
  */
-export function readTripDraft(now: Date): TripDraft | null {
+export function readTripDraft(ownerId: string, now: Date): TripDraft | null {
   let raw: string | null;
   try {
     raw = localStorage.getItem(TRIP_DRAFT_STORAGE_KEY);
@@ -209,10 +221,14 @@ export function readTripDraft(now: Date): TripDraft | null {
     return null;
   }
   if (raw === null) return null;
-  const draft = parseTripDraft(raw, now);
-  // Corrupt, stale or foreign: don't leave it to be re-read every open.
-  if (draft === null) clearTripDraft();
-  return draft;
+  const parsed = parseTripDraft(raw, now);
+  // Corrupt, stale, ownerless or someone else's: don't leave it to be re-read
+  // every open.
+  if (parsed?.ownerId !== ownerId) {
+    clearTripDraft();
+    return null;
+  }
+  return parsed;
 }
 
 /**
@@ -221,10 +237,11 @@ export function readTripDraft(now: Date): TripDraft | null {
  * feature exists to prevent, so the caller surfaces both failure modes.
  */
 export function writeTripDraft(
+  ownerId: string,
   form: TripDraftForm,
   savedAt: Date,
 ): TripDraftWriteResult {
-  const serialized = serializeTripDraft(form, savedAt);
+  const serialized = serializeTripDraft(ownerId, form, savedAt);
   if (serialized.status === "too-large") {
     return { status: "too-large", chars: serialized.chars };
   }

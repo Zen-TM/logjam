@@ -42,8 +42,9 @@ export class RootErrorBoundary extends Component<Props, State> {
     // crash, then reload to a clean sign-in. Reload regardless of outcome
     // (signOut throws in fake-auth dev, where Amplify isn't configured).
     // This is a second sign-out path that bypasses useAuth, so it repeats the
-    // draft clear, and clears the GeoPDF tile cache too. The cache clears
-    // again after signOut: a worker may have written while it was in flight.
+    // draft clear, and clears the GeoPDF tile cache too (the user is known to
+    // be signing out). The cache clears again after signOut: a worker may have
+    // written while it was in flight.
     clearTripDraft();
     await clearTileCache();
     try {

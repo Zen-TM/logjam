@@ -4,9 +4,10 @@
 // PRIVACY: what is cached is the tiles of the area a user printed, so it is
 // their data. It holds nothing but same-origin statewide archive ranges
 // (`cacheableArchive` in tiles.ts decides, and is the only way in), it is
-// cleared on every sign-out (`clearTileCache`, called from useAuth.ts and
-// RootErrorBoundary.tsx; guards: useAuth.test.tsx, RootErrorBoundary.test.tsx,
-// cache.test.ts), and a presigned or third-party URL never reaches it
+// cleared when someone is known to be signed out and at every sign-in
+// (`clearTileCache`, called from useAuth.ts and RootErrorBoundary.tsx; a session
+// check that fails keeps it; guards: useAuth.test.tsx,
+// RootErrorBoundary.test.tsx, cache.test.ts), and a presigned or third-party URL never reaches it
 // (guard: tiles.test.ts). Nothing here logs.
 //
 // Shape: the Cache API holds the bytes, one synthetic 200 response per byte
@@ -330,7 +331,7 @@ export function tileCache(): TileCache | null {
 
 /**
  * Empty the persistent tile cache. Every sign-out path calls this, and so
- * does the sign-in screen: it never throws and does not wait on storage that
+ * does a sign-in screen or sign-in that follows a known sign-out: it never throws and does not wait on storage that
  * is not there.
  */
 export async function clearTileCache(): Promise<void> {
