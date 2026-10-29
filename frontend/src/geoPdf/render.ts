@@ -20,17 +20,14 @@
 // PRIVACY: nothing here logs. See tiles.ts.
 import {
   computeTileToMapTransform,
-  computeZoom,
   GEOPDF_BASE_LAYER_CONFIG,
   GEOPDF_MAX_CANVAS_BYTES,
   GEOPDF_PADDING_MM,
-  geoPdfMaxNativeZoom,
   getPaperDimensions,
   NSW_CONTOURS,
   NSW_HILLSHADE,
   NSW_SLOPE,
   nswContourStyle,
-  TARGET_DPI,
   TILE_SIZE,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
@@ -46,22 +43,17 @@ import {
   areasOnPage,
   contourTilesBySource,
   decodeTerrarium,
-  demBlockRows,
-  hillshadePixels,
   nswContourZoom,
   overlaysDrawn,
-  resampleGrid,
-  slopePixels,
   STATEWIDE,
   terrainCreditLines,
   terrainGrid,
   terrainReadKey,
-  terrainReadZoom,
-  terrainTileReader,
-  terrainTileReads,
-  type DemGrid,
   type TerrainTileRead,
 } from "./terrain";
+import { planTerrainBlocks, printGeometry } from "./plan";
+import { bandRows, type TerrainBand } from "./terrainJobs";
+import { TerrainPool } from "./terrainPool";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
 import { upperBoundTerrainLines } from "./credits";
 import { loadMapFonts } from "./fonts";
@@ -184,12 +176,6 @@ type TerrainPlan = {
   /** Tiles that arrived, and those of them that decoded. */
   arrived: number;
   decodedOk: number;
-  paint: (
-    grid: DemGrid,
-    zoom: number,
-    tileY: number,
-    out: Uint8ClampedArray,
-  ) => Uint8ClampedArray;
 };
 
 const aborted = () => new DOMException("aborted", "AbortError");
@@ -242,6 +228,7 @@ async function renderInner(
     requests: {},
     drawBreakdownMs: {},
     strips: 0,
+    helperBands: 0,
     mapPx: [0, 0],
   };
 
@@ -264,14 +251,10 @@ async function renderInner(
 
   const { north, south, east, west } = config.extent;
   const extent = config.extent;
-  const centreLat = (north + south) / 2;
+  const geometry = printGeometry(config);
+  const { centreLat, zoom, nativeW, nativeH, overlayZoom } = geometry;
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
-  const maxNativeZoom = geoPdfMaxNativeZoom(config.baseLayer);
-  const zoom = computeZoom(config.scale, centreLat, TARGET_DPI, maxNativeZoom);
   const styleZoom = displayZoomForScale(config.scale, centreLat);
-  const probe = computeTileToMapTransform(zoom, north, south, east, west, 1, 1);
-  const nativeW = Math.round(probe.srcW);
-  const nativeH = Math.round(probe.srcH);
   timings.mapPx = [nativeW, nativeH];
 
   // The cap, then this browser's limits: either refuses before a tile is asked for.
@@ -316,7 +299,6 @@ async function renderInner(
     nativeW,
     nativeH,
   );
-  const overlayZoom = computeZoom(config.scale, centreLat, TARGET_DPI, 18);
   const overlayTransform = computeTileToMapTransform(
     overlayZoom,
     north,
@@ -485,40 +467,19 @@ async function renderInner(
   const planTerrain = (
     key: "hillshade" | "slope",
     archiveLayer: "heights" | "slope",
-    maxzoom: number,
     smooth: boolean,
-    paint: TerrainPlan["paint"],
   ): TerrainPlan => {
-    const demZoom = terrainReadZoom(
-      Math.min(zoom, overlayZoom),
-      maxzoom,
+    const { demZoom, t, cols, read, blocks } = planTerrainBlocks(
+      config,
+      geometry,
       areas,
+      archiveLayer,
+      strips.map(drawnRows),
     );
-    const t = computeTileToMapTransform(
-      demZoom,
-      north,
-      south,
-      east,
-      west,
-      nativeW,
-      nativeH,
-    );
-    const last = t.tiles[t.tiles.length - 1]!;
-    const cols = last.x - t.minTileX + 1;
-    const rows = last.y - t.minTileY + 1;
-    const read = terrainTileReader(areas, archiveLayer);
     const entries = new Map<string, TerrainEntry>();
-    const blocks: TerrainPlan["blocks"] = [];
     const firstOf = new Map<string, number>();
     for (const strip of strips) {
-      const span = drawnRows(strip);
-      const { r0, r1 } = demBlockRows(span.from, span.to, t, rows);
-      const tiles: TileCoord[] = [];
-      for (let r = r0; r <= r1; r++)
-        for (let c = 0; c < cols; c++)
-          tiles.push({ z: demZoom, x: t.minTileX + c, y: t.minTileY + r });
-      const reads = terrainTileReads(tiles, demZoom, read, smooth);
-      blocks.push({ r0, r1, reads });
+      const { reads } = blocks[strip.index]!;
       for (const r of reads) {
         const k = terrainReadKey(r);
         if (!firstOf.has(k)) firstOf.set(k, strip.index);
@@ -570,33 +531,16 @@ async function renderInner(
       credited: new Set<string>(),
       arrived: 0,
       decodedOk: 0,
-      paint,
     };
   };
 
   const terrainPlans: TerrainPlan[] = [];
   if (drawn.hillshade && statewide.heights !== undefined) {
     // A statewide archive that failed to open leaves `null`: areas still draw.
-    terrainPlans.push(
-      planTerrain(
-        "hillshade",
-        "heights",
-        NSW_HILLSHADE.maxzoom,
-        true,
-        hillshadePixels,
-      ),
-    );
+    terrainPlans.push(planTerrain("hillshade", "heights", true));
   }
   if (wantSlope && statewide.slope !== undefined) {
-    terrainPlans.push(
-      planTerrain(
-        "slope",
-        "slope",
-        NSW_SLOPE.maxzoom,
-        false,
-        (grid, _z, _y, out) => slopePixels(grid, input.slopeBands, out),
-      ),
-    );
+    terrainPlans.push(planTerrain("slope", "slope", false));
   }
   // Contours: every tile is read and decoded before the first strip, as the
   // labels are placed over the whole map.
@@ -737,6 +681,14 @@ async function renderInner(
   report(true);
 
   // ── Strips ───────────────────────────────────────────────────────────────
+  // Started by the first strip with terrain work: a print with none starts none.
+  let pool: TerrainPool | null = null;
+  cleanups.push(() => pool?.terminate());
+  const poolOf = () =>
+    (pool ??= new TerrainPool({
+      count: debug?.noPool ? 0 : debug?.poolSize,
+      failFirst: debug?.failHelper,
+    }));
   const tileCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
   cleanups.push(() => {
     tileCanvas.width = tileCanvas.height = 0;
@@ -901,6 +853,8 @@ async function renderInner(
           (r) => p.entries.get(terrainReadKey(r))!.status === OK,
         );
         if (present) {
+          let sub = performance.now();
+          bump(`${p.key}.decode`, mark);
           const decoded = new Map<string, Float32Array>();
           for (const [k, e] of p.entries)
             if (e.decoded) decoded.set(k, e.decoded);
@@ -914,30 +868,68 @@ async function renderInner(
             decoded,
             p.smooth,
           );
-          const pixels = p.paint(
-            grid,
-            p.zoom,
-            p.t.minTileY + block.r0,
-            new Uint8ClampedArray(grid.width * grid.height * 4),
-          );
-          const rgba = resampleGrid(
-            pixels,
-            grid.width,
-            grid.height,
-            block.r0 * TILE_SIZE,
-            p.t,
-            p.smooth,
-            nativeW,
-            span.from,
-            canvasH,
-          );
+          bump(`${p.key}.grid`, sub);
+          sub = performance.now();
+          // The strip's pixels in bands of map rows, side by side.
+          const n = Math.min(poolOf().width, canvasH);
+          const jobs: TerrainBand[] = [];
+          for (let i = 0; i < n; i++) {
+            const y0 = Math.floor((canvasH * i) / n);
+            const outH = Math.floor((canvasH * (i + 1)) / n) - y0;
+            const rows = bandRows(
+              p.t,
+              block.r0 * TILE_SIZE,
+              grid.height,
+              span.from + y0,
+              outH,
+            );
+            const part = grid.values.subarray(
+              rows.from * grid.width,
+              rows.to * grid.width,
+            );
+            jobs.push({
+              kind: p.key,
+              // The first band is done here, from the grid itself.
+              values: i === 0 ? part : part.slice(),
+              width: grid.width,
+              gridRow0: rows.from,
+              blockRow0: block.r0 * TILE_SIZE,
+              zoom: p.zoom,
+              tileY: p.t.minTileY + block.r0,
+              bands: input.slopeBands,
+              place: {
+                scaleX: p.t.scaleX,
+                scaleY: p.t.scaleY,
+                offsetX: p.t.offsetX,
+                offsetY: p.t.offsetY,
+              },
+              smooth: p.smooth,
+              outW: nativeW,
+              outY: span.from + y0,
+              outH,
+            });
+          }
+          const bands = await poolOf().run(jobs);
+          bump(`${p.key}.pixels`, sub);
+          sub = performance.now();
           scratch ??= new OffscreenCanvas(nativeW, canvasH);
           const sctx = scratch.getContext("2d")!;
-          sctx.putImageData(new ImageData(rgba, nativeW, canvasH), 0, 0);
+          bands.forEach((rgba, i) =>
+            sctx.putImageData(
+              new ImageData(
+                rgba as Uint8ClampedArray<ArrayBuffer>,
+                nativeW,
+                jobs[i]!.outH,
+              ),
+              0,
+              jobs[i]!.outY - span.from,
+            ),
+          );
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.drawImage(scratch, 0, 0);
           ctx.restore();
+          mark = sub;
         }
         // Tiles no later strip reads are let go.
         for (const e of p.entries.values())
@@ -1124,6 +1116,7 @@ async function renderInner(
     timings.fetchSpanMs[layer] = Math.round(span.end - span.start);
     timings.requests[layer] = span.n;
   }
+  timings.helperBands = (pool as TerrainPool | null)?.helperBands ?? 0;
   timings.totalMs = performance.now() - t0;
   return {
     pdf,

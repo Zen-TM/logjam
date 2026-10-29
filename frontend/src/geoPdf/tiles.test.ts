@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { geoPdfFileName } from "./client";
+import { pmtiles } from "../../e2e/__fixtures__/geoPdfTiles";
 import {
   fetchBytes,
   hostClassOf,
   HOST_LIMITS,
   limitFor,
+  openArchive,
   Scheduler,
 } from "./tiles";
 
@@ -160,5 +162,118 @@ describe("geoPdfFileName", () => {
     expect(geoPdfFileName(undefined)).toBe("logjam-geopdf.pdf");
     expect(geoPdfFileName("???")).toBe("logjam-geopdf.pdf");
     expect(geoPdfFileName("a".repeat(200))).toBe(`${"a".repeat(80)}.pdf`);
+  });
+});
+
+// ── Merged range reads, and what the persistent cache may keep ──────────────
+
+/** An archive of five z15 tiles side by side (x 0..4 on one row) and one far off. */
+function archiveBytes() {
+  const tile = (x: number, y: number) => ({
+    z: 15,
+    x,
+    y,
+    data: Buffer.alloc(40 + x, x + 1),
+  });
+  return pmtiles([0, 1, 2, 3, 4].map((x) => tile(x, 0)).concat(tile(9, 9)), 2);
+}
+
+/** A fetch over `body` that honours Range, counting the ranges it was asked for. */
+function serve(
+  body: Buffer,
+  opts: { etag?: string | (() => string); failMerged?: boolean } = {},
+) {
+  const asked: [number, number][] = [];
+  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+    const range = new Headers(init?.headers).get("range")!;
+    const [a, b] = /bytes=(\d+)-(\d+)/.exec(range)!.slice(1).map(Number) as [
+      number,
+      number,
+    ];
+    asked.push([a, b - a + 1]);
+    if (opts.failMerged && b - a + 1 > 50 && a > 0)
+      return new Response("no", { status: 404 });
+    const slice = body.subarray(a, Math.min(b + 1, body.length));
+    return new Response(
+      slice.buffer.slice(
+        slice.byteOffset,
+        slice.byteOffset + slice.length,
+      ) as ArrayBuffer,
+      {
+        status: 206,
+        headers: {
+          "content-length": String(slice.length),
+          ...(opts.etag
+            ? {
+                etag: typeof opts.etag === "function" ? opts.etag() : opts.etag,
+              }
+            : {}),
+        },
+      },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return asked;
+}
+
+const tileLen = (x: number) => 40 + x;
+const pending = () => new AbortController().signal;
+
+describe("openArchive range merging", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Mutation: drop the etag comparison in RangeSource.getBytes: a tile read
+  // from a replaced archive is decoded through the old directory.
+  it("reads again from the header when the archive changes mid-render", async () => {
+    let answers = 0;
+    // The header read is the first answer; the archive is replaced after it.
+    const asked = serve(archiveBytes(), {
+      etag: () => (answers++ === 0 ? '"v1"' : '"v2"'),
+    });
+    const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());
+    const tile = await archive.getZxy(15, 0, 0);
+    expect(tile!.data.byteLength).toBe(40);
+    // header, the tile under a stale etag, then the header again and the tile.
+    expect(asked.filter(([offset]) => offset === 0)).toHaveLength(2);
+  });
+
+  // Mutation: send each read on its own (drop the merge in RangeSource.flush)
+  // and the tiles take five requests.
+  it("reads tiles that sit end to end as one request, and gives each its own bytes", async () => {
+    const asked = serve(archiveBytes());
+    const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());
+    await archive.getHeader();
+    const tiles = await Promise.all(
+      [0, 1, 2, 3, 4].map((x) => archive.getZxy(15, x, 0)),
+    );
+    tiles.forEach((t, x) => {
+      expect(t!.data.byteLength).toBe(tileLen(x));
+      expect(new Uint8Array(t!.data)[0]).toBe(x + 1);
+    });
+    // header (and with it the directory) once, then one read for the five tiles.
+    expect(asked).toHaveLength(2);
+    expect(asked[1]![1]).toBe(40 + 41 + 42 + 43 + 44);
+  });
+
+  // Mutation: join every read in a tick whatever lies between them (drop the
+  // `w.offset !== end` test in RangeSource.flush): the gap is fetched too.
+  it("does not join tiles with something between them", async () => {
+    const asked = serve(archiveBytes());
+    const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());
+    await archive.getHeader();
+    await Promise.all([archive.getZxy(15, 0, 0), archive.getZxy(15, 9, 9)]);
+    expect(asked).toHaveLength(3);
+  });
+
+  it("asks for each tile on its own when the merged read fails", async () => {
+    const asked = serve(archiveBytes(), { failMerged: true });
+    const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());
+    await archive.getHeader();
+    const tiles = await Promise.all(
+      [0, 1, 2].map((x) => archive.getZxy(15, x, 0)),
+    );
+    expect(tiles.map((t) => t!.data.byteLength)).toEqual([40, 41, 42]);
+    // header, the failed merged read, then three single reads.
+    expect(asked).toHaveLength(5);
   });
 });
