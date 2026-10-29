@@ -41,7 +41,6 @@ model User {
   notifications           Notification[]
   topoJobs                TopoJob[]
   topoExportJobs          TopoExportJob[]
-  geoPdfJobs              GeoPdfJob[]
   tripLogs                TripLog[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
@@ -565,38 +564,6 @@ model TopoExportJob {
 
   @@index([userId, createdAt])
   @@map("topo_export_jobs")
-}
-
-// No longer read or written: GeoPDFs render in the browser (ADR 0043). The
-// table is emptied by 20261027000000_delete_geo_pdf_jobs and dropped, with
-// this model, a release later (ADR 0003): the image still serving during the
-// deploy swap reads it.
-model GeoPdfJob {
-  id                  String    @id @default(uuid())
-  userId              String    @map("user_id")
-  config              Json
-  vectorStyleSnapshot Json      @map("vector_style_snapshot")
-  // Adaptive processing-time estimate computed at create from past completed
-  // GeoPDFs (size scalar recomputed from each row's retained config) —
-  // mirrors topo_jobs.estimated_seconds.
-  estimatedSeconds    Int?      @map("estimated_seconds")
-  status              String    @default("queued")
-  // queued | running | completed | failed
-  resultKey           String?   @map("result_key")
-  resultBytes         BigInt?   @map("result_bytes")
-  errorMessage        String?   @map("error_message")
-  // Set when the worker transitions the row to "running" — anchors the
-  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
-  startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this job — see
-  // TopoExportJob.ecsTaskArn.
-  ecsTaskArn          String?   @map("ecs_task_arn")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  completedAt         DateTime? @map("completed_at")
-  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@map("geo_pdf_jobs")
 }
 
 model TopoTemplate {

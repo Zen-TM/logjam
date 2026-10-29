@@ -5,11 +5,12 @@
 
 \set ON_ERROR_STOP on
 
--- No GeoPDF job, share or notification is left, nothing else was deleted, and
--- every user's storage is what it was less their completed GeoPDFs, never
--- below 0.
+-- The table is gone, no GeoPDF share or notification is left, nothing else was
+-- deleted, and every user's storage is what it was less their completed
+-- GeoPDFs, never below 0 (fixture y: 0 less 9000 stays 0).
 -- Mutation: drop the migration's UPDATE and the fixture user stays at 5000
--- instead of 2500; drop one DELETE and its count below is not 0.
+-- instead of 2500; drop one DELETE and its count below is not 0; drop the
+-- DROP TABLE and the to_regclass check fails.
 SELECT to_regclass('upgrade_check.geo_pdf_uncharge') IS NOT NULL AS geo_pdf_applies \gset
 \if :geo_pdf_applies
 DO $$
@@ -22,8 +23,11 @@ BEGIN
     RAISE EXCEPTION 'upgrade-check: % user(s) not uncharged for their GeoPDFs', bad;
   END IF;
 
-  SELECT (SELECT count(*) FROM geo_pdf_jobs)
-       + (SELECT count(*) FROM shares WHERE entity_type = 'geoPdfJob')
+  IF to_regclass('public.geo_pdf_jobs') IS NOT NULL THEN
+    RAISE EXCEPTION 'upgrade-check: geo_pdf_jobs still exists';
+  END IF;
+
+  SELECT (SELECT count(*) FROM shares WHERE entity_type = 'geoPdfJob')
        + (SELECT count(*) FROM notifications WHERE type = 'geo_pdf_complete')
     INTO bad;
   IF bad > 0 THEN

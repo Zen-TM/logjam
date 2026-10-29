@@ -21,12 +21,13 @@
 
 \set ON_ERROR_STOP on
 
--- 20261027000000_delete_geo_pdf_jobs: every GeoPDF job goes with its shares and
--- notifications, and the completed ones' storage charge is given back. Off once
--- the base has it.
+-- 20261030000000_drop_geo_pdf_jobs: a straggler GeoPDF job (completed by the old
+-- image after the earlier delete) goes with its share and notification, its
+-- storage charge is given back, and the table is dropped. Off once the base has
+-- it.
 SELECT NOT EXISTS (
   SELECT 1 FROM _prisma_migrations
-   WHERE migration_name = '20261027000000_delete_geo_pdf_jobs'
+   WHERE migration_name = '20261030000000_drop_geo_pdf_jobs'
 ) AS geo_pdf_applies \gset
 \if :geo_pdf_applies
 \if :{?fixtures}
@@ -36,7 +37,8 @@ INSERT INTO users (id, cognito_id, username, email, storage_used_bytes) VALUES
 INSERT INTO geo_pdf_jobs (id, user_id, config, vector_style_snapshot, status, result_bytes) VALUES
   ('upgrade-fixture-pdf-1', 'upgrade-fixture-x', '{}', '{}', 'completed', 1500),
   ('upgrade-fixture-pdf-2', 'upgrade-fixture-x', '{}', '{}', 'completed', 1000),
-  ('upgrade-fixture-pdf-3', 'upgrade-fixture-x', '{}', '{}', 'failed', NULL);
+  ('upgrade-fixture-pdf-3', 'upgrade-fixture-x', '{}', '{}', 'failed', NULL),
+  ('upgrade-fixture-pdf-4', 'upgrade-fixture-y', '{}', '{}', 'completed', 9000);
 INSERT INTO shares (id, entity_type, entity_id, shared_by_id, shared_with_id) VALUES
   ('upgrade-fixture-share-1', 'geoPdfJob', 'upgrade-fixture-pdf-1', 'upgrade-fixture-x', 'upgrade-fixture-y'),
   ('upgrade-fixture-share-2', 'route', 'upgrade-fixture-route', 'upgrade-fixture-x', 'upgrade-fixture-y');
