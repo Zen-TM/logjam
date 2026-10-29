@@ -51,11 +51,17 @@ and a copy of the user's print on our side.
   deploy swap still reads them (0003). A job queued on that old image after the
   DELETE runs, and completed, stays charged; the migration that drops the table
   repeats the refund-then-delete first. Guard: `prisma/upgrade-check/`.
-- **`GET /geo-pdf` answers `{ jobs: [] }`** (`routes/geoPdfRetired.ts`) because a
-  Logjam GPS build is supported until three months after its successor ships
+- **`GET /geo-pdf` answers `{ jobs: [] }`** (a one-route router, since
+  deleted) because a Logjam GPS build is supported until three months after its successor ships
   (0022), and an old build asks for the list. It goes three months after the
-  first Logjam GPS release without the list. Guard:
-  `api/src/__tests__/geoPdfRetired.test.ts`.
+  first Logjam GPS release without the list. Guard: its own test, since
+  deleted.
+- **Update 2026-10-30: the `GET /geo-pdf` stub is gone, and account deletion
+  no longer deletes `geo_pdf_jobs` rows.** No Logjam GPS build with the
+  GeoPDF list was ever released, and the only installed copy is the
+  maintainer's own phone, which they will update, so the build the stub kept
+  answering does not exist. An old Logjam GPS build that asks gets a 404.
+  Everything else above stands.
 - **There is no fallback for a browser that cannot render:** the dialog
   refuses with a sentence. The browser floor of 0042 (Safari 17, Chrome 114,
   Firefox 125) is what lets the renderer assume `OffscreenCanvas` in a worker.
@@ -109,7 +115,11 @@ and a copy of the user's print on our side.
 - **Render synchronously in the API.** Rejected: a request of 30 to 120 s.
 - **Drop `GET /geo-pdf` at once.** Considered: an old Logjam GPS build would
   answer "Couldn't load your GeoPDFs." where it now says there are none, a
-  break of a request a supported build makes (0022). Rejected for the stub above.
+  break of a request a supported build makes (0022). Rejected for the stub above;
+  superseded by the update above, once no released build had the list.
+- **Keep the stub three months after the first Logjam GPS release without the
+  list.** The rule above, until 2026-10-30. Rejected then: that release never
+  shipped the list, so nobody was left to answer.
 - **Drop the table in the same release.** Rejected by 0003: the old image still
   reads it during the swap.
 - **No persistent tile cache, so every print is cold.** Rejected by the update

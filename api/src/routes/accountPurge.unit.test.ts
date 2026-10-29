@@ -16,8 +16,9 @@ const schema = read("prisma", "schema.prisma");
 const purgeSource = read("src", "routes", "users.ts");
 
 // Rows with no data of their own beyond the link to the account, which the
-// cascade removes; the purge deliberately has no line for them.
-const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient"];
+// cascade removes; the purge deliberately has no line for them. GeoPdfJob is
+// an empty table nothing writes (ADR 0043) until its drop.
+const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient", "GeoPdfJob"];
 
 /** model name -> its `User` relation lines (the ones that name the owner). */
 function modelsRelatedToUser(): Map<string, string[]> {
