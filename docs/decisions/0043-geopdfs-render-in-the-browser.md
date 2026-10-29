@@ -52,15 +52,15 @@ and a copy of the user's print on our side.
   DELETE runs, and completed, stays charged; the migration that drops the table
   repeats the refund-then-delete first. Guard: `prisma/upgrade-check/`.
 - **`GET /geo-pdf` answers `{ jobs: [] }`** (a one-route router, since
-  deleted) because a Logjam GPS build is supported until three months after its successor ships
-  (0022), and an old build asks for the list. It goes three months after the
-  first Logjam GPS release without the list. Guard: its own test, since
-  deleted.
+  deleted) because a Logjam GPS build is supported until three months after
+  its successor ships (0022), and an old build asks for the list. It goes three
+  months after the first Logjam GPS release without the list. Guard: its own
+  test, since deleted.
 - **Update 2026-10-30: the `GET /geo-pdf` stub is gone, and account deletion
   no longer deletes `geo_pdf_jobs` rows.** No Logjam GPS build with the
   GeoPDF list was ever released, and the only installed copy is the
-  maintainer's own phone, which they will update, so the build the stub kept
-  answering does not exist. An old Logjam GPS build that asks gets a 404.
+  maintainer's own phone, which they will update, so no supported build makes
+  the request 0022 protects. An old Logjam GPS build that asks gets a 404.
   Everything else above stands.
 - **There is no fallback for a browser that cannot render:** the dialog
   refuses with a sentence. The browser floor of 0042 (Safari 17, Chrome 114,
