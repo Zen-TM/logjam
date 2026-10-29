@@ -35,6 +35,10 @@ export type RenderDebug = {
   failPixelCheck?: boolean;
   /** Do the terrain pixel work here, with no helper workers. */
   noPool?: boolean;
+  /** Start this many helpers whatever the cores, so a test does not depend on the runner. */
+  poolSize?: number;
+  /** The first helper throws on its first band. */
+  failHelper?: boolean;
   /** Return the map's pixels as drawn, before JPEG. */
   collectPixels?: boolean;
 };
@@ -54,6 +58,8 @@ export type RenderTimings = {
   /** Drawing split by what drew. */
   drawBreakdownMs: Record<string, number>;
   strips: number;
+  /** Terrain bands a helper worker drew. */
+  helperBands: number;
   mapPx: [number, number];
 };
 

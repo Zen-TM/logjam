@@ -181,7 +181,7 @@ function archiveBytes() {
 /** A fetch over `body` that honours Range, counting the ranges it was asked for. */
 function serve(
   body: Buffer,
-  opts: { etag?: string; failMerged?: boolean } = {},
+  opts: { etag?: string | (() => string); failMerged?: boolean } = {},
 ) {
   const asked: [number, number][] = [];
   const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -203,7 +203,11 @@ function serve(
         status: 206,
         headers: {
           "content-length": String(slice.length),
-          ...(opts.etag ? { etag: opts.etag } : {}),
+          ...(opts.etag
+            ? {
+                etag: typeof opts.etag === "function" ? opts.etag() : opts.etag,
+              }
+            : {}),
         },
       },
     );
@@ -217,6 +221,21 @@ const pending = () => new AbortController().signal;
 
 describe("openArchive range merging", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  // Mutation: drop the etag comparison in RangeSource.getBytes: a tile read
+  // from a replaced archive is decoded through the old directory.
+  it("reads again from the header when the archive changes mid-render", async () => {
+    let answers = 0;
+    // The header read is the first answer; the archive is replaced after it.
+    const asked = serve(archiveBytes(), {
+      etag: () => (answers++ === 0 ? '"v1"' : '"v2"'),
+    });
+    const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());
+    const tile = await archive.getZxy(15, 0, 0);
+    expect(tile!.data.byteLength).toBe(40);
+    // header, the tile under a stale etag, then the header again and the tile.
+    expect(asked.filter(([offset]) => offset === 0)).toHaveLength(2);
+  });
 
   // Mutation: send each read on its own (drop the merge in RangeSource.flush)
   // and the tiles take five requests.
@@ -236,6 +255,8 @@ describe("openArchive range merging", () => {
     expect(asked[1]![1]).toBe(40 + 41 + 42 + 43 + 44);
   });
 
+  // Mutation: join every read in a tick whatever lies between them (drop the
+  // `w.offset !== end` test in RangeSource.flush): the gap is fetched too.
   it("does not join tiles with something between them", async () => {
     const asked = serve(archiveBytes());
     const archive = openArchive(`${ORIGIN}/master/a.pmtiles`, pending());

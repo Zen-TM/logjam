@@ -47,32 +47,76 @@ describe("TerrainPool", () => {
         }
       },
     );
-    const pool = new TerrainPool(3);
+    const pool = new TerrainPool({ count: 3 });
     expect(pool.width).toBe(1);
     const [rgba] = await pool.run([band()]);
     expect(rgba).toEqual(runTerrainBand(band()));
   });
 
-  it("hands a failed helper's band back to be done here", async () => {
-    const made: { onerror: (() => void) | null; terminate: () => void }[] = [];
+  // Mutation: drop `e.preventDefault()` in the pool's onerror (the event ends
+  // not defaultPrevented), or redo every pending band instead of the failed
+  // helper's own (the healthy helper's band is then drawn twice).
+  it("hands a failed helper's band back to be done here, and only that helper's", async () => {
+    type Fake = {
+      onerror: ((e: { preventDefault(): void }) => void) | null;
+      posted: unknown[];
+      terminate: ReturnType<typeof vi.fn>;
+    };
+    const made: Fake[] = [];
     vi.stubGlobal(
       "Worker",
       class {
-        onerror: (() => void) | null = null;
+        onerror: Fake["onerror"] = null;
         onmessage = null;
+        onmessageerror = null;
+        posted: unknown[] = [];
         terminate = vi.fn();
-        // The helper never answers.
-        postMessage = vi.fn(() => queueMicrotask(() => this.onerror?.()));
+        postMessage = vi.fn((m: unknown) => this.posted.push(m));
         constructor() {
           made.push(this);
         }
       },
     );
-    const pool = new TerrainPool(1);
+    const pool = new TerrainPool({ count: 2 });
+    expect(pool.width).toBe(3);
+    const running = pool.run([band(), band(), band()]);
+    const event = {
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+    };
+    made[0]!.onerror!(event);
+    expect(event.defaultPrevented).toBe(true);
+    // Only the first helper's band was redone here: the second's is still out.
+    expect(made[1]!.posted).toHaveLength(1);
+    let settled = false;
+    void running.then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(settled).toBe(false);
     expect(pool.width).toBe(2);
-    const done = await pool.run([band(), band()]);
-    expect(done[1]).toEqual(runTerrainBand(band()));
-    expect(pool.width).toBe(1);
     pool.terminate();
+  });
+
+  it("falls back on an undeliverable result too", async () => {
+    const made: { onmessageerror: (() => void) | null }[] = [];
+    vi.stubGlobal(
+      "Worker",
+      class {
+        onerror = null;
+        onmessage = null;
+        onmessageerror: (() => void) | null = null;
+        terminate = vi.fn();
+        postMessage = vi.fn();
+        constructor() {
+          made.push(this);
+        }
+      },
+    );
+    const pool = new TerrainPool({ count: 1 });
+    const running = pool.run([band(), band()]);
+    made[0]!.onmessageerror!();
+    const done = await running;
+    expect(done[1]).toEqual(runTerrainBand(band()));
   });
 });

@@ -228,6 +228,7 @@ async function renderInner(
     requests: {},
     drawBreakdownMs: {},
     strips: 0,
+    helperBands: 0,
     mapPx: [0, 0],
   };
 
@@ -680,8 +681,14 @@ async function renderInner(
   report(true);
 
   // ── Strips ───────────────────────────────────────────────────────────────
-  const pool = new TerrainPool(debug?.noPool ? 0 : undefined);
-  cleanups.push(() => pool.terminate());
+  // Started by the first strip with terrain work: a print with none starts none.
+  let pool: TerrainPool | null = null;
+  cleanups.push(() => pool?.terminate());
+  const poolOf = () =>
+    (pool ??= new TerrainPool({
+      count: debug?.noPool ? 0 : debug?.poolSize,
+      failFirst: debug?.failHelper,
+    }));
   const tileCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
   cleanups.push(() => {
     tileCanvas.width = tileCanvas.height = 0;
@@ -864,7 +871,7 @@ async function renderInner(
           bump(`${p.key}.grid`, sub);
           sub = performance.now();
           // The strip's pixels in bands of map rows, side by side.
-          const n = Math.min(pool.width, canvasH);
+          const n = Math.min(poolOf().width, canvasH);
           const jobs: TerrainBand[] = [];
           for (let i = 0; i < n; i++) {
             const y0 = Math.floor((canvasH * i) / n);
@@ -902,7 +909,7 @@ async function renderInner(
               outH,
             });
           }
-          const bands = await pool.run(jobs);
+          const bands = await poolOf().run(jobs);
           bump(`${p.key}.pixels`, sub);
           sub = performance.now();
           scratch ??= new OffscreenCanvas(nativeW, canvasH);
@@ -1109,6 +1116,7 @@ async function renderInner(
     timings.fetchSpanMs[layer] = Math.round(span.end - span.start);
     timings.requests[layer] = span.n;
   }
+  timings.helperBands = (pool as TerrainPool | null)?.helperBands ?? 0;
   timings.totalMs = performance.now() - t0;
   return {
     pdf,

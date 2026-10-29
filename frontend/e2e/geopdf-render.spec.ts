@@ -115,10 +115,11 @@ test.describe("the in-browser GeoPDF renderer", () => {
     });
   }
 
-  // The terrain's helper workers cut a strip into bands. Mutation: take the
-  // latitude of a band's rows from its first row (terrainJobs.ts, the
-  // `rowOffset` argument), or read a DEM row fewer in `bandRows`: the pixels
-  // differ from a render with no helpers.
+  // The terrain's helper workers cut a strip into bands. Mutation: pass
+  // hillshadePixels a `rowOffset` of 0 in runTerrainBand (terrainJobs.ts, the
+  // `job.gridRow0` argument), or read a DEM row fewer in `bandRows`: the
+  // pixels differ from a render with no helpers. The pooled run starts two
+  // helpers whatever the runner's cores, and must have used them.
   for (const scenario of ["shade", "contours"]) {
     test(`terrain helpers draw the same pixels as none: ${scenario}`, async ({
       page,
@@ -130,8 +131,23 @@ test.describe("the in-browser GeoPDF renderer", () => {
         scenario,
       );
       expect(r).toMatchObject({ ok: true, differing: 0 });
+      expect(r.helperBands).toBeGreaterThan(0);
     });
   }
+
+  // A helper that throws is not the render's failure. Mutation: drop
+  // `e.preventDefault()` in terrainPool.ts: the error reaches the render
+  // worker's scope and the render fails.
+  test("a helper that fails hands its band back and the render completes", async ({
+    page,
+  }) => {
+    await stubNetwork(page);
+    await openBench(page);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.poolCheck("shade", true),
+    );
+    expect(r).toMatchObject({ ok: true, differing: 0 });
+  });
 
   // A strip whose last rows fall on the last row of a DEM tile: with no halo
   // and no read margin its block ends there and the resample clamps where the

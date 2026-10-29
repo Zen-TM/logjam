@@ -114,7 +114,7 @@ const firstDifference = (a: Uint8ClampedArray, b: Uint8ClampedArray) => {
 
 describe("terrain bands", () => {
   // Mutation: take the latitude of a band's rows from the band's own first
-  // row (drop the `rowOffset` argument in runTerrainBand), or cut the DEM rows
+  // row (drop the `job.gridRow0` argument to hillshadePixels in runTerrainBand), or cut the DEM rows
   // a band reads one short (`bandRows`): the bytes differ.
   for (const kind of ["hillshade", "slope"] as const) {
     it(`${kind}: bands side by side are the strip's own bytes`, () => {

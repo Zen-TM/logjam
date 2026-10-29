@@ -19,16 +19,27 @@ export function helperCount(): number {
 }
 
 type Pending = {
+  worker: Worker;
   band: TerrainBand;
   resolve: (rgba: Uint8ClampedArray) => void;
+  reject: (e: unknown) => void;
+};
+
+export type PoolOptions = {
+  /** Helpers to start; default `helperCount()`. */
+  count?: number;
+  /** Test hook: the first helper throws on its first band. */
+  failFirst?: boolean;
 };
 
 export class TerrainPool {
   private helpers: Worker[] = [];
   private pending = new Map<number, Pending>();
   private next = 0;
+  /** Bands a helper drew (not redone here): what a test checks the pool did. */
+  helperBands = 0;
 
-  constructor(count: number = helperCount()) {
+  constructor({ count = helperCount(), failFirst = false }: PoolOptions = {}) {
     for (let i = 0; i < count; i++) {
       try {
         const worker = new Worker(
@@ -42,10 +53,21 @@ export class TerrainPool {
         ) => {
           const job = this.pending.get(e.data.id);
           this.pending.delete(e.data.id);
-          job?.resolve(e.data.rgba);
+          if (job) {
+            this.helperBands++;
+            job.resolve(e.data.rgba);
+          }
         };
-        // A helper that fails hands its band back to be done here.
-        worker.onerror = () => this.fallBack(worker);
+        // A helper that fails hands its bands back to be done here. The
+        // error is cancelable: left alone it would reach the render worker's
+        // own scope and fail the whole render (guard: terrainPool.test.ts,
+        // and the "helper fails" case in e2e/geopdf-render.spec.ts).
+        worker.onerror = (e) => {
+          e.preventDefault();
+          this.fallBack(worker);
+        };
+        worker.onmessageerror = () => this.fallBack(worker);
+        (worker as Worker & { fail?: boolean }).fail = failFirst && i === 0;
         this.helpers.push(worker);
       } catch {
         break;
@@ -64,32 +86,53 @@ export class TerrainPool {
       bands.map((band, i) => {
         // The first band is done here, while the helpers do the rest.
         if (i === 0 || this.helpers.length === 0) {
-          return new Promise<Uint8ClampedArray>((resolve) =>
-            setTimeout(() => resolve(runTerrainBand(band)), 0),
+          return new Promise<Uint8ClampedArray>((resolve, reject) =>
+            setTimeout(() => {
+              try {
+                resolve(runTerrainBand(band));
+              } catch (e) {
+                reject(e);
+              }
+            }, 0),
           );
         }
         const worker = this.helpers[(i - 1) % this.helpers.length]!;
-        return new Promise<Uint8ClampedArray>((resolve) => {
+        return new Promise<Uint8ClampedArray>((resolve, reject) => {
           const id = this.next++;
-          this.pending.set(id, { band, resolve });
+          this.pending.set(id, { worker, band, resolve, reject });
           try {
-            worker.postMessage({ id, band });
+            const w = worker as Worker & { fail?: boolean };
+            worker.postMessage({ id, band, fail: w.fail });
+            w.fail = false;
           } catch {
             this.pending.delete(id);
-            resolve(runTerrainBand(band));
+            this.redo(band, resolve, reject);
           }
         });
       }),
     );
   }
 
+  private redo(
+    band: TerrainBand,
+    resolve: (rgba: Uint8ClampedArray) => void,
+    reject: (e: unknown) => void,
+  ) {
+    try {
+      resolve(runTerrainBand(band));
+    } catch (e) {
+      reject(e);
+    }
+  }
+
   private fallBack(worker: Worker) {
     this.helpers = this.helpers.filter((w) => w !== worker);
     worker.terminate();
-    // Whatever it held is lost with it: redo that here.
+    // What this helper held is lost with it: redo just that here.
     for (const [id, job] of this.pending) {
+      if (job.worker !== worker) continue;
       this.pending.delete(id);
-      job.resolve(runTerrainBand(job.band));
+      this.redo(job.band, job.resolve, job.reject);
     }
   }
 

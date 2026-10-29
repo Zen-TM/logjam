@@ -249,18 +249,26 @@ async function seamCheck(
  * Render with the terrain helper workers and with none: are the map's pixels
  * the same, byte for byte? Both draw in one strip, so only the pool differs.
  */
-async function poolCheck(name: string) {
-  const pooled = await run(name, { debug: { collectPixels: true } });
+async function poolCheck(name: string, failHelper = false) {
+  const pooled = await run(name, {
+    debug: { collectPixels: true, poolSize: 2, failHelper },
+  });
   const alone = await run(name, {
     debug: { collectPixels: true, noPool: true },
   });
-  if (!pooled.pixels || !alone.pixels) return { ok: false, differing: -1 };
+  if (!pooled.pixels || !alone.pixels)
+    return { ok: false, differing: -1, helperBands: 0 };
   const a = new Uint8Array(pooled.pixels.strips[0]!.data);
   const b = new Uint8Array(alone.pixels.strips[0]!.data);
   let differing = a.length === b.length ? 0 : -1;
   if (differing === 0)
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differing++;
-  return { ok: differing === 0, differing, bytes: a.length };
+  return {
+    ok: differing === 0,
+    differing,
+    bytes: a.length,
+    helperBands: pooled.timings!.helperBands,
+  };
 }
 
 const DEM_TILE_PX = 256;

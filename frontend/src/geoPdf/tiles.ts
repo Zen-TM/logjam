@@ -5,7 +5,12 @@
 // PRIVACY: a presigned URL is a bearer credential and a tile index is a
 // coarse location. Nothing here logs, and an error carries a status or a kind,
 // never a URL.
-import { PMTiles, type RangeResponse, type Source } from "pmtiles";
+import {
+  EtagMismatch,
+  PMTiles,
+  type RangeResponse,
+  type Source,
+} from "pmtiles";
 
 /** Time one request, body included, may take. */
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -286,9 +291,15 @@ class RangeSource implements Source {
     offset: number,
     length: number,
     signal?: AbortSignal,
+    etag?: string,
   ): Promise<RangeResponse> {
     const res = await this.fetchMerged(offset, length, signal ?? this.signal);
     if (res.status >= 300) throw new Error(`Bad response code: ${res.status}`);
+    // No If-Match is sent (CORS), so an archive replaced mid-render shows
+    // only here. The library invalidates its header and tries again.
+    const got = res.headers.get("etag");
+    if (etag && got && !got.startsWith("W/") && got !== etag)
+      throw new EtagMismatch("archive changed while it was read");
     return {
       data: res.bytes,
       etag: res.headers.get("etag") ?? undefined,
