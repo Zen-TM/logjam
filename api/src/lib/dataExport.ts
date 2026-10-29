@@ -175,8 +175,6 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "sync bookkeeping: the ids of records already deleted or unshared, which say nothing the rest of the export does not",
   EgressLogCursor:
     "not per user: how far the egress meter has read the storage access logs",
-  GeoPdfJob:
-    "removed feature: nothing writes it any more, its rows are deleted, and the table drops a release later (ADR 0003)",
   Announcement:
     "not per user: the maintainer's own messages; each user's copy is a row under notifications",
 };

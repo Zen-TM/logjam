@@ -47,10 +47,11 @@ and a copy of the user's print on our side.
 - **The rows go at once:** the migration `20261027000000_delete_geo_pdf_jobs`
   deletes every `geo_pdf_jobs` row, its shares and its notifications, and gives
   back the storage the completed ones were charged. The empty table and its
-  Prisma model drop a release later, because the image serving during the
-  deploy swap still reads them (0003). A job queued on that old image after the
-  DELETE runs, and completed, stays charged; the migration that drops the table
-  repeats the refund-then-delete first. Guard: `prisma/upgrade-check/`.
+  Prisma model dropped a release later (updated 2026-10-30), because the image
+  serving during the deploy swap still read them (0003). A job queued on that
+  old image after the DELETE runs, and completed, stays charged; the migration
+  that drops the table repeats the refund-then-delete first. Guard:
+  `prisma/upgrade-check/`.
 - **`GET /geo-pdf` answers `{ jobs: [] }`** (a one-route router, since
   deleted) because a Logjam GPS build is supported until three months after
   its successor ships (0022), and an old build asks for the list. It goes three
@@ -61,7 +62,9 @@ and a copy of the user's print on our side.
   GeoPDF list was ever released, and the only installed copy is the
   maintainer's own phone, which they will update, so no supported build makes
   the request 0022 protects. An old Logjam GPS build that asks gets a 404.
-  Everything else above stands.
+  The `geo_pdf_jobs` table and the `GeoPdfJob` model dropped in
+  `20261030000000_drop_geo_pdf_jobs`, which repeats the refund-then-delete
+  first (guard: `prisma/upgrade-check/`). Everything else above stands.
 - **There is no fallback for a browser that cannot render:** the dialog
   refuses with a sentence. The browser floor of 0042 (Safari 17, Chrome 114,
   Firefox 125) is what lets the renderer assume `OffscreenCanvas` in a worker.
@@ -91,9 +94,10 @@ and a copy of the user's print on our side.
   definition or log group. PDFs already in that `geo-pdf` exports folder are not deleted by this
   change; the topo bucket's 7-day `exports/` lifecycle rule collects them. The
   maintainer may remove them sooner by hand. The `geo_pdf_jobs` table and model
-  drop in a later release. The `autoDownloadGeoPdfs` and `geoPdfEmail`
-  preferences are no longer read and are not written; an old value stays inert
-  in `users.ui_preferences` until the user next saves a preference.
+  dropped in `20261030000000_drop_geo_pdf_jobs` (updated 2026-10-30). The
+  `autoDownloadGeoPdfs` and `geoPdfEmail` preferences are no longer read and
+  are not written; an old value stays inert in `users.ui_preferences` until the
+  user next saves a preference.
 
 ## Alternatives considered
 
