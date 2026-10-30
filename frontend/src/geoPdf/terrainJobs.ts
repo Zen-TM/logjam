@@ -59,8 +59,14 @@ export function bandRows(
 
 let paintBuffer = new Uint8ClampedArray(0);
 
-/** Paint and resample one band: RGBA for `outH` rows of `outW`. */
-export function runTerrainBand(job: TerrainBand): Uint8ClampedArray {
+/**
+ * Paint and resample one band: RGBA for `outH` rows of `outW`. With `reuse`
+ * (a helper), the painted pixels go in one buffer kept for the next band.
+ */
+export function runTerrainBand(
+  job: TerrainBand,
+  reuse = false,
+): Uint8ClampedArray {
   const rows = job.values.length / job.width;
   const grid = { values: job.values, width: job.width, height: rows };
   const srcRow0 = job.blockRow0 + job.gridRow0;
@@ -76,12 +82,17 @@ export function runTerrainBand(job: TerrainBand): Uint8ClampedArray {
     job.outY,
     job.outH,
   );
-  // The painted pixels are read once, by the resample below, so one buffer
-  // serves every band this thread paints: a helper then leaves no band-sized
-  // garbage behind it but the rows it was sent.
+  // The painted pixels are read once, by the resample below, so a helper
+  // paints every band into one buffer and leaves no band-sized garbage
+  // behind it but the rows it was sent. The render worker does not keep one:
+  // with no helpers its band is the whole strip, which would then stay alive
+  // to the end of the render.
   const size = job.values.length * 4;
-  if (paintBuffer.length < size) paintBuffer = new Uint8ClampedArray(size);
-  const out = paintBuffer.subarray(0, size).fill(0);
+  let out: Uint8ClampedArray;
+  if (reuse) {
+    if (paintBuffer.length < size) paintBuffer = new Uint8ClampedArray(size);
+    out = paintBuffer.subarray(0, size).fill(0);
+  } else out = new Uint8ClampedArray(size);
   const pixels =
     job.kind === "hillshade"
       ? hillshadePixels(grid, job.zoom, job.tileY, out, job.gridRow0, rect)

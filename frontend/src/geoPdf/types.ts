@@ -60,6 +60,8 @@ export type RenderTimings = {
   strips: number;
   /** Terrain bands a helper worker drew. */
   helperBands: number;
+  /** Helpers that failed during the render (their jobs were redone). */
+  helpersLost: number;
   mapPx: [number, number];
 };
 

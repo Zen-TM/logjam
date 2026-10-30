@@ -1,6 +1,7 @@
 // A helper of the terrain pool (terrainPool.ts): decodes the tiles and paints
-// the bands it is sent, one at a time, nothing else. It keeps nothing between
-// jobs. A band that throws does so here, synchronously, so the pool hears it
+// the bands it is sent, one at a time, nothing else. Between jobs it keeps
+// only what it reuses: one paint buffer for the bands (`runTerrainBand`'s
+// `reuse`) and one tile-sized canvas for the decodes. A band that throws does so here, synchronously, so the pool hears it
 // as the worker's error event; a decode never throws (it answers null).
 import { decodeTerrainTile, runTerrainBand } from "./terrainJobs";
 import type { TerrainJob } from "./terrainPool";
@@ -18,6 +19,6 @@ const answer = (result: Uint8ClampedArray | Float32Array | null) =>
 scope.onmessage = (e) => {
   if (e.data.fail) throw new Error("helper failed (test hook)");
   const { job } = e.data;
-  if (job.kind === "band") answer(runTerrainBand(job.band));
+  if (job.kind === "band") answer(runTerrainBand(job.band, true));
   else void decodeTerrainTile(job.bytes).then(answer);
 };

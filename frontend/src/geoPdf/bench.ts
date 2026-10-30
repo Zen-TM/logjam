@@ -274,7 +274,7 @@ async function poolCheck(name: string, failHelper = false) {
     debug: { collectPixels: true, noPool: true },
   });
   if (!pooled.pixels || !alone.pixels)
-    return { ok: false, differing: -1, helperBands: 0 };
+    return { ok: false, differing: -1, helperBands: 0, helpersLost: 0 };
   const a = new Uint8Array(pooled.pixels.strips[0]!.data);
   const b = new Uint8Array(alone.pixels.strips[0]!.data);
   let differing = a.length === b.length ? 0 : -1;
@@ -285,6 +285,7 @@ async function poolCheck(name: string, failHelper = false) {
     differing,
     bytes: a.length,
     helperBands: pooled.timings!.helperBands,
+    helpersLost: pooled.timings!.helpersLost,
   };
 }
 

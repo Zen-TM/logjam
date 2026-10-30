@@ -238,6 +238,7 @@ async function renderInner(
     drawBreakdownMs: {},
     strips: 0,
     helperBands: 0,
+    helpersLost: 0,
     mapPx: [0, 0],
   };
 
@@ -823,31 +824,26 @@ async function renderInner(
   };
 
   /**
-   * A strip's terrain, started once its own tiles are in: the helpers decode
-   * and paint it while this worker waits for the base tiles and draws them.
-   * The next strip's starts as soon as this one's is drawn, so the helpers
-   * work through this strip's encode too; no further ahead, as a strip's
-   * bands are a canvas's worth of RGBA per layer.
+   * A strip's terrain, started at that strip once its own tiles are in: the
+   * helpers decode and paint it while this worker waits for the base tiles
+   * and draws them. No earlier, so at most one strip's bands are alive (a
+   * canvas's worth of RGBA per layer).
    */
-  const terrainOf = new Map<number, (Promise<TerrainBands | null> | null)[]>();
-  const startTerrain = (strip: Strip) => {
-    let work = terrainOf.get(strip.index);
-    if (!work) {
-      const started = terrainPlans.map(async (p) => {
-        await Promise.all(
-          p.blocks[strip.index]!.reads.map(
-            (r) => p.entries.get(terrainReadKey(r))!.promise,
-          ),
-        );
-        check();
-        return paintTerrain(p, strip, drawnRows(strip));
-      });
-      // Awaited in layer order when drawn; an abort first must not leave a
-      // rejection unheard.
-      for (const w of started) w.catch(() => {});
-      work = started;
-      terrainOf.set(strip.index, work);
-    }
+  const startTerrain = (
+    strip: Strip,
+  ): (Promise<TerrainBands | null> | null)[] => {
+    const work = terrainPlans.map(async (p) => {
+      await Promise.all(
+        p.blocks[strip.index]!.reads.map(
+          (r) => p.entries.get(terrainReadKey(r))!.promise,
+        ),
+      );
+      check();
+      return paintTerrain(p, strip, drawnRows(strip));
+    });
+    // Awaited in layer order when drawn; an abort first must not leave a
+    // rejection unheard.
+    for (const w of work) w.catch(() => {});
     return work;
   };
 
@@ -972,7 +968,6 @@ async function renderInner(
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
-      terrainOf.delete(strip.index);
       if (scratch) scratch.width = scratch.height = 0;
       scratch = null;
 
@@ -1159,6 +1154,7 @@ async function renderInner(
     timings.requests[layer] = span.n;
   }
   timings.helperBands = pool?.helperBands ?? 0;
+  timings.helpersLost = pool?.helpersLost ?? 0;
   timings.totalMs = performance.now() - t0;
   return {
     pdf,

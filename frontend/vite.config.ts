@@ -188,6 +188,10 @@ export default defineConfig(({ mode }) => {
     // worker, which the dependency scan does not follow. Found at run time,
     // each makes the dev server re-optimise and reload the page mid-render.
     optimizeDeps: {
+      // Both pages: with `build.rolldownOptions.input` set the scan crawls
+      // only the build's inputs, and a dependency only the bench page
+      // imports, found at run time, would re-optimise mid-render.
+      entries: ["index.html", "geopdf-bench.html"],
       include: [
         "@cantoo/pdf-lib",
         "@mapbox/vector-tile",

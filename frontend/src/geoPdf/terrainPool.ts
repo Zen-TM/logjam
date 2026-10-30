@@ -62,6 +62,8 @@ export class TerrainPool {
   private terminated = false;
   /** Bands a helper drew (not redone here): what a test checks the pool did. */
   helperBands = 0;
+  /** Helpers that failed and were ended. */
+  helpersLost = 0;
 
   constructor({ count = helperCount(), failFirst = false }: PoolOptions = {}) {
     this.failBand = failFirst;
@@ -171,6 +173,7 @@ export class TerrainPool {
   }
 
   private fallBack(worker: Worker) {
+    this.helpersLost++;
     this.helpers = this.helpers.filter((w) => w !== worker);
     this.idle = this.idle.filter((w) => w !== worker);
     worker.terminate();
