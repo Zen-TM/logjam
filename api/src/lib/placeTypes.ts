@@ -100,13 +100,86 @@ export async function defsForPlaceType(
     select: { key: true, label: true, type: true, min: true, max: true },
     orderBy: [{ position: "asc" }, { key: "asc" }],
   });
-  return rows.map((row) => ({
+  return rows.map(toDef);
+}
+
+function toDef(row: {
+  key: string;
+  label: string;
+  type: string;
+  min: number | null;
+  max: number | null;
+}): TripLogCustomFieldDef {
+  return {
     key: row.key,
     label: row.label,
     type: row.type as TripLogCustomFieldDef["type"],
     ...(row.min !== null ? { min: row.min } : {}),
     ...(row.max !== null ? { max: row.max } : {}),
-  }));
+  };
+}
+
+/**
+ * `defsForPlaceType` for several foreign types in two queries, for the sync
+ * delta: the same rows and order, per type, as one call each with that type's
+ * owner. System types (ownerId null) are omitted: the recipient holds them.
+ */
+export async function defsForForeignPlaceTypes(
+  typeIds: string[],
+): Promise<Map<string, TripLogCustomFieldDef[]>> {
+  const out = new Map<string, TripLogCustomFieldDef[]>();
+  if (typeIds.length === 0) return out;
+  const types = await prisma.placeType.findMany({
+    where: { id: { in: typeIds }, ownerId: { not: null } },
+    select: { id: true, ownerId: true },
+  });
+  if (types.length === 0) return out;
+  const rows = await prisma.customFieldDef.findMany({
+    where: {
+      entity: "place",
+      OR: [
+        { ownerId: null },
+        { ownerId: { in: types.map((t) => t.ownerId!) } },
+      ],
+      AND: [
+        {
+          OR: [
+            { appliesToAllTypes: true },
+            {
+              placeTypes: {
+                some: { placeTypeId: { in: types.map((t) => t.id) } },
+              },
+            },
+          ],
+        },
+      ],
+    },
+    select: {
+      key: true,
+      label: true,
+      type: true,
+      min: true,
+      max: true,
+      ownerId: true,
+      appliesToAllTypes: true,
+      placeTypes: { select: { placeTypeId: true } },
+    },
+    orderBy: [{ position: "asc" }, { key: "asc" }],
+  });
+  for (const t of types) {
+    out.set(
+      t.id,
+      rows
+        .filter(
+          (r) =>
+            (r.ownerId === null || r.ownerId === t.ownerId) &&
+            (r.appliesToAllTypes ||
+              r.placeTypes.some((j) => j.placeTypeId === t.id)),
+        )
+        .map(toDef),
+    );
+  }
+  return out;
 }
 
 // ── lifecycle ───────────────────────────────────────────────────────────────
