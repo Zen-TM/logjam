@@ -21,6 +21,7 @@ export * from "./placeRegistry.js";
 export * from "./placeTypes.js";
 export * from "./placeStatus.js";
 export * from "./copyRules.js";
+export * from "./switchCopy.js";
 export * from "./designTokens.js";
 export * from "./webTokens.js";
 export * from "./fieldValues.js";
