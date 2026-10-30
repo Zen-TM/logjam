@@ -469,7 +469,7 @@ class TestRun(unittest.TestCase):
         self.assertIn(("900002", g.BOM_FROM), starts)
         merged = s3.doc("history/900001.json")
         self.assertEqual(merged["level"], [0.91, None, 9.0])
-        self.assertEqual(merged["flow"], [120.5, None, None])
+        self.assertEqual(merged["flow"], [120.5, None, 99.0])
 
     def test_a_partly_null_recent_day_keeps_the_stored_value(self):
         # Mutation: replace the stored row with days.update → red; a day BoM
