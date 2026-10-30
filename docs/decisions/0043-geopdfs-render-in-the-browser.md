@@ -37,6 +37,14 @@ and a copy of the user's print on our side.
   (`docs/operations/announcements.md`), and `infra/scripts/pin-release.sh` names
   the family, so a rename would make every API deploy depend on a Terraform
   apply. A rename can be its own later change.
+- **Update 2026-10-30: the task definition and log group are renamed
+  `logjam-api-script` and `/ecs/logjam-api-script`** (container `api-script`,
+  Terraform `api_script`), because the family renders nothing and the old
+  name misled. The rename went in two applies, the new family beside the old
+  and then the old removed, since `infra/scripts/pin-release.sh` names the
+  family and every API deploy would otherwise depend on a Terraform apply.
+  Terraform's destroy deregisters only its own revision; the revisions deploys
+  pinned were deregistered by hand. Everything else above stands.
 - **Job history and GeoPDF sharing are gone:** `geoPdfJob` is not a
   `SHARABLE_ENTITY_TYPES` member, so a sharee can no longer see a GeoPDF
   (sharing a place still shares the map). Guard:
