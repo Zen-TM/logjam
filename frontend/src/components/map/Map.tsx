@@ -18,6 +18,7 @@ import {
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
+  GAUGES,
   latestGaugeReading,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
@@ -30,7 +31,12 @@ import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
 import { useGauges } from "../gauges/useGauges";
-import { GAUGE_BELOW, GAUGE_LAYER } from "./layerOrder";
+import {
+  GAUGE_BELOW,
+  GAUGE_LAYER,
+  PRESSABLE_LAYERS,
+  pressedGaugeId,
+} from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -789,7 +795,7 @@ function Map({
   }, []);
   // The river gauge pressed, if any; the dots come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
-  const gaugeFile = useGauges(showGauges);
+  const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
   const closeGauge = useCallback(() => setGaugeId(null), []);
@@ -1449,7 +1455,7 @@ function Map({
           layout: { visibility: "none" },
           paint: {
             "circle-radius": 6,
-            "circle-color": "#3b82c4",
+            "circle-color": MAP_INK.gauge,
             "circle-opacity": ["case", ["get", "recent"], 1, 0.35],
             "circle-stroke-width": 1.5,
             "circle-stroke-color": INK,
@@ -1459,9 +1465,9 @@ function Map({
         GAUGE_BELOW,
       );
       map.on("click", GAUGE_LAYER, (e) => {
-        if (pickModeRef.current) return;
-        const id = e.features?.[0]?.properties?.id;
-        if (typeof id === "string") setGaugeId(id);
+        if (pickModeRef.current || drawingRouteRef.current) return;
+        const id = pressedGaugeId(map, [e.point.x, e.point.y]);
+        if (id) setGaugeId(id);
       });
       map.on("mouseenter", GAUGE_LAYER, () => {
         if (pickModeRef.current) return;
@@ -1775,15 +1781,7 @@ function Map({
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     // Everything on the map that has a press of its own.
-    const PRESSABLE = [
-      "place-circles",
-      "shared-place-halos",
-      "shared-place-circles",
-      GAUGE_LAYER,
-      "routes-hit",
-      "place-tracks-hit",
-      "standalone-tracks-hit",
-    ];
+    const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
     // Pressing the panel's own dismissal and the map in one gesture.
@@ -3228,6 +3226,11 @@ function Map({
           generatedAt={gaugeFile.generatedAt}
           onClose={closeGauge}
         />
+      )}
+      {gaugesFailed && (
+        <div className={classes.pickBanner}>
+          <Notice>{GAUGES.copy.failed}</Notice>
+        </div>
       )}
       {pickingCoords && (
         <>

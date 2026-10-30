@@ -126,9 +126,8 @@ describe("the gauge panel's words", () => {
     expect(gaugeDisplayName("McKIMMS CORNER")).toBe("McKIMMS Corner");
   });
 
-  it("reads the newest reading that has a value, and none past 7 days", () => {
-    // Mutation: take the last row even when both values are null, or skip the
-    // 7-day check → red.
+  it("reads the newest level and the newest flow each on their own, within 7 days", () => {
+    // Mutation: take both from the same (last) row → red.
     const g = (readings: Gauge["readings"]): Gauge => ({ ...gauge, readings });
     const sec = now / 1000;
     expect(latestGaugeReading(g([]), now)).toBeNull();
@@ -136,15 +135,30 @@ describe("the gauge panel's words", () => {
     expect(
       latestGaugeReading(
         g([
-          [sec - 3600, 1.2, null],
-          [sec - 60, null, null],
+          [sec - 7200, 1.2, 9],
+          [sec - 3600, 1.3, null],
+          [sec - 60, null, 4],
         ]),
         now,
       ),
-    ).toEqual({ at: (sec - 3600) * 1000, level: 1.2, flow: null });
+    ).toEqual({ at: (sec - 60) * 1000, level: 1.3, flow: 4 });
+    // A newest row with no level keeps the level from an hour earlier.
+    expect(
+      latestGaugeReading(
+        g([
+          [sec - 3600, 1.3, 4],
+          [sec - 60, null, 5],
+        ]),
+        now,
+      )?.level,
+    ).toBe(1.3);
     expect(latestGaugeReading(g([[sec - 8 * 86400, 1, 1]]), now)).toBeNull();
-    // Level missing, flow present.
-    expect(latestGaugeReading(g([[sec - 60, null, 4]]), now)?.flow).toBe(4);
+    // Level missing everywhere, flow present.
+    expect(latestGaugeReading(g([[sec - 60, null, 4]]), now)).toEqual({
+      at: (sec - 60) * 1000,
+      level: null,
+      flow: 4,
+    });
   });
 
   it("formats and ages", () => {

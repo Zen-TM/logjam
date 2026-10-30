@@ -27,6 +27,7 @@ export const GAUGES = {
     graph: "Last 7 days",
     noLevel: "No level reading",
     noRecent: "This gauge has had no reading in the last 7 days.",
+    failed: "River gauges couldn\u2019t be loaded.",
     staleFile: "Readings last refreshed",
     // Only if the file's own attribution is blank: the credit is never dropped.
     credit: "© WaterNSW",
@@ -70,25 +71,37 @@ export function gaugeDisplayName(raw: string): string {
 }
 
 export type GaugeLatest = {
-  /** Epoch milliseconds. */
+  /** Epoch milliseconds of the newest value shown. */
   at: number;
   level: number | null;
   flow: number | null;
 };
 
-/** The newest reading with a value, or null when the gauge has none in the 7
- *  days before `now`: the file can be older than its own week. */
+/** The newest level and the newest flow, each on its own and each within the 7
+ *  days before `now` (the file can be older than its own week), or null when
+ *  the gauge has neither. A row with no level does not hide an earlier one. */
 export function latestGaugeReading(
   gauge: Gauge,
   now: number,
 ): GaugeLatest | null {
-  for (let i = gauge.readings.length - 1; i >= 0; i--) {
-    const [sec, level, flow] = gauge.readings[i];
-    if (level === null && flow === null) continue;
-    const at = sec * 1000;
-    return now - at > GAUGE_RECENT_MS ? null : { at, level, flow };
-  }
-  return null;
+  const newest = (column: 1 | 2) => {
+    for (let i = gauge.readings.length - 1; i >= 0; i--) {
+      const row = gauge.readings[i];
+      if (row[column] === null) continue;
+      return now - row[0] * 1000 > GAUGE_RECENT_MS
+        ? null
+        : { at: row[0] * 1000, value: row[column] as number };
+    }
+    return null;
+  };
+  const level = newest(1);
+  const flow = newest(2);
+  if (!level && !flow) return null;
+  return {
+    at: Math.max(level?.at ?? 0, flow?.at ?? 0),
+    level: level?.value ?? null,
+    flow: flow?.value ?? null,
+  };
 }
 
 export function formatGaugeLevel(metres: number): string {

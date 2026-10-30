@@ -8,6 +8,7 @@ import {
   GAUGE_BELOW,
   GAUGE_LAYER,
   moveTerrainIntoBasemap,
+  pressedGaugeId,
   stackTopoLayers,
   TOPO_CEILING,
 } from "./layerOrder";
@@ -143,14 +144,42 @@ describe("GAUGE_LAYER", () => {
       source.indexOf(`id: "${TOPO_CEILING}"`),
     );
     expect(source).toContain(`GAUGE_BELOW,\n      );`);
-    expect(source.indexOf(`id: "${GAUGE_BELOW}"`)).toBeLessThan(
-      source.indexOf("id: GAUGE_LAYER"),
+    // The highlight layers are added in a loop over this list.
+    const highlights = source.indexOf(`["${GAUGE_BELOW}", "places"]`);
+    expect(highlights).toBeGreaterThan(-1);
+    expect(highlights).toBeLessThan(source.indexOf("id: GAUGE_LAYER"));
+  });
+
+  // Mutation: drop the PRESSABLE_LAYERS query in pressedGaugeId, and a gauge
+  // under a pin also opens its panel.
+  it("loses a press to a pin, route or track over it", () => {
+    const at = (layers: Record<string, Record<string, unknown>[]>) => ({
+      getLayer: () => ({}),
+      queryRenderedFeatures: (_p: [number, number], o: { layers: string[] }) =>
+        o.layers.flatMap((l) => layers[l] ?? []),
+    });
+    const gauge = { properties: { id: "212290" } };
+    expect(pressedGaugeId(at({ [GAUGE_LAYER]: [gauge] }), [1, 1])).toBe(
+      "212290",
     );
+    expect(
+      pressedGaugeId(
+        at({ [GAUGE_LAYER]: [gauge], "place-circles": [{}] }),
+        [1, 1],
+      ),
+    ).toBeNull();
+    expect(
+      pressedGaugeId(
+        at({ [GAUGE_LAYER]: [gauge], "routes-hit": [{}] }),
+        [1, 1],
+      ),
+    ).toBeNull();
   });
 
   it("is pressable, so a gauge press does not also ask 'what is here?'", () => {
     const pressable = /const PRESSABLE = \[([^\]]*)\]/.exec(source)?.[1];
     expect(pressable).toContain("GAUGE_LAYER");
+    expect(pressable).toContain("PRESSABLE_LAYERS");
     expect(GAUGE_LAYER).toBe("gauge-circles");
   });
 });

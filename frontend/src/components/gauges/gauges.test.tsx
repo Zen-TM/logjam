@@ -56,11 +56,15 @@ describe("GaugeView", () => {
     expect(screen.getByText(file.attribution)).toBeTruthy();
   });
 
-  // Mutation: read the level of the last row, not the last row with a value.
-  it("reads a flow when the newest level is missing", () => {
+  // Mutation: take the level from the newest row, not the newest level.
+  it("keeps an earlier level when the newest row has none, and says when a gauge has no level at all", () => {
     view(withFlow);
-    expect(screen.getByText(GAUGES.copy.noLevel)).toBeTruthy();
+    expect(screen.getByText("0.95 m")).toBeTruthy();
     expect(screen.getByText("130 ML/d")).toBeTruthy();
+    cleanup();
+    view({ ...withFlow, readings: [[now / 1000 - 60, null, 12]] });
+    expect(screen.getByText(GAUGES.copy.noLevel)).toBeTruthy();
+    expect(screen.getByText("12 ML/d")).toBeTruthy();
   });
 
   it("says plainly that a gauge with no readings has none", () => {
@@ -83,13 +87,29 @@ describe("GaugeView", () => {
 
 describe("useGauges", () => {
   function Probe({ on }: { on: boolean }) {
-    const f = useGauges(on);
-    return <p>{f ? f.gauges.length : "none"}</p>;
+    const { file: f, failed } = useGauges(on);
+    return <p>{failed ? "failed" : f ? f.gauges.length : "none"}</p>;
   }
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  // Mutation: never set `failed`, and a layer that could not load is silent.
+  it("says a failed first load, and the next timer is the retry", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(Response.json(latestJson));
+    vi.stubGlobal("fetch", fetch);
+    render(<Probe on />);
+    await act(async () => {});
+    expect(screen.getByText("failed")).toBeTruthy();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GAUGE_REFRESH_MS);
+    });
+    expect(screen.getByText("3")).toBeTruthy();
   });
 
   it("asks nothing while the layer is off", () => {

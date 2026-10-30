@@ -12,8 +12,12 @@ export const GAUGE_REFRESH_MS = 5 * 60_000;
  * for only while the layer is on and again every five minutes while the tab is
  * visible. A failed or malformed fetch keeps the last good file.
  */
-export function useGauges(enabled: boolean): GaugeLatestFile | null {
+export function useGauges(enabled: boolean): {
+  file: GaugeLatestFile | null;
+  failed: boolean;
+} {
   const [file, setFile] = useState<GaugeLatestFile | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     if (!enabled) return;
     let lastAt = 0;
@@ -25,10 +29,14 @@ export function useGauges(enabled: boolean): GaugeLatestFile | null {
       fetch(`/${GAUGE_LATEST_PATH}`, { signal: abort.signal })
         .then((res) => (res.ok ? res.json() : null))
         .then((json) => {
+          if (abort.signal.aborted) return;
           const parsed = parseGaugeLatest(json);
-          if (parsed && !abort.signal.aborted) setFile(parsed);
+          if (parsed) setFile(parsed);
+          setFailed(!parsed);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!abort.signal.aborted) setFailed(true);
+        });
     };
     const visible = () => document.visibilityState === "visible";
     const tick = () => {
@@ -46,5 +54,6 @@ export function useGauges(enabled: boolean): GaugeLatestFile | null {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled]);
-  return file;
+  // Only a first load that failed is said; the 5-minute timer is the retry.
+  return { file, failed: enabled && failed && !file };
 }
