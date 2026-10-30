@@ -1,8 +1,14 @@
-// Dev-only harness behind geopdf-bench.html (not a Vite build input): renders
-// fixed, made-up extents through the real client and worker, and reports the
-// time per phase. `window.geoPdfBench` is what Playwright drives; the page's
-// button is for a person. Point it at the dev proxy for real tiles, or stub
-// the network (e2e/geopdf-render.spec.ts) for a run with none.
+// Dev-only harness behind geopdf-bench.html, which only `--mode bench` builds
+// (vite.config.ts): renders fixed, made-up extents through the real client
+// and worker, and reports the time per phase. `window.geoPdfBench` is what
+// Playwright drives; the page's button is for a person.
+//
+// Time it from a built bundle: in frontend/,
+//   npx vite build --mode bench && npx vite preview --mode bench
+// The dev server serves each terrain helper's modules unbundled, which about
+// doubles the terrain time. Real tiles come through the /master proxy, which
+// preview keeps (DEV_MASTER_URL); or stub the network, as
+// e2e/geopdf-render.spec.ts does, for a run with none.
 import {
   computeTileToMapTransform,
   computeZoom,
@@ -268,7 +274,7 @@ async function poolCheck(name: string, failHelper = false) {
     debug: { collectPixels: true, noPool: true },
   });
   if (!pooled.pixels || !alone.pixels)
-    return { ok: false, differing: -1, helperBands: 0 };
+    return { ok: false, differing: -1, helperBands: 0, helpersLost: 0 };
   const a = new Uint8Array(pooled.pixels.strips[0]!.data);
   const b = new Uint8Array(alone.pixels.strips[0]!.data);
   let differing = a.length === b.length ? 0 : -1;
@@ -279,6 +285,7 @@ async function poolCheck(name: string, failHelper = false) {
     differing,
     bytes: a.length,
     helperBands: pooled.timings!.helperBands,
+    helpersLost: pooled.timings!.helpersLost,
   };
 }
 

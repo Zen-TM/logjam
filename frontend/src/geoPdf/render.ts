@@ -42,7 +42,6 @@ import { canvasRows, planStrips, type Strip } from "./strips";
 import {
   areasOnPage,
   contourTilesBySource,
-  decodeTerrarium,
   nswContourZoom,
   overlaysDrawn,
   STATEWIDE,
@@ -53,7 +52,7 @@ import {
 } from "./terrain";
 import type { TileCache } from "./cache";
 import { planTerrainBlocks, printGeometry } from "./plan";
-import { bandRows, type TerrainBand } from "./terrainJobs";
+import { bandRows } from "./terrainJobs";
 import { TerrainPool } from "./terrainPool";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
 import { upperBoundTerrainLines } from "./credits";
@@ -127,6 +126,8 @@ const JPEG_QUALITY = 0.95;
 const JPEG_TYPE = "image/jpeg";
 /** Base tiles decoded at once (each is a 256 KB bitmap). */
 const DECODE_BATCH = 8;
+/** Bands of a strip's terrain layer per helper. */
+const BANDS_PER_HELPER = 2;
 
 // Priority among reads that the same strip needs first.
 const RANK = { contours: -1, base: 0, hillshade: 1, slope: 2, vegetation: 3 };
@@ -161,8 +162,13 @@ type TerrainEntry = {
   /** The compressed tile, until it is decoded (then let go). */
   bytes: ArrayBuffer | null;
   status: typeof UNKNOWN | typeof OK | typeof BAD | typeof EMPTY;
+  /** The decode, once asked for: every caller waits on the same one. */
+  settled: Promise<void> | null;
   decoded: Float32Array | null;
 };
+
+/** A strip's terrain layer as painted: RGBA rows from `y` of the strip's canvas. */
+type TerrainBands = { y: number; rows: number; rgba: Uint8ClampedArray }[];
 
 type TerrainPlan = {
   key: "hillshade" | "slope";
@@ -232,6 +238,7 @@ async function renderInner(
     drawBreakdownMs: {},
     strips: 0,
     helperBands: 0,
+    helpersLost: 0,
     mapPx: [0, 0],
   };
 
@@ -504,6 +511,7 @@ async function renderInner(
           promise: Promise.resolve(),
           bytes: null,
           status: UNKNOWN,
+          settled: null,
           decoded: null,
         };
         if (src) {
@@ -548,6 +556,16 @@ async function renderInner(
   if (wantSlope && statewide.slope !== undefined) {
     terrainPlans.push(planTerrain("slope", "slope", false));
   }
+  // Started now, so the helpers load while the tiles arrive; a print with no
+  // terrain starts none.
+  const pool =
+    terrainPlans.length > 0
+      ? new TerrainPool({
+          count: debug?.noPool ? 0 : debug?.poolSize,
+          failFirst: debug?.failHelper,
+        })
+      : null;
+  cleanups.push(() => pool?.terminate());
   // Contours: every tile is read and decoded before the first strip, as the
   // labels are placed over the whole map.
   type ContourRead = {
@@ -687,64 +705,104 @@ async function renderInner(
   report(true);
 
   // ── Strips ───────────────────────────────────────────────────────────────
-  // Started by the first strip with terrain work: a print with none starts none.
-  let pool: TerrainPool | null = null;
-  cleanups.push(() => pool?.terminate());
-  const poolOf = () =>
-    (pool ??= new TerrainPool({
-      count: debug?.noPool ? 0 : debug?.poolSize,
-      failFirst: debug?.failHelper,
-    }));
-  const tileCanvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
-  cleanups.push(() => {
-    tileCanvas.width = tileCanvas.height = 0;
-  });
-  const tileCtx = tileCanvas.getContext("2d", { willReadFrequently: true })!;
-  const decodeTerrainTile = async (bytes: ArrayBuffer) => {
-    try {
-      const bmp = await createImageBitmap(new Blob([bytes]), {
-        premultiplyAlpha: "none",
-        colorSpaceConversion: "none",
-      });
-      tileCtx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
-      tileCtx.drawImage(bmp, 0, 0);
-      bmp.close();
-      const { data } = tileCtx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
-      return decodeTerrarium(data, TILE_SIZE, TILE_SIZE).values;
-    } catch {
-      return null;
-    }
-  };
   const decodeImage = (bytes: ArrayBuffer) =>
     createImageBitmap(new Blob([bytes])).catch(() => null);
 
   /**
-   * Decode an arrived terrain tile once: it is then usable (and credited), or
-   * unreadable for good; the compressed bytes are let go either way. Kept
-   * decoded only if a strip from `keepFrom` on still reads it.
+   * Decode an arrived terrain tile once, on a helper: it is then usable (and
+   * credited), or unreadable for good; the compressed bytes are let go either
+   * way. Kept decoded only if a strip from `keepFrom` on still reads it.
    */
-  const settleDecode = async (
+  const settleDecode = (p: TerrainPlan, e: TerrainEntry, keepFrom: number) =>
+    (e.settled ??= (async () => {
+      const bytes = e.bytes;
+      e.bytes = null;
+      if (!bytes) {
+        e.status = EMPTY;
+        return;
+      }
+      p.arrived++;
+      const values = await pool!.decode(bytes);
+      if (!values) {
+        e.status = BAD;
+        return;
+      }
+      e.status = OK;
+      p.decodedOk++;
+      p.credited.add(e.read.source);
+      if (e.last >= keepFrom) e.decoded = values;
+    })());
+
+  /**
+   * A strip's hillshade or slope, as bands of RGBA from the helpers, or null
+   * where none of its tiles decoded. Runs while this worker draws the base.
+   */
+  const paintTerrain = async (
     p: TerrainPlan,
-    e: TerrainEntry,
-    keepFrom: number,
-  ) => {
-    if (e.status !== UNKNOWN) return;
-    const bytes = e.bytes;
-    e.bytes = null;
-    if (!bytes) {
-      e.status = EMPTY;
-      return;
+    strip: Strip,
+    span: { from: number; to: number },
+  ): Promise<TerrainBands | null> => {
+    const start = performance.now();
+    const block = p.blocks[strip.index]!;
+    const entries = block.reads.map((r) => p.entries.get(terrainReadKey(r))!);
+    await Promise.all(entries.map((e) => settleDecode(p, e, strip.index)));
+    if (!entries.some((e) => e.status === OK)) return null;
+    bump(`${p.key}.decode`, start);
+    const decoded = new Map<string, Float32Array>();
+    for (const [k, e] of p.entries) if (e.decoded) decoded.set(k, e.decoded);
+    const grid = terrainGrid(
+      p.zoom,
+      p.t.minTileX,
+      p.t.minTileY + block.r0,
+      p.cols,
+      block.r1 - block.r0 + 1,
+      p.read,
+      decoded,
+      p.smooth,
+    );
+    // More bands than helpers, so a fast core takes another while a slow one
+    // finishes its first.
+    const canvasH = span.to - span.from;
+    const n = Math.min(Math.max(1, pool!.size * BANDS_PER_HELPER), canvasH);
+    const bands = [];
+    for (let i = 0; i < n; i++) {
+      const y0 = Math.floor((canvasH * i) / n);
+      const outH = Math.floor((canvasH * (i + 1)) / n) - y0;
+      const rows = bandRows(
+        p.t,
+        block.r0 * TILE_SIZE,
+        grid.height,
+        span.from + y0,
+        outH,
+      );
+      const band = pool!.band({
+        kind: p.key,
+        values: grid.values.subarray(
+          rows.from * grid.width,
+          rows.to * grid.width,
+        ),
+        width: grid.width,
+        gridRow0: rows.from,
+        blockRow0: block.r0 * TILE_SIZE,
+        zoom: p.zoom,
+        tileY: p.t.minTileY + block.r0,
+        bands: input.slopeBands,
+        place: {
+          scaleX: p.t.scaleX,
+          scaleY: p.t.scaleY,
+          offsetX: p.t.offsetX,
+          offsetY: p.t.offsetY,
+        },
+        smooth: p.smooth,
+        outW: nativeW,
+        outY: span.from + y0,
+        outH,
+      });
+      bands.push(band.then((rgba) => ({ y: y0, rows: outH, rgba })));
     }
-    p.arrived++;
-    const values = await decodeTerrainTile(bytes);
-    if (!values) {
-      e.status = BAD;
-      return;
-    }
-    e.status = OK;
-    p.decodedOk++;
-    p.credited.add(e.read.source);
-    if (e.last >= keepFrom) e.decoded = values;
+    const out = await Promise.all(bands);
+    bump(`${p.key}.pixels`, start);
+    return out;
   };
 
   const jpegs: GeoPdfPageInput["strips"] = [];
@@ -765,27 +823,44 @@ async function renderInner(
     markers: config.placeMarkers && config.placeMarkers.length > 0,
   };
 
+  /**
+   * A strip's terrain, started at that strip once its own tiles are in: the
+   * helpers decode and paint it while this worker waits for the base tiles
+   * and draws them. No earlier, so at most one strip's bands are alive (a
+   * canvas's worth of RGBA per layer).
+   */
+  const startTerrain = (
+    strip: Strip,
+  ): (Promise<TerrainBands | null> | null)[] => {
+    const work = terrainPlans.map(async (p) => {
+      await Promise.all(
+        p.blocks[strip.index]!.reads.map(
+          (r) => p.entries.get(terrainReadKey(r))!.promise,
+        ),
+      );
+      check();
+      return paintTerrain(p, strip, drawnRows(strip));
+    });
+    // Awaited in layer order when drawn; an abort first must not leave a
+    // rejection unheard.
+    for (const w of work) w.catch(() => {});
+    return work;
+  };
+
   for (const strip of strips) {
     check();
     phase = "drawing";
     report(true);
+    const terrainWork = startTerrain(strip);
     const waitStart = performance.now();
     const myBase = baseEntries.filter(
       (e) => e.first <= strip.index && e.last >= strip.index,
     );
-    // The strip waits for what it draws from.
     const myVeg = vegetation.map((v) =>
       v.entries.filter((e) => e.first <= strip.index && e.last >= strip.index),
     );
-    await Promise.all([
-      ...myBase.map((e) => e.promise),
-      ...terrainPlans.flatMap((p) =>
-        p.blocks[strip.index]!.reads.map(
-          (r) => p.entries.get(terrainReadKey(r))!.promise,
-        ),
-      ),
-      ...myVeg.flat().map((e) => e.promise),
-    ]);
+    // Nothing else is waited for here: each layer waits for its own tiles
+    // as it is drawn, so the base draws while the rest of it arrives.
     // The attribution names what drew, which only the last read knows.
     const reachesCredits = strip.y + strip.renderHeight > upperBlock.top;
     const span = drawnRows(strip);
@@ -794,8 +869,9 @@ async function renderInner(
       await Promise.all(creditReads);
       // What is credited is what decoded, so every terrain tile is tried now.
       for (const p of terrainPlans) {
-        for (const e of p.entries.values())
-          await settleDecode(p, e, strip.index);
+        await Promise.all(
+          [...p.entries.values()].map((e) => settleDecode(p, e, strip.index)),
+        );
         // A layer whose every tile is unreadable is a failure, not a layer
         // quietly missing from the map.
         if (p.arrived > 0 && p.decodedOk === 0)
@@ -807,6 +883,17 @@ async function renderInner(
     timings.fetchWaitMs += performance.now() - waitStart;
 
     const drawStart = performance.now();
+    // Time in the draw spent waiting for tiles: counted as fetch wait.
+    let drawWaitMs = 0;
+    const waitFor = async (batch: TileEntry[]) => {
+      const start = performance.now();
+      await Promise.all(batch.map((e) => e.promise));
+      check();
+      const waited = performance.now() - start;
+      timings.fetchWaitMs += waited;
+      drawWaitMs += waited;
+      return waited;
+    };
     let canvas: OffscreenCanvas;
     let ctx: Ctx | null;
     try {
@@ -827,11 +914,13 @@ async function renderInner(
       const top = span.from;
       const bottom = span.to;
 
-      // 1. Base tiles, in tile order, decoded a few at a time.
+      // 1. Base tiles, in tile order, decoded a few at a time, each batch
+      // drawn as soon as it is in.
       let mark = performance.now();
       const rows = myBase.filter((e) => reachesRows(e.rect, top, bottom));
       for (let i = 0; i < rows.length; i += DECODE_BATCH) {
         const batch = rows.slice(i, i + DECODE_BATCH);
+        mark += await waitFor(batch);
         const images = await Promise.all(
           batch.map(async (e) => {
             const bytes = await e.promise!;
@@ -850,98 +939,37 @@ async function renderInner(
       bump("base", mark);
 
       // 2. Terrain: hillshade, then slope.
-      for (const p of terrainPlans) {
+      for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
-        const block = p.blocks[strip.index]!;
-        for (const r of block.reads)
-          await settleDecode(p, p.entries.get(terrainReadKey(r))!, strip.index);
-        const present = block.reads.some(
-          (r) => p.entries.get(terrainReadKey(r))!.status === OK,
-        );
-        if (present) {
-          let sub = performance.now();
-          bump(`${p.key}.decode`, mark);
-          const decoded = new Map<string, Float32Array>();
-          for (const [k, e] of p.entries)
-            if (e.decoded) decoded.set(k, e.decoded);
-          const grid = terrainGrid(
-            p.zoom,
-            p.t.minTileX,
-            p.t.minTileY + block.r0,
-            p.cols,
-            block.r1 - block.r0 + 1,
-            p.read,
-            decoded,
-            p.smooth,
-          );
-          bump(`${p.key}.grid`, sub);
-          sub = performance.now();
-          // The strip's pixels in bands of map rows, side by side.
-          const n = Math.min(poolOf().width, canvasH);
-          const jobs: TerrainBand[] = [];
-          for (let i = 0; i < n; i++) {
-            const y0 = Math.floor((canvasH * i) / n);
-            const outH = Math.floor((canvasH * (i + 1)) / n) - y0;
-            const rows = bandRows(
-              p.t,
-              block.r0 * TILE_SIZE,
-              grid.height,
-              span.from + y0,
-              outH,
-            );
-            const part = grid.values.subarray(
-              rows.from * grid.width,
-              rows.to * grid.width,
-            );
-            jobs.push({
-              kind: p.key,
-              // The first band is done here, from the grid itself.
-              values: i === 0 ? part : part.slice(),
-              width: grid.width,
-              gridRow0: rows.from,
-              blockRow0: block.r0 * TILE_SIZE,
-              zoom: p.zoom,
-              tileY: p.t.minTileY + block.r0,
-              bands: input.slopeBands,
-              place: {
-                scaleX: p.t.scaleX,
-                scaleY: p.t.scaleY,
-                offsetX: p.t.offsetX,
-                offsetY: p.t.offsetY,
-              },
-              smooth: p.smooth,
-              outW: nativeW,
-              outY: span.from + y0,
-              outH,
-            });
-          }
-          const bands = await poolOf().run(jobs);
-          bump(`${p.key}.pixels`, sub);
-          sub = performance.now();
+        const bands = await terrainWork[i]!;
+        // Let go as soon as drawn; the other layer's may still be painting.
+        terrainWork[i] = null;
+        check();
+        if (bands) {
           scratch ??= new OffscreenCanvas(nativeW, canvasH);
           const sctx = scratch.getContext("2d")!;
-          bands.forEach((rgba, i) =>
+          for (const b of bands)
             sctx.putImageData(
               new ImageData(
-                rgba as Uint8ClampedArray<ArrayBuffer>,
+                b.rgba as Uint8ClampedArray<ArrayBuffer>,
                 nativeW,
-                jobs[i]!.outH,
+                b.rows,
               ),
               0,
-              jobs[i]!.outY - span.from,
-            ),
-          );
+              b.y,
+            );
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.drawImage(scratch, 0, 0);
           ctx.restore();
-          mark = sub;
         }
         // Tiles no later strip reads are let go.
         for (const e of p.entries.values())
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
+      if (scratch) scratch.width = scratch.height = 0;
+      scratch = null;
 
       // 3. Contour lines, then vegetation, then the labels over both.
       mark = performance.now();
@@ -952,6 +980,7 @@ async function renderInner(
         const mine = entries.filter((e) => reachesRows(e.rect, top, bottom));
         for (let i = 0; i < mine.length; i += DECODE_BATCH) {
           const batch = mine.slice(i, i + DECODE_BATCH);
+          mark += await waitFor(batch);
           const images = await Promise.all(
             batch.map(async (e) => {
               const bytes = await e.promise!;
@@ -1027,16 +1056,14 @@ async function renderInner(
         );
       }
       bump("elements", mark);
-      timings.drawMs += performance.now() - drawStart;
+      timings.drawMs += performance.now() - drawStart - drawWaitMs;
 
       // 5. The strip must have drawn: Safari fails a canvas past its limit
       // silently, reading back transparent black.
-      // Crop the halo off. The terrain scratch canvas is let go first, so no
-      // more canvases are alive than peakCanvasPx counts.
+      // Crop the halo off. The terrain scratch canvas is already let go, so
+      // no more canvases are alive than peakCanvasPx counts.
       let out = canvas;
       if (span.above > 0) {
-        if (scratch) scratch.width = scratch.height = 0;
-        scratch = null;
         cropped = new OffscreenCanvas(nativeW, strip.renderHeight);
         const cctx = cropped.getContext("2d");
         if (!cctx) throw new TooLarge();
@@ -1126,7 +1153,8 @@ async function renderInner(
     timings.fetchSpanMs[layer] = Math.round(span.end - span.start);
     timings.requests[layer] = span.n;
   }
-  timings.helperBands = (pool as TerrainPool | null)?.helperBands ?? 0;
+  timings.helperBands = pool?.helperBands ?? 0;
+  timings.helpersLost = pool?.helpersLost ?? 0;
   timings.totalMs = performance.now() - t0;
   return {
     pdf,

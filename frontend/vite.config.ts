@@ -126,6 +126,19 @@ export function browserCheckPlugin(
   };
 }
 
+/**
+ * The pages a build bundles. `--mode bench` adds the GeoPDF timing page
+ * (geopdf-bench.html, src/geoPdf/bench.ts), so it can be timed from a built
+ * bundle; every other build, the deploy's included, has index.html alone.
+ * Guard: src/viteBuildInputs.test.ts.
+ */
+export function buildInputs(mode: string): Record<string, string> {
+  const page = (name: string) => path.resolve(import.meta.dirname, name);
+  return mode === "bench"
+    ? { main: page("index.html"), bench: page("geopdf-bench.html") }
+    : { main: page("index.html") };
+}
+
 export default defineConfig(({ mode }) => {
   // DEV_MASTER_URL (frontend/.env) points the /master proxy at MiniStack's
   // topo bucket, so dev maps read local archives. Unset, it stays the prod CDN:
@@ -166,12 +179,19 @@ export default defineConfig(({ mode }) => {
       maplibreWorkerPlugin(),
       browserCheckPlugin(),
     ],
-    // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
-    build: { target: ["safari17", "chrome114", "firefox125"] },
+    build: {
+      // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
+      target: ["safari17", "chrome114", "firefox125"],
+      rolldownOptions: { input: buildInputs(mode) },
+    },
     // The GeoPDF render worker (src/geoPdf/worker.ts) imports these only from a
     // worker, which the dependency scan does not follow. Found at run time,
     // each makes the dev server re-optimise and reload the page mid-render.
     optimizeDeps: {
+      // Both pages: with `build.rolldownOptions.input` set the scan crawls
+      // only the build's inputs, and a dependency only the bench page
+      // imports, found at run time, would re-optimise mid-render.
+      entries: ["index.html", "geopdf-bench.html"],
       include: [
         "@cantoo/pdf-lib",
         "@mapbox/vector-tile",

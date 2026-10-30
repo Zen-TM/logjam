@@ -26,7 +26,6 @@ import {
   lat2tileY,
   lon2tileX,
   metersPerPixel,
-  demMetresFromRgb,
   parseRgbaHex,
   NSW_CONTOURS,
   slopeBandAt,
@@ -50,10 +49,14 @@ export function decodeTerrarium(
   height: number,
 ): DemGrid {
   const values = new Float32Array(width * height);
-  for (let i = 0; i < values.length; i++) {
-    const o = i * 4;
+  // `demMetresFromRgb`, written out: every step is exact in a double, so only
+  // the Float32 store rounds, as it does there. A call a pixel is a large
+  // part of the decode in a browser that does not optimise (see
+  // hillshadePixels). Guard: terrain.test.ts, "decodes a terrarium pixel
+  // with the shared rule".
+  for (let i = 0, o = 0; i < values.length; i++, o += 4) {
     // A pixel no tile was drawn onto is (0,0,0,0), which decodes to −32768.
-    values[i] = demMetresFromRgb(rgba[o]!, rgba[o + 1]!, rgba[o + 2]!);
+    values[i] = rgba[o]! * 256 + rgba[o + 1]! + rgba[o + 2]! / 256 - 32768;
   }
   return { values, width, height };
 }
@@ -61,46 +64,56 @@ export function decodeTerrarium(
 /** Whole degrees the colour table covers; the archive holds 0°–90°. */
 const SLOPE_LUT_SIZE = 91;
 
+/** The grid pixels a caller will read, `[x0, x1)` × `[y0, y1)`. */
+export type PaintRect = { x0: number; x1: number; y0: number; y1: number };
+
+const wholeGrid = (grid: DemGrid): PaintRect => ({
+  x0: 0,
+  x1: grid.width,
+  y0: 0,
+  y1: grid.height,
+});
+
 /** Each pixel in its band's colour; clear where `slopeBandAt` is. `out`
- *  starts clear: only coloured pixels are written. */
+ *  starts clear: only coloured pixels are written, and only inside `rect`. */
 export function slopePixels(
   grid: DemGrid,
   bands: readonly SlopeBand[],
   out: Uint8ClampedArray = new Uint8ClampedArray(grid.width * grid.height * 4),
+  rect: PaintRect = wholeGrid(grid),
 ): Uint8ClampedArray {
   // ADR 0039: the archive holds whole degrees, so a value is looked up in a
   // table by degree. Anything else (a fraction, no-data, past 90°) falls back
   // to `slopeBandAt`, so a grid that is not whole degrees still paints right.
+  // Each degree's RGBA as one 32-bit word, copied whole; a degree no band
+  // paints is 0, which leaves the pixel clear as it was.
   const table = new Uint8ClampedArray(SLOPE_LUT_SIZE * 4);
-  const painted = new Uint8Array(SLOPE_LUT_SIZE);
   for (let d = 0; d < SLOPE_LUT_SIZE; d++) {
     const band = slopeBandAt(bands, d);
-    if (!band) continue;
-    table.set(parseRgbaHex(band.colour), d * 4);
-    painted[d] = 1;
+    if (band) table.set(parseRgbaHex(band.colour), d * 4);
   }
-  const { values } = grid;
+  const table32 = new Uint32Array(table.buffer);
+  const out32 = new Uint32Array(out.buffer, out.byteOffset, out.length >> 2);
+  const { values, width } = grid;
   const fallback = new Map<number, number[] | null>();
-  for (let i = 0; i < values.length; i++) {
-    const degrees = values[i]!;
-    if (degrees >= 0 && degrees < SLOPE_LUT_SIZE && degrees % 1 === 0) {
-      if (painted[degrees]) {
-        const o = i * 4;
-        const t = degrees * 4;
-        out[o] = table[t]!;
-        out[o + 1] = table[t + 1]!;
-        out[o + 2] = table[t + 2]!;
-        out[o + 3] = table[t + 3]!;
+  for (let y = rect.y0; y < rect.y1; y++) {
+    const rowEnd = y * width + rect.x1;
+    for (let i = y * width + rect.x0; i < rowEnd; i++) {
+      const degrees = values[i]!;
+      const whole = degrees | 0;
+      if (whole === degrees && whole >= 0 && whole < SLOPE_LUT_SIZE) {
+        const rgba = table32[whole]!;
+        if (rgba !== 0) out32[i] = rgba;
+        continue;
       }
-      continue;
+      let colour = fallback.get(degrees);
+      if (colour === undefined) {
+        const band = slopeBandAt(bands, degrees);
+        colour = band ? parseRgbaHex(band.colour) : null;
+        fallback.set(degrees, colour);
+      }
+      if (colour) out.set(colour, i * 4);
     }
-    let colour = fallback.get(degrees);
-    if (colour === undefined) {
-      const band = slopeBandAt(bands, degrees);
-      colour = band ? parseRgbaHex(band.colour) : null;
-      fallback.set(degrees, colour);
-    }
-    if (colour) out.set(colour, i * 4);
   }
   return out;
 }
@@ -114,16 +127,14 @@ export function slopePixels(
 const ILLUMINATION_RAD = (335 * Math.PI) / 180;
 const DEG_TO_RAD = Math.PI / 180;
 
-/** GLSL's `mod`, which is never negative for a positive divisor. */
-const glslMod = (x: number, y: number) => x - y * Math.floor(x / y);
-
 /**
  * The hillshade of a height grid read at `zoom`, whose top row is the top of
  * tile row `tileY`, as Logjam Web shades tiles of that zoom. Straight-alpha
  * RGBA into `out`, which starts clear: a pixel is left alone where a height
  * or one of its eight neighbours is missing. The
  * grid's own edge is read as if the edge pixel repeated: it is a tile edge
- * outside the printed area.
+ * outside the printed area. Only pixels inside `rect` are painted; their
+ * neighbours are read from the whole grid all the same.
  */
 export function hillshadePixels(
   grid: DemGrid,
@@ -132,6 +143,7 @@ export function hillshadePixels(
   out: Uint8ClampedArray = new Uint8ClampedArray(grid.width * grid.height * 4),
   /** Rows of the whole grid above this one, when it is a band of a larger one. */
   rowOffset = 0,
+  rect: PaintRect = wholeGrid(grid),
 ): Uint8ClampedArray {
   const { values, width, height } = grid;
   // Below z15 MapLibre steepens the shading, which makes up for the coarser
@@ -143,63 +155,78 @@ export function hillshadePixels(
   const divisor = 2 ** (exaggeration + 28.2562 - zoom) / TILE_SIZE;
   const azimuth = ILLUMINATION_RAD + Math.PI;
   // The prepared texture holds deriv / 8 + 128/255 in a byte, so it saturates.
-  const stored = (v: number) =>
-    Math.max(-128 / 255, Math.min(127 / 255, v / 8)) * 8;
+  const lo = -128 / 255;
+  const hi = 127 / 255;
   const T = DEM_NO_DATA_BELOW;
 
-  for (let y = 0; y < height; y++) {
+  // Written for an engine that does not optimise it (a browser with its
+  // JavaScript optimiser off runs it several times slower): no call it can
+  // avoid, each height read once. Guard for the bytes: `originalHillshade`
+  // in terrain.test.ts ("the faster terrain loops").
+  for (let y = rect.y0; y < rect.y1; y++) {
     const lat = tileY2lat(tileY + (y + rowOffset + 0.5) / TILE_SIZE, zoom);
     const cosLat = Math.cos(lat * DEG_TO_RAD);
     // The grid's own edge reads as if its edge pixel repeated.
     const rowM = (y > 0 ? y - 1 : 0) * width;
     const row0 = y * width;
     const rowP = (y < height - 1 ? y + 1 : y) * width;
-    for (let x = 0; x < width; x++) {
-      const xm = x > 0 ? x - 1 : 0;
+    // A 3 × 3 window that slides right: columns a d g, b e h, c f i. A
+    // column is usable when none of its three heights is missing.
+    const xm = rect.x0 > 0 ? rect.x0 - 1 : 0;
+    let a = values[rowM + xm]!;
+    let d = values[row0 + xm]!;
+    let g = values[rowP + xm]!;
+    let b = values[rowM + rect.x0]!;
+    let e = values[row0 + rect.x0]!;
+    let h = values[rowP + rect.x0]!;
+    let okL = !(a <= T || d <= T || g <= T);
+    let okC = !(b <= T || e <= T || h <= T);
+    for (let x = rect.x0; x < rect.x1; x++) {
       const xp = x < width - 1 ? x + 1 : x;
-      const a = values[rowM + xm]!;
-      const b = values[rowM + x]!;
       const c = values[rowM + xp]!;
-      const d = values[row0 + xm]!;
-      const e = values[row0 + x]!;
       const f = values[row0 + xp]!;
-      const g = values[rowP + xm]!;
-      const h = values[rowP + x]!;
       const i = values[rowP + xp]!;
-      if (
-        a <= T ||
-        b <= T ||
-        c <= T ||
-        d <= T ||
-        e <= T ||
-        f <= T ||
-        g <= T ||
-        h <= T ||
-        i <= T
-      )
-        continue;
-      const dx = stored((c + f + f + i - (a + d + d + g)) / divisor) / cosLat;
-      const dy = stored((g + h + h + i - (a + b + b + c)) / divisor) / cosLat;
-      // The shader takes sin and cos of atan(0.625 × |gradient|). With
-      // t = 0.625 × |gradient| those are t / √(1+t²) and 1 / √(1+t²): one
-      // square root where an atan, a sin and a cos were, which is most of the
-      // loop. The same numbers, to within the last bit of a double (the bytes
-      // test in terrain.test.ts).
-      const t = 0.625 * Math.sqrt(dx * dx + dy * dy);
-      const cosSlope = 1 / Math.sqrt(1 + t * t);
-      const shadeAlpha = t * cosSlope;
-      const alpha = (1 - cosSlope) * (1 - shadeAlpha) + shadeAlpha;
-      if (alpha <= 0) continue;
-      const aspect =
-        dx !== 0 ? Math.atan2(dy, -dx) : (Math.PI / 2) * (dy > 0 ? 1 : -1);
-      // At exaggeration 0.5 the shader's scaled slope is the slope itself.
-      const shade = Math.abs(
-        glslMod((aspect + azimuth) / Math.PI + 0.5, 2) - 1,
-      );
-      const grey = (255 * shade * shadeAlpha) / alpha;
-      const o = (row0 + x) * 4;
-      out[o] = out[o + 1] = out[o + 2] = grey;
-      out[o + 3] = 255 * alpha;
+      const okR = !(c <= T || f <= T || i <= T);
+      if (okL && okC && okR) {
+        // `stored`: v / 8, clamped to the byte's range, times 8.
+        let sx = (c + f + f + i - (a + d + d + g)) / divisor / 8;
+        sx = sx < hi ? sx : hi;
+        sx = sx > lo ? sx : lo;
+        let sy = (g + h + h + i - (a + b + b + c)) / divisor / 8;
+        sy = sy < hi ? sy : hi;
+        sy = sy > lo ? sy : lo;
+        const dx = (sx * 8) / cosLat;
+        const dy = (sy * 8) / cosLat;
+        // The shader takes sin and cos of atan(0.625 × |gradient|). With
+        // t = 0.625 × |gradient| those are t / √(1+t²) and 1 / √(1+t²): one
+        // square root where an atan, a sin and a cos were. The same numbers,
+        // to within the last bit of a double (the bytes test in terrain.test.ts).
+        const t = 0.625 * Math.sqrt(dx * dx + dy * dy);
+        const cosSlope = 1 / Math.sqrt(1 + t * t);
+        const shadeAlpha = t * cosSlope;
+        const alpha = (1 - cosSlope) * (1 - shadeAlpha) + shadeAlpha;
+        if (!(alpha <= 0)) {
+          const aspect =
+            dx !== 0 ? Math.atan2(dy, -dx) : (Math.PI / 2) * (dy > 0 ? 1 : -1);
+          // GLSL's mod(m, 2) - 1. m is in [2.36, 4.37] (aspect is within
+          // ±π), so `| 0` is its floor.
+          const m = (aspect + azimuth) / Math.PI + 0.5;
+          const r = m - 2 * ((m / 2) | 0) - 1;
+          // At exaggeration 0.5 the shader's scaled slope is the slope itself.
+          const shade = r < 0 ? -r : r;
+          const o = (row0 + x) * 4;
+          out[o] = out[o + 1] = out[o + 2] = (255 * shade * shadeAlpha) / alpha;
+          out[o + 3] = 255 * alpha;
+        }
+      }
+      a = b;
+      b = c;
+      d = e;
+      e = f;
+      g = h;
+      h = i;
+      okL = okC;
+      okC = okR;
     }
   }
   return out;
@@ -553,47 +580,111 @@ export function resampleGrid(
     }
     return out;
   }
+  // Per column: where the two reads are (RGBA offsets) and their weights.
   const xa = new Int32Array(outW);
   const xb = new Int32Array(outW);
   const fxs = new Float64Array(outW);
+  const gxs = new Float64Array(outW);
   for (let px = 0; px < outW; px++) {
     const u = (px + 0.5) / scaleX + offsetX - 0.5;
     const x0 = Math.floor(u);
-    fxs[px] = u - x0;
-    xa[px] = clamp(x0, 0, maxX);
-    xb[px] = clamp(x0 + 1, 0, maxX);
+    const fx = u - x0;
+    fxs[px] = fx;
+    gxs[px] = 1 - fx;
+    xa[px] = clamp(x0, 0, maxX) * 4;
+    xb[px] = clamp(x0 + 1, 0, maxX) * 4;
   }
+  // Separable: each grid row is blended across once, into premultiplied
+  // alpha and grey, and an output row blends the two rows it falls between,
+  // so one row's blend serves the output rows on both sides of it. The sums
+  // are the four-pixel blend's, grouped differently, so a byte can round a
+  // level differently from it, on whole rows or columns where one axis's
+  // fraction is exactly dyadic (0.5, 0.25, ...) and the other's is not.
+  // Guard: terrain.test.ts, "blends as the four-pixel bilinear to within a
+  // level".
+  let alphaA = new Float64Array(outW);
+  let greyA = new Float64Array(outW);
+  let alphaB = new Float64Array(outW);
+  let greyB = new Float64Array(outW);
+  let rowOfA = -1;
+  let rowOfB = -1;
+  const across = (row: number, alpha: Float64Array, grey: Float64Array) => {
+    const base = row * srcW * 4;
+    for (let px = 0; px < outW; px++) {
+      const i = base + xa[px]!;
+      const j = base + xb[px]!;
+      const wa = gxs[px]! * src[i + 3]!;
+      const wb = fxs[px]! * src[j + 3]!;
+      alpha[px] = wa + wb;
+      grey[px] = wa * src[i]! + wb * src[j]!;
+    }
+  };
+  let o = 0;
   for (let r = 0; r < outH; r++) {
     const v = (outY + r + 0.5) / scaleY + offsetY - 0.5;
     const y0 = Math.floor(v);
     const fy = v - y0;
-    const rowA = clamp(y0 - srcRow0, 0, maxY) * srcW;
-    const rowB = clamp(y0 + 1 - srcRow0, 0, maxY) * srcW;
-    for (let px = 0; px < outW; px++) {
-      const fx = fxs[px]!;
-      const i00 = (rowA + xa[px]!) * 4;
-      const i10 = (rowA + xb[px]!) * 4;
-      const i01 = (rowB + xa[px]!) * 4;
-      const i11 = (rowB + xb[px]!) * 4;
-      const w00 = (1 - fx) * (1 - fy) * src[i00 + 3]!;
-      const w10 = fx * (1 - fy) * src[i10 + 3]!;
-      const w01 = (1 - fx) * fy * src[i01 + 3]!;
-      const w11 = fx * fy * src[i11 + 3]!;
-      const alpha = w00 + w10 + w01 + w11;
+    const gy = 1 - fy;
+    const rowA = clamp(y0 - srcRow0, 0, maxY);
+    const rowB = clamp(y0 + 1 - srcRow0, 0, maxY);
+    if (rowA === rowOfB) {
+      // Moved down a grid row: the lower row becomes the upper.
+      [alphaA, alphaB] = [alphaB, alphaA];
+      [greyA, greyB] = [greyB, greyA];
+      rowOfA = rowA;
+      rowOfB = -1;
+    }
+    if (rowA !== rowOfA) {
+      across(rowA, alphaA, greyA);
+      rowOfA = rowA;
+    }
+    if (rowB !== rowOfB) {
+      across(rowB, alphaB, greyB);
+      rowOfB = rowB;
+    }
+    for (let px = 0; px < outW; px++, o += 4) {
+      const alpha = gy * alphaA[px]! + fy * alphaB[px]!;
       if (alpha <= 0) continue;
-      const o = (r * outW + px) * 4;
       out[o] =
         out[o + 1] =
         out[o + 2] =
-          (w00 * src[i00]! +
-            w10 * src[i10]! +
-            w01 * src[i01]! +
-            w11 * src[i11]!) /
-          alpha;
+          (gy * greyA[px]! + fy * greyB[px]!) / alpha;
       out[o + 3] = alpha;
     }
   }
   return out;
+}
+
+/**
+ * The grid pixels `resampleGrid` reads for the same arguments: a caller paints
+ * only these. Worked out with its expressions at the first and last output
+ * column and row, which bound the rest. Guard: terrainJobs.test.ts, whose
+ * bands leave grid columns unread on both sides.
+ */
+export function resampleReach(
+  srcW: number,
+  srcH: number,
+  srcRow0: number,
+  place: GridPlacement,
+  smooth: boolean,
+  outW: number,
+  outY: number,
+  outH: number,
+): PaintRect {
+  const { scaleX, scaleY, offsetX, offsetY } = place;
+  const maxX = srcW - 1;
+  const maxY = srcH - 1;
+  const lift = smooth ? 0.5 : 0;
+  const reach = smooth ? 1 : 0;
+  const col = (px: number) => Math.floor((px + 0.5) / scaleX + offsetX - lift);
+  const row = (r: number) =>
+    Math.floor((outY + r + 0.5) / scaleY + offsetY - lift) - srcRow0;
+  return {
+    x0: clamp(col(0), 0, maxX),
+    x1: clamp(col(outW - 1) + reach, 0, maxX) + 1,
+    y0: clamp(row(0), 0, maxY),
+    y1: clamp(row(outH - 1) + reach, 0, maxY) + 1,
+  };
 }
 
 /** Tile rows of DEM a bilinear read and the hillshade's neighbours reach. */

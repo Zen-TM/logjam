@@ -139,7 +139,8 @@ test.describe("the in-browser GeoPDF renderer", () => {
 
   // A helper that throws is not the render's failure. Mutation: drop
   // `e.preventDefault()` in terrainPool.ts: the error reaches the render
-  // worker's scope and the render fails.
+  // worker's scope and the render fails. Or make the `failHelper` hook do
+  // nothing: no helper is lost.
   test("a helper that fails hands its band back and the render completes", async ({
     page,
   }) => {
@@ -148,7 +149,7 @@ test.describe("the in-browser GeoPDF renderer", () => {
     const r = await page.evaluate(() =>
       window.geoPdfBench.poolCheck("shade", true),
     );
-    expect(r).toMatchObject({ ok: true, differing: 0 });
+    expect(r).toMatchObject({ ok: true, differing: 0, helpersLost: 1 });
   });
 
   // A strip whose last rows fall on the last row of a DEM tile: with no halo

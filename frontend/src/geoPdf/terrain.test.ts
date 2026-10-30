@@ -510,6 +510,31 @@ describe("the faster terrain loops", () => {
     }
   });
 
+  // Mutation: drop either clamp of `stored` in hillshadePixels, slide the
+  // window one column late, or paint outside `rect`.
+  it("shades cliffs steep enough to saturate, inside a rect only, as the original", () => {
+    const grid = bumpyGrid(61, 37);
+    for (let y = 0; y < grid.height; y++)
+      for (let x = 30; x < grid.width; x++)
+        grid.values[y * grid.width + x]! += 900 + 40 * (y % 5);
+    const rect = { x0: 3, x1: 50, y0: 2, y1: 30 };
+    for (const zoom of [13, 15, 17]) {
+      const tileY = lat2tileY(-33.7, zoom);
+      const want = originalHillshade(grid, zoom, tileY);
+      expect(hillshadePixels(grid, zoom, tileY)).toEqual(want);
+      const got = hillshadePixels(grid, zoom, tileY, undefined, 0, rect);
+      for (let y = 0; y < grid.height; y++)
+        for (let x = 0; x < grid.width; x++) {
+          const inside =
+            x >= rect.x0 && x < rect.x1 && y >= rect.y0 && y < rect.y1;
+          const o = (y * grid.width + x) * 4;
+          expect([...got.subarray(o, o + 4)]).toEqual(
+            inside ? [...want.subarray(o, o + 4)] : [0, 0, 0, 0],
+          );
+        }
+    }
+  });
+
   it("paints whole degrees, fractions, no data and out-of-range values as the original", () => {
     const bands = RASTER_TEMPLATE_DEFAULTS.slope.bands;
     const rand = lcg(3);
@@ -529,12 +554,22 @@ describe("the faster terrain loops", () => {
     expect(slopePixels(grid, bands)).toEqual(originalSlope(grid, bands));
   });
 
-  it("decodes a terrarium pixel with the shared rule", () => {
-    const rgba = new Uint8ClampedArray([129, 4, 128, 255]);
-    expect(decodeTerrarium(rgba, 1, 1).values[0]).toBeCloseTo(
-      demMetresFromRgb(129, 4, 128),
-      4,
-    );
+  // Mutation: change the formula written out in decodeTerrarium (a constant,
+  // or `/ 256` to `>> 8`) and some pixel differs.
+  it("decodes a terrarium pixel with the shared rule, to the Float32", () => {
+    const greens = [0, 1, 4, 127, 128, 254, 255];
+    const rgba = new Uint8ClampedArray(256 * greens.length * 256 * 4);
+    const want = new Float32Array(rgba.length / 4);
+    let i = 0;
+    for (let r = 0; r < 256; r++)
+      for (const g of greens)
+        for (let b = 0; b < 256; b++, i++) {
+          rgba.set([r, g, b, 255], i * 4);
+          want[i] = demMetresFromRgb(r, g, b);
+        }
+    const got = decodeTerrarium(rgba, want.length, 1).values;
+    // Counted rather than compared whole: a diff that long is slow to print.
+    expect(got.filter((v, k) => v !== want[k]).length).toBe(0);
   });
 });
 
@@ -585,6 +620,82 @@ describe("resampleGrid", () => {
         (v) => v === 0,
       ),
     ).toBe(true);
+  });
+
+  // Reference four-pixel bilinear; resampleGrid must match it to within a
+  // level.
+  function fourPixelBilinear(
+    src: Uint8ClampedArray,
+    srcW: number,
+    srcH: number,
+    p: typeof place,
+    w: number,
+    h: number,
+  ) {
+    const out = new Uint8ClampedArray(w * h * 4);
+    const c = (v: number, hi: number) => Math.min(hi, Math.max(0, v));
+    for (let r = 0; r < h; r++) {
+      const v = (r + 0.5) / p.scaleY + p.offsetY - 0.5;
+      const y0 = Math.floor(v);
+      const fy = v - y0;
+      for (let px = 0; px < w; px++) {
+        const u = (px + 0.5) / p.scaleX + p.offsetX - 0.5;
+        const x0 = Math.floor(u);
+        const fx = u - x0;
+        const at = (x: number, y: number) =>
+          (c(y, srcH - 1) * srcW + c(x, srcW - 1)) * 4;
+        const i00 = at(x0, y0);
+        const i10 = at(x0 + 1, y0);
+        const i01 = at(x0, y0 + 1);
+        const i11 = at(x0 + 1, y0 + 1);
+        const w00 = (1 - fx) * (1 - fy) * src[i00 + 3]!;
+        const w10 = fx * (1 - fy) * src[i10 + 3]!;
+        const w01 = (1 - fx) * fy * src[i01 + 3]!;
+        const w11 = fx * fy * src[i11 + 3]!;
+        const alpha = w00 + w10 + w01 + w11;
+        if (alpha <= 0) continue;
+        const o = (r * w + px) * 4;
+        out[o] =
+          out[o + 1] =
+          out[o + 2] =
+            (w00 * src[i00]! +
+              w10 * src[i10]! +
+              w01 * src[i01]! +
+              w11 * src[i11]!) /
+            alpha;
+        out[o + 3] = alpha;
+      }
+    }
+    return out;
+  }
+
+  // resampleGrid blends each grid row across first, which rounds a level
+  // differently from the four-pixel blend on whole columns where one axis's
+  // fraction is exactly dyadic and the other's is not (the last placement,
+  // on a grid whose grey alternates 10 and 11 by column). Mutation: swap the
+  // weights of the two rows (gy and fy), or keep the upper row when moving
+  // down a grid row.
+  it("blends as the four-pixel bilinear to within a level, edges and clear pixels included", () => {
+    const columns = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+      const g = (i % W) % 2 ? 11 : 10;
+      columns.set([g, g, g, 255], i * 4);
+    }
+    const cases: [Uint8ClampedArray, typeof place][] = [
+      [grid, place],
+      [grid, { scaleX: 2, scaleY: 2, offsetX: 0, offsetY: 0 }],
+      [grid, { scaleX: 1.99998, scaleY: 1.99996, offsetX: -0.7, offsetY: 3.2 }],
+      [grid, { scaleX: 0.8, scaleY: 1.5, offsetX: 1.1, offsetY: 2.6 }],
+      [columns, { scaleX: 2, scaleY: 3.1, offsetX: 0.25, offsetY: 7.9 }],
+    ];
+    for (const [src, p] of cases) {
+      const got = resampleGrid(src, W, H, 0, p, true, 80, 0, outH);
+      const want = fourPixelBilinear(src, W, H, p, 80, outH);
+      let worst = 0;
+      for (let i = 0; i < got.length; i++)
+        worst = Math.max(worst, Math.abs(got[i]! - want[i]!));
+      expect(worst).toBeLessThanOrEqual(1);
+    }
   });
 
   it("reads a flat grey grid back as that grey where it is opaque", () => {
