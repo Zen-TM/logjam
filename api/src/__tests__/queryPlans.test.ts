@@ -5,20 +5,7 @@ import pg from "pg";
 import { databaseUrlFromEnv } from "../lib/databaseUrl";
 import prisma from "../services/prisma";
 import { errorHandler } from "../middleware/errorHandler";
-import placesRouter from "../routes/places";
-import tripLogsGlobalRouter from "../routes/tripLogsGlobal";
-import routesRouter from "../routes/routes";
-import mediaRouter from "../routes/media";
-import notificationsRouter from "../routes/notifications";
-import friendsRouter from "../routes/friends";
-import topoJobsRouter from "../routes/topoJobs";
-import placeTypesRouter from "../routes/placeTypes";
-import usersRouter from "../routes/users";
-import syncRouter from "../routes/sync";
-import sharingRouter from "../routes/sharing";
-import fileSendsRouter from "../routes/fileSends";
-import customFieldsRouter from "../routes/customFields";
-import topoExportsRouter from "../routes/topoExports";
+import { ROUTER_MOUNTS } from "../routes/mounts";
 import {
   as,
   ALICE_SUB,
@@ -30,64 +17,66 @@ import {
   SHARED_PLACE_ID,
 } from "./_actors";
 
-// The key read paths run in this process, so the SQL Prisma sends for them can
-// be captured and EXPLAINed. Under enable_seqscan = off the planner reads a
-// whole table only when no index fits the query, so a missing index shows on
-// the suite's small seed as well as on a big table. Every table is guarded: a
-// read path that must scan one whole is the thing to fix. The paths are the
-// GETs Logjam Web and Logjam GPS call on load, on the map and in sync. Left
-// out: the full export and /friends/search (a substring match on usernames)
-// read whole tables by design. On the seed's few rows the planner drives
-// /file-sends/inbox from file_sends and /friends/leaderboard's canyon count
-// from every Canyon place, reading the other side whole, where real tables
-// start from the caller's own rows; no index is missing.
-// Mutation: drop notifications_user_id_idx and GET /notifications turns red.
+// Every router GET runs in this process, so the SQL Prisma sends for it can be
+// captured and EXPLAINed. Under enable_seqscan = off the planner reads a whole
+// table only when no index fits the query, so a missing index shows on the
+// suite's small seed as well as on a big table. Every table is guarded: a read
+// path that must scan one whole is the thing to fix. Mutation: drop
+// notifications_user_id_idx and GET /notifications turns red.
 
-const app = express()
-  .use(express.json())
-  .use("/users", usersRouter)
-  .use("/place-types", placeTypesRouter)
-  .use("/places", placesRouter)
-  .use("/places", sharingRouter)
-  .use("/custom-fields", customFieldsRouter)
-  .use("/file-sends", fileSendsRouter)
-  .use("/topo-exports", topoExportsRouter)
-  .use("/trips", tripLogsGlobalRouter)
-  .use("/routes", routesRouter)
-  .use("/media", mediaRouter)
-  .use("/notifications", notificationsRouter)
-  .use("/friends", friendsRouter)
-  .use("/topo-jobs", topoJobsRouter)
-  .use("/sync", syncRouter)
-  .use(errorHandler);
+const app = express().use(express.json());
+for (const [path, router] of ROUTER_MOUNTS) app.use(path, router);
+app.use(errorHandler);
 
-const READ_PATHS = [
-  "/users/me",
-  "/place-types",
-  "/places",
-  "/places/shared",
-  "/places/tracks",
-  "/routes",
-  `/places/${SHARED_PLACE_ID}`,
-  `/places/${BOB_SHARED_PLACE_ID}`,
-  "/trips",
-  "/trips/:trip",
-  `/routes/${BOB_SHARED_ROUTE_ID}`,
-  `/places/${SHARED_PLACE_ID}/shares`,
-  "/custom-fields/place",
-  "/file-sends/sent",
-  "/topo-exports",
-  "/media/standalone",
-  "/notifications",
-  "/notifications/unread-count",
-  "/friends",
-  "/friends/requests",
-  "/friends/:friendship/shares",
-  "/topo-jobs",
-  "/topo-jobs/completed-overlays",
-  `/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`,
-  "/sync/delta",
-];
+// Each GET route, by its template, and the requests that exercise it as
+// alice; a `:name` in a request is a seeded id looked up in beforeAll.
+const READ_PATHS: Record<string, [string, ...string[]]> = {
+  "/users/me": ["/users/me"],
+  "/place-types": ["/place-types"],
+  "/places": ["/places"],
+  "/places/shared": ["/places/shared"],
+  "/places/tracks": ["/places/tracks"],
+  "/places/:id": [
+    `/places/${SHARED_PLACE_ID}`,
+    `/places/${BOB_SHARED_PLACE_ID}`,
+  ],
+  "/places/:placeId/trips": [`/places/${SHARED_PLACE_ID}/trips`],
+  "/places/:id/shares": [`/places/${SHARED_PLACE_ID}/shares`],
+  "/trips": ["/trips"],
+  "/trips/:id": ["/trips/:trip"],
+  "/routes": ["/routes"],
+  "/routes/:id": [`/routes/${BOB_SHARED_ROUTE_ID}`],
+  "/shares/:entityType/:entityId": ["/shares/:share"],
+  "/custom-fields/:entity": ["/custom-fields/place"],
+  "/custom-fields/:entity/:key/impact": ["/custom-fields/place/:defKey/impact"],
+  "/file-sends/sent": ["/file-sends/sent"],
+  "/topo-exports": ["/topo-exports"],
+  "/topo-exports/:id": ["/topo-exports/:export"],
+  "/media/standalone": ["/media/standalone"],
+  "/notifications": ["/notifications"],
+  "/notifications/unread-count": ["/notifications/unread-count"],
+  "/friends": ["/friends"],
+  "/friends/requests": ["/friends/requests"],
+  "/friends/:id/shares": ["/friends/:friendship/shares"],
+  "/friends/invites": ["/friends/invites"],
+  "/topo-jobs": ["/topo-jobs"],
+  "/topo-jobs/completed-overlays": ["/topo-jobs/completed-overlays"],
+  "/topo-jobs/:id": [`/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`],
+  "/sync/delta": ["/sync/delta"],
+};
+
+// The GETs not EXPLAINed, and why. On the seed's few rows the planner drives
+// the last two from the wrong side, where real tables start from the caller's
+// own rows; no index is missing.
+const LEFT_OUT: Record<string, string> = {
+  "/meta": "server constants; no database",
+  "/meta/min-mobile-version": "server constants; no database",
+  "/vector-style": "reads only the caller's user row, as every GET does",
+  "/users/me/export": "the full export reads every table by design",
+  "/friends/search": "a substring match reads every username by design",
+  "/file-sends/inbox": "on the seed, driven from all file_sends",
+  "/friends/leaderboard": "on the seed, driven from every Canyon place",
+};
 
 type Captured = { text: string; values?: unknown[] };
 let captured: Captured[] | null = null;
@@ -114,7 +103,7 @@ beforeAll(async () => {
   // A fresh cluster plans an unanalyzed table as at least ten pages until
   // autovacuum first reaches it, so a plan could flip partway through CI.
   await explainer.query("ANALYZE");
-  const [friendship, trip] = await Promise.all([
+  const [friendship, trip, share, def, exportJob] = await Promise.all([
     prisma.friendship.findFirstOrThrow({
       where: {
         requesterId: { in: [ALICE_ID, BOB_ID] },
@@ -122,9 +111,20 @@ beforeAll(async () => {
       },
     }),
     prisma.tripLog.findFirstOrThrow({ where: { userId: ALICE_ID } }),
+    prisma.share.findFirstOrThrow({ where: { sharedById: ALICE_ID } }),
+    prisma.customFieldDef.findFirstOrThrow({
+      where: { ownerId: ALICE_ID, entity: "place" },
+    }),
+    // Completed: only a finished export reaches the egress-quota read.
+    prisma.topoExportJob.findFirstOrThrow({
+      where: { userId: ALICE_ID, status: "completed" },
+    }),
   ]);
   seededIds[":friendship"] = friendship.id;
   seededIds[":trip"] = trip.id;
+  seededIds[":share"] = `${share.entityType}/${share.entityId}`;
+  seededIds[":defKey"] = def.key;
+  seededIds[":export"] = exportJob.id;
 });
 afterAll(async () => {
   pg.Client.prototype.query = query;
@@ -177,10 +177,11 @@ async function explain(q: Captured): Promise<string[]> {
 }
 
 describe("key read paths use an index", () => {
-  it.each(READ_PATHS)("GET %s", async (path) => {
+  const requests = Object.values(READ_PATHS).flat();
+  it.each(requests)("GET %s", async (path) => {
     captured = [];
     const res = await request(app)
-      .get(path.replace(/:\w+/, (key) => seededIds[key]))
+      .get(path.replace(/:\w+/g, (key) => seededIds[key]))
       .set(as(ALICE_SUB))
       .set("x-logjam-client", "mobile/0.1.0-test");
     const queries = captured;
@@ -196,6 +197,25 @@ describe("key read paths use an index", () => {
     }
     expect(problems).toEqual([]);
   });
+});
+
+// Reads the router.get routes of ROUTER_MOUNTS; /health and /ready sit in
+// index.ts and read no table. Mutation: add a router.get, or rename one.
+it("every router GET is EXPLAINed or left out for a reason", () => {
+  type Layer = { route?: { path: string; methods: Record<string, boolean> } };
+  const routes = ROUTER_MOUNTS.flatMap(([mount, router]) =>
+    (router as unknown as { stack: Layer[] }).stack
+      .filter((layer) => layer.route?.methods.get)
+      .map(
+        (layer) => mount + (layer.route!.path === "/" ? "" : layer.route!.path),
+      ),
+  );
+  const declared = [...Object.keys(READ_PATHS), ...Object.keys(LEFT_OUT)];
+  expect(routes.filter((route) => !declared.includes(route))).toEqual([]);
+  expect(declared.filter((route) => !routes.includes(route))).toEqual([]);
+  expect(Object.keys(READ_PATHS).filter((route) => route in LEFT_OUT)).toEqual(
+    [],
+  );
 });
 
 // An unindexed foreign key makes every join on it, and every cascade from its

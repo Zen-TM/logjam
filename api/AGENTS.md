@@ -2,6 +2,10 @@
 
 ## Routes and access
 
+- **A router is mounted through `routes/mounts.ts`, never `app.use` in
+  `index.ts`:** `queryPlans.test.ts` reads every GET from that list and fails on
+  one it neither EXPLAINs nor leaves out for a reason. Guard for the `index.ts`
+  half: `src/routes/mounts.unit.test.ts`.
 - **Every route but `/health`, `/ready`, `/meta` and `/places/search`** runs
   `requireAuth`, then `resolveUser(req.user!.sub)` (`lib/resolveUser.ts`) for
   the internal user; never look a user up by `cognitoId` inline. `/ready`, like
