@@ -181,6 +181,7 @@ export type PlaceListScope = "owned" | "shared";
 // On the owned list the counts are the owner's own data: `shares` powers the
 // "shared by me" filter + card badge, `tripLogLinks` the completion filter +
 // per-row trip count.
+//
 // Counted for the page's ids only: a `_count` include makes Prisma aggregate
 // the whole trip_log_places and place_shares tables. Guard: queryPlans.test.ts.
 export async function withPlaceListCounts<T extends { id: string }>(

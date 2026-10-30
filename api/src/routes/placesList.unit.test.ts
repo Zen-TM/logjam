@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
-// The route module builds a Prisma client at import time; the include helper
-// under test is pure, so the client is stubbed out entirely.
+// The route module builds a Prisma client at import time, so it is mocked; the
+// owned-list tests drive the two groupBy counts through the mock.
 vi.mock("../services/prisma", () => ({
   default: {
     place: { findMany: vi.fn(), count: vi.fn() },
@@ -23,9 +23,9 @@ import { withPlaceListCounts } from "./places";
 // Relying on clients to decline rendering the count is not a security boundary;
 // any client or devtools inspection would expose it.
 //
-// These are unit tests because the boundary lives in a pure scope
-// decision: no server, no DB, so they run in the gate that the integration
-// suite doesn't.
+// These are unit tests because the boundary is the scope branch in
+// withPlaceListCounts: no server, no DB, so they run in the gate that the
+// integration suite doesn't.
 
 describe("withPlaceListCounts — owned list", () => {
   it("counts trips and shares per row, zero when none", async () => {
