@@ -17,6 +17,12 @@
 // of the complement cannot overlap by construction. Guard:
 // mobile/src/map/offlineMask.test.ts.
 
+import {
+  drawsTerrain,
+  type MapArtifact,
+  type ResolvedTileSource,
+} from "./sourceResolver";
+
 /** [west, south, east, north] */
 export type MaskBbox = [number, number, number, number];
 
@@ -128,4 +134,26 @@ export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
     properties: {},
     geometry: { type: "MultiPolygon", coordinates: polygons },
   };
+}
+
+/**
+ * What the mask leaves clear offline: the saved clips of the basemap being
+ * drawn, and every saved Terrain clip, so a save whose basemap clip failed
+ * still shows its terrain. A Terrain clip's bounds are the save's box, and
+ * one whose layer is switched off clears only the mask's own colour. Null
+ * while the basemap isn't drawn from saved tiles.
+ */
+export function offlineMaskBoxes(
+  basemap: readonly ResolvedTileSource[],
+  artifacts: readonly MapArtifact[],
+): MaskBbox[] | null {
+  if (!basemap.some((r) => r.status === "ok" && r.origin === "local")) {
+    return null;
+  }
+  return [
+    ...basemap.flatMap((r) =>
+      r.status === "ok" && r.bounds ? [r.bounds] : [],
+    ),
+    ...artifacts.flatMap((a) => (drawsTerrain(a) && a.bbox ? [a.bbox] : [])),
+  ];
 }

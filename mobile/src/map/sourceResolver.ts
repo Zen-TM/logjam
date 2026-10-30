@@ -551,6 +551,16 @@ export const holdsSlope = (
   artifact.kind === "slope-region" && artifact.logicalKey === NSW_SLOPE.id;
 
 /**
+ * Whether a saved file draws in the Terrain group offline, where the layers
+ * sheet has it on.
+ * Guard: `offlineMask.test.ts` ("offlineMaskBoxes").
+ */
+export const drawsTerrain = (
+  artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
+): boolean =>
+  holdsContours(artifact) || holdsSlope(artifact) || holdsHillshade(artifact);
+
+/**
  * The one slope clip drawn offline: the saved area nearest the middle of the
  * screen, and of those holding it, the biggest, so a canyon saved inside a
  * wider area doesn't crop the slope to its own edge (before the map first

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { offlineCoverageMask, type MaskBbox } from "./offlineMask";
+import { NSW_5M, NSW_CONTOURS, NSW_SLOPE } from "@logjam/shared";
+
+import {
+  offlineCoverageMask,
+  offlineMaskBoxes,
+  type MaskBbox,
+} from "./offlineMask";
+import type { MapArtifact, ResolvedTileSource } from "./sourceResolver";
 
 /** Is this point inside any rectangle of the mask? */
 function masked(mask: GeoJSON.Feature, lon: number, lat: number): boolean {
@@ -81,5 +88,73 @@ describe("offlineCoverageMask", () => {
         expect(overlaps).toBe(false);
       }
     }
+  });
+});
+
+describe("offlineMaskBoxes", () => {
+  const AREA_A: MaskBbox = [150, -34, 151, -33];
+  const AREA_B: MaskBbox = [148, -30, 149, -29];
+  const savedBasemap: ResolvedTileSource = {
+    status: "ok",
+    key: "basemap:protomaps:local:a",
+    sourceType: "vector",
+    bounds: AREA_A,
+    origin: "local",
+  };
+  const clip = (
+    kind: MapArtifact["kind"],
+    logicalKey: string,
+    minzoom = 8,
+  ): MapArtifact => ({
+    id: `${kind}-${logicalKey}`,
+    kind,
+    logicalKey,
+    format: "pmtiles",
+    sourceType: "vector",
+    path: "/clip.pmtiles",
+    bbox: AREA_B,
+    minzoom,
+    maxzoom: 15,
+    sizeBytes: 1,
+    downloadedAt: "2026-10-30T00:00:00.000Z",
+  });
+
+  // Mutation: drop the artifacts line and the mask covers a save whose basemap
+  // clip failed, Terrain group included.
+  it.each([
+    ["contours", clip("contours-region", NSW_CONTOURS.id)],
+    ["slope", clip("slope-region", NSW_SLOPE.id)],
+    ["hillshade", clip("dem-region", NSW_5M.id)],
+  ])("leaves a save's %s clear when its basemap clip failed", (_, terrain) => {
+    const boxes = offlineMaskBoxes([savedBasemap], [terrain])!;
+    expect(boxes).toEqual([AREA_A, AREA_B]);
+    expect(masked(offlineCoverageMask(boxes)!, 148.5, -29.5)).toBe(false);
+  });
+
+  it("does not clear a clip that draws nothing", () => {
+    expect(
+      offlineMaskBoxes(
+        [savedBasemap],
+        [
+          clip("dem-region", "terrarium"),
+          // Saved before the shallow zooms: the hillshade can't draw it.
+          clip("dem-region", NSW_5M.id, 15),
+          clip("basemap-region", "six-topo"),
+        ],
+      ),
+    ).toEqual([AREA_A]);
+  });
+
+  it("is nothing while the basemap isn't drawn from saved tiles", () => {
+    const terrain = clip("contours-region", NSW_CONTOURS.id);
+    expect(
+      offlineMaskBoxes([{ ...savedBasemap, origin: "remote" }], [terrain]),
+    ).toBeNull();
+    expect(
+      offlineMaskBoxes(
+        [{ status: "unavailable", key: "k", reason: "offline-not-downloaded" }],
+        [terrain],
+      ),
+    ).toBeNull();
   });
 });

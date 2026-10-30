@@ -224,7 +224,7 @@ import {
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
-import { offlineCoverageMask } from "./offlineMask";
+import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
@@ -1463,17 +1463,9 @@ export function MapScreen({
   // basemap is actually being drawn FROM those saved tiles. Online there is
   // nothing to hide behind (see offlineMask.ts).
   const offlineMask = useMemo(() => {
-    if (
-      !basemapResolved.some((r) => r.status === "ok" && r.origin === "local")
-    ) {
-      return null;
-    }
-    return offlineCoverageMask(
-      basemapResolved.flatMap((r) =>
-        r.status === "ok" && r.bounds ? [r.bounds] : [],
-      ),
-    );
-  }, [basemapResolved]);
+    const boxes = offlineMaskBoxes(basemapResolved, artifacts);
+    return boxes && offlineCoverageMask(boxes);
+  }, [basemapResolved, artifacts]);
 
   // Union the online overlay list with downloaded artifacts, so saved overlays
   // list + render even on a cold offline launch (the online fetch has no
