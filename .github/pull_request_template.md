@@ -3,7 +3,7 @@
 <!-- The change, and the reason for it. -->
 
 Closes #
-<!-- Or a line `No issue: <why>` when there is none. `Part of #` leaves the issue open. -->
+<!-- Or a line `No issue: <why>` when there is none. `Part of #N` alone fails the check: a PR that does one part of an issue says so in a `No issue:` line, e.g. `No issue: part of #N, which a later PR closes`. -->
 
 ## Testing
 
