@@ -18,7 +18,7 @@ export function protomapsLayerCount(flavor: ProtomapsFlavor): number {
 /**
  * A basemap layer's id on the map: its style id under its source's. Layer ids
  * must be unique across the whole map, and offline the stack mounts ONCE PER
- * DOWNLOADED REGION: every stack emitting the same fixed `pm-background`,
+ * DOWNLOADED REGION: every stack emitting the same fixed `pm-earth`,
  * `pm-water`, … would mean the second saved vector region collides with the
  * first and never draws. The source id is already unique per region.
  */
