@@ -14,8 +14,8 @@ export const PROTOMAPS_FLAVOR: ProtomapsFlavor = "light";
 
 export interface ProtomapsLayerDef {
   id: string;
-  type: "background" | "fill" | "line" | "symbol";
-  sourceLayer?: string;
+  type: "fill" | "line" | "symbol";
+  sourceLayer: string;
   filter?: unknown[];
   minzoom?: number;
   maxzoom?: number;

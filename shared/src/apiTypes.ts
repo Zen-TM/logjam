@@ -51,7 +51,7 @@ export type TPlace = {
   // Optional because on a place shared WITH you these counts are absent by
   // design, not zero: the trip tally is the owner's private trip-list
   // cardinality and `shares` is their fan-out to other people, so the API
-  // withholds both (see placeListInclude in api/src/routes/places.ts). Absent
+  // withholds both (see withPlaceListCounts in api/src/routes/places.ts). Absent
   // means "not yours to know" — so never coalesce it to 0 and present that as an
   // answer about a shared place. Gate every read on ownership.
   _count?: { tripLogLinks: number; shares: number };
