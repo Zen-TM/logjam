@@ -22,7 +22,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |
 | Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
-| How long a switch's label and hint may be: two lines on a phone | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
+| How long a switch's label and hint may be: about two lines on a phone | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.

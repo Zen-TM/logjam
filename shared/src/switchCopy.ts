@@ -3,9 +3,9 @@
 // to it.
 import type * as TypeScript from "typescript";
 
-/** Characters: the label one line and the hint one line on a 360dp phone,
- *  measured on a Galaxy S9 ("Canyon leaderboard" fits; "Save photos to your
- *  gallery" wraps). */
+/** Characters: about a line each on a 360dp phone. Measured on a Galaxy S9, a
+ *  hint fits ~27 beside an icon tile and ~33 without one; 30 is the one number
+ *  that keeps hints short without tying copy to a row's layout. */
 export const SWITCH_COPY_MAX = { label: 20, hint: 30 } as const;
 
 /** A component that draws a switch row, and which of its props are the label
