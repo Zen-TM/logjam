@@ -44,10 +44,6 @@ import {
 } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
 
-// One row per switch, so the list is data and a new preference is one entry:
-// `NOTIFICATION_PREFERENCES`, which Logjam Web reads too.
-const sentence = (what: string) => what.charAt(0).toUpperCase() + what.slice(1);
-
 export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
   const userQuery = useApiQuery(
@@ -156,7 +152,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}
@@ -170,7 +166,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}
