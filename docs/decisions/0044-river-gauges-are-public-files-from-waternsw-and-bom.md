@@ -41,11 +41,13 @@ service.**
   `topo/tests/test_gauges.py` ("urls hold only gauge ids and constants"), and
   `shared/src/gauges.test.ts` against the fixtures the builder writes.
 - **Current readings come from WaterNSW's Water Data API,** fetched every two
-  hours with the key in Secrets Manager (`logjam/waternsw-api-key`). The 20
-  hot gauges named in the script are fetched on every run (12 calls a day);
-  the rest once a day in chunks of 20 (13 calls), 4 spare. Guard:
-  `topo/tests/test_gauges.py` ("hot and cold fit the daily quota"), which
-  also holds the registry to 20 hot and 279 gauges.
+  hours with the key in Secrets Manager (`logjam/waternsw-api-key`). The 7 hot
+  gauges named in the script are fetched on every run (12 calls a day), the
+  other 272 once a day in chunks of 20 (14 calls): 26 of the 29 used. The
+  ceiling is 20 hot and 279 gauges. Guard: `topo/tests/test_gauges.py` ("hot
+  and cold fit the daily quota"), which fails if either is exceeded or the
+  quota is. A cold chunk that fails stops the sweep, the hot readings are
+  still published, and the run exits non-zero so the alarm fires.
 - **A reading of no value, or quality 255 (Data Unavailable), is dropped.**
   The portal sends those as 0.000, which would read as a dry river. Guard:
   `topo/tests/test_gauges.py` ("a q255 zero never becomes a reading").

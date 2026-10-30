@@ -127,7 +127,7 @@ COPY icons/ /app/icons/
 # ------------------------------------------------------------
 # 5. Entrypoint
 # ------------------------------------------------------------
-# Single image, three ECS task definitions:
+# Single image, four ECS task definitions:
 #   - logjam-topo-worker         → the default command below, python3 /app/worker.py
 #   - logjam-topo-export-worker  → entryPoint ["python3", "/app/export_worker.py"]
 #   - logjam-gauges              → ["python3", "/app/build_gauges.py", "run"], every 2 hours on a schedule; needs S3_BUCKET_TOPO, AWS_REGION and WATERNSW_API_KEY
@@ -135,7 +135,7 @@ COPY icons/ /app/icons/
 # The topo worker's is a CMD, not an ENTRYPOINT, so that a RunTask command
 # override can run another script from this image under the same task role: the
 # slope archive build (topo/README.md, "The statewide slope archive"). A task
-# definition that sets an entryPoint drops this CMD, as the other two do.
+# definition that sets an entryPoint drops this CMD, as the others do.
 # tests/test_docker_image_files.py `test_the_image_starts_the_worker_as_a_cmd`
 # holds it: with an ENTRYPOINT the slope recipe and `docker compose run topo
 # python3 /app/pipeline.py ...` would pass their command to worker.py as arguments.

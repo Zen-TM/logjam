@@ -190,6 +190,10 @@ non-zero exits and failed starts.
    key is missing or expired: put a new value in the secret. "returned no
    usable hot readings" means WaterNSW answered with nothing: wait for the next
    run. "refusing to publish" means `topo/gauges.json` lost most of its gauges.
+   "the cold sweep failed part way" means one of the daily sweep's calls
+   failed: the hot readings were still published and the sweep stopped to
+   save the quota. If no chunk got through, the next run sweeps again; if
+   some did, the rest wait for tomorrow.
 3. Do not rerun by hand in a loop: each run spends calls from the day's 29.
 
 ### `logjam-gauges-not-launched`

@@ -156,6 +156,7 @@ def fetch_latest(ids: List[str], key: str) -> Dict[str, Dict[int, list]]:
         for site, times in parse_records(data.get("latestRecords") or []).items():
             out.setdefault(site, {}).update(times)
         if page >= int(data.get("totalPages") or 1):
+            print(f"waternsw: {page} page(s) for {len(ids)} sites")
             return out
         page += 1
         time.sleep(CALL_SPACING_S)
@@ -183,7 +184,10 @@ def build_latest(
     """`latest.json`: every listed gauge, with its merged readings."""
     before = {g["id"]: g["readings"] for g in (old or {}).get("gauges", [])}
     iso = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
-    swept_at = iso(now) if swept or old is None else old["coldSweptAt"]
+    # A first run that swept nothing stamps the epoch, so the next run sweeps.
+    swept_at = (
+        iso(now) if swept else old["coldSweptAt"] if old else "1970-01-01T00:00:00Z"
+    )
     return {
         "version": FORMAT,
         "generatedAt": iso(now),
@@ -333,7 +337,10 @@ def sweep_history(s3, bucket: str, gauges: List[dict], today: datetime) -> None:
             if g["id"] in have:
                 key = f"history/{g['id']}.json"
                 days = history_days(read_json(s3, bucket, S3_PREFIX + key))
-                days.update(fetch_daily(g, recent, end))
+                for day, new in fetch_daily(g, recent, end).items():
+                    # Per slot: BoM may have one variable for a recent day.
+                    old = days.get(day, [None, None])
+                    days[day] = [n if n is not None else o for n, o in zip(new, old)]
             else:
                 days = fetch_daily(g, BOM_FROM, end)
             if days:
@@ -373,6 +380,7 @@ def run(bucket: str) -> None:
     fresh = fetch_latest(hot, key)
     if not fresh:
         raise SystemExit("WaterNSW returned no usable hot readings")
+    chunks_done, cold_failed = 0, False
     if sweep:
         rest = [g["id"] for g in gauges if not g["hot"]]
         for i in range(0, len(rest), SITES_PER_CALL):
@@ -382,14 +390,26 @@ def run(bucket: str) -> None:
                     rest[i : i + SITES_PER_CALL], key
                 ).items():
                     fresh.setdefault(site, {}).update(times)
+                chunks_done += 1
             except Exception as err:  # noqa: BLE001
-                print(f"cold chunk {i // SITES_PER_CALL} left for tomorrow: {err}")
+                # Stop: more calls would spend the day's quota, and the hot
+                # gauges' runs with it.
+                print(f"cold chunk {i // SITES_PER_CALL} failed, sweep stopped: {err}")
+                cold_failed = True
+                break
+    # A sweep that got no chunk through is not stamped, so the next run tries
+    # again; one that got some through waits for tomorrow for the rest.
+    swept = sweep and (chunks_done > 0 or not cold_failed)
     put_json(
-        s3, bucket, "latest.json", build_latest(gauges, old, fresh, now, sweep), 300
+        s3, bucket, "latest.json", build_latest(gauges, old, fresh, now, swept), 300
     )
     print(f"published latest.json: {len(gauges)} gauges, sweep={sweep}")
-    if sweep:
+    if swept:
         sweep_history(s3, bucket, gauges, now.astimezone(AEST))
+    if cold_failed:
+        # After publishing, so the failed-run alarm fires with the hot
+        # readings already out.
+        raise SystemExit("the cold sweep failed part way")
 
 
 # ── registry ─────────────────────────────────────────────────────────────

@@ -176,7 +176,9 @@ class TestReadings(unittest.TestCase):
 
 class TestQuota(unittest.TestCase):
     def test_hot_and_cold_fit_the_daily_quota(self):
-        # Mutation: raise MAX_HOT or MAX_GAUGES past what 29 calls cover, or
+        # Mutation: raise MAX_HOT or MAX_GAUGES past the ceiling of 20 hot and
+        # 279 gauges (25 calls a day at the ceiling, 26 with 7 hot) or past what
+        # 29 calls cover, or
         # run the job more often than the schedule → red.
         self.assertLessEqual(g.calls_per_day(g.MAX_HOT, g.MAX_GAUGES), g.CALLS_PER_DAY)
         gauges = g.load_gauges()
@@ -371,16 +373,52 @@ class TestRun(unittest.TestCase):
         with self.assertRaises(SystemExit):
             run_with(FakeS3(), FIXTURE_GAUGES, lambda ids, key: {})
 
-    def test_a_cold_chunk_failing_is_left_for_tomorrow(self):
-        # Mutation: let a cold error escape → red; the hot readings would be lost.
+    def run_failing_on(self, bad, s3):
+        calls = []
+
         def fetch(ids, key):
-            if "900002" in ids:
+            calls.append(ids)
+            if bad in ids:
                 raise OSError("down")
             return self.fresh(ids, key)
 
+        with mock.patch.object(g, "SITES_PER_CALL", 1):
+            with self.assertRaises(SystemExit):
+                run_with(s3, FIXTURE_GAUGES, fetch)
+        return calls
+
+    def test_a_chunk_failing_midway_stops_the_sweep_and_exits_non_zero(self):
+        # Mutation: carry on after a failed chunk → red (a third call, and
+        # the quota spent on a sweep that is already broken); swallow the
+        # failure so the run exits 0 → red (the alarm never fires); skip the
+        # publish → red (the hot readings are lost).
         s3 = FakeS3()
-        run_with(s3, FIXTURE_GAUGES, fetch)
+        calls = self.run_failing_on("900002", s3)
+        self.assertEqual(calls, [["900001"], ["900002"]])
         self.assertTrue(s3.doc("latest.json")["gauges"][0]["readings"])
+
+    def test_a_sweep_with_one_chunk_through_is_stamped(self):
+        # Mutation: never advance coldSweptAt after a partial sweep → red;
+        # the next run would spend the sweep's calls again.
+        s3 = FakeS3()
+        self.run_failing_on("900003", s3)
+        self.assertNotEqual(
+            s3.doc("latest.json")["coldSweptAt"], "1970-01-01T00:00:00Z"
+        )
+
+    def test_a_sweep_with_no_chunk_through_is_not_stamped(self):
+        # Mutation: advance coldSweptAt regardless → red; the cold gauges
+        # would wait a day for a sweep that got nothing.
+        s3 = FakeS3()
+        s3.store[g.S3_PREFIX + "latest.json"] = g.encode(
+            {**fixture_latest(), "coldSweptAt": "2026-10-01T00:00:00Z"}
+        )
+        self.run_failing_on("900002", s3)
+        self.assertEqual(s3.doc("latest.json")["coldSweptAt"], "2026-10-01T00:00:00Z")
+        # A first run that swept nothing is swept again by the next.
+        first = FakeS3()
+        self.run_failing_on("900002", first)
+        self.assertTrue(g.needs_sweep(first.doc("latest.json"), NOW))
 
     def test_the_cold_sweep_runs_once_a_day(self):
         # Mutation: sweep on every run → red; 13 more calls each run.
@@ -432,6 +470,16 @@ class TestRun(unittest.TestCase):
         merged = s3.doc("history/900001.json")
         self.assertEqual(merged["level"], [0.91, None, 9.0])
         self.assertEqual(merged["flow"], [120.5, None, None])
+
+    def test_a_partly_null_recent_day_keeps_the_stored_value(self):
+        # Mutation: replace the stored row with days.update → red; a day BoM
+        # has only a level for would lose its stored flow.
+        s3 = FakeS3()
+        doc = g.history_doc("900001", {"2026-10-01": [1.0, 5.0]})
+        s3.store[g.S3_PREFIX + "history/900001.json"] = g.encode(doc)
+        run_with(s3, FIXTURE_GAUGES, self.fresh, lambda *a: {"2026-10-01": [2.0, None]})
+        merged = s3.doc("history/900001.json")
+        self.assertEqual((merged["level"], merged["flow"]), ([2.0], [5.0]))
 
     def test_a_missing_key_stops_before_any_request(self):
         with self.assertRaises(SystemExit):
