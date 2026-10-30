@@ -357,9 +357,10 @@ export async function directlySharedIds(
 }
 
 /**
- * Ids of the places shared with this user. List queries OR this as an
- * `id IN` / `placeId IN` arm instead of a `shares: { some }` relation filter,
- * which Postgres plans as a correlated EXISTS no index serves; guard:
+ * Ids of the places shared with this user. Inside an OR, use them as an
+ * `id IN` / `placeId IN` arm, not a `shares: { some }` relation filter: that
+ * arm is a correlated EXISTS no index serves, so the whole OR scans its table.
+ * Alone, as in GET /places/shared, the relation filter is fine. Guard:
  * queryPlans.test.ts.
  */
 export async function sharedPlaceIdsFor(userId: string): Promise<string[]> {
