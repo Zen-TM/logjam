@@ -1,8 +1,9 @@
 // A helper of the terrain pool (terrainPool.ts): decodes the tiles and paints
 // the bands it is sent, one at a time, nothing else. Between jobs it keeps
 // only what it reuses: one paint buffer for the bands (`runTerrainBand`'s
-// `reuse`) and one tile-sized canvas for the decodes. A band that throws does so here, synchronously, so the pool hears it
-// as the worker's error event; a decode never throws (it answers null).
+// `reuse`) and one tile-sized canvas for the decodes. A band that throws
+// does so here, synchronously, so the pool hears it as the worker's error
+// event; a decode never throws (it answers null).
 import { decodeTerrainTile, runTerrainBand } from "./terrainJobs";
 import type { TerrainJob } from "./terrainPool";
 
