@@ -7,6 +7,7 @@ import { GAUGES, MAP_OVERLAYS } from "./contracts/index.js";
 import {
   formatGaugeFlow,
   formatGaugeLevel,
+  gaugeAges,
   gaugeAgo,
   gaugeDisplayName,
   gaugeFileNote,
@@ -141,7 +142,12 @@ describe("the gauge panel's words", () => {
         ]),
         now,
       ),
-    ).toEqual({ at: (sec - 60) * 1000, level: 1.3, flow: 4 });
+    ).toEqual({
+      level: 1.3,
+      levelAt: (sec - 3600) * 1000,
+      flow: 4,
+      flowAt: (sec - 60) * 1000,
+    });
     // A newest row with no level keeps the level from an hour earlier.
     expect(
       latestGaugeReading(
@@ -155,10 +161,28 @@ describe("the gauge panel's words", () => {
     expect(latestGaugeReading(g([[sec - 8 * 86400, 1, 1]]), now)).toBeNull();
     // Level missing everywhere, flow present.
     expect(latestGaugeReading(g([[sec - 60, null, 4]]), now)).toEqual({
-      at: (sec - 60) * 1000,
       level: null,
+      levelAt: null,
       flow: 4,
+      flowAt: (sec - 60) * 1000,
     });
+  });
+
+  // Mutation: always return the one line → the stale level looks fresh.
+  it("says one age for values within an hour and each age otherwise", () => {
+    const at = (min: number) => now - min * 60_000;
+    expect(
+      gaugeAges({ level: 1, levelAt: at(50), flow: 2, flowAt: at(10) }, now),
+    ).toEqual({ line: "Latest reading 10 min ago", level: null, flow: null });
+    expect(
+      gaugeAges({ level: 1, levelAt: null, flow: 2, flowAt: at(10) }, now).line,
+    ).toBe("Latest reading 10 min ago");
+    expect(
+      gaugeAges(
+        { level: 1, levelAt: at(5 * 1440), flow: 2, flowAt: at(12) },
+        now,
+      ),
+    ).toEqual({ line: null, level: "5 days ago", flow: "12 min ago" });
   });
 
   it("formats and ages", () => {

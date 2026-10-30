@@ -18,7 +18,6 @@ import {
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
-  GAUGES,
   latestGaugeReading,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
@@ -30,6 +29,7 @@ import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
+import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
 import { useGauges } from "../gauges/useGauges";
 import {
   GAUGE_BELOW,
@@ -3219,7 +3219,7 @@ function Map({
       )}
       {openGauge && gaugeFile && drawableMap && showGauges && (
         <GaugePopover
-          key={openGauge.id}
+          key={`${openGauge.id}:${gaugeFile.generatedAt}`}
           map={drawableMap}
           gauge={openGauge}
           attribution={gaugeFile.attribution}
@@ -3227,11 +3227,16 @@ function Map({
           onClose={closeGauge}
         />
       )}
-      {gaugesFailed && (
-        <div className={classes.pickBanner}>
-          <Notice>{GAUGES.copy.failed}</Notice>
-        </div>
-      )}
+      <GaugeLoadNotice
+        failed={gaugesFailed}
+        modeActive={
+          pickingCoords ||
+          selectingBbox ||
+          selectingGeoPdfExtent ||
+          drawingRoute
+        }
+        className={classes.pickBanner}
+      />
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>

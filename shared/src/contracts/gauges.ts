@@ -71,15 +71,17 @@ export function gaugeDisplayName(raw: string): string {
 }
 
 export type GaugeLatest = {
-  /** Epoch milliseconds of the newest value shown. */
-  at: number;
   level: number | null;
+  /** Epoch milliseconds of the level, null when there is none. */
+  levelAt: number | null;
   flow: number | null;
+  flowAt: number | null;
 };
 
-/** The newest level and the newest flow, each on its own and each within the 7
- *  days before `now` (the file can be older than its own week), or null when
- *  the gauge has neither. A row with no level does not hide an earlier one. */
+/** The newest level and the newest flow, each on its own, with its own time,
+ *  and each within the 7 days before `now` (the file can be older than its
+ *  own week). Null when the gauge has neither. A row with no level does not
+ *  hide an earlier one. */
 export function latestGaugeReading(
   gauge: Gauge,
   now: number,
@@ -98,9 +100,44 @@ export function latestGaugeReading(
   const flow = newest(2);
   if (!level && !flow) return null;
   return {
-    at: Math.max(level?.at ?? 0, flow?.at ?? 0),
     level: level?.value ?? null,
+    levelAt: level?.at ?? null,
     flow: flow?.value ?? null,
+    flowAt: flow?.at ?? null,
+  };
+}
+
+/** Values this far apart in time share one "Latest reading" line. */
+export const GAUGE_SAME_READING_MS = 3_600_000;
+
+export type GaugeAges = {
+  /** One line for both values, or null when their ages differ. */
+  line: string | null;
+  /** Each value's own age, set only when `line` is null. */
+  level: string | null;
+  flow: string | null;
+};
+
+/** How to say how old the values are: one line when level and flow came
+ *  within an hour of each other (or only one exists), else each its own age,
+ *  so a stale level never sits under a fresh flow's time. */
+export function gaugeAges(latest: GaugeLatest, now: number): GaugeAges {
+  const { levelAt, flowAt } = latest;
+  const newest = Math.max(levelAt ?? 0, flowAt ?? 0);
+  if (
+    levelAt === null ||
+    flowAt === null ||
+    Math.abs(levelAt - flowAt) <= GAUGE_SAME_READING_MS
+  )
+    return {
+      line: `${GAUGES.copy.age} ${gaugeAgo(newest, now)}`,
+      level: null,
+      flow: null,
+    };
+  return {
+    line: null,
+    level: gaugeAgo(levelAt, now),
+    flow: gaugeAgo(flowAt, now),
   };
 }
 

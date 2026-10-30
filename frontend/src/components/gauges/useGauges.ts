@@ -50,6 +50,7 @@ export function useGauges(enabled: boolean): {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       controller?.abort();
+      setFailed(false);
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

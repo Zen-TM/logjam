@@ -4,7 +4,7 @@ import {
   contractSectionKeys,
   formatGaugeFlow,
   formatGaugeLevel,
-  gaugeAgo,
+  gaugeAges,
   gaugeDisplayName,
   gaugeFileNote,
   gaugeSeries,
@@ -38,10 +38,13 @@ export function GaugeView({
 }) {
   const latest = latestGaugeReading(gauge, now);
   const fileNote = gaugeFileNote(generatedAt, now);
+  const ages = latest && gaugeAges(latest, now);
   // A gauge with a level draws its level; one with only a flow draws that.
   const levelSeries = gaugeSeries(gauge.readings, "level");
   const flowSeries = gaugeSeries(gauge.readings, "flow");
-  const charted = levelSeries.min !== null ? "level" : "flow";
+  // The chart follows the stat: a level chart over "No level reading" would
+  // disagree with itself.
+  const charted = latest?.level != null ? "level" : "flow";
   const series = charted === "level" ? levelSeries : flowSeries;
   const sections: Record<
     (typeof GAUGES.sections)[number]["key"],
@@ -52,7 +55,9 @@ export function GaugeView({
         <StatGrid
           stats={[
             {
-              label: GAUGES.copy.level,
+              label: ages?.level
+                ? `${GAUGES.copy.level}, ${ages.level}`
+                : GAUGES.copy.level,
               value:
                 latest.level === null
                   ? GAUGES.copy.noLevel
@@ -68,18 +73,23 @@ export function GaugeView({
         <StatGrid
           stats={[
             {
-              label: GAUGES.copy.flow,
+              label: ages?.flow
+                ? `${GAUGES.copy.flow}, ${ages.flow}`
+                : GAUGES.copy.flow,
               value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow),
             },
           ]}
         />
       ),
     age: () =>
-      latest ? (
-        <p className={classes.muted}>
-          {GAUGES.copy.age} {gaugeAgo(latest.at, now)}
-          {fileNote && <> · {fileNote}</>}
-        </p>
+      ages ? (
+        (ages.line || fileNote) && (
+          <p className={classes.muted}>
+            {ages.line}
+            {ages.line && fileNote && " · "}
+            {fileNote}
+          </p>
+        )
       ) : (
         <p className={classes.muted}>
           {GAUGES.copy.noRecent}

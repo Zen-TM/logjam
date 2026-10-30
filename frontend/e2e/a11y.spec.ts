@@ -910,6 +910,14 @@ test.describe("desktop", () => {
         },
       }),
     );
+    // Nothing but the gauge may sit under the pressed point.
+    await page.route(
+      /\/(places|routes)(\/shared|\/tracks)?(\?.*)?$/,
+      (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({ json: [] })
+          : route.continue(),
+    );
     await page.addInitScript(() =>
       localStorage.setItem("logjam.showGauges", "true"),
     );

@@ -8,6 +8,7 @@ import {
   type Gauge,
 } from "@logjam/shared";
 import latestJson from "../../../../shared/src/__fixtures__/gauges-latest.json";
+import { GaugeLoadNotice } from "./GaugeLoadNotice";
 import { GaugeView } from "./GaugeView";
 import { GAUGE_REFRESH_MS, useGauges } from "./useGauges";
 
@@ -67,6 +68,41 @@ describe("GaugeView", () => {
     expect(screen.getByText("12 ML/d")).toBeTruthy();
   });
 
+  // Mutation: draw one "Latest reading" line whatever each value's age.
+  it("puts the age under each value when a stale level sits beside a fresh flow", () => {
+    const sec = now / 1000;
+    view({
+      ...withFlow,
+      readings: [
+        [sec - 5 * 86400, 1.4, 5],
+        [sec - 600, null, 7],
+      ],
+    });
+    expect(screen.queryByText(/Latest reading/)).toBeNull();
+    expect(screen.getByText("Level, 5 days ago")).toBeTruthy();
+    expect(screen.getByText("Flow, 10 min ago")).toBeTruthy();
+  });
+
+  // Mutation: choose the chart from the raw readings, not from `latest`.
+  it("charts the flow when the level is older than the week", () => {
+    const sec = now / 1000;
+    const later = now + 0.5 * 86400_000;
+    view(
+      {
+        ...withFlow,
+        readings: [
+          [sec - 6.9 * 86400, 1.4, 5],
+          [sec, null, 7],
+        ],
+      },
+      later,
+    );
+    expect(screen.getByText(GAUGES.copy.noLevel)).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: /^Flow, last 7 days/ }),
+    ).toBeTruthy();
+  });
+
   it("says plainly that a gauge with no readings has none", () => {
     view(empty);
     expect(screen.getByText(GAUGES.copy.noRecent)).toBeTruthy();
@@ -112,6 +148,21 @@ describe("useGauges", () => {
     expect(screen.getByText("3")).toBeTruthy();
   });
 
+  // Mutation: leave `failed` set when the layer goes off.
+  it("does not show an old failure while a new attempt is in flight", async () => {
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal("fetch", fetch);
+    const { rerender } = render(<Probe on />);
+    await act(async () => {});
+    expect(screen.getByText("failed")).toBeTruthy();
+    rerender(<Probe on={false} />);
+    rerender(<Probe on />);
+    expect(screen.queryByText("failed")).toBeNull();
+  });
+
   it("asks nothing while the layer is off", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
@@ -139,5 +190,17 @@ describe("useGauges", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(3);
     expect(screen.getByText("3")).toBeTruthy();
+  });
+});
+
+describe("GaugeLoadNotice", () => {
+  // Mutation: drop the render, or draw it over a mode banner.
+  it("says the layer could not load, and only when no mode banner is up", () => {
+    const { rerender } = render(<GaugeLoadNotice failed modeActive={false} />);
+    expect(screen.getByText(GAUGES.copy.failed)).toBeTruthy();
+    rerender(<GaugeLoadNotice failed modeActive />);
+    expect(screen.queryByText(GAUGES.copy.failed)).toBeNull();
+    rerender(<GaugeLoadNotice failed={false} modeActive={false} />);
+    expect(screen.queryByText(GAUGES.copy.failed)).toBeNull();
   });
 });
