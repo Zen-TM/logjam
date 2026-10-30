@@ -65,7 +65,7 @@ make announce ARGS="send /path/to/message.md --yes"
 ### In prod
 
 The script is in the API image, so it runs as a one-off Fargate task on the
-`logjam-geo-pdf-worker` task definition (it no longer renders GeoPDFs; the name stays, [0043](../decisions/0043-geopdfs-render-in-the-browser.md)): that definition runs the live API
+`logjam-api-script` task definition (it was the GeoPDF worker until [0043](../decisions/0043-geopdfs-render-in-the-browser.md)): that definition runs the live API
 image (pinned by every deploy) with the API's environment and database
 credentials, and reaches the internet for the pushes. Only the command
 changes; the message travels in an environment variable. This needs the
@@ -95,20 +95,20 @@ announce_task() {
     --query 'SecurityGroups[0].GroupId' --output text)
   task=$(aws ecs run-task \
     --cluster logjam-cluster \
-    --task-definition logjam-geo-pdf-worker \
+    --task-definition logjam-api-script \
     --launch-type FARGATE \
     --network-configuration "awsvpcConfiguration={subnets=[subnet-0f59b0845905891be,subnet-0c10e1438a8fd0231],securityGroups=[$sg],assignPublicIp=ENABLED}" \
     --overrides "$1" \
     --query 'tasks[0].taskArn' --output text)
   aws ecs wait tasks-stopped --cluster logjam-cluster --tasks "$task"
-  aws logs tail /ecs/logjam-geo-pdf-worker \
-    --log-stream-names "ecs/geo-pdf-worker/${task##*/}" --format short
+  aws logs tail /ecs/logjam-api-script \
+    --log-stream-names "ecs/api-script/${task##*/}" --format short
 }
 
 # send <message.md> [--yes]
 announce_send() {
   announce_task "$(jq -n --rawfile md "$1" --arg yes "${2:-}" '{containerOverrides: [{
-    name: "geo-pdf-worker",
+    name: "api-script",
     environment: [{name: "ANNOUNCEMENT_MARKDOWN", value: $md}],
     command: ["sh", "-c", "printf %s \"$ANNOUNCEMENT_MARKDOWN\" > /tmp/message.md && exec node dist/scripts/announce.js send /tmp/message.md \($yes)"]
   }]}')"
@@ -117,7 +117,7 @@ announce_send() {
 # retract <announcementId>
 announce_retract() {
   announce_task "$(jq -n --arg id "$1" '{containerOverrides: [{
-    name: "geo-pdf-worker",
+    name: "api-script",
     command: ["node", "dist/scripts/announce.js", "retract", $id]
   }]}')"
 }
