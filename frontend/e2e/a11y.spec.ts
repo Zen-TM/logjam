@@ -922,12 +922,18 @@ test.describe("desktop", () => {
       localStorage.setItem("logjam.showGauges", "true"),
     );
     await openApp(page);
-    // The gauge sits at the map's start view, so the middle of the canvas
-    // presses it.
+    // The canvas is on screen before the map has loaded and its handlers are
+    // attached; the zoom buttons are enabled once it has.
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const box = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
-    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     const panel = page.getByRole("dialog", { name: "River gauge" });
-    await expect(panel).toBeVisible();
+    // The dot is drawn once the file has arrived, which nothing on the page
+    // announces: press the gauge at the map's start view until the panel opens.
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(panel).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
     await expectNoViolations(page, "[role='dialog'][aria-label='River gauge']");
   });
 

@@ -210,3 +210,19 @@ describe("the gauge panel's words", () => {
     );
   });
 });
+
+// The licence's notice, on every use. Mutation: shorten the fallback or the
+// builder's ATTRIBUTION → red.
+describe("the WaterNSW credit", () => {
+  const notice = "© State of New South Wales through WaterNSW";
+
+  it("is the licence's notice in the fallback and in the builder", () => {
+    expect(GAUGES.copy.credit).toContain(notice);
+    const builder = readFileSync(
+      join(import.meta.dirname, "../../topo/build_gauges.py"),
+      "utf8",
+    );
+    const attribution = /ATTRIBUTION = \(([^)]*)\)/.exec(builder)?.[1] ?? "";
+    expect(attribution.replace(/"\s*"/g, "")).toContain(notice);
+  });
+});

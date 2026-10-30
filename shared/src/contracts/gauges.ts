@@ -30,7 +30,7 @@ export const GAUGES = {
     failed: "River gauges couldn\u2019t be loaded.",
     staleFile: "Readings last refreshed",
     // Only if the file's own attribution is blank: the credit is never dropped.
-    credit: "© WaterNSW",
+    credit: "© State of New South Wales through WaterNSW",
   },
 } as const satisfies ScreenContract;
 
