@@ -40,7 +40,13 @@ export type DedupeProposal = {
   bestPlaceId: string | null; // populated when tier === "autoLink"
 };
 
-function toMatchCandidate(c: Place): MatchCandidate {
+// The columns the dedupe and merge read; callers select exactly these.
+export type DedupePlace = Pick<
+  Place,
+  "id" | "name" | "altNames" | "latitude" | "longitude" | "fieldValues"
+>;
+
+function toMatchCandidate(c: DedupePlace): MatchCandidate {
   return {
     id: c.id,
     name: c.name,
@@ -57,7 +63,7 @@ function toMatchCandidate(c: Place): MatchCandidate {
 // recovered here.
 function spatialReviewCandidates(
   rw: RopeWikiCanyon,
-  existing: Place[],
+  existing: DedupePlace[],
 ): CandidateScore[] {
   const nearby: CandidateScore[] = [];
   for (const c of existing) {
@@ -97,7 +103,7 @@ function spatialReviewCandidates(
 // -name places are surfaced for `review` via spatialReviewCandidates.
 export function buildProposals(
   incoming: RopeWikiCanyon[],
-  existing: Place[],
+  existing: DedupePlace[],
 ): DedupeProposal[] {
   const matchCandidates = existing.map(toMatchCandidate);
 
@@ -210,7 +216,7 @@ function mergeSources(
 // letting RopeWiki think a field was user-owned when the user had never touched
 // it).
 export function mergeFillNulls(
-  existing: Place,
+  existing: Pick<Place, "fieldValues">,
   fresh: RopeWikiCanyon,
 ): {
   ropeWikiId: number;
