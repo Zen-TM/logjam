@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import { throttleWrites } from "./_rateLimitGate";
 import {
@@ -12,9 +12,10 @@ import {
 } from "./_actors";
 
 // The friends leaderboard's consent boundary. Seed: alice<->bob and bob<->carol
-// accepted, carol->alice pending; nobody has joined. Seed trips mostly predate
-// the current season, so counts are not asserted here: computeLeaderboard's
-// shared tests own the arithmetic.
+// accepted, carol->alice pending; alice and bob have joined, so the file starts
+// by taking both off (the baseline sweep puts them back). Counts are not
+// asserted: the seed dates its season trips by the day it ran, and
+// computeLeaderboard's shared tests own the arithmetic.
 //
 // Mutations that turn it red: default `leaderboardOptIn` to true; return the
 // board to someone who has not joined; spread the friend's user row into an
@@ -38,7 +39,7 @@ const board = (sub: string) =>
 const ids = (res: { body: { entries: { userId: string }[] } }) =>
   res.body.entries.map((entry) => entry.userId);
 
-afterAll(async () => {
+beforeAll(async () => {
   await join(ALICE_SUB, false);
   await join(BOB_SUB, false);
 });
