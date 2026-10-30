@@ -5,6 +5,8 @@ import { drawsOverTerrain, TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import {
+  GAUGE_BELOW,
+  GAUGE_LAYER,
   moveTerrainIntoBasemap,
   stackTopoLayers,
   TOPO_CEILING,
@@ -127,5 +129,28 @@ describe("TERRAIN_BASEMAP_ANCHORS in the vector basemap Logjam Web draws", () =>
     const top = Math.max(...Object.values(TERRAIN_BASEMAP_ANCHORS).map(index));
     for (const layer of style.filter(drawsOverTerrain))
       expect(index(layer.id), layer.id).toBeGreaterThanOrEqual(top);
+  });
+});
+
+// Mutation: add the gauge layer before the pins' highlights are added, or drop
+// it from PRESSABLE, and a gauge draws over a pin or a gauge press also opens
+// the point popover.
+describe("GAUGE_LAYER", () => {
+  const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
+
+  it("is added over the topo ceiling and under the pins", () => {
+    expect(source.indexOf("id: GAUGE_LAYER")).toBeGreaterThan(
+      source.indexOf(`id: "${TOPO_CEILING}"`),
+    );
+    expect(source).toContain(`GAUGE_BELOW,\n      );`);
+    expect(source.indexOf(`id: "${GAUGE_BELOW}"`)).toBeLessThan(
+      source.indexOf("id: GAUGE_LAYER"),
+    );
+  });
+
+  it("is pressable, so a gauge press does not also ask 'what is here?'", () => {
+    const pressable = /const PRESSABLE = \[([^\]]*)\]/.exec(source)?.[1];
+    expect(pressable).toContain("GAUGE_LAYER");
+    expect(GAUGE_LAYER).toBe("gauge-circles");
   });
 });

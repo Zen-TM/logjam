@@ -18,6 +18,7 @@ import {
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
+  latestGaugeReading,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
@@ -27,6 +28,9 @@ import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
+import GaugePopover from "../gauges/GaugePopover";
+import { useGauges } from "../gauges/useGauges";
+import { GAUGE_BELOW, GAUGE_LAYER } from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -499,6 +503,7 @@ function Map({
   onCancelPickCoords,
   showPlaces,
   showWays,
+  showGauges,
   placeTracks,
   standaloneTracks,
   routes,
@@ -569,6 +574,8 @@ function Map({
   /** Every line: routes, imported and recorded files, and the tracks on places
    *  friends shared. */
   showWays: boolean;
+  /** The river gauge dots, an optional layer (off until asked for). */
+  showGauges: boolean;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -780,6 +787,12 @@ function Map({
     askedClosedAt.current = Date.now();
     setAsked(null);
   }, []);
+  // The river gauge pressed, if any; the dots come from the public file.
+  const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const gaugeFile = useGauges(showGauges);
+  if (!showGauges && gaugeId) setGaugeId(null);
+  const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
+  const closeGauge = useCallback(() => setGaugeId(null), []);
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -1422,6 +1435,42 @@ function Map({
 
       applyPlaceThemePaint(map);
 
+      map.addSource("gauges", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // One colour for every gauge: a dot says where a gauge is, never what it
+      // read. A gauge with no recent reading is only fainter.
+      map.addLayer(
+        {
+          id: GAUGE_LAYER,
+          type: "circle",
+          source: "gauges",
+          layout: { visibility: "none" },
+          paint: {
+            "circle-radius": 6,
+            "circle-color": "#3b82c4",
+            "circle-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": INK,
+            "circle-stroke-opacity": ["case", ["get", "recent"], 1, 0.35],
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.on("click", GAUGE_LAYER, (e) => {
+        if (pickModeRef.current) return;
+        const id = e.features?.[0]?.properties?.id;
+        if (typeof id === "string") setGaugeId(id);
+      });
+      map.on("mouseenter", GAUGE_LAYER, () => {
+        if (pickModeRef.current) return;
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", GAUGE_LAYER, () => {
+        map.getCanvas().style.cursor = "";
+      });
+
       map.on("click", "place-circles", (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
@@ -1730,6 +1779,7 @@ function Map({
       "place-circles",
       "shared-place-halos",
       "shared-place-circles",
+      GAUGE_LAYER,
       "routes-hit",
       "place-tracks-hit",
       "standalone-tracks-hit",
@@ -1885,6 +1935,26 @@ function Map({
       );
     }
   }, [showPlaces, showWays, drawingRoute, measuring, mapLoaded]);
+
+  // The river gauge dots, drawn from the file while the layer is on.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    map.setLayoutProperty(
+      GAUGE_LAYER,
+      "visibility",
+      showGauges ? "visible" : "none",
+    );
+    const now = Date.now();
+    (map.getSource("gauges") as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: (gaugeFile?.gauges ?? []).map((g) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [g.lon, g.lat] },
+        properties: { id: g.id, recent: latestGaugeReading(g, now) !== null },
+      })),
+    });
+  }, [showGauges, gaugeFile, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
@@ -3147,6 +3217,16 @@ function Map({
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
+        />
+      )}
+      {openGauge && gaugeFile && drawableMap && showGauges && (
+        <GaugePopover
+          key={openGauge.id}
+          map={drawableMap}
+          gauge={openGauge}
+          attribution={gaugeFile.attribution}
+          generatedAt={gaugeFile.generatedAt}
+          onClose={closeGauge}
         />
       )}
       {pickingCoords && (

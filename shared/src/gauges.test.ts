@@ -3,7 +3,17 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { GAUGES, MAP_OVERLAYS } from "./contracts/index.js";
 import {
+  formatGaugeFlow,
+  formatGaugeLevel,
+  gaugeAgo,
+  gaugeDisplayName,
+  gaugeFileNote,
+  latestGaugeReading,
+} from "./contracts/gauges.js";
+import {
+  type Gauge,
   flowOnDate,
   gaugeHistoryUrl,
   gaugeSeries,
@@ -94,5 +104,71 @@ describe("gaugeSeries", () => {
       min: null,
       max: null,
     });
+  });
+});
+
+describe("the gauge panel's words", () => {
+  const now = Date.parse("2026-10-30T12:00:00Z");
+  const gauge = latest.gauges[0];
+
+  it("tidies BoM's names for reading", () => {
+    // Mutation: drop an entry from NAME_WORDS or the "@" padding → red.
+    expect(gaugeDisplayName("COLO R @ UPPER COLO")).toBe(
+      "Colo River at Upper Colo",
+    );
+    expect(gaugeDisplayName("COOPERS CK @ F'MEDOW")).toBe(
+      "Coopers Creek at F'Medow",
+    );
+    expect(gaugeDisplayName("CK@AVONDALE")).toBe("Creek at Avondale");
+    expect(gaugeDisplayName("HUNTER D/S GLENBAWN")).toBe(
+      "Hunter downstream of Glenbawn",
+    );
+    expect(gaugeDisplayName("McKIMMS CORNER")).toBe("McKIMMS Corner");
+  });
+
+  it("reads the newest reading that has a value, and none past 7 days", () => {
+    // Mutation: take the last row even when both values are null, or skip the
+    // 7-day check → red.
+    const g = (readings: Gauge["readings"]): Gauge => ({ ...gauge, readings });
+    const sec = now / 1000;
+    expect(latestGaugeReading(g([]), now)).toBeNull();
+    expect(latestGaugeReading(g([[sec - 60, null, null]]), now)).toBeNull();
+    expect(
+      latestGaugeReading(
+        g([
+          [sec - 3600, 1.2, null],
+          [sec - 60, null, null],
+        ]),
+        now,
+      ),
+    ).toEqual({ at: (sec - 3600) * 1000, level: 1.2, flow: null });
+    expect(latestGaugeReading(g([[sec - 8 * 86400, 1, 1]]), now)).toBeNull();
+    // Level missing, flow present.
+    expect(latestGaugeReading(g([[sec - 60, null, 4]]), now)?.flow).toBe(4);
+  });
+
+  it("formats and ages", () => {
+    expect(formatGaugeLevel(1.234)).toBe("1.23 m");
+    expect(formatGaugeFlow(4.26)).toBe("4.3 ML/d");
+    expect(formatGaugeFlow(1234.6)).toBe("1235 ML/d");
+    expect(gaugeAgo(now - 45 * 60_000, now)).toBe("45 min ago");
+    expect(gaugeAgo(now - 3 * 3_600_000, now)).toBe("3 h ago");
+    expect(gaugeAgo(now - 2 * 86_400_000, now)).toBe("2 days ago");
+    expect(gaugeFileNote("2026-10-30T06:00:00Z", now)).toBeNull();
+    expect(gaugeFileNote("2026-10-28T12:00:00Z", now)).toBe(
+      "Readings last refreshed 2 days ago",
+    );
+  });
+
+  // Readings, never advice (#682). Mutation: put "safe" in the copy → red.
+  it("has no word of advice and no colour scale", () => {
+    const words = JSON.stringify([
+      GAUGES.copy,
+      MAP_OVERLAYS.copy,
+      GAUGES.title,
+    ]);
+    expect(words).not.toMatch(
+      /\b(safe\w*|runnable|high\w*|low\w*|danger\w*|flood\w*|rising|falling|normal|good|bad|dry)\b/i,
+    );
   });
 });

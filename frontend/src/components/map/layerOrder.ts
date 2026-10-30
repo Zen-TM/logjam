@@ -13,6 +13,13 @@ import { terrainBeforeIds, type TerrainLayerKey } from "@logjam/shared";
 export const TOPO_CEILING = "place-tracks-hit";
 
 /**
+ * The gauge dots go over the topo band and under every pin, so a pin on a
+ * gauge is the one pressed. Guard: `layerOrder.test.ts`.
+ */
+export const GAUGE_LAYER = "gauge-circles";
+export const GAUGE_BELOW = "place-highlight";
+
+/**
  * Stacks the topo entries' layers (`groups`, bottom of the map first) directly
  * under `TOPO_CEILING`, each group's layers in their own order.
  */
