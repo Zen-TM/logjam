@@ -13,6 +13,7 @@ import { RootErrorBoundary } from "./src/ui/RootErrorBoundary";
 import { ThemeProvider } from "./src/theme";
 import { initSentry } from "./src/sentry/initSentry";
 import { configureAmplify } from "./src/auth/amplifyConfig";
+import { quietHarmlessMapLogs } from "./src/map/mapLibreLogs";
 // Side-effect import: registers the background track-recording task at module
 // scope so it exists when Android relaunches the app headless.
 import "./src/tracks/trackRecorder";
@@ -20,6 +21,7 @@ import App from "./App";
 
 initSentry();
 configureAmplify();
+quietHarmlessMapLogs();
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App)
 // and sets up the Expo environment appropriately for dev-client and native builds.
