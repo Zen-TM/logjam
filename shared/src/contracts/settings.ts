@@ -74,7 +74,7 @@ export type NotificationPreferenceGroup = "email" | "inApp";
  */
 export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or an export mails whether it finishes or fails
-  // (api/src/lib/topoJobReaper.ts).
+  // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
   { key: "topoEmail", group: "email", label: "LiDAR maps" },
   { key: "exportEmail", group: "email", label: "LiDAR map exports" },
   { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },

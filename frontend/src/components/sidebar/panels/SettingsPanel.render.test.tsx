@@ -6,7 +6,11 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LEADERBOARD_SETTING } from "@logjam/shared";
+import {
+  LEADERBOARD_SETTING,
+  NOTIFICATION_PREFERENCES,
+  notificationGroupLead,
+} from "@logjam/shared";
 
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
 import SettingsPanel from "./SettingsPanel";
@@ -81,5 +85,30 @@ describe("the leaderboard switch", () => {
     );
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(onCurrentUserChange).not.toHaveBeenCalled();
+  });
+});
+
+// Each notification switch sits under its group's heading, which starts the
+// sentence its short label ends. Mutation: draw the switches under one
+// heading, or put one under the other group's.
+describe("the notification switches", () => {
+  it("sit under their group's heading", () => {
+    show();
+    const email = screen.getByRole("heading", {
+      name: notificationGroupLead("email", "Logjam Web"),
+    });
+    const inApp = screen.getByRole("heading", {
+      name: notificationGroupLead("inApp", "Logjam Web"),
+    });
+    const after = (a: Node, b: Node) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    for (const { group, label } of NOTIFICATION_PREFERENCES) {
+      const row = screen.getByRole("switch", { name: label });
+      if (group === "email") {
+        expect(after(email, row) && after(row, inApp)).toBe(true);
+      } else {
+        expect(after(inApp, row)).toBe(true);
+      }
+    }
   });
 });

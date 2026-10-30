@@ -201,27 +201,29 @@ function SettingsPanel({
 
         {/* A heading per group, as Logjam GPS draws them: the heading is the
             sentence's start, so each switch's label stays short. */}
-        {NOTIFICATION_GROUPS.map((group) => (
-          <Fragment key={group}>
-            <SectionHeader title={notificationGroupLead(group, "Logjam Web")} />
-            {notifPrefs === null ? (
-              <LoadingState />
-            ) : (
-              NOTIFICATION_PREFERENCES.filter((row) => row.group === group).map(
-                ({ key, label }) => (
-                  <SwitchRow
-                    key={key}
-                    title={label}
-                    checked={notifPrefs[key]}
-                    disabled={notifSavingKey === key}
-                    disabledReason="Saving…"
-                    onChange={() => handleToggleNotif(key)}
-                  />
-                ),
-              )
-            )}
-          </Fragment>
-        ))}
+        {notifPrefs === null ? (
+          <LoadingState />
+        ) : (
+          NOTIFICATION_GROUPS.map((group) => (
+            <Fragment key={group}>
+              <SectionHeader
+                title={notificationGroupLead(group, "Logjam Web")}
+              />
+              {NOTIFICATION_PREFERENCES.filter(
+                (row) => row.group === group,
+              ).map(({ key, label }) => (
+                <SwitchRow
+                  key={key}
+                  title={label}
+                  checked={notifPrefs[key]}
+                  disabled={notifSavingKey === key}
+                  disabledReason="Saving…"
+                  onChange={() => handleToggleNotif(key)}
+                />
+              ))}
+            </Fragment>
+          ))
+        )}
 
         <SectionHeader title="Friends" />
         {leaderboardOptIn === null ? (

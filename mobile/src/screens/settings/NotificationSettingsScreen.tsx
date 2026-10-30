@@ -44,9 +44,6 @@ import {
 } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
 
-// One row per switch, so the list is data and a new preference is one entry:
-// `NOTIFICATION_PREFERENCES`, which Logjam Web reads too.
-
 export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
   const userQuery = useApiQuery(
