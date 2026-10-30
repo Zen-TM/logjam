@@ -58,10 +58,18 @@ let tail: Promise<void> = Promise.resolve();
 /** Read when a fetch begins; hand back to `cacheGauges` when it lands. */
 export const gaugesEpoch = (): number => epoch;
 
-/** Called by the sign-out wipe: a pending write finishes, later ones are dropped. */
+let refreshing: Promise<void> = Promise.resolve();
+
+/** A history refresh in flight, which the wipe waits for. */
+export const trackGaugeRefresh = (running: Promise<void>): void => {
+  refreshing = running;
+};
+
+/** Called by the sign-out wipe: a pending write finishes, later ones are
+ *  dropped, and a history refresh stops before its next request. */
 export function stopGaugesForWipe(): Promise<void> {
   epoch += 1;
-  return tail;
+  return Promise.all([tail, refreshing]).then(() => {});
 }
 
 /** Keeps an already parsed file. A kill mid-write loses only this public

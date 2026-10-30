@@ -5,6 +5,7 @@
 // The file is public and the same for everyone (ADR 0044), so it holds
 // nothing per user; Logjam GPS keeps its last copy for use offline.
 import {
+  aestDay,
   gaugeReadingOnDay,
   tripGaugeDay,
   type Gauge,
@@ -191,19 +192,23 @@ const values = (gauge: Gauge, r: GaugeDayReading | null): string =>
 
 /** The reading on a trip's date beside the current one, a line per gauge:
  *  "Colo River at Upper Colo: 0.91 m on this trip, 1.40 m now." With several
- *  dates (the trips at a place) a gauge reads its latest date that has a
- *  value. A date with no value shows nothing; if a history file was had and
- *  no gauge has a value, one plain line says so. Two numbers, no verdict. */
+ *  dates (the trips at a place) "lastTrip" reads only the newest past one,
+ *  so the label is true; a trip date in the future is skipped. A date with no
+ *  value shows nothing; if a history file was had and no gauge has a value,
+ *  one plain line says so. Two numbers, no verdict. */
 export function tripGaugeLines(
   inputs: { gauge: Gauge; history: GaugeHistoryFile | null }[],
   dates: string[],
   when: "trip" | "lastTrip",
   now: number,
 ): string[] {
-  const days = dates
+  const today = aestDay(now);
+  const past = dates
     .flatMap((d) => tripGaugeDay(d) ?? [])
+    .filter((day) => when === "trip" || day <= today)
     .sort()
     .reverse();
+  const days = when === "lastTrip" ? past.slice(0, 1) : past;
   const lines = inputs.flatMap(({ gauge, history }) => {
     for (const day of days) {
       const then = gaugeReadingOnDay(gauge, history, day, now);

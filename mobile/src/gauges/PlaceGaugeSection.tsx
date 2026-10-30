@@ -12,6 +12,7 @@ import {
   gaugeDisplayName,
   latestGaugeReading,
   nearbyGauges,
+  tripDatesFor,
 } from "@logjam/shared";
 
 import { makeStyles, muted } from "../theme";
@@ -52,7 +53,7 @@ export function PlaceGaugeSection({
             <Text style={styles.note}>{gaugeDisplayName(chosen.name)}</Text>
             <TripGaugeReading
               gaugeIds={[gaugeId]}
-              dates={owned ? tripDates : []}
+              dates={tripDatesFor(owned, tripDates)}
               when="lastTrip"
               credit={false}
             />

@@ -83,7 +83,7 @@ describe("a place's gauge section", () => {
 describe("the trip reading's wiring", () => {
   it("shows a sharee none: the place section passes dates only when owned", () => {
     expect(read("./PlaceGaugeSection.tsx")).toContain(
-      "dates={owned ? tripDates : []}",
+      "dates={tripDatesFor(owned, tripDates)}",
     );
   });
   it("draws it on both pages", () => {

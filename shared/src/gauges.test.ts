@@ -25,6 +25,7 @@ import {
   distinctGaugeIds,
   gaugeReadingOnDay,
   levelOnDate,
+  tripDatesFor,
   tripGaugeDay,
   nearbyGauges,
   parseGaugeHistory,
@@ -169,17 +170,41 @@ describe("a gauge on a trip's date", () => {
     ]);
   });
 
-  it("reads the latest dated trip that has a reading", () => {
-    // Mutation: use the first date given, not the latest with a value → red.
-    const g = latest.gauges[0]!;
+  it("reads only the newest past trip, so the label is true", () => {
+    // Mutation: fall back to an older trip, or count a planned trip → red.
+    const g = { ...latest.gauges[0]!, hasFlow: false };
+    const line = (dates: string[]) =>
+      tripGaugeLines([{ gauge: g, history }], dates, "lastTrip", now);
+    expect(line(["2026-10-01", "2026-12-25", "2026-09-01"])[0]).toContain(
+      "0.91 m on your last trip here",
+    );
+    // The newest past trip, 2 Oct, has no value: nothing older stands in.
+    expect(line(["2026-10-01", "2026-10-02"])).toEqual([
+      GAUGES.copy.noneForDate,
+    ]);
+  });
+
+  it("drops flow from a gauge that has none, so no empty value renders", () => {
+    // Mutation: remove the hasFlow check in gaugeReadingOnDay → red.
+    const g: Gauge = {
+      ...latest.gauges[1]!,
+      readings: [[Math.floor(now / 1000) - 60, null, 5]],
+    };
+    expect(gaugeReadingOnDay(g, null, "2026-10-30", now)).toBeNull();
     expect(
       tripGaugeLines(
-        [{ gauge: { ...g, hasFlow: false }, history }],
-        ["2026-10-01", "2026-10-03", "2026-10-02", "2020-01-01"],
-        "lastTrip",
+        [{ gauge: g, history: null }],
+        ["2026-10-30"],
+        "trip",
         now,
-      )[0],
-    ).toContain("0.88 m on your last trip here");
+      ),
+    ).toEqual([]);
+  });
+
+  it("gives a sharee no trip dates", () => {
+    // Mutation: return the dates for a sharee → red.
+    expect(tripDatesFor(true, ["2026-10-01"])).toEqual(["2026-10-01"]);
+    expect(tripDatesFor(false, ["2026-10-01"])).toEqual([]);
   });
 
   it("is silent for a gauge with no history file, and one plain line when a file had no value", () => {

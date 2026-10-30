@@ -24,6 +24,7 @@ import {
   cacheGauges,
   gaugesEpoch,
   readCachedGaugeHistory,
+  trackGaugeRefresh,
 } from "./gaugeStorage";
 
 export const GAUGE_REFRESH_MS = 5 * 60_000;
@@ -92,18 +93,21 @@ let historyTail: Promise<void> = Promise.resolve();
  * file. Resolves when the queue has finished, for the caller to re-read.
  */
 export function refreshGaugeHistories(ids: string[]): Promise<void> {
+  // The epoch is read once, here: a wipe ends this refresh for good, so
+  // nothing of the old account is asked for or written after it.
+  const epoch = gaugesEpoch();
   historyTail = historyTail.then(async () => {
     if (isOfflineOnly()) return;
     for (const id of new Set(ids)) {
-      const key = `${gaugesEpoch()}:${id}`;
+      if (gaugesEpoch() !== epoch) return;
+      const key = `${epoch}:${id}`;
       const url = gaugeHistoryUrl(config.topoCdnBaseUrl, id);
       if (!url || Date.now() - (askedAt.get(key) ?? 0) < GAUGE_REFRESH_MS)
         continue;
       const kept = await readCachedGaugeHistory(id);
       if (kept && kept.ageMs < HISTORY_FRESH_MS) continue;
-      if (!(await canRunNow("sync"))) return;
+      if (!(await canRunNow("sync")) || gaugesEpoch() !== epoch) return;
       askedAt.set(key, Date.now());
-      const epoch = gaugesEpoch();
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
       try {
@@ -119,6 +123,7 @@ export function refreshGaugeHistories(ids: string[]): Promise<void> {
       }
     }
   });
+  trackGaugeRefresh(historyTail);
   return historyTail;
 }
 

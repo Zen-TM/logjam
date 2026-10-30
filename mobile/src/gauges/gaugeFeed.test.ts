@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   fetch: vi.fn(),
   cache: vi.fn(async () => {}),
   cacheHistory: vi.fn(async (..._args: unknown[]) => {}),
+  tracked: null as Promise<void> | null,
   kept: null as { ageMs: number } | null,
   offlineOnly: false,
   canRun: true,
@@ -33,6 +34,9 @@ vi.mock("./gaugeStorage", () => ({
   cacheGauges: h.cache,
   cacheGaugeHistory: h.cacheHistory,
   readCachedGaugeHistory: async () => h.kept,
+  trackGaugeRefresh: (p: Promise<void>) => {
+    h.tracked = p;
+  },
   gaugesEpoch: () => h.epoch,
 }));
 
@@ -166,5 +170,17 @@ describe("refreshGaugeHistories", () => {
     await refreshGaugeHistories(["900001"]);
     await refreshGaugeHistories(["900001"]);
     expect(h.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: read the epoch inside the loop, not when the call starts.
+  it("stops for good when a wipe lands mid-refresh", async () => {
+    h.fetch.mockImplementation(async () => {
+      h.epoch = 1;
+      return { ok: true, text: async () => history };
+    });
+    await refreshGaugeHistories(["900001", "900002"]);
+    expect(h.fetch).toHaveBeenCalledTimes(1);
+    expect(h.cacheHistory.mock.calls[0]?.[2]).toBe(0);
+    expect(h.tracked).not.toBeNull();
   });
 });

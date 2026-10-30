@@ -201,6 +201,7 @@ export function gaugeReadingOnDay(
     level = mean(1);
     flow = mean(2);
   }
+  if (!gauge.hasFlow) flow = null;
   return level === null && flow === null ? null : { level, flow };
 }
 
@@ -213,6 +214,12 @@ export function distinctGaugeIds(ids: (string | null | undefined)[]): string[] {
     0,
     TRIP_GAUGE_MAX,
   );
+}
+
+/** The trip dates a viewer's reading may use: a sharee's are none, because
+ *  trips are the owner's alone (ADR 0002). */
+export function tripDatesFor(owned: boolean, dates: string[]): string[] {
+  return owned ? dates : [];
 }
 
 export interface NearbyGauge {

@@ -8,6 +8,7 @@ import {
   gaugeDisplayName,
   latestGaugeReading,
   nearbyGauges,
+  tripDatesFor,
 } from "@logjam/shared";
 import { IconTile, Row } from "../../ui";
 import { GaugeView } from "./GaugeView";
@@ -51,7 +52,7 @@ export function PlaceGauge({
           <>
             <TripGaugeReading
               gaugeIds={[gaugeId]}
-              dates={owned ? tripDates : []}
+              dates={tripDatesFor(owned, tripDates)}
               when="lastTrip"
               credit={false}
             />
