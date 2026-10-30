@@ -5,9 +5,9 @@
 // a soft and wrong one, over ground the phone has no real data for.
 //
 // So the map draws its own edge: a fill over everywhere EXCEPT the downloaded
-// regions, mounted directly above the basemap band. Inside a region you see
-// the tiles you saved; outside it you see that there is nothing there, which is
-// the true answer.
+// regions and saved Terrain clips (`offlineMaskBoxes`), mounted directly above
+// the basemap band. Inside a region you see the tiles you saved; outside it you
+// see that there is nothing there, which is the true answer.
 //
 // The complement is built as DISJOINT RECTANGLES, not as a world polygon with
 // a hole per region. Holes are the obvious encoding and they do not survive
@@ -16,6 +16,12 @@
 // and it triangulates them into a wedge of map that stays visible. Rectangles
 // of the complement cannot overlap by construction. Guard:
 // mobile/src/map/offlineMask.test.ts.
+
+import {
+  drawsTerrain,
+  type MapArtifact,
+  type ResolvedTileSource,
+} from "./sourceResolver";
 
 /** [west, south, east, north] */
 export type MaskBbox = [number, number, number, number];
@@ -128,4 +134,26 @@ export function offlineCoverageMask(boxes: MaskBbox[]): GeoJSON.Feature | null {
     properties: {},
     geometry: { type: "MultiPolygon", coordinates: polygons },
   };
+}
+
+/**
+ * What the mask leaves clear offline: the saved clips of the basemap being
+ * drawn, and every saved Terrain clip, so a save whose basemap clip failed
+ * still shows its terrain. A Terrain clip's bounds are the save's box, and
+ * one whose layer is switched off clears only the mask's own colour. Null
+ * while the basemap isn't drawn from saved tiles.
+ */
+export function offlineMaskBoxes(
+  basemap: readonly ResolvedTileSource[],
+  artifacts: readonly MapArtifact[],
+): MaskBbox[] | null {
+  if (!basemap.some((r) => r.status === "ok" && r.origin === "local")) {
+    return null;
+  }
+  return [
+    ...basemap.flatMap((r) =>
+      r.status === "ok" && r.bounds ? [r.bounds] : [],
+    ),
+    ...artifacts.flatMap((a) => (drawsTerrain(a) && a.bbox ? [a.bbox] : [])),
+  ];
 }
