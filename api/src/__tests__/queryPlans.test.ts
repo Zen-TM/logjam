@@ -17,7 +17,7 @@ import {
   SHARED_PLACE_ID,
 } from "./_actors";
 
-// Every GET runs in this process, so the SQL Prisma sends for it can be
+// Every router GET runs in this process, so the SQL Prisma sends for it can be
 // captured and EXPLAINed. Under enable_seqscan = off the planner reads a whole
 // table only when no index fits the query, so a missing index shows on the
 // suite's small seed as well as on a big table. Every table is guarded: a read
