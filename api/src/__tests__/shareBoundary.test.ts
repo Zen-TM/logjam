@@ -212,6 +212,38 @@ describe("share boundary — recipient view (hybrid model)", () => {
     }
   });
 
+  // Mutation: add `gaugeId: place.gaugeId` to the copy's data in places.ts.
+  it("a copy of a place does not carry the owner's gauge", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary gauge copy");
+    try {
+      await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(ALICE_SUB))
+        .send({ gaugeId: "210001" })
+        .expect(200);
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+      const copy = await request(API_URL)
+        .post(`/places/${placeId}/copy`)
+        .set(as(BOB_SUB))
+        .send({});
+      expect(copy.status).toBe(201);
+      expect(copy.body.gaugeId ?? null).toBeNull();
+      const got = await request(API_URL)
+        .get(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+      expect(got.body.gaugeId ?? null).toBeNull();
+      await request(API_URL)
+        .delete(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
   it("recipient may copy a shared place under their own account", async () => {
     const res = await request(API_URL)
       .post(`/places/${SHARED_PLACE_ID}/copy`)

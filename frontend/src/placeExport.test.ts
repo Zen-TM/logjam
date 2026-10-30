@@ -128,11 +128,13 @@ describe("buildPlaceExport — KML", () => {
 
 // A place record carrying every internal field the API can attach — these
 // must NEVER appear in an exported file.
+// Mutation: add "gaugeId" to an export key list (EXPORT_PROPERTY_KEYS).
 const INTERNAL_FIELD_OVERRIDES = {
   ownerId: "user-secret-owner-id",
   importBatchId: "batch-secret-id",
   importKey: "import-key-secret",
   forkedFromId: "forked-from-secret",
+  gaugeId: "210001",
   ropeWikiId: 12345,
   ropeWikiSnapshot: { huge: "blob-of-scraped-data" },
   _count: { tripLogLinks: 3, shares: 2 },

@@ -484,13 +484,13 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   longitude: isNumber,
   placeTypeId: isString,
   notes: nullable(isString),
+  gaugeId: (value) => value === undefined || nullable(isString)(value),
   elevation: nullable(isNumber),
   fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),
   forkedFromId: nullable(isString),
   createdAt: isString,
   updatedAt: isString,
-  // gaugeId is optional like them: a delta page from an older server lacks it.
   // fieldDefsSnapshot and foreignFields are deliberately UNCHECKED here and
   // therefore optional: one is present only on a shared row of a type the
   // caller does not own, the other only on an owned row. Requiring either

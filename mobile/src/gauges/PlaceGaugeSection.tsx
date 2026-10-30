@@ -81,7 +81,13 @@ export function PlaceGaugeSection({
         onClose={() => setPicking(false)}
         title={copy.chooseGauge}
       >
-        <Text style={styles.note}>{copy.gaugePickerHint}</Text>
+        <Text style={styles.note}>
+          {file
+            ? copy.gaugePickerHint
+            : settled
+              ? GAUGES.copy.failed
+              : copy.gaugeLoading}
+        </Text>
         {file
           ? nearbyGauges(file.gauges, latitude, longitude, NEARBY).map(
               ({ gauge, distanceM }) => {

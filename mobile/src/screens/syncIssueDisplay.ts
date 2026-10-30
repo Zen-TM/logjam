@@ -48,6 +48,7 @@ const FIELD_LABEL: Record<string, string> = {
   name: "name",
   altNames: "other names",
   notes: "notes",
+  gaugeId: "river gauge",
   // Keyed by FIELD KEY now, because the seven grades are field values rather
   // than columns — same words, one level in.
   num_abseils: "abseil count",

@@ -66,6 +66,7 @@ export const PLACE_PAGE = {
     chooseGauge: "Choose a river gauge",
     changeGauge: "Change gauge",
     removeGauge: "Remove gauge",
+    cancelPick: "Cancel",
     gaugePickerHint:
       "The nearest gauge can be on a different river, so check the name.",
     gaugeLoading: "Loading river gauges…",

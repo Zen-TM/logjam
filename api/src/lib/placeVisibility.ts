@@ -63,7 +63,7 @@ export const SHAREE_VISIBLE_PLACE_FIELDS: readonly string[] = [
   // per-TRIP notes are not).
   "notes",
   // The owner's pick, shown beside the place with its current reading. It
-  // names a public gauge, not the place, and a sharee already sees the place.
+  // hints at the area, but a sharee already sees the exact coordinates.
   "gaugeId",
   "fieldValues",
   "createdAt",

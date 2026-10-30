@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PLACE_PAGE } from "@logjam/shared";
+import { GAUGES, PLACE_PAGE } from "@logjam/shared";
 import latestJson from "../../../../shared/src/__fixtures__/gauges-latest.json";
 import { PlaceGauge } from "./PlaceGauge";
 
@@ -48,6 +48,20 @@ describe("a place's river gauge", () => {
     await screen.findByText("Made Up River at One");
     expect(screen.queryByText(PLACE_PAGE.copy.changeGauge)).toBeNull();
     expect(screen.queryByText(PLACE_PAGE.copy.removeGauge)).toBeNull();
+  });
+
+  // Mutation: gate the picker on `file` alone, and a failed load leaves the
+  // owner with no rows and no way back.
+  it("says a failed load in the picker and lets the owner cancel", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new Error("offline"))),
+    );
+    draw({});
+    fireEvent.click(screen.getByText(PLACE_PAGE.copy.chooseGauge));
+    await screen.findByText(GAUGES.copy.failed);
+    fireEvent.click(screen.getByText(PLACE_PAGE.copy.cancelPick));
+    expect(screen.getByText(PLACE_PAGE.copy.chooseGauge)).toBeTruthy();
   });
 
   it("lets the owner remove the gauge", async () => {

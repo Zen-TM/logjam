@@ -73,6 +73,18 @@ export function PlaceGauge({
           onOpen={() => onChange(null)}
         />
       )}
+      {owned && picking && !file && (
+        <p className={classes.muted}>
+          {failed ? GAUGES.copy.failed : copy.gaugeLoading}
+        </p>
+      )}
+      {owned && picking && (
+        <Row
+          leading={tile}
+          title={copy.cancelPick}
+          onOpen={() => setPicking(false)}
+        />
+      )}
       {owned && picking && file && (
         <>
           <p className={classes.muted}>{copy.gaugePickerHint}</p>

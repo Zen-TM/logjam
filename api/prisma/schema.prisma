@@ -201,7 +201,7 @@ model Place {
   elevation        Float?
   notes            String?
   /// A river gauge the owner picked (`GaugeRecord.id`). Not checked against
-  /// the registry: the list changes. Hints at where the place is.
+  /// the registry: the list changes. Hints at the area; a sharee sees it too, as they see the coordinates.
   gaugeId          String?        @map("gauge_id")
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested
