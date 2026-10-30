@@ -56,6 +56,24 @@ export function measureSwitchCopy(
         ? [type.value]
         : [];
 
+  // Each way a prop's words can arrive: `reason ?? "fallback"` types as
+  // `string`, so its sides are read one by one or the fallback goes unseen.
+  const texts = (expr: TypeScript.Expression): string[] => {
+    if (ts.isParenthesizedExpression(expr)) return texts(expr.expression);
+    if (ts.isConditionalExpression(expr))
+      return [...texts(expr.whenTrue), ...texts(expr.whenFalse)];
+    if (
+      ts.isBinaryExpression(expr) &&
+      (expr.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+        expr.operatorToken.kind === ts.SyntaxKind.BarBarToken)
+    )
+      return [...texts(expr.left), ...texts(expr.right)];
+    // The checker widens a bare literal to `string`.
+    if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr))
+      return [expr.text];
+    return literals(checker.getTypeAtLocation(expr));
+  };
+
   for (const file of files) {
     const sf = program.getSourceFile(file);
     if (!sf) throw new Error(`Not in the program: ${file}`);
@@ -76,13 +94,8 @@ export function measureSwitchCopy(
           const expr =
             ts.isJsxExpression(init) && init.expression
               ? init.expression
-              : init;
-          // The checker widens a bare attribute literal to `string`.
-          const texts =
-            ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)
-              ? [expr.text]
-              : literals(checker.getTypeAtLocation(expr));
-          for (const text of texts)
+              : (init as TypeScript.Expression);
+          for (const text of texts(expr))
             found.push({
               file,
               line:

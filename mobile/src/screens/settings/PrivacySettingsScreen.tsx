@@ -202,9 +202,9 @@ export function PrivacySettingsScreen() {
         <PreferenceRow
           icon="photo"
           title="Save to gallery"
-          // Says the consequence, which is the part a switch label can't: the
-          // copy is out of Logjam's storage and its backup exclusion, and
-          // nothing here can take it back.
+          // The consequence, which a switch label can't say: the copy leaves
+          // Logjam's storage for one other apps read. Where it goes is the
+          // toast on turning it on.
           subtitle="Other apps can see the copies."
           value={saveToGallery}
           ready

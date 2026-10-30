@@ -196,7 +196,7 @@ export function OfflineSettingsScreen({
           subtitle={
             needsAccount("autoTopo")
               ? accountText
-              : "Sharpened areas made on Logjam Web download here automatically."
+              : "When finished on Logjam Web."
           }
           value={topoAutoDownload}
           ready={!needsAccount("autoTopo")}
@@ -240,10 +240,7 @@ export function OfflineSettingsScreen({
         <PreferenceRow
           icon="photo"
           title="Copy photos too"
-          subtitle={
-            copyMediaBlocked ??
-            "Copies a shared place's photos and files into your storage too."
-          }
+          subtitle={copyMediaBlocked ?? "Shared place photos and files."}
           subtitleNumberOfLines={2}
           value={copyMedia ?? true}
           ready={copyMediaBlocked === undefined && copyMedia !== null}

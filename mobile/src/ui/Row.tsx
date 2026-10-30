@@ -47,9 +47,9 @@ export function Row({
   // TWO lines for the title, and that is a text-size rule rather than a taste
   // one: at a large OS font setting (or a large in-app multiplier) a one-line
   // cap cuts a long title off mid-word, with no way to read the rest. A row
-  // that grows is legible; a row that truncates is a dead end. Two rather than unlimited, because a title is
-  // often a user-supplied NAME and a pasted paragraph should not become a
-  // screen-tall row. Pass 1 where a single line is load-bearing.
+  // that grows is legible; a row that truncates is a dead end. Two rather
+  // than unlimited, because a title is often a user-supplied NAME and a
+  // pasted paragraph should not become a screen-tall row. Pass 1 where a single line is load-bearing.
   titleNumberOfLines = 2,
   // The subtitle is UNCAPPED by default: it is our own copy, not user data, and
   // it is where the explanations live ("Every layer of every finished job, once
