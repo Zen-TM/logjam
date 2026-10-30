@@ -216,9 +216,11 @@ function resolveBasemap(
 ): ResolvedTileSource[] {
   const logicalId = `basemap:${basemapId}`;
   const online = ctx.connectivity === "online";
-  const regions = ctx.artifacts.filter(
-    (a) => a.kind === "basemap-region" && a.logicalKey === basemapId,
-  );
+  // Oldest first: a stack mounted later draws on top (`BAND_MARKERS`), and the
+  // registry lists the newest first. Where saves overlap, the newest wins.
+  const regions = ctx.artifacts
+    .filter((a) => a.kind === "basemap-region" && a.logicalKey === basemapId)
+    .reverse();
 
   if (basemapId === "protomaps") {
     // Self-hosted vector basemap. Remote archive lives on our CDN (catalog

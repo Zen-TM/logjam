@@ -3,10 +3,23 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
-  basemapMountKeys,
+  DEFAULT_THEME_SCHEME_ID,
+  drawsOverTerrain,
+  terrainBeforeIds,
+  THEME_SCHEMES,
+} from "@logjam/shared";
+
+import {
+  PROTOMAPS_FLAVOR,
+  protomapsBandMarkers,
+  protomapsLayerDefs,
+} from "./basemap/protomapsLayers";
+import { buildShellStyle } from "./basemap/shellStyle";
+import {
   chainBeforeIds,
   PIN_FLOOR,
   ROUTES_FLOOR,
+  terrainBandMarker,
 } from "./layerOrder";
 
 const SRC = join(__dirname, "..");
@@ -30,49 +43,60 @@ describe("chainBeforeIds", () => {
   });
 });
 
-describe("basemapMountKeys", () => {
-  const raster = (key: string) => ({ key, sourceType: "raster" });
-  const vector = (key: string) => ({ key, sourceType: "vector" });
-
-  // Mutation: give `terrain` one value whatever the basemaps, and after a
-  // switch from imagery to the vector map the contour lines stay over the
-  // roads and labels.
-  it("remounts the Terrain group when it moves into the vector map or out", () => {
-    const imagery = basemapMountKeys([raster("six-imagery")]);
-    expect(basemapMountKeys([vector("protomaps")]).terrain).not.toBe(
-      imagery.terrain,
+// Mutation: put a band's marker out of order in the shell, send a stack's water
+// to the top band, or anchor the Terrain group in one stack, and the roads of
+// one saved area end up under the contours or the water of another over them.
+describe("two saved areas and the Terrain group", () => {
+  /** MLRN's `beforeId`: directly under the anchor, whatever is already there. */
+  const under = (style: string[], id: string, beforeId: string) =>
+    style.splice(style.indexOf(beforeId), 0, id);
+  const mountStack = (style: string[], area: string) => {
+    const markers = protomapsBandMarkers(PROTOMAPS_FLAVOR);
+    protomapsLayerDefs(PROTOMAPS_FLAVOR).forEach((layer, i) =>
+      under(style, `${area}/${layer.id}`, markers[i]),
     );
-    expect(basemapMountKeys([raster("six-topo")]).terrain).toBe(
-      imagery.terrain,
+  };
+  const mountTerrain = (style: string[]) => {
+    const pairs = terrainBeforeIds(
+      { hillshade: ["hillshade"], slope: ["slope"], contours: ["contours"] },
+      terrainBandMarker,
     );
-  });
+    for (const [id, beforeId] of pairs) under(style, id, beforeId);
+  };
+  const shell = () =>
+    buildShellStyle(
+      null,
+      PROTOMAPS_FLAVOR,
+      THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens,
+    ).layers.map((l) => l.id);
 
-  // Mutation: leave the basemaps out of `stacks`, and offline a newly saved
-  // area's stack mounts under the older ones', the Terrain group in it.
-  it("remounts every stack and the Terrain group when a saved area joins", () => {
-    const one = basemapMountKeys([vector("region-a")]);
-    const two = basemapMountKeys([vector("region-b"), vector("region-a")]);
-    expect(two.stacks).not.toBe(one.stacks);
-    expect(two.terrain).not.toBe(one.terrain);
-  });
-});
-
-// Mutation: key a basemap stack or a Terrain `ResolvedSource` in MapScreen by
-// its own source alone (`r.key`), and the keys above never reach the map: after
-// a switch from imagery to the vector map the contour lines stay over the roads.
-describe("MapScreen keys its stacks and the Terrain group by basemapMountKeys", () => {
-  const source = readFileSync(join(SRC, "map/MapScreen.tsx"), "utf8");
   it.each([
-    ["basemapResolved", "stacks", "resolved"],
-    ["hillshadeResolved", "terrain", "r"],
-    ["slopeResolved", "terrain", "r"],
-    ["contoursResolved", "terrain", "r"],
-  ])("%s by mountKeys.%s", (list, mount, item) => {
-    // The first ResolvedSource after `{list.map(`, before the next `.map(`.
-    const keyed = new RegExp(
-      String.raw`\{${list}\.map\((?:(?!\.map\()[\s\S])*?<ResolvedSource\s+key=\{\`\$\{${item}\.key\}@\$\{mountKeys\.${mount}\}\`\}`,
+    ["a saved area joins after the Terrain group", ["older", "t", "newer"]],
+    ["the map mounts them in one go", ["older", "newer", "t"]],
+  ])("every road and label draws over all of it: %s", (_, order) => {
+    const style = shell();
+    for (const step of order) {
+      if (step === "t") mountTerrain(style);
+      else mountStack(style, step);
+    }
+    const at = (id: string) => style.indexOf(id);
+    const layers = protomapsLayerDefs(PROTOMAPS_FLAVOR);
+    const over = layers.filter(drawsOverTerrain);
+    expect(over.length).toBeGreaterThan(0);
+    for (const area of ["older", "newer"]) {
+      expect(at(`${area}/earth`)).toBeLessThan(at("hillshade"));
+      expect(at("hillshade")).toBeLessThan(at(`${area}/water`));
+      expect(at(`${area}/water`)).toBeLessThan(at("slope"));
+      for (const layer of over) {
+        expect(at(`${area}/${layer.id}`)).toBeGreaterThan(at("contours"));
+      }
+    }
+    expect(at("slope")).toBeLessThan(at("contours"));
+    // Where saves overlap, the newest draws on top.
+    expect(at("older/earth")).toBeLessThan(at("newer/earth"));
+    expect(at("older/places_locality")).toBeLessThan(
+      at("newer/places_locality"),
     );
-    expect(source).toMatch(keyed);
   });
 });
 
