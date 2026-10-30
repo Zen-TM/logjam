@@ -542,9 +542,9 @@ describe("settings", () => {
   });
 
   it("names the surface a notification is shown in", () => {
-    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me when");
+    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me about");
     expect(notificationGroupLead("inApp", "Logjam GPS")).toBe(
-      "Notify me in Logjam GPS when",
+      "Notify me in Logjam GPS about",
     );
   });
 

@@ -9,6 +9,7 @@ import {
   ownTypeCountLabel,
   SETTINGS,
   type SectionKeysOn,
+  type NotificationPreferenceGroup,
   type NotificationPreferences,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -198,21 +199,29 @@ function SettingsPanel({
       <>
         <ThemeChooser />
 
-        <SectionHeader title="Notifications" />
-        {notifPrefs === null ? (
-          <LoadingState />
-        ) : (
-          NOTIFICATION_PREFERENCES.map(({ key, group, what }) => (
-            <SwitchRow
-              key={key}
-              title={`${notificationGroupLead(group, "Logjam Web")} ${what}`}
-              checked={notifPrefs[key]}
-              disabled={notifSavingKey === key}
-              disabledReason="Saving…"
-              onChange={() => handleToggleNotif(key)}
-            />
-          ))
-        )}
+        {/* A heading per group, as Logjam GPS draws them: the heading is the
+            sentence's start, so each switch's label stays short. */}
+        {NOTIFICATION_GROUPS.map((group) => (
+          <Fragment key={group}>
+            <SectionHeader title={notificationGroupLead(group, "Logjam Web")} />
+            {notifPrefs === null ? (
+              <LoadingState />
+            ) : (
+              NOTIFICATION_PREFERENCES.filter((row) => row.group === group).map(
+                ({ key, label }) => (
+                  <SwitchRow
+                    key={key}
+                    title={label}
+                    checked={notifPrefs[key]}
+                    disabled={notifSavingKey === key}
+                    disabledReason="Saving…"
+                    onChange={() => handleToggleNotif(key)}
+                  />
+                ),
+              )
+            )}
+          </Fragment>
+        ))}
 
         <SectionHeader title="Friends" />
         {leaderboardOptIn === null ? (
@@ -281,6 +290,11 @@ function SettingsPanel({
 }
 
 const copy = SETTINGS.copy;
+
+const NOTIFICATION_GROUPS = [
+  "email",
+  "inApp",
+] as const satisfies readonly NotificationPreferenceGroup[];
 
 /** The user's own attributes: a system one has no owner. */
 const ownCount = (defs: ScopedCustomFieldDef[]) =>
