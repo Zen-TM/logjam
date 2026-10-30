@@ -40,7 +40,8 @@ export type DedupeProposal = {
   bestPlaceId: string | null; // populated when tier === "autoLink"
 };
 
-// The columns the dedupe and merge read; callers select exactly these.
+// The columns the dedupe and merge read: a caller's select must include them,
+// and this Pick makes a missing one a type error.
 export type DedupePlace = Pick<
   Place,
   "id" | "name" | "altNames" | "latitude" | "longitude" | "fieldValues"
