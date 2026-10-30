@@ -145,7 +145,10 @@ describe("404-not-403 anti-oracle", () => {
 describe("deleteSharesFor", () => {
   it("deletes every share row for the given entities", async () => {
     const tx = {
-      share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      share: {
+        findMany: vi.fn().mockResolvedValue([{ sharedWithId: "u1" }]),
+        deleteMany: vi.fn().mockResolvedValue({ count: 2 }),
+      },
       notification: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
     };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
@@ -154,6 +157,9 @@ describe("deleteSharesFor", () => {
     });
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({
       where: {
+        // Mutation that turns it red: drop `userId`, or read the recipients
+        // after the share rows are deleted.
+        userId: { in: ["u1"] },
         type: "item_shared",
         AND: [{ payload: { path: ["entityType"], equals: "route" } }],
         OR: [

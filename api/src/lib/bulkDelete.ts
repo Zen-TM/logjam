@@ -194,6 +194,7 @@ export async function deletePlacesCascade(
     // recipients) that reference the deleted places.
     await tx.notification.deleteMany({
       where: {
+        userId: { in: shares.map((s) => s.sharedWithId) },
         type: "place_shared",
         OR: ownedIds.map((placeId) => ({
           payload: { path: ["placeId"], equals: placeId },

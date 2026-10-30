@@ -223,6 +223,10 @@ export async function deleteSharesFor(
   entityIds: string[],
 ): Promise<void> {
   if (entityIds.length === 0) return;
+  const recipients = await tx.share.findMany({
+    where: { entityType, entityId: { in: entityIds } },
+    select: { sharedWithId: true },
+  });
   await tx.share.deleteMany({
     where: { entityType, entityId: { in: entityIds } },
   });
@@ -231,6 +235,7 @@ export async function deleteSharesFor(
   // purges it too). Prisma's JSON filter has no `in`, hence one OR arm per id.
   await tx.notification.deleteMany({
     where: {
+      userId: { in: recipients.map((r) => r.sharedWithId) },
       type: "item_shared",
       AND: [{ payload: { path: ["entityType"], equals: entityType } }],
       OR: entityIds.map((id) => ({
