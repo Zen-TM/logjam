@@ -36,6 +36,11 @@ resource "aws_cloudwatch_log_group" "geo_pdf_worker" {
   retention_in_days = local.operational_log_retention_days
 }
 
+resource "aws_cloudwatch_log_group" "api_script" {
+  name              = "/ecs/logjam-api-script"
+  retention_in_days = local.operational_log_retention_days
+}
+
 # Pre-deploy migrate one-shot. Pre-created here because
 # ecsTaskExecutionRole has no logs:CreateLogGroup (standard task-exec policy) —
 # the task def OMITS awslogs-create-group entirely (ECS rejects "false"; see
