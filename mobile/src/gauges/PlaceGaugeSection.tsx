@@ -37,8 +37,7 @@ export function PlaceGaugeSection({
   const copy = PLACE_PAGE.copy;
   const styles = useStyles();
   const [picking, setPicking] = useState(false);
-  const [now] = useState(Date.now);
-  const { file, settled } = useGauges(owned || !!gaugeId);
+  const { file, settled, now } = useGauges(owned || !!gaugeId);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
   return (
     <>

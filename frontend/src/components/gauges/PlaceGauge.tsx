@@ -36,8 +36,7 @@ export function PlaceGauge({
 }) {
   const copy = PLACE_PAGE.copy;
   const [picking, setPicking] = useState(false);
-  const [now] = useState(Date.now);
-  const { file, failed } = useGauges(owned || !!gaugeId);
+  const { file, failed, now } = useGauges(owned || !!gaugeId);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
   const tile = <IconTile icon="place" hue="var(--color-accent)" />;
   return (
