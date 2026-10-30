@@ -43,7 +43,8 @@ and a copy of the user's print on our side.
   name misled. The rename went in two applies, the new family beside the old
   and then the old removed, since `infra/scripts/pin-release.sh` names the
   family and every API deploy would otherwise depend on a Terraform apply.
-  Everything else above stands.
+  Terraform's destroy deregisters only its own revision; the revisions deploys
+  pinned were deregistered by hand. Everything else above stands.
 - **Job history and GeoPDF sharing are gone:** `geoPdfJob` is not a
   `SHARABLE_ENTITY_TYPES` member, so a sharee can no longer see a GeoPDF
   (sharing a place still shares the map). Guard:
