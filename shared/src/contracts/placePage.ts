@@ -28,6 +28,10 @@ export const PLACE_PAGE = {
     },
     // "Show the weather here": WEATHER's words and figures.
     { key: "weather" },
+    // The owner's pick of a river gauge, read-only to a sharee, who sees the
+    // section only when one is set. The owner with none gets a quiet way to
+    // choose; Logjam never picks for them.
+    { key: "gauge" },
     // Only the attributes the place answered: a form asks every question, a
     // page reports the answers.
     { key: "attributes" },
@@ -44,6 +48,7 @@ export const PLACE_PAGE = {
   copy: {
     // A section's title is the copy under its own key, where it is constant.
     position: "Position",
+    gauge: "River gauge",
     doesntFit: "Doesn’t fit this type",
     notes: "Notes",
     sources: "Sources",
@@ -57,6 +62,15 @@ export const PLACE_PAGE = {
     copyPosition: "Coordinates copied.",
     openInMaps: "Open in a maps app",
     notesVisible: "Notes · visible to anyone you share with",
+
+    chooseGauge: "Choose a river gauge",
+    changeGauge: "Change gauge",
+    removeGauge: "Remove gauge",
+    gaugePickerHint:
+      "The nearest gauge can be on a different river, so check the name.",
+    gaugeLoading: "Loading river gauges…",
+    gaugeMissing: "This gauge isn’t in the latest readings.",
+    gaugeSaveFailed: "Couldn’t save the river gauge.",
 
     // An empty slot gets a short label, not a lesson (UX §11).
     notesEmpty: "No notes yet.",

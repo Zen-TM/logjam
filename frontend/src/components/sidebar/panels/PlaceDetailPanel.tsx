@@ -46,6 +46,7 @@ import {
 import classes from "./PlaceDetailPanel.module.css";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
+import { PlaceGauge } from "../../gauges/PlaceGauge";
 import { PlaceWeather } from "../../weather/PlaceWeather";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
@@ -70,6 +71,7 @@ import {
   getPlaceDetail,
   getPlaceShares,
   ownerUsername,
+  updatePlace,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
@@ -605,6 +607,16 @@ function PlaceDetailPanel({
 
   const busy = copying || deleting || removing;
 
+  async function setGauge(gaugeId: string | null) {
+    try {
+      await updatePlace(current.id, { gaugeId });
+      onRefetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, PLACE_PAGE.copy.gaugeSaveFailed));
+    }
+  }
+
   // Exhaustive by type: every verb the contract gives Logjam Web has a runner.
   const verbRunners: Record<WebPlaceVerbId, () => void> = {
     open: () => {}, // A row's verb; this page is what it opens.
@@ -732,6 +744,21 @@ function PlaceDetailPanel({
         />
       </section>
     ),
+
+    // A sharee sees the owner's pick, read-only, and nothing when none is set.
+    gauge: () =>
+      current.gaugeId || isOwnedPlace ? (
+        <section className={classes.section}>
+          <SectionHeader title={copy.gauge} />
+          <PlaceGauge
+            latitude={current.latitude}
+            longitude={current.longitude}
+            gaugeId={current.gaugeId}
+            owned={isOwnedPlace}
+            onChange={(id) => void setGauge(id)}
+          />
+        </section>
+      ) : null,
 
     attributes: () =>
       attributes.length > 0 ? (

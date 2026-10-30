@@ -568,6 +568,7 @@ export async function recreateFromDeadRemote(
             )
           : [],
         notes: pick<string>("notes"),
+        gaugeId: pick<string>("gaugeId"),
         elevation:
           typeof merged.elevation === "number" ? merged.elevation : null,
         // The recovered copy keeps the type it had. Falling back to Canyon

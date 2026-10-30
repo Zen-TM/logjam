@@ -212,6 +212,8 @@ export type SyncDeltaPlaceRow = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** Absent from an older server (additive on protocol 1). */
+  gaugeId?: string | null;
   /** Metres, or null. */
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
@@ -488,6 +490,7 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   forkedFromId: nullable(isString),
   createdAt: isString,
   updatedAt: isString,
+  // gaugeId is optional like them: a delta page from an older server lacks it.
   // fieldDefsSnapshot and foreignFields are deliberately UNCHECKED here and
   // therefore optional: one is present only on a shared row of a type the
   // caller does not own, the other only on an owned row. Requiring either

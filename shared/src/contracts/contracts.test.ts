@@ -354,6 +354,15 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
   });
 
+  // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
+  it("gives both clients and a sharee the gauge section", () => {
+    for (const client of ["web", "gps"] as const)
+      for (const owned of [true, false])
+        expect(contractSectionsFor(PLACE_PAGE, client, owned)).toContain(
+          "gauge",
+        );
+  });
+
   // Red when a primary verb is dropped from the page's verbs: the buttons and
   // the ⋯ must never disagree about what a place can do.
   it("draws as buttons only verbs the page offers", () => {

@@ -200,6 +200,9 @@ model Place {
   /// waypoint surface today; dropping it in the fold would be silent data loss.
   elevation        Float?
   notes            String?
+  /// A river gauge the owner picked (`GaugeRecord.id`). Not checked against
+  /// the registry: the list changes. Hints at where the place is.
+  gaugeId          String?        @map("gauge_id")
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested
   /// at `attributes.customFields[key]` are HOISTED to the top level here — see

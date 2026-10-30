@@ -62,6 +62,9 @@ export const SHAREE_VISIBLE_PLACE_FIELDS: readonly string[] = [
   // Place-level notes ARE shared (the hybrid model's central distinction —
   // per-TRIP notes are not).
   "notes",
+  // The owner's pick, shown beside the place with its current reading. It
+  // names a public gauge, not the place, and a sharee already sees the place.
+  "gaugeId",
   "fieldValues",
   "createdAt",
   "updatedAt",

@@ -766,6 +766,7 @@ export const PLACE_FIELDS = new Set([
   "longitude",
   "placeTypeId",
   "notes",
+  "gaugeId",
   "fieldValues",
   // Folded in from WAYPOINT_FIELDS: every waypoint is a place now, and the two
   // columns it carried that a canyon did not came with it. `symbol` did NOT —
@@ -1007,6 +1008,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
         latitude: fields.latitude as number,
         longitude: fields.longitude as number,
         notes: (fields.notes as string | null | undefined) ?? null,
+        gaugeId: (fields.gaugeId as string | null | undefined) ?? null,
         elevation: (fields.elevation as number | null | undefined) ?? null,
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       },
@@ -1079,6 +1081,9 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.placeTypeId !== undefined && { placeTypeId: typeId }),
       ...(fields.notes !== undefined && {
         notes: fields.notes as string | null,
+      }),
+      ...(fields.gaugeId !== undefined && {
+        gaugeId: fields.gaugeId as string | null,
       }),
       ...(fields.elevation !== undefined && {
         elevation: fields.elevation as number | null,
