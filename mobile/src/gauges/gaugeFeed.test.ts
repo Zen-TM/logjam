@@ -15,7 +15,6 @@ const h = vi.hoisted(() => ({
   fetch: vi.fn(),
   cache: vi.fn(async () => {}),
   cacheHistory: vi.fn(async (..._args: unknown[]) => {}),
-  tracked: null as Promise<void> | null,
   kept: null as { ageMs: number } | null,
   offlineOnly: false,
   canRun: true,
@@ -34,9 +33,6 @@ vi.mock("./gaugeStorage", () => ({
   cacheGauges: h.cache,
   cacheGaugeHistory: h.cacheHistory,
   readCachedGaugeHistory: async () => h.kept,
-  trackGaugeRefresh: (p: Promise<void>) => {
-    h.tracked = p;
-  },
   gaugesEpoch: () => h.epoch,
 }));
 
@@ -180,7 +176,8 @@ describe("refreshGaugeHistories", () => {
     });
     await refreshGaugeHistories(["900001", "900002"]);
     expect(h.fetch).toHaveBeenCalledTimes(1);
+    // The write of the fetch in flight carries the epoch it began under, so
+    // the store drops it. Mutation: remove that argument → red.
     expect(h.cacheHistory.mock.calls[0]?.[2]).toBe(0);
-    expect(h.tracked).not.toBeNull();
   });
 });

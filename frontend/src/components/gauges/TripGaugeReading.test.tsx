@@ -1,6 +1,7 @@
 // Mutations that turn it red: fetch a history on every render or timer tick;
-// draw an error for a 404; draw the trip reading for a sharee (`owned &&` in
-// PlaceGauge); drop the credit from the reading.
+// draw an error for a 404; draw the trip reading for a sharee (make
+// `tripDatesFor` return the dates when not owned); drop the credit from the
+// reading.
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GAUGES } from "@logjam/shared";

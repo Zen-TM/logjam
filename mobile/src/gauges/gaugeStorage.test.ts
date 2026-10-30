@@ -9,7 +9,6 @@ import {
   gaugesEpoch,
   readCachedGauges,
   stopGaugesForWipe,
-  trackGaugeRefresh,
 } from "./gaugeStorage";
 import { gaugeFixture } from "./gaugeFixture";
 
@@ -90,18 +89,5 @@ describe("the kept gauge histories", () => {
     await stopGaugesForWipe();
     await cacheGaugeHistory("900001", text, begun);
     expect(fs.files.size).toBe(0);
-  });
-
-  // Mutation: return only `tail` from stopGaugesForWipe.
-  it("makes the wipe wait for a history refresh in flight", async () => {
-    let finish = () => {};
-    trackGaugeRefresh(new Promise<void>((r) => (finish = r)));
-    let done = false;
-    const wiped = stopGaugesForWipe().then(() => (done = true));
-    await Promise.resolve();
-    expect(done).toBe(false);
-    finish();
-    await wiped;
-    expect(done).toBe(true);
   });
 });

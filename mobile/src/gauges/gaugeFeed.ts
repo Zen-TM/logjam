@@ -24,7 +24,6 @@ import {
   cacheGauges,
   gaugesEpoch,
   readCachedGaugeHistory,
-  trackGaugeRefresh,
 } from "./gaugeStorage";
 
 export const GAUGE_REFRESH_MS = 5 * 60_000;
@@ -123,7 +122,6 @@ export function refreshGaugeHistories(ids: string[]): Promise<void> {
       }
     }
   });
-  trackGaugeRefresh(historyTail);
   return historyTail;
 }
 
