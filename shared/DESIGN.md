@@ -63,6 +63,9 @@ renumber.
   with no question (Settings) has no hero; the map is its own answer.
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
+- **Between the hero and the list, only what narrows the list** (the rail, a
+  selection bar). A way elsewhere is a hero action; a number it carries is its
+  badge.
 - **One pinned filter axis per screen.** Finer filters are one press away and
   say so while active ("3 filters active").
 - **A list that grows without limit never shares a scroller with one that
@@ -295,6 +298,12 @@ renumber.
   ("315° is what most maps use"). A label that says it gets no hint.
 - **A screen used daily spends no prose.** A screen visited once when
   confused may explain itself, if every line changes what the user does next.
+- **An explanation opens on request, never as a section of the page.** A
+  control's is its hint. How a screen or feature works is behind a `help`
+  button in the hero, or beside what it explains where there is no hero. An
+  empty state may explain.
+- **A switch's label is at most 20 characters, its hint at most 30**: two
+  lines on a phone.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
