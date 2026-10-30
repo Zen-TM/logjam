@@ -4278,8 +4278,8 @@ export function MapScreen({
    * Changing this key unmounts and re-adds the two top layers, which puts them
    * back on top of whatever just arrived. It is a string of everything BELOW
    * them that can mount or unmount; the anchored layers (basemap, topo band,
-   * GeoPDFs, imports) cannot climb, so they are deliberately not in it. Anything unpinned added to this map later
-   * belongs here too.
+   * GeoPDFs, imports) cannot climb, so they are deliberately not in it.
+   * Anything unpinned added to this map later belongs here too.
    */
   const topStackKey = [
     showTracks ? tracks.map((track) => track.id).join(",") : "",

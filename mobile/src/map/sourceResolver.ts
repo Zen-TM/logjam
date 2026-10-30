@@ -217,7 +217,8 @@ function resolveBasemap(
   const logicalId = `basemap:${basemapId}`;
   const online = ctx.connectivity === "online";
   // Oldest first: a stack mounted later draws on top (`BAND_MARKERS`), and the
-  // registry lists the newest first. Where saves overlap, the newest wins.
+  // registry lists the newest first. Where saves overlap, the newest wins
+  // until a style reload (`BAND_MARKERS`).
   const regions = ctx.artifacts
     .filter((a) => a.kind === "basemap-region" && a.logicalKey === basemapId)
     .reverse();

@@ -43,9 +43,9 @@ describe("chainBeforeIds", () => {
   });
 });
 
-// Mutation: put a band's marker out of order in the shell, send a stack's water
-// to the top band, or anchor the Terrain group in one stack, and the roads of
-// one saved area end up under the contours or the water of another over them.
+// Mutation: put a band's marker out of order in the shell, or send a stack's
+// water to the top band, and the roads of one saved area end up under the
+// contours or the water of another over them.
 describe("two saved areas and the Terrain group", () => {
   /** MLRN's `beforeId`: directly under the anchor, whatever is already there. */
   const under = (style: string[], id: string, beforeId: string) =>

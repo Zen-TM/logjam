@@ -28,6 +28,8 @@ export const ROUTES_FLOOR = "saved-routes-casing";
  * band by band, not one above the other: hillshade, slope and contours then lie
  * under the roads and labels of every saved area. A band is filled in mount
  * order, the last on top, so nothing has to remount when a saved area joins.
+ * A style reload keeps the bands but can reorder the saved areas inside one,
+ * which shows only where saves overlap: they are clips of the same map.
  * Guard: layerOrder.test.ts ("two saved areas and the Terrain group").
  */
 export const BAND_MARKERS = {
