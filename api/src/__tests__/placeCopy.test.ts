@@ -21,6 +21,7 @@ import {
   ALICE_SUB,
   BOB_SUB,
   BOB_ID,
+  CAROL_SUB,
   ALICE_ID,
   as,
   CANYON_TYPE_ID,
@@ -190,6 +191,54 @@ describe("a sharee of a place of the sender's own type", () => {
     expect(snapshot.find((d) => d.key === "passage_m")?.label).toBe(
       "Passage length (m)",
     );
+  });
+
+  // Mutation: drop the per-owner filter (or the per-type join check) in
+  // `defsForForeignPlaceTypes` and each place carries the other's defs too.
+  // Carol is not alice's friend in the seed, so bob (friends with both) is the
+  // recipient.
+  it("gets each place's own owner's defs when one page spans two owners' types", async () => {
+    const stamp = Date.now();
+    const aliceType = await makeType(ALICE_SUB, `Cave ${stamp}-a`);
+    const carolType = await makeType(CAROL_SUB, `Cave ${stamp}-c`);
+    await makeField(
+      ALICE_SUB,
+      { key: "alice_only", label: "Alice only", type: "integer", min: 0 },
+      [aliceType],
+    );
+    await makeField(
+      CAROL_SUB,
+      { key: "carol_only", label: "Carol only", type: "integer", min: 0 },
+      [carolType],
+    );
+    const places = [];
+    for (const [sub, placeTypeId] of [
+      [ALICE_SUB, aliceType],
+      [CAROL_SUB, carolType],
+    ] as const) {
+      const place = await makePlace(sub, {
+        placeTypeId,
+        name: "Batched snapshot",
+        latitude: -33.62,
+        longitude: 150.32,
+      });
+      await shareWith(sub, place.id as string, BOB_ID);
+      places.push(place);
+    }
+
+    const delta = await request(API_URL)
+      .get("/sync/delta")
+      .set({ ...as(BOB_SUB), ...CLIENT })
+      .query({ limit: 500 });
+    expect(delta.status).toBe(200);
+    const keysOf = (id: unknown) =>
+      (
+        (delta.body.changes.places as Record<string, unknown>[]).find(
+          (p) => p.id === id,
+        )?.fieldDefsSnapshot as { key: string }[] | undefined
+      )?.map((d) => d.key);
+    expect(keysOf(places[0].id)).toEqual(["alice_only"]);
+    expect(keysOf(places[1].id)).toEqual(["carol_only"]);
   });
 
   it("gets NO snapshot for a system type, which it already holds", async () => {
