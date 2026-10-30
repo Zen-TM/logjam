@@ -1,10 +1,6 @@
 // Mounts the generated Protomaps basemap layer set as MLRN components:
 // the shell style stays empty, the resolver supplies the source, and these
 // layers bind to it declaratively.
-//
-// The generated set's `background` layer mounts at the bottom of the band
-// (land colour under the tiles), above the shell's own background at index 0,
-// and unmounts cleanly with the rest on basemap swap.
 import { memo } from "react";
 import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 
@@ -49,11 +45,8 @@ function layerComponent(
     layerIndex,
     type: def.type,
     style: def.style,
-    // A background layer has no source; everything else binds to the one the
-    // resolver mounted.
-    ...(def.type === "background"
-      ? {}
-      : { source: sourceID, "source-layer": def.sourceLayer }),
+    source: sourceID,
+    "source-layer": def.sourceLayer,
     ...(def.filter && { filter: def.filter }),
     ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
     ...(def.maxzoom !== undefined && { maxzoom: def.maxzoom }),
