@@ -153,6 +153,68 @@ export function flowOnDate(
   return onDate(history, date, history.flow);
 }
 
+const DAY_MS = 86_400_000;
+/** History days are Australian Eastern Standard days, with no daylight saving. */
+const AEST_MS = 10 * 3_600_000;
+
+/** The `YYYY-MM-DD` of the AEST day a moment falls in. */
+export function aestDay(ms: number): string {
+  return new Date(ms + AEST_MS).toISOString().slice(0, 10);
+}
+
+/** A trip's calendar day. A trip's date is a day held as UTC midnight, so its
+ *  first ten characters are the day as the person entered it: no time zone
+ *  can move it. Null for anything else. */
+export function tripGaugeDay(date: string): string | null {
+  return /^\d{4}-\d{2}-\d{2}/.test(date) ? date.slice(0, 10) : null;
+}
+
+export interface GaugeDayReading {
+  level: number | null;
+  flow: number | null;
+}
+
+/** The gauge's reading for a trip's day, or null for none, never a guess.
+ *  History holds the daily mean about two days late, so a day within the
+ *  latest file's week that history lacks is the mean of that file's readings
+ *  on the day. */
+export function gaugeReadingOnDay(
+  gauge: Gauge,
+  history: GaugeHistoryFile | null,
+  day: string,
+  now: number,
+): GaugeDayReading | null {
+  let level = history ? levelOnDate(history, day) : null;
+  let flow = history ? flowOnDate(history, day) : null;
+  if (
+    level === null &&
+    flow === null &&
+    aestDay(now - 7 * DAY_MS) <= day &&
+    day <= aestDay(now)
+  ) {
+    const mean = (at: 1 | 2): number | null => {
+      const v = gauge.readings.flatMap((r) =>
+        r[at] !== null && aestDay(r[0] * 1000) === day ? [r[at] as number] : [],
+      );
+      return v.length ? v.reduce((a, b) => a + b) / v.length : null;
+    };
+    level = mean(1);
+    flow = mean(2);
+  }
+  return level === null && flow === null ? null : { level, flow };
+}
+
+/** Trip readings are shown for at most this many gauges. */
+export const TRIP_GAUGE_MAX = 3;
+
+/** The distinct gauges of some places, a few at most, in order. */
+export function distinctGaugeIds(ids: (string | null | undefined)[]): string[] {
+  return [...new Set(ids.flatMap((id) => (id ? [id] : [])))].slice(
+    0,
+    TRIP_GAUGE_MAX,
+  );
+}
+
 export interface NearbyGauge {
   gauge: Gauge;
   distanceM: number;

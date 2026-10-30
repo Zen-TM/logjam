@@ -52,6 +52,7 @@ import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
+import { registerSavedGaugeHistoryRefresh } from "./gauges/savedPlaceHistories";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
@@ -846,6 +847,7 @@ export function AppShell({
         sync: registerSyncTriggers,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
+        gaugeHistoryRefresh: registerSavedGaugeHistoryRefresh,
       }),
     [accountState],
   );

@@ -409,6 +409,7 @@ export function PlaceDetailScreen({
             longitude={place.longitude}
             gaugeId={place.gaugeId}
             owned={isOwner}
+            tripDates={linkedTrips.map((trip) => trip.date)}
             onChange={(gaugeId) =>
               updatePlaceLocal(placeId, { gaugeId }).catch((err: unknown) => {
                 console.error(err);

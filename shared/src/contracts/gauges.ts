@@ -4,7 +4,13 @@
 //
 // The file is public and the same for everyone (ADR 0044), so it holds
 // nothing per user; Logjam GPS keeps its last copy for use offline.
-import type { Gauge } from "../gauges.js";
+import {
+  gaugeReadingOnDay,
+  tripGaugeDay,
+  type Gauge,
+  type GaugeDayReading,
+  type GaugeHistoryFile,
+} from "../gauges.js";
 import type { ScreenContract } from "./types.js";
 
 export const GAUGES = {
@@ -26,6 +32,11 @@ export const GAUGES = {
     age: "Latest reading",
     graph: "Last 7 days",
     noLevel: "No level reading",
+    onThisTrip: "on this trip",
+    onLastTrip: "on your last trip here",
+    now: "now",
+    noneNow: "no recent reading now",
+    noneForDate: "This gauge has no reading for that date.",
     noRecent: "This gauge has had no reading in the last 7 days.",
     failed: "River gauges couldn\u2019t be loaded.",
     staleFile: "Readings last refreshed",
@@ -168,4 +179,45 @@ export function gaugeFileNote(generatedAt: string, now: number): string | null {
   return Number.isNaN(at) || now - at <= GAUGE_STALE_FILE_MS
     ? null
     : `${GAUGES.copy.staleFile} ${gaugeAgo(at, now)}`;
+}
+
+const values = (gauge: Gauge, r: GaugeDayReading | null): string =>
+  [
+    r?.level != null ? formatGaugeLevel(r.level) : null,
+    gauge.hasFlow && r?.flow != null ? formatGaugeFlow(r.flow) : null,
+  ]
+    .filter(Boolean)
+    .join(" and ");
+
+/** The reading on a trip's date beside the current one, a line per gauge:
+ *  "Colo River at Upper Colo: 0.91 m on this trip, 1.40 m now." With several
+ *  dates (the trips at a place) a gauge reads its latest date that has a
+ *  value. A date with no value shows nothing; if a history file was had and
+ *  no gauge has a value, one plain line says so. Two numbers, no verdict. */
+export function tripGaugeLines(
+  inputs: { gauge: Gauge; history: GaugeHistoryFile | null }[],
+  dates: string[],
+  when: "trip" | "lastTrip",
+  now: number,
+): string[] {
+  const days = dates
+    .flatMap((d) => tripGaugeDay(d) ?? [])
+    .sort()
+    .reverse();
+  const lines = inputs.flatMap(({ gauge, history }) => {
+    for (const day of days) {
+      const then = gaugeReadingOnDay(gauge, history, day, now);
+      if (!then) continue;
+      const current = values(gauge, latestGaugeReading(gauge, now));
+      return [
+        `${gaugeDisplayName(gauge.name)}: ${values(gauge, then)} ${
+          when === "trip" ? GAUGES.copy.onThisTrip : GAUGES.copy.onLastTrip
+        }, ${current ? `${current} ${GAUGES.copy.now}` : GAUGES.copy.noneNow}.`,
+      ];
+    }
+    return [];
+  });
+  return lines.length > 0 || days.length === 0 || !inputs.some((i) => i.history)
+    ? lines
+    : [GAUGES.copy.noneForDate];
 }

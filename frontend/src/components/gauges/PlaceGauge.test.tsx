@@ -12,6 +12,7 @@ const draw = (over: Partial<Parameters<typeof PlaceGauge>[0]>) => {
       {...place}
       gaugeId={null}
       owned
+      tripDates={[]}
       onChange={onChange}
       {...over}
     />,

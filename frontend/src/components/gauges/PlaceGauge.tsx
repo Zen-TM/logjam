@@ -12,6 +12,7 @@ import {
 import { IconTile, Row } from "../../ui";
 import { GaugeView } from "./GaugeView";
 import classes from "./GaugeView.module.css";
+import { TripGaugeReading } from "./TripGaugeReading";
 import { useGauges } from "./useGauges";
 
 const NEARBY = 8;
@@ -26,12 +27,16 @@ export function PlaceGauge({
   longitude,
   gaugeId,
   owned,
+  tripDates,
   onChange,
 }: {
   latitude: number;
   longitude: number;
   gaugeId: string | null | undefined;
   owned: boolean;
+  /** The dates of the viewer's own trips at this place. A sharee has none,
+   *  and is never shown a trip reading whatever is passed. */
+  tripDates: string[];
   onChange: (gaugeId: string | null) => void;
 }) {
   const copy = PLACE_PAGE.copy;
@@ -43,12 +48,20 @@ export function PlaceGauge({
     <>
       {gaugeId &&
         (chosen && file ? (
-          <GaugeView
-            gauge={chosen}
-            attribution={file.attribution}
-            generatedAt={file.generatedAt}
-            now={now}
-          />
+          <>
+            <TripGaugeReading
+              gaugeIds={[gaugeId]}
+              dates={owned ? tripDates : []}
+              when="lastTrip"
+              credit={false}
+            />
+            <GaugeView
+              gauge={chosen}
+              attribution={file.attribution}
+              generatedAt={file.generatedAt}
+              now={now}
+            />
+          </>
         ) : (
           <p className={classes.muted}>
             {failed

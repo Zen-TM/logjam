@@ -77,3 +77,22 @@ describe("a place's gauge section", () => {
     expect(section).toContain("useGauges(owned || !!gaugeId)");
   });
 });
+
+// Mutations that turn it red: pass `tripDates` to the reading for a sharee;
+// drop the section from either screen; fetch histories on a timer.
+describe("the trip reading's wiring", () => {
+  it("shows a sharee none: the place section passes dates only when owned", () => {
+    expect(read("./PlaceGaugeSection.tsx")).toContain(
+      "dates={owned ? tripDates : []}",
+    );
+  });
+  it("draws it on both pages", () => {
+    expect(read("../logs/TripDetailScreen.tsx")).toContain("<TripGaugeReading");
+    expect(read("./PlaceGaugeSection.tsx")).toContain("<TripGaugeReading");
+  });
+  it("keeps the saved places' histories only at start and on return to the front", () => {
+    const src = read("./savedPlaceHistories.ts");
+    expect(src).toContain('state === "active"');
+    expect(src).not.toMatch(/setInterval|setTimeout/);
+  });
+});
