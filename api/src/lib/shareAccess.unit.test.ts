@@ -149,6 +149,11 @@ describe("deleteSharesFor", () => {
       notification: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
     };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0].slice(1)).toEqual([
+      "route",
+      ["rt-1", "rt-2"],
+    ]);
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({
       where: {
         // Mutation that turns it red: drop `userId`.

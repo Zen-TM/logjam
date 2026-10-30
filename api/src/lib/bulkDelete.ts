@@ -192,7 +192,8 @@ export async function deletePlacesCascade(
     await tx.placeShare.deleteMany({ where: { placeId: { in: ownedIds } } });
     // Purge place_shared notifications held by OTHER users (the share
     // recipients) that reference the deleted places. Unscoped on purpose: it
-    // also clears place_shared rows whose share is already gone.
+    // also clears place_shared rows whose share is already gone
+    // (guard: "DELETE /places/:id with no share row" in places.test.ts).
     await tx.notification.deleteMany({
       where: {
         type: "place_shared",
