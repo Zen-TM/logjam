@@ -22,9 +22,11 @@
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
 
-resource "aws_ecs_task_definition" "geo_pdf_worker" {
+resource "aws_ecs_task_definition" "api_script" {
   container_definitions = jsonencode([{
-    command = ["node", "dist/worker/geoPdfWorker.js"]
+    # Always overridden by the RunTask caller; this refuses a bare start rather
+    # than booting the API server with the production database credentials.
+    command = ["node", "-e", "console.error('api-script needs a command override'); process.exit(1)"]
     environment = [{
       name  = "AUTH_MODE"
       value = "cognito"
@@ -57,10 +59,10 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "noreply@notifications.logjamnsw.com"
       }, {
       name = "ECS_SECURITY_GROUPS"
-      # Dedicated worker SG. Vestigial here (geoPdfWorker is a leaf, never
-      # calls RunTask) but kept in sync so no stale default-SG id lingers in
-      # a committed task def. The operative value is the EB env property of
-      # the same name (operator-owned).
+      # Dedicated worker SG. Vestigial here (a maintainer script never calls
+      # RunTask) but kept in sync so no stale default-SG id lingers in a
+      # committed task def. The operative value is the EB env property of the
+      # same name (operator-owned).
       value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
@@ -88,13 +90,13 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       logDriver = "awslogs"
       options = {
         awslogs-create-group  = "true"
-        awslogs-group         = "/ecs/logjam-geo-pdf-worker"
+        awslogs-group         = "/ecs/logjam-api-script"
         awslogs-region        = "ap-southeast-2"
         awslogs-stream-prefix = "ecs"
       }
     }
     mountPoints  = []
-    name         = "geo-pdf-worker"
+    name         = "api-script"
     portMappings = []
     secrets = [{
       name      = "DB_PASSWORD"
@@ -112,7 +114,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
   cpu                      = "1024"
   enable_fault_injection   = false
   execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
-  family                   = "logjam-geo-pdf-worker"
+  family                   = "logjam-api-script"
   memory                   = "4096"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]

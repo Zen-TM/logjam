@@ -39,7 +39,7 @@ image, with the maintainer's AWS access in `ap-southeast-2`. Define
 ```sh
 purge_task() {
   announce_task "$(jq -n --arg yes "${1:-}" '{containerOverrides: [{
-    name: "geo-pdf-worker",
+    name: "api-script",
     command: (["node", "dist/scripts/purgeLegacyTopoJobs.js"]
               + (if $yes == "" then [] else [$yes] end))
   }]}')"
