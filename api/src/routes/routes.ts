@@ -43,6 +43,7 @@ import {
   directShareeIds,
   directlySharedIds,
   getRouteRole,
+  sharedPlaceIdsFor,
   requireShareAccess,
   requireShareOwner,
 } from "../lib/shareAccess";
@@ -85,7 +86,7 @@ router.get(
     const where: Prisma.RouteWhereInput = {
       OR: [
         { ownerId: user.id },
-        { place: { shares: { some: { sharedWithId: user.id } } } },
+        { placeId: { in: await sharedPlaceIdsFor(user.id) } },
         { id: { in: await directlySharedIds(user.id, "route") } },
       ],
     };
