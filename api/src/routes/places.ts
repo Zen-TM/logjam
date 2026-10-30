@@ -13,6 +13,7 @@ import {
   resolveCopyPlaceType,
   strandValuesOnTypeChange,
 } from "../lib/placeCopy";
+import { sharedPlaceIdsFor } from "../lib/shareAccess";
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
@@ -262,7 +263,7 @@ router.get(
       where: {
         OR: [
           { ownerId: user.id },
-          { shares: { some: { sharedWithId: user.id } } },
+          { id: { in: await sharedPlaceIdsFor(user.id) } },
         ],
       },
       select: { id: true },
