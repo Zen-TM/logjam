@@ -3,10 +3,15 @@ import { describe, it, expect, vi } from "vitest";
 // The route module builds a Prisma client at import time; the include helper
 // under test is pure, so the client is stubbed out entirely.
 vi.mock("../services/prisma", () => ({
-  default: { place: { findMany: vi.fn(), count: vi.fn() } },
+  default: {
+    place: { findMany: vi.fn(), count: vi.fn() },
+    tripLogPlace: { groupBy: vi.fn() },
+    placeShare: { groupBy: vi.fn() },
+  },
 }));
 
-import { placeListInclude } from "./places";
+import prisma from "../services/prisma";
+import { withPlaceListCounts } from "./places";
 
 // The privacy boundary of the place LIST payload (hybrid share model).
 //
@@ -18,39 +23,35 @@ import { placeListInclude } from "./places";
 // Relying on clients to decline rendering the count is not a security boundary;
 // any client or devtools inspection would expose it.
 //
-// These are unit tests because the boundary lives in a pure include-shape
+// These are unit tests because the boundary lives in a pure scope
 // decision: no server, no DB, so they run in the gate that the integration
 // suite doesn't.
 
-describe("placeListInclude — owned list", () => {
-  it("counts trips and shares (the owner's own data)", () => {
-    expect(placeListInclude("owned")).toEqual({
-      _count: { select: { tripLogLinks: true, shares: true } },
-    });
+describe("withPlaceListCounts — owned list", () => {
+  it("counts trips and shares per row, zero when none", async () => {
+    vi.mocked(prisma.tripLogPlace.groupBy).mockResolvedValue([
+      { placeId: "a", _count: { _all: 2 } },
+    ] as never);
+    vi.mocked(prisma.placeShare.groupBy).mockResolvedValue([
+      { placeId: "b", _count: { _all: 3 } },
+    ] as never);
+    expect(
+      await withPlaceListCounts("owned", [{ id: "a" }, { id: "b" }]),
+    ).toEqual([
+      { id: "a", _count: { tripLogLinks: 2, shares: 0 } },
+      { id: "b", _count: { tripLogLinks: 0, shares: 3 } },
+    ]);
   });
 });
 
-describe("placeListInclude — shared list (the boundary)", () => {
-  // The load-bearing assertion: nothing to serialise means nothing to leak.
-  it("attaches no include at all", () => {
-    expect(placeListInclude("shared")).toBeUndefined();
-  });
-
-  it("never counts tripLogLinks — that is the owner-private trip list's cardinality", () => {
-    expect(placeListInclude("shared")?._count).toBeUndefined();
-  });
-
-  it("never counts shares — that is the owner's share fan-out to other people", () => {
-    // Guards the narrower regression of dropping only tripLogLinks and keeping
-    // shares, which would still expose who-else-can-see-this to a sharee.
-    expect(JSON.stringify(placeListInclude("shared") ?? {})).not.toContain(
-      "shares",
-    );
-  });
-
-  // The two scopes must not converge: a refactor that made the shared list
-  // reuse the owned include would silently reinstate the leak.
-  it("is not the owned include", () => {
-    expect(placeListInclude("shared")).not.toEqual(placeListInclude("owned"));
+describe("withPlaceListCounts — shared list (the boundary)", () => {
+  // The load-bearing assertion: nothing counted means nothing to leak.
+  it("attaches no _count and queries nothing", async () => {
+    vi.mocked(prisma.tripLogPlace.groupBy).mockClear();
+    vi.mocked(prisma.placeShare.groupBy).mockClear();
+    const rows = await withPlaceListCounts("shared", [{ id: "a" }]);
+    expect(rows).toEqual([{ id: "a" }]);
+    expect(prisma.tripLogPlace.groupBy).not.toHaveBeenCalled();
+    expect(prisma.placeShare.groupBy).not.toHaveBeenCalled();
   });
 });

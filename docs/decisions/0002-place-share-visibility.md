@@ -41,7 +41,7 @@ recipients:
   owner-private data (trip tally, share fan-out) is itself owner-private — withholding the
   trip *list* while shipping its `_count` is not a boundary. A sharee-reachable payload must
   not carry `_count`/sum/exists over owner-private relations; scope it to the owned response
-  (see `placeListInclude` in `api/src/routes/places.ts`,
+  (see `withPlaceListCounts` in `api/src/routes/places.ts`,
   `api/src/routes/placesList.unit.test.ts`). A test that asserts the *list* is withheld will
   pass while its count leaks — assert the aggregate's absence too.
 - **Update 2026-10-18: the friends leaderboard is an opt-in exception to
