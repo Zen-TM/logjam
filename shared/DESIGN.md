@@ -63,6 +63,10 @@ renumber.
   with no question (Settings) has no hero; the map is its own answer.
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
+- **Between the hero and the list sits only what narrows the list**: the
+  filter rail, a selection bar. A way to somewhere else, however useful, is an
+  action in the hero (an icon when it is not the screen's main verb), and a
+  number it carries, like a rank, is its badge.
 - **One pinned filter axis per screen.** Finer filters are one press away and
   say so while active ("3 filters active").
 - **A list that grows without limit never shares a scroller with one that
@@ -295,6 +299,16 @@ renumber.
   ("315° is what most maps use"). A label that says it gets no hint.
 - **A screen used daily spends no prose.** A screen visited once when
   confused may explain itself, if every line changes what the user does next.
+- **An explanation waits until it is asked for, where the question comes up.**
+  What one control means is its hint. How a whole screen or feature works
+  (its rules, how a number is counted) is behind a `help` button in its hero:
+  a dialog on Logjam Web, a sheet on Logjam GPS. An empty state may explain,
+  having nothing else to show. Never a section of the page: on a long list it
+  ends up where nobody looks.
+- **A switch's label is at most 20 characters and its hint at most 30**, so
+  the row is two lines on a phone. Over that, the label has become a sentence
+  or the hint a rule: keep what changes the user's choice, and move the rest
+  behind help.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
