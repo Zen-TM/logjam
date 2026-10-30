@@ -193,10 +193,12 @@ describe("a sharee of a place of the sender's own type", () => {
     );
   });
 
-  // Mutation: drop the per-owner filter (or the per-type join check) in
-  // `defsForForeignPlaceTypes` and each place carries the other's defs too.
-  // Carol is not alice's friend in the seed, so bob (friends with both) is the
-  // recipient.
+  // Mutations in `defsForForeignPlaceTypes`' JS filter: drop the owner check
+  // and carol's place gains alice's all-type `water_temp_c` (the
+  // not.toContain on places[1]); drop `appliesToAllTypes ||` and alice's place
+  // loses `water_temp_c` (the toContain on places[0]). The join check is
+  // guarded by placeTypeDefs.test.ts. Carol is not alice's friend in the seed,
+  // so bob (friends with both) is the recipient.
   it("gets each place's own owner's defs when one page spans two owners' types", async () => {
     const stamp = Date.now();
     const aliceType = await makeType(ALICE_SUB, `Cave ${stamp}-a`);
@@ -238,6 +240,8 @@ describe("a sharee of a place of the sender's own type", () => {
         )?.fieldDefsSnapshot as { key: string }[] | undefined
       )?.map((d) => d.key);
     // Each also carries its owner's fields that apply to every type.
+    expect(keysOf(places[0].id)).toContain("water_temp_c");
+    expect(keysOf(places[1].id)).not.toContain("water_temp_c");
     expect(keysOf(places[0].id)).toContain("alice_only");
     expect(keysOf(places[0].id)).not.toContain("carol_only");
     expect(keysOf(places[1].id)).toContain("carol_only");

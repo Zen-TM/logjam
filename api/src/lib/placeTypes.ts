@@ -122,7 +122,7 @@ function toDef(row: {
 /**
  * `defsForPlaceType` for several foreign types in two queries, for the sync
  * delta: the same rows and order, per type, as one call each with that type's
- * owner. System types (ownerId null) are omitted: the recipient holds them.
+ * owner (guarded by placeTypeDefs.test.ts). System types (ownerId null) are omitted: the recipient holds them.
  */
 export async function defsForForeignPlaceTypes(
   typeIds: string[],

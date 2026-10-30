@@ -98,6 +98,7 @@ const query = pg.Client.prototype.query;
 
 const explainer = new pg.Client({ connectionString: databaseUrlFromEnv() });
 const seededIds: Record<string, string> = {};
+let extraShare: { id: string } | undefined;
 beforeAll(async () => {
   await explainer.connect();
   // A fresh cluster plans an unanalyzed table as at least ten pages until
@@ -125,8 +126,20 @@ beforeAll(async () => {
   seededIds[":share"] = `${share.entityType}/${share.entityId}`;
   seededIds[":defKey"] = def.key;
   seededIds[":export"] = exportJob.id;
+  // Alice's only seeded incoming share is a system-typed place, which never
+  // reaches the foreign-defs query in /sync/delta. Sharing bob's user-typed
+  // lookout makes the guarded delta run it. Mutation: drop the placeTypeId
+  // index on custom_field_def_place_types and /sync/delta turns red.
+  const lookout = await prisma.place.findFirstOrThrow({
+    where: { ownerId: BOB_ID, name: "Coin Slot lookout" },
+  });
+  extraShare = await prisma.placeShare.create({
+    data: { placeId: lookout.id, sharedById: BOB_ID, sharedWithId: ALICE_ID },
+  });
 });
 afterAll(async () => {
+  if (extraShare)
+    await prisma.placeShare.deleteMany({ where: { id: extraShare.id } });
   pg.Client.prototype.query = query;
   await explainer.end();
 });
