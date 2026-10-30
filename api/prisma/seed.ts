@@ -1313,7 +1313,9 @@ function buildTrips(): SeedTrip[] {
         placeId: place.id,
         userId,
         date: new Date(
-          season.start.getTime() + Math.min(i * 7, daysIn) * 86_400_000,
+          season.start.getTime() +
+            // Sydney's 21 June starts while UTC is still on the 20th: -1 there.
+            Math.max(0, Math.min(i * 7, daysIn)) * 86_400_000,
         ),
         notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} This season.`,
       });
