@@ -111,8 +111,8 @@ export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 
 /**
  * The last river gauge file (`gauges/gaugeStorage.ts`, ADR 0044). WIPED, though
- * the file is public and the same for everyone, because the layer being on is
- * a hint at what its user plans; the next user fetches it again.
+ * the file is public and the same for everyone, because every on-device store
+ * joins the wipe (ADR 0006); the next user fetches it again.
  */
 export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
 

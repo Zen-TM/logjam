@@ -20,13 +20,14 @@ const RECENT = ["case", ["get", "recent"], 1, FAINT] as unknown as number;
 
 export const GaugesLayer = memo(function GaugesLayer({
   file,
+  now,
   onPress,
 }: {
   file: GaugeLatestFile;
+  now: number;
   onPress: (event: NativeSyntheticEvent<PressEventWithFeatures>) => void;
 }) {
   const data = useMemo(() => {
-    const now = Date.now();
     return {
       type: "FeatureCollection" as const,
       features: file.gauges.map((g) => ({
@@ -39,7 +40,7 @@ export const GaugesLayer = memo(function GaugesLayer({
         properties: { id: g.id, recent: latestGaugeReading(g, now) !== null },
       })),
     };
-  }, [file]);
+  }, [file, now]);
   return (
     <GeoJSONSource id="gauges" data={data} onPress={onPress}>
       <Layer

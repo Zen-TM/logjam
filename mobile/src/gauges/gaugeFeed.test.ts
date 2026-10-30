@@ -1,6 +1,6 @@
 // Mutations that turn it red: add a header or a query to the fetch; drop the
 // parse (a bad file replaces a good one); fetch while offline-only; drop the
-// five-minute debounce.
+// five-minute debounce; keep the throttle across a wipe (`lastOkEpoch`).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GAUGE_LATEST_PATH } from "@logjam/shared";
 
@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   cache: vi.fn(async () => {}),
   offlineOnly: false,
   canRun: true,
+  epoch: 0,
 }));
 vi.mock("../config", () => ({
   config: { topoCdnBaseUrl: "https://cdn.example" },
@@ -24,7 +25,7 @@ vi.mock("../offline/networkPolicy", () => ({
 }));
 vi.mock("./gaugeStorage", () => ({
   cacheGauges: h.cache,
-  gaugesEpoch: () => 0,
+  gaugesEpoch: () => h.epoch,
 }));
 
 const answer = (body: string, ok = true) =>
@@ -36,6 +37,7 @@ beforeEach(() => {
   h.cache.mockClear();
   h.offlineOnly = false;
   h.canRun = true;
+  h.epoch = 0;
   vi.stubGlobal("fetch", h.fetch);
 });
 
@@ -75,5 +77,23 @@ describe("refreshGauges", () => {
     await refreshGauges();
     expect(await refreshGauges()).toBeNull();
     expect(h.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fetches again after a wipe, though five minutes have not passed", async () => {
+    answer(JSON.stringify(gaugeFixture));
+    await refreshGauges();
+    h.epoch = 1;
+    expect(await refreshGauges()).toEqual(gaugeFixture);
+    expect(h.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not count a fetch a wipe cut off as fresh", async () => {
+    answer(JSON.stringify(gaugeFixture));
+    h.cache.mockImplementationOnce(async () => {
+      h.epoch = 1;
+    });
+    await refreshGauges();
+    await refreshGauges();
+    expect(h.fetch).toHaveBeenCalledTimes(2);
   });
 });

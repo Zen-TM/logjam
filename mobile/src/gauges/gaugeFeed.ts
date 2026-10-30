@@ -21,6 +21,8 @@ export const GAUGE_REFRESH_MS = 5 * 60_000;
 const TIMEOUT_MS = 15_000;
 
 let lastOkAt = 0;
+/** The wipe epoch of the fetch that set `lastOkAt`: a wipe voids the throttle. */
+let lastOkEpoch = 0;
 let running: Promise<GaugeLatestFile | null> | null = null;
 
 /** The new file, or null when none was fetched (too soon, no connection,
@@ -34,7 +36,11 @@ export function refreshGauges(): Promise<GaugeLatestFile | null> {
 }
 
 async function run(): Promise<GaugeLatestFile | null> {
-  if (isOfflineOnly() || Date.now() - lastOkAt < GAUGE_REFRESH_MS) return null;
+  if (
+    isOfflineOnly() ||
+    (lastOkEpoch === gaugesEpoch() && Date.now() - lastOkAt < GAUGE_REFRESH_MS)
+  )
+    return null;
   // A file of about 300 KB gzipped rides the "sync" setting, which allows
   // mobile data by default, so no row of its own is needed.
   if (!(await canRunNow("sync"))) return null;
@@ -53,7 +59,11 @@ async function run(): Promise<GaugeLatestFile | null> {
     const file = parseGaugeLatest(JSON.parse(text));
     if (!file) return null;
     await cacheGauges(text, epoch).catch(() => {});
-    lastOkAt = Date.now();
+    // A wipe mid-fetch dropped the write: nothing is kept, so nothing is fresh.
+    if (gaugesEpoch() === epoch) {
+      lastOkAt = Date.now();
+      lastOkEpoch = epoch;
+    }
     return file;
   } catch {
     return null;

@@ -1,13 +1,12 @@
 // The last river gauge file on this phone (ADR 0044). It is public and the
-// same for everyone; it is wiped anyway because the layer being on hints at
-// what its user plans.
+// same for everyone; it is wiped anyway because every on-device store joins
+// the wipe (ADR 0006).
 import * as FileSystem from "expo-file-system/legacy";
 import { parseGaugeLatest, type GaugeLatestFile } from "@logjam/shared";
 
 import { GAUGES_DIR } from "../offline/localStores";
 
 const FILE = `${GAUGES_DIR}latest.json`;
-const TEMP = `${GAUGES_DIR}latest.tmp`;
 
 /** Sends nothing: it only reads the phone's own file. */
 export async function readCachedGauges(): Promise<GaugeLatestFile | null> {
@@ -34,15 +33,13 @@ export function stopGaugesForWipe(): Promise<void> {
   return tail;
 }
 
-/** Keeps an already parsed file: written beside the old one, then moved over
- *  it, so a phone killed mid-write still reads a whole file. */
+/** Keeps an already parsed file. A kill mid-write loses only this public
+ *  cache, which the next fetch restores. */
 export function cacheGauges(text: string, fetchEpoch: number): Promise<void> {
   tail = tail.then(async () => {
     if (fetchEpoch !== epoch) return;
     await FileSystem.makeDirectoryAsync(GAUGES_DIR, { intermediates: true });
-    await FileSystem.writeAsStringAsync(TEMP, text);
-    await FileSystem.deleteAsync(FILE, { idempotent: true });
-    await FileSystem.moveAsync({ from: TEMP, to: FILE });
+    await FileSystem.writeAsStringAsync(FILE, text);
   });
   const done = tail;
   tail = tail.catch(() => {});

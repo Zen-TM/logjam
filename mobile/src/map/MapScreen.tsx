@@ -1038,7 +1038,11 @@ export function MapScreen({
     setShowGaugesState(on);
     setGaugesLayer(on);
   }, []);
-  const { file: gaugeFile, settled: gaugesSettled } = useGauges(showGauges);
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(showGauges);
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
@@ -2066,6 +2070,8 @@ export function MapScreen({
     [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
   );
 
+  /** One place's verbs, from its pin. */
+  const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
   /** When a place pin last took a press: a gauge under it yields. */
   const pinPressedAt = useRef(0);
   const handleGaugePress = useCallback(
@@ -2079,6 +2085,10 @@ export function MapScreen({
         if (Date.now() - pinPressedAt.current < 250) return;
         if (collectingPoints) void addToolPoint(lon, lat);
         else if (typeof id === "string") {
+          // Whichever press lands last wins: the gauge replaces what a
+          // pin or a point press had open.
+          setTappedPoint(null);
+          setOptionsPlaceId(null);
           setGaugeNow(Date.now());
           setGaugeId(id);
         }
@@ -2090,12 +2100,11 @@ export function MapScreen({
     ? gaugeFile?.gauges.find((g) => g.id === gaugeId)
     : undefined;
 
-  /** One place's verbs, from its pin. */
-  const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
   const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
       pinPressedAt.current = Date.now();
+      setGaugeId(null);
       // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
       // while a point-collecting tool is armed this has to place the point
       // itself — otherwise tapping near a place does nothing and reads as
@@ -4803,7 +4812,11 @@ export function MapScreen({
         ) : null}
 
         {showGauges && gaugeFile ? (
-          <GaugesLayer file={gaugeFile} onPress={handleGaugePress} />
+          <GaugesLayer
+            file={gaugeFile}
+            now={gaugesNow}
+            onPress={handleGaugePress}
+          />
         ) : null}
 
         {/* Place overlays: authed API GeoJSON — never baked into tiles
