@@ -58,6 +58,9 @@
   gap: var(--space-1-5);
   /* A Row's 48: a control-sized tile and the space around it. */
   min-height: calc(var(--control-md) + 2 * var(--space-1));
+  /* In a scrolling flex column (Settings) a row would otherwise shrink to
+     that 48 and spill a two-line description over the next heading. */
+  flex-shrink: 0;
   box-sizing: border-box;
   padding: calc(var(--space-1) - 1px) var(--space-1);
   border: var(--hairline);

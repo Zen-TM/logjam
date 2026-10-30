@@ -82,6 +82,7 @@ function SidebarPanel({
   currentUser,
   currentUserError,
   onRetryCurrentUser,
+  onCurrentUserChange,
   // Friends
   friends,
   friendRequests,
@@ -166,6 +167,7 @@ function SidebarPanel({
    *  the Account page has no fallback for. */
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
+  onCurrentUserChange: (user: TUser) => void;
   // Friends
   friends: TFriend[];
   friendRequests: TFriendRequest[];
@@ -349,6 +351,9 @@ function SidebarPanel({
         )}
         {activePanel === "friends" && (
           <FriendsPanel
+            leaderboardOptIn={
+              currentUser?.uiPreferences?.leaderboardOptIn ?? false
+            }
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={onRefetchFriends}
@@ -419,6 +424,7 @@ function SidebarPanel({
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             placeTypes={placeTypes}
             onPlaceTypesChange={onPlaceTypesChange}
+            onCurrentUserChange={onCurrentUserChange}
           />
         )}
         {activePanel === "place-detail" && (

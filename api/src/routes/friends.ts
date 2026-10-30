@@ -9,6 +9,14 @@ import { getParam } from "../lib/getParam";
 import {
   say,
   normalizeUserUiPreferences,
+  computeLeaderboard,
+  currentSeason,
+  isPodiumWeek,
+  medalFor,
+  previousSeason,
+  SYSTEM_PLACE_TYPE_IDS,
+  type LeaderboardResponse,
+  type Season,
   isSharableEntityType,
   type BulkShareItem,
   type FriendShareRow,
@@ -216,6 +224,140 @@ router.get(
     res.json(friends);
   },
 );
+
+// ── GET /friends/leaderboard ──────────────────────────────────
+// The user and their friends who have joined, ranked by distinct canyons this
+// season (shared/src/leaderboard.ts). Someone who has not joined gets
+// `{ joined: false }` and nothing else: no peeking without taking part.
+router.get(
+  "/leaderboard",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    if (!normalizeUserUiPreferences(user.uiPreferences).leaderboardOptIn) {
+      res.json({ joined: false } satisfies LeaderboardResponse);
+      return;
+    }
+
+    const friendships = await prisma.friendship.findMany({
+      where: {
+        status: "accepted",
+        OR: [{ requesterId: user.id }, { addresseeId: user.id }],
+      },
+      include: {
+        requester: {
+          select: { id: true, username: true, uiPreferences: true },
+        },
+        addressee: {
+          select: { id: true, username: true, uiPreferences: true },
+        },
+      },
+    });
+    const { participants, notJoined } = collectLeaderboardParticipants(
+      { id: user.id, username: user.username },
+      friendships,
+    );
+
+    const now = new Date();
+    const season = currentSeason(now);
+    const entries = await buildLeaderboard(participants, season);
+
+    let podium: Extract<LeaderboardResponse, { joined: true }>["podium"] = null;
+    if (isPodiumWeek(now)) {
+      const last = previousSeason(now);
+      const mine = (await buildLeaderboard(participants, last)).find(
+        (entry) => entry.userId === user.id,
+      );
+      if (mine && medalFor(mine, participants.size)) {
+        podium = {
+          season: last.label,
+          rank: mine.rank,
+          canyonCount: mine.canyonCount,
+        };
+      }
+    }
+
+    res.json({
+      joined: true,
+      season: season.label,
+      entries: entries.map((entry) => ({
+        ...entry,
+        isSelf: entry.userId === user.id,
+      })),
+      notJoined,
+      podium,
+    } satisfies LeaderboardResponse);
+  },
+);
+
+type LeaderboardParty = {
+  id: string;
+  username: string;
+  uiPreferences: unknown;
+};
+
+/**
+ * Who is on the board: the user and every accepted friend who has joined, as
+ * userId → username; the rest of their friends by username, for the nudge.
+ * Pure, so the consent boundary is unit-tested (leaderboard.unit.test.ts).
+ */
+export function collectLeaderboardParticipants(
+  self: { id: string; username: string },
+  friendships: {
+    requesterId: string;
+    requester: LeaderboardParty;
+    addressee: LeaderboardParty;
+  }[],
+): { participants: Map<string, string>; notJoined: string[] } {
+  const participants = new Map([[self.id, self.username]]);
+  const notJoined: string[] = [];
+  for (const f of friendships) {
+    const friend = f.requesterId === self.id ? f.addressee : f.requester;
+    if (normalizeUserUiPreferences(friend.uiPreferences).leaderboardOptIn) {
+      participants.set(friend.id, friend.username);
+    } else {
+      notJoined.push(friend.username);
+    }
+  }
+  return {
+    participants,
+    notJoined: notJoined.sort((a, b) => a.localeCompare(b)),
+  };
+}
+
+/** One query for every participant's canyon links in the season. Only the
+ *  built-in Canyon type scores: a user's own types and campsites do not. */
+async function buildLeaderboard(
+  participants: Map<string, string>,
+  season: Season,
+) {
+  const trips = await prisma.tripLog.findMany({
+    where: {
+      userId: { in: [...participants.keys()] },
+      date: { gte: season.start, lt: season.end },
+    },
+    select: {
+      userId: true,
+      places: {
+        where: { place: { placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon } },
+        select: { placeId: true },
+      },
+    },
+  });
+  const placeIds = new Map<string, string[]>();
+  for (const trip of trips) {
+    const ids = placeIds.get(trip.userId) ?? [];
+    ids.push(...trip.places.map((link) => link.placeId));
+    placeIds.set(trip.userId, ids);
+  }
+  return computeLeaderboard(
+    [...participants].map(([userId, username]) => ({
+      userId,
+      username,
+      placeIds: placeIds.get(userId) ?? [],
+    })),
+  );
+}
 
 // ── GET /friends/requests ─────────────────────────────────────
 // Returns all pending friend requests received by the current user

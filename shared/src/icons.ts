@@ -115,6 +115,7 @@ export const ICONS = {
   notes: { web: "align-left", gps: "align-left" },
   stats: { web: "chart-column", gps: "bar-chart-2" },
   friends: { web: "users", gps: "users" },
+  leaderboard: { web: "award", gps: "award" }, // the friends leaderboard, a medal
   account: { web: "circle-user", gps: "user" },
   notifications: { web: "bell", gps: "bell" },
   settings: { web: "settings", gps: "settings" },

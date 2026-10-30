@@ -51,6 +51,10 @@ import {
   friendsHeroTitle,
   FRIENDS,
   friendVerb,
+  leaderboardBadge,
+  leaderboardButtonLabel,
+  selfStanding,
+  type LeaderboardResponse,
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
@@ -64,6 +68,7 @@ import {
   getFriendInvites,
   getFriendRequests,
   getFriends,
+  getLeaderboard,
   removeFriend,
   revokeFriendInvites,
   searchUsers,
@@ -72,10 +77,18 @@ import {
   type FriendRequest,
   type UserSearchResult,
 } from "../api/friends";
+import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
+import {
+  spacing,
+  makeStyles,
+  radius,
+  useTheme,
+  useHues,
+  muted,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -113,8 +126,11 @@ type FriendItem =
 export function FriendsScreen({
   onBack,
   onOpenShares,
+  onOpenLeaderboard,
 }: {
   onBack: () => void;
+  /** Push the leaderboard, for someone who has joined it. */
+  onOpenLeaderboard: () => void;
   /**
    * Open the per-friend sharing audit — "what does this person see?". Pushed by
    * the caller so Back returns to this list. Reached by tapping the friend's row
@@ -148,6 +164,34 @@ export function FriendsScreen({
     [],
   );
 
+  // The leaderboard button exists only for someone who has joined (Settings →
+  // Privacy and security). Settings' PATCH refreshes the cached user record
+  // (`api/apiFetch.ts`), so this screen, mounted fresh on each visit, reads
+  // the change.
+  const userQuery = useApiQuery(
+    fetchCurrentUser,
+    "Couldn't load your account.",
+    !guestBlock,
+  );
+  const { refetch: refetchUser } = userQuery;
+  const leaderboardOptIn =
+    userQuery.data?.uiPreferences?.leaderboardOptIn === true;
+  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const [boardRequest, setBoardRequest] = useState(0);
+  useEffect(() => {
+    if (!leaderboardOptIn) return;
+    let cancelled = false;
+    getLeaderboard()
+      .then((next) => {
+        if (!cancelled) setBoard(next);
+      })
+      // The badge is a courtesy; the button opens without it.
+      .catch((err: unknown) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [leaderboardOptIn, boardRequest]);
+
   const load = useCallback(async () => {
     if (guestBlock) return;
     await Promise.all([getFriends(), getFriendRequests()])
@@ -170,9 +214,11 @@ export function FriendsScreen({
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    refetchUser();
+    setBoardRequest((n) => n + 1);
     await load();
     setRefreshing(false);
-  }, [load]);
+  }, [load, refetchUser]);
 
   const runAction = useCallback(
     async (
@@ -314,13 +360,22 @@ export function FriendsScreen({
         title={friendsHeroTitle(requests.length, friends.length)}
         onBack={onBack}
         actions={
-          <Button
-            label={copy.add}
-            icon="addFriend"
-            variant="outlineAccent"
-            compact
-            onPress={() => setAddOpen(true)}
-          />
+          <View style={styles.heroActions}>
+            {/* Nothing at all until the user joins: Settings is the only way in. */}
+            {leaderboardOptIn && board?.joined !== false ? (
+              <LeaderboardButton
+                standing={board?.joined ? selfStanding(board) : null}
+                onPress={onOpenLeaderboard}
+              />
+            ) : null}
+            <Button
+              label={copy.add}
+              icon="addFriend"
+              variant="outlineAccent"
+              compact
+              onPress={() => setAddOpen(true)}
+            />
+          </View>
         }
       />
     ),
@@ -761,8 +816,55 @@ function EmptyPanel({
   );
 }
 
+/** The way into the leaderboard, wearing the user's rank as the More tab's
+ *  Inbox row wears its unread count, in the accent: a rank is news, not a
+ *  warning. The badge is hidden; its number is in the name (shared/DESIGN.md). */
+function LeaderboardButton({
+  standing,
+  onPress,
+}: {
+  standing: { rank: number; size: number } | null;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const badge = standing && leaderboardBadge(standing.rank, standing.size);
+  return (
+    <View>
+      <IconButton
+        icon="leaderboard"
+        accessibilityLabel={leaderboardButtonLabel(standing)}
+        onPress={onPress}
+      />
+      {badge ? (
+        <View
+          style={styles.rankBadge}
+          pointerEvents="none"
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        >
+          <Text style={styles.rankBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
+  heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  rankBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: spacing(0.5),
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.accent,
+  },
+  rankBadgeText: { ...textRole.caption, color: theme.onFill },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),

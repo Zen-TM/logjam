@@ -19,6 +19,11 @@
   not 403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
 - **A response about another user carries their username, never their email**
   (`src/__tests__/friends.test.ts`).
+- **The friends leaderboard is the one count of trip data another user sees,**
+  and only between friends who both opted in (`uiPreferences.leaderboardOptIn`):
+  a username and a number per person, never which places. Guard:
+  `src/routes/leaderboard.unit.test.ts`, `src/__tests__/leaderboard.test.ts`.
+  [0002](../docs/decisions/0002-place-share-visibility.md)
 - **Errors are ``AppError(status, say`…`)``** from `middleware/errorHandler`,
   never `res.status(500)` or a bare `Error`: an upstream that refused is 502, a
   dependency we own that is missing is 503.

@@ -148,6 +148,16 @@ export const PLACE_STATUS_HUES = {
   shared: SHARED_PLACE_COLOR,
 } as const;
 
+/**
+ * The leaderboard's podium medals. Muted like every other hue here: old gold,
+ * creek-stone grey, burnt copper. Not a status: a rank 4+ row wears none.
+ */
+export const MEDAL_HUES = {
+  gold: "#D4B04C",
+  silver: "#B4BCC4",
+  bronze: "#C98A5B",
+} as const;
+
 /** Corner radii. `pill` is the fully rounded end (chips, meters, badges). */
 export const RADIUS = { sm: 4, md: 8, lg: 12, xl: 16, pill: 999 } as const;
 

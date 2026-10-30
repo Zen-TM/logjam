@@ -5,6 +5,12 @@ import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
+  leaderboardHeroTitle,
+  leaderboardNudge,
+  leaderboardPodiumLine,
+  leaderboardBadge,
+  leaderboardButtonLabel,
+  leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   noFriendsMatch,
   noFriendsMessage,
@@ -966,5 +972,40 @@ describe("the snap words", () => {
       "both",
     ]);
     expect(new Set(MAP_SNAP_OPTIONS.map((o) => o.label)).size).toBe(4);
+  });
+});
+
+describe("the leaderboard", () => {
+  it("says where the user stands, and a board of one as such", () => {
+    expect(leaderboardBadge(2, 4)).toBe("2");
+    expect(leaderboardBadge(1, 1)).toBeNull();
+    expect(leaderboardButtonLabel({ rank: 2, size: 4 })).toBe(
+      "Leaderboard, you're #2 of 4",
+    );
+    expect(leaderboardButtonLabel({ rank: 1, size: 1 })).toBe("Leaderboard");
+    expect(leaderboardButtonLabel(null)).toBe("Leaderboard");
+    expect(leaderboardHeroTitle(2, 4)).toBe("#2 of 4");
+    expect(leaderboardHeroTitle(1, 1)).toBe("Just you so far");
+    expect(leaderboardSeasonLine("2026–27")).toBe("2026–27 season");
+  });
+
+  it("words the podium by place and count", () => {
+    expect(
+      leaderboardPodiumLine({ season: "2025–26", rank: 1, canyonCount: 1 }),
+    ).toBe("You came first in 2025–26, with 1 canyon.");
+    expect(
+      leaderboardPodiumLine({ season: "2025–26", rank: 3, canyonCount: 7 }),
+    ).toBe("You came third in 2025–26, with 7 canyons.");
+  });
+
+  it("names everyone who hasn't joined", () => {
+    expect(leaderboardNudge([])).toBe("");
+    expect(leaderboardNudge(["kit"])).toBe("kit isn't on it yet.");
+    expect(leaderboardNudge(["kit", "bo"])).toBe(
+      "kit and bo aren't on it yet.",
+    );
+    expect(leaderboardNudge(["kit", "bo", "al"])).toBe(
+      "kit, bo and al aren't on it yet.",
+    );
   });
 });

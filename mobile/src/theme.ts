@@ -22,6 +22,7 @@ import {
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
+  MEDAL_HUES,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
@@ -429,6 +430,8 @@ export const huesFor = perScheme((theme) => {
     assetHue,
     placeHue,
     notificationHue: notificationHues(theme, assetHue, placeHue),
+    /** The leaderboard's medals — `MEDAL_HUES` in `@logjam/shared`. */
+    medalHue: MEDAL_HUES,
   };
 });
 

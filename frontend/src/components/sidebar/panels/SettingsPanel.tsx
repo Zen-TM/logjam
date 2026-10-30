@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  LEADERBOARD_SETTING,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   ownAttributeCountLabel,
@@ -14,6 +15,7 @@ import {
 
 import {
   updateNotificationPreferences,
+  updateUserPreferences,
   type TPlaceType,
   type TUser,
 } from "../../../placeUtils";
@@ -58,8 +60,12 @@ function SettingsPanel({
   onPlaceCustomFieldDefsChange,
   placeTypes,
   onPlaceTypesChange,
+  onCurrentUserChange,
 }: {
   currentUser: TUser | null;
+  /** The saved user, so what reads it elsewhere (Friends' leaderboard button)
+   *  follows a switch here without a reload. */
+  onCurrentUserChange: (user: TUser) => void;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
   customFieldDefs: ScopedCustomFieldDef[];
@@ -83,6 +89,10 @@ function SettingsPanel({
   const [notifSavingKey, setNotifSavingKey] = useState<
     keyof NotificationPreferences | null
   >(null);
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState<boolean | null>(
+    null,
+  );
+  const [leaderboardSaving, setLeaderboardSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -95,6 +105,7 @@ function SettingsPanel({
         ...DEFAULT_NOTIFICATION_PREFERENCES,
         ...(currentUser.uiPreferences?.notifications ?? {}),
       });
+      setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
     }
   }
 
@@ -121,6 +132,28 @@ function SettingsPanel({
       );
     } finally {
       setNotifSavingKey((current) => (current === key ? null : current));
+    }
+  }
+
+  async function handleToggleLeaderboard() {
+    if (leaderboardOptIn === null) return;
+    const previous = leaderboardOptIn;
+    const next = !leaderboardOptIn;
+    setLeaderboardOptIn(next);
+    setLeaderboardSaving(true);
+    try {
+      onCurrentUserChange(
+        await updateUserPreferences({ leaderboardOptIn: next }),
+      );
+      toast.success(
+        next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left,
+      );
+    } catch (err) {
+      console.error(err);
+      setLeaderboardOptIn(previous);
+      toast.error(messageFromError(err, LEADERBOARD_SETTING.saveFailed));
+    } finally {
+      setLeaderboardSaving(false);
     }
   }
 
@@ -179,6 +212,20 @@ function SettingsPanel({
               onChange={() => handleToggleNotif(key)}
             />
           ))
+        )}
+
+        <SectionHeader title="Friends" />
+        {leaderboardOptIn === null ? (
+          <LoadingState />
+        ) : (
+          <SwitchRow
+            title={LEADERBOARD_SETTING.label}
+            description={LEADERBOARD_SETTING.hint}
+            checked={leaderboardOptIn}
+            disabled={leaderboardSaving}
+            disabledReason="Saving…"
+            onChange={handleToggleLeaderboard}
+          />
         )}
       </>
     ),

@@ -1560,6 +1560,7 @@ function App() {
             currentUser={currentUser}
             currentUserError={currentUserError}
             onRetryCurrentUser={refetchCurrentUser}
+            onCurrentUserChange={applyCurrentUser}
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={refetchFriends}

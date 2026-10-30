@@ -33,6 +33,7 @@ import type {
   BulkShareItem,
   FriendShareRow,
   FriendShares,
+  LeaderboardResponse,
 } from "@logjam/shared";
 import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
@@ -858,6 +859,7 @@ export function updateUserPreferences(
     // is a 400 naming the replacement rather than a silent no-op.
     notifications: Partial<NotificationPreferences>;
     importMergePolicy: PlaceMergePolicy;
+    leaderboardOptIn: boolean;
     slopeBands: SlopeBand[];
   }>,
 ): Promise<TUser> {
@@ -1628,6 +1630,10 @@ export function declineFriendRequest(friendshipId: string): Promise<void> {
 
 export function removeFriend(friendshipId: string): Promise<void> {
   return apiFetch<void>(`/friends/${friendshipId}`, { method: "DELETE" });
+}
+
+export function getLeaderboard(): Promise<LeaderboardResponse> {
+  return apiFetch<LeaderboardResponse>("/friends/leaderboard");
 }
 
 // Invite links (api/src/routes/friendInvites.ts). The token only ever travels

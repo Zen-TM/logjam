@@ -1,5 +1,6 @@
 import { FRIENDS, FRIEND_SHARES } from "./friends.js";
 import { STATS } from "./stats.js";
+import { LEADERBOARD } from "./leaderboard.js";
 import { SEND_COPY, SHARE_SHEET } from "./share.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_OVERLAYS } from "./mapOverlays.js";
@@ -27,6 +28,7 @@ export * from "./tripPage.js";
 export * from "./tripLogs.js";
 export * from "./inbox.js";
 export * from "./friends.js";
+export * from "./leaderboard.js";
 export * from "./settings.js";
 export * from "./account.js";
 export * from "./mapLayers.js";
@@ -52,6 +54,7 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   INBOX,
   FRIENDS,
   FRIEND_SHARES,
+  LEADERBOARD,
   SETTINGS,
   ACCOUNT,
   MAP_LAYERS,

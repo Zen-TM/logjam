@@ -113,6 +113,12 @@ export type UserUiPreferences = {
    */
   copyPlaceMedia: boolean;
   /**
+   * Whether the user is on the friends leaderboard. FALSE by default: joining
+   * shares a count of trip data with friends, and no default widens who sees
+   * something (root AGENTS.md). See shared/src/leaderboard.ts.
+   */
+  leaderboardOptIn: boolean;
+  /**
    * The bands the Terrain group's statewide slope is coloured in, on both
    * clients (shared/src/terrain.ts). Edited on Logjam Web.
    */
@@ -380,6 +386,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       placeCustomFields,
       notifications,
       copyPlaceMedia,
+      leaderboardOptIn: prefs.leaderboardOptIn === true,
       slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
@@ -392,6 +399,7 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
     copyPlaceMedia: true,
+    leaderboardOptIn: false,
     slopeBands: defaultSlopeBands(),
   };
 }

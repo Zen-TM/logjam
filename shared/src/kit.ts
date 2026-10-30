@@ -52,9 +52,7 @@ export const KIT_COMPONENTS = {
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,
-  IconTile: web(
-    "Logjam GPS's Row draws the same tile from its icon and hue props",
-  ),
+  IconTile: both,
   TileCheckbox: web(
     "a tile that ticks under a pointer; touch selects by press-and-hold",
   ),

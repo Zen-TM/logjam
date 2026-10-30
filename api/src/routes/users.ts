@@ -334,6 +334,7 @@ router.patch(
       notifications,
       importMergePolicy,
       copyPlaceMedia,
+      leaderboardOptIn,
       slopeBands,
       consentVersion,
     } = req.body as {
@@ -342,6 +343,7 @@ router.patch(
       notifications?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
+      leaderboardOptIn?: unknown;
       slopeBands?: unknown;
       consentVersion?: unknown;
     };
@@ -392,6 +394,7 @@ router.patch(
       notifications !== undefined ||
       importMergePolicy !== undefined ||
       copyPlaceMedia !== undefined ||
+      leaderboardOptIn !== undefined ||
       slopeBands !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
@@ -411,6 +414,12 @@ router.patch(
       }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
+      }
+      if (
+        leaderboardOptIn !== undefined &&
+        typeof leaderboardOptIn !== "boolean"
+      ) {
+        throw malformed("Invalid leaderboardOptIn");
       }
       if (Array.isArray(slopeBands) && slopeBands.length > MAX_SLOPE_BANDS) {
         throw malformed(`At most ${MAX_SLOPE_BANDS} slopeBands`, 413);
@@ -444,6 +453,7 @@ router.patch(
             }
           : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
+        ...(leaderboardOptIn !== undefined ? { leaderboardOptIn } : {}),
         ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }

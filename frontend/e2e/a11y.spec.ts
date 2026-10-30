@@ -187,6 +187,90 @@ test.describe("desktop", () => {
     );
   });
 
+  test("the leaderboard button on Friends, and the Leaderboard page", async ({
+    page,
+  }) => {
+    // Never written to the account (frontend/AGENTS.md): `/users/me` says alice
+    // has joined, rewriting only that field, and the board is a made-up one
+    // that draws every section — a podium, medals, a nudge.
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...user,
+          uiPreferences: { ...user.uiPreferences, leaderboardOptIn: true },
+        },
+      });
+    });
+    await page.route("**/friends/leaderboard", (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          joined: true,
+          season: "2026–27",
+          entries: [
+            {
+              userId: "b",
+              username: "bob",
+              canyonCount: 6,
+              rank: 1,
+              isSelf: false,
+            },
+            {
+              userId: "a",
+              username: "alice",
+              canyonCount: 4,
+              rank: 2,
+              isSelf: true,
+            },
+            {
+              userId: "c",
+              username: "carol",
+              canyonCount: 1,
+              rank: 3,
+              isSelf: false,
+            },
+          ],
+          notJoined: ["dave"],
+          podium: { season: "2025–26", rank: 2, canyonCount: 9 },
+        },
+      }),
+    );
+    await openApp(page);
+    await page.getByRole("button", { name: "Friends", exact: true }).click();
+    const aside = page.locator("aside");
+    const button = aside.getByRole("button", {
+      name: "Leaderboard, you're #2 of 3",
+    });
+    await expect(button).toBeVisible({ timeout: 15_000 });
+    await expectNoViolations(page, "aside");
+
+    // It replaces the list, with a way back. Dismiss is not pressed: the case
+    // only looks.
+    await button.click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "#2 of 3" }),
+    ).toBeVisible();
+    await expect(aside.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    await expectNoViolations(page, "aside");
+
+    // The rules open in a dialog, and Escape puts focus back on their button.
+    const rules = aside.getByRole("button", { name: "How it works" });
+    await rules.click();
+    await expect(
+      page.getByRole("dialog", { name: "How it works" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(rules).toBeFocused();
+
+    await aside.getByRole("button", { name: "Back to friends" }).click();
+    await expect(button).toBeVisible();
+  });
+
   test("Account, Settings and the three lists it keeps", async ({ page }) => {
     await openApp(page);
     const aside = page.locator("aside");

@@ -85,6 +85,7 @@ export type TUser = {
     notifications?: NotificationPreferences;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
+    leaderboardOptIn?: boolean;
     slopeBands?: SlopeBand[];
   } | null;
 };
