@@ -79,7 +79,8 @@ An accepted ADR changes in three ways only:
 
 - **A moved path or renamed symbol** is corrected in place, unmarked, in the
   change that moved it: this directory is found by searching for the paths a
-  change touches. Guard: `shared/src/adrReferences.test.ts`.
+  change touches. Guard: `shared/src/adrReferences.test.ts`, which also fails
+  on a path the change deletes; the ADR then describes what it held in words.
 - **A stale fact or figure** is corrected in place and marked
   "(updated YYYY-MM-DD)".
 - **A narrow exception, or a reason that no longer holds,** is a bullet under
@@ -134,3 +135,8 @@ supersede instead.
 | [0036](0036-the-phone-cuts-its-own-offline-clips.md) | Logjam GPS cuts every offline clip itself, from the public archives, for guests too | 2026-10-18 | Accepted |
 | [0037](0037-undo-restores-what-an-import-changed-for-a-day.md) | Undoing an import puts back what it changed, field by field, for a day | 2026-10-18 | Accepted |
 | [0038](0038-a-forecast-request-sends-the-cell-not-the-spot.md) | A forecast request sends the 0.1° cell and the height, never the spot, straight from the client to Open-Meteo | 2026-10-18 | Accepted |
+| [0039](0039-the-statewide-slope-archive-is-rounded-to-1-degree.md) | The statewide slope archive is terrarium PMTiles rounded to 1°: Horn over the height tiles, a max pyramid | 2026-10-18 | Accepted |
+| [0040](0040-a-sharpened-area-is-a-private-dem-source.md) | A sharpened area is a private DEM source, and each map tile comes from one archive | 2026-10-23 | Accepted |
+| [0041](0041-a-session-lasts-ten-years-and-sign-out-everywhere-ends-it.md) | A Cognito session lasts ten years, and Sign out everywhere is how one ends | 2026-10-24 | Accepted |
+| [0042](0042-logjam-web-needs-the-popover-api.md) | Logjam Web needs the Popover API: Safari 17, Chrome 114, Firefox 125, and a static page below that | 2026-10-29 | Accepted |
+| [0043](0043-geopdfs-render-in-the-browser.md) | GeoPDFs render in the browser, and nothing about one reaches the server | 2026-10-29 | Accepted |

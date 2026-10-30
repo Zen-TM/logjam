@@ -1,12 +1,17 @@
 import { describe, it, expect } from "vitest";
+import type { SharpenedOverlay } from "@logjam/shared";
+import { tileRectBounds } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
-  hasSavedImageryContours,
   resolveMapSource,
   hashKey,
+  holdsContours,
+  holdsHillshade,
+  holdsSlope,
   type BasemapId,
   type MapArtifact,
   type ResolveContext,
+  type Viewport,
 } from "./sourceResolver";
 
 const CDN = "https://logjamnsw.com";
@@ -355,7 +360,12 @@ describe("statewide contours", () => {
   // own clip is drawn as contours (and the reverse in snapRegion.ts).
   it("offline: only the contour clips saved, never a basemap's", () => {
     const saved = [
-      artifact({ id: "c", kind: "contours-region", sourceType: "vector" }),
+      artifact({
+        id: "c",
+        kind: "contours-region",
+        logicalKey: "nsw-contours",
+        sourceType: "vector",
+      }),
       artifact({ id: "b", kind: "basemap-region", logicalKey: "protomaps" }),
     ];
     const resolved = resolveMapSource(
@@ -373,24 +383,520 @@ describe("statewide contours", () => {
   });
 });
 
-describe("hasSavedImageryContours", () => {
-  const imagery = (groupId: string) =>
-    artifact({
-      id: `i-${groupId}`,
-      kind: "basemap-region",
-      logicalKey: "six-imagery",
-      groupId,
+describe("statewide slope and hillshade", () => {
+  // Mutation: resolve either as `raster`, and MapLibre draws the terrarium
+  // PNGs as coloured noise instead of a slope or a shade.
+  it("online: the CDN's DEM archives, as DEMs", () => {
+    const [slope] = resolveMapSource({ kind: "nsw-slope" }, ctx());
+    expect(slope).toMatchObject({
+      status: "ok",
+      sourceType: "raster-dem",
+      url: `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
+      attribution: expect.stringMatching(/^Slope: derived from the NSW 5 m/),
     });
-  const contours = (groupId: string) =>
-    artifact({ id: `c-${groupId}`, kind: "contours-region", groupId });
+    const [shade] = resolveMapSource({ kind: "nsw-hillshade" }, ctx());
+    expect(shade).toMatchObject({
+      status: "ok",
+      sourceType: "raster-dem",
+      url: `pmtiles://${CDN}/master/dem/nsw-5m.pmtiles`,
+      attribution: expect.stringMatching(/^Hillshade: derived/),
+    });
+  });
 
-  // Mutation: test for a contour clip anywhere, and the switch is offered
-  // offline when the only contours saved are with a vector area, where
-  // switching it on over imagery draws nothing.
-  it("needs both in the same saved area", () => {
-    expect(hasSavedImageryContours([imagery("a"), contours("a")])).toBe(true);
-    expect(hasSavedImageryContours([imagery("a"), contours("b")])).toBe(false);
-    expect(hasSavedImageryContours([imagery("a")])).toBe(false);
-    expect(hasSavedImageryContours([])).toBe(false);
+  // Mutation: match the slope by `dem-region`, and offline the saved
+  // heights are coloured as if they were degrees.
+  it("offline: the slope from its own clips, the shade from the saved heights", () => {
+    const saved = [
+      artifact({
+        id: "c",
+        kind: "contours-region",
+        logicalKey: "nsw-contours",
+        sourceType: "vector",
+      }),
+      artifact({ id: "w", kind: "dem-region", logicalKey: "terrarium" }),
+      artifact({
+        id: "d",
+        kind: "dem-region",
+        logicalKey: "nsw-5m",
+        sourceType: "raster",
+        minzoom: 8,
+        maxzoom: 15,
+      }),
+      artifact({
+        id: "s",
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+      }),
+    ];
+    const offline = ctx({ connectivity: "offline", artifacts: saved });
+    const slope = resolveMapSource({ kind: "nsw-slope" }, offline);
+    expect(slope).toHaveLength(1);
+    expect(slope[0]).toMatchObject({
+      status: "ok",
+      origin: "local",
+      sourceType: "raster-dem",
+    });
+    // Mutation: drop the logicalKey and the worldwide tiles (an MBTiles) are
+    // drawn too; keep the registered `raster` and MapLibre draws noise.
+    const shade = resolveMapSource({ kind: "nsw-hillshade" }, offline);
+    expect(shade).toHaveLength(1);
+    expect(shade[0]).toMatchObject({
+      status: "ok",
+      origin: "local",
+      sourceType: "raster-dem",
+      minZoom: 8,
+      maxZoom: 15,
+    });
+  });
+  // Mutation: let a clip saved at z15 alone count (drop the `minzoom` test in
+  // `holdsHillshade`), and the sheet enables a switch that draws nothing below
+  // z15, and an old clip with a bigger bbox beats the new one.
+  it("holdsHillshade: only the nsw-5m clip that reaches z8", () => {
+    const clip = {
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      minzoom: 8,
+    } as const;
+    expect(holdsHillshade(clip)).toBe(true);
+    expect(holdsHillshade({ ...clip, minzoom: 15 })).toBe(false);
+    expect(holdsHillshade({ ...clip, minzoom: null })).toBe(false);
+    expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
+    expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
+  });
+  // Mutation: drop the `logicalKey` test, and a sharpened area's contour or
+  // slope clip (filed as the same kind) enables the statewide switch.
+  it("holdsContours and holdsSlope: the statewide clip, not an area's", () => {
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "nsw-contours" }),
+    ).toBe(true);
+    expect(
+      holdsContours({ kind: "contours-region", logicalKey: "area-1" }),
+    ).toBe(false);
+    expect(
+      holdsContours({ kind: "slope-region", logicalKey: "nsw-contours" }),
+    ).toBe(false);
+    expect(
+      holdsSlope({ kind: "slope-region", logicalKey: "nsw-5m-slope" }),
+    ).toBe(true);
+    expect(holdsSlope({ kind: "slope-region", logicalKey: "area-1" })).toBe(
+      false,
+    );
+  });
+  it("offline: a clip saved at z15 alone gives no shade, and never beats a z8-15 one", () => {
+    const old = artifact({
+      id: "old",
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      bbox: [150, -34, 151, -33],
+      minzoom: 15,
+      maxzoom: 15,
+    });
+    expect(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ connectivity: "offline", artifacts: [old] }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+    const fresh = artifact({
+      id: "fresh",
+      kind: "dem-region",
+      logicalKey: "nsw-5m",
+      bbox: [150.2, -33.8, 150.3, -33.7],
+      minzoom: 8,
+      maxzoom: 15,
+    });
+    const shade = resolveMapSource(
+      { kind: "nsw-hillshade" },
+      ctx({ connectivity: "offline", artifacts: [old, fresh] }),
+    );
+    expect(shade).toHaveLength(1);
+    expect(shade[0]).toMatchObject({ status: "ok", minZoom: 8 });
+  });
+  it("offline: no saved heights, no shade", () => {
+    const only = artifact({ kind: "dem-region", logicalKey: "terrarium" });
+    expect(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ connectivity: "offline", artifacts: [only] }),
+      ),
+    ).toMatchObject([{ status: "unavailable" }]);
+  });
+  // Mutation: draw every slope clip, as the contours do, and where two saved
+  // areas share a tile its bands are painted twice, darker.
+  it("draws one slope clip offline, the area nearest the middle of the screen", () => {
+    const at = (id: string, west: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, west + 0.1, -33.7],
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
+    });
+    const drawn = (viewport: Viewport | null) =>
+      resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+        (r) => r.status === "ok" && r.url,
+      );
+    const screen = (lng: number): Viewport => ({
+      west: lng - 0.02,
+      south: -33.77,
+      east: lng + 0.02,
+      north: -33.73,
+    });
+    expect(drawn(screen(150.36))).toEqual([
+      "pmtiles://file:///maps/katoomba.pmtiles",
+    ]);
+    expect(drawn(screen(150.1))).toEqual([
+      "pmtiles://file:///maps/blackheath.pmtiles",
+    ]);
+    expect(drawn(null)).toEqual(["pmtiles://file:///maps/katoomba.pmtiles"]);
+  });
+  // Mutation: drop the size tie-break, and the newest area (the registry's
+  // first) wins every tie: the canyon's clip, whose bounds crop the slope.
+  it("draws the wider clip where a saved area sits inside another", () => {
+    const clip = (id: string, bbox: MapArtifact["bbox"]): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox,
+      });
+    const offline = ctx({
+      connectivity: "offline",
+      artifacts: [
+        clip("canyon", [150.3, -33.75, 150.32, -33.73]),
+        clip("valley", [150.2, -33.9, 150.5, -33.6]),
+      ],
+    });
+    const screen: Viewport = {
+      west: 150.3,
+      south: -33.75,
+      east: 150.32,
+      north: -33.73,
+    };
+    for (const viewport of [screen, null])
+      expect(
+        resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
+          (r) => r.status === "ok" && r.url,
+        ),
+      ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
+  });
+});
+
+describe("routes the Terrain group", () => {
+  // A made-up area, and the same one after the list signed new URLs.
+  const area = (signature: string, contours = true): SharpenedOverlay => ({
+    id: "area-1",
+    zmax: 17,
+    tiles15: [100, 200, 103, 203],
+    coverage: [0, 0, 0, 0],
+    contours,
+    credit: "Made-up area credit",
+    createdAt: "2026-10-01T00:00:00Z",
+    heightsUrl: `https://bucket.example/h.pmtiles?X-Amz-Signature=${signature}`,
+    slopeUrl: `https://bucket.example/s.pmtiles?X-Amz-Signature=${signature}`,
+    contoursUrl: contours
+      ? `https://bucket.example/c.pmtiles?X-Amz-Signature=${signature}`
+      : null,
+  });
+  const ok = (sources: ReturnType<typeof resolveMapSource>) =>
+    sources.flatMap((s) => (s.status === "ok" ? [s] : []));
+
+  // Red if statewide isn't stopped at z15, or a DEM TileJSON loses its
+  // terrarium encoding.
+  it("stops statewide slope at z15 and reads each rectangle from one archive", () => {
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    const [statewide, ...routed] = sources;
+    expect(statewide.url).toBe(
+      `pmtiles://${CDN}/master/dem/nsw-5m-slope.pmtiles`,
+    );
+    expect(statewide.layerMaxZoom).toBe(15);
+    const own = routed.filter((r) => r.attribution === "Made-up area credit");
+    expect(own).toHaveLength(1);
+    expect(own[0].tileJson).toMatchObject({
+      tiles: ["pmtiles://https://sharpened-area.invalid/area-1/slope.pmtiles"],
+      minzoom: 15,
+      maxzoom: 17,
+      encoding: "terrarium",
+    });
+    for (const r of routed) {
+      expect(r.layerMinZoom).toBe(15);
+      if (r !== own[0])
+        expect(r.tileJson).toMatchObject({
+          tiles: [statewide.url],
+          maxzoom: 15,
+        });
+    }
+  });
+
+  // Red if the hillshade reads the slope archive.
+  it("shades the hillshade from the area's heights", () => {
+    const routed = ok(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(JSON.stringify(routed)).toContain("area-1/heights.pmtiles");
+  });
+
+  // Red if an area's contours are read past z14.
+  it("routes contours from z14, to the area's z14 archive", () => {
+    const [statewide, ...routed] = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(statewide.layerMaxZoom).toBe(14);
+    const own = routed.find((r) => r.attribution === "Made-up area credit");
+    expect(own?.tileJson).toMatchObject({ minzoom: 14, maxzoom: 14 });
+    expect(own?.tileJson?.encoding).toBeUndefined();
+  });
+
+  // Red if an area without contours takes a contour rectangle.
+  it("leaves the statewide contours where an area has none", () => {
+    const routed = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        ctx({ sharpenedAreas: [area("a", false)] }),
+      ),
+    );
+    expect(routed.some((r) => r.attribution === "Made-up area credit")).toBe(
+      false,
+    );
+  });
+
+  // Red if a source reads the presigned URL instead of the fixed address.
+  it("puts no presigned URL in a source, so new URLs remount nothing", () => {
+    const before = resolveMapSource(
+      { kind: "nsw-slope" },
+      ctx({ sharpenedAreas: [area("a")] }),
+    );
+    const after = resolveMapSource(
+      { kind: "nsw-slope" },
+      ctx({ sharpenedAreas: [area("b")] }),
+    );
+    expect(JSON.stringify(before)).not.toContain("X-Amz");
+    expect(after.map((s) => s.key)).toEqual(before.map((s) => s.key));
+  });
+
+  // Red if saved clips are routed offline.
+  it("draws statewide alone with no area, and offline", () => {
+    expect(resolveMapSource({ kind: "nsw-slope" }, ctx())).toEqual(
+      resolveMapSource({ kind: "nsw-slope" }, ctx({ sharpenedAreas: [] })),
+    );
+    const [only] = ok(resolveMapSource({ kind: "nsw-slope" }, ctx()));
+    expect(only.layerMaxZoom).toBeUndefined();
+    // Offline, a saved clip: the area's archive can't be reached.
+    const saved = {
+      connectivity: "offline" as const,
+      artifacts: [
+        artifact({
+          kind: "slope-region",
+          logicalKey: "nsw-5m-slope",
+          sourceType: "raster-dem",
+          bbox: [150, -34, 151, -33],
+        }),
+      ],
+    };
+    const offline = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        ctx({ ...saved, sharpenedAreas: [area("a")] }),
+      ),
+    );
+    expect(offline).toHaveLength(1);
+    expect(offline).toEqual(
+      ok(resolveMapSource({ kind: "nsw-slope" }, ctx(saved))),
+    );
+  });
+});
+
+describe("routes saved areas offline", () => {
+  // A made-up kept area, and the clips a saved area took of it and of the
+  // statewide archives. An area clip's bounds are its z15 tiles.
+  const kept = {
+    id: "area-1",
+    zmax: 17 as const,
+    tiles15: [100, 200, 103, 203] as const,
+    coverage: [0, 0, 0, 0] as const,
+    contours: true,
+    credit: "Made-up area credit",
+    createdAt: "2026-10-01T00:00:00Z",
+  };
+  const areaBounds: MapArtifact["bbox"] = tileRectBounds(15, kept.tiles15);
+  const clip = (
+    id: string,
+    kind: MapArtifact["kind"],
+    logicalKey: string,
+    bbox: MapArtifact["bbox"] = [-179, 84.8, -178.8, 84.9],
+  ) =>
+    artifact({
+      id,
+      kind,
+      logicalKey,
+      sourceType: kind === "contours-region" ? "vector" : "raster-dem",
+      path: `/maps/${id}.pmtiles`,
+      bbox,
+      minzoom: 8,
+      maxzoom: 15,
+    });
+  const offline = (artifacts: MapArtifact[], keptAreas = [kept]) =>
+    ctx({
+      connectivity: "offline",
+      artifacts,
+      keptSharpenedAreas: keptAreas,
+    });
+  const ok = (sources: ReturnType<typeof resolveMapSource>) =>
+    sources.flatMap((s) => (s.status === "ok" ? [s] : []));
+
+  // Red if offline routing reads the list's fixed addresses, or the
+  // statewide clip still draws past z15 under the area.
+  it("reads the area's saved clip inside it and the statewide clip around it", () => {
+    const [statewide, ...routed] = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        offline([
+          clip("s", "slope-region", "nsw-5m-slope"),
+          clip("a", "slope-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    );
+    expect(statewide.url).toBe("pmtiles://file:///maps/s.pmtiles");
+    expect(statewide.layerMaxZoom).toBe(15);
+    const own = routed.filter((r) => r.attribution === "Made-up area credit");
+    expect(own).toHaveLength(1);
+    expect(own[0]).toMatchObject({
+      origin: "local",
+      layerMinZoom: 15,
+      tileJson: {
+        tiles: ["pmtiles://file:///maps/a.pmtiles"],
+        maxzoom: 17,
+        encoding: "terrarium",
+      },
+    });
+    for (const r of routed)
+      if (r !== own[0])
+        expect(r.tileJson?.tiles).toEqual(["pmtiles://file:///maps/s.pmtiles"]);
+  });
+
+  // Red if the statewide clip lookup takes an area's clip of the same kind:
+  // it would draw over the statewide clip with no routing.
+  it("never takes an area's clip for the statewide one", () => {
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        offline([clip("a", "slope-region", "lidar-area-1", areaBounds)], []),
+      ),
+    );
+    expect(sources).toEqual([]);
+  });
+
+  // Red if a clip of an area no longer listed is still drawn.
+  it("draws no clip of an area the account can no longer see", () => {
+    const saved = [
+      clip("s", "slope-region", "nsw-5m-slope"),
+      clip("a", "slope-region", "lidar-area-1", areaBounds),
+    ];
+    // Another area is still listed: only area-1 has gone.
+    const listed = [{ ...kept, id: "area-2" }];
+    expect(
+      resolveMapSource({ kind: "nsw-slope" }, offline(saved, listed)),
+    ).toEqual(
+      resolveMapSource(
+        { kind: "nsw-slope" },
+        offline(saved.slice(0, 1), listed),
+      ),
+    );
+  });
+
+  // Red if a statewide rectangle reads only one of the saved contour clips
+  // (the contours would stop at that clip's edge around the area), or the
+  // statewide lookup takes the area's contour clip.
+  it("reads every saved statewide contour clip around the area, and the area's z14 clip inside it", () => {
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        offline([
+          clip("c1", "contours-region", "nsw-contours"),
+          clip("c2", "contours-region", "nsw-contours"),
+          clip("ac", "contours-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    );
+    // The statewide contours below z14 are the statewide clips alone.
+    expect(sources.filter((s) => !s.tileJson).map((s) => s.url)).toEqual([
+      "pmtiles://file:///maps/c1.pmtiles",
+      "pmtiles://file:///maps/c2.pmtiles",
+    ]);
+    const tiles = sources.flatMap((s) => s.tileJson?.tiles ?? []);
+    expect(tiles.filter((t) => t.endsWith("/c1.pmtiles")).length).toBe(
+      tiles.filter((t) => t.endsWith("/c2.pmtiles")).length,
+    );
+    const own = sources.find((s) =>
+      s.tileJson?.tiles[0]?.endsWith("/ac.pmtiles"),
+    );
+    expect(own?.tileJson).toMatchObject({ minzoom: 14, maxzoom: 14 });
+  });
+
+  // Red if a statewide rectangle reads a saved clip that doesn't reach it:
+  // ten saved regions would mount ten contour sources for every rectangle.
+  it("reads only the statewide clips that reach each rectangle", () => {
+    const far: MapArtifact["bbox"] = [10, 10, 10.1, 10.1];
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-contours" },
+        offline([
+          clip("near", "contours-region", "nsw-contours"),
+          // Saved far from the area: only a rectangle reaching it reads it.
+          clip("far", "contours-region", "nsw-contours", far),
+          clip("ac", "contours-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    );
+    const reading = (name: string) =>
+      sources.filter((s) => s.tileJson?.tiles[0]?.endsWith(`/${name}.pmtiles`));
+    const meets = (a: readonly number[], b: readonly number[]) =>
+      a[0]! <= b[2]! && b[0]! <= a[2]! && a[1]! <= b[3]! && b[1]! <= a[3]!;
+    expect(reading("far").length).toBeGreaterThan(0);
+    expect(reading("far").length).toBeLessThan(reading("near").length);
+    for (const s of reading("far"))
+      expect(meets(s.tileJson!.bounds, far!)).toBe(true);
+  });
+
+  // Red if the hillshade leaves the area's saved heights out.
+  it("shades the area from its saved heights", () => {
+    const sources = ok(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        offline([
+          artifact({
+            id: "h",
+            kind: "dem-region",
+            logicalKey: "nsw-5m",
+            sourceType: "raster",
+            path: "/maps/h.pmtiles",
+            bbox: [-179, 84.8, -178.8, 84.9],
+            minzoom: 8,
+            maxzoom: 15,
+          }),
+          clip("ah", "dem-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    );
+    expect(JSON.stringify(sources)).toContain("/maps/ah.pmtiles");
   });
 });

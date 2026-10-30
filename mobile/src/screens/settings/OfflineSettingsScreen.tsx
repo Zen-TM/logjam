@@ -2,8 +2,8 @@
 // what it may spend mobile data on, and where the things it already holds are
 // managed.
 //
-// The auto-download switches are DEVICE preferences (see
-// `geopdf/autoDownloadPreference.ts`, `offline/topoAutoDownload.ts`): whether
+// The auto-download switch is a DEVICE preference (see
+// `offline/topoAutoDownload.ts`): whether
 // this handset should spend tens of megabytes and a couple of minutes of
 // rasterising is a fact about the handset, not about the person, and as account
 // preferences they would need a connection to change — which is the state you are
@@ -12,7 +12,7 @@
 // The data switches are separate from the download switches on purpose. "Should
 // this happen at all" and "may it happen on my mobile plan" are different
 // questions, and folding them into one three-way control means a user who wants
-// a GeoPDF the moment it is ready, but only on Wi-Fi, has nothing to pick.
+// a topo the moment it is ready, but only on Wi-Fi, has nothing to pick.
 //
 // The storage row is a POINTER, not a duplicate. Saved is the inventory screen
 // and owns the per-item actions (DESIGN.md — the three verbs follow the asset
@@ -33,14 +33,10 @@
 // theirs. The rows that govern account-backed jobs are dead with "Needs an
 // account" (`offlineRows.ts`), and the account query below stays off for them.
 //
-// PRIVACY: seven booleans. No place names, no regions named.
+// PRIVACY: six booleans. No place names, no regions named.
 import { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import {
-  isAutoDownloadEnabled,
-  setAutoDownloadEnabled,
-} from "../../geopdf/autoDownloadPreference";
 import {
   isMeteredAllowed,
   setMeteredAllowed,
@@ -82,14 +78,8 @@ const METERED_ROWS: {
   job: MeteredJob;
   title: string;
   subtitle: string;
-  needs?: "geoPdf" | "topo";
+  needs?: "topo";
 }[] = [
-  {
-    job: "geoPdfDownload",
-    title: "GeoPDF auto-downloads",
-    subtitle: "Tens of megabytes each.",
-    needs: "geoPdf",
-  },
   {
     job: "topoDownload",
     title: "Topo auto-downloads",
@@ -135,14 +125,12 @@ export function OfflineSettingsScreen({
     [notify],
   );
 
-  const [autoDownload, setAutoDownload] = useState(isAutoDownloadEnabled);
   const [topoAutoDownload, setTopoAutoDownload] = useState(
     isTopoAutoDownloadEnabled,
   );
-  // One object rather than three booleans: the rows are data (METERED_ROWS), so
+  // One object rather than five booleans: the rows are data (METERED_ROWS), so
   // their state has to be indexable by the same key.
   const [metered, setMetered] = useState<Record<MeteredJob, boolean>>(() => ({
-    geoPdfDownload: isMeteredAllowed("geoPdfDownload"),
     topoDownload: isMeteredAllowed("topoDownload"),
     placeNames: isMeteredAllowed("placeNames"),
     sync: isMeteredAllowed("sync"),
@@ -203,28 +191,12 @@ export function OfflineSettingsScreen({
       <ScreenScroll>
         <SectionHeader title="Fetch automatically" />
         <PreferenceRow
-          icon="geoPdf"
-          title="Finished GeoPDFs"
-          subtitle={
-            needsAccount("autoGeoPdf")
-              ? accountText
-              : "GeoPDFs generated on Logjam Web download here automatically."
-          }
-          value={autoDownload}
-          ready={!needsAccount("autoGeoPdf")}
-          onToggle={() => {
-            const next = !autoDownload;
-            if (!stored(setAutoDownloadEnabled(next))) return;
-            setAutoDownload(next);
-          }}
-        />
-        <PreferenceRow
           icon="lidar"
-          title="Finished LiDAR topos"
+          title="Finished sharpened areas"
           subtitle={
             needsAccount("autoTopo")
               ? accountText
-              : "LiDAR topos generated on Logjam Web download here automatically."
+              : "Sharpened areas made on Logjam Web download here automatically."
           }
           value={topoAutoDownload}
           ready={!needsAccount("autoTopo")}
@@ -238,9 +210,7 @@ export function OfflineSettingsScreen({
         <SectionHeader title="Allow on mobile data" />
         {METERED_ROWS.map((row) => {
           const blocked = needsAccount(row.job);
-          const off =
-            (row.needs === "geoPdf" && !autoDownload) ||
-            (row.needs === "topo" && !topoAutoDownload);
+          const off = row.needs === "topo" && !topoAutoDownload;
           return (
             <PreferenceRow
               key={row.job}

@@ -1,55 +1,27 @@
-// Renders one vector topo overlay's layer stack (contours or OSM features)
-// against a resolved PMTiles source — the Logjam GPS counterpart of Logjam
-// Web's structural layer creation, driven entirely by
-// buildTopoVectorLayerDefs.
+// Renders the statewide contours' layer stack against a resolved PMTiles
+// source — the Logjam GPS counterpart of Logjam Web's structural layer
+// creation, driven entirely by buildTopoVectorLayerDefs.
 import { memo, useMemo } from "react";
-import {
-  Images,
-  Layer,
-  type LayerProps,
-} from "@maplibre/maplibre-react-native";
-import { OSM_POINT_ICON, type VectorStyleSettings } from "@logjam/shared";
+import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
+import type { VectorStyleSettings } from "@logjam/shared";
 
 import {
   buildTopoVectorLayerDefs,
   type TopoVectorLayerDef,
 } from "./topoVectorLayers";
 
-// Static require map — Metro needs literal require() calls per asset.
-// Keys match the iconImage names emitted by buildTopoVectorLayerDefs.
-export const TOPO_ICON_IMAGES: Record<string, ReturnType<typeof require>> = {
-  "topo-icon-campsite": require("../../assets/topo-icons/campsite.png"),
-  "topo-icon-peak": require("../../assets/topo-icons/peak.png"),
-  "topo-icon-spring": require("../../assets/topo-icons/spring.png"),
-  "topo-icon-gate": require("../../assets/topo-icons/gate.png"),
-  "topo-icon-cave": require("../../assets/topo-icons/cave.png"),
-  "topo-icon-ford": require("../../assets/topo-icons/ford.png"),
-  "topo-icon-waterfall": require("../../assets/topo-icons/waterfall.png"),
-  "topo-icon-trailhead": require("../../assets/topo-icons/trailhead.png"),
-  "topo-icon-viewpoint": require("../../assets/topo-icons/viewpoint.png"),
-  "topo-icon-hut": require("../../assets/topo-icons/hut.png"),
-};
-
-// One <Images> registration for every point icon — mount once per Map.
-export const TopoIconImages = memo(function TopoIconImages() {
-  return <Images images={TOPO_ICON_IMAGES} />;
-});
-
-// Compile-time-ish guard: every OSM point icon key must have a require entry.
-// (Fails loudly at module load in dev rather than rendering blank icons.)
-for (const key of Object.keys(OSM_POINT_ICON)) {
-  if (!TOPO_ICON_IMAGES[`topo-icon-${key}`]) {
-    throw new Error(`Missing bundled topo icon for "${key}"`);
-  }
-}
-
 function layerFor(
   def: TopoVectorLayerDef,
   idPrefix: string,
   sourceID: string,
   beforeId: string,
+  zooms: { minzoom?: number; maxzoom?: number },
 ) {
   const id = `${idPrefix}-${def.suffix}`;
+  const minzoom =
+    def.minzoom === undefined || zooms.minzoom === undefined
+      ? (def.minzoom ?? zooms.minzoom)
+      : Math.max(def.minzoom, zooms.minzoom);
   // One cast for the whole prop bag: buildTopoVectorLayerDefs emits one merged
   // camelCase style object (parity with Logjam Web), not the spec's
   // paint/layout split, so it goes in through MLRN's legacy `style` prop —
@@ -63,40 +35,43 @@ function layerFor(
     type: def.type,
     style: def.style,
     ...(def.filter && { filter: def.filter }),
-    ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
+    ...(minzoom !== undefined && { minzoom }),
+    ...(zooms.maxzoom !== undefined && { maxzoom: zooms.maxzoom }),
   } as LayerProps;
   return <Layer key={id} {...props} />;
 }
 
 /** The id each of an overlay's layers mounts under, bottom to top. */
 export function topoVectorLayerIds(
-  kind: "contours" | "features",
   idPrefix: string,
   vectorStyle: VectorStyleSettings,
 ): string[] {
-  return buildTopoVectorLayerDefs(kind, vectorStyle).map(
+  return buildTopoVectorLayerDefs(vectorStyle).map(
     (def) => `${idPrefix}-${def.suffix}`,
   );
 }
 
 export const TopoVectorOverlay = memo(function TopoVectorOverlay({
-  kind,
   idPrefix,
   sourceID,
   beforeIds,
   vectorStyle,
+  minzoom,
+  maxzoom,
 }: {
-  kind: "contours" | "features";
   /** Unique per overlay — layer ids must not collide across jobs. */
   idPrefix: string;
   sourceID: string;
   /** `chainBeforeIds` entries for this overlay's `topoVectorLayerIds`. */
   beforeIds: Record<string, string>;
   vectorStyle: VectorStyleSettings;
+  /** The zooms the stack draws at, where it doesn't draw at every zoom. */
+  minzoom?: number;
+  maxzoom?: number;
 }) {
   const defs = useMemo(
-    () => buildTopoVectorLayerDefs(kind, vectorStyle),
-    [kind, vectorStyle],
+    () => buildTopoVectorLayerDefs(vectorStyle),
+    [vectorStyle],
   );
   return (
     <>
@@ -106,6 +81,7 @@ export const TopoVectorOverlay = memo(function TopoVectorOverlay({
           idPrefix,
           sourceID,
           beforeIds[`${idPrefix}-${def.suffix}`],
+          { minzoom, maxzoom },
         ),
       )}
     </>

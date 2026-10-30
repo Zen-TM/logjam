@@ -81,10 +81,9 @@ export const PLACE_REGISTRY_DIR = `${FileSystem.documentDirectory}place-registry
 
 /**
  * Raw sensor logs from the developer-only research logger
- * (modules/logjam-sensors). WIPED: the samples
- * describe how one person moved through a place for a day, which is location
- * history by another name even though no coordinate is written — so it leaves
- * with the account like everything else.
+ * (modules/logjam-sensors). WIPED: each file holds a recording's raw GPS fixes
+ * beside how its owner moved, which is location history, so it leaves with the
+ * account like everything else.
  */
 export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 
@@ -94,6 +93,21 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
  * went looking, which is location history at 11 km rather than none.
  */
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
+
+/**
+ * The sharpened areas the account could last see, without their URLs
+ * (`offline/sharpenedAreaStore.ts`). WIPED: an area's coverage and tile range
+ * say where its owner surveyed.
+ */
+export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-areas/`;
+
+/**
+ * TileJSONs Logjam GPS writes for map sources MLRN can't describe in props
+ * (`map/tileJsonFile.ts`). WIPED: a sharpened area's holds its tile range,
+ * which says where its owner surveyed. Each is written again when the map
+ * next needs it.
+ */
+export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 
 /**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
@@ -108,6 +122,8 @@ export const WIPED_DIRS = [
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
   WEATHER_DIR,
+  TILEJSON_DIR,
+  SHARPENED_AREAS_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

@@ -5,8 +5,7 @@
 // The two email switches for topo jobs and topo exports are kept even though
 // mobile cannot start either — they are account-wide EMAIL settings, and telling
 // someone holding their phone to find a laptop to stop an email is not an
-// answer. `geoPdfEmail` is directly mobile-relevant (this app imports and
-// auto-downloads them) and both in-app kinds are live here.
+// answer. both in-app kinds are live here.
 //
 // The OS row is not a preference and is deliberately last: no in-app switch can
 // do anything if Android is dropping the notification, and that is a fact about

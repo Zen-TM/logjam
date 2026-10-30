@@ -30,7 +30,7 @@ export function PreferenceRow({
 }: {
   /**
    * Only for a switch over a THING (the app lock). A list of statements — "A
-   * GeoPDF is ready" is not an object — takes no glyph, because one there is
+   * topo is ready" is not an object — takes no glyph, because one there is
    * decoration.
    */
   icon?: Glyph;

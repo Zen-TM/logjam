@@ -15,7 +15,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 - **Canyon logbook** — store canyon data including coordinates, grade, abseil counts, notes, and custom attributes
 - **Trip logs** — record trips with custom fields, photos, and GPX tracks
 - **Topo map generation** — generate offline-ready MBTiles topo maps from NSW Spatial Services LiDAR data for import into Gaia GPS
-- **GeoPDF export** — generate geo-referenced topo PDFs (GPS-aware, for field map apps)
+- **GeoPDF export** — render geo-referenced topo PDFs in the browser (GPS-aware, for field map apps)
 - **Friends & sharing** — connect with friends and share selected canyons with them
 - **Private by design** — all data is private to each user by default
 
@@ -49,7 +49,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 ### AWS
 
 - Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
-- ECS Fargate (topo/export/geo-pdf workers) · Elastic Beanstalk (API) · ECR (images)
+- ECS Fargate (topo/export workers) · Elastic Beanstalk (API) · ECR (images)
 - RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email)
 
 ### Infrastructure as Code & local dev
@@ -70,7 +70,6 @@ logjam/
 │       ├── middleware/     # auth, errorHandler, rateLimit
 │       ├── routes/         # one file per resource
 │       ├── services/       # prisma, awsClients, email, ...
-│       ├── worker/         # geoPdfWorker (runs as an ECS task)
 │       ├── __tests__/      # integration tests (need a running local API)
 │       ├── boot.ts         # prod entrypoint (resolve DB secret, migrate, start)
 │       └── index.ts        # app bootstrap + route registration
@@ -100,7 +99,7 @@ logjam/
 
 ## Local Development
 
-The local environment spins up a Postgres database and MiniStack (a free, open-source LocalStack-compatible AWS emulator) via Docker. The API and frontend run on the host for fast hot-reload. No AWS account is needed for the default "fake auth" mode. Unlike LocalStack Community, MiniStack's ECS RunTask launches real worker containers, so topo/export/GeoPDF jobs run locally exactly as in prod.
+The local environment spins up a Postgres database and MiniStack (a free, open-source LocalStack-compatible AWS emulator) via Docker. The API and frontend run on the host for fast hot-reload. No AWS account is needed for the default "fake auth" mode. Unlike LocalStack Community, MiniStack's ECS RunTask launches real worker containers, so topo and export jobs run locally exactly as in prod.
 
 **New here? Follow [docs/dev-setup.md](docs/dev-setup.md)**: from a fresh clone
 to a running stack on Linux, Windows (WSL2) or macOS, plus Logjam GPS on an
@@ -111,12 +110,29 @@ hand (it's gitignored and overwritten on each `make dev`/`make reset`). To chang
 a dev value, edit `infra/terraform/envs/local/env-files.tf` (and add new vars to
 both `api/src/lib/env.ts` and `infra/terraform/templates/env.local.tftpl`).
 
+By default dev maps fetch the `master/*` archives from the prod CDN. To read
+them from MiniStack instead, upload the archives, then set `DEV_MASTER_URL` in
+`frontend/.env` and `EXPO_PUBLIC_TOPO_CDN_BASE_URL` in `mobile/.env` (values in
+the `.env.example` files). Build the 5 m DEM and the contours with
+`build_nsw_dem.py` ([topo/README.md](topo/README.md#building-the-nsw-5-m-dem-archive)),
+or use the committed Katoomba DEM slice, and upload each to its `master/` key
+with the stack up (`test`/`test` are MiniStack's dummy credentials):
+
+```bash
+curl -u test:test --upload-file shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles \
+  http://127.0.0.1:4566/logjam-topo-local/master/dem/nsw-5m.pmtiles
+# contours: master/contours/nsw-10m.pmtiles
+```
+
+The vector basemap (`master/basemap/protomaps-nsw.pmtiles`) has no local source,
+so it 404s and the map has no base layer.
+
 ### Command reference
 
 | Command | What it does |
 |---|---|
 | `make dev` | Build worker images, start Postgres + MiniStack, provision S3 + ECS task defs + generate `.env.local` (Terraform), run migrations, seed fixtures |
-| `make build-workers` | Build the worker Docker images (`logjam-topo-worker`, `logjam-api`) that MiniStack RunTask launches; rebuild after changing worker code |
+| `make build-workers` | Build the worker Docker image (`logjam-topo-worker`) that MiniStack RunTask launches; rebuild after changing worker code |
 | `make reset` | Wipe all volumes + local TF state, restart infra, re-provision, re-migrate, re-seed |
 | `make seed` | Re-run seed without wiping volumes |
 | `make down` | Stop infra containers |
@@ -191,22 +207,19 @@ make dev-snapshot
 
 Verify the sanitization: `grep -i '@' snapshots/latest.sql | grep -v '@local'` should return nothing.
 
-### Topo / export / GeoPDF jobs
+### Topo / export jobs
 
-Jobs run automatically. Submitting a topo, export, or GeoPDF job in the UI makes
+Jobs run automatically. Submitting a topo or export job in the UI makes
 the API call ECS RunTask, and MiniStack launches the corresponding worker
-container (`logjam-topo-worker` / `logjam-api`) on the `logjam-local` network —
+container (`logjam-topo-worker`) on the `logjam-local` network —
 the same flow as prod. The worker reaches Postgres and S3 by container name,
 processes the job, writes output to MiniStack S3, and updates the job row.
 
-Prerequisites: the worker images must exist (`make dev` builds them, or run
+Prerequisites: the worker image must exist (`make dev` builds them, or run
 `make build-workers`), and a heavy LiDAR topo job additionally needs its input
 LiDAR ZIP uploaded plus the SVTM formation GeoTIFF seeded at
 `s3://logjam-topo-local/svtm/svtm_formation.tif`. Watch running workers with
 `docker ps`; tail one with `docker logs -f <container>`.
-
-To debug a GeoPDF job in-process instead of in a container, use
-`make geo-pdf-run JOB=<geoPdfJobId>`.
 
 ### Running tests
 

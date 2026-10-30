@@ -4,6 +4,7 @@ import { LEADERBOARD } from "./leaderboard.js";
 import { SEND_COPY, SHARE_SHEET } from "./share.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import { MAP_OVERLAYS } from "./mapOverlays.js";
+import { MAP_TERRAIN } from "./mapTerrain.js";
 import { MAP_MEASURE } from "./mapMeasure.js";
 import { MAP_POINT } from "./mapPoint.js";
 import { WEATHER } from "./weather.js";
@@ -32,6 +33,7 @@ export * from "./settings.js";
 export * from "./account.js";
 export * from "./mapLayers.js";
 export * from "./mapOverlays.js";
+export * from "./mapTerrain.js";
 export * from "./mapMeasure.js";
 export * from "./mapPoint.js";
 export * from "./share.js";
@@ -57,6 +59,7 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   ACCOUNT,
   MAP_LAYERS,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
   MAP_POINT,
   MAP_MEASURE,
   SHARE_SHEET,

@@ -3,10 +3,12 @@ export_worker.py
 ----------------
 ECS Fargate export worker. Processes a single TopoExportJob then exits.
 
-Reads the export-job ID from EXPORT_JOB_ID, fetches the source TopoJob's
+Reads the export-job ID from EXPORT_JOB_ID. An export of an area renders the
+statewide terrain over its box (area_export.py). An export of a topo, which
+only a row queued before Export an area can be, fetches the source TopoJob's
 outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
-PMTiles where needed), dispatches to the right renderer for the requested
-{format, bundling, layers}, uploads the artefact to:
+PMTiles where needed) and dispatches to the renderer for its
+{format, bundling, layers}. Either way it uploads the artefact to:
     s3://$S3_BUCKET_TOPO/exports/<exportJobId>/<filename>
 and emails the user a download link via Resend (see email_send.py).
 
@@ -34,11 +36,12 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import boto3
 import psycopg2
 import psycopg2.extras
+from botocore.config import Config
 
 from renderers import (
     ExportTooLarge,
@@ -47,8 +50,16 @@ from renderers import (
     render_mbtiles,
     render_geotiff,
     render_gpkg,
-    render_geojson,
-    render_gpx,
+)
+from area_export import (
+    FETCH_THREADS,
+    Area,
+    AreaExportError,
+    AreaOutsideNsw,
+    area_from,
+    render_area,
+    s3_area_archives,
+    s3_archives,
 )
 from worker_common import (
     compose_database_url,
@@ -77,8 +88,8 @@ GENERIC_FAILURE = (
 def failure_sentence(error: Exception) -> str:
     """What the owner reads for a failed export: never the exception's text."""
     return (
-        ExportTooLarge.SENTENCE
-        if isinstance(error, ExportTooLarge)
+        error.SENTENCE
+        if isinstance(error, (ExportTooLarge, AreaOutsideNsw))
         else GENERIC_FAILURE
     )
 
@@ -89,7 +100,12 @@ DATABASE_URL = compose_database_url()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 EXPORT_JOB_ID = os.environ["EXPORT_JOB_ID"]
 
-s3 = boto3.client("s3", region_name=AWS_REGION)
+# An area export reads its archives FETCH_THREADS ranges at a time.
+s3 = boto3.client(
+    "s3",
+    region_name=AWS_REGION,
+    config=Config(max_pool_connections=FETCH_THREADS),
+)
 
 
 def db_connect():
@@ -120,23 +136,18 @@ def update_status(
     conn,
     export_job_id: str,
     status: str,
-    storage_delta_bytes: int = 0,
     expected_status: Optional[str] = None,
     **kwargs,
 ) -> int:
     """Update the export row's status and optional extra columns. Returns rows
     updated.
 
-    If storage_delta_bytes is non-zero, the owner's storage_used_bytes is
-    incremented in the SAME transaction/commit as the status update: a crash
-    between a `completed` commit and a separate storage commit would leave a
-    downloadable export whose bytes were never quota-accounted (guarded by
-    tests/test_status_guards.py).
+    An export is not charged to the owner's storage (it is gone in 7 days and
+    the owner can't see or delete the charge): this never touches users.
 
     With expected_status the UPDATE is guarded (`AND status = %s`), making
     transitions write-once: a reaped/deleted export matches 0
-    rows, the storage charge is SKIPPED, and the caller must self-clean and
-    skip notification/email.
+    rows and the caller must self-clean and skip notification/email.
     """
     # No `updated_at = NOW()` here, unlike worker.py's twin: topo_export_jobs
     # has no updated_at column (schema.prisma TopoExportJob / migration
@@ -158,12 +169,6 @@ def update_status(
             values,
         )
         updated = cur.rowcount
-        if updated and storage_delta_bytes:
-            cur.execute(
-                "UPDATE users SET storage_used_bytes = storage_used_bytes + %s"
-                " WHERE id = (SELECT user_id FROM topo_export_jobs WHERE id = %s)",
-                (storage_delta_bytes, export_job_id),
-            )
     conn.commit()
     return updated
 
@@ -218,6 +223,94 @@ def send_completion_email(
     send_email(to_email, subject, text, html)
 
 
+def render_job_export(conn, export_job: dict, work: Path) -> Tuple[Path, Optional[str]]:
+    """An export of one LiDAR job: its stored outputs, in the requested format.
+    Returns the file and the job's name."""
+    source_jobs = get_source_jobs(conn, list(export_job["source_job_ids"]))
+    if not source_jobs:
+        raise RuntimeError("No source jobs found for this export")
+    job_name = source_jobs[0].get("name")
+    for sj in source_jobs:
+        if sj["user_id"] != export_job["user_id"]:
+            raise RuntimeError(f"Source job {sj['id']} not owned by requester")
+        if sj["status"] != "complete":
+            raise RuntimeError(f"Source job {sj['id']} is not complete")
+
+    ctx = RenderContext(
+        s3=s3,
+        bucket=BUCKET,
+        work_dir=work,
+        source_jobs=source_jobs,
+        layers=list(export_job["layers"]),
+        bundling=export_job["bundling"],
+        vector_style=export_job["vector_style_snapshot"],
+    )
+
+    # Drop layers the source job never produced (e.g. OSM features when
+    # Overpass returned nothing) so one empty layer can't fail the whole
+    # export. Only a request with no usable layers at all is fatal.
+    available = ctx.available_layers(ctx.layers)
+    dropped = [l for l in ctx.layers if l not in available]
+    if dropped:
+        log.info(f"Dropping layers with no data for this job: {dropped}")
+    if not available:
+        raise RenderError("None of the selected layers have data for this job.")
+    ctx.layers = available
+
+    fmt = export_job["format"]
+    log.info(
+        f"Rendering format={fmt} bundling={ctx.bundling} "
+        f"layers={ctx.layers} sources={[sj['id'] for sj in source_jobs]}"
+    )
+    if fmt == "mbtiles":
+        result_local = render_mbtiles(ctx)
+    elif fmt == "geotiff":
+        result_local = render_geotiff(ctx)
+    elif fmt == "gpkg":
+        result_local = render_gpkg(ctx)
+    else:
+        raise RenderError(f"Unsupported export format: {fmt}")
+    return result_local, job_name
+
+
+def get_sharpened_areas(conn, ids: list[str]) -> list[Area]:
+    """The sharpened areas the API chose for an export, in its order (the
+    router's). Deleting an area's job is refused while this export runs and
+    fails it while queued (api/src/routes/topoJobs.ts), so only a race leaves
+    one missing here, and it drops out."""
+    if not ids:
+        return []
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, sharpen, footprint FROM topo_jobs "
+            "WHERE id = ANY(%s) AND status = 'complete'",
+            (ids,),
+        )
+        rows = {r["id"]: dict(r) for r in cur.fetchall() or []}
+    areas = [area_from(rows[i]) for i in ids if i in rows]
+    return [a for a in areas if a is not None]
+
+
+def render_area_export(conn, export_job: dict, work: Path) -> Path:
+    """An export of an area: the statewide terrain over its box, and the
+    sharpened areas in it the API chose (area_export.py)."""
+    bbox = export_job["bbox"]
+    areas = get_sharpened_areas(conn, list(export_job["source_job_ids"]))
+    log.info(
+        f"Rendering area format={export_job['format']} "
+        f"layers={list(export_job['layers'])}"
+    )  # the box is a place: never logged (tests/test_export_worker_helpers.py)
+    return render_area(
+        s3_archives(s3, BUCKET),
+        (bbox["west"], bbox["south"], bbox["east"], bbox["north"]),
+        list(export_job["layers"]),
+        export_job["format"],
+        work,
+        export_job["vector_style_snapshot"],
+        [(area, s3_area_archives(s3, BUCKET, area)) for area in areas],
+    )
+
+
 def main():
     log.info(f"Export worker started — job {EXPORT_JOB_ID}")
     conn = db_connect()
@@ -252,55 +345,11 @@ def main():
     job_name: Optional[str] = None
 
     try:
-        source_jobs = get_source_jobs(conn, list(export_job["source_job_ids"]))
-        if not source_jobs:
-            raise RuntimeError("No source jobs found for this export")
-        job_name = source_jobs[0].get("name")
-        for sj in source_jobs:
-            if sj["user_id"] != export_job["user_id"]:
-                raise RuntimeError(f"Source job {sj['id']} not owned by requester")
-            if sj["status"] != "complete":
-                raise RuntimeError(f"Source job {sj['id']} is not complete")
-
         with tempfile.TemporaryDirectory(prefix="export_") as tmp:
-            ctx = RenderContext(
-                s3=s3,
-                bucket=BUCKET,
-                work_dir=Path(tmp),
-                source_jobs=source_jobs,
-                layers=list(export_job["layers"]),
-                bundling=export_job["bundling"],
-                vector_style=export_job["vector_style_snapshot"],
-            )
-
-            # Drop layers the source job never produced (e.g. OSM features when
-            # Overpass returned nothing) so one empty layer can't fail the whole
-            # export. Only a request with no usable layers at all is fatal.
-            available = ctx.available_layers(ctx.layers)
-            dropped = [l for l in ctx.layers if l not in available]
-            if dropped:
-                log.info(f"Dropping layers with no data for this job: {dropped}")
-            if not available:
-                raise RenderError("None of the selected layers have data for this job.")
-            ctx.layers = available
-
-            fmt = export_job["format"]
-            log.info(
-                f"Rendering format={fmt} bundling={ctx.bundling} "
-                f"layers={ctx.layers} sources={[sj['id'] for sj in source_jobs]}"
-            )
-            if fmt == "mbtiles":
-                result_local = render_mbtiles(ctx)
-            elif fmt == "geotiff":
-                result_local = render_geotiff(ctx)
-            elif fmt == "gpkg":
-                result_local = render_gpkg(ctx)
-            elif fmt == "geojson":
-                result_local = render_geojson(ctx)
-            elif fmt == "gpx":
-                result_local = render_gpx(ctx)
+            if export_job.get("bbox"):
+                result_local = render_area_export(conn, export_job, Path(tmp))
             else:
-                raise RenderError(f"Unsupported export format: {fmt}")
+                result_local, job_name = render_job_export(conn, export_job, Path(tmp))
 
             if not result_local.exists():
                 raise RenderError(
@@ -312,6 +361,9 @@ def main():
             s3.upload_file(str(result_local), BUCKET, result_key)
             result_bytes = result_local.stat().st_size
 
+    except AreaExportError as e:
+        log.error(f"AreaExportError: {e}")  # detail stays in worker logs
+        error_msg = failure_sentence(e)
     except RenderError as e:
         raw = str(e)
         log.error(f"RenderError: {raw}")  # full detail stays in worker logs
@@ -320,9 +372,7 @@ def main():
         log.error(f"Unexpected failure: {e}", exc_info=True)
         error_msg = failure_sentence(e)
 
-    # Terminal write guarded on `running`. On success the storage charge shares
-    # the same commit as the status flip (guarded by
-    # tests/test_status_guards.py) — never a separate commit.
+    # Terminal write guarded on `running`.
     if error_msg or result_key is None:
         updated = update_status(
             conn,
@@ -339,7 +389,6 @@ def main():
             EXPORT_JOB_ID,
             "completed",
             expected_status="running",
-            storage_delta_bytes=result_bytes,
             result_key=result_key,
             result_bytes=result_bytes,
             completed_at=datetime.now(timezone.utc),
@@ -348,7 +397,7 @@ def main():
 
     if updated == 0:
         # Export was reaped or deleted mid-render: nothing references the
-        # uploaded artefact and no storage was charged — self-clean and skip
+        # uploaded artefact and self-clean and skip
         # notification/email. Exit 0 either way (the outcome is moot).
         log.warning(
             f"Export {EXPORT_JOB_ID} was reaped or deleted mid-run — "
@@ -370,6 +419,7 @@ def main():
                 "exportJobId": EXPORT_JOB_ID,
                 "format": export_job["format"],
                 "jobName": job_name,
+                "resultBytes": result_bytes,
                 "status": "completed" if ok else "failed",
                 "errorMessage": None if ok else (error_msg or GENERIC_FAILURE),
             },

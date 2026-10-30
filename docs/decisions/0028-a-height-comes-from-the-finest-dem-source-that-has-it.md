@@ -62,16 +62,17 @@ Proposal: #359.
   for it, and each segment is filled from its own fixes and DEM samples. The
   chart still shows the jump. `upgradeTrackClimbs` in
   `mobile/src/tracks/trackClimb.ts` asks again on the first sync cycle after
-  the finish, and after that only when the ids or `coverage` in
-  `DEM_SOURCES` change; nothing polls. It reads saved terrain and
+  the finish, and after that only when the ids or `coverage` of the
+  sources it reads change: `DEM_SOURCES` and the account's kept sharpened
+  areas (updated 2026-10-24); nothing polls. It reads saved terrain and
   `POST /elevation/profile`, never a public tile host, because nobody opened
   the track. Guards: `shared/src/elevation.test.ts`,
   `shared/src/gpsFill.test.ts`, `mobile/src/tracks/trackClimb.test.ts`. Cost: a stored figure can be older
   than the best terrain, a phone built with a new source before the API
   serves it marks its tracks as asked, and the key sees only the declaration: an
-  archive rebuilt inside an unchanged `coverage` re-asks nothing, and a
-  source with no declared footprint (a LiDAR job's DEM) must change the key
-  itself when it gains ground. Everything else above stands.
+  archive rebuilt inside an unchanged `coverage` re-asks nothing (updated
+  2026-10-24: a sharpened area declares its `coverage`, so the key sees one
+  that is new or grown). Everything else above stands.
 - **Update 2026-10-12: Logjam Web replaces a stored climb too, and each
   figure says its source.** A finished recording's Ascent and Descent are the
   stored figures on every screen of both clients; no screen shows its own
@@ -97,6 +98,29 @@ Proposal: #359.
   when its own pass reaches the same answer. A climb stored before the
   arithmetic changed is still replaced by nothing. Everything else above
   stands.
+- **Update 2026-10-23: a sharpened area is a source with its own coverage,
+  read only by those who may see it, and declared outside `DEM_SOURCES`.**
+  `demSourcesFor` in `shared/src/sharpen.ts` puts each area the caller may
+  read ([0040](0040-a-sharpened-area-is-a-private-dem-source.md)) above
+  `DEM_SOURCES`, the finer first, then the newer. This is an exception to
+  "one declaration": an area's zoom and credit come from its job's result at
+  run time, not from `DEM_SOURCES`. The precedence and the one sampler still
+  hold, and no file names an area's archive by URL or path. Each area
+  declares its `coverage`, so the key `upgradeTrackClimbs` uses sees a new
+  area: Logjam GPS keys it on `demSourcesFor` the account's kept areas, and
+  then counts a track short of `lidar` as due (updated 2026-10-24; guard
+  `mobile/src/tracks/trackClimb.test.ts`). Every area's
+  heights are stored under one climb id, `lidar`, first in `CLIMB_SOURCES`,
+  so a track's label names no job. Guard: `shared/src/sharpen.test.ts`.
+  Everything else above stands.
+- **Update 2026-10-18: a slope reads its window from the finest regional
+  source with all nine pixels, never the worldwide tiles.** Slope is not a
+  height, so `demSlopeReading` in `shared/src/demSlope.ts` walks
+  `DEM_SOURCES` itself instead of calling `sampleDem`: it takes the first
+  source whose coverage and tiles hold the whole 3 × 3 window of Horn, and
+  gives no slope when none does, since the worldwide 30 m tiles are too
+  coarse to show a cliff. Guard: `shared/src/demSlope.test.ts`.
+  Everything else above stands.
 
 Guards: `shared/src/demSources.test.ts` holds each seam case and fails when a
 file outside the declaration names a source's URL. The API and Logjam GPS
@@ -167,5 +191,14 @@ parity pair `api/src/services/elevation.unit.test.ts` and
   It holds both the file and the DEM, so no client would need a pass. Not
   taken: a larger change, and a phone offline must still store a figure of
   its own at the finish.
+- **Read a slope like a height, through `sampleDem` down the whole list**
+  (2026-10-18). One sampler, and a slope wherever there is a height. Rejected
+  because the worldwide 30 m tiles are within 5° of a 5 m survey at only 57 %
+  of points (ground of 60° or steeper reads a median of 34° on them), and
+  `sampleDem`'s four-pixel blend can fill a missing pixel from a neighbour.
 - **Choose the source in each client.** Rejected by 0020: deciding twice is
   how the two clients drifted before.
+- **Declare each sharpened area in `DEM_SOURCES`** (2026-10-23). One list for
+  every source. Rejected because an area is private to the users who may see
+  it, and its zoom, coverage and credit are known only from its job's result
+  at run time. 0040 lists the other options it rejected.

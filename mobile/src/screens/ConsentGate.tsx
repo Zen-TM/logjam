@@ -1,10 +1,10 @@
 // Blocking re-consent screen — Agree or Sign out only (mirrors Logjam Web
 // ConsentGate). Shown when needsReconsent() is true for the fetched current
-// user; the server rejects any consentVersion other than CURRENT_CONSENT_VERSION.
+// user; the server rejects any consentVersion other than the one it named.
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
+import { messageFromError } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
@@ -17,9 +17,12 @@ import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, TextLink } from "../ui";
 
 export function ConsentGate({
+  consentVersion,
   onConsented,
   onSignOut,
 }: {
+  /** The version the server named, which is the only one it will record. */
+  consentVersion: string;
   onConsented: () => void;
   onSignOut: SignOutHandler;
 }) {
@@ -34,7 +37,7 @@ export function ConsentGate({
     setSubmitting(true);
     setError(null);
     try {
-      await updateConsent(CURRENT_CONSENT_VERSION);
+      await updateConsent(consentVersion);
       onConsented();
     } catch (err) {
       console.error(err);
@@ -63,8 +66,8 @@ export function ConsentGate({
       <Text style={styles.title}>Terms & privacy</Text>
       <Text style={styles.body}>
         Logjam&apos;s Terms of Use and Privacy Policy have changed (last updated{" "}
-        {CURRENT_CONSENT_VERSION}). Please review them and confirm your
-        agreement to keep using Logjam.
+        {consentVersion}). Please review them and confirm your agreement to keep
+        using Logjam.
       </Text>
       <TextLink
         label="Read the Terms of Use"

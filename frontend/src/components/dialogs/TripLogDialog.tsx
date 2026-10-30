@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   buildCustomFieldDef,
@@ -69,6 +69,7 @@ import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import ConfirmDialog from "./ConfirmDialog";
+import { CurrentUserIdContext } from "../../CurrentUserIdContext";
 import classes from "./TripLogDialog.module.css";
 
 // True when a date-only string (YYYY-MM-DD) is after today. Both sides are
@@ -318,6 +319,13 @@ function TripLogDialog({
   const [restorableDraft, setRestorableDraft] = useState<TripDraft | null>(
     null,
   );
+  // Who a draft is written for and offered to; null until Logjam Web has
+  // loaded the signed-in user, when no draft is read or written.
+  const currentUserId = useContext(CurrentUserIdContext);
+  // The user the draft slot was last checked for in this open. When the user
+  // loads late, changes or goes, the slot is checked again in the same render,
+  // so autosave never clears or overwrites a draft that was not yet offered.
+  const [draftCheckedFor, setDraftCheckedFor] = useState<string | null>(null);
   // One autosave-failure toast per open, not one per keystroke.
   const draftWarnedRef = useRef(false);
   // Whether the Dialog moves focus into the date field as it opens; settled by
@@ -350,6 +358,20 @@ function TripLogDialog({
         populateForm();
       }
     }
+  }
+
+  // The user arrived, changed or went (an expiry) while the form was open:
+  // check the slot for them now, and drop an offer made to someone else.
+  if (
+    open &&
+    !tripLog &&
+    openKey === populatedFor &&
+    draftCheckedFor !== currentUserId
+  ) {
+    setDraftCheckedFor(currentUserId);
+    setRestorableDraft(
+      currentUserId ? readTripDraft(currentUserId, new Date()) : null,
+    );
   }
 
   function populateForm() {
@@ -436,8 +458,12 @@ function TripLogDialog({
     // already typed and have to work out where it came from. Edit mode never
     // reads the draft — it holds a create form, and pouring it into an existing
     // trip would overwrite a saved one (tripDraft.ts re-checks `mode` too).
-    const foundDraft = tripLog ? null : readTripDraft(new Date());
+    const foundDraft =
+      tripLog || !currentUserId
+        ? null
+        : readTripDraft(currentUserId, new Date());
     setRestorableDraft(foundDraft);
+    setDraftCheckedFor(currentUserId);
     setFocusDateWhenOpened(foundDraft === null);
     setError(null);
     setShowFieldErrors(false);
@@ -517,7 +543,7 @@ function TripLogDialog({
   // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
   // cover, because nobody is there to answer its prompt.
   useEffect(() => {
-    if (!open || tripLog) return;
+    if (!open || tripLog || !currentUserId) return;
     // Don't overwrite the draft we're currently offering to restore.
     if (restorableDraft) return;
     const timer = setTimeout(() => {
@@ -530,7 +556,7 @@ function TripLogDialog({
         clearTripDraft();
         return;
       }
-      const result = writeTripDraft(currentForm, new Date());
+      const result = writeTripDraft(currentUserId, currentForm, new Date());
       if (result.status === "saved") return;
       // A draft the user assumes exists but doesn't is the exact failure this
       // feature exists to prevent, so say so instead of failing quietly. Once
@@ -549,7 +575,15 @@ function TripLogDialog({
       }
     }, DRAFT_AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [open, tripLog, restorableDraft, draftWorthKeeping, currentForm, toast]);
+  }, [
+    open,
+    tripLog,
+    currentUserId,
+    restorableDraft,
+    draftWorthKeeping,
+    currentForm,
+    toast,
+  ]);
 
   function handleRestoreDraft() {
     if (!restorableDraft) return;

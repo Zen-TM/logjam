@@ -15,11 +15,24 @@ import {
 import { nextEnabledIndex } from "./rovingFocus";
 import classes from "./Chip.module.css";
 import { Icon, type Glyph } from "./Icon";
+import { chipFill } from "@logjam/shared";
+import { useSchemeTokens } from "../themePreferences";
+
+/** A `var(--hue-x)` hue as the hex it names (they sit on `:root`, whatever the
+ *  scheme); anything the browser can't resolve is returned as given. */
+function cssHue(hue: string | undefined): string | undefined {
+  const name = hue?.match(/^var\((--[\w-]+)\)$/)?.[1];
+  if (!name) return hue;
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+    hue
+  );
+}
 
 /**
  * The pill behind every chip surface: filter rails, sort choices, sub-mode
  * switches. Active fills with `hue` (default accent), writes its label in the
- * fixed ink and leads with a check unless it has an `icon` of its own; a
+ * fixed ink, with no check, so selecting never changes its width; a
  * `count` rides as a trailing badge; an `icon` leads. `dashed` is the "add one" chip at the end of a vocabulary.
  */
 export function Chip({
@@ -46,6 +59,10 @@ export function Chip({
   starred?: boolean;
   ref?: Ref<HTMLButtonElement>;
 }) {
+  const tokens = useSchemeTokens();
+  // Selected is the fill alone, so the fill is moved off the unselected chip's
+  // card until it stands 3:1 apart (`chipFill`); the hue elsewhere is unmoved.
+  const fill = chipFill(cssHue(hue) ?? tokens.accent, tokens);
   return (
     <button
       ref={ref}
@@ -58,19 +75,13 @@ export function Chip({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={hue ? ({ ...style, "--chip-hue": hue } as CSSProperties) : style}
+      style={{ ...style, "--chip-hue": fill } as CSSProperties}
       // The badge is aria-hidden, so the count joins the name with a pause
       // rather than running into the label ("Canyon241").
       aria-label={count != null ? `${label}, ${count}` : undefined}
       {...rest}
     >
-      {icon ? (
-        <Icon idea={icon} size={14} className={classes.glyph} />
-      ) : (
-        // A SELECTED chip says so with a check as well as a fill, so it is
-        // never mistaken for the primary button, which is filled too.
-        active && <Icon idea="done" size={14} className={classes.glyph} />
-      )}
+      {icon && <Icon idea={icon} size={14} className={classes.glyph} />}
       <span>{label}</span>
       {starred && (
         <Icon
@@ -256,6 +267,7 @@ export function ChipRail<T extends string>({
   onChange,
   trailing,
   className,
+  hint,
 }: {
   /** The group's accessible name — "Place type", "Status". */
   label: string;
@@ -265,7 +277,11 @@ export function ChipRail<T extends string>({
   /** Rendered after the group, inside the scroller (an "add" chip). */
   trailing?: ReactNode;
   className?: string;
+  /** One plain sentence under the rail about the choice made, read with the
+   *  group (shared/DESIGN.md §12). */
+  hint?: string;
 }) {
+  const hintId = useId();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [edges, setEdges] = useState({ start: false, end: false });
@@ -345,45 +361,53 @@ export function ChipRail<T extends string>({
   }
 
   return (
-    <div
-      className={[classes.rail, className].filter(Boolean).join(" ")}
-      data-fade-start={edges.start}
-      data-fade-end={edges.end}
-    >
+    <>
       <div
-        ref={scrollerRef}
-        className={classes.scroller}
-        onScroll={updateEdges}
+        className={[classes.rail, className].filter(Boolean).join(" ")}
+        data-fade-start={edges.start}
+        data-fade-end={edges.end}
       >
-        {/* tabIndex -1: the chips are the tab stop; the group only hears their keys. */}
         <div
-          role="radiogroup"
-          aria-label={label}
-          tabIndex={-1}
-          className={classes.group}
-          onKeyDown={onKeyDown}
+          ref={scrollerRef}
+          className={classes.scroller}
+          onScroll={updateEdges}
         >
-          {options.map((option, index) => (
-            <Chip
-              key={option.value}
-              ref={(chip) => {
-                chipRefs.current[index] = chip;
-              }}
-              role="radio"
-              aria-checked={option.value === value}
-              tabIndex={index === tabStop ? 0 : -1}
-              disabled={option.disabled}
-              label={option.label}
-              count={option.count}
-              icon={option.icon}
-              hue={option.hue}
-              active={option.value === value}
-              onClick={() => onChange(option.value)}
-            />
-          ))}
+          {/* tabIndex -1: the chips are the tab stop; the group only hears their keys. */}
+          <div
+            role="radiogroup"
+            aria-label={label}
+            aria-describedby={hint ? hintId : undefined}
+            tabIndex={-1}
+            className={classes.group}
+            onKeyDown={onKeyDown}
+          >
+            {options.map((option, index) => (
+              <Chip
+                key={option.value}
+                ref={(chip) => {
+                  chipRefs.current[index] = chip;
+                }}
+                role="radio"
+                aria-checked={option.value === value}
+                tabIndex={index === tabStop ? 0 : -1}
+                disabled={option.disabled}
+                label={option.label}
+                count={option.count}
+                icon={option.icon}
+                hue={option.hue}
+                active={option.value === value}
+                onClick={() => onChange(option.value)}
+              />
+            ))}
+          </div>
+          {trailing}
         </div>
-        {trailing}
       </div>
-    </div>
+      {hint && (
+        <p id={hintId} className={classes.pickerHint}>
+          {hint}
+        </p>
+      )}
+    </>
   );
 }

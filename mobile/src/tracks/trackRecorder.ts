@@ -35,7 +35,7 @@ import {
   readAccuracyLimitM,
   readFixRate,
 } from "./recordingPreferences";
-import { startSensorLog, stopSensorLog } from "./sensorLog";
+import { deleteSensorLog, startSensorLog, stopSensorLog } from "./sensorLog";
 import { backUpFinishedTrack } from "./trackBackup";
 import { climbFromSavedTerrain } from "./trackClimb";
 import { toElevationGpsFixes, toElevationLine } from "@logjam/shared";
@@ -584,6 +584,7 @@ export async function stopTrackRecordingForWipe(): Promise<void> {
 export async function discardTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
   await deleteTrack(trackId);
+  await deleteSensorLog(trackId);
 }
 
 /**
@@ -608,6 +609,9 @@ export async function reconcileTrackRecording(): Promise<void> {
     // The recorder died at some unknown moment; everything from the last fix
     // to now is a gap, not recording time, so open a pause at that fix rather
     // than at launch.
+    // The logger does not die with the location task, so it is stopped here
+    // like on every other way out of `recording`.
+    await stopLocationUpdatesIfRunning();
     const lastPoint = await lastTrackPoint(active.id);
     await updateTrack(active.id, {
       state: "paused",
@@ -616,7 +620,7 @@ export async function reconcileTrackRecording(): Promise<void> {
       ).toISOString(),
     });
   } else if (!active && taskRunning) {
-    await Location.stopLocationUpdatesAsync(TRACK_RECORDING_TASK);
+    await stopLocationUpdatesIfRunning();
   } else if (active?.state === "recording" && taskRunning) {
     // The platform persists a task's options and keeps delivering across a
     // process death, so a process that died with the map boost on leaves the

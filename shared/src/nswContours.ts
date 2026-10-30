@@ -24,17 +24,30 @@ export const NSW_CONTOURS = {
 } as const;
 
 /**
- * Whether the statewide contours are drawn over a basemap: always with the
- * vector basemap, which has none of its own, and over imagery when the user
- * asks. The topographic sheets already print theirs.
+ * Whether the statewide contours are drawn over a basemap: when the Terrain
+ * group's Contours switch is on, over the vector basemap, which has none of its
+ * own, and over imagery. The topographic sheets already print theirs.
  */
-export function drawsNswContours(
-  basemapId: string,
-  overImagery: boolean,
-): boolean {
-  return (
-    basemapId === "protomaps" || (overImagery && basemapId === "six-imagery")
-  );
+export function drawsNswContours(basemapId: string, on: boolean): boolean {
+  return on && takesNswContours(basemapId);
+}
+
+/** Whether a basemap has room for the statewide contours: no lines of its own. */
+export function takesNswContours(basemapId: string): boolean {
+  return basemapId === "protomaps" || basemapId === "six-imagery";
+}
+
+/**
+ * Whether the hillshade is drawn over a basemap: when its switch is on, except
+ * over imagery, whose photographs already carry their own shadows.
+ */
+export function drawsNswHillshade(basemapId: string, on: boolean): boolean {
+  return on && takesNswHillshade(basemapId);
+}
+
+/** Whether a basemap has room for the hillshade: every one but imagery. */
+export function takesNswHillshade(basemapId: string): boolean {
+  return basemapId !== "six-imagery";
 }
 
 /** Imagery is dark, and the brown a paper map prints its contours in is lost on it. */

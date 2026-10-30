@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEM_SOURCES, TERRARIUM } from "./demSources.js";
+import { DEM_SOURCES, NSW_5M, TERRARIUM } from "./demSources.js";
 import {
   DEM_SOURCE_ID,
   MAX_REGION_AREA_KM2,
@@ -14,6 +14,7 @@ import {
   lonLatToTile,
   planDemDownload,
   planRegionForBasemaps,
+  demClipMinZoom,
   planRegionTiles,
   regionEdgesKm,
   xyzToTmsRow,
@@ -242,8 +243,20 @@ describe("planRegionForBasemaps", () => {
     expect(job.p90Bytes).toBe(
       job.perSource[0].size.p90Bytes +
         job.demArchives[0].size.p90Bytes +
-        job.contours.p90Bytes,
+        job.contours.p90Bytes +
+        job.slope.p90Bytes,
     );
+  });
+
+  // Mutation: price the height clip at z15 alone and an area's estimate
+  // undercounts the z8-14 tiles the hillshade is drawn from offline.
+  it("prices the height clip at every zoom the hillshade is drawn at", () => {
+    const b = { west: 150.2, south: -33.78, east: 150.3, north: -33.69 };
+    const [clip] = planRegionForBasemaps(b, [], 15, maxZoomFor).demArchives;
+    const z15 = planRegionTiles(b, 15, 15).totalTiles;
+    expect(clip!.size.meanBytes).toBeGreaterThan(z15 * 24_000 * 1.5);
+    expect(demClipMinZoom(NSW_5M)).toBe(8);
+    expect(demClipMinZoom(TERRARIUM)).toBe(TERRARIUM.sampleZoom);
   });
 
   // Mutation: leave the contour clip out of the totals and the free-space
@@ -256,8 +269,21 @@ describe("planRegionForBasemaps", () => {
     expect(job.meanBytes).toBe(
       job.perSource[0].size.meanBytes +
         job.demArchives[0].size.meanBytes +
-        job.contours.meanBytes,
+        job.contours.meanBytes +
+        job.slope.meanBytes,
     );
+  });
+
+  // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets
+  // the measured clip. (Leaving the slope out of the totals
+  // turns the two sum tests above red.)
+  it("prices the slope clip from its measured tiles", () => {
+    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    // A real clip of this area, from the Katoomba sheet's slope, is 6.0 MB.
+    expect(job.slope.meanBytes).toBeGreaterThan(4_500_000);
+    expect(job.slope.meanBytes).toBeLessThan(6_000_000);
+    expect(job.slope.p90Bytes).toBeGreaterThan(6_000_000);
+    expect(job.slope.p90Bytes).toBeLessThan(8_000_000);
   });
 
   // Mutation: add an archive source to DEM_SOURCES without its measured tile

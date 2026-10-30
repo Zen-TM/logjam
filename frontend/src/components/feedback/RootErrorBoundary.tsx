@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { signOut } from "aws-amplify/auth";
+import { clearTileCache } from "../../geoPdf/cache";
 import { clearTripDraft } from "../../tripDraft";
 import BrandMark from "../brand/BrandMark";
 import { Button } from "../../ui";
@@ -41,13 +42,17 @@ export class RootErrorBoundary extends Component<Props, State> {
     // crash, then reload to a clean sign-in. Reload regardless of outcome
     // (signOut throws in fake-auth dev, where Amplify isn't configured).
     // This is a second sign-out path that bypasses useAuth, so it repeats the
-    // draft clear — a draft must not outlive the session down *any* exit.
+    // draft clear, and clears the GeoPDF tile cache too (the user is known to
+    // be signing out). The cache clears again after signOut: a worker may have
+    // written while it was in flight.
     clearTripDraft();
+    await clearTileCache();
     try {
       await signOut();
     } catch (err) {
       console.error(err);
     }
+    await clearTileCache();
     window.location.reload();
   };
 

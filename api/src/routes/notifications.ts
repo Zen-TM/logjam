@@ -25,6 +25,9 @@ const router = Router();
 //       copy of it (lib/fileSendReaper.ts), because the recipient is owed the
 //       name of the file they missed. Nothing else ever writes it.
 //   topo_complete / topo_failed / *_export:   self-only refs (jobId, jobName, footprint)
+//   announcement:                             payload.announcementId (+ title, body)
+//     — the maintainer's own text, sent to everyone (scripts/announce.ts);
+//       deleting the announcement retracts it here.
 // When the referenced place/share/friendship is gone (share revoked, place
 // deleted, friendship removed, or the other user's account deleted), there is
 // nothing to resolve, so the notification is dropped at read time and never
@@ -64,6 +67,7 @@ router.get(
     const sharerIds = new Set<string>();
     const sharedItems: { entityType: string; entityId: string }[] = [];
     const fileSendIds = new Set<string>();
+    const announcementIds = new Set<string>();
     for (const n of notifications) {
       if (n.type === "friend_request" || n.type === "friend_request_accepted") {
         const id = payloadString(n.payload, "friendshipId");
@@ -84,10 +88,13 @@ router.get(
         if (entityType && entityId) sharedItems.push({ entityType, entityId });
         // No name is resolved for a directly-shared item: the client already
         // has the row through delta sync (waypoint/route) or its own list
-        // endpoint (topo/GeoPDF job), and resolving one here would mean
+        // endpoint (topo job), and resolving one here would mean
         // reading a waypoint name into a notification payload for no gain.
         const sharedById = payloadString(n.payload, "sharedById");
         if (sharedById) sharerIds.add(sharedById);
+      } else if (n.type === "announcement") {
+        const id = payloadString(n.payload, "announcementId");
+        if (id) announcementIds.add(id);
       }
     }
 
@@ -95,7 +102,7 @@ router.get(
     // read time. Nothing is persisted in the payload, so a revoked
     // share, deleted place, or removed friendship simply has no row to resolve
     // and the notification is dropped below.
-    const [existingFriendships, existingPlaces, sharerUsers] =
+    const [existingFriendships, existingPlaces, sharerUsers, announcements] =
       await Promise.all([
         friendshipIds.size > 0
           ? prisma.friendship.findMany({
@@ -129,11 +136,20 @@ router.get(
               select: { id: true, username: true },
             })
           : Promise.resolve([] as { id: string; username: string }[]),
+        announcementIds.size > 0
+          ? prisma.announcement.findMany({
+              where: { id: { in: [...announcementIds] } },
+              select: { id: true, title: true, body: true },
+            })
+          : Promise.resolve(
+              [] as { id: string; title: string; body: string }[],
+            ),
       ]);
 
     const friendshipById = new Map(existingFriendships.map((f) => [f.id, f]));
     const placeById = new Map(existingPlaces.map((c) => [c.id, c]));
     const sharerById = new Map(sharerUsers.map((u) => [u.id, u]));
+    const announcementById = new Map(announcements.map((a) => [a.id, a]));
 
     // Which item_shared notifications still have a live Share row for this
     // recipient. A revoked share resolves to nothing and the notification is
@@ -307,6 +323,21 @@ router.get(
             payload: {
               ...(n.payload as object),
               ...(sharer ? { sharedByUsername: sharer.username } : {}),
+            },
+          },
+        ];
+      }
+      if (n.type === "announcement") {
+        const id = payloadString(n.payload, "announcementId");
+        const announcement = id ? announcementById.get(id) : undefined;
+        if (!announcement) return [];
+        return [
+          {
+            ...n,
+            payload: {
+              ...(n.payload as object),
+              title: announcement.title,
+              body: announcement.body,
             },
           },
         ];

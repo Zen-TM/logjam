@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { fetchAuthSession } from "aws-amplify/auth";
 import type {
   ScopedCustomFieldDef,
@@ -11,6 +11,7 @@ import type {
   MediaMetadata,
   MediaOrigin,
   PlaceMergePolicy,
+  SlopeBand,
   ElevationPoint,
   ElevationProfile,
   TrackClimb,
@@ -38,7 +39,11 @@ import { ApiError } from "./errors/ApiError";
 import { messageFromError } from "./errors/messageFromError";
 // Profiles already sampled this session, so reopening or editing a line does
 // not re-ask the DEM a question it has answered (see the module's header).
-import { cacheProfile, cachedProfile } from "./elevationCache";
+import {
+  cacheProfile,
+  cachedProfile,
+  profileCacheGeneration,
+} from "./elevationCache";
 
 // The server's REST response shapes are declared ONCE in shared/ and
 // re-exported here, so the mobile client (mobile/src/api/types.ts) and this
@@ -605,11 +610,13 @@ export function useElevationProfile(points: ProfiledLine | null) {
     if (!fetchKey) return;
     // A late response from a previous line must not overwrite this one's.
     let current = true;
+    const askedIn = profileCacheGeneration();
     getElevationProfile(JSON.parse(fetchKey) as ProfiledLine)
       .then((result) => {
-        // Cached even if this hook has moved on: the answer is about the
-        // geometry, not about who asked.
-        cacheProfile(fetchKey, result);
+        // Cached even if this hook has moved on to another line, but not if
+        // the user or their areas changed meanwhile: the answer read what
+        // the caller could see then (elevationCache.ts).
+        cacheProfile(fetchKey, result, askedIn);
         if (current) setProfile(result);
       })
       .catch((err) => {
@@ -773,15 +780,7 @@ export type ComputeEstimate = {
   wouldExceed: boolean;
 };
 
-export type ComputeEstimateRequest =
-  | { kind: "topo"; tileCount: number | null }
-  | {
-      kind: "topoExport";
-      sourceJobId: string;
-      format: string;
-      bundling: string;
-    }
-  | { kind: "geoPdf"; config: unknown };
+export type ComputeEstimateRequest = { kind: "topo"; tileCount: number | null };
 
 export function fetchComputeEstimate(
   request: ComputeEstimateRequest,
@@ -796,6 +795,14 @@ export function useCurrentUser(enabled: boolean) {
   const [currentUser, setCurrentUser] = useState<TUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
+  // Signed out (an expired session leaves Logjam Web mounted): the next person
+  // to sign in must never see this user's row, not even until their own
+  // /users/me answers. Reset during render, not in the effect.
+  const [wasEnabled, setWasEnabled] = useState(enabled);
+  if (wasEnabled !== enabled) {
+    setWasEnabled(enabled);
+    if (!enabled) setCurrentUser(null);
+  }
 
   useEffect(() => {
     if (!enabled) return;
@@ -851,9 +858,9 @@ export function updateUserPreferences(
     // are rows, written through the row-grain calls below; sending them here
     // is a 400 naming the replacement rather than a silent no-op.
     notifications: Partial<NotificationPreferences>;
-    autoDownloadGeoPdfs: boolean;
     importMergePolicy: PlaceMergePolicy;
     leaderboardOptIn: boolean;
+    slopeBands: SlopeBand[];
   }>,
 ): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: prefs });
@@ -1335,33 +1342,48 @@ type PresignMediaResponse = {
 
 // Direct PUT to a presigned S3 URL. Intentionally raw (not apiFetch): the target
 // is S3, not our API, and it must NOT carry the Authorization header. The
-// Content-Type must match what the presign signed, or S3 rejects it.
+// Content-Type must match what the presign signed, or S3 rejects it; null sends
+// none, for a URL that signed none.
 //
 // Uses XMLHttpRequest rather than fetch so an optional onProgress callback can
 // report upload progress — fetch cannot observe request-body upload progress.
-// onProgress fires with bytes (loaded, total) as the body streams to S3.
+// onProgress fires with bytes (loaded, total) as the body streams to S3. With
+// stallMs, a request that sends nothing for that long is aborted and rejects.
 export function putToPresignedUrl(
   url: string,
   body: Blob,
-  contentType: string,
+  contentType: string | null,
   onProgress?: (loaded: number, total: number) => void,
+  stallMs?: number,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", contentType);
-    if (onProgress) {
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress(e.loaded, e.total);
-      };
-    }
+    if (contentType) xhr.setRequestHeader("Content-Type", contentType);
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    let stalled = false;
+    const arm = () => {
+      if (!stallMs) return;
+      clearTimeout(stall);
+      stall = setTimeout(() => {
+        stalled = true;
+        xhr.abort();
+      }, stallMs);
+    };
+    xhr.upload.onprogress = (e) => {
+      arm();
+      if (onProgress && e.lengthComputable) onProgress(e.loaded, e.total);
+    };
+    xhr.onloadend = () => clearTimeout(stall);
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`Upload failed (${xhr.status})`));
     };
     xhr.onerror = () => reject(new Error("Upload failed (network error)"));
     xhr.ontimeout = () => reject(new Error("Upload failed (timeout)"));
-    xhr.onabort = () => reject(new Error("Upload cancelled"));
+    xhr.onabort = () =>
+      reject(new Error(stalled ? "Upload stalled" : "Upload cancelled"));
+    arm();
     xhr.send(body);
   });
 }
@@ -1708,7 +1730,7 @@ export function getPlaceShares(placeId: string): Promise<TPlaceShare[]> {
 }
 
 // ── Direct sharing, non-place entities ───────────────────────
-// Waypoints, routes, LiDAR topo jobs and GeoPDF jobs. A live, read-only view
+// Waypoints, routes and LiDAR topo jobs. A live, read-only view
 // the owner can revoke — NOT the same promise as a sent copy below.
 
 export type TEntityShare = {
@@ -1813,8 +1835,8 @@ export function declineFileSend(fileSendId: string): Promise<void> {
 // The row shape is `FriendShareRow` in shared/src/sharing.ts — (entityType,
 // entityId, name, sharedAt), the same pair a bulk share speaks, because the
 // payload covers every shareable kind and not just places. THIS panel still
-// renders places only (it filters on `entityType`), so waypoint/route/topo/
-// GeoPDF shares are visible on Logjam GPS and not here yet.
+// renders places only (it filters on `entityType`), so waypoint/route/topo
+// shares are visible on Logjam GPS and not here yet.
 export type TFriendShareRow = FriendShareRow;
 export type TFriendShares = FriendShares;
 
@@ -1994,7 +2016,7 @@ export type {
 
 // ── Vector style (live, per-user) ─────────────────────────────
 
-import type { VectorStyleSettings, TopoExportJobView } from "@logjam/shared";
+import type { TopoExportJobView } from "@logjam/shared";
 
 // ── Topo exports (Stage 2 on-demand pipeline) ────────────────
 
@@ -2006,6 +2028,8 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   // True total (pre server-side list cap); null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  // True once the first fetch has settled, either way.
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -2035,7 +2059,10 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
           setError(messageFromError(err, "Couldn't load exports."));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -2052,7 +2079,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
   }, [enabled, pollMs, hasInProgress]);
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { exports, total, loading, error, refetch };
+  return { exports, total, loading, loaded, error, refetch };
 }
 
 export function deleteTopoExport(id: string): Promise<void> {
@@ -2061,181 +2088,6 @@ export function deleteTopoExport(id: string): Promise<void> {
 
 export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
-}
-
-// ── GeoPDF jobs (async export pipeline) ──────────────────────
-
-export type { GeoPdfJobView } from "@logjam/shared";
-import type { GeoPdfJobView } from "@logjam/shared";
-
-// Polls every `pollMs` while enabled AND at least one job is in progress
-// (queued/running), mirroring useTopoExports.
-export function useGeoPdfJobs(enabled: boolean, pollMs: number = 5000) {
-  const [jobs, setJobs] = useState<GeoPdfJobView[]>([]);
-  // True total (pre server-side list cap); null until known.
-  const [total, setTotal] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  // True once the first fetch has settled, either way. `loading` alone starts
-  // false, so a list reading it would flash "nothing yet" before any request.
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    apiFetchWithTotal<{ jobs: GeoPdfJobView[] }>("/geo-pdf")
-      .then(({ data, total }) => {
-        if (!cancelled) {
-          setJobs(data.jobs);
-          setTotal(total);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load GeoPDF jobs."));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-          setLoaded(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled, fetchCount]);
-
-  const hasInProgress = jobs.some(
-    (j) => j.status === "queued" || j.status === "running",
-  );
-  useEffect(() => {
-    if (!enabled || pollMs <= 0 || !hasInProgress) return;
-    const id = setInterval(() => setFetchCount((n) => n + 1), pollMs);
-    return () => clearInterval(id);
-  }, [enabled, pollMs, hasInProgress]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-  return { jobs, total, loading, loaded, error, refetch };
-}
-
-export function getGeoPdfJob(id: string): Promise<GeoPdfJobView> {
-  return apiFetch<GeoPdfJobView>(`/geo-pdf/${id}`);
-}
-
-export function deleteGeoPdfJob(id: string): Promise<void> {
-  return apiFetch<void>(`/geo-pdf/${id}`, { method: "DELETE" });
-}
-
-export function useVectorStyle(enabled: boolean) {
-  const [vectorStyle, setVectorStyle] = useState<VectorStyleSettings | null>(
-    null,
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [fetchCount, setFetchCount] = useState(0);
-
-  // A new request (the gate opening, or a refetch) shows loading from the
-  // render that asks for it; the effect fetches and lowers it.
-  const request = enabled ? fetchCount : null;
-  const [requested, setRequested] = useState<number | null>(null);
-  if (request !== requested) {
-    setRequested(request);
-    if (request !== null) setLoading(true);
-  }
-
-  useEffect(() => {
-    if (!enabled) return;
-    apiFetch<VectorStyleSettings>("/vector-style")
-      .then((v) => {
-        setVectorStyle(v);
-        setError(null);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(messageFromError(err, "Couldn't load vector style."));
-      })
-      .finally(() => setLoading(false));
-  }, [enabled, fetchCount]);
-
-  const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
-
-  const save = useCallback(
-    async (next: VectorStyleSettings): Promise<VectorStyleSettings> => {
-      const saved = await apiFetch<VectorStyleSettings>("/vector-style", {
-        method: "PUT",
-        body: next,
-      });
-      setVectorStyle(saved);
-      return saved;
-    },
-    [],
-  );
-
-  return { vectorStyle, loading, error, refetch, save };
-}
-
-const VECTOR_STYLE_SAVE_DEBOUNCE_MS = 400;
-
-// useLiveVectorStyle: wraps useVectorStyle to give a single, app-level source of
-// truth for the vector style. The returned `vectorStyle` updates optimistically
-// the instant `setVectorStyle` is called (so the map repaints live), while the
-// server PUT is debounced. This lets the LiDAR Topos panel be a controlled editor
-// whose edits flow straight to the MapLibre overlay without a page refresh.
-export function useLiveVectorStyle(enabled: boolean): {
-  vectorStyle: VectorStyleSettings | null;
-  setVectorStyle: (next: VectorStyleSettings) => void;
-  loadError: string | null;
-  saveError: string | null;
-} {
-  const {
-    vectorStyle: serverStyle,
-    error: loadError,
-    save,
-  } = useVectorStyle(enabled);
-  const [liveStyle, setLiveStyle] = useState<VectorStyleSettings | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Seed the live style once from the server value; never clobber an in-flight
-  // edit on a later server refetch (the saved value already equals the draft).
-  if (serverStyle && liveStyle === null) setLiveStyle(serverStyle);
-
-  const setVectorStyle = useCallback(
-    (next: VectorStyleSettings) => {
-      setLiveStyle(next);
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = setTimeout(() => {
-        save(next)
-          .then(() => setSaveError(null))
-          .catch((err) => {
-            console.error(err);
-            setSaveError(messageFromError(err, "Couldn't save vector style."));
-          });
-      }, VECTOR_STYLE_SAVE_DEBOUNCE_MS);
-    },
-    [save],
-  );
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    [],
-  );
-
-  return { vectorStyle: liveStyle, setVectorStyle, loadError, saveError };
 }
 
 // Renders `v3a4 III`, omitting unset segments. Re-exported from

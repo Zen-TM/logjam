@@ -81,7 +81,7 @@ export const KIT_COMPONENTS = {
   // — form controls —
   TextField: both,
   Field: gps(
-    "a label, control, hint and error at the form rhythm; Logjam Web's TextField, Select and RangeField share one inside TextField.tsx",
+    "a label, control, hint and error at the form rhythm; Logjam Web's TextField and Select share one inside TextField.tsx",
   ),
   FormStack: gps(
     "a form's fields at the one field-to-field gap; Logjam Web's dialog body sets it in CSS",
@@ -90,7 +90,6 @@ export const KIT_COMPONENTS = {
   TextArea: web("Logjam GPS's TextField takes multiline"),
   NumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
   LiveNumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
-  RangeField: web("a slider; touch uses RangePills"),
   SearchField: web("Logjam GPS's TextField with a search keyboard"),
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),

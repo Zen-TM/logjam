@@ -53,6 +53,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   BASEMAP_CATALOG,
   NSW_5M,
+  SHARPENED_SOURCE_PREFIX,
   TOPO_LAYERS,
   formatDistanceM,
   mediaDisplayName,
@@ -63,6 +64,8 @@ import {
   wayVerbLabel,
   type IconIdea,
   type SharableEntityType,
+  type SharePromiseKind,
+  lidarJobSharePromise,
   type TopoLayerFormat,
   type TopoLayerName,
 } from "@logjam/shared";
@@ -76,11 +79,6 @@ import {
 } from "./savedKeys";
 import { shareMark, sharedWithLabel } from "./shareMark";
 import { formatBytes, formatMinutes } from "../format";
-import {
-  getGeoPdfJob,
-  listGeoPdfJobs,
-  type GeoPdfJobView,
-} from "../api/geoPdfJobs";
 import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
@@ -123,7 +121,6 @@ import {
 import {
   GEOPDF_ERRORS,
   importGeoPdfFromPicker,
-  importGeoPdfFromUrl,
   resumeGeoPdfImport,
 } from "../geopdf/importPipeline";
 import {
@@ -151,6 +148,7 @@ import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   groupArtifacts,
+  isRegionArtifact,
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
@@ -211,7 +209,11 @@ function basemapName(logicalKey: string): string {
 
 /** What one row of a region card is, listed under the ⋯ sheet. */
 function regionMemberName(artifact: MapArtifact): string {
+  // A sharpened area's clip, labelled when saved (offline/sharpenedClips.ts).
+  if (artifact.logicalKey.startsWith(SHARPENED_SOURCE_PREFIX))
+    return artifact.label ?? "Sharpened area";
   if (artifact.kind === "contours-region") return "Contours";
+  if (artifact.kind === "slope-region") return "Slope";
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
   return artifact.logicalKey === NSW_5M.id
     ? "Elevation data, NSW 5 m"
@@ -256,7 +258,11 @@ const CATEGORY_META: Record<
   }
 > = {
   region: { label: "Region", plural: "Regions", icon: "map" },
-  overlay: { label: "LiDAR topo", plural: "LiDAR Topos", icon: "lidar" },
+  overlay: {
+    label: "Sharpened area",
+    plural: "Sharpened areas",
+    icon: "lidar",
+  },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
   // Routes you drew, as opposed to files you brought in. Kept a separate
   // category rather than folded into "import": a route is editable in place and
@@ -376,7 +382,12 @@ type SavedItem = {
   /** Present on an editable route: flip vertex order (direction is semantic). */
   reverse?: () => Promise<unknown>;
   /** Present on an OWNED, server-backed asset — see `AssetActions.share`. */
-  share?: { entityType: SharableEntityType; entityId: string };
+  share?: {
+    entityType: SharableEntityType;
+    entityId: string;
+    /** What the share promises a friend, when the entity type alone can't say. */
+    promise?: SharePromiseKind;
+  };
   /**
    * Present on an asset that exists as a FILE this device can hand over — an
    * import with its original bytes, a recording that serialises to GPX, a
@@ -410,8 +421,7 @@ export function SavedScreen({
    * spelled — and `nonce` is what makes following the same pointer twice pulse
    * twice, since this tab stays mounted.
    *
-   * A key that matches nothing (an item deleted since, a GeoPDF job already
-   * imported under a local id) simply does not pulse: the filter beside it is
+   * A key that matches nothing (an item deleted since) simply does not pulse: the filter beside it is
    * still the right place to be looking.
    */
   initialHighlight?: { key: string; nonce: number };
@@ -480,9 +490,6 @@ export function SavedScreen({
   const { accountState } = useAccountState();
   const lidarReady =
     capabilityStatus("lidarOverlays", accountState, online).status ===
-    "available";
-  const accountGeoPdfReady =
-    capabilityStatus("accountGeoPdf", accountState, online).status ===
     "available";
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
@@ -652,12 +659,7 @@ export function SavedScreen({
   // The DEM saved with a run belongs to that run's card: its bytes are part of
   // what the area cost, and deleting the area has to take it with it. It is not
   // one of the "maps", though — see `basemapMembers`.
-  const regionArtifacts = artifacts.filter(
-    (a) =>
-      a.kind === "basemap-region" ||
-      a.kind === "dem-region" ||
-      a.kind === "contours-region",
-  );
+  const regionArtifacts = artifacts.filter(isRegionArtifact);
 
   // A region download in flight, as one card per run at the top of the Regions
   // filter. It is background work — the queue keeps running while the user is
@@ -763,7 +765,7 @@ export function SavedScreen({
 
   const overlaysQuery = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     accountState !== "guest",
   );
   const mergedOverlays = mergeSavedOverlayJobs(overlaysQuery.data, artifacts);
@@ -942,54 +944,6 @@ export function SavedScreen({
     );
   }, []);
 
-  // Import your own server-generated GeoPDFs: list the account's completed
-  // jobs on demand (online-only), then stream a chosen one's presigned bytes
-  // into the same on-device pipeline. Loaded lazily on a tap, not on mount.
-  const [accountJobs, setAccountJobs] = useState<GeoPdfJobView[] | null>(null);
-  const [accountJobsLoading, setAccountJobsLoading] = useState(false);
-
-  // The caller raises `accountJobsLoading` first: the tap below, or the render
-  // that sees a notification's arrival (see "An arrival that NAMES a row").
-  const fetchAccountGeoPdfs = useCallback(
-    () =>
-      listGeoPdfJobs()
-        .then((jobs) => {
-          const completed = jobs.filter((job) => job.status === "completed");
-          setAccountJobs(completed);
-          setFilter("geoPdf");
-          if (completed.length === 0)
-            info("No generated GeoPDFs on your account yet.");
-        })
-        .catch((err: unknown) => {
-          console.error(err);
-          fail(messageFromError(err, "Couldn't load your GeoPDFs."));
-        })
-        .finally(() => setAccountJobsLoading(false)),
-    [fail, info],
-  );
-  const loadAccountGeoPdfs = useCallback(() => {
-    setAccountJobsLoading(true);
-    void fetchAccountGeoPdfs();
-  }, [fetchAccountGeoPdfs]);
-
-  const handleImportAccountGeoPdf = useCallback((job: GeoPdfJobView) => {
-    const label = job.title ?? "GeoPDF";
-    void runGeoPdfImport(label, async (onProgress, token) => {
-      // Re-presign right before download — the listed URL may have expired
-      // while this list was open.
-      const fresh = await getGeoPdfJob(job.id);
-      if (!fresh.downloadUrl)
-        throw new Error("This GeoPDF isn't ready to download.");
-      return importGeoPdfFromUrl(
-        fresh.title ?? "Logjam GeoPDF",
-        fresh.downloadUrl,
-        onProgress,
-        token,
-      );
-    });
-    setFilter("geoPdf");
-  }, []);
-
   // --- Tracks ---
   const { tracks } = useTracks();
   const savedTracks = tracks.filter((track) => track.state === "done");
@@ -1011,7 +965,8 @@ export function SavedScreen({
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
-      // when they picked two. Nor are the contours, drawn with one of them.
+      // when they picked two. Nor are the contours or the slope, drawn over
+      // one of them.
       const basemapMembers = group.members.filter(
         (a) => a.kind === "basemap-region",
       );
@@ -1095,7 +1050,13 @@ export function SavedScreen({
                 },
               },
             }
-          : { share: { entityType: "topoJob" as const, entityId: group.key } }),
+          : {
+              share: {
+                entityType: "topoJob" as const,
+                entityId: group.key,
+                promise: lidarJobSharePromise(job),
+              },
+            }),
         // The saved layers' own extent, else the job's footprint from the account.
         locatable: (group.bbox ?? bboxOfFootprint(job?.footprint)) != null,
         resolveBbox: async () => group.bbox ?? bboxOfFootprint(job?.footprint),
@@ -1397,8 +1358,7 @@ export function SavedScreen({
     (visibleItems.some((item) => item.key === highlightKey) ||
       downloadableJobs.some(
         (job) => savedOverlayKey(job.jobId) === highlightKey,
-      ) ||
-      (accountJobs ?? []).some((job) => job.id === highlightKey));
+      ));
   const pulsedForNonce = useRef<number | null>(null);
   useEffect(() => {
     if (!highlightPresent || pulsedForNonce.current === highlightNonce) return;
@@ -1430,21 +1390,6 @@ export function SavedScreen({
     });
   }, [highlightKey, highlightNonce, highlightPresent, pulse]);
 
-  // An arrival that NAMES a row is the tap the lazy account list was waiting
-  // for. Without this the GeoPDF a notification points at is behind an "Import
-  // a GeoPDF" button, on a tab whose empty state says there is nothing here.
-  const autoLoadKey =
-    highlightKey && filter === "geoPdf" && accountJobs == null
-      ? `${highlightNonce}:${highlightKey}`
-      : null;
-  const [autoLoadedFor, setAutoLoadedFor] = useState<string | null>(null);
-  if (autoLoadKey !== autoLoadedFor) {
-    setAutoLoadedFor(autoLoadKey);
-    if (autoLoadKey !== null) setAccountJobsLoading(true);
-  }
-  useEffect(() => {
-    if (autoLoadKey !== null) void fetchAccountGeoPdfs();
-  }, [autoLoadKey, fetchAccountGeoPdfs]);
   // The search field itself follows the same "nothing to search" rule the tag
   // rail already did: hidden when the active tab holds no rows, so an empty
   // panel gets the whole screen body.
@@ -1674,6 +1619,7 @@ export function SavedScreen({
               kind: "entity",
               entityType: menuItem.share.entityType,
               entityId: menuItem.share.entityId,
+              promise: menuItem.share.promise,
             }
           : null,
     itemLabel: menuItem?.title ?? "",
@@ -2120,53 +2066,6 @@ export function SavedScreen({
           </>
         ) : null}
 
-        {filter === "geoPdf" &&
-        accountJobs != null &&
-        accountJobs.length > 0 ? (
-          <>
-            <SectionHeader title="In your Logjam account" />
-            {accountJobs.map((job) => (
-              // Keyed by the JOB id, which is what a "GeoPDF ready"
-              // notification carries. Once imported the row is a local import
-              // with an id of its own and the pointer stops matching — the
-              // filter is still right, and nothing pulses.
-              <PulseSlot
-                key={job.id}
-                active={pulsingKey === job.id}
-                opacity={pulse}
-                onMeasure={scrollToPulse}
-              >
-                <Row
-                  title={job.title ?? "Untitled GeoPDF"}
-                  // Its home is the map but it is not on the phone: the one
-                  // obvious job is bringing it here, as its button does.
-                  onPress={
-                    geoPdfBusy
-                      ? undefined
-                      : () => handleImportAccountGeoPdf(job)
-                  }
-                  subtitle={
-                    job.resultBytes != null
-                      ? formatBytes(job.resultBytes)
-                      : undefined
-                  }
-                  icon="geoPdf"
-                  hue={assetHue.geoPdf}
-                  right={
-                    <IconButton
-                      icon="download"
-                      accessibilityLabel={`Import ${job.title ?? "this GeoPDF"} to this device`}
-                      color={theme.accent}
-                      disabled={geoPdfBusy}
-                      onPress={() => handleImportAccountGeoPdf(job)}
-                    />
-                  }
-                />
-              </PulseSlot>
-            ))}
-          </>
-        ) : null}
-
         {/* The list ends with the button its empty state offers (the same one),
             so adding is where the eye ends up after scrolling to the bottom. */}
         <SavedListEnd
@@ -2220,30 +2119,10 @@ export function SavedScreen({
               handleImportGeoPdf();
             }}
           />
+          {/* Not up with the regions: this is something you made on the web and
+              are pulling down, which is less like a basemap download. */}
           <Row
-            title={
-              accountJobsLoading
-                ? "Loading your GeoPDFs…"
-                : "GeoPDFs from my account"
-            }
-            icon="sync"
-            hue={assetHue.geoPdf}
-            {...capabilityRowProps("accountGeoPdf", accountState, online)}
-            onPress={
-              accountGeoPdfReady && !accountJobsLoading
-                ? () => {
-                    setAddSheetOpen(false);
-                    loadAccountGeoPdfs();
-                  }
-                : undefined
-            }
-          />
-          {/* Under the other "from my account" row rather than up with the
-              regions: both are things you generated on the web and are pulling
-              down, which is more like each other than either is like a
-              basemap download. */}
-          <Row
-            title="LiDAR topos from my account"
+            title="Sharpened areas from my account"
             icon="lidar"
             hue={assetHue.overlay}
             {...capabilityRowProps("lidarOverlays", accountState, online)}
@@ -2614,18 +2493,16 @@ function EmptyPanel({
       hint: "Without a saved region the map is blank once you lose signal.",
     },
     overlay: {
-      title: "No LiDAR topos here",
+      title: "No sharpened areas here",
       hint: isGuest
-        ? "LiDAR topos are generated on Logjam Web and need a Logjam account."
+        ? "Logjam Web makes sharpened areas, and they need a Logjam account."
         : online
-          ? "Save topo overlays you make on Logjam Web for offline use."
-          : "Connect to see the overlays on your account.",
+          ? "Save the sharpened areas you make on Logjam Web for offline use."
+          : "Connect to see the sharpened areas on your account.",
     },
     geoPdf: {
       title: "No GeoPDF maps",
-      hint: isGuest
-        ? "Import a GeoPDF from this phone. An account is needed to pull one from Logjam Web."
-        : "Import a GeoPDF from this phone, or pull one from your Logjam account.",
+      hint: "Import a GeoPDF from this phone's storage.",
     },
     import: {
       title: "No imported files",

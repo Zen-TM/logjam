@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   NOTIFICATION_TYPES,
+  notificationAnnouncement,
   notificationHaystack,
+  notificationKind,
   notificationLabel,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
@@ -92,16 +94,21 @@ describe("notificationLabel", () => {
     ).toBe("bob shared an item with you");
   });
 
-  it("labels topo completion, with OSM warning when flagged", () => {
+  it("labels topo completion", () => {
     expect(
       notificationLabel(notification("topo_complete", { jobName: "Kanangra" })),
     ).toEqual({
       text: "Kanangra map ready",
     });
-    const withWarning = notificationLabel(
-      notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
-    );
-    expect(withWarning.warning).toMatch(/Roads and labels/);
+  });
+
+  // Mutation: uppercase the format again, and it reads "GPKG export ready".
+  it("names an export's format as the app does", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { format: "gpkg" }),
+      ).text,
+    ).toBe("GeoPackage export ready");
   });
 
   it("labels export completion and failure", () => {
@@ -121,21 +128,19 @@ describe("notificationLabel", () => {
           errorMessage: "boom",
         }),
       ),
-    ).toEqual({ text: "PDF export failed", warning: "boom" });
+    ).toEqual({ text: "PDF export failed", detail: "boom" });
   });
 
-  it("labels geo_pdf completion and failure", () => {
-    expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe(
-      "GeoPDF ready",
-    );
+  // Mutation: drop the size branch and the detail line vanishes.
+  it("gives a finished export its size when it has one", () => {
     expect(
       notificationLabel(
-        notification("geo_pdf_complete", {
-          status: "failed",
-          errorMessage: "no extent",
+        notification("topo_export_complete", {
+          format: "geotiff",
+          resultBytes: 5 * 1024 ** 2,
         }),
       ),
-    ).toEqual({ text: "Couldn't create GeoPDF", warning: "no extent" });
+    ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
   });
 
   it("degrades gracefully on missing payload fields", () => {
@@ -151,6 +156,52 @@ describe("notificationLabel", () => {
     expect(notificationLabel(notification("future_type")).text).toBe(
       "Notification",
     );
+  });
+});
+
+describe("announcement", () => {
+  const resolved = {
+    announcementId: "a1",
+    title: "Trip season",
+    body: "Hello **all**",
+  };
+
+  // Red if the byline goes: a bare title reads like any system notice.
+  it("is labelled with the message's own title and who it is from", () => {
+    expect(notificationLabel(notification("announcement", resolved))).toEqual({
+      text: "Trip season",
+      detail: "From the Logjam maintainer",
+    });
+    expect(notificationLabel(notification("announcement"))).toEqual({
+      text: "A message from the Logjam maintainer",
+    });
+  });
+
+  // Red if it falls back to "people": a friends glyph reads as a friend event.
+  it("is its own kind", () => {
+    expect(notificationKind(notification("announcement"))).toBe("message");
+  });
+
+  it("hands a client the resolved message", () => {
+    expect(
+      notificationAnnouncement(notification("announcement", resolved)),
+    ).toEqual({
+      id: "a1",
+      title: "Trip season",
+      body: "Hello **all**",
+    });
+  });
+
+  // Red if the helper stops checking the type or the resolved body.
+  it("is null for another type or an unresolved payload", () => {
+    expect(
+      notificationAnnouncement(notification("topo_complete", resolved)),
+    ).toBeNull();
+    expect(
+      notificationAnnouncement(
+        notification("announcement", { announcementId: "a1" }),
+      ),
+    ).toBeNull();
   });
 });
 
@@ -179,7 +230,7 @@ describe("file_sent", () => {
       }),
     );
     expect(label.text).toBe("bob sent you Exit notes.gpx");
-    expect(label.warning).toBe("This file expired. Ask bob to send it again.");
+    expect(label.detail).toBe("This file expired. Ask bob to send it again.");
   });
 
   // Nothing to explain while it is still answerable.
@@ -191,7 +242,7 @@ describe("file_sent", () => {
             fileSendId: "s1",
             fileSendStatus: status,
           }),
-        ).warning,
+        ).detail,
       ).toBeUndefined();
     }
   });
@@ -215,7 +266,7 @@ describe("notificationHaystack — what the inbox search matches", () => {
     expect(haystack).toContain("bob");
   });
 
-  it("includes the warning line, which is the only place some rows say why", () => {
+  it("includes the detail line, which is the only place some rows say why", () => {
     expect(
       notificationHaystack(
         notification("topo_export_skipped", {

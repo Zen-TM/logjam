@@ -47,7 +47,7 @@ renumber.
   `scripts/wcag-contrast.mjs`, measured on the surface it renders on; its
   known-failures list only shrinks.
 - **A touch target is 48×48 dp**, even when drawn smaller. A mouse target is
-  never under 24px.
+  never under 24px. A link inside running text is exempt, as in WCAG 2.5.8.
 - **On the map, chrome is the least it can be**: no permanent labels, no
   pinned cards, a badge only while what it says is true. A running job is one
   glyph, its numbers one press away.
@@ -114,7 +114,8 @@ renumber.
   Exempt: text fields, switches, the surfaces themselves and the map's chrome.
 - **Small things follow it.** A button wears the card fill; a surface's one
   primary action wears the accent. A status pill is read, so it has no fill:
-  words with a dot or a glyph. A selected chip looks like neither. A badge on
+  words with a dot or a glyph. A selected chip looks like neither: its fill
+  shows it, with no check, so selecting never changes its width. A badge on
   something pressable (an unread count, a chip's tally) keeps its fill.
 - **A pill is never narrower than it is tall.**
 - **Things that look alike behave alike**; a thing that behaves differently
@@ -161,8 +162,13 @@ renumber.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.
+- **A selected chip's fill is `chipFill(hue, scheme)`, not the hue**: the hue
+  moved just far enough to stand 3:1 off the unselected chip beside it and off
+  the page behind a lone chip, since the fill is all that shows it is
+  selected. Tiles, avatars and map marks keep the hue as declared. Guard: `shared/src/chipFill.test.ts` walks every scheme
+  and hue.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
-  a shape. Selected is an accent edge and a check, not a tint.
+  a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
 - **Controls over a photo are black and white on a scrim**, not theme
@@ -172,7 +178,8 @@ renumber.
 
 - **Anything with kinds takes a glyph and a hue per kind from one map**, used
   wherever the kind appears: row tile, active chip, map mark, "add" menu,
-  notification. A notification borrows the hue of the thing it is about.
+  notification. A notification borrows the hue of the thing it is about; one
+  about Logjam itself (a maintainer message) has no thing and takes the accent.
 - **A menu of destinations is not a set of kinds**: Inbox, Friends and
   Settings share one look.
 - **An open vocabulary hashes its hue from the label**, so it survives
@@ -186,7 +193,8 @@ renumber.
 
 - **`Row` is the only list row.** The body opens; the ⋯ acts. Trailing
   order: metric, status, ⋯. A row that asks a question (accept or decline)
-  answers it in its footer.
+  answers it in its footer. A maintainer message's footer says Read
+  message, since nothing else says its row opens one.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
   a LiDAR topo) opens on the map. A thing with nowhere to open does its one
@@ -228,7 +236,8 @@ renumber.
 ## 10. Surfaces
 
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
-  for looking.** Never the only way to read something.
+  for looking.** Never the only way to read something, except a maintainer
+  message, which has no page.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title
@@ -324,7 +333,7 @@ renumber.
   it. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now.
-- **Overlays divide by what a thing is** (Places, Ways, LiDAR topos). Whose
+- **Overlays divide by what a thing is** (Places, Ways). Whose
   it is lives on the thing: the shared ring, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.

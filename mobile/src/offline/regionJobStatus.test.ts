@@ -7,6 +7,7 @@ import {
   isJobSettled,
   isJobStalled,
   regionRejectedLine,
+  sourceUnavailableLine,
 } from "./regionJobStatus";
 
 // (1) A job parked by a provider 403/429 — which nothing auto-resumes, by
@@ -77,5 +78,18 @@ describe("regionRejectedLine", () => {
     expect(regionRejectedLine("too-large")).toMatch(/smaller area/);
     expect(regionRejectedLine("outside-nsw")).toMatch(/inside NSW/);
     expect(regionRejectedLine(undefined)).toMatch(/inside NSW/);
+  });
+});
+
+describe("sourceUnavailableLine", () => {
+  // Red if an expired sharpened area reads as a server fault: the user would
+  // wait for Logjam to fix something only a new save fixes.
+  it("tells a sharpened area to be saved again, and any other archive to wait", () => {
+    expect(sourceUnavailableLine("sharpened-area")).toMatch(
+      /Saving the area again fetches it/,
+    );
+    expect(sourceUnavailableLine(undefined)).toBe(
+      "Logjam couldn't prepare this map right now. Other maps still work.",
+    );
   });
 });

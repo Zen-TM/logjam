@@ -79,4 +79,19 @@ describe("useStoredState", () => {
       expect(sessionStorage.getItem("k")).toBe(JSON.stringify("fallback"));
     });
   });
+
+  // A tab open across a deploy that retired a view still holds its name.
+  // Mutation: drop the isValid check and the retired name comes back.
+  it("reads a stored value its guard rejects as the default", () => {
+    type View = "current";
+    const isView = (stored: unknown): stored is View => stored === "current";
+    const read = () =>
+      renderHook(() =>
+        useStoredState<View>("k", "current", sessionStorage, isView),
+      ).result.current[0];
+    sessionStorage.setItem("k", '"retired"');
+    expect(read()).toBe("current");
+    sessionStorage.setItem("k", '"current"');
+    expect(read()).toBe("current");
+  });
 });

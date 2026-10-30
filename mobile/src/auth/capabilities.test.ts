@@ -18,7 +18,6 @@ const ALL_CAPABILITIES: Capability[] = [
   "friends",
   "inbox",
   "lidarOverlays",
-  "accountGeoPdf",
   "placeSearch",
   "serverPrefs",
   "pushNotifications",

@@ -41,8 +41,7 @@ elvis-katoomba-2506258-laz.zip`:
 1. Builds the image (layer-cached) and brings up Postgres, MiniStack (S3 and
    ECS, with the Docker socket) and the seeded API, which has `ECS_SUBNETS`
    set.
-2. Puts the worker on a Docker network with no internet: Overpass is a stub
-   serving `e2e/overpass-katoomba-2506258.json`, and the SVTM and
+2. Puts the worker on a Docker network with no internet: the SVTM and
    fire-history rasters are made-up ones in MiniStack, read through
    `/vsis3/`. It registers a task definition in MiniStack whose env is
    `e2e/worker.env` (itself checked against prod's `ecs.tf`) and whose
@@ -53,22 +52,35 @@ elvis-katoomba-2506258-laz.zip`:
    row has its `ecs_task_arn`, that MiniStack lists that task, and that the
    container got the `JOB_ID` override and sits on the no-internet network
    only.
-4. **Happy path** (`e2e/check.py complete`): the worker exits 0 and the row is
-   `complete` with its outputs, footprint, metrics and
-   storage charge; the objects are in the bucket and the input ZIP is gone;
-   every layer's tile on Mount Solitary decodes and is not blank.
-5. **Resurrection check** (`e2e/check.py reaped`): a second job is launched
-   the same way, its worker killed mid-render and the row force-failed as the
-   reaper would; a worker relaunched for the same `JOB_ID` leaves it
-   `failed`, with no outputs and no notification. The relaunch is by `docker
-   run` with `e2e/worker.env`, not RunTask: only the reaper's half is stood in
-   for.
+4. **Sharpen** (`e2e/check.py sharpened`): before the job starts,
+   `e2e/statewide.py` puts made-up stand-ins for the statewide height and
+   slope archives in MiniStack (the heights a steep plane, so the check can
+   say what every fill pixel must hold). `/start` marks the job and the
+   worker runs `sharpen.py`. The row must be `complete` with its result and ground
+   kind, every z15 tile of its range in both raster archives, the survey's own
+   heights on Mount Solitary, the fill pixels of the range's corner tile in
+   place, and a contour tile.
+5. **Vegetation** (`e2e/check.py ticked`): a second job is started the same
+   way with the vegetation tick, so the worker also runs `pipeline.py`'s
+   vegetation pass. The worker exits 0 and reads the SVTM raster; the row is
+   `complete`, keeps the tick, holds one vegetation output and the fire
+   raster's staleness in its metrics, and charges storage; the input ZIP is
+   gone, and the vegetation tile on Mount Solitary is not blank.
+6. **Resurrection check** (`e2e/check.py reaped`): a ticked job is inserted
+   by hand (`e2e/ticked-job.sh`, so no RunTask launches a worker for it), its
+   worker killed as soon as it has claimed the row (the one-tile job is done
+   in under a minute, too soon for its heartbeat) and the row force-failed as
+   the reaper would; a
+   worker relaunched for the same `JOB_ID` leaves it `failed`, writes no
+   outputs and sends no notification. Both workers are started by
+   `docker run` with `e2e/worker.env`, not RunTask: only the reaper's half is
+   stood in for.
 
 MiniStack runs a task on the first network of its own container, by name, so
 the job's no-internet network is named to sort before the job's own.
 
 What stays manual: a multi-tile or multi-survey ZIP, a real SVTM or fire
-raster, live Overpass, and a run on Fargate itself. Run one by hand (below)
+raster, and a run on Fargate itself. Run one by hand (below)
 before committing a worker change that touches those.
 
 ### By hand, against the dev stack
@@ -82,11 +94,35 @@ definition's env from `worker_common_env` in that `ecs.tf` and the S3 settings
 from the GDAL block of `e2e/worker.env`:
 
     docker run --rm --network logjam-local --env-file topo/tests/e2e/worker.env \
-      -e JOB_ID=<id> -e OVERPASS_ENDPOINTS=https://overpass-api.de/api/interpreter \
-      -e SVTM_FORMATION_S3_PATH= -e FIRE_HISTORY_S3_PATH= logjam-topo-worker:latest
+      -e JOB_ID=<id> -e SVTM_FORMATION_S3_PATH= -e FIRE_HISTORY_S3_PATH= \
+      logjam-topo-worker:latest
 
-(`worker.env` points Overpass and the rasters at CI's stubs; the `-e` overrides
-send them to the real mirror and skip the rasters.) It claims only a `pending` job.
+(`worker.env` points the rasters at CI's stand-ins; the `-e` overrides skip
+them.) It claims only a `pending` job.
+
+A job started in Logjam Web sharpens, and `sharpen.py`
+reads the statewide height and slope archives from the dev bucket, which
+nothing local puts there. Before starting one, put CI's made-up stand-ins in
+(a steep plane, so the area's fill looks nothing like real ground):
+
+    mkdir -p /tmp/statewide
+    docker run --rm -v /tmp/statewide:/out -v "$PWD/topo/tests/e2e:/e2e:ro" \
+      --entrypoint python3 logjam-topo-worker:latest /e2e/statewide.py /out
+    for name in nsw-5m nsw-5m-slope; do
+      AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=ap-southeast-2 \
+        aws --endpoint-url http://localhost:4566 s3 cp /tmp/statewide/$name.pmtiles \
+        s3://logjam-topo-local/master/dem/$name.pmtiles
+    done
+
+The height stand-in replaces the Katoomba slice the root README's Local
+Development section uploads to the same key for dev maps (`DEV_MASTER_URL`),
+so dev maps then draw the plane. Re-run that section's `curl` afterwards to
+get the real slice back. It uploads no slope, so remove the slope stand-in (a
+flat 3° plane, which bands covering 3° would tint):
+
+    AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=ap-southeast-2 \
+      aws --endpoint-url http://localhost:4566 s3 rm \
+      s3://logjam-topo-local/master/dem/nsw-5m-slope.pmtiles
 
 The automated DB test (#1) covers the guard semantics; this job covers the
 real-pipeline control flow around it.

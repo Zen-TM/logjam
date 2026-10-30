@@ -26,29 +26,30 @@ describe("inboxDestination", () => {
     });
   });
 
-  it("sends a finished map to the Maps view that lists it", () => {
+  // Mutation: send a finished sharpened area to a page instead of Layers →
+  // Terrain → Sharpened areas.
+  it("sends a finished map to where it is listed", () => {
     expect(
       inboxDestination(notification("topo_complete", { jobId: "j1" })),
-    ).toMatchObject({ panel: "maps", mapsView: "lidar" });
-    expect(
-      inboxDestination(
-        notification("geo_pdf_complete", { status: "completed" }),
-      ),
-    ).toMatchObject({
-      panel: "maps",
-      mapsView: "geopdfs",
-    });
+    ).toEqual({ kind: "sharpened", label: "Show" });
   });
 
   it("goes nowhere for a failure, which made nothing to look at", () => {
-    expect(
-      inboxDestination(notification("geo_pdf_complete", { status: "failed" })),
-    ).toBeNull();
     expect(
       inboxDestination(
         notification("topo_export_complete", { status: "failed" }),
       ),
     ).toBeNull();
+  });
+
+  // An export is a file the row's Download hands over; no page lists it.
+  // Mutation: send it to a page and this is not null.
+  it("goes nowhere for an export, finished or failed", () => {
+    for (const status of ["completed", "failed"]) {
+      expect(
+        inboxDestination(notification("topo_export_complete", { status })),
+      ).toBeNull();
+    }
   });
 
   it("goes nowhere for a file send, which the row itself answers", () => {

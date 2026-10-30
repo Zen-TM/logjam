@@ -44,6 +44,7 @@ import psycopg2.extras
 from pmtiles.convert import mbtiles_to_pmtiles
 
 from worker_common import (
+    TOO_BIG,
     compose_database_url,
     create_notification,
     get_user_email,
@@ -64,6 +65,19 @@ GENERIC_FAILURE = (
 )
 
 
+class JobInputError(Exception):
+    """A ZIP the job cannot use; the message is the sentence its owner reads."""
+
+
+# A job /start never marked to sharpen: from before new jobs sharpened their
+# area, which nothing runs any more (tests/test_worker_helpers.py
+# `test_an_unmarked_job_is_refused_before_its_download`).
+OLD_JOB = (
+    "This LiDAR map was started before LiDAR maps sharpened their area, and "
+    "can't be made now. Sharpen the area again."
+)
+
+
 def safe_error_message(e: Exception) -> str:
     """The sentence the job's owner reads in both clients (shared/DESIGN.md §11).
 
@@ -71,10 +85,12 @@ def safe_error_message(e: Exception) -> str:
     no id. Which step failed stays in CloudWatch, with the full traceback.
     """
     msg = str(e)
+    if isinstance(e, JobInputError):
+        return msg
     if isinstance(e, subprocess.CalledProcessError):
         return GENERIC_FAILURE
     if isinstance(e, MemoryError) or "OOM" in msg or "exit code -9" in msg:
-        return "This area was too big to process. Try a smaller one."
+        return TOO_BIG
     if isinstance(e, RuntimeError):
         return GENERIC_FAILURE
     if isinstance(e, (OSError, IOError)):
@@ -90,109 +106,6 @@ BUCKET = os.environ["S3_BUCKET_TOPO"]
 DATABASE_URL = compose_database_url()
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "")
 JOB_ID = os.environ["JOB_ID"]
-
-# Python mirror of the canonical layer list — keep in sync with
-# shared/src/topoSettings.ts → TOPO_LAYERS (the TS side all derives from it;
-# this is the only remaining hand-synced copy). Composite is intentionally
-# absent — the export worker builds it on demand.
-ALL_LAYERS: frozenset[str] = frozenset(
-    {
-        "hillshade",
-        "vegetation",
-        "slope",
-        "contours",
-        "features",
-    }
-)
-
-RASTER_LAYERS: frozenset[str] = frozenset({"hillshade", "vegetation", "slope"})
-VECTOR_LAYERS: frozenset[str] = frozenset({"contours", "features"})
-
-# Per-layer survey-pick policy — hand-synced mirror of the `surveyPick` field on
-# shared/src/topoSettings.ts → TOPO_LAYERS (guarded by
-# tests/test_layer_sync.py). "density" = prefer densest survey (terrain/bedrock,
-# fire-irrelevant); "recency" = prefer most-recent capture (vegetation, post-fire
-# state matters); "none" = not LiDAR-derived (OSM features). Consumed by
-# pipeline.py select_surveys_by_layer to split overlapping surveys per footprint.
-LAYER_SURVEY_PICK: dict[str, str] = {
-    "hillshade": "density",
-    "vegetation": "recency",
-    "slope": "density",
-    "contours": "density",
-    "features": "none",
-}
-
-# Hardcoded fallback when User.vector_style is NULL. Must match
-# VECTOR_STYLE_DEFAULTS in shared/src/topoSettings.ts. Used only as a safety
-# net — the migration backfills every user row, so this should rarely fire.
-VECTOR_STYLE_DEFAULTS: dict = {
-    "contours": {
-        "majorColour": "#503c28dc",
-        "minorColour": "#785a3ca0",
-        "majorWidthM": 18,
-        "minorWidthM": 8,
-    },
-    "features": {
-        "waterway": {"enabled": True, "colour": "#2878dcdc", "widthZ18": 3},
-        "track": {"enabled": True, "colour": "#a0641edc", "widthZ18": 2},
-        "road": {"enabled": True, "colour": "#505050e6", "widthZ18": 4},
-        "building": {"enabled": True, "colour": "#a08c78c8", "widthZ18": 2},
-        "power": {"enabled": True, "colour": "#c8a000c8", "widthZ18": 1},
-        "campsite": {"enabled": True, "colour": "#00a050e6", "widthZ18": 14},
-        "peak": {"enabled": True, "colour": "#503214f0", "widthZ18": 12},
-        "spring": {"enabled": True, "colour": "#1e5ad2e6", "widthZ18": 8},
-        "gate": {"enabled": True, "colour": "#464646dc", "widthZ18": 10},
-        "cave": {"enabled": True, "colour": "#3c1e0ae6", "widthZ18": 10},
-        "bridge": {"enabled": False, "colour": "#403028e6", "widthZ18": 3},
-        "ford": {"enabled": False, "colour": "#1e90ffe6", "widthZ18": 8},
-        "waterfall": {"enabled": False, "colour": "#1e6ad2f0", "widthZ18": 10},
-        "trailhead": {"enabled": False, "colour": "#a04020e6", "widthZ18": 12},
-        "viewpoint": {"enabled": False, "colour": "#806020e6", "widthZ18": 12},
-        "hut": {"enabled": False, "colour": "#503820e6", "widthZ18": 12},
-    },
-    "labelScale": 1,
-}
-
-
-def merge_settings(layer_options: Optional[dict], vector_style: Optional[dict]) -> dict:
-    """
-    Merge the per-job RasterTemplateSettings (layer_options) with the
-    user-level VectorStyleSettings snapshot into the legacy TopoSettings
-    shape that pipeline.py consumes.
-
-    Output keys:
-      hillshade, slope, vegetation       - from layer_options (or empty/missing)
-      contours: zoomBands + enabled      - from layer_options.contours
-                majorColour/minorColour/
-                majorWidthM/minorWidthM  - from vector_style.contours
-      features: enabled                  - from layer_options.features.enabled
-                features                 - from vector_style.features
-    """
-    raster = layer_options or {}
-    vec = vector_style or VECTOR_STYLE_DEFAULTS
-
-    merged = {
-        "hillshade": raster.get("hillshade"),
-        "slope": raster.get("slope"),
-        "vegetation": raster.get("vegetation"),
-    }
-    merged = {k: v for k, v in merged.items() if v is not None}
-
-    raster_contours = raster.get("contours") or {}
-    vec_contours = vec.get("contours") or VECTOR_STYLE_DEFAULTS["contours"]
-    merged["contours"] = {**raster_contours, **vec_contours}
-
-    raster_features = raster.get("features") or {}
-    vec_features = vec.get("features") or VECTOR_STYLE_DEFAULTS["features"]
-    merged["features"] = {
-        "enabled": raster_features.get("enabled", True),
-        "features": vec_features,
-    }
-
-    # Global label-size multiplier (default 1). Absent on styles stored before
-    # the field existed, so fall back rather than assume it's present.
-    merged["labelScale"] = vec.get("labelScale", VECTOR_STYLE_DEFAULTS["labelScale"])
-    return merged
 
 
 s3 = boto3.client("s3", region_name=AWS_REGION)
@@ -279,7 +192,7 @@ def _heartbeat_loop(
     except Exception as e:
         log.warning(f"Heartbeat disabled (no DB connection): {e}")
         return
-    last_done = None
+    last = None
     # stop_event.wait returns True when set → exit promptly on subprocess end.
     while not stop_event.wait(interval):
         try:
@@ -288,9 +201,12 @@ def _heartbeat_loop(
             payload = json.loads(progress_path.read_text())
             done = payload.get("done")
             total = payload.get("total")
-            if done is None or done == last_done:
+            # By phase as well: sharpen.py's phases each count from 1, and a
+            # phase that starts on the last one's count is still progress
+            # (tests/test_heartbeat.py, "a new phase at the same count").
+            if done is None or (payload.get("phase"), done) == last:
                 continue
-            last_done = done
+            last = (payload.get("phase"), done)
             update_status(
                 conn,
                 job_id,
@@ -354,48 +270,21 @@ def get_job(conn, job_id: str) -> dict:
 # ── Email ─────────────────────────────────────────────────────────────────────
 
 
-def send_completion_email(
-    to_email: str, job_id: str, output_keys: list[dict], osm_failed: bool = False
-):
+def send_completion_email(to_email: str, job_id: str, output_keys: list[dict]):
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping completion email")
         return
 
     base = FRONTEND_URL.rstrip("/")
-    # Job-completion email links the user to the topo job so they can
-    # open the Export… dialog. Downloads are produced on demand by the
-    # export worker; the job itself only provides display PMTiles + COG sources.
+    # The link opens the job in Logjam Web, whose map draws the area.
     open_url = f"{base}/?topoJob={job_id}"
-
-    osm_warning_text = (
-        (
-            "\n\nThe features layer (tracks, waterways, peaks) couldn't be included. "
-            "The rest is complete. Re-run the job if you need that layer."
-        )
-        if osm_failed
-        else ""
+    text_body = "\n".join(
+        [
+            "Your sharpened area is ready.",
+            "",
+            f"Open it in Logjam Web: {open_url}",
+        ]
     )
-    osm_warning_html = (
-        (
-            '<p style="color:#a06000">The features layer (tracks, waterways, '
-            "peaks) couldn't be included. The rest is complete. "
-            "Re-run the job if you need that layer.</p>"
-        )
-        if osm_failed
-        else ""
-    )
-
-    text_body = (
-        "\n".join(
-            [
-                "Your topo map job is complete.",
-                "",
-                f"Open it in Logjam Web to download or export your map: {open_url}",
-            ]
-        )
-        + osm_warning_text
-    )
-
     html_body = "\n".join(
         [
             "<html>",
@@ -403,21 +292,20 @@ def send_completion_email(
             '    <p style="margin:0 0 16px">'
             f'<img src="{base}/email-logo-lockup.png" alt="Logjam" width="212" '
             'style="display:block" /></p>',
-            "    <p>Your topo map job is complete.</p>",
-            f'    <p><a href="{open_url}">Open it in Logjam Web to download or export your map</a></p>',
-            f"    {osm_warning_html}",
+            "    <p>Your sharpened area is ready.</p>",
+            f'    <p><a href="{open_url}">Open it in Logjam Web</a></p>',
             "  </body>",
             "</html>",
         ]
     )
-    send_email(to_email, "Topo map ready — Logjam", text_body, html_body)
+    send_email(to_email, "Sharpened area ready — Logjam", text_body, html_body)
 
 
 def send_failure_email(to_email: str, job_id: str, error_message: str):
     """Failure sibling of send_completion_email. Both are gated on the
     same `topoEmail` preference, which means "finishes or fails" — the export
     worker's send_completion_email carries ok/error in one function instead;
-    here a separate function keeps the osm-warning branches out of the way."""
+    this one is failure-only."""
     if not FRONTEND_URL:
         log.warning("FRONTEND_URL not set — skipping failure email")
         return
@@ -455,90 +343,6 @@ def send_failure_email(to_email: str, job_id: str, error_message: str):
 # ── Vector tile generation ────────────────────────────────────────────────────
 
 
-def run_tippecanoe_contours(geojson_dir: str, out_dir: str) -> Path | None:
-    """Convert contour GeoJSON files to a single vector MBTiles via tippecanoe."""
-    inputs = []
-    for interval in [5, 10, 50]:
-        path = Path(geojson_dir) / f"contours_{interval}m.geojson"
-        if path.exists():
-            inputs.append(str(path))
-    if not inputs:
-        log.warning("No contour GeoJSON files found — skipping vector contours.")
-        return None
-
-    out_path = Path(out_dir) / "contours_vector.mbtiles"
-    cmd = [
-        "tippecanoe",
-        "-o",
-        str(out_path),
-        "-z",
-        "18",
-        "-Z",
-        "12",
-        "--no-feature-limit",
-        "--no-tile-size-limit",
-        "-l",
-        "contours",
-        "--force",
-        *inputs,
-    ]
-    log.info(f"tippecanoe (contours): {len(inputs)} input file(s) …")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"tippecanoe contours failed:\n{result.stderr}")
-    log.info(f"Vector contours → {out_path}")
-    return out_path
-
-
-def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
-    """Convert OSM features GeoJSON to vector MBTiles via tippecanoe.
-
-    Returns None when the input is missing or has zero features. tippecanoe
-    fails with "Did not read any valid geometries" on empty FeatureCollections,
-    which would otherwise kill the whole job (e.g. when Overpass returns 0
-    matches in a remote area, or the user disables every OSM feature class).
-    """
-    input_path = Path(geojson_dir) / "osm_features.geojson"
-    if not input_path.exists():
-        log.warning("No OSM features GeoJSON found — skipping vector features.")
-        return None
-
-    try:
-        with open(input_path, "r", encoding="utf-8") as f:
-            feature_count = len(json.load(f).get("features", []))
-    except (json.JSONDecodeError, OSError) as e:
-        log.warning(f"Could not parse {input_path} ({e}) — skipping vector features.")
-        return None
-    if feature_count == 0:
-        log.warning(
-            "OSM features GeoJSON contains 0 features — skipping vector features."
-        )
-        return None
-
-    out_path = Path(out_dir) / "features_vector.mbtiles"
-    cmd = [
-        "tippecanoe",
-        "-o",
-        str(out_path),
-        "-z",
-        "18",
-        "-Z",
-        "12",
-        "--no-feature-limit",
-        "--no-tile-size-limit",
-        "-l",
-        "features",
-        "--force",
-        str(input_path),
-    ]
-    log.info("tippecanoe (features) …")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"tippecanoe features failed:\n{result.stderr}")
-    log.info(f"Vector features → {out_path}")
-    return out_path
-
-
 # ── Future tile-serving architecture ─────────────────────────────────────────
 #
 # This worker currently uploads per-job MBTiles and PMTiles to
@@ -562,100 +366,181 @@ def run_tippecanoe_features(geojson_dir: str, out_dir: str) -> Path | None:
 # ── Core processing ───────────────────────────────────────────────────────────
 
 
-def process_job(
-    job: dict, tmp: str
-) -> tuple[list[dict], Path, bool, int, Optional[dict]]:
-    """
-    Download ZIP, run topo pipeline, convert to PMTiles, upload all to S3.
-    Returns (output_keys, footprint_local, osm_failed, total_output_bytes,
-    pipeline_metrics).
-    osm_failed is True when the Overpass fetch did not produce a GeoJSON
-    (so the features layer will be empty/missing). pipeline_metrics is the
-    parsed runtime metrics dict (or None if absent/unreadable).
-    """
-    s3_input_key = job["s3_input_key"]
-    job_id = job["id"]
-
-    # Download input ZIP from S3
-    zip_path = Path(tmp) / "input.zip"
-    log.info(f"Downloading {s3_input_key} …")
-    s3.download_file(BUCKET, s3_input_key, str(zip_path))
-
-    # Merge per-job raster template settings (TopoJob.layer_options) with the
-    # vector style snapshot taken at job-submit time
-    # (TopoJob.vector_style_snapshot) into the legacy TopoSettings shape that
-    # pipeline.py expects. The pipeline uses the merged dict to drive both
-    # raster compositing colours and OSM/contour selection.
-    output_dir = Path(tmp) / "output"
-    output_dir.mkdir()
-    geojson_dir = Path(tmp) / "geojson_export"
-    geojson_dir.mkdir()
-    # Worker now always pins --work-dir so we can upload styled per-layer
-    # GeoTIFFs (TopoExportDialog GeoTIFF format option).
-    pipeline_work_dir = Path(tmp) / "pipeline_work"
-    pipeline_work_dir.mkdir()
-    cmd = [
-        "python3",
-        str(Path(__file__).parent / "pipeline.py"),
-        str(zip_path),
-        "--output",
-        str(output_dir),
-        "--work-dir",
-        str(pipeline_work_dir),
-        "--workers",
-        str(os.cpu_count() or 4),
-        "--layers",
-        "all",
-        "--export-geojson",
-        str(geojson_dir),
-        "--export-footprint",
-        str(geojson_dir),
-    ]
-
-    layer_options = job.get("layer_options")
-    vector_style_snapshot = job.get("vector_style_snapshot")
-    merged_settings = merge_settings(layer_options, vector_style_snapshot)
-    settings_path = Path(tmp) / "settings.json"
-    with open(settings_path, "w", encoding="utf-8") as f:
-        json.dump(merged_settings, f)
-    metrics_path = Path(tmp) / "metrics.json"
-    progress_path = Path(tmp) / "progress.json"
-    cmd.extend(
-        [
-            "--settings-json",
-            str(settings_path),
-            "--metrics-json",
-            str(metrics_path),
-            "--progress-file",
-            str(progress_path),
-        ]
-    )
-    log.info(f"Merged render settings written to {settings_path}")
-    log.info("Running pipeline …")
-
-    # Heartbeat thread refreshes the job's progress columns from progress.json
-    # while the pipeline runs (see _heartbeat_loop). The main thread keeps the
-    # blocking subprocess.run; the thread is signalled to stop when it returns.
+def run_with_heartbeat(cmd: list[str], job_id: str, progress_path: Path) -> int:
+    """Run a pipeline subprocess while a thread refreshes the job's progress
+    columns from its progress file (see _heartbeat_loop). Returns the exit code."""
     stop_heartbeat = threading.Event()
     heartbeat = threading.Thread(
         target=_heartbeat_loop,
-        args=(job["id"], progress_path, stop_heartbeat),
+        args=(job_id, progress_path, stop_heartbeat),
         daemon=True,
     )
     heartbeat.start()
     try:
-        result = subprocess.run(cmd)
+        return subprocess.run(cmd).returncode
     finally:
         stop_heartbeat.set()
         heartbeat.join(timeout=5)
-    if result.returncode != 0:
+
+
+def process_job(
+    job: dict, tmp: str
+) -> tuple[list[dict], Path, int, Optional[dict], dict]:
+    """
+    Download the ZIP, sharpen it, and upload what it made. Returns
+    (output_keys, footprint_local, total_output_bytes, pipeline_metrics,
+    sharpen): sharpen is the `topo_jobs.sharpen` result. A job with no mark
+    is refused (`OLD_JOB`) before anything is downloaded.
+    """
+    if not job.get("sharpen"):
+        raise JobInputError(OLD_JOB)
+    s3_input_key = job["s3_input_key"]
+    zip_path = Path(tmp) / "input.zip"
+    log.info(f"Downloading {s3_input_key} …")
+    s3.download_file(BUCKET, s3_input_key, str(zip_path))
+    return process_sharpen(job, tmp, zip_path)
+
+
+# contours.pmtiles is absent when no 10 m level crosses the area.
+SHARPEN_ARCHIVES = ("heights", "slope", "contours")
+
+
+def process_sharpen(
+    job: dict, tmp: str, zip_path: Path
+) -> tuple[list[dict], Path, int, Optional[dict], dict]:
+    """A job marked to sharpen: `sharpen.py` builds the height, slope and
+    contour archives, and a ticked job also gets the vegetation layer.
+
+    The mark (`{"v": 1, "vegetation": bool}`, written by the API's /start) is
+    replaced by the result: what sharpen.py reports, the archives' keys and
+    the tick (tests/test_worker_helpers.py `TestProcessSharpen`).
+    """
+    job_id = job["id"]
+    out = Path(tmp) / "sharpen"
+    metrics_path = Path(tmp) / "sharpen-metrics.json"
+    progress_path = Path(tmp) / "sharpen-progress.json"
+    cmd = [
+        "python3",
+        str(Path(__file__).parent / "sharpen.py"),
+        str(zip_path),
+        str(out),
+        "--workers",
+        str(os.cpu_count() or 4),
+        "--metrics-json",
+        str(metrics_path),
+        "--progress-file",
+        str(progress_path),
+    ]
+    log.info("Running sharpen …")
+    code = run_with_heartbeat(cmd, job_id, progress_path)
+    if code == 2 and (out / "error.json").exists():
+        raise JobInputError(json.loads((out / "error.json").read_text())["sentence"])
+    if code != 0:
         raise RuntimeError(
-            f"pipeline.py exited with code {result.returncode} "
-            f"({'OOM kill' if result.returncode == -9 else 'non-zero exit'})"
+            f"sharpen.py exited with code {code} "
+            f"({'OOM kill' if code == -9 else 'non-zero exit'})"
         )
 
-    # Best-effort: read the pipeline's runtime metrics file. A missing/partial
-    # file just means no instrumentation for this job — never fail the job.
+    result = json.loads((out / "sharpen.json").read_text())
+    pipeline_metrics = None
+    try:
+        pipeline_metrics = {
+            **json.loads(metrics_path.read_text()),
+            "pipeline": "sharpen",
+        }
+    except Exception as e:
+        log.warning(f"Failed to read metrics JSON (non-fatal): {e}")
+
+    total_output_bytes = 0
+    keys = {}
+    for name in SHARPEN_ARCHIVES:
+        local = out / f"{name}.pmtiles"
+        if name == "contours" and not local.exists():
+            continue
+        keys[name] = f"outputs/{job_id}/{name}.pmtiles"
+        log.info(f"Uploading {keys[name]} …")
+        s3.upload_file(
+            str(local),
+            BUCKET,
+            keys[name],
+            ExtraArgs={"ContentType": "application/vnd.pmtiles"},
+        )
+        total_output_bytes += local.stat().st_size
+
+    vegetation = bool(job["sharpen"].get("vegetation"))
+    output_keys: list[dict] = []
+    if vegetation:
+        veg_dir = Path(tmp) / "vegetation"
+        veg_dir.mkdir()
+        output_keys, veg_bytes, veg_metrics = process_vegetation(
+            job, str(veg_dir), zip_path
+        )
+        total_output_bytes += veg_bytes
+        # Charged with the job: credits come from wallSeconds
+        # (api/src/lib/computeCredits.ts), and so does the next estimate
+        # (tests/test_worker_helpers.py `TestProcessSharpen`).
+        # Only onto sharpen.py's own figure: without it the job falls back to
+        # its elapsed time, which already holds the vegetation pass.
+        veg_seconds = (veg_metrics or {}).get("wallSeconds")
+        sharpen_seconds = (pipeline_metrics or {}).get("wallSeconds")
+        if isinstance(veg_seconds, (int, float)) and isinstance(
+            sharpen_seconds, (int, float)
+        ):
+            pipeline_metrics = {
+                **pipeline_metrics,
+                "wallSeconds": sharpen_seconds + veg_seconds,
+                "vegetationWallSeconds": veg_seconds,
+                "fireStaleFraction": veg_metrics.get("fireStaleFraction"),
+            }
+
+    sharpen = {**result, "keys": keys, "vegetation": vegetation}
+    return (
+        output_keys,
+        out / "footprint.geojson",
+        total_output_bytes,
+        pipeline_metrics,
+        sharpen,
+    )
+
+
+def process_vegetation(
+    job: dict, tmp: str, zip_path: Path
+) -> tuple[list[dict], int, Optional[dict]]:
+    """A ticked job's vegetation layer: `pipeline.py` renders it from the
+    ZIP's point clouds, and its PMTiles is uploaded for display. Returns
+    (output_keys, output_bytes, pipeline_metrics); no layer for a ZIP with no
+    point clouds. No styled COG: nothing reads one any more."""
+    job_id = job["id"]
+    output_dir = Path(tmp) / "output"
+    output_dir.mkdir()
+    work_dir = Path(tmp) / "pipeline_work"
+    work_dir.mkdir()
+    settings_path = Path(tmp) / "settings.json"
+    vegetation = (job.get("layer_options") or {}).get("vegetation")
+    settings_path.write_text(json.dumps({"vegetation": vegetation or {}}))
+    metrics_path = Path(tmp) / "metrics.json"
+    progress_path = Path(tmp) / "progress.json"
+    cmd = [
+        "python3",
+        str(Path(__file__).parent / "pipeline.py"),
+        str(zip_path),
+        *["--output", str(output_dir), "--work-dir", str(work_dir)],
+        *["--workers", str(os.cpu_count() or 4)],
+        *["--settings-json", str(settings_path)],
+        *["--metrics-json", str(metrics_path), "--progress-file", str(progress_path)],
+    ]
+    log.info("Running the vegetation pass …")
+    # The heartbeat refreshes the job's progress columns from progress.json
+    # while the pipeline runs (see _heartbeat_loop).
+    code = run_with_heartbeat(cmd, job_id, progress_path)
+    if code != 0:
+        raise RuntimeError(
+            f"pipeline.py exited with code {code} "
+            f"({'OOM kill' if code == -9 else 'non-zero exit'})"
+        )
+
+    # Best-effort: a missing or partial metrics file only means no
+    # instrumentation for this pass; it never fails the job.
     pipeline_metrics = None
     try:
         if metrics_path.exists():
@@ -663,158 +548,27 @@ def process_job(
     except Exception as e:
         log.warning(f"Failed to read metrics JSON (non-fatal): {e}")
 
-    footprint_local = geojson_dir / "footprint.geojson"
-    if not (geojson_dir / "osm_features.geojson").exists():
-        log.warning("OSM features GeoJSON missing — Overpass fetch failed in pipeline.")
-
-    # ── Vector tiles for contours + OSM features ────────────────────────
-    # pipeline.py writes raster contours.mbtiles / features.mbtiles
-    # (used for the composite + Gaia downloads). Logjam Web needs the
-    # vector versions — run tippecanoe on the GeoJSON exports and put the
-    # resulting MBTiles in vector_dir; the upload loop picks them up for
-    # the vector layers' pmtiles conversion.
-    vector_dir = Path(tmp) / "vector"
-    vector_dir.mkdir()
-    vector_mbtiles_by_layer: dict[str, Path] = {}
-    contours_vector = run_tippecanoe_contours(str(geojson_dir), str(vector_dir))
-    if contours_vector is not None:
-        vector_mbtiles_by_layer["contours"] = contours_vector
-    features_vector = run_tippecanoe_features(str(geojson_dir), str(vector_dir))
-    if features_vector is not None:
-        vector_mbtiles_by_layer["features"] = features_vector
-    # True when no features layer will be produced — covers missing GeoJSON
-    # (Overpass failure) and empty GeoJSON (no matches / all classes disabled).
-    osm_failed = features_vector is None
-
-    # ── Upload raw vector GeoJSONs for the export worker ────────────────
-    # The export worker reads these directly when producing
-    # GeoJSON / GPX / GPKG outputs.
-    output_prefix = f"outputs/{job_id}"
-    for geojson_name in ("contours_5m.geojson", "osm_features.geojson"):
-        local = geojson_dir / geojson_name
-        if local.exists():
-            try:
-                s3.upload_file(str(local), BUCKET, f"{output_prefix}/{geojson_name}")
-                log.info(f"Uploaded {output_prefix}/{geojson_name}")
-            except Exception as e:
-                log.warning(f"Failed to upload {geojson_name}: {e}")
-
-    # ── Optional: upload extra debug intermediates ──────────────────────
-    if os.environ.get("TOPO_KEEP_INTERMEDIATES") == "1":
-        debug_prefix = f"jobs/{job_id}/debug"
-        debug_files = [
-            "dtm_raw.tif",
-            "dtm_filled.tif",
-            "scrub_low_count_raw.tif",
-            "scrub_high_count_raw.tif",
-            "below_count_raw.tif",
-            "all_count_raw.tif",
-            "footprint.geojson",
-        ]
-        for fname in debug_files:
-            local = pipeline_work_dir / fname
-            if local.exists():
-                try:
-                    s3.upload_file(str(local), BUCKET, f"{debug_prefix}/{fname}")
-                    log.info(f"Uploaded {debug_prefix}/{fname}")
-                except Exception as e:
-                    log.warning(f"Failed to upload debug artefact {fname}: {e}")
-            else:
-                log.info(f"Debug artefact {fname} not present — skipped")
-
-    # ── Per-job upload (COG + PMTiles) ──────────────────────────────────
-    # Raster layers store a single styled COG (canonical source for downstream
-    # export rendering) + PMTiles (in-app display). Vector layers store
-    # PMTiles only — the raw GeoJSON uploaded above is the export source.
-    # Per-layer raster MBTiles and composite.mbtiles are not uploaded; the
-    # export worker produces those on demand.
-    cog_dir = Path(tmp) / "cog"
-    cog_dir.mkdir(exist_ok=True)
-    output_keys = []
-    total_output_bytes = 0
-    skipped_vector_layers = {
-        name for name in VECTOR_LAYERS if name not in vector_mbtiles_by_layer
-    }
-    for name in sorted(ALL_LAYERS):
-        if name in skipped_vector_layers:
-            log.info(f"Skipping {name} (no vector tiles produced).")
-            continue
-        styled_mbtiles = output_dir / f"{name}.mbtiles"
-        if not styled_mbtiles.exists():
-            log.info(f"Skipping {name} (renderer did not emit {styled_mbtiles.name}).")
-            continue
-
-        cog_key: Optional[str] = None
-        pmtiles_key: Optional[str] = None
-
-        # Raster layers — convert styled MBTiles → COG via GDAL's MBTiles
-        # driver. The MBTiles driver mosaics the tile pyramid into a virtual
-        # raster, then COG creation rolls overviews back in.
-        if name in RASTER_LAYERS:
-            local_cog = cog_dir / f"{name}.tif"
-            log.info(f"Converting {name}.mbtiles → COG …")
-            try:
-                from osgeo import gdal as _gdal
-
-                _gdal.Translate(
-                    str(local_cog),
-                    str(styled_mbtiles),
-                    format="COG",
-                    creationOptions=[
-                        "COMPRESS=DEFLATE",
-                        "BIGTIFF=IF_SAFER",
-                        "BLOCKSIZE=512",
-                        "OVERVIEWS=AUTO",
-                    ],
-                )
-            except Exception as e:
-                log.warning(f"Failed COG conversion for {name}: {e}")
-                local_cog = None
-
-            if local_cog and local_cog.exists():
-                cog_key = f"{output_prefix}/{name}.tif"
-                log.info(f"Uploading {cog_key} …")
-                s3.upload_file(str(local_cog), BUCKET, cog_key)
-                total_output_bytes += local_cog.stat().st_size
-
-        # PMTiles for in-app display. Vector layers use the tippecanoe output;
-        # raster layers reuse the styled MBTiles.
-        pmtiles_source = vector_mbtiles_by_layer.get(name, styled_mbtiles)
-        # closing(): sqlite3's own context manager commits but does NOT close,
-        # leaking an fd on a multi-hundred-MB MBTiles per layer.
-        with contextlib.closing(sqlite3.connect(str(pmtiles_source))) as _conn:
-            _row = _conn.execute(
-                "SELECT value FROM metadata WHERE name='maxzoom'"
-            ).fetchone()
-            maxzoom = int(_row[0]) if _row else 18
-            tile_count = _conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
-
-        if tile_count == 0:
-            log.info(f"Skipping PMTiles for {name} (0 tiles — layer is empty)")
-        else:
-            pmtiles_path = output_dir / f"{name}.pmtiles"
-            pmtiles_key = f"{output_prefix}/{name}.pmtiles"
-            log.info(
-                f"Converting {name} → PMTiles ({tile_count} tiles, source={pmtiles_source.name}) …"
-            )
-            mbtiles_to_pmtiles(str(pmtiles_source), str(pmtiles_path), maxzoom)
-            log.info(f"Uploading {pmtiles_key} …")
-            s3.upload_file(str(pmtiles_path), BUCKET, pmtiles_key)
-            total_output_bytes += pmtiles_path.stat().st_size
-
-        output_keys.append(
-            {
-                "name": name,
-                "cogKey": cog_key,
-                "pmtilesKey": pmtiles_key,
-            }
-        )
-
+    mbtiles = output_dir / "vegetation.mbtiles"
+    if not mbtiles.exists():
+        log.info("No vegetation layer (no point clouds in the ZIP).")
+        return [], 0, pipeline_metrics
+    # closing(): sqlite3's own context manager commits but does NOT close.
+    with contextlib.closing(sqlite3.connect(str(mbtiles))) as conn:
+        row = conn.execute("SELECT value FROM metadata WHERE name='maxzoom'").fetchone()
+        maxzoom = int(row[0]) if row else 18
+        tile_count = conn.execute("SELECT COUNT(*) FROM tiles").fetchone()[0]
+    if tile_count == 0:
+        log.info("Skipping the vegetation PMTiles (0 tiles: the layer is empty).")
+        return [], 0, pipeline_metrics
+    pmtiles = output_dir / "vegetation.pmtiles"
+    key = f"outputs/{job_id}/vegetation.pmtiles"
+    log.info(f"Converting vegetation → PMTiles ({tile_count} tiles) …")
+    mbtiles_to_pmtiles(str(mbtiles), str(pmtiles), maxzoom)
+    log.info(f"Uploading {key} …")
+    s3.upload_file(str(pmtiles), BUCKET, key)
     return (
-        output_keys,
-        footprint_local,
-        osm_failed,
-        total_output_bytes,
+        [{"name": "vegetation", "cogKey": None, "pmtilesKey": key}],
+        pmtiles.stat().st_size,
         pipeline_metrics,
     )
 
@@ -857,14 +611,15 @@ def main():
             (
                 output_keys,
                 footprint_local,
-                osm_failed,
                 total_output_bytes,
                 pipeline_metrics,
+                sharpen,
             ) = process_job(job, tmp)
 
             extra: dict = {
                 "s3_output_keys": output_keys,
                 "output_bytes": total_output_bytes,
+                "sharpen": sharpen,
             }
             if footprint_local and footprint_local.exists():
                 with open(footprint_local) as f:
@@ -903,10 +658,7 @@ def main():
             return
         completed = True
 
-        log.info(
-            f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded"
-            + (" (OSM features missing — Overpass failed)" if osm_failed else "")
-        )
+        log.info(f"Job {JOB_ID} complete — {len(output_keys)} layer(s) uploaded")
 
         create_notification(
             conn,
@@ -916,7 +668,6 @@ def main():
                 "jobId": JOB_ID,
                 "jobName": job.get("name"),
                 "footprint": extra.get("footprint"),
-                "osmFailed": osm_failed,
             },
         )
         # Best-effort push — generic title + opaque IDs only (privacy rule:
@@ -927,7 +678,7 @@ def main():
 
         email = get_user_email(conn, job["user_id"])
         if email and wants_email(conn, job["user_id"], "topoEmail"):
-            send_completion_email(email, JOB_ID, output_keys, osm_failed=osm_failed)
+            send_completion_email(email, JOB_ID, output_keys)
 
     except Exception as e:
         if completed:

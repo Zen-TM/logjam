@@ -1,5 +1,10 @@
 import { INK } from "./designTokens.js";
 import {
+  parseSlopeBands,
+  RASTER_TEMPLATE_DEFAULTS,
+  type SlopeBand,
+} from "./topoSettings.js";
+import {
   isTripLogCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "./tripLogFields.js";
@@ -69,7 +74,6 @@ export type ThemeScheme = {
 export type NotificationPreferences = {
   topoEmail: boolean;
   exportEmail: boolean;
-  geoPdfEmail: boolean;
   friendRequestInApp: boolean;
   shareInApp: boolean;
 };
@@ -77,7 +81,6 @@ export type NotificationPreferences = {
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   topoEmail: true,
   exportEmail: true,
-  geoPdfEmail: true,
   friendRequestInApp: true,
   shareInApp: true,
 };
@@ -87,7 +90,6 @@ export type UserUiPreferences = {
   tripLogCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   placeCustomFields?: import("./tripLogFields.js").TripLogCustomFieldDef[];
   notifications: NotificationPreferences;
-  autoDownloadGeoPdfs: boolean;
   importMergePolicy?: import("./mergePlace.js").PlaceMergePolicy;
   /**
    * Whether saving a copy of a shared place brings that place's place-level
@@ -116,6 +118,11 @@ export type UserUiPreferences = {
    * something (root AGENTS.md). See shared/src/leaderboard.ts.
    */
   leaderboardOptIn: boolean;
+  /**
+   * The bands the Terrain group's statewide slope is coloured in, on both
+   * clients (shared/src/terrain.ts). Edited on Logjam Web.
+   */
+  slopeBands: SlopeBand[];
 };
 
 export function isNotificationPreferences(
@@ -126,7 +133,6 @@ export function isNotificationPreferences(
   for (const key of [
     "topoEmail",
     "exportEmail",
-    "geoPdfEmail",
     "friendRequestInApp",
     "shareInApp",
   ] as const) {
@@ -151,10 +157,6 @@ function normalizeNotificationPreferences(
       typeof prefs.exportEmail === "boolean"
         ? prefs.exportEmail
         : DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
-    geoPdfEmail:
-      typeof prefs.geoPdfEmail === "boolean"
-        ? prefs.geoPdfEmail
-        : DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
     friendRequestInApp:
       typeof prefs.friendRequestInApp === "boolean"
         ? prefs.friendRequestInApp
@@ -262,7 +264,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       lineStrong: "#7A857C",
       text: "#252A26",
       textMuted: "#4C554D",
-      accent: "#6A9072",
+      accent: "#778D7C",
       warning: "#C2735A",
       success: "#7E8E3E",
       neutral: "#B3BBAE",
@@ -371,10 +373,6 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     );
     const placeCustomFields = normalizeCustomFieldDefs(prefs.placeCustomFields);
     const notifications = normalizeNotificationPreferences(prefs.notifications);
-    const autoDownloadGeoPdfs =
-      typeof prefs.autoDownloadGeoPdfs === "boolean"
-        ? prefs.autoDownloadGeoPdfs
-        : true;
     const importMergePolicy = normalizeImportMergePolicy(
       prefs.importMergePolicy,
     );
@@ -387,9 +385,9 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
       tripLogCustomFields,
       placeCustomFields,
       notifications,
-      autoDownloadGeoPdfs,
       copyPlaceMedia,
       leaderboardOptIn: prefs.leaderboardOptIn === true,
+      slopeBands: parseSlopeBands(prefs.slopeBands) ?? defaultSlopeBands(),
     };
     if (importMergePolicy) result.importMergePolicy = importMergePolicy;
     return result;
@@ -400,8 +398,16 @@ export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
     tripLogCustomFields: [],
     placeCustomFields: [],
     notifications: { ...DEFAULT_NOTIFICATION_PREFERENCES },
-    autoDownloadGeoPdfs: true,
     copyPlaceMedia: true,
     leaderboardOptIn: false,
+    slopeBands: defaultSlopeBands(),
   };
+}
+
+/**
+ * A fresh copy: a caller that edits it must not edit the template default.
+ * Guard: `terrain.test.ts` ("hands out a copy of the defaults").
+ */
+function defaultSlopeBands(): SlopeBand[] {
+  return RASTER_TEMPLATE_DEFAULTS.slope.bands.map((band) => ({ ...band }));
 }

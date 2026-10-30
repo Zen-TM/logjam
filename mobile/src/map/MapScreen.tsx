@@ -48,6 +48,7 @@ import {
   type PressEvent,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
+  type ColorReliefLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -62,9 +63,7 @@ import {
 import {
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
-  TOPO_LAYERS,
   TRACK_MIME_TYPES,
-  VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   distinctTripTypes,
   draftAnchorIndices,
@@ -84,12 +83,18 @@ import {
   type SnapMode,
   type TrackPass,
   drawsNswContours,
+  drawsNswHillshade,
+  slopeReliefColor,
+  TERRAIN_LAYER_KEYS,
+  terrainBeforeIds,
+  type TerrainLayerKey,
+  type TerrainSwitchKey,
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  type SharpenedArea,
 } from "@logjam/shared";
 
-import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import type { SavedItemReveal } from "../saved/SavedScreen";
 import { setRouteEditing } from "./routeEditLock";
@@ -101,7 +106,7 @@ import {
 } from "./routeDraftStore";
 import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
-import { getVectorStyle, useApiQuery } from "../api/queries";
+import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   useMirrorPlaces,
@@ -213,12 +218,12 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
-  readContoursOverImagery,
+  readTerrainLayers,
   setBasemapPreference,
-  setContoursOverImagery,
+  setTerrainLayers,
 } from "./basemapPreference";
+import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
-import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
 import { offlineCoverageMask } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
@@ -291,21 +296,18 @@ import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { confirmFinishRecording } from "../tracks/finishRecordingPrompt";
 import { RecordButton } from "../tracks/RecordButton";
 import { RecordingSheet } from "../tracks/RecordingSheet";
+import { SensorMarkButton } from "../tracks/SensorMarkButton";
 import {
   isRecordingWriteFailing,
   onTrackWriteHealthChanged,
 } from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import {
-  listEnabledOverlayKeys,
-  setOverlayEnabled,
-} from "../offline/registryDb";
 import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { ProtomapsLayers, protomapsLayerId } from "./basemap/ProtomapsLayers";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
@@ -319,6 +321,14 @@ import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { getCompletedOverlays } from "./completedOverlays";
+import { serveSharpenedArchives, sharpenedAreasOf } from "./sharpenedArchives";
+import {
+  rememberSharpenedAreas,
+  savedSharpenedAreas,
+  subscribeSharpenedAreas,
+} from "../offline/sharpenedAreaStore";
+import { writeTileJsons } from "./tileJsonFile";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -329,8 +339,6 @@ import {
   topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
-  type CompletedOverlaysResponse,
-  type TopoOverlayRef,
 } from "./topoOverlays";
 import {
   MAX_PINCH_ZOOM,
@@ -343,12 +351,19 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
 import {
-  TopoIconImages,
-  TopoVectorOverlay,
-  topoVectorLayerIds,
-} from "./TopoVectorOverlay";
+  basemapMountKeys,
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+} from "./layerOrder";
+import { mapDataAttribution } from "./mapDataCredits";
+import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
+
+/** The shared expression builder's untyped result, as MLRN types the paint. */
+type ColorReliefColor = NonNullable<
+  NonNullable<ColorReliefLayerSpecification["paint"]>["color-relief-color"]
+>;
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed, remote host as the
@@ -403,6 +418,13 @@ const CAMERA_DEFAULTS = {
  * same button do two different things depending on where the map happened to be.
  */
 const FOLLOW_ZOOM = 15;
+
+/**
+ * MapLibre's deepest zoom, the `maxzoom` of a Terrain layer that draws at
+ * every zoom. Set rather than left out, so a layer whose limit is lifted
+ * (routing falling back to statewide) gets this one and not a stale value.
+ */
+const MAX_LAYER_ZOOM = 24;
 
 /** How near the drawn line a press-and-hold must land to insert a point, in DP. */
 const LINE_GRAB_DP = 24;
@@ -509,17 +531,7 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
   "course-up": "Facing your direction — tap to stop",
 };
 
-function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
-  return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
-}
-
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
-
-// Contour layers get contour styling; every other vector layer is the OSM
-// features set (web parity: `id.includes("contours")`).
-function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
-  return ref.layer === "contours" ? "contours" : "features";
-}
 
 /**
  * The user's own position marker.
@@ -878,13 +890,18 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
-  const [contoursOverImagery, setContoursOverImageryState] = useState(
-    readContoursOverImagery,
+  const [terrainLayers, setTerrainLayersState] = useState(readTerrainLayers);
+  const chooseTerrainLayer = useCallback(
+    (key: TerrainSwitchKey, on: boolean) => {
+      setTerrainLayersState((prev) => {
+        const next = { ...prev, [key]: on };
+        setTerrainLayers(next);
+        return next;
+      });
+    },
+    [],
   );
-  const chooseContoursOverImagery = useCallback((on: boolean) => {
-    setContoursOverImageryState(on);
-    setContoursOverImagery(on);
-  }, []);
+  const slopeBands = useSlopeBands();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
@@ -1011,7 +1028,6 @@ export function MapScreen({
   >(() => new Set<string>());
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
   const [showVectorImports, setShowVectorImports] = useState(true);
-  const [showOverlays, setShowOverlays] = useState(true);
   const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(
     null,
   );
@@ -1074,19 +1090,8 @@ export function MapScreen({
     writeSnapMode(mode);
   }, []);
   const mapRef = useRef<MapRef>(null);
-  // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
-  // downloaded overlay stays visible across a cold offline launch; toggles
-  // write through. Saved overlays are auto-enabled on download.
-  const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  // Re-read on focus (not just mount): the Saved screen's "Save offline"
-  // action auto-enables an overlay by writing overlay_enabled directly, and
-  // that table has no change listener (unlike the artifact registry) — a
-  // focus refresh is how a Map screen that stayed mounted in the background
-  // picks up an overlay saved while the user was on the Saved tab.
   // The compass switch lives in Settings, on another tab, so its value is
-  // re-read on focus alongside the overlays rather than only at mount.
+  // re-read on focus rather than only at mount.
   const [compassEnabled, setCompassEnabled] = useState(isCompassEnabled);
   // The Map settings page writes these five and lives on another tab, so they
   // are re-read on focus alongside the compass rather than only at mount. All
@@ -1130,38 +1135,8 @@ export function MapScreen({
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
       setSpeedElevationEnabled(isSpeedElevationEnabled());
-      listEnabledOverlayKeys()
-        .then((keys) => setEnabledOverlays(new Set(keys)))
-        .catch(console.error);
     }, []),
   );
-  // Which areas are hidden wholesale — the "where" axis of the overlay matrix
-  // (topoAreaMuting.ts). Independent of the per-cell enabled set above, so
-  // unmuting an area restores whatever layers were selected for it.
-  const [mutedAreas, setMutedAreas] =
-    useState<ReadonlySet<string>>(readMutedTopoAreas);
-  const setAreasMuted = useCallback((areaIds: string[], muted: boolean) => {
-    setMutedAreas((prev) => {
-      const next = new Set(prev);
-      for (const areaId of areaIds) {
-        if (muted) next.add(areaId);
-        else next.delete(areaId);
-      }
-      writeMutedTopoAreas(next);
-      return next;
-    });
-  }, []);
-  // Toggle one overlay on/off, persisting the change.
-  const toggleOverlay = useCallback((key: string) => {
-    setEnabledOverlays((prev) => {
-      const next = new Set(prev);
-      const enabled = !next.has(key);
-      if (enabled) next.add(key);
-      else next.delete(key);
-      setOverlayEnabled(key, enabled).catch(console.error);
-      return next;
-    });
-  }, []);
   // Follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
@@ -1333,25 +1308,54 @@ export function MapScreen({
   const isGuest = useAccountState().accountState === "guest";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     !isGuest,
   );
-  // Server-side vector style (same one the web map + exports use); defaults
-  // until it loads / when offline.
-  const vectorStyleQuery = useApiQuery(
-    getVectorStyle,
-    "Couldn't load map style.",
-    !isGuest,
+  // The sharpened areas the user can see: the Terrain group reads each one's
+  // own archive inside it (sourceResolver.ts `routeTerrain`), with the epoch
+  // the list was asked in, so a sign-out wipe running while the map is still
+  // mounted stops it (sharpenedArchives.ts `sharpenedAreasOf`).
+  const { sharpenedAreas, areasEpoch } = useMemo(
+    () => sharpenedAreasOf(overlays.data, !isGuest),
+    [isGuest, overlays.data],
   );
-  const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
-
+  // Before the sources that read them mount (sharpenedArchives.ts).
+  useMemo(
+    () => serveSharpenedArchives(sharpenedAreas, areasEpoch),
+    [sharpenedAreas, areasEpoch],
+  );
+  // Each list that loads is kept, without its URLs, for the offline sampler,
+  // the climb upgrade and the offline map (offline/sharpenedAreaStore.ts).
+  useEffect(() => {
+    if (overlays.data && !isGuest)
+      void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
+  // The map draws its saved area clips from the kept list, read again
+  // whenever it changes: the save screen keeps the list it cut from, which
+  // can be newer than this one.
+  const [keptAreas, setKeptAreas] = useState<readonly SharpenedArea[]>([]);
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      void savedSharpenedAreas().then((kept) => {
+        if (live) setKeptAreas(kept);
+      });
+    read();
+    const stop = subscribeSharpenedAreas(read);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
       artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
+      sharpenedAreas,
+      keptSharpenedAreas: isGuest ? [] : keptAreas,
     }),
-    [connectivity, artifacts],
+    [connectivity, artifacts, sharpenedAreas, isGuest, keptAreas],
   );
 
   /**
@@ -1379,16 +1383,45 @@ export function MapScreen({
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
-  // The statewide contours, where this basemap takes them (shared
-  // nswContours.ts). Offline they are whatever clips were saved with it.
+  // The Terrain group (shared terrain.ts). The contours only where this
+  // basemap takes them; offline, each is whatever clips were saved of it.
   const contoursResolved = useMemo(
     () =>
-      drawsNswContours(renderedBasemapId, contoursOverImagery)
-        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
-            (r) => r.status === "ok",
+      drawsNswContours(renderedBasemapId, terrainLayers.contours)
+        ? writeTileJsons(
+            resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+              (r) => r.status === "ok",
+            ),
+            areasEpoch,
           )
         : [],
-    [renderedBasemapId, contoursOverImagery, ctx],
+    [renderedBasemapId, terrainLayers.contours, ctx, areasEpoch],
+  );
+  const slopeResolved = useMemo(
+    () =>
+      terrainLayers.slope
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-slope", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.slope, viewportBbox, ctx, areasEpoch],
+  );
+  const hillshadeResolved = useMemo(
+    () =>
+      drawsNswHillshade(renderedBasemapId, terrainLayers.hillshade)
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-hillshade", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [renderedBasemapId, terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
   );
 
   /**
@@ -1452,16 +1485,10 @@ export function MapScreen({
 
   const overlayRefs = useMemo(
     () =>
-      // A muted area draws nothing, whatever its cells say — the "where" gate
-      // applied after the "what" (topoAreaMuting.ts). The kind's own master is
-      // a third gate ON TOP of both, so switching the band off and on again
-      // brings back exactly the layer/area picks that were showing.
-      showOverlays
-        ? composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
-            (ref) => !mutedAreas.has(ref.jobId),
-          )
-        : [],
-    [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
+      // Only the vegetation layer is an overlay now; the rest of a sharpened
+      // area draws through the Terrain group.
+      terrainLayers.vegetation ? composeTopoOverlayRefs(mergedOverlays) : [],
+    [mergedOverlays, terrainLayers.vegetation],
   );
 
   // "Show only these on the map" — the Places screen's filter, opt-in, handed
@@ -2633,22 +2660,8 @@ export function MapScreen({
           setVectorImportVisible(focus.reveal.key, true).catch(console.error);
           break;
         case "overlay": {
-          // Reveal the whole job: every layer enabled and the area unmuted.
-          // SavedScreen's item key for this category is `overlay:<jobId>`
-          // (SavedScreen.tsx's registry-row prefix) — strip it back to the raw
-          // jobId that mergedOverlays.jobs and setAreasMuted both key on.
-          const jobId = focus.reveal.key.replace(/^overlay:/, "");
-          for (const job of mergedOverlays.jobs) {
-            if (job.jobId !== jobId) continue;
-            for (const layer of job.layers) {
-              const key = `${job.jobId}/${layer.name}`;
-              setEnabledOverlays((prev) =>
-                prev.has(key) ? prev : new Set(prev).add(key),
-              );
-              setOverlayEnabled(key, true).catch(console.error);
-            }
-          }
-          setAreasMuted([jobId], false);
+          // The only overlay is the Terrain tab's vegetation switch.
+          chooseTerrainLayer("vegetation", true);
           break;
         }
         case "region":
@@ -2670,14 +2683,7 @@ export function MapScreen({
     if (focus.basemapId) {
       setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
     }
-  }, [
-    focus?.nonce,
-    focus,
-    chooseBasemap,
-    fitCameraToBbox,
-    mergedOverlays,
-    setAreasMuted,
-  ]);
+  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, chooseTerrainLayer]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Once per restored draft — the user's own panning owns the
@@ -4025,21 +4031,6 @@ export function MapScreen({
     [addToolPoint, collectingPoints],
   );
 
-  // The layer sheet groups these two ways at once — by layer across every area,
-  // and by area — so each entry carries both its area and its layer rather than
-  // one pre-joined label to be parsed back apart.
-  const overlayList = mergedOverlays.jobs.flatMap((job) =>
-    job.layers.map((layer) => ({
-      key: `${job.jobId}/${layer.name}`,
-      areaId: job.jobId,
-      areaLabel: job.name ?? job.jobId.slice(0, 8),
-      layer: layer.name,
-      layerLabel:
-        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ??
-        layer.name,
-    })),
-  );
-
   /**
    * What the search box can find on this phone.
    *
@@ -4346,22 +4337,20 @@ export function MapScreen({
     viewportBbox,
   );
 
-  // Once each: offline, every saved clip of a source carries the same credit.
-  const attributionText = [
-    ...new Set(
-      [...basemapResolved, ...contoursResolved]
-        .map((r) => (r.status === "ok" ? r.attribution : null))
-        .filter(Boolean),
-    ),
-  ].join(" · ");
+  const attributionText = mapDataAttribution(basemapResolved, {
+    contours: contoursResolved,
+    slope: slopeResolved,
+    hillshade: hillshadeResolved,
+  });
 
   const nswContoursStyle = useMemo(
     () => nswContourStyle(renderedBasemapId),
     [renderedBasemapId],
   );
 
-  // The ground band, bottom to top: the statewide contours, topo overlays,
-  // GeoPDFs, vector imports.
+  // The ground band, bottom to top: the Terrain group (hillshade, slope,
+  // contours: `TERRAIN_LAYER_KEYS` read upwards) when the basemap is a raster,
+  // topo overlays, GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4376,19 +4365,38 @@ export function MapScreen({
       ctx,
     ).filter((r) => r.status === "ok"),
   }));
-  const groundIds = [
-    ...contoursResolved.flatMap((r) =>
-      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+  const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
+    contours: contoursResolved.flatMap((r) =>
+      topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
     ),
+    slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
+  };
+  // Over the vector basemap the Terrain group goes inside it, under its roads
+  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn,
+  // which is the top one (basemapMountKeys): offline, that of the most
+  // recently saved area.
+  const basemapStacks = basemapResolved.filter((r) => r.status === "ok");
+  const mountKeys = basemapMountKeys(basemapStacks);
+  const vectorBasemap = basemapStacks.find((r) => r.sourceType === "vector");
+  const terrainBefore = vectorBasemap
+    ? Object.fromEntries(
+        terrainBeforeIds(terrainLayerIds, (id) =>
+          protomapsLayerId(sourceIdFor(vectorBasemap.key), id),
+        ),
+      )
+    : null;
+  const groundIds = [
+    ...(terrainBefore
+      ? []
+      : [...TERRAIN_LAYER_KEYS]
+          .reverse()
+          .flatMap((key) => terrainLayerIds[key])),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
-      resolved.flatMap((r) =>
-        ref.format === "vector"
-          ? topoVectorLayerIds(overlayKind(ref), `topo-${r.key}`, vectorStyle)
-          : [`topo-layer-${r.key}`],
-      ),
+      resolved.flatMap((r) => [`topo-layer-${r.key}`]),
     ),
     ...geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
       resolved.map(() => `geopdf-layer-${geoPdf.id}`),
@@ -4399,7 +4407,10 @@ export function MapScreen({
       `import-point-${i.id}`,
     ]),
   ];
-  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
+  const groundBefore = {
+    ...chainBeforeIds(groundIds, ROUTES_FLOOR),
+    ...terrainBefore,
+  };
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -4502,8 +4513,6 @@ export function MapScreen({
         onLongPress={handleMapLongPress}
       >
         <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
-        {/* Bundled point-feature icons for vector overlays. */}
-        <TopoIconImages />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
@@ -4519,7 +4528,10 @@ export function MapScreen({
             overlay base index depends on the active basemap. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
-            <ResolvedSource key={resolved.key} resolved={resolved}>
+            <ResolvedSource
+              key={`${resolved.key}@${mountKeys.stacks}`}
+              resolved={resolved}
+            >
               {resolved.sourceType === "vector" ? (
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
@@ -4554,43 +4566,65 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
-        {/* The statewide contours: a topo area's contour layers, on the
-            statewide archive (or the clips saved from it). */}
-        {contoursResolved.map((r) => (
-          <ResolvedSource key={r.key} resolved={r}>
-            <TopoVectorOverlay
-              kind="contours"
-              idPrefix={`nsw-contours-${r.key}`}
-              sourceID={sourceIdFor(r.key)}
-              beforeIds={groundBefore}
-              vectorStyle={nswContoursStyle}
+        {/* The Terrain group's shading and slope: MapLibre draws both from
+            a terrarium DEM. The bands are a paint expression, so changing
+            them on Logjam Web repaints this layer, no rebuild. */}
+        {hillshadeResolved.map((r) => (
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+            <Layer
+              key={`nsw-hillshade-${r.key}`}
+              type="hillshade"
+              id={`nsw-hillshade-${r.key}`}
+              beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+            />
+          </ResolvedSource>
+        ))}
+        {slopeResolved.map((r) => (
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+            <Layer
+              key={`nsw-slope-${r.key}`}
+              type="color-relief"
+              id={`nsw-slope-${r.key}`}
+              beforeId={groundBefore[`nsw-slope-${r.key}`]}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              paint={{
+                "color-relief-color": slopeReliefColor(
+                  slopeBands,
+                ) as ColorReliefColor,
+              }}
             />
           </ResolvedSource>
         ))}
 
-        {/* Topo overlays: raster = one translucent RasterLayer; vector =
-            the full contour/feature layer stack styled by the user's
-            server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
+        {/* The statewide contours: a topo area's contour layers, on the
+            statewide archive (or the clips saved from it). */}
+        {contoursResolved.map((r) => (
+          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+            <TopoVectorOverlay
+              idPrefix={`nsw-contours-${r.key}`}
+              sourceID={sourceIdFor(r.key)}
+              beforeIds={groundBefore}
+              vectorStyle={nswContoursStyle}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+            />
+          </ResolvedSource>
+        ))}
+
+        {/* Topo overlays: one translucent RasterLayer each. */}
         {overlayMounts.flatMap(({ ref, resolved }) =>
           resolved.map((r) => (
             <ResolvedSource key={r.key} resolved={r}>
-              {ref.format === "vector" ? (
-                <TopoVectorOverlay
-                  kind={overlayKind(ref)}
-                  idPrefix={`topo-${r.key}`}
-                  sourceID={sourceIdFor(r.key)}
-                  beforeIds={groundBefore}
-                  vectorStyle={vectorStyle}
-                />
-              ) : (
-                <Layer
-                  key={`topo-layer-${r.key}`}
-                  type="raster"
-                  id={`topo-layer-${r.key}`}
-                  beforeId={groundBefore[`topo-layer-${r.key}`]}
-                  style={{ rasterOpacity: 0.8 }}
-                />
-              )}
+              <Layer
+                key={`topo-layer-${r.key}`}
+                type="raster"
+                id={`topo-layer-${r.key}`}
+                beforeId={groundBefore[`topo-layer-${r.key}`]}
+                style={{ rasterOpacity: 0.8 }}
+              />
             </ResolvedSource>
           )),
         )}
@@ -4933,6 +4967,11 @@ export function MapScreen({
             Points aren&apos;t being saved — finish the recording and check free
             space.
           </Notice>
+        ) : null}
+
+        {/* Developer builds only; draws nothing unless a sensor log is running. */}
+        {activeTrack?.state === "recording" ? (
+          <SensorMarkButton key={activeTrack.id} trackId={activeTrack.id} />
         ) : null}
 
         {/* Measure HUD — the same panel as route draw, minus Save. */}
@@ -5438,17 +5477,13 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={chooseContoursOverImagery}
+        terrainLayers={terrainLayers}
+        onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}
-        overlays={overlayList}
-        enabledOverlays={enabledOverlays}
-        onToggleOverlay={toggleOverlay}
-        mutedAreas={mutedAreas}
-        onSetAreasMuted={setAreasMuted}
+        hasVegetation={mergedOverlays.jobs.some((job) =>
+          job.layers.some((layer) => layer.name === "vegetation"),
+        )}
         layers={layerToggles}
-        showOverlays={showOverlays}
-        onShowOverlaysChange={setShowOverlays}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {

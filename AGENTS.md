@@ -15,7 +15,7 @@ platform: privacy constrains every feature. Each package has its own
   who sees something. `api/AGENTS.md` has what a sharee may see.
 - Logs and error reports never carry a place's coordinates, name, tags, field
   values or field labels in plain text. Guards: `api/src/lib/logger.unit.test.ts`,
-  `mobile/src/sentry/scrubEvent.test.ts`.
+  `mobile/src/sentry/scrubEvent.test.ts`, `topo/tests/test_log_privacy.py`.
 - A committed example (fixture, seed, screenshot, demo) is published or made
   up, never a user's, in any form. Guard: `scripts/snapshot-scrub.sql` for
   snapshots; review for the rest.

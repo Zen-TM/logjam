@@ -16,20 +16,24 @@
     "tokens": "node scripts/generate-tokens.mjs"
   },
   "dependencies": {
+    "@cantoo/pdf-lib": "^2.11.1",
     "@logjam/shared": "file:../shared",
+    "@mapbox/vector-tile": "^3.0.0",
     "@protomaps/basemaps": "5.7.2",
     "@tmcw/togeojson": "^7.1.3",
     "@types/papaparse": "^5.5.2",
     "aws-amplify": "^6.22.2",
-    "lucide-react": "^1.57.0",
-    "maplibre-gl": "^6.14.0",
+    "geomagnetism": "^0.2.0",
+    "lucide-react": "^1.60.0",
+    "maplibre-gl": "^6.15.0",
     "papaparse": "^5.7.0",
+    "pbf": "^5.1.2",
     "pmtiles": "^4.4.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.13.0",
+    "@axe-core/playwright": "^4.14.0",
     "@eslint/js": "^9.25.0",
     "@playwright/test": "^1.64.1",
     "@testing-library/dom": "^10.4.2",
@@ -45,13 +49,13 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^16.0.0",
-    "jsdom": "^30.1.2",
+    "jsdom": "^30.1.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.15",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.30.1",
     "vite": "^8.3.4",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "minimatch": "^10.2.5",

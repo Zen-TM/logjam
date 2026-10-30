@@ -30,6 +30,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures.process
 import json
 import logging
 import math
@@ -43,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import zipfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -51,7 +53,6 @@ from pathlib import Path
 from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
-import requests
 from PIL import Image, ImageDraw, ImageFont
 from osgeo import gdal, ogr, osr
 
@@ -84,6 +85,34 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("topo")
+
+
+_GDAL_MESSAGES_MAX = 1000  # GDAL's own default cap (CPL_MAX_ERROR_REPORTS)
+_gdal_messages = 0
+
+
+def _gdal_message(err_class: int, err_num: int, _message: str) -> None:
+    """GDAL's warnings and errors, logged by class and number only. GDAL's own
+    output quotes file names ("… Skipping <file>"), and an ELVIS file's name
+    says where the survey is. An error still raises (UseExceptions). A pushed
+    handler gets every message, so it stops at GDAL's cap, as GDAL's printing
+    does."""
+    global _gdal_messages
+    _gdal_messages += 1
+    if _gdal_messages < _GDAL_MESSAGES_MAX:
+        log.warning(f"GDAL message, class {err_class}, number {err_num}")
+    elif _gdal_messages == _GDAL_MESSAGES_MAX:
+        log.warning("GDAL message limit reached: further ones are not logged")
+
+
+# Replaces GDAL's default printing to stderr (CloudWatch), on the importing
+# thread: nothing here runs GDAL on threads of its own, and a forked worker
+# inherits it. Pushed on import, not in main(), so a spawned pool child (which
+# imports this and never runs main) keeps it; every importer gets it, the
+# export worker too, through renderers/tile_compose.py, whose warnings lose
+# their text with it. SetErrorHandler is no substitute: under UseExceptions it
+# has no effect. Guard: tests/test_log_privacy.py `TestGdalMessages`.
+gdal.PushErrorHandler(_gdal_message)
 
 # Composite stacking order, bottom→top. Hand-synced mirror of TOPO_LAYERS in
 # shared/src/topoSettings.ts, which is canonical: a layer is added there first,
@@ -181,9 +210,9 @@ class Benchmark:
     def set_survey_selection(self, decisions: Optional[List[dict]]):
         """Record the per-footprint overlapping-survey resolution (see
         select_surveys_by_layer). None/empty when no footprint had more than one
-        survey (the common single-survey job) or for DEM-only jobs. Privacy-safe:
-        numeric tile ids + area/date survey labels only, never place
-        names/coords."""
+        survey (the common single-survey job) or for DEM-only jobs. It says
+        where the survey is (see SurveySelection), so it goes to the job's own
+        metrics row only."""
         self._survey_decisions = decisions
 
     def write_metrics(self, path: str):
@@ -498,26 +527,6 @@ CONTOUR_WIDTH_UNITS_PER_PX = 8
 # keep more terrain detail.
 CONTOUR_SMOOTH_SIGMA_M = 3.0  # Gaussian smoothing sigma, ground metres
 
-# OSM Overpass query tags for topo-relevant features.
-# Catalogue is fixed (user-supplied queries would be an injection vector).
-OSM_FEATURE_QUERIES = {
-    "waterway": '["waterway"~"river|stream|creek|drain|canal|ditch"]',
-    "track": '["highway"~"track|path|footway|bridleway|steps"]',
-    "road": '["highway"~"primary|secondary|tertiary|unclassified|residential|service"]',
-    "building": '["building"]',
-    "power": '["power"~"line|minor_line|cable"]',
-    "campsite": '["tourism"~"camp_site|caravan_site|wilderness_hut|alpine_hut"]',
-    "peak": '["natural"="peak"]',
-    "spring": '["natural"="spring"]',
-    "gate": '["barrier"~"gate|lift_gate|cycle_barrier"]',
-    "cave": '["natural"="cave_entrance"]',
-    "bridge": '["bridge"="yes"]',
-    "ford": '["ford"]',
-    "waterfall": '["waterway"="waterfall"]',
-    "trailhead": '["highway"="trailhead"]',
-    "viewpoint": '["tourism"="viewpoint"]',
-    "hut": '["amenity"="shelter"]',
-}
 
 # Default per-feature render style metadata. Geometry kind (point vs line/poly),
 # symbol glyphs and dash patterns are intrinsic to the category and not exposed
@@ -601,8 +610,7 @@ OSM_STYLE_META = {
 # Render settings (per-job overrides loaded via --settings-json)
 # ---------------------------------------------------------------------------
 
-ALL_LAYER_KEYS = ("hillshade", "vegetation", "slope", "contours", "features")
-ALL_OSM_KEYS = tuple(OSM_FEATURE_QUERIES.keys())
+ALL_OSM_KEYS = tuple(OSM_STYLE_META.keys())
 
 _HEX_RGBA_RE = re.compile(r"^#[0-9a-fA-F]{8}$")
 
@@ -692,85 +700,30 @@ def _default_render_settings() -> Dict[str, Any]:
     }
 
 
-def _validate_render_settings(settings: Dict[str, Any]) -> None:
-    """Defence-in-depth validation. API already validates via shared zod-style
-    schema, but the worker re-checks so an out-of-band settings.json (e.g. a
-    manual local invocation) still fails loud rather than producing garbage.
-    """
-    if not isinstance(settings, dict):
-        raise ValueError("settings must be a JSON object")
-    for layer in ALL_LAYER_KEYS:
-        if layer not in settings or not isinstance(settings[layer], dict):
-            raise ValueError(f"settings.{layer} missing or not an object")
-
-    hs = settings["hillshade"]
-    _parse_rgba_hex(hs.get("colour", ""))
-    if not (0 <= float(hs["azimuth"]) <= 360):
-        raise ValueError("hillshade.azimuth out of range")
-    if not (0 <= float(hs["altitude"]) <= 90):
-        raise ValueError("hillshade.altitude out of range")
-    if not (0.1 <= float(hs["zFactor"]) <= 10):
-        raise ValueError("hillshade.zFactor out of range")
-
-    bands = settings["slope"].get("bands", [])
-    if not isinstance(bands, list) or len(bands) > 8:
-        raise ValueError("slope.bands must be list of length <= 8")
-    for b in bands:
-        _parse_rgba_hex(b["colour"])
-
-    veg = settings["vegetation"]
+def _validate_vegetation_settings(veg: Dict[str, Any]) -> None:
+    """Defence-in-depth validation. The API already validates the job's
+    settings (shared/src/topoSettings.ts), but an out-of-band settings.json
+    (a manual local run) still fails loud rather than producing garbage."""
     if not (0 <= float(veg["minRatio"]) < float(veg["maxRatio"]) <= 1):
         raise ValueError("vegetation minRatio/maxRatio invalid")
     _parse_rgba_hex(veg["sparseColour"])
     _parse_rgba_hex(veg["denseColour"])
 
-    cont = settings["contours"]
-    zbs = cont.get("zoomBands", [])
-    if not isinstance(zbs, list) or len(zbs) != 3:
-        raise ValueError("contours.zoomBands must be list of length 3")
-    _parse_rgba_hex(cont["majorColour"])
-    _parse_rgba_hex(cont["minorColour"])
-
-    feats = settings["features"].get("features", {})
-    if not isinstance(feats, dict):
-        raise ValueError("features.features must be an object")
-    for key, style in feats.items():
-        if key not in ALL_OSM_KEYS:
-            raise ValueError(f"unknown OSM feature key: {key}")
-        _parse_rgba_hex(style["colour"])
-
-    # Global label-size multiplier (LABEL_SCALE_MIN..MAX in shared). Absent on
-    # pre-field settings — default to 1 rather than reject.
-    label_scale = settings.get("labelScale", 1)
-    if not isinstance(label_scale, (int, float)) or not (
-        0.5 <= float(label_scale) <= 2
-    ):
-        raise ValueError("labelScale must be 0.5..2")
-
 
 def load_render_settings(path: Optional[str]) -> Dict[str, Any]:
-    """Load + validate per-job render settings. Returns the Default preset if
-    `path` is None (no settings file passed)."""
+    """The Default preset, with the vegetation layer's settings from `path`
+    (the job's `vegetation`, the one layer the pipeline renders) over it."""
+    settings = _default_render_settings()
     if not path:
-        return _default_render_settings()
+        return settings
     with open(path, "r", encoding="utf-8") as f:
         raw = json.load(f)
-    _validate_render_settings(raw)
-    return raw
-
-
-def active_layers_from_settings(
-    settings: Dict[str, Any], has_vegetation: bool
-) -> List[str]:
-    """Return ordered layer list filtered by settings.<layer>.enabled."""
-    order = COMPOSITE_LAYER_ORDER
-    out = []
-    for name in order:
-        if name == "vegetation" and not has_vegetation:
-            continue
-        if settings.get(name, {}).get("enabled", True):
-            out.append(name)
-    return out
+    vegetation = raw.get("vegetation", {}) if isinstance(raw, dict) else None
+    if not isinstance(vegetation, dict):
+        raise ValueError("settings.vegetation must be an object")
+    settings["vegetation"] = {**settings["vegetation"], **vegetation}
+    _validate_vegetation_settings(settings["vegetation"])
+    return settings
 
 
 # ---------------------------------------------------------------------------
@@ -1004,7 +957,14 @@ def declutter_labels(items):
 # ---------------------------------------------------------------------------
 
 
-def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Connection:
+def create_mbtiles(
+    path: str,
+    name: str,
+    description: str = "",
+    minzoom: int = ZOOM_MIN,
+    maxzoom: int = ZOOM_MAX,
+    attribution: Optional[str] = None,
+) -> sqlite3.Connection:
     # Schema matches exactly what QGIS produces (confirmed working in Gaia):
     # - lowercase column types, no NOT NULL, no PRIMARY KEY on tiles
     # - UNIQUE INDEX only, no extra indexes
@@ -1028,9 +988,11 @@ def create_mbtiles(path: str, name: str, description: str = "") -> sqlite3.Conne
         ("version", "1.1"),
         ("description", description),
         ("format", "png"),
-        ("minzoom", str(ZOOM_MIN)),
-        ("maxzoom", str(ZOOM_MAX)),
+        ("minzoom", str(minzoom)),
+        ("maxzoom", str(maxzoom)),
     ]
+    if attribution is not None:
+        meta.append(("attribution", attribution))
     for k, v in meta:
         c.execute("INSERT OR REPLACE INTO metadata (name, value) VALUES (?,?)", (k, v))
     conn.commit()
@@ -1046,7 +1008,14 @@ def insert_tile(conn: sqlite3.Connection, z: int, x: int, y: int, png_bytes: byt
     )
 
 
-def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max):
+def finalise_bounds(
+    conn: sqlite3.Connection,
+    lon_min,
+    lat_min,
+    lon_max,
+    lat_max,
+    center_zoom: int = (ZOOM_MIN + ZOOM_MAX) // 2,
+):
     # Round to 6dp — full float precision in bounds strings causes parse
     # failures in some MBTiles consumers including older Gaia versions.
     lo_lon = round(lon_min, 6)
@@ -1056,7 +1025,7 @@ def finalise_bounds(conn: sqlite3.Connection, lon_min, lat_min, lon_max, lat_max
     cx = round((lo_lon + hi_lon) / 2, 6)
     cy = round((lo_lat + hi_lat) / 2, 6)
     bounds = f"{lo_lon},{lo_lat},{hi_lon},{hi_lat}"
-    center = f"{cx},{cy},{(ZOOM_MIN + ZOOM_MAX) // 2}"
+    center = f"{cx},{cy},{center_zoom}"
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('bounds',?)", (bounds,))
     conn.execute("INSERT OR REPLACE INTO metadata VALUES ('center',?)", (center,))
     conn.commit()
@@ -1189,12 +1158,12 @@ def extract_elvis_zip(zip_path: str, work_dir: str) -> ElvisContents:
         has_vegetation=has_veg,
     )
 
-    mode_labels = {
-        MODE_LAZ_ONLY: "C – LAZ (full PDAL DTM + DSM pipeline)",
-        MODE_DEM_ONLY: "A – DEM only  (no point cloud; vegetation layer unavailable)",
-    }
     log.info(f"ELVIS contents detected:\n{contents.describe()}")
-    log.info(f"Selected pipeline mode {mode_labels[mode]}")
+    log.info(
+        "Point clouds in the ZIP"
+        if mode == MODE_LAZ_ONLY
+        else "No point clouds in the ZIP: no vegetation layer"
+    )
 
     if not has_veg:
         log.warning(
@@ -1218,11 +1187,16 @@ def build_pipeline_full(
     out_below_count: str,
     out_all_count: str,
     resolution: float = 1.0,
+    *,
+    ground: str,
 ) -> dict:
-    """PDAL pipeline: LAZ → DTM (ground) + strata/below/all-return count rasters. Mode C.
+    """PDAL pipeline: LAZ → DTM (ground) + strata/below/all-return count rasters.
 
-    Uses filters.smrf for ground classification and filters.hag_nn to assign
-    HeightAboveGround to every point. The scrub band (0.25–SCRUB_BAND_MAX_M m
+    Ground is the survey's own class 2 (`ground="class2"`), or ground found
+    by filters.smrf for a survey with no class 2 at all (`ground="smrf"`),
+    sharpen.py's rule: on a classified survey SMRF reads canopy as ground
+    (tests/test_pipeline_build.py). filters.hag_nn then assigns
+    HeightAboveGround to every point from the class 2 points. The scrub band (0.25–SCRUB_BAND_MAX_M m
     HAG) is split into two vertical strata weighted for push-through
     difficulty, plus a below-band count and an unfiltered all-return count:
       - scrub_low:  0.25 ≤ HAG < SCRUB_STRATUM_LOW_MAX_M m (grass/sedge/low
@@ -1254,11 +1228,11 @@ def build_pipeline_full(
     rasterize a rotated quad into an axis-aligned 3857 grid, leaving triangular
     nodata wedges that fill_nodata then fabricates ("spaghetti") data into.
     """
-    # Note on classification: filters.assign below wipes incoming Classification
-    # to 0 so smrf has a clean slate to assign 1 (unclassified) / 2 (ground).
-    # That destroys ASPRS noise/overlap codes (7/12/18). To preserve them for
-    # downstream filtering, we drop those points BEFORE the assign step using
-    # filters.range — it removes points outright rather than reclassifying.
+    # Note on classification: for SMRF, filters.assign wipes incoming
+    # Classification to 0 so smrf has a clean slate to assign 1 (unclassified)
+    # / 2 (ground). That destroys ASPRS noise/overlap codes (7/12/18), so those
+    # points are dropped first with filters.range, which removes points
+    # outright rather than reclassifying (and drops them for class 2 too).
     # PDAL filter expression parser has no function support (no abs()), so
     # the scan-angle gate is written as an explicit range comparison.
     scrub_low_where = (
@@ -1294,8 +1268,16 @@ def build_pipeline_full(
                 "type": "filters.range",
                 "limits": "Classification![7:7],Classification![12:12],Classification![18:18]",
             },
-            {"type": "filters.assign", "assignment": "Classification[:]=0"},
-            {"type": "filters.smrf"},
+        ]
+        + (
+            [
+                {"type": "filters.assign", "assignment": "Classification[:]=0"},
+                {"type": "filters.smrf"},
+            ]
+            if ground == "smrf"
+            else []
+        )
+        + [
             {"type": "filters.hag_nn"},
             # DTM: mean elevation of ground-classified points.
             {
@@ -1442,7 +1424,9 @@ def run_pdal_sequential_full(
     work_dir: str,
     resolution: float = 1.0,
 ):
-    """Process LAZ files one at a time (DTM + strata/below/all counts), then merge. Mode C.
+    """Process LAZ files one at a time (DTM + strata/below/all counts), then
+    merge. Each tile is grounded on its own class 2 where it has any, and on
+    SMRF's where it has none (tests/test_pipeline_build.py `TestGroundPerTile`).
 
     `terrain_tiles` and `veg_tiles` are the per-footprint survey selections
     (see select_surveys_by_layer): the DTM mosaic is built ONLY from the
@@ -1457,7 +1441,7 @@ def run_pdal_sequential_full(
     # laz path → its five per-tile GeoTIFF paths.
     grids: Dict[str, Dict[str, str]] = {}
     for i, laz in enumerate(union):
-        log.info(f"PDAL tile {i + 1}/{len(union)}: {os.path.basename(laz)}")
+        log.info(f"PDAL tile {i + 1}/{len(union)}")
         # Heartbeat: PDAL is the other long phase (≈48s/tile). Reporting before
         # each tile keeps last_progress_at fresh through the whole PDAL pass so
         # the stall-reaper doesn't false-kill a big job before render starts.
@@ -1477,6 +1461,7 @@ def run_pdal_sequential_full(
             tile["below"],
             tile["all"],
             resolution,
+            ground="class2" if has_class2(laz) else "smrf",
         )
         run_pdal_pipeline(pipeline, work_dir, label=f"pipeline_full_{i}")
         grids[laz] = tile
@@ -1752,36 +1737,6 @@ def compute_data_footprint(dtm_path: str, dst_geojson_path: str):
     log.info(f"Data footprint computed → {dst_geojson_path}")
 
 
-def clip_geojson_to_footprint(geojson_path: str, footprint_path: str, out_path: str):
-    """Clip GeoJSON features to footprint, dropping features entirely outside it."""
-    with open(footprint_path) as f:
-        fp_fc = json.load(f)
-    fp_geom = unary_union([shape(feat["geometry"]) for feat in fp_fc["features"]])
-
-    with open(geojson_path) as f:
-        gj = json.load(f)
-
-    clipped = []
-    for feat in gj.get("features", []):
-        geom = shape(feat["geometry"])
-        if not geom.is_valid:
-            geom = geom.buffer(0)
-        if not fp_geom.intersects(geom):
-            continue
-        if fp_geom.contains(geom):
-            clipped.append(feat)
-        else:
-            inter = fp_geom.intersection(geom)
-            if not inter.is_empty:
-                clipped.append({**feat, "geometry": mapping(inter)})
-
-    with open(out_path, "w") as f:
-        json.dump({"type": "FeatureCollection", "features": clipped}, f)
-    log.info(
-        f"Clipped {len(gj.get('features', []))} → {len(clipped)} features to footprint"
-    )
-
-
 def align_raster_to_reference(src_path: str, ref_path: str, dst_path: str):
     """
     Warp src_path to exactly match the projection, extent, and pixel grid
@@ -1982,8 +1937,8 @@ def _capture_year_from_las_files(las_files: List[str]) -> Optional[int]:
 # resolves "which survey" once per footprint, per policy. The two physical raster
 # groups downstream map onto the two policies: the DTM (→ hillshade/slope/
 # contours) consumes the density-picked tiles; the veg-return counts (→
-# vegetation) consume the recency-picked tiles. This mirrors LAYER_SURVEY_PICK in
-# worker.py / the canonical surveyPick field in shared/src/topoSettings.ts.
+# vegetation) consume the recency-picked tiles, as the surveyPick field in
+# shared/src/topoSettings.ts declares.
 #
 # Full ELVIS filename shape: "<Area><YYYYMM>-LID<n>-C<c>-AHD_<tileid>_<zone>_<sub>_<sub>.laz"
 # (the "-C<c>-" classification segment is sometimes absent). The footprint key is
@@ -2067,9 +2022,10 @@ class SurveySelection:
 
     terrain_tiles feeds the DTM (hillshade/slope/contours); veg_tiles feeds the
     vegetation-return counts. A footprint with a single survey contributes the
-    same tile to both. `decisions` is a privacy-safe per-footprint audit
-    (numeric tile ids + area/date survey labels only, never place names/coords)
-    folded into the job metrics.
+    same tile to both. `decisions` is a per-footprint audit folded into the
+    job's own metrics row. Its tile ids (an MGA easting and northing) and
+    survey labels (an area name) say where the survey is, so they go to that
+    row and never to a log (tests/test_log_privacy.py).
     """
 
     terrain_tiles: List[str]
@@ -2142,9 +2098,8 @@ def select_surveys_by_layer(las_files: List[str]) -> SurveySelection:
             }
         )
         log.info(
-            f"Footprint {footprint}: {len(tiles)} surveys → "
-            f"terrain={terrain_win.survey_label} ({terrain_density:.2f} pts/m²), "
-            f"veg={veg_win.survey_label} ({veg_win.capture_yyyymm})"
+            f"{len(tiles)} overlapping surveys: terrain from the densest "
+            f"({terrain_density:.2f} pts/m²), vegetation from the newest"
         )
 
     return SurveySelection(terrain, veg, decisions)
@@ -2644,261 +2599,14 @@ def compute_rasters(
     return paths
 
 
-def compute_rasters_no_veg(
-    dtm_path: str, work_dir: str, settings: Dict[str, Any]
-) -> dict:
-    """Compute only hillshade and slope (no DSM/CHM available). Mode A."""
-    paths = {}
-
-    hs_path = os.path.join(work_dir, "hillshade.tif")
-    log.info("Computing hillshade …")
-    _run_gdaldem_hillshade(hs_path, dtm_path, settings)
-    paths["hillshade"] = hs_path
-
-    sl_path = os.path.join(work_dir, "slope.tif")
-    log.info("Computing slope …")
-    gdal.DEMProcessing(
-        sl_path,
-        dtm_path,
-        "slope",
-        slopeFormat="degree",
-        creationOptions=["COMPRESS=LZW"],
-    )
-    paths["slope"] = sl_path
-    return paths
-
-
 # ---------------------------------------------------------------------------
 # Step 3 – Fetch OSM features
 # ---------------------------------------------------------------------------
 
 
-def fetch_osm_features(
-    lon_min: float,
-    lat_min: float,
-    lon_max: float,
-    lat_max: float,
-    work_dir: str,
-    footprint_path: Optional[str] = None,
-    settings: Optional[Dict[str, Any]] = None,
-) -> Optional[str]:
-    """Download OSM data via Overpass API, then clip to the data footprint. Returns path to GeoJSON.
-
-    Queries ALL supported feature classes unconditionally. Per-category
-    `enabled` is a paint/composite decision now (lives in VectorStyleSettings
-    on the user) — fetching everything means toggling a category in the UI
-    never requires a LiDAR rerun.
-    """
-    del settings  # No per-category filter applied here anymore.
-    log.info("Fetching OSM features from Overpass API …")
-    bbox = f"{lat_min},{lon_min},{lat_max},{lon_max}"
-
-    parts = [f"nwr{tag_filter}({bbox});" for tag_filter in OSM_FEATURE_QUERIES.values()]
-
-    query = f"""
-    [out:json][timeout:120];
-    (
-      {"".join(parts)}
-    );
-    out body geom;
-    """
-
-    # Multiple Overpass mirrors — the main endpoint has been returning 406
-    # for requests coming from AWS Fargate egress IPs. Rotate across mirrors
-    # so transient blocks on one don't kill the whole layer.
-    # OVERPASS_ENDPOINTS (comma-separated) replaces the list: CI's topo-e2e job
-    # points it at a stub serving a committed response (tests/e2e/).
-    endpoints = [
-        e for e in os.environ.get("OVERPASS_ENDPOINTS", "").split(",") if e
-    ] or [
-        "https://overpass-api.de/api/interpreter",
-        "https://overpass.kumi.systems/api/interpreter",
-        "https://overpass.private.coffee/api/interpreter",
-    ]
-    headers = {
-        "User-Agent": "LogjamTopoWorker/1.0",
-        "Accept": "application/json",
-    }
-
-    import time as _time
-
-    raw: Optional[dict] = None
-    last_err: Optional[str] = None
-    attempts = 0
-    for endpoint in endpoints:
-        for retry in range(2):
-            attempts += 1
-            try:
-                resp = requests.post(
-                    endpoint, data={"data": query}, headers=headers, timeout=180
-                )
-                resp.raise_for_status()
-                # Decoded INSIDE the retry loop: a mirror answering
-                # 200 with an HTML interstitial is a mirror failure, not a job
-                # failure — rotate to the next endpoint instead of raising out
-                # of a function whose contract is "degrade to an empty layer".
-                decoded = resp.json()
-                if not isinstance(decoded, dict):
-                    raise ValueError(
-                        f"expected a JSON object, got {type(decoded).__name__}"
-                    )
-                raw = decoded
-                break
-            except Exception as e:
-                last_err = f"{endpoint}: {e}"
-                log.warning(f"Overpass attempt {attempts} failed ({last_err})")
-                raw = None
-                if retry == 0:
-                    _time.sleep(10)
-        if raw is not None:
-            break
-    if raw is None:
-        log.warning(
-            f"Overpass API failed after {attempts} attempts across {len(endpoints)} endpoints. "
-            f"Features layer will be empty. Last error: {last_err}"
-        )
-        return None
-
-    geojson_path = os.path.join(work_dir, "osm_features.geojson")
-    features = []
-
-    for el in raw.get("elements", []):
-        props = {**el.get("tags", {}), "_osm_type": el.get("type")}
-        # Classify into our feature categories
-        tags = el.get("tags", {})
-        category = classify_osm_element(tags)
-        if not category:
-            continue
-        props["_category"] = category
-
-        geom = None
-        if el["type"] == "node" and "lat" in el:
-            geom = {"type": "Point", "coordinates": [el["lon"], el["lat"]]}
-        elif el["type"] == "way" and "geometry" in el:
-            coords = [[p["lon"], p["lat"]] for p in el["geometry"]]
-            if len(coords) >= 2:
-                if coords[0] == coords[-1] and len(coords) >= 4:
-                    geom = {"type": "Polygon", "coordinates": [coords]}
-                else:
-                    geom = {"type": "LineString", "coordinates": coords}
-        elif el["type"] == "relation" and "members" in el:
-            # Simplified: just take the outer way if available
-            for m in el.get("members", []):
-                if m.get("role") == "outer" and "geometry" in m:
-                    coords = [[p["lon"], p["lat"]] for p in m["geometry"]]
-                    if len(coords) >= 4:
-                        geom = {"type": "Polygon", "coordinates": [coords]}
-                    break
-
-        if geom and category == "peak" and geom["type"] != "Point":
-            continue
-        if geom:
-            features.append({"type": "Feature", "geometry": geom, "properties": props})
-
-    geojson = {"type": "FeatureCollection", "features": features}
-    with open(geojson_path, "w") as f:
-        json.dump(geojson, f)
-    log.info(f"OSM fetch complete: {len(features)} features.")
-
-    if footprint_path and os.path.exists(footprint_path):
-        clipped_path = os.path.join(work_dir, "osm_features.geojson")
-        clip_geojson_to_footprint(geojson_path, footprint_path, clipped_path)
-        return clipped_path
-
-    return geojson_path
-
-
-def classify_osm_element(tags: dict) -> Optional[str]:
-    hw = tags.get("highway", "")
-    ww = tags.get("waterway", "")
-    nat = tags.get("natural", "")
-    tour = tags.get("tourism", "")
-    pw = tags.get("power", "")
-    bar = tags.get("barrier", "")
-    info = tags.get("information", "")
-    amenity = tags.get("amenity", "")
-
-    # Specific categories first — bridge/ford/waterfall override more generic
-    # tags so a highway-tagged bridge classifies as bridge, not track/road.
-    if ww == "waterfall":
-        return "waterfall"
-    if "ford" in tags:
-        return "ford"
-    if tags.get("bridge") == "yes":
-        return "bridge"
-    if tour == "viewpoint":
-        return "viewpoint"
-    # amenity=shelter only — tourism=alpine_hut/wilderness_hut keep their
-    # legacy "campsite" classification so the Default preset's behaviour
-    # remains backwards-compatible.
-    if amenity == "shelter":
-        return "hut"
-    if hw == "trailhead" or info == "guidepost":
-        return "trailhead"
-
-    if ww in ("river", "stream", "creek", "drain", "canal", "ditch"):
-        return "waterway"
-    if hw in ("track", "path", "footway", "bridleway", "steps"):
-        return "track"
-    if hw in (
-        "primary",
-        "secondary",
-        "tertiary",
-        "unclassified",
-        "residential",
-        "service",
-    ):
-        return "road"
-    if "building" in tags:
-        return "building"
-    if pw in ("line", "minor_line", "cable"):
-        return "power"
-    if tour in ("camp_site", "caravan_site", "wilderness_hut", "alpine_hut"):
-        return "campsite"
-    if nat == "peak":
-        return "peak"
-    if nat == "spring":
-        return "spring"
-    if bar in ("gate", "lift_gate", "cycle_barrier"):
-        return "gate"
-    if nat == "cave_entrance":
-        return "cave"
-    return None
-
-
 # ---------------------------------------------------------------------------
 # Step 4 – Contour generation
 # ---------------------------------------------------------------------------
-
-
-def generate_contours(dtm_path: str, work_dir: str) -> dict:
-    """Generate GeoJSON contour files for each interval."""
-    log.info("Generating contours …")
-    paths = {}
-    for intervals_needed in [5, 10, 50]:
-        out_path = os.path.join(work_dir, f"contours_{intervals_needed}m.geojson")
-        gdal.ContourGenerate(
-            gdal.Open(dtm_path).GetRasterBand(1),
-            intervals_needed,  # interval
-            0,  # base
-            [],  # fixed levels
-            0,
-            0,  # nodata flag/value
-            ogr.GetDriverByName("GeoJSON")
-            .CreateDataSource(out_path)
-            .CreateLayer("contours", srs=_merc_srs(), geom_type=ogr.wkbLineString),
-            -1,  # id field
-            0,  # elev field index
-        )
-        paths[intervals_needed] = out_path
-        log.info(f"  {intervals_needed}m contours → {out_path}")
-    return paths
-
-
-def _merc_srs():
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(WEB_MERCATOR_EPSG)
-    return srs
 
 
 def _blur_1d(a: np.ndarray, kernel: np.ndarray, axis: int) -> np.ndarray:
@@ -2948,131 +2656,6 @@ def _normalized_gaussian(
     with np.errstate(invalid="ignore", divide="ignore"):
         out = np.where(blurred_w > 1e-6, blurred_v / blurred_w, values)
     return out
-
-
-def smooth_dem_for_contours(
-    in_path: str,
-    out_path: str,
-    sigma_m: float = CONTOUR_SMOOTH_SIGMA_M,
-) -> str:
-    """Write a Gaussian-smoothed copy of a DTM for contouring. Smoothing the
-    surface (not the lines) guarantees the resulting contours never cross — they
-    are level sets of a continuous field. Sigma is given in ground metres and
-    converted to cells via the raster's pixel size, so the knob is independent of
-    DTM resolution. Nodata is preserved (normalized convolution, see
-    `_normalized_gaussian`)."""
-    ds = gdal.Open(in_path)
-    if ds is None:
-        raise RuntimeError(f"could not open DTM for smoothing: {in_path}")
-    band = ds.GetRasterBand(1)
-    nodata = band.GetNoDataValue()
-    arr = band.ReadAsArray().astype(np.float64)
-    pixel_size = abs(ds.GetGeoTransform()[1]) or 1.0
-    sigma_cells = max(0.5, float(sigma_m) / pixel_size)
-
-    valid = np.isfinite(arr)
-    if nodata is not None:
-        valid &= arr != nodata
-    smoothed = _normalized_gaussian(arr, valid, sigma_cells)
-    fill = nodata if nodata is not None else -9999.0
-    smoothed = np.where(valid, smoothed, fill)
-
-    driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(
-        out_path,
-        ds.RasterXSize,
-        ds.RasterYSize,
-        1,
-        gdal.GDT_Float32,
-        options=["COMPRESS=LZW"],
-    )
-    out_ds.SetGeoTransform(ds.GetGeoTransform())
-    out_ds.SetProjection(ds.GetProjection())
-    out_band = out_ds.GetRasterBand(1)
-    out_band.SetNoDataValue(float(fill))
-    out_band.WriteArray(smoothed.astype(np.float32))
-    out_band.FlushCache()
-    out_ds = None
-    ds = None
-    return out_path
-
-
-def generate_contours_gdal(
-    dtm_filled: str,
-    work_dir: str,
-    intervals: List[float],
-    footprint_path: Optional[str] = None,
-) -> dict:
-    """
-    Generate contour GeoJSONs from the DTM, one per requested interval.
-
-    gdal_contour outputs coordinates in the DTM's CRS (Web Mercator).
-    We then reproject each GeoJSON to WGS84 (EPSG:4326) and clip to the
-    data footprint so contours don't extend into nodata-filled edges.
-
-    The DTM is Gaussian-smoothed once up front (see CONTOUR_SMOOTH_SIGMA_M): raw
-    LiDAR contours are knobbly, hiding labels until high zoom. Smoothing the
-    surface — rather than the lines — keeps the contours crossing-free even on
-    cliffs, because they stay level sets of a continuous field.
-    """
-    # Smooth the surface once, then contour every interval off the smoothed DTM.
-    smoothed_dtm = os.path.join(work_dir, "dtm_contour_smoothed.tif")
-    smooth_dem_for_contours(dtm_filled, smoothed_dtm)
-
-    paths = {}
-    for interval in sorted({float(i) for i in intervals}):
-        # Format the interval for filenames — strip trailing ".0" so integer
-        # intervals keep their familiar names (e.g. "contours_50m.geojson").
-        suffix = (
-            str(int(interval))
-            if interval == int(interval)
-            else str(interval).replace(".", "p")
-        )
-        merc_path = os.path.join(work_dir, f"contours_{suffix}m_merc.geojson")
-        reproj_path = os.path.join(work_dir, f"contours_{suffix}m_reproj.geojson")
-        out_path = os.path.join(work_dir, f"contours_{suffix}m.geojson")
-
-        # Step 1: generate contours in Web Mercator from the smoothed surface.
-        cmd = [
-            "gdal_contour",
-            "-a",
-            "elev",
-            "-i",
-            str(interval),
-            "-f",
-            "GeoJSON",
-            smoothed_dtm,
-            merc_path,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(f"gdal_contour failed:\n{result.stderr}")
-
-        # Step 2: reproject to WGS84
-        cmd2 = [
-            "ogr2ogr",
-            "-f",
-            "GeoJSON",
-            "-t_srs",
-            "EPSG:4326",
-            reproj_path,
-            merc_path,
-        ]
-        result2 = subprocess.run(cmd2, capture_output=True, text=True)
-        if result2.returncode != 0:
-            raise RuntimeError(f"ogr2ogr reproject failed:\n{result2.stderr}")
-
-        # Step 3: clip to data footprint if available
-        if footprint_path and os.path.exists(footprint_path):
-            clip_geojson_to_footprint(reproj_path, footprint_path, out_path)
-        else:
-            os.rename(reproj_path, out_path)
-
-        paths[interval] = out_path
-        log.info(f"  {interval}m contours → {out_path}")
-
-    log.info("Contour generation complete.")
-    return paths
 
 
 # ---------------------------------------------------------------------------
@@ -3267,30 +2850,6 @@ def _apply_footprint_mask(
     return Image.merge("RGBA", (r, g, b, new_a))
 
 
-def render_hillshade_tile(
-    hs_arr: Optional[np.ndarray], settings: Dict[str, Any]
-) -> Image.Image:
-    img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
-    if hs_arr is None:
-        return img
-    valid = np.isfinite(hs_arr)
-    if not valid.any():
-        return img
-    norm = np.clip(hs_arr, 0, 255)
-    safe = np.nan_to_num(norm, nan=0).astype(np.float32)
-
-    # Tint: greyscale luminance multiplied by the tint colour, alpha from
-    # the tint hex's alpha channel. Default tint is opaque white = identity.
-    tint_hex = settings.get("hillshade", {}).get("colour", HILLSHADE_DEFAULTS["colour"])
-    tr, tg, tb, ta = _parse_rgba_hex(tint_hex)
-    rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    rgba[..., 0] = (safe * (tr / 255.0)).astype(np.uint8)
-    rgba[..., 1] = (safe * (tg / 255.0)).astype(np.uint8)
-    rgba[..., 2] = (safe * (tb / 255.0)).astype(np.uint8)
-    rgba[..., 3] = np.where(valid, ta, 0).astype(np.uint8)
-    return Image.fromarray(rgba)
-
-
 def render_vegetation_tile(
     density_arr: Optional[np.ndarray],
     settings: Dict[str, Any],
@@ -3378,23 +2937,6 @@ def render_vegetation_tile(
         rgba[hatch, 2] = FIRE_STALE_HATCH_COLOUR[2]
         rgba[hatch, 3] = FIRE_STALE_HATCH_ALPHA
 
-    return Image.fromarray(rgba)
-
-
-def render_slope_tile(
-    slope_arr: Optional[np.ndarray], settings: Dict[str, Any]
-) -> Image.Image:
-    img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
-    if slope_arr is None:
-        return img
-    rgba = np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8)
-    bands = settings.get("slope", {}).get("bands", [])
-    for band in bands:
-        lo = float(band["fromDeg"])
-        hi = float(band["toDeg"])
-        colour = _parse_rgba_hex(band["colour"])
-        m = np.isfinite(slope_arr) & (slope_arr >= lo) & (slope_arr < hi)
-        rgba[m] = colour
     return Image.fromarray(rgba)
 
 
@@ -3555,7 +3097,12 @@ def render_contours_tile(
     bbox_wgs84: Tuple,
     zoom: int,
     settings: Dict[str, Any],
+    contour_lines: Optional[List[Tuple[dict, list]]] = None,
 ) -> Image.Image:
+    """`contour_lines`, when given, are the (feature, lon/lat coords) lines
+    near this tile, read by the caller (an area export reads them from the
+    statewide contour archive, a tile at a time), and `contour_paths` is
+    unused. Every interval pass filters them by `elev`."""
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
@@ -3618,18 +3165,17 @@ def render_contours_tile(
 
     # Draw from largest interval first (so smaller sit on top)
     for interval in intervals_to_draw:
-        path = contour_paths.get(interval)
-        if not path or not os.path.exists(path):
-            continue
-        try:
-            records, tree = _load_contour_index(path)
-        except Exception as e:
-            log.warning(
-                f"Contour geojson load failed for interval {interval} ({path}): {e}"
-            )
-            continue
-        if tree is None:
-            continue
+        if contour_lines is None:
+            path = contour_paths.get(interval)
+            if not path or not os.path.exists(path):
+                continue
+            try:
+                records, tree = _load_contour_index(path)
+            except Exception as e:
+                log.warning(f"Contour geojson load failed for interval {interval}: {e}")
+                continue
+            if tree is None:
+                continue
 
         # When this interval is coarser than the active interval (e.g. drawing
         # the 50 m band underneath the 5 m band), treat its lines as major.
@@ -3642,12 +3188,14 @@ def render_contours_tile(
         # (keep features whose bbox intersects tile ± pad), at O(log n + hits)
         # per tile instead of scanning every feature in the job.
         pad = 0.05
-        query_box = shapely_box(
-            lon_min - pad, lat_min - pad, lon_max + pad, lat_max + pad
-        )
-        for idx in tree.query(query_box):
-            feat, coords = records[int(idx)]
-
+        if contour_lines is None:
+            query_box = shapely_box(
+                lon_min - pad, lat_min - pad, lon_max + pad, lat_max + pad
+            )
+            near = [records[int(idx)] for idx in tree.query(query_box)]
+        else:
+            near = contour_lines
+        for feat, coords in near:
             pts = [lonlat_to_px(c[0], c[1]) for c in coords]
             if len(pts) < 2:
                 continue
@@ -3705,13 +3253,8 @@ def render_contours_tile(
 
 @dataclass
 class RenderConfig:
-    hillshade_path: str
     density_path: str
-    slope_path: str
-    osm_geojson: Optional[str]
-    contour_paths: dict
     output_dir: str
-    layers: List[str]  # which individual layers to also save
     lon_min: float
     lat_min: float
     lon_max: float
@@ -3723,8 +3266,8 @@ class RenderConfig:
 
 def render_tile_job(args) -> Tuple[int, int, int, dict]:
     """
-    Worker function (runs in subprocess).
-    Returns (z, x, y, {layer_name: png_bytes}).
+    Worker function (runs in subprocess): one vegetation tile.
+    Returns (z, x, y, {"vegetation": png_bytes}), empty when transparent.
     """
     z, x, y, cfg_dict = args
     cfg = RenderConfig(**cfg_dict)
@@ -3732,100 +3275,45 @@ def render_tile_job(args) -> Tuple[int, int, int, dict]:
     bbox_merc = tile_bbox_mercator(x, y, z)
     bbox_wgs84 = tile_to_bbox(x, y, z)
 
-    results = {}
+    density_arr = read_raster_window(cfg.density_path, bbox_merc)
+    # cfg.stale_path is "" whenever fire-staleness detection was disabled/
+    # unavailable for this job (see compute_rasters) — same optional-path
+    # convention as cfg.footprint_path.
+    stale_arr = (
+        read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
+    )
+    veg_img = render_vegetation_tile(density_arr, cfg.settings, stale_arr)
 
-    # --- Hillshade ---
-    hs_arr = read_raster_window(cfg.hillshade_path, bbox_merc)
-    hs_img = render_hillshade_tile(hs_arr, cfg.settings)
-
-    # --- Vegetation ---
-    # Only when the layer is active. Mode A (DEM-only) produces no density
-    # raster, so cfg.density_path is "" — reading it would raise "No such file
-    # or directory" and fail the WHOLE tile (taking hillshade + slope down with
-    # it). cfg.layers is the authoritative active set (drops vegetation when
-    # there's no point cloud, or when the user disabled it).
-    veg_img = None
-    if "vegetation" in cfg.layers:
-        density_arr = read_raster_window(cfg.density_path, bbox_merc)
-        # cfg.stale_path is "" whenever fire-staleness detection was disabled/
-        # unavailable for this job (see compute_rasters) — same optional-path
-        # convention as cfg.density_path/footprint_path.
-        stale_arr = (
-            read_raster_window(cfg.stale_path, bbox_merc) if cfg.stale_path else None
-        )
-        veg_img = render_vegetation_tile(density_arr, cfg.settings, stale_arr)
-
-    # --- Features ---
-    feat_img = render_features_tile(cfg.osm_geojson, bbox_wgs84, z, cfg.settings)
-
-    # --- Slope ---
-    sl_arr = read_raster_window(cfg.slope_path, bbox_merc)
-    slope_img = render_slope_tile(sl_arr, cfg.settings)
-
-    # --- Apply footprint mask to raster layers ---
-    # This ensures pixels in the nodata-filled edge ring are fully transparent.
+    # Footprint mask: pixels in the nodata-filled edge ring become transparent.
     if cfg.footprint_path:
         try:
-            hs_img = _apply_footprint_mask(hs_img, cfg.footprint_path, bbox_wgs84)
-            if veg_img is not None:
-                veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
-            slope_img = _apply_footprint_mask(slope_img, cfg.footprint_path, bbox_wgs84)
+            veg_img = _apply_footprint_mask(veg_img, cfg.footprint_path, bbox_wgs84)
         except Exception as _e:
-            log.warning(f"Footprint mask failed for tile {z}/{x}/{y}: {_e}")
+            log.warning(f"Footprint mask failed for a tile: {_e}")
 
-    # --- Contours ---
-    contour_img = render_contours_tile(cfg.contour_paths, bbox_wgs84, z, cfg.settings)
+    # getextrema() on the alpha band: (min, max). If max==0, fully transparent.
+    if veg_img.split()[3].getextrema()[1] == 0:
+        return z, x, y, {}
+    from io import BytesIO
 
-    def img_to_png(img: Image.Image):
-        """Return PNG bytes, or None if fully transparent. Uses getextrema() — no numpy needed."""
-        from io import BytesIO
-
-        # getextrema() on the alpha band: (min, max). If max==0, fully transparent.
-        extrema = img.split()[3].getextrema()  # alpha channel min, max
-        if extrema[1] == 0:
-            return None
-        buf = BytesIO()
-        img.save(buf, format="PNG", optimize=True)
-        return buf.getvalue()
-
-    layer_imgs = {
-        "hillshade": hs_img,
-        "vegetation": veg_img,
-        "features": feat_img,
-        "slope": slope_img,
-        "contours": contour_img,
-    }
-
-    # Individual layers — composite is built on demand by the export worker;
-    # the renderer does not emit a composite tile.
-    for lname in cfg.layers:
-        png = img_to_png(layer_imgs[lname])
-        if png is not None:
-            results[lname] = png
-
-    return z, x, y, results
+    buf = BytesIO()
+    veg_img.save(buf, format="PNG", optimize=True)
+    return z, x, y, {"vegetation": buf.getvalue()}
 
 
 def generate_all_tiles(cfg: RenderConfig, workers: int):
-    """Iterate over all zoom levels and tiles, render in parallel, write MBTiles.
-
-    Composite MBTiles is not produced at job time; composite output is built
-    on demand by the export worker against the latest vector style. Per-layer
-    raster MBTiles are still emitted because they are the
-    source for both the in-app PMTiles (vector layers from tippecanoe, raster
-    layers from these MBTiles) and the canonical-source COG conversion
-    (worker.py converts the styled MBTiles → COG via GDAL's MBTiles driver).
-    """
+    """Render every vegetation tile in parallel into vegetation.mbtiles, the
+    source of the layer's PMTiles (worker.py)."""
     output_dir = cfg.output_dir
     os.makedirs(output_dir, exist_ok=True)
 
-    layer_names = list(cfg.layers)
-
-    # Open all MBTiles connections
-    conns = {}
-    for name in layer_names:
-        path = os.path.join(output_dir, f"{name}.mbtiles")
-        conns[name] = create_mbtiles(path, name.capitalize(), f"Topo layer: {name}")
+    conns = {
+        "vegetation": create_mbtiles(
+            os.path.join(output_dir, "vegetation.mbtiles"),
+            "Vegetation",
+            "Topo layer: vegetation",
+        )
+    }
 
     cfg_dict = cfg.__dict__.copy()
 
@@ -3949,7 +3437,12 @@ def get_raster_bbox_wgs84(raster_path: str) -> Tuple[float, float, float, float]
 # ---------------------------------------------------------------------------
 
 
-def merge_dem_tiles(dem_files: List[Path], out_path: str):
+def merge_dem_tiles(
+    dem_files: List[Path],
+    out_path: str,
+    resolution: str = "average",
+    resample: Optional[str] = None,
+):
     """Mosaic multiple DEM GeoTIFFs into one, preserving their NATIVE CRS.
 
     Stays native (axis-aligned, no rotation wedge) so the footprint can be
@@ -3957,6 +3450,10 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
     (reproject_raster_to_web_mercator). Source nodata is normalised to -9999 so
     downstream steps see a consistent hole value. If the DEM tiles span multiple
     CRSs (rare zone-crossing job), each is reprojected to Web Mercator first.
+    Where tiles overlap, the last one listed wins; `resolution` is the
+    mosaic's cell (gdal.BuildVRT's: "average", "highest" …) and `resample`
+    how a tile of another cell is resampled to it (BuildVRT's default,
+    nearest, when None).
     """
     log.info(f"Merging {len(dem_files)} DEM tile(s) …")
     paths = [str(f) for f in dem_files]
@@ -3980,7 +3477,13 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
         paths = merc
 
     vrt_path = out_path.replace(".tif", "_input.vrt")
-    gdal.BuildVRT(vrt_path, paths, VRTNodata=src_nodata)
+    gdal.BuildVRT(
+        vrt_path,
+        paths,
+        VRTNodata=src_nodata,
+        resolution=resolution,
+        **({"resampleAlg": resample} if resample else {}),
+    )
     # Identity mosaic (no reprojection); normalise nodata to -9999.
     gdal.Warp(
         out_path,
@@ -3994,15 +3497,65 @@ def merge_dem_tiles(dem_files: List[Path], out_path: str):
     log.info("DEM merge complete.")
 
 
+def report_failure(error: BaseException, program: str) -> str:
+    """A failure as its type and the code locations it came through, not its
+    message, which can quote an input's ELVIS name.
+
+    A failure in a pool job reaches here with its own frames as text: the
+    pool hands back the exception with the job's traceback formatted into its
+    __cause__, message and all. Only the file:line pairs are taken from it
+    (tests/test_sharpen.py `TestReportFailure`; for this module's main,
+    tests/test_log_privacy.py `TestUncaughtFailure`)."""
+    frames = [
+        (Path(f.filename).name, f.lineno)
+        for f in traceback.extract_tb(error.__traceback__)
+    ]
+    cause = error.__cause__
+    if isinstance(cause, concurrent.futures.process._RemoteTraceback):
+        frames += [
+            (Path(name).name, int(line))
+            for name, line in re.findall(r'File "([^"]+)", line (\d+)', cause.tb)
+        ]
+    where = " < ".join(f"{name}:{line}" for name, line in reversed(frames))
+    return f"{program} failed: {type(error).__name__} at {where}"
+
+
 def main():
+    try:
+        run()
+    except Exception as e:  # noqa: BLE001 - every failure, told without its message
+        print(report_failure(e, "pipeline"), file=sys.stderr)
+        sys.exit(1)
+
+
+def has_class2(path: str) -> bool:
+    """Whether a point cloud holds any ground (ASPRS class 2) points."""
+    out = subprocess.run(
+        [
+            "pdal",
+            "info",
+            "--stats",
+            "--dimensions",
+            "Classification",
+            "--enumerate",
+            "Classification",
+            path,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    stats = json.loads(out)["stats"]["statistic"]
+    return any(2 in [int(v) for v in s.get("values", [])] for s in stats)
+
+
+def run():
     parser = argparse.ArgumentParser(
         description=(
-            "Convert an ELVIS LiDAR ZIP into topo MBTiles for Gaia GPS.\n\n"
-            'Auto-detects ZIP contents ("LAZ wins"):\n'
-            "  Mode C (point cloud present) – all layers; any bundled DEM ignored\n"
-            "  Mode A (DEM only, no LAZ)    – terrain + contours, no vegetation"
+            "The vegetation layer of a sharpened area: an ELVIS ZIP's point "
+            "clouds to vegetation.mbtiles (worker.py `process_vegetation`). A "
+            "ZIP with no point clouds makes none."
         ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("elvis_zip", help="Path to the ELVIS ZIP file")
     parser.add_argument(
@@ -4025,55 +3578,17 @@ def main():
         help="Keep intermediate working files after completion",
     )
     parser.add_argument(
-        "--skip-osm",
-        action="store_true",
-        help="Skip Overpass API download (offline / testing mode)",
-    )
-    parser.add_argument(
         "--benchmark",
         action="store_true",
         help="Print per-step timing report at the end",
-    )
-    parser.add_argument(
-        "--export-geojson",
-        default=None,
-        metavar="DIR",
-        help=(
-            "Copy intermediate GeoJSON files (contours + OSM features) "
-            "to DIR for external vector tile generation."
-        ),
-    )
-    parser.add_argument(
-        "--export-footprint",
-        default=None,
-        metavar="DIR",
-        help=(
-            "Copy the computed data-coverage footprint GeoJSON "
-            "to DIR (alongside --export-geojson outputs)."
-        ),
-    )
-    parser.add_argument(
-        "--layers",
-        default="all",
-        help=(
-            "Comma-separated list of layers to generate "
-            "(hillshade, vegetation, features, slope, contours). "
-            "Defaults to 'all'. Per-layer `enabled` flags in "
-            "--settings-json also disable layers. As of Stage 2 "
-            "composite is no longer produced at job time — the "
-            "export worker builds it on demand."
-        ),
     )
     parser.add_argument(
         "--settings-json",
         default=None,
         metavar="PATH",
         help=(
-            "Path to a JSON file with per-job render overrides "
-            "(hillshade params, slope bands, vegetation colours, "
-            "contour intervals, OSM feature toggles). Shape must "
-            "match shared/src/topoSettings.ts TopoSettings. "
-            "Omit to use the Default preset."
+            "Path to a JSON file with the vegetation layer's render settings "
+            "(shared/src/topoSettings.ts). Omit to use the defaults."
         ),
     )
     parser.add_argument(
@@ -4118,135 +3633,79 @@ def main():
     log.info(f"Working directory: {work_dir}")
 
     try:
-        # ── Step 1: Detect inputs ────────────────────────────────────────────
         with bench.step("Extract & detect inputs", key="extract"):
             contents = extract_elvis_zip(args.elvis_zip, work_dir)
+        if not contents.has_vegetation:
+            log.info("No point clouds in the ZIP: no vegetation layer.")
+            return
 
-        # Populated in the MODE_LAZ_ONLY branch below (needs PDAL for density
-        # probing). capture_year is derived from the recency-picked veg tiles so
-        # the vegetation fire-staleness baseline reflects the surveys that
-        # actually fed the veg rasters. DEM-only jobs have no point cloud → both
-        # stay at their no-op defaults.
-        capture_year: Optional[int] = None
-        survey_selection: Optional[SurveySelection] = None
-        # Final Web-Mercator rasters fed to the derived-raster / tiling stage.
+        # Native-CRS rasters, warped to Web Mercator as rasters after the
+        # footprint (see reproject_raster_to_web_mercator): rasterizing
+        # natively leaves no rotation wedge for fill_nodata to fabricate into.
+        native = {
+            name: os.path.join(work_dir, f"{name}_native.tif")
+            for name in (
+                "scrub_low_count",
+                "scrub_high_count",
+                "below_count",
+                "all_count",
+            )
+        }
+        mercator = {name: os.path.join(work_dir, f"{name}_raw.tif") for name in native}
+        dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
+        dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
         dtm_filled = os.path.join(work_dir, "dtm_filled.tif")
-        scrub_low_raw = os.path.join(work_dir, "scrub_low_count_raw.tif")
-        scrub_high_raw = os.path.join(work_dir, "scrub_high_count_raw.tif")
-        below_count_raw = os.path.join(work_dir, "below_count_raw.tif")
-        all_count_raw = os.path.join(work_dir, "all_count_raw.tif")
-        # Native-CRS intermediates. Rasters are built and the footprint computed
-        # in the data's native MGA/UTM grid (axis-aligned → no rotation wedge),
-        # then warped to Web Mercator as a raster (see
-        # reproject_raster_to_web_mercator). This is what prevents fill_nodata
-        # from fabricating "spaghetti" into the rotated edge gaps.
-        dtm_native = os.path.join(work_dir, "dtm_native.tif")
-        scrub_low_native = os.path.join(work_dir, "scrub_low_count_native.tif")
-        scrub_high_native = os.path.join(work_dir, "scrub_high_count_native.tif")
-        below_count_native = os.path.join(work_dir, "below_count_native.tif")
-        all_count_native = os.path.join(work_dir, "all_count_native.tif")
-
         footprint_path = os.path.join(work_dir, "footprint.geojson")
 
-        # ── Step 2a: Obtain DTM (native) → footprint → warp to Web Mercator ──
-        if contents.mode == MODE_DEM_ONLY:
-            with bench.step("Merge pre-built DEM (DTM, native)", key="merge_dem"):
-                merge_dem_tiles(contents.dem_files, dtm_native)
-            # ELVIS sometimes bundles all-nodata DEM tiles. A DEM-only job has no
-            # point cloud to fall back to, so an empty DEM means the run can't
-            # build terrain — fail loudly here rather than rendering empty
-            # rasters that silently drop the hillshade/slope layers.
-            if not raster_has_valid_pixels(dtm_native):
-                raise RuntimeError(
-                    "DEM-only job: the supplied DEM has no valid elevation data. "
-                    "Cannot build terrain — check the input GeoTIFFs."
-                )
-            with bench.step("Compute data footprint", key="footprint"):
-                compute_data_footprint(dtm_native, footprint_path)
-            with bench.step("Reproject DTM to Web Mercator", key="reproject"):
-                reproject_raster_to_web_mercator(dtm_native, dtm_filled, -9999, "cubic")
-        else:
-            # MODE_LAZ_ONLY – build DTM + NRD counts from point cloud (native).
-            dtm_raw = os.path.join(work_dir, "dtm_raw.tif")
-            dtm_native_filled = os.path.join(work_dir, "dtm_native_filled.tif")
-            # Resolve overlapping surveys per footprint: densest survey → terrain
-            # (DTM/hillshade/slope/contours), most-recent survey → vegetation.
-            with bench.step(
-                "Select surveys per footprint (density vs recency)", key="survey_select"
-            ):
-                survey_selection = select_surveys_by_layer(contents.las_files)
-            capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
-            with bench.step(
-                "PDAL: LAZ → DTM + NRD counts (ground classification)", key="pdal"
-            ):
-                run_pdal_sequential_full(
-                    survey_selection.terrain_tiles,
-                    survey_selection.veg_tiles,
-                    dtm_raw,
-                    scrub_low_native,
-                    scrub_high_native,
-                    below_count_native,
-                    all_count_native,
-                    work_dir,
-                    resolution=1.0,
-                )
-            with bench.step("Fill DTM nodata holes", key="fill"):
-                fill_nodata(dtm_raw, dtm_native_filled)
-            # Footprint is computed from dtm_raw (pre-fill) in the NATIVE grid,
-            # which is axis-aligned with no rotation wedge, so it hugs the true
-            # data extent. (compute_data_footprint reprojects to WGS84.)
-            with bench.step("Compute data footprint", key="footprint"):
-                compute_data_footprint(dtm_raw, footprint_path)
-            with bench.step("Reproject DTM to Web Mercator", key="reproject"):
-                reproject_raster_to_web_mercator(
-                    dtm_native_filled, dtm_filled, -9999, "cubic"
-                )
-
-        # ── Step 2b: Warp NRD counts to Web Mercator (vegetation layer) ─────
-        # Counts are produced in the native grid by the Mode C full PDAL pass;
-        # warp them so they align with the 3857 DTM the derived rasters expect.
-        if contents.has_vegetation:
-            with bench.step(
-                "Reproject NRD counts to Web Mercator", key="reproject_counts"
-            ):
-                reproject_raster_to_web_mercator(
-                    scrub_low_native, scrub_low_raw, 0, "bilinear"
-                )
-                reproject_raster_to_web_mercator(
-                    scrub_high_native, scrub_high_raw, 0, "bilinear"
-                )
-                reproject_raster_to_web_mercator(
-                    below_count_native, below_count_raw, 0, "bilinear"
-                )
-                reproject_raster_to_web_mercator(
-                    all_count_native, all_count_raw, 0, "bilinear"
-                )
-
-        # ── Step 3: Derive rasters ───────────────────────────────────────────
+        # Overlapping surveys per footprint: densest → ground, most recent →
+        # vegetation returns.
         with bench.step(
-            "Compute hillshade, slope"
-            + (", scrub density (vegetation)" if contents.has_vegetation else ""),
-            key="derivatives",
+            "Select surveys per footprint (density vs recency)", key="survey_select"
         ):
-            if contents.has_vegetation:
-                raster_paths = compute_rasters(
-                    dtm_filled,
-                    scrub_low_raw,
-                    scrub_high_raw,
-                    below_count_raw,
-                    all_count_raw,
-                    work_dir,
-                    settings,
-                    capture_year,
+            survey_selection = select_surveys_by_layer(contents.las_files)
+        capture_year = _capture_year_from_las_files(survey_selection.veg_tiles)
+        with bench.step("PDAL: LAZ → DTM + vegetation counts", key="pdal"):
+            run_pdal_sequential_full(
+                survey_selection.terrain_tiles,
+                survey_selection.veg_tiles,
+                dtm_raw,
+                native["scrub_low_count"],
+                native["scrub_high_count"],
+                native["below_count"],
+                native["all_count"],
+                work_dir,
+                resolution=1.0,
+            )
+        with bench.step("Fill DTM nodata holes", key="fill"):
+            fill_nodata(dtm_raw, dtm_native_filled)
+        # Footprint from dtm_raw (pre-fill) in the native grid, so it hugs the
+        # true data extent (compute_data_footprint reprojects to WGS84).
+        with bench.step("Compute data footprint", key="footprint"):
+            compute_data_footprint(dtm_raw, footprint_path)
+        with bench.step("Reproject to Web Mercator", key="reproject"):
+            reproject_raster_to_web_mercator(
+                dtm_native_filled, dtm_filled, -9999, "cubic"
+            )
+            for name in native:
+                reproject_raster_to_web_mercator(
+                    native[name], mercator[name], 0, "bilinear"
                 )
-            else:
-                raster_paths = compute_rasters_no_veg(dtm_filled, work_dir, settings)
+
+        with bench.step("Compute scrub density (vegetation)", key="derivatives"):
+            raster_paths = compute_rasters(
+                dtm_filled,
+                mercator["scrub_low_count"],
+                mercator["scrub_high_count"],
+                mercator["below_count"],
+                mercator["all_count"],
+                work_dir,
+                settings,
+                capture_year,
+            )
 
         # Fold fire_stale_summary.json (written by apply_fire_history, inside
         # compute_rasters, only when fire-staleness detection is enabled) into
-        # the per-job metrics — lets the worker surface "N% of this AOI burned
-        # since capture" on the job. Absent file (fire disabled/unavailable) is
-        # a no-op: set_fire_staleness(None, None) leaves the metrics keys null.
+        # the per-job metrics. Absent file: the metrics keys stay null.
         fire_stale_summary_path = os.path.join(work_dir, "fire_stale_summary.json")
         if os.path.exists(fire_stale_summary_path):
             with open(fire_stale_summary_path) as f:
@@ -4256,143 +3715,30 @@ def main():
                 fire_stale_summary["capture_year"],
             )
 
-        # ── Step 4: Bounding box ─────────────────────────────────────────────
         lon_min, lat_min, lon_max, lat_max = get_raster_bbox_wgs84(dtm_filled)
-        log.info(
-            f"Coverage: lon {lon_min:.4f}–{lon_max:.4f}, lat {lat_min:.4f}–{lat_max:.4f}"
-        )
-
-        # ── Step 5: OSM features ─────────────────────────────────────────────
-        # OSM is always fetched (unless --skip-osm for offline tests). The
-        # per-category enablement flag now lives in VectorStyleSettings and
-        # only influences paint/composite, not the fetch step.
-        fp = footprint_path if os.path.exists(footprint_path) else None
-        osm_geojson = None
-        if not args.skip_osm:
-            with bench.step("Fetch OSM features (Overpass API)", key="osm"):
-                osm_geojson = fetch_osm_features(
-                    lon_min,
-                    lat_min,
-                    lon_max,
-                    lat_max,
-                    work_dir,
-                    footprint_path=fp,
-                    settings=settings,
-                )
-
-        # ── Step 6: Contours ─────────────────────────────────────────────────
-        # 5 m is forced into the interval set so the GeoJSON export and the
-        # vector contours PMTiles the frontend renders are always present,
-        # independent of the template's per-zoom intervalM choices (which
-        # drive only raster compositing).
-        contour_intervals = sorted(
-            {5.0}
-            | {
-                float(b["intervalM"])
-                for b in settings.get("contours", {}).get("zoomBands", [])
-            }
-        )
-        contours_enabled = settings.get("contours", {}).get("enabled", True) and bool(
-            contour_intervals
-        )
-        contour_paths: Dict[float, str] = {}
-        if contours_enabled:
-            with bench.step(
-                f"Generate contours ({', '.join(str(i) + 'm' for i in contour_intervals)})",
-                key="contours",
-            ):
-                contour_paths = generate_contours_gdal(
-                    dtm_filled, work_dir, intervals=contour_intervals, footprint_path=fp
-                )
-
-        # ── Step 6b: Export GeoJSON for external vector tile generation ─────
-        if args.export_geojson or args.export_footprint:
-            export_dir = args.export_geojson or args.export_footprint
-            os.makedirs(export_dir, exist_ok=True)
-        if args.export_geojson:
-            log.info(f"Exporting GeoJSON to {args.export_geojson} …")
-            for interval, path in contour_paths.items():
-                if os.path.exists(path):
-                    pretty = (
-                        int(interval)
-                        if float(interval).is_integer()
-                        else str(interval).replace(".", "p")
-                    )
-                    shutil.copy2(
-                        path,
-                        os.path.join(
-                            args.export_geojson, f"contours_{pretty}m.geojson"
-                        ),
-                    )
-            if osm_geojson and os.path.exists(osm_geojson):
-                shutil.copy2(
-                    osm_geojson,
-                    os.path.join(args.export_geojson, "osm_features.geojson"),
-                )
-        if args.export_footprint and fp:
-            fp_export_dir = args.export_footprint
-            os.makedirs(fp_export_dir, exist_ok=True)
-            shutil.copy2(fp, os.path.join(fp_export_dir, "footprint.geojson"))
-            log.info(f"Footprint exported to {fp_export_dir}")
-
-        # ── Step 7: Tile rendering ───────────────────────────────────────────
-        active_layers = active_layers_from_settings(settings, contents.has_vegetation)
-
-        # CLI --layers further narrows the list (e.g. for debugging single layers).
-        if args.layers and args.layers.lower() != "all":
-            requested = {l.strip().lower() for l in args.layers.split(",") if l.strip()}
-            if "composite" in requested:
-                log.warning(
-                    "--layers 'composite' is a no-op since Stage 2; "
-                    "composites are built on demand by the export worker. Ignoring."
-                )
-                requested.discard("composite")
-            active_layers = [l for l in active_layers if l in requested]
-
         cfg = RenderConfig(
-            hillshade_path=raster_paths["hillshade"],
-            density_path=raster_paths.get("scrub_density", ""),
+            density_path=raster_paths["scrub_density"],
             stale_path=raster_paths.get("fire_stale", ""),
-            slope_path=raster_paths["slope"],
-            osm_geojson=osm_geojson,
-            contour_paths=contour_paths,
             output_dir=args.output,
-            layers=active_layers,
             lon_min=lon_min,
             lat_min=lat_min,
             lon_max=lon_max,
             lat_max=lat_max,
             settings=settings,
-            footprint_path=fp,
+            footprint_path=footprint_path if os.path.exists(footprint_path) else None,
         )
-
         with bench.step(
             f"Render tiles z{ZOOM_MIN}–z{ZOOM_MAX} ({args.workers} workers)",
             key="render",
         ):
             output_tile_count = generate_all_tiles(cfg, workers=args.workers)
 
-        # Record the size signals for the per-job metrics file (consumed by the
-        # worker → TopoJob → adaptive runtime estimator). Input count is the
-        # number of tiles actually GRIDDED (post survey-dedup union), since that
-        # is what drives PDAL runtime — not the raw upload count.
-        gridded_count = (
-            len(survey_selection.gridded_paths)
-            if survey_selection is not None
-            else len(contents.las_files)
-        )
-        bench.set_tile_counts(gridded_count, output_tile_count)
+        # Size signals for the per-job metrics (worker → TopoJob → runtime
+        # estimator): the tiles actually gridded, post survey-dedup union.
+        bench.set_tile_counts(len(survey_selection.gridded_paths), output_tile_count)
         bench.set_zoom(ZOOM_MIN, ZOOM_MAX)
-        bench.set_survey_selection(
-            survey_selection.decisions if survey_selection is not None else None
-        )
-
-        # ── Summary ──────────────────────────────────────────────────────────
-        log.info(f"\n✓ Done! MBTiles written to: {args.output}")
-        for name in active_layers:
-            log.info(f"  {name}.mbtiles")
-        if not contents.has_vegetation:
-            log.info("  (vegetation.mbtiles not produced — no LAZ/LAS in input ZIP)")
+        bench.set_survey_selection(survey_selection.decisions)
+        log.info(f"\n✓ Done! vegetation.mbtiles written to: {args.output}")
 
     finally:
         if use_temp and not args.keep_work:
@@ -4400,15 +3746,13 @@ def main():
         elif args.keep_work:
             log.info(f"Intermediate files kept at: {work_dir}")
 
-    bench.report()
-
-    # Best-effort: write the runtime metrics file the worker reads. Never fatal
-    # (a missing/partial metrics file just means no instrumentation for this job).
-    if args.metrics_json:
-        try:
-            bench.write_metrics(args.metrics_json)
-        except Exception as e:
-            log.warning(f"Failed to write metrics JSON: {e}")
+        bench.report()
+        # Best-effort: the runtime metrics file the worker reads. Never fatal.
+        if args.metrics_json:
+            try:
+                bench.write_metrics(args.metrics_json)
+            except Exception as e:
+                log.warning(f"Failed to write metrics JSON: {e}")
 
 
 if __name__ == "__main__":

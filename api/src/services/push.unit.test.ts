@@ -53,8 +53,6 @@ describe("buildPushMessages — privacy invariant", () => {
       "topo_failed",
       "topo_export_complete",
       "topo_export_skipped",
-      "geo_pdf_complete",
-      "geo_pdf_failed",
       "unknown_future_type",
     ]) {
       const title = pushTitleFor(type);
@@ -64,16 +62,6 @@ describe("buildPushMessages — privacy invariant", () => {
       expect(title).toBe(pushTitleFor(type)); // deterministic
     }
     expect(pushTitleFor("unknown_future_type")).toBe("Logjam notification");
-  });
-
-  // The push carries no status field, so the type is the only thing that can
-  // carry the outcome.
-  it("gives a failed GeoPDF its own title, distinct from the success one", () => {
-    expect(pushTitleFor("geo_pdf_failed")).toBe("GeoPDF failed");
-    expect(pushTitleFor("geo_pdf_failed")).not.toBe(
-      pushTitleFor("geo_pdf_complete"),
-    );
-    expect(pushTitleFor("geo_pdf_failed")).not.toBe("Logjam notification");
   });
 
   it("throws loudly on a non-whitelisted data key (no free-text smuggling)", () => {
@@ -91,6 +79,22 @@ describe("buildPushMessages — privacy invariant", () => {
         latitude: -33.7,
       }),
     ).toThrow(/not allowed: latitude/);
+  });
+
+  // Mutation: title an announcement push with its own (free-text) title, or
+  // drop announcementId from ALLOWED_DATA_KEYS.
+  it("titles an announcement generically and carries only its id", () => {
+    const [message] = buildPushMessages(["t"], {
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
+    expect(message.title).toBe("A message from the Logjam maintainer");
+    expect(message.data).toEqual({
+      type: "announcement",
+      announcementId: "a1",
+      notificationId: "n1",
+    });
   });
 
   it("has no body field — titles only, details fetched over the authed API", () => {

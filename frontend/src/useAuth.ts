@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   signIn as amplifySignIn,
   signUp as amplifySignUp,
@@ -12,6 +12,7 @@ import {
 import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { mapAuthNextStep } from "./errors/authErrorMap";
+import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
@@ -40,6 +41,12 @@ export function useAuth() {
   // Username is stored between sign-up and confirmation steps
   const [pendingUsername, setPendingUsername] = useState("");
 
+  // True when the session check itself failed (offline, say) and put the
+  // sign-in screen up with the refresh token still in localStorage: the user
+  // may be the same one, so their GeoPDF tiles stay (see the effect below).
+  // Reset by the next successful sign-in, which clears the cache first.
+  const sessionCheckFailed = useRef(false);
+
   // On mount, check if there's an existing valid session in localStorage.
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
@@ -48,11 +55,29 @@ export function useAuth() {
         if (session.tokens?.idToken) {
           setState("authenticated");
         } else {
+          // Whoever was here last is signed out, however it came about (a
+          // session that lapsed while the tab was shut): their GeoPDF tiles
+          // go with it.
+          void clearTileCache();
           setState("signIn");
         }
       })
-      .catch(() => setState("signIn"));
+      .catch(() => {
+        // Not known signed out: no clear here or after (sessionCheckFailed).
+        sessionCheckFailed.current = true;
+        setState("signIn");
+      });
   }, []);
+
+  // The sign-in screen showing means nobody is known to be signed in, so the
+  // tile cache goes, except when the session check failed. This runs after the
+  // dialog (and the workers it started) is gone, so it also covers a session
+  // that expired mid-render.
+  useEffect(() => {
+    if (state === "signIn" && !sessionCheckFailed.current) {
+      void clearTileCache();
+    }
+  }, [state]);
 
   // Listen for mid-session token-refresh failures from apiFetch. When the
   // refresh token has expired or been revoked, drop back to the sign-in
@@ -61,6 +86,7 @@ export function useAuth() {
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     setSessionExpiredHandler(() => {
+      void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;
         setError("Your session has expired. Please sign in again.");
@@ -79,6 +105,10 @@ export function useAuth() {
           setError(mapAuthNextStep(result.nextStep.signInStep));
           return false;
         }
+        // Whoever signs in starts with an empty tile cache, even after a
+        // failed session check that left the last user's in place.
+        await clearTileCache();
+        sessionCheckFailed.current = false;
         // Await provisioning before flipping to authenticated: GET /users/me
         // creates the User row on first login, and every other endpoint 404s
         // ("User not found") until that row exists. Flipping state first let
@@ -206,13 +236,16 @@ export function useAuth() {
     [pendingUsername],
   );
 
-  const handleSignOut = useCallback(async () => {
+  const endSession = useCallback(async (everywhere: boolean) => {
     // A trip draft is place names and notes in localStorage, readable by
     // anything on the origin and unaffected by the reload below. It must not
     // outlive the session that wrote it — sign-out is the line (privacy rules,
     // root AGENTS.md). Cleared before the network call so a signOut failure
     // can't strand it.
     clearTripDraft();
+    // The GeoPDF tile cache shows which areas were printed: same line. It
+    // clears here because the user is known to be signing out.
+    await clearTileCache();
     // amplifySignOut can reject (storage error, network hiccup during global
     // revoke, an Amplify internal error) — without the try/catch, the
     // rejection propagates into an onClick handler that ignores promises, so
@@ -220,12 +253,29 @@ export function useAuth() {
     // draft already gone. Reload unconditionally either way,
     // matching RootErrorBoundary.handleSignOut's identical flow.
     try {
-      await amplifySignOut();
+      await amplifySignOut({ global: everywhere });
     } catch (err) {
       console.error(err);
     }
+    // Once more: a render or prefetch worker may have written while the
+    // sign-out was in flight, and the reload does not end it first.
+    await clearTileCache();
     window.location.reload();
   }, []);
+
+  const handleSignOut = useCallback(() => endSession(false), [endSession]);
+
+  // Amplify's global sign-out swallows a failed GlobalSignOut and still clears
+  // this browser, so a stale access token or no reception would look like
+  // success while every other session lived on. Refreshing first makes that
+  // failure throw here, before anything is cleared.
+  const handleSignOutEverywhere = useCallback(async () => {
+    if (import.meta.env.VITE_AUTH_MODE !== "fake") {
+      const { tokens } = await fetchAuthSession({ forceRefresh: true });
+      if (!tokens) throw new Error("No session to refresh");
+    }
+    await endSession(true);
+  }, [endSession]);
 
   return {
     state,
@@ -238,6 +288,7 @@ export function useAuth() {
     forgotPassword: handleForgotPassword,
     confirmForgotPassword: handleConfirmForgotPassword,
     signOut: handleSignOut,
+    signOutEverywhere: handleSignOutEverywhere,
     goToSignUp: useCallback(() => {
       setError(null);
       setState("signUp");

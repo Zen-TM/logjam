@@ -13,6 +13,7 @@ override_resource { target = github_repository.logjam }
 override_resource { target = github_repository_ruleset.main }
 override_resource { target = github_repository_ruleset.mobile_release_tags }
 override_resource { target = github_repository_ruleset.mobile_release_branches }
+override_resource { target = github_repository_ruleset.maplibre_android_tags }
 override_resource { target = github_repository_environment.this }
 override_resource { target = github_repository_environment_deployment_policy.this }
 override_resource { target = github_actions_variable.this }
@@ -66,7 +67,7 @@ run "main_admits_only_green_squashed_prs" {
   # off strict lets a PR merge against a main it was not planned on.
   assert {
     condition = alltrue([
-      for c in ["shared", "api", "api-integration", "frontend", "mobile", "topo", "migrations", "migration-upgrade", "infra-scripts", "topo-e2e", "Live release on this schema", "plan-summary", "fmt", "validate", "test-github", "test-prod", "dependency-review", "setup-smoke", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks", "pr-closes"] :
+      for c in ["shared", "api", "api-integration", "frontend", "mobile", "topo", "migrations", "migration-upgrade", "infra-scripts", "topo-e2e", "Live release on this schema", "plan-summary", "fmt", "validate", "test-github", "test-prod", "dependency-review", "setup-smoke", "format", "actionlint", "plan-prod", "plan-github", "dco", "api-image", "topo-image", "gitleaks", "pr-closes", "expo-doctor"] :
       contains([for r in github_repository_ruleset.main.rules[0].required_status_checks[0].required_check : r.context], c)
     ]) && github_repository_ruleset.main.rules[0].required_status_checks[0].strict_required_status_checks_policy
     error_message = "A required check left the main ruleset, or branches no longer need to be up to date. Add checks freely; removing one needs this test changed too."
@@ -142,6 +143,18 @@ run "releases_stay_the_maintainers" {
   assert {
     condition     = github_repository_environment_deployment_policy.this["mobile-release"].tag_pattern == "mobile-v*"
     error_message = "The mobile-release Environment, which holds EXPO_TOKEN, must be deployable from mobile-v* tags only."
+  }
+
+  # Mutation: dropping update or deletion, or widening the bypass, lets a
+  # collaborator move or delete the patched MapLibre release a build pins.
+  assert {
+    condition = alltrue([
+      github_repository_ruleset.maplibre_android_tags.rules[0].update,
+      github_repository_ruleset.maplibre_android_tags.rules[0].deletion,
+      length(github_repository_ruleset.maplibre_android_tags.bypass_actors) == 1,
+      github_repository_ruleset.maplibre_android_tags.bypass_actors[0].actor_id == 5,
+    ])
+    error_message = "Only repository admins may move or delete maplibre-android-v* tags."
   }
 }
 

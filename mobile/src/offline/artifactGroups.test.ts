@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   groupArtifacts,
+  isRegionArtifact,
   overlayJobId,
   regionGroupKey,
   unionBbox,
   type Bbox,
 } from "./artifactGroups";
 import type { MapArtifact } from "../map/sourceResolver";
+import { regionClipKind, regionClipSpecs } from "./regionTilePlanning";
 
 function artifact(
   overrides: Partial<MapArtifact> & { id: string },
@@ -148,5 +150,33 @@ describe("a resumed download rejoins its run", () => {
       regionGroupKey,
     );
     expect(groups).toHaveLength(2);
+  });
+});
+
+describe("REGION_ARTIFACT_KINDS", () => {
+  // Mutation: drop `slope-region` from the list, and a saved area's slope clip
+  // leaves its card in Saved and the bytes sign-out warns about.
+  it("holds every kind a saved area's run files", () => {
+    const specs = regionClipSpecs(
+      {
+        bbox: { west: 150.2, south: -33.8, east: 150.4, north: -33.6 },
+        groupId: "g",
+        groupLabel: "Katoomba",
+        allowCellular: false,
+      },
+      ["nsw-5m"],
+      (id) => ({ id, label: id }),
+    );
+    const kinds = specs.map(regionClipKind);
+    expect(new Set(kinds)).toEqual(
+      new Set([
+        "dem-region",
+        "contours-region",
+        "slope-region",
+        "basemap-region",
+      ]),
+    );
+    for (const kind of kinds) expect(isRegionArtifact({ kind })).toBe(true);
+    expect(isRegionArtifact({ kind: "topo-overlay" })).toBe(false);
   });
 });

@@ -6,6 +6,8 @@ import {
   say,
   normalizeThemeSchemeId,
   normalizeUserUiPreferences,
+  MAX_SLOPE_BANDS,
+  parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
 } from "@logjam/shared";
@@ -77,12 +79,28 @@ export async function createUserForSignup(params: {
   initialUsername: string;
 }): Promise<User> {
   const { sub, email, initialUsername } = params;
-  // Substring match so it works whether Postgres reports the field name
-  // ("username") or the constraint name ("User_username_key").
-  const targetHas = (e: Prisma.PrismaClientKnownRequestError, name: string) =>
-    ((e.meta?.target as string[] | undefined) ?? []).some((t) =>
-      t.includes(name),
+  // Which unique index a P2002 names, as a substring: the indexes are named
+  // for their columns (`users_username_key`, `users_email_key`), and a
+  // case-variant username trips `users_username_as_read_key` — still
+  // "username". Under the pg driver adapter Prisma leaves `meta.target`
+  // undefined and reports the index under `driverAdapterError`; `target` is
+  // kept for an engine that fills it.
+  const indexHas = (e: Prisma.PrismaClientKnownRequestError, name: string) => {
+    const meta = e.meta as
+      | {
+          target?: unknown;
+          driverAdapterError?: {
+            cause?: { constraint?: { index?: unknown } };
+          };
+        }
+      | undefined;
+    const target = Array.isArray(meta?.target) ? meta.target.join(" ") : "";
+    const index = meta?.driverAdapterError?.cause?.constraint?.index;
+    return (
+      target.includes(name) ||
+      (typeof index === "string" && index.includes(name))
     );
+  };
   const recoverRacingRow = async (): Promise<User | null> =>
     prisma.user.findUnique({ where: { cognitoId: sub } });
 
@@ -105,7 +123,7 @@ export async function createUserForSignup(params: {
         throw e;
       }
 
-      if (targetHas(e, "email")) {
+      if (indexHas(e, "email")) {
         // Email got owned between the pre-check and now. If a concurrent
         // request for this same sub created it, use that row; otherwise a
         // genuinely different account owns the email.
@@ -117,7 +135,7 @@ export async function createUserForSignup(params: {
         );
       }
 
-      if (targetHas(e, "username")) {
+      if (indexHas(e, "username")) {
         // Taken by a different user — try the next, more-unique suffix.
         if (attempt < candidateUsernames.length - 1) continue;
         // Exhausted suffixes (astronomically unlikely): recover a racing row or
@@ -197,6 +215,7 @@ async function serializeUserWithUsage(
   return {
     ...(await serializeUserForResponse(user)),
     monthlyComputeCredits: credits.quota,
+    currentConsentVersion: CURRENT_CONSENT_VERSION,
     monthlyComputeUsage: credits.used,
     monthlyComputeResetAt: credits.resetAt,
     // Egress has no progress bar in the UI — the cap sits far above real use
@@ -313,19 +332,19 @@ router.patch(
       username,
       themeSchemeId,
       notifications,
-      autoDownloadGeoPdfs,
       importMergePolicy,
       copyPlaceMedia,
       leaderboardOptIn,
+      slopeBands,
       consentVersion,
     } = req.body as {
       username?: unknown;
       themeSchemeId?: unknown;
       notifications?: unknown;
-      autoDownloadGeoPdfs?: unknown;
       importMergePolicy?: unknown;
       copyPlaceMedia?: unknown;
       leaderboardOptIn?: unknown;
+      slopeBands?: unknown;
       consentVersion?: unknown;
     };
     for (const legacy of [
@@ -373,10 +392,10 @@ router.patch(
     if (
       themeSchemeId !== undefined ||
       notifications !== undefined ||
-      autoDownloadGeoPdfs !== undefined ||
       importMergePolicy !== undefined ||
       copyPlaceMedia !== undefined ||
-      leaderboardOptIn !== undefined
+      leaderboardOptIn !== undefined ||
+      slopeBands !== undefined
     ) {
       // An older client may still send a retired id; it is stored as the
       // scheme it became.
@@ -393,12 +412,6 @@ router.patch(
       ) {
         throw malformed("Invalid notifications");
       }
-      if (
-        autoDownloadGeoPdfs !== undefined &&
-        typeof autoDownloadGeoPdfs !== "boolean"
-      ) {
-        throw malformed("Invalid autoDownloadGeoPdfs");
-      }
       if (copyPlaceMedia !== undefined && typeof copyPlaceMedia !== "boolean") {
         throw malformed("Invalid copyPlaceMedia");
       }
@@ -407,6 +420,14 @@ router.patch(
         typeof leaderboardOptIn !== "boolean"
       ) {
         throw malformed("Invalid leaderboardOptIn");
+      }
+      if (Array.isArray(slopeBands) && slopeBands.length > MAX_SLOPE_BANDS) {
+        throw malformed(`At most ${MAX_SLOPE_BANDS} slopeBands`, 413);
+      }
+      const nextSlopeBands =
+        slopeBands === undefined ? undefined : parseSlopeBands(slopeBands);
+      if (nextSlopeBands === null) {
+        throw malformed("Invalid slopeBands");
       }
       if (importMergePolicy !== undefined) {
         const normalized = normalizeImportMergePolicy(importMergePolicy);
@@ -431,9 +452,9 @@ router.patch(
               },
             }
           : {}),
-        ...(autoDownloadGeoPdfs !== undefined ? { autoDownloadGeoPdfs } : {}),
         ...(copyPlaceMedia !== undefined ? { copyPlaceMedia } : {}),
         ...(leaderboardOptIn !== undefined ? { leaderboardOptIn } : {}),
+        ...(nextSlopeBands ? { slopeBands: nextSlopeBands } : {}),
         ...(importMergePolicy !== undefined
           ? { importMergePolicy: normalizeImportMergePolicy(importMergePolicy) }
           : {}),
@@ -512,7 +533,6 @@ router.delete(
     const [
       topoJobs,
       topoExportJobs,
-      geoPdfJobs,
       media,
       ownedPlaces,
       friendships,
@@ -528,10 +548,6 @@ router.delete(
       prisma.topoExportJob.findMany({
         where: { userId: user.id },
         select: { id: true, resultKey: true },
-      }),
-      prisma.geoPdfJob.findMany({
-        where: { userId: user.id },
-        select: { id: true },
       }),
       // linkedType/linkedId feed the sync-tombstone fan-out below (which
       // place each media row belonged to).
@@ -618,13 +634,6 @@ router.delete(
       ...topoJobs.map(({ id }) => deleteTopoJobObjects(TOPO_BUCKET, id)),
       ...topoExportJobs.map(({ id }) =>
         deleteS3Prefix(TOPO_BUCKET, `exports/${id}/`),
-      ),
-      // GeoPDF outputs live under exports/geo-pdf/{jobId}/ (geoPdfWorker
-      // resultKeyFor). Delete the whole per-job prefix, not just the recorded
-      // resultKey, so an object uploaded by a running/failed job before its row
-      // was recorded is still purged.
-      ...geoPdfJobs.map(({ id }) =>
-        deleteS3Prefix(TOPO_BUCKET, `exports/geo-pdf/${id}/`),
       ),
       // Sent copies live in the MEDIA bucket under file-sends/{senderId}/.
       // One prefix delete covers every send, including one whose upload was
@@ -740,7 +749,6 @@ router.delete(
       prisma.friendInvite.deleteMany({ where: { inviterId: user.id } }),
       prisma.topoJob.deleteMany({ where: { userId: user.id } }),
       prisma.topoExportJob.deleteMany({ where: { userId: user.id } }),
-      prisma.geoPdfJob.deleteMany({ where: { userId: user.id } }),
       prisma.fileSend.deleteMany({ where: { senderId: user.id } }),
       prisma.media.deleteMany({ where: { ownerId: user.id } }),
       // Explicit even though TripLogPlace.tripLogId cascades on TripLog
@@ -753,7 +761,6 @@ router.delete(
       prisma.importSnapshot.deleteMany({ where: { ownerId: user.id } }),
       prisma.tripLog.deleteMany({ where: { userId: user.id } }),
       prisma.place.deleteMany({ where: { ownerId: user.id } }),
-      prisma.geoPdfTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.topoTemplate.deleteMany({ where: { userId: user.id } }),
       prisma.deviceToken.deleteMany({ where: { userId: user.id } }),
       // Routes store their geometry on the row, so there is no S3 leg here.

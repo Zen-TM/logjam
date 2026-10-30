@@ -11,7 +11,7 @@
 # refreshed on purpose, ideally as its own commit:
 #     docker buildx imagetools inspect ubuntu:24.04
 # Digest below verified against the live registry as `ubuntu:24.04` 2026-08-29.
-FROM ubuntu:24.04@sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 LABEL maintainer="pipeline"
 LABEL description="ELVIS LiDAR → Topo MBTiles for Gaia GPS"
@@ -72,8 +72,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ------------------------------------------------------------
 # 2b. tippecanoe – GeoJSON → vector MBTiles (MVT format)
-#     Used by the worker to produce vector tiles for contours
-#     and OSM features before merging into master PMTiles.
+#     Used by the export worker's MBTiles renderer for an old
+#     job's contours and features (renderers/mbtiles.py).
 # ------------------------------------------------------------
 #     Pinned to a released tag — `main` HEAD would silently change the
 #     vector-tile renderer on every rebuild, with nothing to bisect.
@@ -111,7 +111,9 @@ RUN python -c "from osgeo import gdal_array"
 WORKDIR /app
 COPY worker.py /app/worker.py
 COPY pipeline.py /app/pipeline.py
+COPY sharpen.py /app/sharpen.py
 COPY export_worker.py /app/export_worker.py
+COPY area_export.py /app/area_export.py
 COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py

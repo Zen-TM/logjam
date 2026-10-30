@@ -1,12 +1,11 @@
-// "Auto-download finished LiDAR topos" — the same feature as the GeoPDF one
-// (src/geopdf/autoDownload.ts), over the overlays a topo job renders.
+// "Auto-download finished LiDAR topos": the overlays a topo job renders.
 //
 // WHEN IT CHECKS: on app start, on return to the foreground, and when a
 // connection is regained — the three moments the sync engine uses, and never a
 // background timer, because battery is a field resource (ADR 0013).
 //
 // WHAT IT TAKES: every layer of every completed job the account has, once each.
-// That is deliberately the same rule as the GeoPDF feature rather than
+// That is deliberately simple rather than
 // something cleverer (only enabled layers, say): a layer you have not switched
 // on yet is exactly the one you will want the evening before a trip, and the
 // dedupe below means the cost is paid once per layer, ever.
@@ -42,7 +41,7 @@ const HANDLED_PREF_KEY = "autoDownloadedOverlayKeys";
  * How many handled keys to remember. A key is one job/layer pair, so this is
  * well past any plausible account, and bounded so the row can't grow forever.
  * ponytail: a flat JSON array in prefsDb, the same shape (and the same ceiling)
- * as the GeoPDF marker next door.
+ * as the rest of prefsDb.
  */
 const HANDLED_CAP = 500;
 
@@ -53,10 +52,9 @@ let lastRunAt = 0;
 let running = false;
 
 /**
- * Defaults OFF, where the GeoPDF switch defaults on.
+ * Defaults OFF.
  *
- * A GeoPDF is one file the user asked to have made; a topo job's overlays are
- * several layers each, and a phone that quietly fills up with contour, slope
+ * A topo job's overlays are several layers each, and a phone that quietly fills up with contour, slope
  * and vegetation archives for jobs run months ago is not a favour. Opt in.
  */
 export function isTopoAutoDownloadEnabled(): boolean {

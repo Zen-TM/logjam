@@ -101,7 +101,7 @@ describe("canRunNow", () => {
     vi.mocked(readPref).mockReturnValue(null);
     vi.mocked(NetInfo.fetch).mockResolvedValue(hotspot as never);
     vi.mocked(NetInfo.refresh).mockResolvedValue(wifi as never);
-    expect(await canRunNow("geoPdfDownload")).toBe(true);
+    expect(await canRunNow("topoDownload")).toBe(true);
     expect(NetInfo.fetch).not.toHaveBeenCalled();
   });
 
@@ -119,7 +119,6 @@ describe("isMeteredAllowed", () => {
   it("defaults every job the same way its cost class always has", () => {
     vi.mocked(readPref).mockReturnValue(null);
     expect(isMeteredAllowed("sync")).toBe(true);
-    expect(isMeteredAllowed("geoPdfDownload")).toBe(false);
     expect(isMeteredAllowed("topoDownload")).toBe(false);
     expect(isMeteredAllowed("placeNames")).toBe(false);
     expect(isMeteredAllowed("mediaUpload")).toBe(false);

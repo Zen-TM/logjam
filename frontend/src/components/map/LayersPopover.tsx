@@ -1,5 +1,4 @@
 import {
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -9,53 +8,41 @@ import {
 import {
   contractSectionKeys,
   MAP_LAYERS,
+  MAP_TERRAIN,
   PLACE_TYPE_COLORS,
-  type RegionBbox,
+  takesNswContours,
+  takesNswHillshade,
   type SectionKeysOn,
+  type SlopeBand,
+  type TerrainSwitchKey,
 } from "@logjam/shared";
-import { TOPO_LAYERS, type CompletedTopoJob } from "../../topoLayerTypes";
+import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { GeoJsonPolygonal, TopoJob } from "../dialogs/TopoDialog";
+import type { TFriend } from "../../placeUtils";
+import SharpenedAreasView from "./SharpenedAreasView";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
-import { boundsIntersect, footprintBounds } from "./topoFootprint";
+import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
 import {
-  Chip,
   ChipRail,
   IconButton,
   IconTile,
   Popover,
   Row,
-  SearchField,
   Toggle,
-  Icon,
-  InfoTip,
   type Glyph,
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
 
 type BaseLayer = TileLayer & { id: string; name: string };
-type Setter<T> = (value: T | ((prev: T) => T)) => void;
-type View = "overlays" | "basemap" | "topos";
-
-// A layer-row descriptor, shown as the row's info tooltip. Only vegetation needs
-// one: its orange crosshatch (fire more recent than the survey) is the least
-// intuitive symbol and carries no other label.
-const LAYER_DESCRIPTIONS: Partial<Record<string, string>> = {
-  vegetation:
-    "Estimated vegetation density for bushbashing — denser scrub renders darker. " +
-    "Orange crosshatching marks areas burnt more recently than the LiDAR survey, " +
-    "so the estimate there may be out of date.",
-};
+type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
 
 const copy = MAP_LAYERS.copy;
+const terrainCopy = MAP_TERRAIN.copy;
 
 const countOf = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
-
-const TOPO_DATE = new Intl.DateTimeFormat("en-AU", {
-  month: "short",
-  year: "numeric",
-});
 
 /** A drawn scrap of the vector basemap's own palette — land, a creek, a road
  *  and a lane — because a vector basemap has no XYZ tile to thumbnail. */
@@ -90,9 +77,8 @@ function VectorSwatch() {
 
 /**
  * What is drawn on the map, in a popover over it — not a page, because it is a
- * question about the map. Two views (Basemap, Overlays); an overlay with more
- * inside it than a switch (LiDAR topos) opens a sub-view in place, so twenty
- * topos cost a scroll inside that view rather than a screen of rows here.
+ * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
+ * inside it than a switch (the slope bands) opens a sub-view in place.
  */
 export default function LayersPopover({
   open,
@@ -104,24 +90,26 @@ export default function LayersPopover({
   setShowWays,
   placeCount,
   wayCount,
-  lidarEnabled,
-  setLidarEnabled,
-  lidarLayerToggles,
-  setLidarLayerToggles,
-  lidarLayerOrder,
-  setLidarLayerOrder,
-  unavailableTopoLayerNames,
   completedTopoJobs,
-  lidarJobToggles,
-  setLidarJobToggles,
-  mapBounds,
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
+  terrainLayers,
+  onTerrainLayerChange,
+  slopeBands,
+  onSlopeBandsChange,
   mapView,
   onImportFile,
+  startView,
+  sharpenedLoaded,
+  activeTopoJobs,
+  friends,
+  onSharpen,
+  onExportArea,
+  onFlyToArea,
+  onRefetchCompletedTopoJobs,
+  onDismissActiveJob,
+  onQuotaChanged,
 }: {
   open: boolean;
   onClose: () => void;
@@ -134,42 +122,54 @@ export default function LayersPopover({
   placeCount: number;
   /** Null while the lines are not loaded (they load with their layer). */
   wayCount: number | null;
-  lidarEnabled: boolean;
-  setLidarEnabled: (v: boolean) => void;
-  lidarLayerToggles: Record<string, boolean>;
-  setLidarLayerToggles: Setter<Record<string, boolean>>;
-  lidarLayerOrder: string[];
-  setLidarLayerOrder: Setter<string[]>;
-  /** Layer names whose PMTiles failed to load for at least one job. */
-  unavailableTopoLayerNames: Set<string>;
   completedTopoJobs: CompletedTopoJob[];
-  lidarJobToggles: Record<string, boolean>;
-  setLidarJobToggles: Setter<Record<string, boolean>>;
-  mapBounds: RegionBbox | null;
   baseLayers: readonly BaseLayer[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
+  terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
+  onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
+  slopeBands: SlopeBand[];
+  onSlopeBandsChange: (bands: SlopeBand[]) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
   /** Opens the importer (the same entry the Ways and Logs lists use). */
   onImportFile: () => void;
+  /**
+   * A request to open on a sub-view instead of where the popover was. Each
+   * request is a new object, so asking again for the same view navigates
+   * again (Back, then the Inbox's Show once more).
+   */
+  startView: { view: "sharpened" } | null;
+  /** False until the first fetch of sharpened areas settles (shared/DESIGN.md §11). */
+  sharpenedLoaded: boolean;
+  activeTopoJobs: TopoJob[];
+  friends: TFriend[];
+  /** Arms the pick for a new sharpened area, as the Make a map menu does. */
+  onSharpen: () => void;
+  onExportArea: (job: CompletedTopoJob) => void;
+  onFlyToArea: (footprint: GeoJsonPolygonal) => void;
+  onRefetchCompletedTopoJobs: () => void;
+  onDismissActiveJob: (jobId: string) => void;
+  onQuotaChanged: () => void;
 }) {
   const [view, setView] = useState<View>("overlays");
+  // However it closes (the button toggles `open` itself), the next opening
+  // starts on Overlays; a start request made in the same render wins.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    if (!open) setView("overlays");
+  }
+  const [seenStartView, setSeenStartView] = useState(startView);
+  if (seenStartView !== startView) {
+    setSeenStartView(startView);
+    if (startView) setView(startView.view);
+  }
 
-  const shownJobs = completedTopoJobs.filter(
-    (job) => lidarJobToggles[job.jobId] ?? true,
+  // Only a sharpened area made with the vegetation layer has one to switch.
+  const hasVegetation = completedTopoJobs.some((job) =>
+    job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const shownLayerLabels = lidarLayerOrder
-    .filter((name) => lidarLayerToggles[name])
-    .map(
-      (name) =>
-        TOPO_LAYERS.find((layer) => layer.name === name)?.label.toLowerCase() ??
-        name,
-    );
-  const overlaysOn = [showPlaces, showWays, lidarEnabled].filter(
-    Boolean,
-  ).length;
+  const overlaysOn = [showPlaces, showWays].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -181,27 +181,44 @@ export default function LayersPopover({
       open={open}
       onClose={close}
       anchorRef={anchorRef}
-      label={view === "topos" ? "LiDAR topos" : "Map layers"}
+      label={
+        view === "slopeBands"
+          ? terrainCopy.slopeBands
+          : view === "sharpened"
+            ? terrainCopy.sharpenedAreas
+            : "Map layers"
+      }
       className={classes.popover}
       // Both views carry their own × in the header.
       closeButton={false}
     >
-      {view === "topos" ? (
-        <ToposView
-          onBack={() => setView("overlays")}
+      {view === "sharpened" ? (
+        <SharpenedAreasView
+          onBack={() => setView("terrain")}
           onClose={close}
-          lidarEnabled={lidarEnabled}
-          setLidarEnabled={setLidarEnabled}
-          jobs={completedTopoJobs}
-          shownCount={shownJobs.length}
-          lidarJobToggles={lidarJobToggles}
-          setLidarJobToggles={setLidarJobToggles}
-          lidarLayerToggles={lidarLayerToggles}
-          setLidarLayerToggles={setLidarLayerToggles}
-          lidarLayerOrder={lidarLayerOrder}
-          setLidarLayerOrder={setLidarLayerOrder}
-          unavailableTopoLayerNames={unavailableTopoLayerNames}
-          mapBounds={mapBounds}
+          activeTopoJobs={activeTopoJobs}
+          completedTopoJobs={completedTopoJobs}
+          friends={friends}
+          loaded={sharpenedLoaded}
+          onSharpen={() => {
+            close();
+            onSharpen();
+          }}
+          onExportArea={(job) => {
+            close();
+            onExportArea(job);
+          }}
+          onFlyTo={onFlyToArea}
+          onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
+          onDismissActiveJob={onDismissActiveJob}
+          onQuotaChanged={onQuotaChanged}
+        />
+      ) : view === "slopeBands" ? (
+        <SlopeBandsView
+          onBack={() => setView("terrain")}
+          onClose={close}
+          bands={slopeBands}
+          onChange={onSlopeBandsChange}
         />
       ) : (
         <>
@@ -211,8 +228,14 @@ export default function LayersPopover({
               className={classes.grow}
               options={contractSectionKeys(MAP_LAYERS, "web").map((key) =>
                 key === "basemap"
-                  ? { value: key, label: copy.tabBasemap, icon: "map" as const }
-                  : { value: key, label: copy.tabOverlays, count: overlaysOn },
+                  ? { value: key, label: copy.tabBasemap }
+                  : key === "terrain"
+                    ? { value: key, label: copy.tabTerrain }
+                    : {
+                        value: key,
+                        label: copy.tabOverlays,
+                        count: overlaysOn,
+                      },
               )}
               value={view}
               onChange={setView}
@@ -227,30 +250,25 @@ export default function LayersPopover({
               () => ReactNode
             > = {
               basemap: () => (
-                <>
-                  <BasemapGallery
-                    layers={baseLayers}
-                    activeLayerId={activeLayerId}
-                    onChange={onActiveLayerChange}
-                    mapView={mapView}
-                  />
-                  {/* Imagery has no contours of its own; the vector basemap
-                      always draws them (shared nswContours.ts). */}
-                  {activeLayerId === "six-imagery" && (
-                    <div className={classes.body}>
-                      <Row
-                        title="Contours"
-                        trailing={
-                          <Toggle
-                            checked={contoursOverImagery}
-                            onChange={onContoursOverImageryChange}
-                            label="Show contours"
-                          />
-                        }
-                      />
-                    </div>
-                  )}
-                </>
+                <BasemapGallery
+                  layers={baseLayers}
+                  activeLayerId={activeLayerId}
+                  onChange={onActiveLayerChange}
+                  mapView={mapView}
+                />
+              ),
+              terrain: () => (
+                <TerrainPane
+                  layers={terrainLayers}
+                  onChange={onTerrainLayerChange}
+                  activeLayerId={activeLayerId}
+                  onOpenSlopeBands={() => setView("slopeBands")}
+                  hasVegetation={hasVegetation}
+                  sharpenedCount={
+                    sharpenedLoaded ? completedTopoJobs.length : null
+                  }
+                  onOpenSharpened={() => setView("sharpened")}
+                />
               ),
               overlays: () => (
                 <div className={classes.body}>
@@ -294,29 +312,6 @@ export default function LayersPopover({
                     checked={showWays}
                     onToggle={setShowWays}
                   />
-                  {completedTopoJobs.length === 0 ? (
-                    <Row
-                      leading={
-                        <IconTile icon="lidar" hue="var(--hue-overlay)" />
-                      }
-                      title={copy.lidarTopos}
-                      subtitle="None yet. Make one from Maps."
-                    />
-                  ) : (
-                    <OverlayRow
-                      icon="lidar"
-                      hue="var(--hue-overlay)"
-                      title={copy.lidarTopos}
-                      subtitle={[
-                        `${shownJobs.length} of ${completedTopoJobs.length} shown`,
-                        shownLayerLabels.join(", ") || "no layers",
-                      ].join(" · ")}
-                      checked={lidarEnabled}
-                      onToggle={setLidarEnabled}
-                      onOpen={() => setView("topos")}
-                      openLabel="Choose topos and layers"
-                    />
-                  )}
                   {/* The list ends with the way to add to it: the same
                       import the Ways and Logs lists offer. */}
                   <Row
@@ -337,6 +332,139 @@ export default function LayersPopover({
         </>
       )}
     </Popover>
+  );
+}
+
+/** The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. */
+export function TerrainPane({
+  layers,
+  onChange,
+  activeLayerId,
+  onOpenSlopeBands,
+  hasVegetation,
+  sharpenedCount,
+  onOpenSharpened,
+}: {
+  layers: Readonly<Record<TerrainSwitchKey, boolean>>;
+  onChange: (key: TerrainSwitchKey, on: boolean) => void;
+  activeLayerId: string;
+  onOpenSlopeBands: () => void;
+  /** Whether any sharpened area has a vegetation layer to switch. */
+  hasVegetation: boolean;
+  /** Null until the first fetch settles. */
+  sharpenedCount: number | null;
+  onOpenSharpened: () => void;
+}) {
+  // One shape for all three, so the Slope row's chevron is the only difference.
+  const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
+    const title = terrainCopy[key];
+    const printed = key === "contours" && !takesNswContours(activeLayerId);
+    const shadowed = key === "hillshade" && !takesNswHillshade(activeLayerId);
+    const reason = printed
+      ? terrainCopy.contoursPrinted
+      : shadowed
+        ? terrainCopy.hillshadeImagery
+        : undefined;
+    return (
+      <Row
+        key={key}
+        title={title}
+        subtitle={reason}
+        trailing={
+          <>
+            {extra}
+            <Toggle
+              // Off while nothing can draw it; the stored choice returns with
+              // the basemap that can.
+              checked={layers[key] && !printed && !shadowed}
+              onChange={(on) => onChange(key, on)}
+              label={`Show ${title.toLowerCase()}`}
+              disabled={printed || shadowed}
+            />
+          </>
+        }
+      />
+    );
+  };
+  const panes: Record<
+    SectionKeysOn<typeof MAP_TERRAIN, "web">,
+    () => ReactNode
+  > = {
+    contours: () => row("contours"),
+    slope: () =>
+      row(
+        "slope",
+        <IconButton
+          icon="disclosure"
+          label={terrainCopy.slopeBands}
+          onClick={onOpenSlopeBands}
+        />,
+      ),
+    hillshade: () => row("hillshade"),
+    vegetation: () =>
+      hasVegetation ? (
+        <Row
+          key="vegetation"
+          title={terrainCopy.vegetation}
+          subtitle={terrainCopy.vegetationHint}
+          trailing={
+            <Toggle
+              checked={layers.vegetation}
+              onChange={(on) => onChange("vegetation", on)}
+              label="Show vegetation"
+            />
+          }
+        />
+      ) : null,
+    sharpenedAreas: () => (
+      <Row
+        key="sharpenedAreas"
+        title={
+          sharpenedCount === null
+            ? terrainCopy.sharpenedAreas
+            : `${terrainCopy.sharpenedAreas} · ${sharpenedCount}`
+        }
+        onOpen={onOpenSharpened}
+      />
+    ),
+    // Opened from the Slope row's chevron, as a view of its own.
+    slopeBands: () => null,
+  };
+  return (
+    <div className={classes.body}>
+      {contractSectionKeys(MAP_TERRAIN, "web").map((key) => panes[key]())}
+    </div>
+  );
+}
+
+/** The bands the statewide slope is drawn in, edited while the map redraws. */
+function SlopeBandsView({
+  onBack,
+  onClose,
+  bands,
+  onChange,
+}: {
+  onBack: () => void;
+  onClose: () => void;
+  bands: SlopeBand[];
+  onChange: (bands: SlopeBand[]) => void;
+}) {
+  return (
+    <>
+      <div className={classes.head}>
+        <IconButton icon="back" label="Back to terrain" onClick={onBack} />
+        <div className={classes.titleBlock}>
+          <span className={classes.title}>{terrainCopy.slopeBands}</span>
+        </div>
+        <IconButton icon="close" label="Close" onClick={onClose} />
+      </div>
+      <div className={classes.body}>
+        <SlopeSettings
+          value={{ enabled: true, bands }}
+          onChange={(next) => onChange(next.bands)}
+        />
+      </div>
+    </>
   );
 }
 
@@ -455,297 +583,5 @@ function BasemapGallery({
         );
       })}
     </div>
-  );
-}
-
-function ToposView({
-  onBack,
-  onClose,
-  lidarEnabled,
-  setLidarEnabled,
-  jobs,
-  shownCount,
-  lidarJobToggles,
-  setLidarJobToggles,
-  lidarLayerToggles,
-  setLidarLayerToggles,
-  lidarLayerOrder,
-  setLidarLayerOrder,
-  unavailableTopoLayerNames,
-  mapBounds,
-}: {
-  onBack: () => void;
-  onClose: () => void;
-  lidarEnabled: boolean;
-  setLidarEnabled: (v: boolean) => void;
-  jobs: CompletedTopoJob[];
-  shownCount: number;
-  lidarJobToggles: Record<string, boolean>;
-  setLidarJobToggles: Setter<Record<string, boolean>>;
-  lidarLayerToggles: Record<string, boolean>;
-  setLidarLayerToggles: Setter<Record<string, boolean>>;
-  lidarLayerOrder: string[];
-  setLidarLayerOrder: Setter<string[]>;
-  unavailableTopoLayerNames: Set<string>;
-  mapBounds: RegionBbox | null;
-}) {
-  const [tab, setTab] = useState<"topos" | "layers">("topos");
-  const [scope, setScope] = useState<"view" | "all">("view");
-  const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState("");
-
-  // "In this view" is a footprint test against the map's current bounds, done
-  // here rather than by the server: the footprints are already on the client.
-  const inView = useMemo(
-    () =>
-      mapBounds
-        ? jobs.filter(
-            (job) =>
-              job.footprint &&
-              boundsIntersect(footprintBounds(job.footprint), mapBounds),
-          )
-        : jobs,
-    [jobs, mapBounds],
-  );
-  const needle = query.trim().toLowerCase();
-  const listed = (scope === "view" ? inView : jobs).filter((job) =>
-    (job.name ?? "Untitled topo").toLowerCase().includes(needle),
-  );
-
-  return (
-    <>
-      <div className={classes.head}>
-        <IconButton icon="back" label="Back to overlays" onClick={onBack} />
-        <div className={classes.titleBlock}>
-          <span className={classes.title}>LiDAR topos</span>
-          <span className={classes.subtitle}>
-            {shownCount} of {jobs.length} shown
-          </span>
-        </div>
-        <Toggle
-          checked={lidarEnabled}
-          onChange={setLidarEnabled}
-          label="Show LiDAR topos"
-        />
-        <IconButton icon="close" label="Close" onClick={onClose} />
-      </div>
-      <div className={classes.body}>
-        <ChipRail
-          label="Topos or layers"
-          options={[
-            { value: "topos", label: "Topos", count: jobs.length },
-            { value: "layers", label: "Layers", count: lidarLayerOrder.length },
-          ]}
-          value={tab}
-          onChange={setTab}
-        />
-        {tab === "topos" ? (
-          <>
-            <div className={classes.scopeLine}>
-              {searching ? (
-                <SearchField
-                  label="Search topos"
-                  value={query}
-                  autoFocus
-                  onChange={(event) => setQuery(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Escape") return;
-                    event.stopPropagation();
-                    setQuery("");
-                    setSearching(false);
-                  }}
-                />
-              ) : (
-                <ChipRail
-                  label="Which topos"
-                  className={classes.grow}
-                  options={[
-                    {
-                      value: "view",
-                      label: "In this view",
-                      count: inView.length,
-                      icon: "scan",
-                    },
-                    { value: "all", label: "All", count: jobs.length },
-                  ]}
-                  value={scope}
-                  onChange={setScope}
-                />
-              )}
-              <IconButton
-                icon={searching ? "close" : "search"}
-                label={searching ? "Close search" : "Search topos"}
-                tone={query ? "filled" : "default"}
-                onClick={() => {
-                  if (searching) setQuery("");
-                  setSearching(!searching);
-                }}
-              />
-            </div>
-            {listed.length === 0 ? (
-              <div className={classes.emptyLine}>
-                <span>
-                  {needle ? "No topos match." : "No topos in this view."}
-                </span>
-                {scope === "view" && !needle && (
-                  <Chip
-                    label="Show all"
-                    count={jobs.length}
-                    onClick={() => setScope("all")}
-                  />
-                )}
-              </div>
-            ) : (
-              <ul className={classes.list}>
-                {listed.map((job) => {
-                  const name = job.name ?? "Untitled topo";
-                  return (
-                    <li key={job.jobId} className={classes.listRow}>
-                      <span className={classes.dot} aria-hidden />
-                      <span className={classes.titleBlock}>
-                        <span className={classes.listName}>{name}</span>
-                        <span className={classes.subtitle}>
-                          {TOPO_DATE.format(new Date(job.createdAt))}
-                          {job.syncRole === "shared"
-                            ? " · Shared with you"
-                            : ""}
-                        </span>
-                      </span>
-                      <Toggle
-                        checked={lidarJobToggles[job.jobId] ?? true}
-                        onChange={(next) =>
-                          setLidarJobToggles((prev) => ({
-                            ...prev,
-                            [job.jobId]: next,
-                          }))
-                        }
-                        label={`Show ${name}`}
-                        disabled={!lidarEnabled}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </>
-        ) : (
-          <LayerOrder
-            order={lidarLayerOrder}
-            setOrder={setLidarLayerOrder}
-            toggles={lidarLayerToggles}
-            setToggles={setLidarLayerToggles}
-            unavailable={unavailableTopoLayerNames}
-            disabled={!lidarEnabled}
-          />
-        )}
-      </div>
-    </>
-  );
-}
-
-/** The topo layers, drawn top-to-bottom in this order, applying to every topo.
- *  Reorder by dragging the grip or with ↑/↓ on it (WCAG 2.5.7). */
-function LayerOrder({
-  order,
-  setOrder,
-  toggles,
-  setToggles,
-  unavailable,
-  disabled,
-}: {
-  order: string[];
-  setOrder: Setter<string[]>;
-  toggles: Record<string, boolean>;
-  setToggles: Setter<Record<string, boolean>>;
-  unavailable: Set<string>;
-  disabled: boolean;
-}) {
-  const dragFrom = useRef<number | null>(null);
-  const [dropAt, setDropAt] = useState<number | null>(null);
-
-  const move = (from: number, to: number) => {
-    if (to < 0 || to >= order.length || from === to) return;
-    setOrder((prev) => {
-      const next = [...prev];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
-  };
-
-  return (
-    <>
-      <span className={classes.caption}>
-        Drawn top to bottom, on every topo
-      </span>
-      <ul className={classes.list}>
-        {order.map((name, index) => {
-          const label =
-            TOPO_LAYERS.find((layer) => layer.name === name)?.label ?? name;
-          const description = LAYER_DESCRIPTIONS[name];
-          return (
-            <li
-              key={name}
-              className={classes.listRow}
-              data-drop-target={dropAt === index}
-              draggable
-              onDragStart={() => {
-                dragFrom.current = index;
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDropAt(index);
-              }}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (dragFrom.current != null) move(dragFrom.current, index);
-                dragFrom.current = null;
-                setDropAt(null);
-              }}
-              onDragEnd={() => {
-                dragFrom.current = null;
-                setDropAt(null);
-              }}
-            >
-              <button
-                type="button"
-                className={classes.grip}
-                aria-label={`Reorder ${label}, position ${index + 1} of ${order.length}. Use the up and down arrow keys.`}
-                title="Drag, or focus and use ↑/↓"
-                onKeyDown={(event) => {
-                  if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-                    event.preventDefault();
-                    move(index, index + (event.key === "ArrowUp" ? -1 : 1));
-                  }
-                }}
-              >
-                <Icon idea="dragHandle" size={16} aria-hidden />
-              </button>
-              <span className={classes.titleBlock}>
-                <span className={classes.listName}>
-                  {label}
-                  {description && (
-                    <InfoTip label={label} content={description} />
-                  )}
-                </span>
-                {unavailable.has(name) && (
-                  <span className={classes.warning}>
-                    Files missing for some topos — re-run them to restore
-                  </span>
-                )}
-              </span>
-              <Toggle
-                checked={toggles[name] ?? true}
-                onChange={(next) =>
-                  setToggles((prev) => ({ ...prev, [name]: next }))
-                }
-                label={`Show ${label}`}
-                disabled={disabled}
-              />
-            </li>
-          );
-        })}
-      </ul>
-    </>
   );
 }

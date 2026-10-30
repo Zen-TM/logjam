@@ -14,6 +14,7 @@
 import prisma from "./prisma";
 import { logger } from "../lib/logger";
 import { getEnv } from "../lib/env";
+import { ANNOUNCEMENT } from "@logjam/shared";
 
 // Expo accepts up to 100 messages per request.
 const EXPO_PUSH_BATCH_LIMIT = 100;
@@ -27,12 +28,13 @@ const PUSH_TITLES: Record<string, string> = {
   topo_failed: "Topo processing failed",
   topo_export_complete: "Topo export finished",
   topo_export_skipped: "Auto-export skipped",
-  geo_pdf_complete: "GeoPDF finished",
-  geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
   egress_quota_warning: "Approaching your monthly download limit",
   egress_quota_exceeded: "Monthly download limit reached",
+  // Never the message's own title: that is free text, and the inbox has it.
+  // Guard: push.unit.test.ts, "titles an announcement generically…".
+  announcement: ANNOUNCEMENT.untitled,
   // ONE buzz for a whole bulk action, whatever it contained. Deliberately says
   // neither who nor how many: a count is not free text, but a title is built by
   // lookup and never by interpolation, and keeping that true BY CONSTRUCTION is
@@ -51,12 +53,12 @@ export type PushData = {
   placeId?: string;
   jobId?: string;
   exportId?: string;
-  geoPdfJobId?: string;
   entityType?: string;
   entityId?: string;
   fileSendId?: string;
   /** Groups the notifications one bulk share created. Opaque uuid. */
   batchId?: string;
+  announcementId?: string;
 };
 
 const ALLOWED_DATA_KEYS = new Set([
@@ -66,11 +68,11 @@ const ALLOWED_DATA_KEYS = new Set([
   "placeId",
   "jobId",
   "exportId",
-  "geoPdfJobId",
   "entityType",
   "entityId",
   "fileSendId",
   "batchId",
+  "announcementId",
 ]);
 
 export type ExpoPushMessage = {

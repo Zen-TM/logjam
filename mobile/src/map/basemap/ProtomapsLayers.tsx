@@ -19,13 +19,23 @@ export function protomapsLayerCount(flavor: ProtomapsFlavor): number {
   return protomapsLayerDefs(flavor).length;
 }
 
+/**
+ * A basemap layer's id on the map: its style id under its source's. Layer ids
+ * must be unique across the whole map, and offline the stack mounts ONCE PER
+ * DOWNLOADED REGION: every stack emitting the same fixed `pm-background`,
+ * `pm-water`, … would mean the second saved vector region collides with the
+ * first and never draws. The source id is already unique per region.
+ */
+export function protomapsLayerId(sourceID: string, styleId: string): string {
+  return `pm-${sourceID}-${styleId}`;
+}
+
 function layerComponent(
   def: ProtomapsLayerDef,
   sourceID: string,
   layerIndex: number,
-  idPrefix: string,
 ) {
-  const id = `${idPrefix}-${def.id}`;
+  const id = protomapsLayerId(sourceID, def.id);
   // One cast for the whole prop bag. The generated defs carry a merged
   // camelCase style object rather than the spec's paint/layout split, so they
   // go in through MLRN's legacy `style` prop — a different arm of LayerProps
@@ -71,16 +81,10 @@ export const ProtomapsLayers = memo(function ProtomapsLayers({
   sourceID: string;
   startIndex: number;
 }) {
-  // Layer ids must be unique across the whole map, and offline this component
-  // mounts ONCE PER DOWNLOADED REGION — every stack emitting the same fixed
-  // `pm-background`, `pm-water`, … would mean the second saved vector region
-  // collides with the first and never draws. The source id is already unique
-  // per region, so it seeds the prefix.
-  const idPrefix = `pm-${sourceID}`;
   return (
     <>
       {protomapsLayerDefs(flavor).map((def, i) =>
-        layerComponent(def, sourceID, startIndex + i, idPrefix),
+        layerComponent(def, sourceID, startIndex + i),
       )}
     </>
   );

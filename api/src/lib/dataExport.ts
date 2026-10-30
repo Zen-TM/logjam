@@ -97,7 +97,7 @@ export const EXPORT_SECTIONS = {
         include: { sharedBy: otherUser },
       }),
   },
-  // Routes, topo maps and GeoPDFs shared one at a time.
+  // Routes and topo maps shared one at a time.
   itemSharesGiven: {
     models: ["Share"],
     load: (userId) =>
@@ -155,14 +155,6 @@ export const EXPORT_SECTIONS = {
     models: ["TopoTemplate"],
     load: (userId) => prisma.topoTemplate.findMany({ where: { userId } }),
   },
-  geoPdfJobs: {
-    models: ["GeoPdfJob"],
-    load: (userId) => prisma.geoPdfJob.findMany({ where: { userId } }),
-  },
-  geoPdfTemplates: {
-    models: ["GeoPdfTemplate"],
-    load: (userId) => prisma.geoPdfTemplate.findMany({ where: { userId } }),
-  },
   notifications: {
     models: ["Notification"],
     load: (userId) => prisma.notification.findMany({ where: { userId } }),
@@ -183,6 +175,8 @@ export const NOT_EXPORTED_MODELS: Record<string, string> = {
     "sync bookkeeping: the ids of records already deleted or unshared, which say nothing the rest of the export does not",
   EgressLogCursor:
     "not per user: how far the egress meter has read the storage access logs",
+  Announcement:
+    "not per user: the maintainer's own messages; each user's copy is a row under notifications",
 };
 
 /** v3 adds every section beyond v2's places, trip logs, templates, shares,

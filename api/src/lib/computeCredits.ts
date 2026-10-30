@@ -33,7 +33,6 @@ import type { DbClient } from "./storageQuota";
 const VCPUS = {
   topo: WORKER_SPECS.topo.vcpus,
   topoExport: WORKER_SPECS.topoExport.vcpus,
-  geoPdf: WORKER_SPECS.geoPdf.vcpus,
 };
 
 /**
@@ -42,8 +41,7 @@ const VCPUS = {
  * Elapsed time per job, in priority order:
  *  1. topo only — `pipeline_metrics.wallSeconds`, the worker's own measurement.
  *     Preferred because topo_jobs has no completed_at and `updated_at` keeps
- *     moving after completion (the reaper stamps auto_exported_at on it), which
- *     would inflate the charge.
+ *     moving after completion, which would inflate the charge.
  *  2. still running — NOW() - started_at, so in-flight work counts immediately.
  *  3. finished without metrics (a failure, mostly) — the row's end timestamp.
  *
@@ -82,18 +80,6 @@ export async function getMonthlyCreditUsage(
         / 60.0
       )
       FROM topo_export_jobs
-      WHERE user_id = ${userId}
-        AND started_at IS NOT NULL
-        AND started_at >= ${monthStart}
-
-      UNION ALL
-
-      SELECT CEIL(
-        ${VCPUS.geoPdf}::numeric
-        * EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - started_at))
-        / 60.0
-      )
-      FROM geo_pdf_jobs
       WHERE user_id = ${userId}
         AND started_at IS NOT NULL
         AND started_at >= ${monthStart}

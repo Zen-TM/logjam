@@ -79,12 +79,12 @@ describe("buildShareCards", () => {
     expect(cards.map((card) => card.removable)).toEqual([true, true]);
   });
 
-  it("withholds copy from a received topo and GeoPDF", () => {
-    const cards = buildShareCards(
-      [row("topoJob", "j1", "Kanangra"), row("geoPdfJob", "g1", "Sheet 1")],
-      { direction: "youSee", friendName: FRIEND },
-    );
-    expect(cards.map((card) => card.copyable)).toEqual([false, false]);
+  it("withholds copy from a received topo", () => {
+    const cards = buildShareCards([row("topoJob", "j1", "Kanangra")], {
+      direction: "youSee",
+      friendName: FRIEND,
+    });
+    expect(cards.map((card) => card.copyable)).toEqual([false]);
   });
 
   // THE TRAP: a route shared directly AND linked to a place this friend

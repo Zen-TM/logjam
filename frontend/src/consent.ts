@@ -1,8 +1,12 @@
 // Thin re-export — the canonical consent version and needsReconsent() live in
 // shared/src/consent.ts so api and frontend do not diverge.
-import { CURRENT_CONSENT_VERSION, needsReconsent } from "@logjam/shared";
+import {
+  CURRENT_CONSENT_VERSION,
+  currentConsentVersionOf,
+  needsReconsent,
+} from "@logjam/shared";
 
-export { CURRENT_CONSENT_VERSION, needsReconsent };
+export { CURRENT_CONSENT_VERSION, currentConsentVersionOf, needsReconsent };
 
 export const PENDING_CONSENT_STORAGE_KEY = "logjam.pendingConsentVersion";
 
@@ -20,17 +24,17 @@ export const PENDING_CONSENT_STORAGE_KEY = "logjam.pendingConsentVersion";
  * race the answer.
  */
 export function consentGate(
-  currentUser: { consentVersion: string | null } | null,
+  currentUser: Parameters<typeof needsReconsent>[0] | null,
   pendingConsentVersion: string | null,
 ): { blocked: boolean; settled: boolean } {
   // Nothing to decide from yet. Not blocked (no gate flash before we know),
   // not settled (no fetches until we do).
   if (!currentUser) return { blocked: false, settled: false };
-  // A pending version matching the current one is a consent just given on the
+  // A pending version matching the server's current one is a consent just given on the
   // sign-up form and not yet recorded server-side. Gating on it would trap a
   // brand-new user behind a gate for a box they already ticked.
   const blocked =
     needsReconsent(currentUser) &&
-    pendingConsentVersion !== CURRENT_CONSENT_VERSION;
+    pendingConsentVersion !== currentConsentVersionOf(currentUser);
   return { blocked, settled: !blocked };
 }

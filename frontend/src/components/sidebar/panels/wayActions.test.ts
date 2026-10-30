@@ -115,7 +115,7 @@ describe("wayVerbs", () => {
     expect(ids(importFile())).not.toContain("edit");
   });
 
-  // `POST /shares` admits route, topoJob and geoPdfJob (`SHARABLE_ENTITY_TYPES`),
+  // `POST /shares` admits route and topoJob (`SHARABLE_ENTITY_TYPES`),
   // so a file has nothing to share. Mutation:
   // drop the `WAY_SHARE_VERB` test from the share verb in `wayVerbs`.
   it("offers Share… on a route and on no kind of file", () => {

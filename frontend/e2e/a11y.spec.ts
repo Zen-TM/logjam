@@ -39,7 +39,7 @@ async function settled(page: Page) {
         (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
       ) &&
       // A button's 150 ms background-color transition otherwise lets axe read
-      // a half-way colour (the flaky "Make a LiDAR topo" case).
+      // a half-way colour.
       document
         .getAnimations()
         .every(
@@ -75,6 +75,41 @@ async function openApp(page: Page) {
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
     timeout: 15_000,
   });
+}
+
+/** The seed's announcement (api/prisma/seed.ts), marked read here so opening it
+ *  writes nothing to the account. */
+const SEEDED_ANNOUNCEMENT = "Logjam is moving to a new server";
+
+async function withAnnouncementRead(page: Page) {
+  await page.route("**/notifications", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const rows: { type: string }[] = await response.json();
+    await route.fulfill({
+      response,
+      json: rows.map((row) =>
+        row.type === "announcement" ? { ...row, read: true } : row,
+      ),
+    });
+  });
+}
+
+async function openAnnouncement(page: Page, narrow = false) {
+  if (narrow) {
+    // Narrow web keeps the Inbox in the tab bar's More menu.
+    await page.getByRole("button", { name: /^More/ }).click();
+    await page.getByRole("menuitem", { name: /^Inbox/ }).click();
+  } else {
+    await page.getByRole("button", { name: /^Inbox/ }).click();
+  }
+  await page
+    .locator("aside")
+    .getByRole("button", { name: SEEDED_ANNOUNCEMENT, exact: true })
+    .click({ timeout: 15_000 });
+  const dialog = page.getByRole("dialog", { name: SEEDED_ANNOUNCEMENT });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 test.describe("desktop", () => {
@@ -450,6 +485,23 @@ test.describe("desktop", () => {
     await expect(inbox.getByRole("radiogroup", { name: "Show" })).toBeVisible();
   });
 
+  test("a maintainer announcement opened from its row", async ({ page }) => {
+    await withAnnouncementRead(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page);
+    await expect(dialog.getByRole("heading", { level: 2 })).toBeFocused();
+    // The seed's #, ## and ### sit under the dialog's title, none skipped.
+    for (const [level, name] of [
+      [3, "What to expect"],
+      [4, "If something looks wrong"],
+      [5, "On Logjam GPS"],
+    ] as const)
+      await expect(dialog.getByRole("heading", { level, name })).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  });
+
   test("a confirm dialog", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: /^Inbox/ }).click();
@@ -622,79 +674,52 @@ test.describe("desktop", () => {
     await aside.getByRole("button", { name: "Cancel", exact: true }).click();
   });
 
-  test("Maps: both views, a row menu, the topo style sheet and its colour", async ({
+  test("Layers → Terrain → Sharpened areas, and a row menu", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
-    // Loaded, not the placeholder title ("GeoPDFs" while the list is loading).
-    await expect(
-      aside.getByRole("heading", {
-        level: 2,
-        name: /^(No GeoPDFs yet|\d+ GeoPDFs?)$/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "aside");
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    const popover = page.getByRole("dialog", { name: "Sharpened areas" });
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: "Terrain" })
+      .click();
+    await page.getByRole("button", { name: /^Sharpened areas/ }).click();
+    await expect(popover).toBeVisible();
+    await expectNoViolations(
+      page,
+      "[role='dialog'][aria-label='Sharpened areas']",
+    );
 
-    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
-    await expect(
-      aside.getByRole("heading", {
-        level: 2,
-        name: /^(No LiDAR topos yet|\d+ LiDAR topos?)$/,
-      }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expectNoViolations(page, "aside");
-
-    // The built-in Default template is always there, so there is always a menu —
-    // on the Templates tab, where templates live.
-    await aside.getByRole("radio", { name: /^Templates/ }).click();
-    await aside.getByRole("button", { name: "Actions for Default" }).click();
+    // The seed always has completed sharpened jobs, so there is always a row menu.
+    await popover
+      .getByRole("button", { name: /^Actions for / })
+      .first()
+      .click();
     await expect(page.getByRole("menu")).toBeVisible();
     await expectNoViolations(page, "[role='menu']");
     await page.keyboard.press("Escape");
-
-    // How topos draw opens BESIDE the page, and its colours are free pickers.
-    await aside.getByRole("button", { name: "Topo style" }).click();
-    const sheet = page.getByRole("region", { name: "Topo style" });
-    await expect(sheet.getByRole("slider", { name: "Label size" })).toBeVisible(
-      { timeout: 15_000 },
-    );
-    await expectNoViolations(page, "aside");
-    const major = sheet.getByRole("button", { name: /^Major colour:/ });
-    await major.click();
-    await expect(page.getByRole("slider", { name: "Hue" })).toBeVisible();
-    await expectNoViolations(
-      page,
-      "[role='dialog'][aria-label='Major colour']",
-    );
-    await page.keyboard.press("Escape");
-    await expect(major).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(
-      aside.getByRole("button", { name: "Topo style" }),
-    ).toBeFocused();
   });
 
-  test("Make a LiDAR topo, its ELVIS steps and its settings", async ({
+  test("Sharpen an area, its ELVIS steps and its Vegetation choice", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "LiDAR topos" }).click();
-    await aside.getByRole("button", { name: /^Make/ }).first().click();
-    await page.getByRole("menuitem", { name: /LiDAR topo/ }).click();
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: "Terrain" })
+      .click();
+    await page.getByRole("button", { name: /^Sharpened areas/ }).click();
+    await page.getByRole("button", { name: "Sharpen an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Make a LiDAR topo" }),
+      dialog.getByRole("heading", { name: "Sharpen an area" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // The errand and the settings are SUB-VIEWS: each swaps the body, and each
-    // backs out to the form rather than out of the dialog.
+    // The errand is a SUB-VIEW: it swaps the body and backs out to the form.
     await dialog.getByRole("button", { name: /^Haven.t got one/ }).click();
     await expect(
       dialog.getByRole("heading", { name: "Getting LiDAR from ELVIS" }),
@@ -702,48 +727,44 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "dialog");
     await dialog.getByRole("button", { name: "Back to the form" }).click();
 
+    // A ZIP with point clouds offers Vegetation. The fixture is made up: one
+    // empty .laz under an ELVIS-style name, read only for its file list.
     await dialog
-      .getByRole("button", { name: "How this topo is drawn" })
-      .click();
-    await expect(
-      dialog.getByRole("radio", { name: "Hillshade" }),
-    ).toBeVisible();
+      .locator("input[type=file]")
+      .setInputFiles(
+        new URL("./__fixtures__/elvis-point-clouds.zip", import.meta.url)
+          .pathname,
+      );
+    const vegetation = dialog.getByRole("checkbox", {
+      name: /Vegetation \(experimental\)/,
+    });
+    await expect(vegetation).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await vegetation.check();
     await expectNoViolations(page, "dialog");
 
-    // The band table and the layer checkboxes are the dense ones.
-    await dialog.getByRole("radio", { name: "Slope" }).click();
-    await expect(
-      dialog.getByRole("textbox", { name: /upper angle/ }).first(),
-    ).toBeVisible();
-    await expectNoViolations(page, "dialog");
-
-    await dialog.getByRole("radio", { name: "Auto-export" }).click();
-    await expect(
-      dialog.getByRole("radiogroup", { name: "Format" }),
-    ).toBeVisible();
-    await expectNoViolations(page, "dialog");
-
-    await dialog.getByRole("button", { name: "Back to the form" }).click();
-    await expect(
-      dialog.getByRole("heading", { name: "Make a LiDAR topo" }),
-    ).toBeVisible();
     await page.keyboard.press("Escape");
+    const confirm = page.getByRole("alertdialog", {
+      name: "Discard unsaved changes?",
+    });
+    await confirm.getByRole("button", { name: "Discard" }).click();
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Make a GeoPDF, its template mode and its dense extent grid", async ({
+  test("Export an area: GeoPDF, its edges, and a GIS format", async ({
     page,
   }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Maps", exact: true }).click();
-    const aside = page.locator("aside");
-    await aside.getByRole("radio", { name: "GeoPDFs" }).click();
-    await aside.getByRole("button", { name: /^Make/ }).first().click();
-    await page.getByRole("menuitem", { name: "Make a GeoPDF" }).click();
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Tools" })
+      .getByText("Make a map")
+      .click();
+    await page.getByRole("menuitem", { name: "Export an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Make a GeoPDF" }),
+      dialog.getByRole("heading", { name: "Export an area" }),
     ).toBeVisible();
     // Closed, the Area section is paper, scale and the button to the map.
     await expect(
@@ -751,12 +772,9 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Exact edges opens the four edges, the pivot radiogroup and two more
-    // rails in the same scrolling body.
-    await dialog.getByText("Exact edges").click();
-    await expect(
-      dialog.getByRole("radiogroup", { name: "Pivot" }),
-    ).toBeVisible();
+    // Type the edges swaps the map button for the four edges.
+    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
     // Other opens the typed scale under the presets.
@@ -771,14 +789,15 @@ test.describe("desktop", () => {
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Naming a template swaps the pinned line for a field, Save and Cancel.
     await dialog.getByRole("radio", { name: "A4" }).click();
-    await dialog.getByRole("button", { name: "Save as a template" }).click();
-    await expect(
-      dialog.getByRole("textbox", { name: "Template name" }),
-    ).toBeFocused();
+
+    // A GIS format swaps the paper for a free box, its edges and the
+    // format's layers.
+    await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
+    await expect(dialog.getByRole("button", { name: "Heights" })).toBeVisible();
+    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
-    await dialog.getByRole("button", { name: "Cancel" }).first().click();
 
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");
@@ -863,6 +882,26 @@ test.describe("desktop", () => {
     await expect(
       page.getByRole("button", { name: "Layers", exact: true }),
     ).toBeFocused();
+  });
+
+  test("the Layers popover's Terrain tab, and its slope bands", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Layers", exact: true }).click();
+    const popover = page.getByRole("dialog", { name: "Map layers" });
+    await popover.getByRole("radio", { name: "Terrain" }).click();
+    await expect(
+      popover.getByRole("switch", { name: "Show hillshade" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+
+    await popover.getByRole("button", { name: "Slope bands" }).click();
+    const bands = page.getByRole("dialog", { name: "Slope bands" });
+    await expect(
+      bands.getByRole("button", { name: "Back to terrain" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Slope bands']");
   });
 
   test("What is here?: asked by a right-click, drawn at the point", async ({
@@ -1028,6 +1067,14 @@ test.describe("ghost gum", () => {
 
 test.describe("narrow web", () => {
   test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a maintainer announcement inside the phone", async ({ page }) => {
+    await withAnnouncementRead(page);
+    await openApp(page);
+    const dialog = await openAnnouncement(page, true);
+    await expectNoViolations(page, "dialog");
+    expect((await dialog.boundingBox())!.width).toBe(390);
+  });
 
   test("the tab bar and its More menu", async ({ page }) => {
     await openApp(page);

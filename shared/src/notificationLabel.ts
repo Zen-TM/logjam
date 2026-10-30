@@ -1,13 +1,16 @@
 // Pure label derivation for the notifications inbox, read by Logjam GPS and
 // Logjam Web alike so the two inboxes cannot word the same event differently.
-// Kept as data (text + optional warning subline) so it is testable and
+// Kept as data (text + optional detail subline) so it is testable and
 // reusable by push handling. A new notification type is a branch here; unknown
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
+import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatBytes } from "./format.js";
+import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
 export type NotificationLabel = {
   text: string;
-  warning?: string;
+  detail?: string;
 };
 
 function str(value: unknown): string | null {
@@ -27,14 +30,13 @@ const SHARED_ITEM_NOUN: Record<string, string> = {
   waypoint: "a waypoint",
   route: "a route",
   topoJob: "a LiDAR topo",
-  geoPdfJob: "a GeoPDF",
 };
 
 /**
  * Every type a Notification row is stored with, one declaration. The labels
  * below branch on them, the dev seed writes one row of each
  * (api/src/lib/seedCoverage.unit.test.ts), and the label test checks each has a
- * branch. `bulk_shared` and `geo_pdf_failed` are push-only titles and never rows.
+ * branch. `bulk_shared` is a push-only title and never a row.
  */
 export const NOTIFICATION_TYPES = [
   "friend_request",
@@ -46,9 +48,9 @@ export const NOTIFICATION_TYPES = [
   "topo_failed",
   "topo_export_complete",
   "topo_export_skipped",
-  "geo_pdf_complete",
   "egress_quota_warning",
   "egress_quota_exceeded",
+  "announcement",
 ] as const;
 
 export function notificationLabel(n: TNotification): NotificationLabel {
@@ -95,7 +97,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          warning: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+          detail: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
         }),
       };
     case "topo_complete":
@@ -103,9 +105,6 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: str(p.jobName)
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
-        ...(p.osmFailed === true && {
-          warning: "Roads and labels didn't download. Try again.",
-        }),
       };
     case "topo_failed":
       return {
@@ -114,30 +113,28 @@ export function notificationLabel(n: TNotification): NotificationLabel {
           : "LiDAR map failed",
       };
     case "topo_export_complete": {
-      const format = String(p.format ?? "Topo").toUpperCase();
+      const format =
+        EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
+        String(p.format ?? "Topo").toUpperCase();
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
+          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
         };
       }
       return {
         text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        // Older ones carry no size.
+        ...(typeof p.resultBytes === "number" &&
+          p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),
       };
     }
+    // No longer sent (auto-export is gone); older ones stay in the inbox.
     case "topo_export_skipped":
       return {
         text: "Auto-export didn't run",
-        ...(str(p.reason) && { warning: str(p.reason)! }),
+        ...(str(p.reason) && { detail: str(p.reason)! }),
       };
-    case "geo_pdf_complete":
-      if (p.status === "failed") {
-        return {
-          text: "Couldn't create GeoPDF",
-          ...(str(p.errorMessage) && { warning: str(p.errorMessage)! }),
-        };
-      }
-      return { text: "GeoPDF ready" };
     // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
     // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
@@ -145,8 +142,17 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "egress_quota_exceeded":
       return {
         text: "Monthly download limit reached",
-        warning: "Downloads resume when the limit resets next month.",
+        detail: "Downloads resume when the limit resets next month.",
       };
+    // The maintainer's own title, resolved at read time. The push carries a
+    // fixed title instead (Guard: api/src/services/push.unit.test.ts).
+    // The subline says who it is from, which the title alone does not.
+    case "announcement": {
+      const title = str(p.title);
+      return title
+        ? { text: title, detail: ANNOUNCEMENT.from }
+        : { text: ANNOUNCEMENT.untitled };
+    }
     default:
       return { text: "Notification" };
   }
@@ -163,13 +169,13 @@ export function notificationLabel(n: TNotification): NotificationLabel {
  */
 export function notificationHaystack(n: TNotification): string {
   const label = notificationLabel(n);
-  return `${label.text} ${label.warning ?? ""}`.toLowerCase();
+  return `${label.text} ${label.detail ?? ""}`.toLowerCase();
 }
 
 // ── Identity: the kind ───────────────────────────────────────────────────────
 //
 // Notifications are a genuine open-ended vocabulary of KINDS, so they get a
-// glyph and a hue each (both DESIGN.md files, §3). Which kind a notification is
+// glyph and a hue each (shared/DESIGN.md §8). Which kind a notification is
 // is decided here; each client draws the kind in its own icon family and in
 // the hue of the thing the notification is about.
 
@@ -179,7 +185,7 @@ export type NotificationKind =
   | "people"
   | "topo"
   | "export"
-  | "geoPdf"
+  | "message"
   | "problem";
 
 /**
@@ -201,6 +207,9 @@ export function notificationKind(n: TNotification): NotificationKind {
     case "friend_request":
     case "friend_request_accepted":
       return "people";
+    // Not "people": a friends glyph would read as a friend event.
+    case "announcement":
+      return "message";
     case "topo_failed":
       return "problem";
     case "topo_complete":
@@ -210,8 +219,6 @@ export function notificationKind(n: TNotification): NotificationKind {
       return failed ? "problem" : "export";
     case "topo_export_skipped":
       return "problem";
-    case "geo_pdf_complete":
-      return failed ? "problem" : "geoPdf";
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
@@ -231,6 +238,22 @@ export function notificationKind(n: TNotification): NotificationKind {
 export function notificationPlaceId(n: TNotification): string | null {
   const placeId = n.payload.placeId;
   return typeof placeId === "string" && placeId.length > 0 ? placeId : null;
+}
+
+/**
+ * The maintainer announcement a notification carries, as `GET /notifications`
+ * resolved it: null for any other type, or one whose announcement is gone.
+ * `body` is Markdown source, drawn through `parseMessageMarkdown`, never as
+ * HTML.
+ */
+export function notificationAnnouncement(
+  n: TNotification,
+): { id: string; title: string; body: string } | null {
+  const p = n.payload;
+  if (n.type !== "announcement") return null;
+  const id = str(p.announcementId);
+  if (!id || typeof p.body !== "string") return null;
+  return { id, title: str(p.title) ?? ANNOUNCEMENT.untitled, body: p.body };
 }
 
 // ── The list: its cap, order and day grouping ────────────────────────────────

@@ -3,34 +3,24 @@ import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
 vi.mock("../services/prisma", () => ({
   default: {
     topoExportJob: { findMany: vi.fn() },
-    geoPdfJob: { findMany: vi.fn() },
+    topoJob: { findMany: vi.fn() },
   },
 }));
 
 import prisma from "../services/prisma";
-import {
-  estimateExportSeconds,
-  estimateGeoPdfSeconds,
-} from "./runtimeEstimates";
-import { geoPdfNativeMegapixels } from "../services/geoPdfTileMath";
-import type { GeoPdfConfig } from "@logjam/shared";
+import { estimateExportSeconds, estimateTopoSeconds } from "./runtimeEstimates";
 
 const exportFindMany = (
   prisma as unknown as { topoExportJob: { findMany: Mock } }
 ).topoExportJob.findMany;
-const geoPdfFindMany = (prisma as unknown as { geoPdfJob: { findMany: Mock } })
-  .geoPdfJob.findMany;
 
 // Env defaults (vitest.unit.setup.ts leaves these unset, so the zod schema
 // defaults apply): TOPO_EXPORT_ESTIMATE_DEFAULT_SECONDS_PER_TILE=20,
-// TOPO_EXPORT_ESTIMATE_MIN_SAMPLES=3, GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL=6,
-// GEO_PDF_ESTIMATE_MIN_SAMPLES=3. Overheads are the module's own constants:
-// 30s (export), 15s (GeoPDF).
+// TOPO_EXPORT_ESTIMATE_MIN_SAMPLES=3,
+// Overheads are the module's own constants: 30s (export).
 const EXPORT_DEFAULT_RATE = 20;
 const EXPORT_MIN_SAMPLES = 3;
 const EXPORT_OVERHEAD_SECONDS = 30;
-const GEO_PDF_DEFAULT_RATE = 6;
-const GEO_PDF_OVERHEAD_SECONDS = 15;
 
 const START = new Date("2026-07-01T00:00:00Z");
 function completedAfter(seconds: number): Date {
@@ -147,50 +137,17 @@ describe("estimateExportSeconds", () => {
   });
 });
 
-describe("estimateGeoPdfSeconds", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+describe("estimateTopoSeconds", () => {
+  const topoFindMany = (prisma as unknown as { topoJob: { findMany: Mock } })
+    .topoJob.findMany;
+  beforeEach(() => topoFindMany.mockReset().mockResolvedValue([]));
 
-  const config: GeoPdfConfig = {
-    paperSize: "A3",
-    orientation: "landscape",
-    extent: { north: -33.65, south: -33.7, east: 150.3, west: 150.25 },
-    scale: 25000,
-    baseLayer: "no-such-layer",
-    overlays: [],
-    elements: { compass: true, scaleText: true, scaleBar: true },
-  };
-
-  it("uses the cold-start default rate below minSamples", async () => {
-    geoPdfFindMany.mockResolvedValueOnce([]); // no history at all
-    const mp = geoPdfNativeMegapixels(config.extent, config.scale, 18);
-
-    const result = await estimateGeoPdfSeconds(config);
-
-    expect(result).toBe(
-      Math.round(GEO_PDF_OVERHEAD_SECONDS + GEO_PDF_DEFAULT_RATE * mp),
-    );
-  });
-
-  it("skips malformed/legacy history rows without throwing", async () => {
-    geoPdfFindMany.mockResolvedValueOnce([
-      // Legacy row: config missing `extent` entirely.
-      {
-        config: { paperSize: "A4" },
-        startedAt: START,
-        completedAt: completedAfter(60),
-      },
-      // Legacy row: scale is not a number.
-      {
-        config: { ...config, scale: "not-a-number" },
-        startedAt: START,
-        completedAt: completedAfter(60),
-      },
-    ]);
-
-    const result = await estimateGeoPdfSeconds(config);
-    expect(typeof result).toBe("number");
-    expect(Number.isFinite(result)).toBe(true);
+  // Red if older, unsharpened jobs feed the fit: a job would be estimated,
+  // and charged, at the old render's rate.
+  it("reads only sharpened jobs", async () => {
+    await estimateTopoSeconds(2);
+    expect(topoFindMany.mock.calls[0]![0].where.sharpen).toEqual({
+      not: expect.anything(),
+    });
   });
 });

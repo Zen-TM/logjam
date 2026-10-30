@@ -3,7 +3,8 @@
 //
 // Every "save maps offline" run writes a `dem-region` MBTiles of a DEM
 // source's tiles at its `sampleZoom` (regionTileDownload.ts), filed under the
-// source's id. This reads them back, so a
+// source's id; the nsw-5m clip also holds z8-14 for the hillshade
+// (`demClipMinZoom`), which this never reads. This reads them back, so a
 // route profile, a point's height and a track's gain/loss keep working in a
 // place with no signal — the trip the download exists for.
 //
@@ -36,6 +37,7 @@ import {
   clearDemArchives,
   demArchive,
   demSlopeAt,
+  demSourcesFor,
   demTileKey,
   demTileUrl,
   readDemArchive,
@@ -55,6 +57,7 @@ import { cacheTile, cachedTile, clearDemTileCache } from "./demTileCache";
 import { REGION_DIR } from "./localStores";
 import { listArtifacts } from "./registryDb";
 import { regionFileName } from "./regionMbtiles";
+import { savedSharpenedAreas } from "./sharpenedAreaStore";
 
 /** expo-sqlite's `directory` argument is a plain path, not a file:// URI. */
 const REGION_DIR_PATH = REGION_DIR.replace(/^file:\/\//, "");
@@ -250,8 +253,12 @@ export async function sampleElevations(
   positions: readonly SamplePosition[],
   { allowNetwork = false }: { allowNetwork?: boolean } = {},
 ): Promise<DemSamples> {
-  return sampleDem(positions, (source, wanted) =>
-    readTiles(source, wanted, allowNetwork),
+  return sampleDem(
+    positions,
+    (source, wanted) => readTiles(source, wanted, allowNetwork),
+    // The account's sharpened areas first: a saved clip of one answers before
+    // the statewide clip (ADR 0040).
+    demSourcesFor(await savedSharpenedAreas()),
   );
 }
 
@@ -270,8 +277,11 @@ export async function slopeAt(
   lat: number,
   { allowNetwork = false }: { allowNetwork?: boolean } = {},
 ): Promise<number | null> {
-  return demSlopeAt(lon, lat, (source, wanted) =>
-    readTiles(source, wanted, allowNetwork),
+  return demSlopeAt(
+    lon,
+    lat,
+    (source, wanted) => readTiles(source, wanted, allowNetwork),
+    demSourcesFor(await savedSharpenedAreas()),
   );
 }
 

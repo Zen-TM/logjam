@@ -14,6 +14,8 @@ import {
 } from "./tripDraft";
 
 const NOW = new Date("2026-07-16T09:00:00.000Z");
+const ALICE = "user-alice";
+const BOB = "user-bob";
 
 function form(overrides: Partial<TripDraftForm> = {}): TripDraftForm {
   return {
@@ -90,7 +92,7 @@ describe("isTripDraftExpired", () => {
 
 describe("serializeTripDraft", () => {
   it("round-trips through parseTripDraft", () => {
-    const serialized = serializeTripDraft(form(), NOW);
+    const serialized = serializeTripDraft(ALICE, form(), NOW);
     expect(serialized.status).toBe("ok");
     if (serialized.status !== "ok") return;
     const parsed = parseTripDraft(serialized.raw, NOW);
@@ -104,14 +106,14 @@ describe("serializeTripDraft", () => {
     const withCreate = form({
       creating: { name: "Unnamed", latitude: "-33.1", longitude: "150.2" },
     });
-    const serialized = serializeTripDraft(withCreate, NOW);
+    const serialized = serializeTripDraft(ALICE, withCreate, NOW);
     if (serialized.status !== "ok") throw new Error("expected ok");
     expect(parseTripDraft(serialized.raw, NOW)!.form).toEqual(withCreate);
   });
 
   it("reports a draft over the size cap instead of storing it", () => {
     const huge = form({ notes: "x".repeat(TRIP_DRAFT_MAX_CHARS + 1) });
-    const serialized = serializeTripDraft(huge, NOW);
+    const serialized = serializeTripDraft(ALICE, huge, NOW);
     expect(serialized.status).toBe("too-large");
     if (serialized.status !== "too-large") return;
     expect(serialized.chars).toBeGreaterThan(TRIP_DRAFT_MAX_CHARS);
@@ -119,13 +121,13 @@ describe("serializeTripDraft", () => {
 
   it("accepts a draft just under the cap", () => {
     const big = form({ notes: "x".repeat(TRIP_DRAFT_MAX_CHARS - 500) });
-    expect(serializeTripDraft(big, NOW).status).toBe("ok");
+    expect(serializeTripDraft(ALICE, big, NOW).status).toBe("ok");
   });
 });
 
 describe("parseTripDraft", () => {
   const validRaw = () => {
-    const s = serializeTripDraft(form(), NOW);
+    const s = serializeTripDraft(ALICE, form(), NOW);
     if (s.status !== "ok") throw new Error("expected ok");
     return s.raw;
   };
@@ -142,9 +144,18 @@ describe("parseTripDraft", () => {
     expect(parseTripDraft(JSON.stringify("a string"), NOW)).toBeNull();
   });
 
+  // Mutation: drop the ownerId check in parseTripDraft.
+  it("returns null for a record with no owner, or an empty one", () => {
+    const record = JSON.parse(validRaw());
+    delete record.ownerId;
+    expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
+    record.ownerId = "";
+    expect(parseTripDraft(JSON.stringify(record), NOW)).toBeNull();
+  });
+
   it("returns null for an expired draft", () => {
     const stale = new Date(NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS - 1);
-    const s = serializeTripDraft(form(), stale);
+    const s = serializeTripDraft(ALICE, form(), stale);
     if (s.status !== "ok") throw new Error("expected ok");
     expect(parseTripDraft(s.raw, NOW)).toBeNull();
   });
@@ -204,14 +215,15 @@ describe("parseTripDraft", () => {
 
 describe("storage wrappers", () => {
   it("writes then reads back a draft", () => {
-    expect(writeTripDraft(form(), NOW)).toEqual({ status: "saved" });
-    const draft = readTripDraft(NOW);
+    expect(writeTripDraft(ALICE, form(), NOW)).toEqual({ status: "saved" });
+    const draft = readTripDraft(ALICE, NOW);
     expect(draft).not.toBeNull();
     expect(draft!.form).toEqual(form());
   });
 
   it("does not write a draft over the cap", () => {
     const result = writeTripDraft(
+      ALICE,
       form({ notes: "x".repeat(TRIP_DRAFT_MAX_CHARS) }),
       NOW,
     );
@@ -226,7 +238,7 @@ describe("storage wrappers", () => {
       throw quotaError;
     };
     try {
-      expect(writeTripDraft(form(), NOW)).toEqual({
+      expect(writeTripDraft(ALICE, form(), NOW)).toEqual({
         status: "failed",
         error: quotaError,
       });
@@ -237,23 +249,50 @@ describe("storage wrappers", () => {
 
   it("clears an expired draft on read instead of re-reading it every open", () => {
     const stale = new Date(NOW.getTime() - TRIP_DRAFT_MAX_AGE_MS - 1);
-    writeTripDraft(form(), stale);
-    expect(readTripDraft(NOW)).toBeNull();
+    writeTripDraft(ALICE, form(), stale);
+    expect(readTripDraft(ALICE, NOW)).toBeNull();
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
   });
 
   it("clears a corrupt draft on read", () => {
     localStorage.setItem(TRIP_DRAFT_STORAGE_KEY, "{not json");
-    expect(readTripDraft(NOW)).toBeNull();
+    expect(readTripDraft(ALICE, NOW)).toBeNull();
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
   });
 
   it("returns null when nothing is stored, leaving storage alone", () => {
-    expect(readTripDraft(NOW)).toBeNull();
+    expect(readTripDraft(ALICE, NOW)).toBeNull();
+  });
+
+  // Mutation: drop the `ownerId` comparison in readTripDraft (keep `parsed ===
+  // null`) and only this test goes red; drop the clearTripDraft() on a
+  // mismatch and its removal assert does.
+  it("does not offer another user's draft, and removes it", () => {
+    writeTripDraft(ALICE, form(), NOW);
+    expect(readTripDraft(BOB, NOW)).toBeNull();
+    expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("offers the owner's draft, and keeps it", () => {
+    writeTripDraft(ALICE, form(), NOW);
+    expect(readTripDraft(ALICE, NOW)?.form).toEqual(form());
+    expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).not.toBeNull();
+  });
+
+  // Mutation: this goes red only with BOTH the parseTripDraft ownerId check
+  // and the readTripDraft comparison dropped; either one alone still drops the
+  // record. parseTripDraft's own check is pinned in its describe block.
+  it("drops a draft with no owner, as written before owners were recorded", () => {
+    writeTripDraft(ALICE, form(), NOW);
+    const record = JSON.parse(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)!);
+    delete record.ownerId;
+    localStorage.setItem(TRIP_DRAFT_STORAGE_KEY, JSON.stringify(record));
+    expect(readTripDraft(ALICE, NOW)).toBeNull();
+    expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
   });
 
   it("clearTripDraft removes the key", () => {
-    writeTripDraft(form(), NOW);
+    writeTripDraft(ALICE, form(), NOW);
     clearTripDraft();
     expect(localStorage.getItem(TRIP_DRAFT_STORAGE_KEY)).toBeNull();
   });

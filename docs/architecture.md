@@ -99,7 +99,7 @@ CloudFront's address ranges (`envs/prod/eb.tf`), and CloudFront adds a secret
 **API.** Node/Express in `api/`, one Docker container on a single-instance
 Elastic Beanstalk environment (no load balancer). The container also runs the
 periodic sweeps (`api/src/lib/topoJobReaper.ts`): it fails stuck jobs, expires
-old exports, queues auto-exports, removes orphaned media uploads and expired
+old exports, removes orphaned media uploads and expired
 "Send a copy" files, and meters egress. A deploy briefly takes the API down.
 That is why deploys smoke-test and roll back on their own
 ([below](#how-a-change-reaches-prod)).
@@ -113,9 +113,9 @@ definitions are in `envs/prod/ecs.tf`:
 | Task family | Image | Runs | Launched by |
 |---|---|---|---|
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
-| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: tiles → download file | `POST /topo-exports`, or the auto-export sweep (`EXPORT_JOB_ID`) |
+| `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
 | `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
-| `logjam-geo-pdf-worker` | API | `api/src/worker/geoPdfWorker.ts` | `POST /geo-pdf` (`GEO_PDF_JOB_ID`) |
+| `logjam-api-script` | API | a one-off maintainer script (`api/src/scripts/`); formerly the GeoPDF worker, [0043](decisions/0043-geopdfs-render-in-the-browser.md) | the maintainer, by hand ([announcements](operations/announcements.md#in-prod)) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
 The job workers write their results straight to Postgres and S3, then
@@ -132,7 +132,7 @@ and CloudFront reads them through origin access control:
 | Bucket | Holds | `terraform output` |
 |---|---|---|
 | media | photos and other trip media; "Send a copy" files (expire after 8 days) | `s3_bucket_media` |
-| topo-jobs | LiDAR ZIP uploads, job outputs, exports and GeoPDFs, the `/master/*` basemap | `s3_bucket_topo` |
+| topo-jobs | LiDAR ZIP uploads, job outputs, exports, the `/master/*` basemap | `s3_bucket_topo` |
 | frontend | the Logjam Web build | `s3_bucket_frontend` |
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
@@ -246,18 +246,21 @@ task. The worker claims the row by a guarded status change (`… WHERE status =
 or reaped while its task was starting is claimed by nobody, and the worker
 exits without doing anything. Apart from the worker, only the sweep and the
 owner deleting a job move it out of an in-progress state. The sweep's
-timeouts are the `TOPO_REAPER_*` and `GEO_PDF_*` variables in
+timeouts are the `TOPO_REAPER_*` variables in
 `api/src/lib/env.ts`. When the sweep fails a job, it stops the job's task by
 the task ARN saved on the row.
 
 ### Topo jobs
 
 A user uploads an ELVIS LiDAR ZIP straight to S3, then starts the job
-(`api/src/routes/topoJobs.ts`, `topo/worker.py`):
+(`api/src/routes/topoJobs.ts`, `topo/worker.py`). The ZIP goes as an S3
+multipart upload: the API signs URLs for its parts (`/parts`), Logjam Web
+sends them a few at a time, and the API joins them (`/complete`). After a
+failure, Logjam Web sends only the missing parts, to the same job.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> uploading: POST /topo-jobs<br/>(returns a presigned upload URL)
+  [*] --> uploading: POST /topo-jobs<br/>(opens the multipart upload)
   uploading --> pending: POST /topo-jobs/{id}/start<br/>(credits, quota, capacity checked)
   pending --> processing: worker claims the job
   pending --> failed: RunTask failed, or the sweep's<br/>pending timeout, or the owner deleted it
@@ -269,23 +272,24 @@ stateDiagram-v2
 
 While processing, the worker records progress, and the sweep fails the job
 only when that progress stops or the job passes an absolute ceiling. A slow
-job that is still advancing is left alone. Nothing fails a job left in
-`uploading`; its owner deletes it. Deleting a job that is still running fails
+job that is still advancing is left alone. The sweep deletes a job left in
+`uploading` for a day, with its ZIP and its parts; the topo bucket's lifecycle
+rule aborts any parts left behind two days after the upload began. Deleting a job that is still running fails
 it, stops its task and then removes the row. Deleting also fails the exports
 queued from the job, and is refused while one of its exports is running.
-When a job with auto-export turned on completes, the sweep queues its export.
 
-### Exports and GeoPDFs
+### Exports
 
-Topo exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`)
-and GeoPDFs (`api/src/routes/geoPdf.ts`, `api/src/worker/geoPdfWorker.ts`)
-share one state machine:
+Exports (`api/src/lib/topoExportLauncher.ts`, `topo/export_worker.py`) follow
+one state machine. A GeoPDF is not a job: Logjam Web renders it in the browser
+and nothing about it reaches the API
+([0043](decisions/0043-geopdfs-render-in-the-browser.md)).
 
 ```mermaid
 stateDiagram-v2
-  [*] --> queued: POST /topo-exports or /geo-pdf<br/>(or the auto-export sweep)
+  [*] --> queued: POST /topo-exports
   queued --> running: worker claims the job
-  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or (export) its source topo job was deleted
+  queued --> failed: RunTask failed, or the sweep's queued timeout,<br/>or its source topo job was deleted
   running --> completed: file uploaded to the topo-jobs bucket
   running --> failed: worker error, or the sweep's running timeout
   completed --> [*]: the sweep deletes the file and the row<br/>after TOPO_EXPORT_TTL_MS
@@ -293,9 +297,15 @@ stateDiagram-v2
 ```
 
 A user can delete a `completed` or `failed` job, not a `queued` or `running`
-one. The topo-jobs bucket also expires `exports/` after 7 days as a
-backstop; the sweep's own expiry is the one that returns the user's storage
-quota.
+one. The topo-jobs bucket also expires `exports/` after 7 days as a backstop.
+
+A finished or failed export comes to the owner's Inbox (`topo_export_complete`,
+with its format and size) and, if they opted in, their email. Both link to
+`/?export=<id>`, which mints a fresh download URL and checks egress when it is
+opened: a presigned URL would be dead within hours. Logjam Web has no list of
+exports. An export is not charged to storage, because the owner can't see or
+delete it and it is gone in 7 days; its download is charged to egress. One user holds at most
+`MAX_LIVE_PER_USER` exports at a time (`topoExportLauncher.ts`).
 
 ## How a change reaches prod
 
@@ -402,4 +412,4 @@ module prod uses. Step-by-step setup is in `docs/dev-setup.md`.
   each package's rules and how its tests run.
 - [`decisions/`](decisions/README.md): why.
 - [`operations/`](operations/): alarms, rollback, drills, saved queries, mobile
-  releases.
+  releases, maintainer announcements, the legacy LiDAR job purge.

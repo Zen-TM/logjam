@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { TOPO_LAYERS } from "./topoSettings.js";
 import {
   validateGeoPdfConfig,
-  validateGeoPdfTemplateConfig,
+  VALID_GEOPDF_OVERLAY_NAMES,
   type GeoPdfConfig,
 } from "./geoPdfConfig.js";
 
@@ -120,37 +121,23 @@ describe("validateGeoPdfConfig", () => {
   });
 });
 
-describe("validateGeoPdfTemplateConfig", () => {
-  it("accepts a config with no extent (a template omits it)", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    expect(validateGeoPdfTemplateConfig(c)).toBeNull();
+describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
+  // Logjam Web offers and sends every TOPO_LAYERS name but `features`, which
+  // nothing draws. Mutation: add a layer to TOPO_LAYERS only, and every GeoPDF
+  // from Logjam Web is refused.
+  it("holds every layer Logjam Web can send", () => {
+    for (const layer of TOPO_LAYERS)
+      if (layer.name !== "features")
+        expect(VALID_GEOPDF_OVERLAY_NAMES.has(layer.name)).toBe(true);
   });
 
-  it("accepts a fully valid config that does include an extent", () => {
-    expect(validateGeoPdfTemplateConfig(validConfig())).toBeNull();
-  });
-
-  it("still requires baseLayer and paperSize", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    delete c.baseLayer;
-    expect(validateGeoPdfTemplateConfig(c)).toMatch(
-      /Missing required fields: baseLayer/,
-    );
-  });
-
-  it("still validates an extent when one is present", () => {
-    const c = validConfig();
-    c.extent.north = -33.7; // below south
-    expect(validateGeoPdfTemplateConfig(c)).toMatch(/north must be > south/);
-  });
-
-  it("still enforces the base-layer allowlist", () => {
-    const c = validConfig() as Partial<GeoPdfConfig>;
-    delete c.extent;
-    expect(
-      validateGeoPdfTemplateConfig({ ...c, baseLayer: "evil-tiles" }),
-    ).toBe("Invalid base layer: evil-tiles");
+  // Mutation: put `features` back, and a request names an overlay nothing draws.
+  it("is the Terrain group and vegetation, nothing else", () => {
+    expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
+      "contours",
+      "hillshade",
+      "slope",
+      "vegetation",
+    ]);
   });
 });

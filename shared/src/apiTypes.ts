@@ -11,6 +11,7 @@ import type { MediaItem } from "./media.js";
 import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type { SlopeBand } from "./topoSettings.js";
 
 export type TPlace = {
   id: string;
@@ -73,15 +74,19 @@ export type TUser = {
   monthlyEgressUsedBytes: string;
   consentedAt: string | null;
   consentVersion: string | null;
+  /** The version PATCH /users/me accepts now; `consentVersion` is stale when
+   * it is null or older (see needsReconsent). Absent from a server that
+   * predates the field. */
+  currentConsentVersion?: string;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
     placeCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
-    autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
     leaderboardOptIn?: boolean;
+    slopeBands?: SlopeBand[];
   } | null;
 };
 

@@ -19,32 +19,30 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   validateRasterTemplateSettings,
-  validateAutoExportSettings,
   VECTOR_STYLE_DEFAULTS,
   RASTER_TEMPLATE_DEFAULTS,
+  TOPO_UPLOAD_SIGN_MAX,
+  type SharpenedOverlay,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
 import { getParam } from "../lib/getParam";
+import { deleteTopoJob } from "../lib/deleteTopoJob";
 import { launchFargateTask } from "../lib/ecsRunTask";
 import { assertHasCredits } from "../lib/computeCredits";
 import { estimateTopoSeconds } from "../lib/runtimeEstimates";
 import { assertGlobalCapacity } from "../lib/fargateCapacity";
-import {
-  assertHasStorageQuota,
-  decrementStorageUsed,
-} from "../lib/storageQuota";
+import { assertHasStorageQuota } from "../lib/storageQuota";
 import {
   MAX_INPUT_ZIP_COMPRESSED_BYTES,
   TOPO_UPLOAD_MAX_PARTS,
   TOPO_UPLOAD_PART_BYTES,
-  deleteTopoJobObjects,
   joinTopoUpload,
   signTopoParts,
 } from "../lib/topoUpload";
 import { logger } from "../lib/logger";
 import { resolveUser as getUser } from "../lib/resolveUser";
+import { sharpenedAreaFrom } from "../services/sharpenedAreas";
 import {
-  deleteSharesFor,
   directlySharedIds,
   getJobRole,
   requireShareAccess,
@@ -115,8 +113,6 @@ export function serializeTopoJobFor<
 // tile; this sits well above any realistic one while rejecting pathological
 // archives before the worker is launched.
 const MAX_INPUT_ZIP_UNCOMPRESSED_BYTES = 50 * 1024 * 1024 * 1024; // 50 GB
-/** Part URLs one request may ask for. */
-const TOPO_UPLOAD_SIGN_MAX = 32;
 const ECS_TASK_DEFINITION = env.ECS_TOPO_TASK_DEF;
 // Non-empty subnet list = launch the worker via RunTask. Local dev sets dummy
 // subnets (.env.local) so MiniStack spawns the worker container; an empty list
@@ -129,7 +125,7 @@ router.post(
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await getUser(req.user!.sub);
-    const { tileCount, jobName, settings, autoExport } = req.body;
+    const { tileCount, jobName, settings } = req.body;
 
     // Validate jobName is a string and cap it alongside the type check rather
     // than storing whatever fits in the body budget.
@@ -166,20 +162,6 @@ router.post(
       layerOptions = validation.value as object;
     }
 
-    // Optional auto-export config. Persisted so the reaper can queue a
-    // TopoExportJob once this job completes. Validated to the same legality
-    // rules as a manual export so a bad config can't strand the auto-export.
-    let autoExportConfig: object | undefined;
-    if (autoExport !== undefined && autoExport !== null) {
-      const validation = validateAutoExportSettings(autoExport);
-      if (!validation.ok) {
-        throw malformed(
-          `Invalid auto-export settings: ${validation.errors.join("; ")}`,
-        );
-      }
-      autoExportConfig = validation.value as object;
-    }
-
     // Snapshot the user's live vector style at submission time. The composite
     // raster bake uses this snapshot; in-app display reads the live value
     // independently. Falls back to defaults if the column is null.
@@ -196,7 +178,6 @@ router.post(
         tileCount: tileCount ?? null,
         estimatedSeconds,
         layerOptions,
-        autoExport: autoExportConfig ?? undefined,
         vectorStyleSnapshot,
       },
     });
@@ -356,6 +337,7 @@ router.post(
     );
     const tailBytes = await tail.Body!.transformToByteArray();
     let verifiedTileCount: number | null = null;
+    let lazCount = 0;
     try {
       const entries = parseZipCentralDirectory(
         new Uint8Array(tailBytes),
@@ -371,6 +353,7 @@ router.post(
         );
       }
       verifiedTileCount = zipStats.tileCount || null;
+      lazCount = zipStats.lazCount;
     } catch (e) {
       if (e instanceof ElvisZipError) {
         throw new AppError(400, e.sentence);
@@ -406,6 +389,7 @@ router.post(
         data: {
           status: "pending",
           attemptCount: { increment: 1 },
+          sharpen: sharpenMark(lazCount, job.layerOptions),
           ...(verifiedTileCount !== null
             ? {
                 tileCount: verifiedTileCount,
@@ -457,6 +441,17 @@ router.post(
   },
 );
 
+/**
+ * What /start writes to `TopoJob.sharpen` to send a job down the sharpen
+ * pipeline; the worker replaces it with its result. Vegetation needs point
+ * clouds, so it is ticked only for a ZIP that has them.
+ */
+export function sharpenMark(lazCount: number, layerOptions: unknown) {
+  const vegetation = (layerOptions as { vegetation?: { enabled?: unknown } })
+    ?.vegetation;
+  return { v: 1, vegetation: lazCount > 0 && vegetation?.enabled === true };
+}
+
 // GET /topo-jobs — list authenticated user's jobs
 router.get(
   "/",
@@ -504,6 +499,7 @@ router.get(
         footprint: true,
         createdAt: true,
         s3OutputKeys: true,
+        sharpen: true,
       },
     });
 
@@ -515,6 +511,15 @@ router.get(
     const expiresAt = new Date(
       Date.now() + presignTtlSeconds * 1000,
     ).toISOString();
+
+    const presign = (key: string) =>
+      getSignedUrl(
+        s3,
+        new GetObjectCommand({ Bucket: TOPO_BUCKET, Key: key }),
+        {
+          expiresIn: presignTtlSeconds,
+        },
+      );
 
     const jobsResult = await Promise.all(
       jobs.map(async (j) => {
@@ -535,14 +540,7 @@ router.get(
             )
             .map(async (o) => {
               const meta = layerMetaByName.get(o.name as TopoLayerName)!;
-              const pmtilesUrl = await getSignedUrl(
-                s3,
-                new GetObjectCommand({
-                  Bucket: TOPO_BUCKET,
-                  Key: o.pmtilesKey,
-                }),
-                { expiresIn: presignTtlSeconds },
-              );
+              const pmtilesUrl = await presign(o.pmtilesKey);
               return {
                 name: o.name as TopoLayerName,
                 format: meta.format,
@@ -550,12 +548,26 @@ router.get(
               };
             }),
         );
+        // A sharpened job's archives, in their own field so an old build,
+        // which reads only `layers`, ignores them (ADR 0040).
+        const area = sharpenedAreaFrom(j);
+        let sharpened: SharpenedOverlay | undefined;
+        if (area) {
+          const { keys, ...shown } = area;
+          sharpened = {
+            ...shown,
+            heightsUrl: await presign(keys.heights),
+            slopeUrl: await presign(keys.slope),
+            contoursUrl: keys.contours ? await presign(keys.contours) : null,
+          };
+        }
         return {
           jobId: j.id,
           name: j.name,
           createdAt: j.createdAt,
           footprint: j.footprint,
           layers,
+          ...(sharpened ? { sharpened } : {}),
           // Same rule as the job view above — the role is the whole answer,
           // and the owner's internal id is never emitted. This payload is a
           // derived overlay shape rather than a job row, so it stamps the role
@@ -649,42 +661,10 @@ router.delete(
       }
     }
 
-    // Re-read outputBytes: the worker may have completed between the
-    // ownership read and the cancel flip — the decrement must match what was
-    // actually charged.
-    const fresh = await prisma.topoJob.findUnique({
-      where: { id: jobId },
-      select: { outputBytes: true },
-    });
-    if (!fresh) throw new AppError(404, say`Couldn't find that LiDAR map.`);
-
-    // S3-first: delete the objects before the DB row and the quota
-    // decrement. deleteS3Prefix throws on failure, so if any prefix fails the
-    // row survives and a retried DELETE re-derives the same jobId-keyed prefixes
-    // — no orphaned objects, and the quota is only decremented once the bytes
-    // are confirmed gone. (decrementStorageUsed clamps at 0 — keep it for that.)
-    await deleteTopoJobObjects(TOPO_BUCKET, jobId);
-
-    // One transaction: queued exports referencing this job are
-    // force-failed with a clear message (their COG source is about to
-    // disappear), and the row delete commits with the quota decrement.
-    await prisma.$transaction(async (tx) => {
-      await tx.topoExportJob.updateMany({
-        where: { status: "queued", sourceJobIds: { has: jobId } },
-        data: {
-          status: "failed",
-          errorMessage: say`A LiDAR map this export needed was deleted before it started.`,
-        },
-      });
-      // Share.entityId is polymorphic, so Postgres cannot cascade: without
-      // this the rows outlive the job and keep it in a recipient's list.
-      // No tombstone — topo jobs are not delta-synced; the recipient's next
-      // GET /topo-jobs simply stops returning it and the client reconciles
-      // its downloaded overlay from that.
-      await deleteSharesFor(tx, "topoJob", [jobId]);
-      await tx.topoJob.delete({ where: { id: jobId } });
-      await decrementStorageUsed(job.userId, fresh.outputBytes ?? 0n, tx);
-    });
+    // The worker may have completed between the ownership read and the
+    // cancel flip: `deleteTopoJob` re-reads the charge it undoes.
+    if (!(await deleteTopoJob(jobId, job.userId)))
+      throw new AppError(404, say`Couldn't find that LiDAR map.`);
 
     res.status(204).send();
   },

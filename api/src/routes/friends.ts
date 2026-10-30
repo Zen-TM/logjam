@@ -36,7 +36,6 @@ import {
   revokeAllSharesBetween,
 } from "../lib/shareAccess";
 import { parseBulkShareItems } from "../lib/bulkShare";
-import { geoPdfTitle } from "../lib/geoPdfTitle";
 import {
   revokeDirectShares,
   syncedEntityType,
@@ -603,7 +602,7 @@ router.delete(
         },
       });
       // Every OTHER share type between the two users: direct per-item Shares
-      // (waypoint / route / topo job / GeoPDF job) in both directions, plus
+      // (waypoint / route / topo job) in both directions, plus
       // file sends the recipient has not taken yet. Place shares are the
       // block above; this is the rest of the same promise — unfriending takes
       // back all live access, not just places.
@@ -684,7 +683,7 @@ type DirectShareRef = {
 };
 
 /**
- * Direct `Share` rows (waypoint / route / LiDAR topo / GeoPDF) that one person
+ * Direct `Share` rows (waypoint / route / LiDAR topo) that one person
  * can see and ANOTHER person owns — the non-place half of both directions.
  *
  * WHY IT IS NOT ONE WHERE CLAUSE, unlike the place pair above: `Share` is
@@ -754,8 +753,7 @@ async function directSharesBetween(args: {
  * Put a name on each direct-share row. One query per type present, and only
  * over the ids that survived the ownership filter.
  *
- * A name can come back null — a LiDAR topo saved without one, a GeoPDF whose
- * config carried no title. `shareRowTitle` (shared/src/sharing.ts) is what
+ * A name can come back null — a LiDAR topo saved without one. `shareRowTitle` (shared/src/sharing.ts) is what
  * turns that into words, on both clients, rather than each surface inventing
  * its own "Untitled".
  */
@@ -785,17 +783,6 @@ async function nameDirectShares(
 
   await Promise.all(
     [...idsByType].map(async ([entityType, ids]) => {
-      if (entityType === "geoPdfJob") {
-        // No `name` column at all — the label is buried in the render config.
-        const jobs = await prisma.geoPdfJob.findMany({
-          where: { id: { in: ids } },
-          select: { id: true, config: true },
-        });
-        for (const job of jobs) {
-          nameById.set(key(entityType, job.id), geoPdfTitle(job.config));
-        }
-        return;
-      }
       const rows =
         entityType === "route"
           ? await prisma.route.findMany({

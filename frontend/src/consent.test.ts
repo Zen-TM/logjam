@@ -41,6 +41,31 @@ describe("consentGate", () => {
     });
   });
 
+  // Mutation: compare with CURRENT_CONSENT_VERSION in needsReconsent (or
+  // return it from currentConsentVersionOf) and this turns red.
+  it("blocks on the server's version even when the recorded one matches the build's", () => {
+    expect(
+      consentGate(
+        {
+          consentVersion: CURRENT_CONSENT_VERSION,
+          currentConsentVersion: "2999-01-01",
+        },
+        null,
+      ).blocked,
+    ).toBe(true);
+  });
+
+  // Mutation: match the pending value against CURRENT_CONSENT_VERSION in
+  // consentGate (or return it from currentConsentVersionOf) and this turns red.
+  it("releases a fresh sign-up whose pending version is the server's, not the build's", () => {
+    expect(
+      consentGate(
+        { consentVersion: null, currentConsentVersion: "2999-01-01" },
+        "2999-01-01",
+      ).blocked,
+    ).toBe(false);
+  });
+
   it("ignores a pending value left over from an older consent version", () => {
     expect(consentGate({ consentVersion: null }, "2020-01-01").blocked).toBe(
       true,

@@ -133,8 +133,8 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         />
         <Row
           icon="lidar"
-          title="LiDAR maps"
-          subtitle="Import topos from Logjam Web"
+          title="Sharpened areas"
+          subtitle="Save the areas you sharpen on Logjam Web"
         />
 
         <SectionHeader title="Get an account" />
@@ -332,6 +332,14 @@ function LinkedAccountScreen({
           variant="outlineAccent"
           icon="signOut"
           onPress={() => onSignOut()}
+        />
+        <Button
+          label={copy.signOutEverywhere}
+          variant="outlineAccent"
+          icon="signOut"
+          disabled={!online}
+          disabledReason="Needs a connection"
+          onPress={() => onSignOut({ everywhere: true })}
         />
         <Row
           icon="delete"

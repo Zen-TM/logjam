@@ -37,6 +37,7 @@ class TestBuildPipelineFull(unittest.TestCase):
             "below.tif",
             "all.tif",
             resolution=0.5,
+            ground="smrf",
         )["pipeline"]
 
     def test_one_reader_per_input(self):
@@ -63,6 +64,25 @@ class TestBuildPipelineFull(unittest.TestCase):
     def test_uses_smrf_and_hag_nn(self):
         self.assertEqual(len(_stages_of_type(self.p, "filters.smrf")), 1)
         self.assertEqual(len(_stages_of_type(self.p, "filters.hag_nn")), 1)
+
+    # Red if a survey with class 2 still has its classes wiped and SMRF run:
+    # on a classified survey SMRF reads canopy as ground (sharpen.py's rule),
+    # so heights above ground come out low under trees.
+    def test_class2_ground_keeps_the_survey_classes(self):
+        p = build_pipeline_full(
+            ["a.laz"],
+            "dtm.tif",
+            "lo.tif",
+            "hi.tif",
+            "below.tif",
+            "all.tif",
+            ground="class2",
+        )["pipeline"]
+        types = [s["type"] for s in p]
+        self.assertNotIn("filters.assign", types)
+        self.assertNotIn("filters.smrf", types)
+        # Noise and overlap still go first; height above ground still runs.
+        self.assertLess(types.index("filters.range"), types.index("filters.hag_nn"))
 
     def test_five_gdal_writers_with_resolution(self):
         writers = _stages_of_type(self.p, "writers.gdal")
@@ -107,6 +127,47 @@ class TestBuildPipelineFull(unittest.TestCase):
         gate = f"ScanAngleRank >= -{PDAL_SCAN_ANGLE_MAX}"
         for w in (scrub_low, scrub_high, below, all_count):
             self.assertIn(gate, w["where"])
+
+
+@unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
+class TestGroundPerTile(unittest.TestCase):
+    """Each point cloud is grounded on its own: class 2 where it has it, SMRF
+    where it has none. Made-up tiles, no PDAL run.
+
+    Red if one ground is chosen for the whole job: a ZIP mixing a classified
+    tile with an unclassified one (a water-only tile, a second survey) then
+    either runs height above ground on a tile with no ground points, which
+    fails the job, or wipes the survey's classes everywhere."""
+
+    def test_a_mixed_tile_set_grounds_each_tile_on_its_own(self):
+        import tempfile
+        from unittest import mock
+
+        import pipeline
+
+        run = mock.Mock()
+        with (
+            tempfile.TemporaryDirectory() as work,
+            mock.patch.object(
+                pipeline, "has_class2", side_effect=lambda p: p == "classified.laz"
+            ),
+            mock.patch.object(pipeline, "run_pdal_pipeline", run),
+            mock.patch.object(pipeline, "_merge_raster_tiles"),
+            mock.patch.object(pipeline.os, "remove"),
+        ):
+            pipeline.run_pdal_sequential_full(
+                ["classified.laz", "unclassified.laz"],
+                ["classified.laz", "unclassified.laz"],
+                *(os.path.join(work, f"{n}.tif") for n in "abcde"),
+                work,
+            )
+        smrf = {
+            next(
+                s["filename"] for s in p["pipeline"] if s.get("type") == "readers.las"
+            ): bool(_stages_of_type(p["pipeline"], "filters.smrf"))
+            for p in (c.args[0] for c in run.call_args_list)
+        }
+        self.assertEqual(smrf, {"classified.laz": False, "unclassified.laz": True})
 
 
 if __name__ == "__main__":

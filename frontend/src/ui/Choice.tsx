@@ -20,6 +20,7 @@ export function Checkbox({
   onChange,
   disabled = false,
   card = false,
+  describedBy,
 }: {
   label: ReactNode;
   description?: string;
@@ -27,6 +28,8 @@ export function Checkbox({
   onChange: (next: boolean) => void;
   disabled?: boolean;
   card?: boolean;
+  /** Another element that describes it, such as why it is disabled. */
+  describedBy?: string;
 }) {
   const descriptionId = useId();
   return (
@@ -40,7 +43,11 @@ export function Checkbox({
           className={classes.checkboxInput}
           checked={checked}
           disabled={disabled}
-          aria-describedby={description ? descriptionId : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, describedBy]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           onChange={(event) => onChange(event.target.checked)}
         />
         <Icon

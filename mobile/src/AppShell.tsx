@@ -19,10 +19,16 @@ import {
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
+import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
+import {
+  currentConsentVersionOf,
+  isThemeSchemeId,
+  needsReconsent,
+  type IconIdea,
+} from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -45,7 +51,6 @@ import {
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
-import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { BackgroundToast } from "./BackgroundToast";
@@ -227,7 +232,10 @@ type SavedStackParams = {
 
 type MoreStackParams = {
   MoreHome: undefined;
-  Inbox: undefined;
+  // A tapped announcement push opens its message over the inbox.
+  Inbox:
+    | { openAnnouncement?: { announcementId: string; nonce: number } }
+    | undefined;
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
@@ -819,8 +827,8 @@ export function AppShell({
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
   // Sync triggers: initial cycle, app foreground, connectivity regained, and
-  // the same three moments for the GeoPDF and topo auto-downloads (Settings →
-  // Offline and storage; autoDownload.ts says why not a timer) and the place
+  // the same three moments for the topo auto-download (Settings →
+  // Offline and storage; topoAutoDownload.ts says why not a timer) and the place
   // names for search. Torn down on sign-out (shell unmount).
   //
   // A guest registers none of the account-backed ones. This is the
@@ -830,14 +838,12 @@ export function AppShell({
   // could only ever 401 would also mean a failing sync every foreground, and a
   // permanently red sync health line on the More tab. Guard:
   // `shellTriggers.test.ts`. The place names go to a guest too
-  // (shellTriggers.ts). The two auto-downloads keep their own
-  // registrations: separate switches and connection policies, and a combined
-  // runner would make one's failure the other's.
+  // (shellTriggers.ts). The topo auto-download keeps its own
+  // registration, apart from sync's.
   useEffect(
     () =>
       registerShellTriggers(accountState, {
         sync: registerSyncTriggers,
-        geoPdfAutoDownload: registerGeoPdfAutoDownload,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
       }),
@@ -852,6 +858,11 @@ export function AppShell({
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
     if (isThemeSchemeId(accountScheme)) setThemeSchemeId(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
+
+  // The account's slope bands, kept on the phone so the map has them offline.
+  useEffect(() => {
+    keepAccountSlopeBands(userQuery.data?.uiPreferences?.slopeBands);
+  }, [userQuery.data?.uiPreferences?.slopeBands]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
@@ -887,11 +898,22 @@ export function AppShell({
         // left to do here". The unread list is the queue of things the user
         // still has to deal with, and emptying it on the strength of a
         // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it.
+        // Opening the row is what reads it. An announcement push opens its
+        // message on the inbox, and the message is read when the user closes it.
         if (target.kind === "place") {
           nav.navigate("Places", {
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
+          });
+        } else if (target.kind === "announcement") {
+          nav.navigate("More", {
+            screen: "Inbox",
+            params: {
+              openAnnouncement: {
+                announcementId: target.announcementId,
+                nonce: Date.now(),
+              },
+            },
           });
         } else {
           // Inbox lives inside the More stack.
@@ -945,6 +967,7 @@ export function AppShell({
   if (user && !consented && needsReconsent(user)) {
     return (
       <ConsentGate
+        consentVersion={currentConsentVersionOf(user)}
         onConsented={() => {
           setConsented(true);
           userQuery.refetch();
@@ -1077,8 +1100,9 @@ export function AppShell({
                     name="Inbox"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <NotificationsScreen
+                        openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is
