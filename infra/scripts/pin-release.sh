@@ -17,7 +17,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 families() {
   case "$1" in
-    logjam-api) echo logjam-api-migrate logjam-geo-pdf-worker logjam-api-script ;;
+    logjam-api) echo logjam-api-migrate logjam-api-script ;;
     logjam-topo-worker) echo logjam-topo-worker logjam-topo-export-worker logjam-place-registry ;;
     *) echo "unknown image repository '$1'" >&2; return 1 ;;
   esac
