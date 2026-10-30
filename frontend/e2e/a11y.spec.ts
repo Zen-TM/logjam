@@ -190,21 +190,9 @@ test.describe("desktop", () => {
   test("the leaderboard button on Friends, and the Leaderboard page", async ({
     page,
   }) => {
-    // Never written to the account (frontend/AGENTS.md): `/users/me` says alice
-    // has joined, rewriting only that field, and the board is a made-up one
-    // that draws every section — a podium, medals, a nudge.
-    await page.route("**/users/me", async (route) => {
-      if (route.request().method() !== "GET") return route.continue();
-      const response = await route.fetch();
-      const user = await response.json();
-      await route.fulfill({
-        response,
-        json: {
-          ...user,
-          uiPreferences: { ...user.uiPreferences, leaderboardOptIn: true },
-        },
-      });
-    });
+    // The seed has alice on the leaderboard; the board itself is a made-up one
+    // that draws every section, a podium, medals and a nudge, which no seed
+    // date could promise (a podium shows one week a year).
     await page.route("**/friends/leaderboard", (route) =>
       route.fulfill({
         status: 200,

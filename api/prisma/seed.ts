@@ -37,6 +37,7 @@ import {
   PLACE_REGISTRY_POINTER_PATH,
   PLACE_REGISTRY_PREFIX,
   SYSTEM_PLACE_TYPE_IDS,
+  currentSeason,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
   trackPointsToGpx,
@@ -239,6 +240,9 @@ const prisma = new PrismaClient({ adapter });
 //     trip log. PLACE_IDS[1] also shared with bob. carol is shared NOTHING and
 //     is NOT alice's friend (sharing.test.ts asserts a 403 for share->carol).
 //   - alice<->bob accepted friendship; carol->alice pending request.
+//   - alice and bob have joined the friends leaderboard, with canyon trips in
+//     the current season; carol, bob's friend, has not, so bob's board names
+//     her (leaderboard.test.ts starts by taking both off it).
 // New data uses fresh ids and never mutates those invariants.
 // ---------------------------------------------------------------------------
 
@@ -1291,6 +1295,31 @@ function buildTrips(): SeedTrip[] {
     }
   }
 
+  // This season's canyons, for the friends leaderboard: bob 3, alice 2. Last,
+  // so every trip above keeps its id and date. A week apart from the season's
+  // start and never after today, so a re-seed in any month lands them in the
+  // season it is.
+  const season = currentSeason();
+  const daysIn = Math.floor((Date.now() - season.start.getTime()) / 86_400_000);
+  const isCanyon = (place: SeedPlace) =>
+    seedPlaceTypeId(place.id) === SYSTEM_PLACE_TYPE_IDS.canyon;
+  for (const [userId, places] of [
+    [ALICE_ID, ALICE_PLACES.filter(isCanyon).slice(0, 2)],
+    [BOB_ID, BOB_PLACES.filter(isCanyon).slice(0, 3)],
+  ] as const) {
+    for (const [i, place] of places.entries()) {
+      seed++;
+      trips.push({
+        placeId: place.id,
+        userId,
+        date: new Date(
+          season.start.getTime() + Math.min(i * 7, daysIn) * 86_400_000,
+        ),
+        notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} This season.`,
+      });
+    }
+  }
+
   return trips;
 }
 
@@ -1478,6 +1507,7 @@ async function main() {
         email: "alice@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: BOB_ID,
@@ -1486,6 +1516,7 @@ async function main() {
         email: "bob@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: CAROL_ID,
