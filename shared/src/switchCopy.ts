@@ -12,7 +12,7 @@ export const SWITCH_COPY_MAX = { label: 20, hint: 30 } as const;
  *  and the hint. */
 export type SwitchComponent = { tag: string; label: string; hint: string };
 
-export type SwitchCopyHit = {
+export type SwitchCopy = {
   file: string;
   line: number;
   role: "label" | "hint";
@@ -20,19 +20,20 @@ export type SwitchCopyHit = {
 };
 
 /**
- * Every label and hint of a switch row in `files` longer than
- * `SWITCH_COPY_MAX`. The type checker reads each prop, so a literal and copy
- * declared `as const` in `@logjam/shared` are both seen; a string built at run
- * time (a count, a name) types as `string` and is skipped, as it has no fixed
- * length to hold.
+ * Every label and hint of a switch row in `files` whose text is known before
+ * run time. The type checker reads each prop, so a literal and copy declared
+ * `as const` in `@logjam/shared` are both seen; a string built at run time (a
+ * count, a name) types as `string` and is skipped, as it has no fixed length
+ * to hold. Tags match by name, so a spread, an alias or `ui.SwitchRow` is not
+ * seen (none exists).
  */
-export function switchCopyOverLimit(
+export function measureSwitchCopy(
   /** The caller's `typescript` module, typed loosely as in `copyRules.ts`. */
   tsModule: unknown,
   tsconfigPath: string,
   files: readonly string[],
   components: readonly SwitchComponent[],
-): SwitchCopyHit[] {
+): SwitchCopy[] {
   const ts = tsModule as typeof TypeScript;
   const config = ts.getParsedCommandLineOfConfigFile(
     tsconfigPath,
@@ -46,7 +47,7 @@ export function switchCopyOverLimit(
   });
   const checker = program.getTypeChecker();
   const byTag = new Map(components.map((c) => [c.tag, c]));
-  const hits: SwitchCopyHit[] = [];
+  const found: SwitchCopy[] = [];
 
   const literals = (type: TypeScript.Type): string[] =>
     type.isUnion()
@@ -82,19 +83,18 @@ export function switchCopyOverLimit(
               ? [expr.text]
               : literals(checker.getTypeAtLocation(expr));
           for (const text of texts)
-            if (text.length > SWITCH_COPY_MAX[role])
-              hits.push({
-                file,
-                line:
-                  sf.getLineAndCharacterOfPosition(attr.getStart(sf)).line + 1,
-                role,
-                text,
-              });
+            found.push({
+              file,
+              line:
+                sf.getLineAndCharacterOfPosition(attr.getStart(sf)).line + 1,
+              role,
+              text,
+            });
         }
       }
       ts.forEachChild(node, visit);
     };
     visit(sf);
   }
-  return hits;
+  return found;
 }
