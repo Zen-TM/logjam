@@ -15,12 +15,18 @@ import topoJobsRouter from "../routes/topoJobs";
 import placeTypesRouter from "../routes/placeTypes";
 import usersRouter from "../routes/users";
 import syncRouter from "../routes/sync";
+import sharingRouter from "../routes/sharing";
+import fileSendsRouter from "../routes/fileSends";
+import customFieldsRouter from "../routes/customFields";
+import topoExportsRouter from "../routes/topoExports";
 import {
   as,
   ALICE_SUB,
   ALICE_ID,
   BOB_ID,
   BOB_SHARED_PLACE_ID,
+  BOB_SHARED_ROUTE_ID,
+  BOB_SHARED_TOPO_JOB_ID,
   SHARED_PLACE_ID,
 } from "./_actors";
 
@@ -28,14 +34,22 @@ import {
 // be captured and EXPLAINed. Under enable_seqscan = off the planner reads a
 // whole table only when no index fits the query, so a missing index shows on
 // the suite's small seed as well as on a big table. Every table is guarded: a
-// read path that must scan one whole is the thing to fix. Mutation: drop
-// notifications_user_id_idx and GET /notifications turns this red.
+// read path that must scan one whole is the thing to fix. The paths are the
+// GETs Logjam Web and Logjam GPS call on load, on the map and in sync. Left
+// out: the full export and /friends/search (a substring match on usernames)
+// read whole tables by design, and on the seed's two file sends the planner
+// drives /file-sends/inbox from file_sends, which a real table would not.
+// Mutation: drop notifications_user_id_idx and GET /notifications turns red.
 
 const app = express()
   .use(express.json())
   .use("/users", usersRouter)
   .use("/place-types", placeTypesRouter)
   .use("/places", placesRouter)
+  .use("/places", sharingRouter)
+  .use("/custom-fields", customFieldsRouter)
+  .use("/file-sends", fileSendsRouter)
+  .use("/topo-exports", topoExportsRouter)
   .use("/trips", tripLogsGlobalRouter)
   .use("/routes", routesRouter)
   .use("/media", mediaRouter)
@@ -52,13 +66,22 @@ const READ_PATHS = [
   `/places/${SHARED_PLACE_ID}`,
   `/places/${BOB_SHARED_PLACE_ID}`,
   "/trips",
+  "/trips/:trip",
+  `/routes/${BOB_SHARED_ROUTE_ID}`,
+  `/places/${SHARED_PLACE_ID}/shares`,
+  "/custom-fields/place",
+  "/file-sends/sent",
+  "/topo-exports",
   "/media/standalone",
   "/notifications",
   "/notifications/unread-count",
   "/friends",
   "/friends/requests",
-  "/friends/:aliceBobFriendship/shares",
+  "/friends/:friendship/shares",
+  "/friends/leaderboard",
   "/topo-jobs",
+  "/topo-jobs/completed-overlays",
+  `/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`,
   "/sync/delta",
 ];
 
@@ -81,16 +104,20 @@ const query = pg.Client.prototype.query;
 };
 
 const explainer = new pg.Client({ connectionString: databaseUrlFromEnv() });
-let aliceBobFriendship: string;
+const seededIds: Record<string, string> = {};
 beforeAll(async () => {
   await explainer.connect();
-  const friendship = await prisma.friendship.findFirstOrThrow({
-    where: {
-      requesterId: { in: [ALICE_ID, BOB_ID] },
-      addresseeId: { in: [ALICE_ID, BOB_ID] },
-    },
-  });
-  aliceBobFriendship = friendship.id;
+  const [friendship, trip] = await Promise.all([
+    prisma.friendship.findFirstOrThrow({
+      where: {
+        requesterId: { in: [ALICE_ID, BOB_ID] },
+        addresseeId: { in: [ALICE_ID, BOB_ID] },
+      },
+    }),
+    prisma.tripLog.findFirstOrThrow({ where: { userId: ALICE_ID } }),
+  ]);
+  seededIds[":friendship"] = friendship.id;
+  seededIds[":trip"] = trip.id;
 });
 afterAll(async () => {
   pg.Client.prototype.query = query;
@@ -106,7 +133,9 @@ type PlanNode = {
 };
 
 /** Every node that reads a whole table: a sequential scan, or an index scan
- *  with no condition, which the planner picks instead once seqscan is off. */
+ *  with no condition, which the planner picks instead once seqscan is off.
+ *  An index scan whose only condition is on a later column of a composite
+ *  index reads it whole too, and is not caught. */
 function fullScans(node: PlanNode, out: string[] = []): string[] {
   const type = node["Node Type"];
   if (type === "Seq Scan") out.push(`Seq Scan on ${node["Relation Name"]}`);
@@ -123,7 +152,13 @@ function fullScans(node: PlanNode, out: string[] = []): string[] {
 async function explain(q: Captured): Promise<string[]> {
   await explainer.query("BEGIN");
   try {
-    await explainer.query("SET LOCAL enable_seqscan = off");
+    // With hash and merge joins off too, every join is a nested loop whose
+    // inner side has an index condition only if an index fits the join key;
+    // otherwise a tiny seed table joins through a full scan that a big one
+    // would not.
+    await explainer.query(
+      "SET LOCAL enable_seqscan = off; SET LOCAL enable_hashjoin = off; SET LOCAL enable_mergejoin = off",
+    );
     const { rows } = await explainer.query(
       `EXPLAIN (FORMAT JSON) ${q.text}`,
       q.values,
@@ -138,7 +173,7 @@ describe("key read paths use an index", () => {
   it.each(READ_PATHS)("GET %s", async (path) => {
     captured = [];
     const res = await request(app)
-      .get(path.replace(":aliceBobFriendship", aliceBobFriendship))
+      .get(path.replace(/:\w+/, (key) => seededIds[key]))
       .set(as(ALICE_SUB))
       .set("x-logjam-client", "mobile/0.1.0-test");
     const queries = captured;
@@ -163,8 +198,9 @@ it("every foreign key leads an index", async () => {
     SELECT c.conrelid::regclass::text AS "table", a.attname AS "column"
       FROM pg_constraint c
       JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
-     WHERE c.contype = 'f'
+     WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace
        AND NOT EXISTS (SELECT 1 FROM pg_index i
-                        WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])`);
+                        WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1]
+                          AND i.indisvalid AND i.indpred IS NULL)`);
   expect(rows).toEqual([]);
 });
