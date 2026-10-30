@@ -1,16 +1,15 @@
 // Logjam GPS draws exactly the sections `LEADERBOARD` names, and Friends draws
-// the `leaderboard` section `FRIENDS` gained, only for someone who has joined.
+// its leaderboard button only for someone who has joined.
 //
 // Mutations that turn it red: add `{ key: "medals" }` to
-// `LEADERBOARD.sections`; delete `rules` from `LEADERBOARD_SECTIONS`; make
+// `LEADERBOARD.sections`; delete `nudge` from `LEADERBOARD_SECTIONS`; make
 // `podium` draw without `podiumShown`; drop the `leaderboardOptIn &&` guard
-// from Friends' `leaderboard` section; hide the Settings switch for a guest
+// from Friends' `LeaderboardButton`; hide the Settings switch for a guest
 // (`isGuest ? null :`), or let it turn on with a reason showing.
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   contractSectionKeys,
-  FRIENDS,
   LEADERBOARD,
   type LeaderboardResponse,
 } from "@logjam/shared";
@@ -58,7 +57,7 @@ const props = {
   podiumShown: true,
   onBack: () => {},
   onDismissPodium: () => {},
-  onAsk: () => {},
+  onOpenRules: () => {},
 };
 
 describe("Logjam GPS draws what the leaderboard contracts name", () => {
@@ -81,10 +80,9 @@ describe("Logjam GPS draws what the leaderboard contracts name", () => {
     ).toBeNull();
   });
 
-  it("Friends draws its leaderboard row only for someone who has joined", () => {
-    expect(contractSectionKeys(FRIENDS, "gps")).toContain("leaderboard");
+  it("Friends draws its leaderboard button only for someone who has joined", () => {
     expect(read("./FriendsScreen.tsx")).toMatch(
-      /leaderboard: \(\) =>[\s\S]{0,120}leaderboardOptIn && board\?\.joined !== false \?/,
+      /leaderboardOptIn && board\?\.joined !== false \? \(\s*<LeaderboardButton/,
     );
   });
 

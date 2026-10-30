@@ -1,5 +1,5 @@
 // Leaderboard — "how am I going against my friends this season?", pushed from
-// the row Friends draws for someone who has joined. Drawn from `LEADERBOARD`
+// the button Friends' hero draws for someone who has joined. Drawn from `LEADERBOARD`
 // (shared/src/contracts/leaderboard.ts); every number is the server's.
 //
 // Online only, like Friends. A guest is gated before any fetch
@@ -16,11 +16,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Share, Text, View } from "react-native";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 import {
   contractSectionKeys,
   LEADERBOARD,
-  LEADERBOARD_ASK_MESSAGE,
   LEADERBOARD_SETTING,
   leaderboardCount,
   leaderboardHeroTitle,
@@ -44,15 +43,16 @@ import { useConnectivity } from "../map/connectivity";
 import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
   Avatar,
+  BottomSheet,
   Button,
   EmptyState,
   ErrorBanner,
   ErrorState,
   Hero,
+  IconButton,
   IconTile,
   LoadingState,
   Row,
-  SectionHeader,
   Toast,
   type ToastMessage,
 } from "../ui";
@@ -67,7 +67,7 @@ type SectionProps = {
   podiumShown: boolean;
   onBack: () => void;
   onDismissPodium: () => void;
-  onAsk: () => void;
+  onOpenRules: () => void;
 };
 
 /** One drawing per contract section; `tsc` and `leaderboardContracts.test.ts`
@@ -76,7 +76,7 @@ export const LEADERBOARD_SECTIONS: Record<
   SectionKeysOn<typeof LEADERBOARD, "gps">,
   (props: SectionProps) => ReactNode
 > = {
-  hero: ({ board, onBack }) => {
+  hero: ({ board, onBack, onOpenRules }) => {
     const { rank, size } = selfStanding(board);
     return (
       <Hero
@@ -84,6 +84,13 @@ export const LEADERBOARD_SECTIONS: Record<
         title={leaderboardHeroTitle(rank, size)}
         value={leaderboardSeasonLine(board.season)}
         onBack={onBack}
+        actions={
+          <IconButton
+            icon="help"
+            accessibilityLabel={copy.rulesTitle}
+            onPress={onOpenRules}
+          />
+        }
       />
     );
   },
@@ -102,8 +109,7 @@ export const LEADERBOARD_SECTIONS: Record<
       ))}
     </>
   ),
-  nudge: ({ board, onAsk }) => <Nudge board={board} onAsk={onAsk} />,
-  rules: () => <Rules />,
+  nudge: ({ board }) => <Nudge board={board} />,
 };
 
 export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
@@ -167,9 +173,7 @@ export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
     setDismissedNow(season);
   }, [season]);
 
-  const onAsk = useCallback(() => {
-    Share.share({ message: LEADERBOARD_ASK_MESSAGE }).catch(console.error);
-  }, []);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   // Every state but the board keeps a hero, so the back arrow is always there.
   const gate = (body: ReactNode) => (
@@ -203,7 +207,7 @@ export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
     podiumShown,
     onBack,
     onDismissPodium,
-    onAsk,
+    onOpenRules: () => setRulesOpen(true),
   };
   const [hero, ...rest] = contractSectionKeys(LEADERBOARD, "gps");
   return (
@@ -228,6 +232,19 @@ export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
           <Fragment key={key}>{LEADERBOARD_SECTIONS[key](props)}</Fragment>
         ))}
       </ScrollView>
+      <BottomSheet
+        visible={rulesOpen}
+        onClose={() => setRulesOpen(false)}
+        title={copy.rulesTitle}
+      >
+        <View style={styles.rules}>
+          {copy.rules.split("\n").map((rule) => (
+            <Text key={rule} style={styles.rule}>
+              {rule}
+            </Text>
+          ))}
+        </View>
+      </BottomSheet>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
@@ -299,38 +316,14 @@ function BoardRow({
   );
 }
 
-function Nudge({ board, onAsk }: { board: Board; onAsk: () => void }) {
+function Nudge({ board }: { board: Board }) {
   const styles = useStyles();
   const kind = nudgeKind(board);
   if (kind === null) return null;
   return (
-    <View style={styles.nudge}>
-      <Text style={styles.note}>
-        {kind === "ask" ? leaderboardNudge(board.notJoined) : copy.alone}
-      </Text>
-      {kind === "ask" ? (
-        <Button
-          label={copy.askFriends}
-          icon="send"
-          variant="outlineAccent"
-          onPress={onAsk}
-        />
-      ) : null}
-    </View>
-  );
-}
-
-function Rules() {
-  const styles = useStyles();
-  return (
-    <>
-      <SectionHeader title={copy.rulesTitle} />
-      {copy.rules.split("\n").map((rule) => (
-        <Text key={rule} style={styles.note}>
-          {rule}
-        </Text>
-      ))}
-    </>
+    <Text style={[styles.note, styles.nudge]}>
+      {kind === "ask" ? leaderboardNudge(board.notJoined) : copy.alone}
+    </Text>
   );
 }
 
@@ -346,6 +339,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   place: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   count: { ...textRole.body, color: theme.text },
   rank: { ...textRole.rowTitle, color: theme.text },
-  nudge: { gap: spacing(1), paddingTop: spacing(1) },
+  nudge: { paddingTop: spacing(1) },
   note: { ...muted(theme, textRole.paragraph) },
+  rules: { gap: spacing(1.5), paddingBottom: spacing(2) },
+  rule: { ...textRole.paragraph, color: theme.text },
 }));

@@ -15,9 +15,6 @@ export const FRIENDS = {
   title: "Friends",
   sections: [
     { key: "hero" },
-    // One row into the leaderboard, drawn only for someone who has joined it
-    // (contracts/leaderboard.ts); above the rail, because it is not a person.
-    { key: "leaderboard" },
     // One rail, a true partition: a pending request is not a friend yet.
     { key: "buckets" },
     { key: "list" },

@@ -187,7 +187,7 @@ test.describe("desktop", () => {
     );
   });
 
-  test("the leaderboard row on Friends, and the Leaderboard page", async ({
+  test("the leaderboard button on Friends, and the Leaderboard page", async ({
     page,
   }) => {
     // Never written to the account (frontend/AGENTS.md): `/users/me` says alice
@@ -242,23 +242,33 @@ test.describe("desktop", () => {
     await openApp(page);
     await page.getByRole("button", { name: "Friends", exact: true }).click();
     const aside = page.locator("aside");
-    const row = aside.getByRole("button", { name: "Leaderboard", exact: true });
-    await expect(row).toBeVisible({ timeout: 15_000 });
-    await expect(aside.getByText("You're #2 of 3")).toBeVisible();
+    const button = aside.getByRole("button", {
+      name: "Leaderboard, you're #2 of 3",
+    });
+    await expect(button).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
-    // It replaces the list, with a way back. Neither Ask them nor Dismiss is
-    // pressed: the case only looks.
-    await row.click();
+    // It replaces the list, with a way back. Dismiss is not pressed: the case
+    // only looks.
+    await button.click();
     await expect(
       aside.getByRole("heading", { level: 2, name: "#2 of 3" }),
     ).toBeVisible();
-    await expect(aside.getByRole("button", { name: "Ask them" })).toBeVisible();
     await expect(aside.getByRole("button", { name: "Dismiss" })).toBeVisible();
     await expectNoViolations(page, "aside");
 
+    // The rules open in a dialog, and Escape puts focus back on their button.
+    const rules = aside.getByRole("button", { name: "How it works" });
+    await rules.click();
+    await expect(
+      page.getByRole("dialog", { name: "How it works" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(rules).toBeFocused();
+
     await aside.getByRole("button", { name: "Back to friends" }).click();
-    await expect(row).toBeVisible();
+    await expect(button).toBeVisible();
   });
 
   test("Account, Settings and the three lists it keeps", async ({ page }) => {

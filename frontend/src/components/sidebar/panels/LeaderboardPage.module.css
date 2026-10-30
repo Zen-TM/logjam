@@ -54,27 +54,16 @@
 }
 
 .nudge {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  margin-top: var(--space-2);
-}
-
-.note {
   composes: body from "../../../textRoles.generated.module.css";
-  margin: 0;
+  margin: var(--space-2) 0 0;
   color: var(--color-text-muted);
 }
 
 .rules {
+  composes: body from "../../../textRoles.generated.module.css";
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   margin: 0;
   padding-left: var(--space-2);
-}
-
-.rulesSection {
-  margin-top: var(--space-2);
 }

@@ -1,16 +1,16 @@
 // The friends leaderboard — "how am I going against my friends this season?"
 //
-// Reached from the one row Friends draws for someone who has joined, and it
-// replaces the list the way a friend's sharing audit does. FriendsPanel owns
-// the fetch, so the row's subtitle and this page read the same board.
+// Reached from the button in Friends' hero, drawn only for someone who has
+// joined, and it replaces the list the way a friend's sharing audit does.
+// FriendsPanel owns the fetch, so the button's badge and this page read the
+// same board.
 //
 // PRIVACY: a joined friend is a username and a count, never which canyons; the
 // payload carries nothing more (api/src/routes/leaderboard.unit.test.ts).
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   LEADERBOARD,
-  LEADERBOARD_ASK_MESSAGE,
   leaderboardCount,
   leaderboardHeroTitle,
   leaderboardNudge,
@@ -25,18 +25,18 @@ import {
   type SectionKeysOn,
 } from "@logjam/shared";
 import classes from "./LeaderboardPage.module.css";
-import { useToast } from "../../feedback/ToastProvider";
 import { useStoredState } from "../../../useStoredState";
 import {
   Avatar,
   Button,
+  Dialog,
   EmptyState,
   ErrorState,
   Hero,
+  IconButton,
   IconTile,
   LoadingState,
   Row,
-  SectionHeader,
 } from "../../../ui";
 
 const copy = LEADERBOARD.copy;
@@ -63,7 +63,7 @@ function LeaderboardPage({
   onRetry: () => void;
   onBack: () => void;
 }) {
-  const toast = useToast();
+  const [rulesOpen, setRulesOpen] = useState(false);
   // `useStoredState` keeps every storage access in a try/catch.
   const [dismissedSeason, setDismissedSeason] = useStoredState<string | null>(
     PODIUM_DISMISSED_KEY,
@@ -73,16 +73,6 @@ function LeaderboardPage({
   const joined = board?.joined ? board : null;
   const standing = joined ? selfStanding(joined) : null;
   const nudge = joined ? nudgeKind(joined) : null;
-
-  async function handleAsk() {
-    try {
-      await navigator.clipboard.writeText(LEADERBOARD_ASK_MESSAGE);
-      toast.success(copy.askCopied);
-    } catch (err) {
-      console.error(err);
-      toast.error(copy.askCopyFailed);
-    }
-  }
 
   // Exhaustive by type: a section the contract names and this page does not
   // draw, or the reverse, fails `tsc` (`LEADERBOARD`, shared/src/contracts).
@@ -100,6 +90,13 @@ function LeaderboardPage({
           }
           onBack={onBack}
           backLabel="Back to friends"
+          actions={
+            <IconButton
+              icon="help"
+              label={copy.rulesTitle}
+              onClick={() => setRulesOpen(true)}
+            />
+          }
         />
         {joined && (
           <p className={classes.season}>
@@ -148,34 +145,11 @@ function LeaderboardPage({
         );
       }),
     nudge: () =>
-      joined && nudge === "ask" ? (
-        <div className={classes.nudge}>
-          <p className={classes.note}>{leaderboardNudge(joined.notJoined)}</p>
-          <Button
-            variant="outline"
-            icon="copy"
-            onClick={() => void handleAsk()}
-          >
-            {copy.askFriends}
-          </Button>
-        </div>
-      ) : nudge === "alone" ? (
-        <div className={classes.nudge}>
-          <p className={classes.note}>{copy.alone}</p>
-        </div>
+      joined && nudge !== null ? (
+        <p className={classes.nudge}>
+          {nudge === "ask" ? leaderboardNudge(joined.notJoined) : copy.alone}
+        </p>
       ) : null,
-    rules: () => (
-      <section className={classes.rulesSection}>
-        <SectionHeader title={copy.rulesTitle} />
-        <ul className={classes.rules}>
-          {copy.rules.split("\n").map((rule) => (
-            <li key={rule} className={classes.note}>
-              {rule}
-            </li>
-          ))}
-        </ul>
-      </section>
-    ),
   };
 
   const keys = contractSectionKeys(LEADERBOARD, "web");
@@ -201,6 +175,18 @@ function LeaderboardPage({
           )}
         </div>
       )}
+      <Dialog
+        open={rulesOpen}
+        title={copy.rulesTitle}
+        size="small"
+        onClose={() => setRulesOpen(false)}
+      >
+        <ul className={classes.rules}>
+          {copy.rules.split("\n").map((rule) => (
+            <li key={rule}>{rule}</li>
+          ))}
+        </ul>
+      </Dialog>
     </div>
   );
 }

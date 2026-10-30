@@ -18,7 +18,7 @@
 // send writes the recipient a notification and both verbs resolve it,
 // avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
-// The leaderboard row is drawn only for someone who has joined it: for anyone
+// The leaderboard button is drawn only for someone who has joined it: for anyone
 // else nothing here mentions it, and the way in is the switch in Settings
 // (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
 //
@@ -51,7 +51,8 @@ import {
   type SectionKeysOn,
   friendSearchHint,
   LEADERBOARD,
-  leaderboardRowSubtitle,
+  leaderboardBadge,
+  leaderboardButtonLabel,
   selfStanding,
   type LeaderboardResponse,
 } from "@logjam/shared";
@@ -69,9 +70,7 @@ import {
   Dialog,
   EmptyState,
   Hero,
-  Icon,
   IconButton,
-  IconTile,
   ListEnd,
   Menu,
   Row,
@@ -286,6 +285,24 @@ function FriendsPanel({
     bucket,
   });
 
+  function leaderboardButton() {
+    // `false` from the server outranks the cached preference: the user left
+    // on another device since this session fetched it.
+    if (!leaderboardOptIn || board?.joined === false) return null;
+    const standing = board?.joined ? selfStanding(board) : null;
+    return (
+      <IconButton
+        icon="leaderboard"
+        label={leaderboardButtonLabel(standing)}
+        badge={standing && leaderboardBadge(standing.rank, standing.size)}
+        onClick={() => {
+          loadBoard();
+          setLeaderboardOpen(true);
+        }}
+      />
+    );
+  }
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
@@ -293,41 +310,20 @@ function FriendsPanel({
       <Hero
         title={FRIENDS.title}
         actions={
-          <Button
-            compact
-            variant="outline"
-            icon="addFriend"
-            onClick={() => setAddOpen(true)}
-          >
-            {copy.add}
-          </Button>
+          <>
+            {leaderboardButton()}
+            <Button
+              compact
+              variant="outline"
+              icon="addFriend"
+              onClick={() => setAddOpen(true)}
+            >
+              {copy.add}
+            </Button>
+          </>
         }
       />
     ),
-    leaderboard: () => {
-      // `false` from the server outranks the cached preference: the user left
-      // on another device since this session fetched it.
-      if (!leaderboardOptIn || board?.joined === false) return null;
-      const standing = board?.joined ? selfStanding(board) : null;
-      return (
-        <div className={classes.leaderboard}>
-          <Row
-            leading={<IconTile icon="leaderboard" hue="var(--color-accent)" />}
-            title={LEADERBOARD.title}
-            subtitle={
-              standing
-                ? leaderboardRowSubtitle(standing.rank, standing.size)
-                : undefined
-            }
-            trailing={<Icon idea="disclosure" size={18} aria-hidden />}
-            onOpen={() => {
-              loadBoard();
-              setLeaderboardOpen(true);
-            }}
-          />
-        </div>
-      );
-    },
     buckets: () => (
       // The selection bar takes the rail's slot at the rail's height, so the
       // list does not move when a selection starts (DESIGN.md).

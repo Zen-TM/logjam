@@ -63,7 +63,7 @@ function SettingsPanel({
   onCurrentUserChange,
 }: {
   currentUser: TUser | null;
-  /** The saved user, so what reads it elsewhere (Friends' leaderboard row)
+  /** The saved user, so what reads it elsewhere (Friends' leaderboard button)
    *  follows a switch here without a reload. */
   onCurrentUserChange: (user: TUser) => void;
   // Custom trip-log field definitions (App-level state, shared with the trip

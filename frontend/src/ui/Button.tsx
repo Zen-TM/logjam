@@ -107,6 +107,7 @@ export function IconButton({
   tone = "default",
   size = 18,
   round = false,
+  badge,
   disabled,
   disabledReason,
   className,
@@ -127,6 +128,9 @@ export function IconButton({
      *  is concentric with the pill's end and neither hover nor focus crosses its
      *  edge. */
     round?: boolean;
+    /** A short number on the glyph's corner, in the accent. Hidden from
+     *  assistive tech, so `label` must say it too (DESIGN.md §5). */
+    badge?: string | null;
     ref?: Ref<HTMLButtonElement>;
   }) {
   // The same rule as `Button`: with a reason it stays focusable, and the
@@ -154,6 +158,11 @@ export function IconButton({
       onClick={explained ? undefined : rest.onClick}
     >
       <Icon idea={icon} size={size} />
+      {badge && (
+        <span className={classes.badge} aria-hidden>
+          {badge}
+        </span>
+      )}
     </button>
   );
   if (!explained) return button();

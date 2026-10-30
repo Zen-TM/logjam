@@ -1,14 +1,7 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LEADERBOARD,
-  LEADERBOARD_ASK_MESSAGE,
   LEADERBOARD_SETTING,
   leaderboardNudge,
   leaderboardPodiumLine,
@@ -18,10 +11,15 @@ import {
 
 import LeaderboardPage from "./LeaderboardPage";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
-vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
-
 const copy = LEADERBOARD.copy;
+
+// jsdom has no modal dialog: the rules open in one.
+HTMLDialogElement.prototype.showModal = function () {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function () {
+  this.removeAttribute("open");
+};
 
 afterEach(() => {
   cleanup();
@@ -98,7 +96,6 @@ describe("LeaderboardPage", () => {
     show(board({ entries: [entry("alice", 3, 1, true)] }));
     expect(screen.queryByRole("img", { name: /medal/ })).toBeNull();
     expect(screen.getByText(copy.alone)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: copy.askFriends })).toBeNull();
   });
 
   // Mutation: mark every row, or none.
@@ -109,19 +106,21 @@ describe("LeaderboardPage", () => {
     expect(marks[0].closest("[data-selected]")?.textContent).toContain("alice");
   });
 
-  it("names who has not joined and copies the message to ask them", async () => {
-    const writeText = vi.fn(() => Promise.resolve());
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  it("names who has not joined", () => {
     show(board({ notJoined: ["erin", "frank"] }));
-
     expect(screen.getByText(leaderboardNudge(["erin", "frank"]))).toBeTruthy();
     expect(screen.queryByText(copy.alone)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: copy.askFriends }));
+  });
 
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(copy.askCopied),
+  // Mutation: draw the rules on the page again, where a long board buries them.
+  it("keeps the rules behind the hero's button", () => {
+    show(board());
+    expect(screen.queryByRole("listitem")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: copy.rulesTitle }));
+    expect(screen.getByRole("dialog", { name: copy.rulesTitle })).toBeTruthy();
+    expect(screen.getAllByRole("listitem")).toHaveLength(
+      copy.rules.split("\n").length,
     );
-    expect(writeText).toHaveBeenCalledWith(LEADERBOARD_ASK_MESSAGE);
   });
 
   // Mutation: forget the stored season, or key it by anything but the
@@ -160,7 +159,6 @@ describe("LeaderboardPage", () => {
       screen.getByText(/You came first/),
       screen.getByText("dave"),
       screen.getByText(leaderboardNudge(["erin"])),
-      screen.getByRole("heading", { name: copy.rulesTitle }),
     ];
     for (let i = 1; i < inOrder.length; i += 1) {
       expect(
@@ -168,9 +166,6 @@ describe("LeaderboardPage", () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
-    expect(screen.getAllByRole("listitem")).toHaveLength(
-      copy.rules.split("\n").length,
-    );
   });
 
   // Mutation: treat `{ joined: false }` as still loading, and the page spins

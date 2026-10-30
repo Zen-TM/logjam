@@ -8,7 +8,8 @@ import {
   leaderboardHeroTitle,
   leaderboardNudge,
   leaderboardPodiumLine,
-  leaderboardRowSubtitle,
+  leaderboardBadge,
+  leaderboardButtonLabel,
   leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   noFriendsMatch,
@@ -976,8 +977,13 @@ describe("the snap words", () => {
 
 describe("the leaderboard", () => {
   it("says where the user stands, and a board of one as such", () => {
-    expect(leaderboardRowSubtitle(2, 4)).toBe("You're #2 of 4");
-    expect(leaderboardRowSubtitle(1, 1)).toBe("Just you so far");
+    expect(leaderboardBadge(2, 4)).toBe("2");
+    expect(leaderboardBadge(1, 1)).toBeNull();
+    expect(leaderboardButtonLabel({ rank: 2, size: 4 })).toBe(
+      "Leaderboard, you're #2 of 4",
+    );
+    expect(leaderboardButtonLabel({ rank: 1, size: 1 })).toBe("Leaderboard");
+    expect(leaderboardButtonLabel(null)).toBe("Leaderboard");
     expect(leaderboardHeroTitle(2, 4)).toBe("#2 of 4");
     expect(leaderboardHeroTitle(1, 1)).toBe("Just you so far");
     expect(leaderboardSeasonLine("2026–27")).toBe("2026–27 season");

@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRIENDS, LEADERBOARD } from "@logjam/shared";
+import { FRIENDS } from "@logjam/shared";
 
 import { getLeaderboard, sendFriendRequest } from "../../../placeUtils";
 import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
@@ -143,8 +143,8 @@ describe("sending a request from the Add dialog", () => {
 });
 
 // Off, the feature is invisible: nothing on Friends mentions it, and it asks
-// the server nothing. Mutation: draw the row whatever the switch says.
-describe("the leaderboard row on Friends", () => {
+// the server nothing. Mutation: draw the button whatever the switch says.
+describe("the leaderboard button on Friends", () => {
   function show(leaderboardOptIn: boolean) {
     render(
       <FriendsPanel
@@ -160,7 +160,7 @@ describe("the leaderboard row on Friends", () => {
 
   it("is absent for someone who has not joined", () => {
     show(false);
-    expect(screen.queryByText(LEADERBOARD.title)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Leaderboard/ })).toBeNull();
     expect(getLeaderboard).not.toHaveBeenCalled();
   });
 
@@ -170,15 +170,20 @@ describe("the leaderboard row on Friends", () => {
     show(true);
     await waitFor(() => expect(getLeaderboard).toHaveBeenCalled());
     await waitFor(() =>
-      expect(screen.queryByText(LEADERBOARD.title)).toBeNull(),
+      expect(screen.queryByRole("button", { name: /Leaderboard/ })).toBeNull(),
     );
   });
 
-  it("says where a joined user stands and opens the board in place", async () => {
+  // Mutation: drop the rank from the button's name, and the badge says it to
+  // no one using a screen reader.
+  it("wears a joined user's rank and opens the board in place", async () => {
     show(true);
-    expect(await screen.findByText("You're #2 of 2")).toBeTruthy();
+    const button = await screen.findByRole("button", {
+      name: "Leaderboard, you're #2 of 2",
+    });
+    expect(button.textContent).toBe("2");
 
-    fireEvent.click(screen.getByRole("button", { name: LEADERBOARD.title }));
+    fireEvent.click(button);
     expect(
       await screen.findByRole("heading", { name: "#2 of 2" }),
     ).toBeTruthy();
