@@ -187,6 +187,7 @@ async function redeemInvite(token: unknown, callerId: string) {
       });
       await tx.notification.deleteMany({
         where: {
+          userId: { in: [friendship.requesterId, friendship.addresseeId] },
           type: "friend_request",
           payload: { path: ["friendshipId"], equals: id },
         },
