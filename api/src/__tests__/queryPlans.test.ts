@@ -30,7 +30,7 @@ app.use(errorHandler);
 
 // Each GET route, by its template, and the requests that exercise it as
 // alice; a `:name` in a request is a seeded id looked up in beforeAll.
-const READ_PATHS: Record<string, string[]> = {
+const READ_PATHS: Record<string, [string, ...string[]]> = {
   "/users/me": ["/users/me"],
   "/place-types": ["/place-types"],
   "/places": ["/places"],
@@ -63,7 +63,6 @@ const READ_PATHS: Record<string, string[]> = {
   "/topo-jobs/completed-overlays": ["/topo-jobs/completed-overlays"],
   "/topo-jobs/:id": [`/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`],
   "/sync/delta": ["/sync/delta"],
-  "/vector-style": ["/vector-style"],
 };
 
 // The GETs not EXPLAINed, and why. On the seed's few rows the planner drives
@@ -72,6 +71,7 @@ const READ_PATHS: Record<string, string[]> = {
 const LEFT_OUT: Record<string, string> = {
   "/meta": "server constants; no database",
   "/meta/min-mobile-version": "server constants; no database",
+  "/vector-style": "reads only the caller's user row, as every GET does",
   "/users/me/export": "the full export reads every table by design",
   "/friends/search": "a substring match reads every username by design",
   "/file-sends/inbox": "on the seed, driven from all file_sends",
@@ -115,7 +115,10 @@ beforeAll(async () => {
     prisma.customFieldDef.findFirstOrThrow({
       where: { ownerId: ALICE_ID, entity: "place" },
     }),
-    prisma.topoExportJob.findFirstOrThrow({ where: { userId: ALICE_ID } }),
+    // Completed: only a finished export reaches the egress-quota read.
+    prisma.topoExportJob.findFirstOrThrow({
+      where: { userId: ALICE_ID, status: "completed" },
+    }),
   ]);
   seededIds[":friendship"] = friendship.id;
   seededIds[":trip"] = trip.id;
@@ -196,8 +199,9 @@ describe("key read paths use an index", () => {
   });
 });
 
-// Mutation: add a GET to any router, or rename one, and this turns red.
-it("every GET route is EXPLAINed or left out for a reason", () => {
+// Reads the router.get routes of ROUTER_MOUNTS; /health and /ready sit in
+// index.ts and read no table. Mutation: add a router.get, or rename one.
+it("every router GET is EXPLAINed or left out for a reason", () => {
   type Layer = { route?: { path: string; methods: Record<string, boolean> } };
   const routes = ROUTER_MOUNTS.flatMap(([mount, router]) =>
     (router as unknown as { stack: Layer[] }).stack

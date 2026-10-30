@@ -72,7 +72,7 @@ logjam/
 │       ├── services/       # prisma, awsClients, email, ...
 │       ├── __tests__/      # integration tests (need a running local API)
 │       ├── boot.ts         # prod entrypoint (resolve DB secret, migrate, start)
-│       └── index.ts        # app bootstrap + route registration
+│       └── index.ts        # app bootstrap; mounts routes/mounts.ts
 ├── frontend/               # React 19 + Vite + MapLibre + MUI
 │   └── src/
 │       ├── components/      # map, sidebar, dialogs, ...
