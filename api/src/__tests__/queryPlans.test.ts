@@ -37,8 +37,10 @@ import {
 // read path that must scan one whole is the thing to fix. The paths are the
 // GETs Logjam Web and Logjam GPS call on load, on the map and in sync. Left
 // out: the full export and /friends/search (a substring match on usernames)
-// read whole tables by design, and on the seed's two file sends the planner
-// drives /file-sends/inbox from file_sends, which a real table would not.
+// read whole tables by design. On the seed's few rows the planner drives
+// /file-sends/inbox from file_sends and /friends/leaderboard's canyon count
+// from every Canyon place, reading the other side whole, where real tables
+// start from the caller's own rows; no index is missing.
 // Mutation: drop notifications_user_id_idx and GET /notifications turns red.
 
 const app = express()
@@ -78,7 +80,6 @@ const READ_PATHS = [
   "/friends",
   "/friends/requests",
   "/friends/:friendship/shares",
-  "/friends/leaderboard",
   "/topo-jobs",
   "/topo-jobs/completed-overlays",
   `/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`,
@@ -107,6 +108,9 @@ const explainer = new pg.Client({ connectionString: databaseUrlFromEnv() });
 const seededIds: Record<string, string> = {};
 beforeAll(async () => {
   await explainer.connect();
+  // A fresh cluster plans an unanalyzed table as at least ten pages until
+  // autovacuum first reaches it, so a plan could flip partway through CI.
+  await explainer.query("ANALYZE");
   const [friendship, trip] = await Promise.all([
     prisma.friendship.findFirstOrThrow({
       where: {
