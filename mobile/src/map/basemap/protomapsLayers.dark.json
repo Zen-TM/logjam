@@ -6,16 +6,9 @@
     "flavor": "dark",
     "lang": "en",
     "fontStacks": ["Noto Sans Italic", "Noto Sans Medium", "Noto Sans Regular"],
-    "generatedAt": "2026-07-23"
+    "generatedAt": "2026-10-30"
   },
   "layers": [
-    {
-      "id": "background",
-      "type": "background",
-      "style": {
-        "backgroundColor": "#34373d"
-      }
-    },
     {
       "id": "earth",
       "type": "fill",
