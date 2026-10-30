@@ -7,9 +7,9 @@
 // - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
 //   in placeRegistry.ts, Wi-Fi by default.
 // - SYNC: a few kilobytes of JSON, and the river gauge feed (about 300 KB
-//   gzipped, at most every 5 minutes in the foreground), ALLOWED on mobile data by default — a queued
-//   trip log that waits for Wi-Fi is a trip log that is only on one phone when
-//   it matters.
+//   gzipped, at most every 5 minutes in the foreground), ALLOWED on mobile
+//   data by default — a queued trip log that waits for Wi-Fi is a trip log
+//   that is only on one phone when it matters.
 //
 // The check is `isConnectionExpensive`, the platform's own answer, not
 // `type === "cellular"`: a metered hotspot is Wi-Fi by type and mobile data by

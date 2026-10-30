@@ -59,11 +59,8 @@ async function run(): Promise<GaugeLatestFile | null> {
     const file = parseGaugeLatest(JSON.parse(text));
     if (!file) return null;
     await cacheGauges(text, epoch).catch(() => {});
-    // A wipe mid-fetch dropped the write: nothing is kept, so nothing is fresh.
-    if (gaugesEpoch() === epoch) {
-      lastOkAt = Date.now();
-      lastOkEpoch = epoch;
-    }
+    lastOkAt = Date.now();
+    lastOkEpoch = epoch;
     return file;
   } catch {
     return null;

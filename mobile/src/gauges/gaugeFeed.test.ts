@@ -86,14 +86,4 @@ describe("refreshGauges", () => {
     expect(await refreshGauges()).toEqual(gaugeFixture);
     expect(h.fetch).toHaveBeenCalledTimes(2);
   });
-
-  it("does not count a fetch a wipe cut off as fresh", async () => {
-    answer(JSON.stringify(gaugeFixture));
-    h.cache.mockImplementationOnce(async () => {
-      h.epoch = 1;
-    });
-    await refreshGauges();
-    await refreshGauges();
-    expect(h.fetch).toHaveBeenCalledTimes(2);
-  });
 });

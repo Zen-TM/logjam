@@ -31,7 +31,11 @@ export function useGauges(enabled: boolean): {
     );
     const load = () =>
       refreshGauges().then((fresh) => live && fresh && setFile(fresh));
-    void Promise.all([read, load()]).then(() => live && setSettled(true));
+    void Promise.all([read, load()]).then(() => {
+      if (!live) return;
+      setNow(Date.now());
+      setSettled(true);
+    });
     // Only while in front: no timer behind a dark screen (ADR 0013).
     let tick: ReturnType<typeof setInterval> | undefined;
     const startTick = () => {

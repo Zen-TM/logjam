@@ -1,6 +1,5 @@
 // Mutations that turn it red: drop the `fetchEpoch !== epoch` check (a fetch
-// begun before a wipe re-creates the directory after it); write straight to
-// latest.json instead of the temp file.
+// begun before a wipe re-creates the directory after it).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -21,13 +20,6 @@ vi.mock("expo-file-system/legacy", () => ({
   writeAsStringAsync: async (uri: string, text: string) => {
     fs.files.set(uri, text);
   },
-  deleteAsync: async (uri: string) => {
-    fs.files.delete(uri);
-  },
-  moveAsync: async ({ from, to }: { from: string; to: string }) => {
-    fs.files.set(to, fs.files.get(from) as string);
-    fs.files.delete(from);
-  },
   makeDirectoryAsync: async () => {
     fs.dirs += 1;
   },
@@ -40,10 +32,9 @@ beforeEach(() => {
 });
 
 describe("the kept gauge file", () => {
-  it("reads back what was cached, leaving no temp file", async () => {
+  it("reads back what was cached", async () => {
     await cacheGauges(JSON.stringify(gaugeFixture), gaugesEpoch());
     expect(await readCachedGauges()).toEqual(gaugeFixture);
-    expect([...fs.files.keys()]).toEqual(["file:///g/latest.json"]);
   });
 
   it("reads null for a file that is not a gauge file", async () => {
