@@ -26,6 +26,7 @@ import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
 import {
   ChipRail,
+  Dialog,
   IconButton,
   IconTile,
   Popover,
@@ -355,6 +356,7 @@ export function TerrainPane({
   sharpenedCount: number | null;
   onOpenSharpened: () => void;
 }) {
+  const [legendOpen, setLegendOpen] = useState(false);
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
@@ -408,11 +410,18 @@ export function TerrainPane({
           title={terrainCopy.vegetation}
           subtitle={terrainCopy.vegetationHint}
           trailing={
-            <Toggle
-              checked={layers.vegetation}
-              onChange={(on) => onChange("vegetation", on)}
-              label="Show vegetation"
-            />
+            <>
+              <IconButton
+                icon="help"
+                label={terrainCopy.vegetationAbout}
+                onClick={() => setLegendOpen(true)}
+              />
+              <Toggle
+                checked={layers.vegetation}
+                onChange={(on) => onChange("vegetation", on)}
+                label="Show vegetation"
+              />
+            </>
           }
         />
       ) : null,
@@ -433,6 +442,13 @@ export function TerrainPane({
   return (
     <div className={classes.body}>
       {contractSectionKeys(MAP_TERRAIN, "web").map((key) => panes[key]())}
+      <Dialog
+        open={legendOpen}
+        title={terrainCopy.vegetation}
+        onClose={() => setLegendOpen(false)}
+      >
+        <p>{terrainCopy.vegetationLegend}</p>
+      </Dialog>
     </div>
   );
 }

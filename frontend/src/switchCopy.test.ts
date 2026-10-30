@@ -9,29 +9,15 @@ import {
   SWITCH_COPY_MAX,
 } from "@logjam/shared";
 
-// A switch's label and hint keep to `SWITCH_COPY_MAX` (shared/DESIGN.md). The
-// rows over it before the limit existed are listed, and the list only
-// shrinks: a row shortened is deleted from it.
+// A switch's label and hint keep to `SWITCH_COPY_MAX` (shared/DESIGN.md).
 //
-// Mutations that turn it red: lengthen `LEADERBOARD_SETTING.label` in
-// shared/src/contracts/leaderboard.ts past 20 characters; shorten a row
-// listed in OVER without deleting its line.
+// Mutation that turns it red: lengthen `LEADERBOARD_SETTING.label` in
+// shared/src/contracts/leaderboard.ts past 20 characters.
 const SRC = dirname(fileURLToPath(import.meta.url));
 const SWITCHES = [{ tag: "SwitchRow", label: "title", hint: "description" }];
 
-const OVER: [file: string, text: string][] = [
-  [
-    "components/sidebar/panels/PlaceFilterSheet.tsx",
-    "Include places missing this info",
-  ],
-  [
-    "components/sidebar/panels/TripLogFilterSheet.tsx",
-    "Include trips missing this info",
-  ],
-];
-
 describe("switch copy", () => {
-  it("keeps to the limit, apart from the rows listed", () => {
+  it("keeps to the limit", () => {
     const files = readdirSync(SRC, { recursive: true })
       .map(String)
       .filter((f) => f.endsWith(".tsx") && !f.includes(".test."))
@@ -50,14 +36,11 @@ describe("switch copy", () => {
     // such prop would type as `any` and pass unmeasured.
     expect(measured.map((m) => m.text)).toContain(LEADERBOARD_SETTING.label);
 
-    // Arrays, not sets: one text on two rows is two lines of OVER.
-    const key = ([file, text]: [string, string]) => `${file}: "${text}"`;
     expect(
       measured
         .filter((m) => m.text.length > SWITCH_COPY_MAX[m.role])
-        .map((m) => key([relative(SRC, m.file), m.text]))
-        .sort(),
-      `over ${SWITCH_COPY_MAX.label}/${SWITCH_COPY_MAX.hint} characters, or listed in OVER and now within them`,
-    ).toEqual(OVER.map(key).sort());
+        .map((m) => `${relative(SRC, m.file)}:${m.line}: "${m.text}"`),
+      `over ${SWITCH_COPY_MAX.label}/${SWITCH_COPY_MAX.hint} characters`,
+    ).toEqual([]);
   }, 30_000);
 });

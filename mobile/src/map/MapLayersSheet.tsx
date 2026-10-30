@@ -61,6 +61,7 @@ import {
   ChipRail,
   Toggle,
   Icon,
+  IconButton,
   type Glyph,
   SwitchRow,
 } from "../ui";
@@ -163,6 +164,14 @@ export function MapLayersSheet({
   const styles = useStyles();
 
   const [tab, setTab] = useState<Tab>("basemap");
+  // The vegetation legend: a sub-mode of this sheet, never a second one
+  // (DESIGN.md), reset whenever the sheet opens or closes.
+  const [legend, setLegend] = useState(false);
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    setLegend(false);
+  }
   const online = connectivity === "online";
 
   // Exhaustive by type: a tab the contract names and this sheet does not
@@ -183,6 +192,7 @@ export function MapLayersSheet({
         online={online}
         artifacts={artifacts}
         hasVegetation={hasVegetation}
+        onOpenLegend={() => setLegend(true)}
       />
     ),
     overlays: () => <LayersTab layers={layers} onImportFile={onImportFile} />,
@@ -200,7 +210,19 @@ export function MapLayersSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={MAP_LAYERS.title}>
+    <BottomSheet
+      visible={visible}
+      // The legend backs out to the Terrain tab, not out of the sheet.
+      onClose={legend ? () => setLegend(false) : onClose}
+      onBack={legend ? () => setLegend(false) : undefined}
+      title={legend ? MAP_TERRAIN.copy.vegetation : MAP_LAYERS.title}
+      // Over the tab rather than in place of it, so the sheet keeps its height.
+      overlay={
+        legend ? (
+          <Text style={styles.legend}>{MAP_TERRAIN.copy.vegetationLegend}</Text>
+        ) : null
+      }
+    >
       <View style={styles.rail}>
         <ChipRail
           options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
@@ -284,6 +306,7 @@ function TerrainTab({
   online,
   artifacts,
   hasVegetation,
+  onOpenLegend,
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
@@ -293,6 +316,7 @@ function TerrainTab({
   artifacts: readonly MapArtifact[];
   /** A sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
+  onOpenLegend: () => void;
 }) {
   const styles = useStyles();
   const rows = {
@@ -319,15 +343,23 @@ function TerrainTab({
         ];
       }),
     ),
+    // The help button sits beside the row, not inside it: the whole row is
+    // one switch to a screen reader, which would swallow a button within.
     vegetation: hasVegetation ? (
-      <SwitchRow
-        key="vegetation"
-        title={MAP_TERRAIN.copy.vegetation}
-        description={MAP_TERRAIN.copy.vegetationHint}
-        style={styles.itemRow}
-        checked={layers.vegetation}
-        onChange={(on) => onChange("vegetation", on)}
-      />
+      <View key="vegetation" style={styles.trailing}>
+        <SwitchRow
+          title={MAP_TERRAIN.copy.vegetation}
+          description={MAP_TERRAIN.copy.vegetationHint}
+          style={[styles.itemRow, styles.grow]}
+          checked={layers.vegetation}
+          onChange={(on) => onChange("vegetation", on)}
+        />
+        <IconButton
+          icon="help"
+          accessibilityLabel={MAP_TERRAIN.copy.vegetationAbout}
+          onPress={onOpenLegend}
+        />
+      </View>
     ) : null,
   } as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
   return (
@@ -539,7 +571,7 @@ function OfflineTab({
         icon="offline"
         hue={assetHue.region}
         title="Offline maps only"
-        description="Use only saved maps, even with signal"
+        description="Even when you have signal"
         descriptionNumberOfLines={2}
         checked={offlineOnly}
         onChange={onOfflineOnlyChange}
@@ -582,6 +614,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   itemRow: { minHeight: controlSize.lg, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  grow: { flex: 1 },
+  legend: { ...textRole.body, color: theme.text },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {

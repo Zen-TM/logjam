@@ -20,7 +20,7 @@
 // them to go stale.
 //
 // ONE ROW HERE IS ACCOUNT-SCOPED, and it is the exception the page states rather
-// than hides: "Photos with copied places" lives on the user record
+// than hides: "Copy photos too" lives on the user record
 // (`uiPreferences.copyPlaceMedia`) because the SERVER reads it — it is the
 // fallback when a copy request does not say, which is what lets Logjam Web
 // honour a choice made here. It is on THIS page rather than a page of its own
@@ -192,7 +192,7 @@ export function OfflineSettingsScreen({
         <SectionHeader title="Fetch automatically" />
         <PreferenceRow
           icon="lidar"
-          title="Finished sharpened areas"
+          title="Sharpened areas"
           subtitle={
             needsAccount("autoTopo")
               ? accountText
@@ -239,7 +239,7 @@ export function OfflineSettingsScreen({
             so Logjam Web — which has no switch of its own — follows it too. */}
         <PreferenceRow
           icon="photo"
-          title="Photos with copied places"
+          title="Copy photos too"
           subtitle={
             copyMediaBlocked ??
             "Copies a shared place's photos and files into your storage too."

@@ -32,7 +32,10 @@ export const MAP_TERRAIN = {
     hillshade: "Hillshade",
     vegetation: "Vegetation",
     sharpenedAreas: "Sharpened areas",
-    vegetationHint:
+    vegetationHint: "Scrub density for bushbashing",
+    // Behind the Vegetation row's help button, titled with its label.
+    vegetationAbout: "About vegetation",
+    vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange crosshatching is ground burnt since the survey.",
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
