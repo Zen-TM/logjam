@@ -125,7 +125,11 @@ curl -u test:test --upload-file shared/src/__fixtures__/nsw-5m-z15-katoomba.pmti
 ```
 
 The vector basemap (`master/basemap/protomaps-nsw.pmtiles`) has no local source,
-so it 404s and the map has no base layer.
+so it 404s and the map has no base layer. To try one new file on the real
+basemap, upload just that file, run `node scripts/dev-master.mjs`, and use
+`http://127.0.0.1:4567` for both settings: it serves what's in the local bucket
+and takes the rest from the prod CDN. On a phone, also run
+`adb reverse tcp:4567 tcp:4567`.
 
 ### Command reference
 

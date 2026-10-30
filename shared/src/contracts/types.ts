@@ -4,8 +4,10 @@
 // A client RENDERS from its contract: a `Record<SectionKeysOn<…>, renderer>`
 // iterated in `contractSectionKeys` order, with every word read from `copy`.
 // A contract a client is only tested against would be a third copy of the UI.
-// `contracts.test.ts` holds the rules a declaration must meet; each client has
-// one parity test per contract asserting its renderer map is exactly the set.
+// `contracts.test.ts` holds the rules a declaration must meet. The `Record` is
+// the parity check: `tsc` refuses a missing or an extra key. A map at module
+// level also gets a test (`placesContracts.test.ts`); one that closes over
+// component state cannot be imported, so the `Record` is its only check.
 
 export type ContractPlatform = "web" | "gps";
 
