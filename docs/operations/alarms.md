@@ -172,8 +172,11 @@ was made by hand).
 
 The river gauge files ([0044](../decisions/0044-river-gauges-are-public-files-from-waternsw-and-bom.md))
 are written by the ECS task `logjam-gauges`, which EventBridge Scheduler starts
-every two hours from its own schedule group. A failed run publishes nothing:
-`master/gauges/v1/latest.json` stays as it was, and clients show its age. The
+every two hours from its own schedule group. A run that fails before publishing
+(key, no hot readings, refusing to publish) leaves
+`master/gauges/v1/latest.json` as it was, and clients show its age. A cold
+sweep that fails part way publishes the hot readings first, then exits
+non-zero. The
 task reads WaterNSW's key from the Secrets Manager secret
 `logjam/waternsw-api-key`, whose value is set by hand. Its quota is 29 calls a
 day: do not start extra runs.

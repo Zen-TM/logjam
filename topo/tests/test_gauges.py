@@ -177,9 +177,8 @@ class TestReadings(unittest.TestCase):
 class TestQuota(unittest.TestCase):
     def test_hot_and_cold_fit_the_daily_quota(self):
         # Mutation: raise MAX_HOT or MAX_GAUGES past the ceiling of 20 hot and
-        # 279 gauges (25 calls a day at the ceiling, 26 with 7 hot) or past what
-        # 29 calls cover, or
-        # run the job more often than the schedule → red.
+        # 279 gauges (25 calls a day at the ceiling, 26 with 7 hot), past what
+        # 29 calls cover, or run the job more often than the schedule → red.
         self.assertLessEqual(g.calls_per_day(g.MAX_HOT, g.MAX_GAUGES), g.CALLS_PER_DAY)
         gauges = g.load_gauges()
         self.assertLessEqual(
@@ -418,10 +417,13 @@ class TestRun(unittest.TestCase):
         # A first run that swept nothing is swept again by the next.
         first = FakeS3()
         self.run_failing_on("900002", first)
+        # Mutation: drop the `if swept` guard around sweep_history → red; a
+        # total failure would make about 280 BoM calls on every retry.
+        self.assertFalse([k for k in first.store if "/history/" in k])
         self.assertTrue(g.needs_sweep(first.doc("latest.json"), NOW))
 
     def test_the_cold_sweep_runs_once_a_day(self):
-        # Mutation: sweep on every run → red; 13 more calls each run.
+        # Mutation: sweep on every run → red; 14 more calls each run.
         s3 = FakeS3()
         run_with(s3, FIXTURE_GAUGES, self.fresh)
         calls = []

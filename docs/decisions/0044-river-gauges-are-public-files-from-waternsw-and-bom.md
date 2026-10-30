@@ -47,7 +47,10 @@ service.**
   ceiling is 20 hot and 279 gauges. Guard: `topo/tests/test_gauges.py` ("hot
   and cold fit the daily quota"), which fails if either is exceeded or the
   quota is. A cold chunk that fails stops the sweep, the hot readings are
-  still published, and the run exits non-zero so the alarm fires.
+  still published, and the run exits non-zero so the alarm fires. A sweep
+  that gets no chunk through is tried again on the next run, one call each
+  time, which leaves room for three failures on a 26-of-29 day. That is
+  accepted: a run whose hot call fails stops before the sweep.
 - **A reading of no value, or quality 255 (Data Unavailable), is dropped.**
   The portal sends those as 0.000, which would read as a dry river. Guard:
   `topo/tests/test_gauges.py` ("a q255 zero never becomes a reading").

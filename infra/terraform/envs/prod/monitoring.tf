@@ -386,8 +386,9 @@ resource "aws_cloudwatch_metric_alarm" "place_registry_not_launched" {
 
 # ── River gauges ───────────────────────────────────────────────────────────
 
-# A failed run leaves the published readings as they were; clients show their
-# age. One failure alarms: the job runs every two hours, and a key or a
+# A run that fails before publishing leaves the readings as they were, and
+# clients show their age; a cold sweep failing part way publishes the hot
+# readings first, then exits non-zero. One failure alarms: the job runs every two hours, and a key or a
 # WaterNSW outage should be known before the readings go a day stale.
 resource "aws_cloudwatch_log_metric_filter" "gauges_failures" {
   name           = "logjam-gauges-failures"
@@ -403,7 +404,7 @@ resource "aws_cloudwatch_log_metric_filter" "gauges_failures" {
 
 resource "aws_cloudwatch_metric_alarm" "gauges_failed" {
   alarm_name        = "logjam-gauges-failed"
-  alarm_description = "The river gauges job stopped with a non-zero exit or failed to start; the published readings are unchanged and getting older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.gauges.name}. ${local.alarms_doc}"
+  alarm_description = "The river gauges job stopped with a non-zero exit or failed to start; the published readings may be unchanged and getting older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.gauges.name}. ${local.alarms_doc}"
 
   namespace   = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].namespace
   metric_name = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].name
