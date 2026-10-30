@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAP_TERRAIN, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import { TerrainPane } from "./LayersPopover";
 
+// jsdom has no modal <dialog>; the kit's Dialog calls both.
+HTMLDialogElement.prototype.showModal = function showModal() {
+  this.setAttribute("open", "");
+};
+HTMLDialogElement.prototype.close = function close() {
+  this.removeAttribute("open");
+};
+
 afterEach(cleanup);
 
 const copy = MAP_TERRAIN.copy;
@@ -56,6 +64,17 @@ describe("the Terrain group on Logjam Web", () => {
     expect(screen.getAllByRole("switch")).toHaveLength(4);
     fireEvent.click(screen.getByRole("switch", { name: "Show vegetation" }));
     expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
+  });
+
+  // Mutation: drop the help button or the Dialog, and the legend the short
+  // hint stands in for is nowhere to be read.
+  it("opens the vegetation legend from the row's help button", () => {
+    draw("protomaps", undefined, true);
+    expect(screen.queryByText(copy.vegetationLegend)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: copy.vegetationAbout }));
+    expect(
+      screen.getByRole("dialog", { name: copy.vegetation }).textContent,
+    ).toContain(copy.vegetationLegend);
   });
 
   it("counts the sharpened areas and opens them", () => {

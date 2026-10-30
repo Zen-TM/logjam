@@ -202,12 +202,13 @@ export function useCopyPanel({
         {media.count > 0 ? (
           <SwitchRow
             icon="photo"
-            title={
+            // The same words as the Offline setting this choice defaults from.
+            title="Copy photos too"
+            description={`${
               media.count === 1
-                ? "Also copy 1 photo or file"
-                : `Also copy ${media.count} photos and files`
-            }
-            description={`${formatBytes(media.bytes)} of your storage.`}
+                ? "1 photo or file"
+                : `${media.count} photos and files`
+            }, ${formatBytes(media.bytes)}`}
             checked={withMedia}
             onChange={toggleMedia}
             disabled={busy}

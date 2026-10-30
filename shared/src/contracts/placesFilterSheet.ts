@@ -40,7 +40,8 @@ export const PLACES_FILTER_SHEET = {
     dates: "Dates",
     onMap: "On the map",
 
-    includeMissing: "Include places missing this info",
+    includeMissing: "Include if not set",
+    includeMissingHint: "Also show ones with no value",
     drawArea: "Draw on map",
     /** Logjam Web only: the map is in view beside the sheet. */
     areaToView: "This view",
@@ -50,7 +51,7 @@ export const PLACES_FILTER_SHEET = {
     updated: "Updated",
     dateFrom: "From",
     dateTo: "To",
-    showOnMap: "Show filtered places on the map",
+    showOnMap: "Only filtered places",
     reset: "Reset",
     done: "Done",
   },

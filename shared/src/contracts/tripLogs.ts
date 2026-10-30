@@ -103,7 +103,8 @@ export const TRIPS_FILTER_SHEET = {
     attributes: "Attributes",
     dates: "Dates",
 
-    includeMissing: "Include trips missing this info",
+    includeMissing: "Include if not set",
+    includeMissingHint: "Also show ones with no value",
     tripDate: "Trip date",
     dateFrom: "From",
     dateTo: "To",

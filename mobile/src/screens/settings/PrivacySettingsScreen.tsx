@@ -93,6 +93,9 @@ export function PrivacySettingsScreen() {
       return;
     }
     setCrashReportsState(next);
+    // The hint has room for the promise, not the timing: Sentry starts once,
+    // at launch (initSentry.ts).
+    notify("Applies the next time Logjam GPS opens.");
   }, [crashReports, notify]);
 
   // Off by default — see galleryPreference.ts for why that default is a
@@ -107,6 +110,10 @@ export function PrivacySettingsScreen() {
       return;
     }
     setSaveToGalleryState(next);
+    // Where the copies go, said once as the switch turns on; the hint keeps
+    // the part that matters every time it is read.
+    if (next)
+      notify("Copies go to your camera roll, where other apps can see them.");
   }, [saveToGallery, notify]);
 
   // ── The one account-scoped row (see the header) ──────────────────────────
@@ -169,7 +176,7 @@ export function PrivacySettingsScreen() {
           // No trailing pill beside the switch: the switch is already the
           // trailing element, and a pill next to it would force this
           // sentence to ellipsise.
-          subtitle="Asks for your fingerprint or PIN each time Logjam GPS opens."
+          subtitle="Fingerprint or PIN to open."
           value={appLockEnabled}
           ready
           onToggle={() => void toggleAppLock()}
@@ -181,7 +188,7 @@ export function PrivacySettingsScreen() {
           // user has no way to check and this app's whole premise is that
           // place locations don't leave it (scrubEvent.ts does the work,
           // guard: `mobile/src/sentry/scrubEvent.test.ts`).
-          subtitle="Place names and coordinates are removed before sending. Takes effect next launch."
+          subtitle="No place names or coordinates."
           value={crashReports}
           ready
           onToggle={toggleCrashReports}
@@ -194,12 +201,11 @@ export function PrivacySettingsScreen() {
         <SectionHeader title="Photos and videos" />
         <PreferenceRow
           icon="photo"
-          title="Save photos to your gallery"
-          // Says the consequence, which is the part a switch label can't: the
-          // copy is out of Logjam's storage and its backup exclusion, and
-          // nothing here can take it back.
-          subtitle="A copy of anything you shoot in Logjam GPS goes to your camera roll."
-          subtitleNumberOfLines={2}
+          title="Save to gallery"
+          // The consequence, which a switch label can't say: the copy leaves
+          // Logjam's storage for one other apps read. Where it goes is the
+          // toast on turning it on.
+          subtitle="Other apps can see the copies."
           value={saveToGallery}
           ready
           onToggle={toggleSaveToGallery}

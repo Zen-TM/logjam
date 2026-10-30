@@ -421,11 +421,7 @@ export function useCustomFieldForm({
           <SwitchRow
             icon="filter"
             title="Limit to a range"
-            description={
-              bounded
-                ? "Values must be between the min and max you set"
-                : "Any number"
-            }
+            description={bounded ? "Between your min and max" : "Any number"}
             checked={bounded}
             onChange={(next) => patch({ bounded: next })}
           />

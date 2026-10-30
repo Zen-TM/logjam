@@ -110,6 +110,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         {/* With the attributes because it widens only them. */}
         <SwitchRow
           title={copy.includeMissing}
+          description={copy.includeMissingHint}
           checked={filters.include_unknowns}
           onChange={(next) => patch({ include_unknowns: next })}
         />

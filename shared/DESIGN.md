@@ -22,6 +22,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |
 | Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
+| How long a switch's label and hint may be: about two lines on a phone | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
@@ -302,8 +303,6 @@ renumber.
   control's is its hint. How a screen or feature works is behind a `help`
   button in the hero, or beside what it explains where there is no hero. An
   empty state may explain.
-- **A switch's label is at most 20 characters, its hint at most 30**: two
-  lines on a phone.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
