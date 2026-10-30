@@ -13,8 +13,9 @@ import {
   type TerrainBand,
 } from "./terrainJobs";
 
-/** Past this, a helper adds start-up and memory more than speed. */
-const MAX_HELPERS = 7;
+/** Each helper holds a band's buffers and a heap of its own: past three, a
+ *  large print's peak memory grows faster than the render speeds up. */
+const MAX_HELPERS = 3;
 
 /** Helpers worth starting on this device: one core left for the render worker. */
 export function helperCount(): number {
@@ -34,12 +35,14 @@ type Queued = {
   job: TerrainJob;
   resolve: (r: Result) => void;
   reject: (e: unknown) => void;
+  /** A helper already failed on this job. */
+  failedOnce?: boolean;
 };
 
 export type PoolOptions = {
   /** Helpers to start; default `helperCount()`. */
   count?: number;
-  /** Test hook: the first helper throws on its first job. */
+  /** Test hook: the helper given the first band throws on it. */
   failFirst?: boolean;
 };
 
@@ -52,12 +55,16 @@ export class TerrainPool {
   private idle: Worker[] = [];
   private queue: Queued[] = [];
   private running = new Map<Worker, Queued>();
-  private failNext = new Set<Worker>();
+  /** Jobs for this thread: ones that failed on two helpers, and all of them once none is left. */
+  private here: Queued[] = [];
+  private failBand: boolean;
   private hereBusy = false;
+  private terminated = false;
   /** Bands a helper drew (not redone here): what a test checks the pool did. */
   helperBands = 0;
 
   constructor({ count = helperCount(), failFirst = false }: PoolOptions = {}) {
+    this.failBand = failFirst;
     for (let i = 0; i < count; i++) {
       let worker: Worker;
       try {
@@ -86,7 +93,6 @@ export class TerrainPool {
         this.fallBack(worker);
       };
       worker.onmessageerror = () => this.fallBack(worker);
-      if (failFirst && i === 0) this.failNext.add(worker);
       this.helpers.push(worker);
       this.idle.push(worker);
     }
@@ -107,6 +113,8 @@ export class TerrainPool {
 
   private add(job: TerrainJob): Promise<Result> {
     return new Promise((resolve, reject) => {
+      // Ended: the render is over, and nothing waits for this.
+      if (this.terminated) return;
       this.queue.push({ job, resolve, reject });
       this.pump();
     });
@@ -123,11 +131,13 @@ export class TerrainPool {
         this.fallBack(worker);
       }
     }
-    if (this.helpers.length === 0 && this.queue.length > 0) this.runQueueHere();
+    if (this.helpers.length === 0) this.here.push(...this.queue.splice(0));
+    if (this.here.length > 0) this.runHereSoon();
   }
 
   private post(worker: Worker, job: TerrainJob) {
-    const fail = this.failNext.delete(worker);
+    const fail = this.failBand && job.kind === "band";
+    if (fail) this.failBand = false;
     if (job.kind === "decode") {
       // Copied, not moved: the tile cache may still be writing these bytes.
       worker.postMessage({ job, fail });
@@ -142,12 +152,12 @@ export class TerrainPool {
     );
   }
 
-  /** With no helper, the queue runs here, a job a task, so other work interleaves. */
-  private runQueueHere() {
+  /** Jobs for this thread run one a task, so other work interleaves. */
+  private runHereSoon() {
     if (this.hereBusy) return;
     this.hereBusy = true;
     setTimeout(async () => {
-      const next = this.queue.shift();
+      const next = this.here.shift();
       if (next) {
         try {
           next.resolve(await runHere(next.job));
@@ -156,7 +166,7 @@ export class TerrainPool {
         }
       }
       this.hereBusy = false;
-      if (this.queue.length > 0) this.runQueueHere();
+      if (this.here.length > 0) this.runHereSoon();
     }, 0);
   }
 
@@ -164,18 +174,28 @@ export class TerrainPool {
     this.helpers = this.helpers.filter((w) => w !== worker);
     this.idle = this.idle.filter((w) => w !== worker);
     worker.terminate();
-    // What this helper held goes back to the front of the queue, for another
-    // helper or, with none left, this thread.
+    // What this helper held goes back to the front of the queue for another
+    // helper. A job that has now failed on two runs here instead, so one that
+    // always kills its helper (out of memory on a large band) cannot end them
+    // all; if it fails here too, the render fails.
     const held = this.running.get(worker);
     this.running.delete(worker);
-    if (held) this.queue.unshift(held);
+    if (held?.failedOnce) this.here.push(held);
+    else if (held) {
+      held.failedOnce = true;
+      this.queue.unshift(held);
+    }
     this.pump();
   }
 
+  /** Ends the helpers. Work still pending is dropped unsettled: only the
+   *  render worker's own end calls this, and nothing then waits for it. */
   terminate() {
+    this.terminated = true;
     for (const w of this.helpers) w.terminate();
     this.helpers = [];
     this.idle = [];
     this.queue = [];
+    this.here = [];
   }
 }

@@ -6,8 +6,10 @@
     <title>GeoPDF bench</title>
   </head>
   <body>
-    <!-- Dev only: Vite builds index.html alone, so this is never shipped.
-         Renders fixed, made-up extents and shows where the time went; see
+    <!-- Dev only: only `vite build --mode bench` builds this page, so it is
+         never shipped. Renders fixed, made-up extents and shows where the
+         time went. Time it from that build (`npx vite preview --mode bench`),
+         not the dev server, which roughly doubles the terrain time; see
          src/geoPdf/bench.ts. -->
     <h1>GeoPDF bench</h1>
     <p>

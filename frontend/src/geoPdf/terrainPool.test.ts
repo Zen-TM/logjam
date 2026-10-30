@@ -55,16 +55,16 @@ function fakeHelpers(): Fake[] {
 }
 
 describe("TerrainPool", () => {
-  it("leaves a single core to do the work itself, and starts no more than seven", () => {
+  it("leaves a single core to do the work itself, and starts no more than three", () => {
     vi.stubGlobal("navigator", { hardwareConcurrency: 1 });
     expect(helperCount()).toBe(0);
-    vi.stubGlobal("navigator", { hardwareConcurrency: 4 });
-    expect(helperCount()).toBe(3);
+    vi.stubGlobal("navigator", { hardwareConcurrency: 3 });
+    expect(helperCount()).toBe(2);
     vi.stubGlobal("navigator", { hardwareConcurrency: 64 });
-    expect(helperCount()).toBe(7);
+    expect(helperCount()).toBe(3);
   });
 
-  // Mutation: let the constructor's error out, or drop `runQueueHere`: a
+  // Mutation: let the constructor's error out, or drop `runHereSoon`: a
   // browser that will not start a worker from a worker draws nothing.
   it("does the work here when no helper can start", async () => {
     vi.stubGlobal(
@@ -130,5 +130,121 @@ describe("TerrainPool", () => {
     const done = await running;
     expect(done[0]).toEqual(runTerrainBand(band()));
     expect(done[1]).toEqual(runTerrainBand(band()));
+  });
+
+  const errorEvent = () => ({
+    defaultPrevented: false,
+    preventDefault() {
+      this.defaultPrevented = true;
+    },
+  });
+
+  // Mutation: requeue a job however often it has failed (the second helper
+  // gets it too and dies with it), or never run a twice-failed job here.
+  it("runs a job that has killed two helpers here instead of handing it to a third", async () => {
+    const made = fakeHelpers();
+    const pool = new TerrainPool({ count: 3 });
+    const job = pool.band(band());
+    expect(made.map((h) => h.posted.length)).toEqual([0, 0, 1]);
+    made[2]!.onerror!(errorEvent());
+    expect(made.map((h) => h.posted.length)).toEqual([0, 1, 1]);
+    made[1]!.onerror!(errorEvent());
+    // Not given to the last helper: done here.
+    expect(made[0]!.posted).toHaveLength(0);
+    expect(await job).toEqual(runTerrainBand(band()));
+    expect(pool.size).toBe(1);
+    pool.terminate();
+  });
+
+  // Mutation: fail the first job of any kind (the hook then lands on a
+  // decode, and e2e's "helper fails" case no longer requeues a band).
+  it("fails the first band with the test hook, not the decode posted before it", () => {
+    const made = fakeHelpers();
+    const pool = new TerrainPool({ count: 2, failFirst: true });
+    void pool.decode(new ArrayBuffer(4));
+    void pool.band(band());
+    const fails = made.flatMap((h) =>
+      h.posted.map((m) => {
+        const { job, fail } = m as { job: { kind: string }; fail: boolean };
+        return [job.kind, fail];
+      }),
+    );
+    expect(fails).toEqual(
+      expect.arrayContaining([
+        ["decode", false],
+        ["band", true],
+      ]),
+    );
+    pool.terminate();
+  });
+
+  // Mutation: drop the `unshift` in fallBack (the decode is lost and never
+  // settles).
+  it("hands a decode a failed helper held to another helper", async () => {
+    const made = fakeHelpers();
+    const pool = new TerrainPool({ count: 2 });
+    const bytes = new ArrayBuffer(8);
+    const decoded = pool.decode(bytes);
+    expect(made[1]!.posted).toHaveLength(1);
+    made[1]!.onerror!(errorEvent());
+    expect(made[0]!.posted).toEqual([
+      { job: { kind: "decode", bytes }, fail: false },
+    ]);
+    const values = new Float32Array([1, 2]);
+    made[0]!.onmessage!({ data: { result: values } });
+    expect(await decoded).toBe(values);
+    expect(pool.helperBands).toBe(0);
+    pool.terminate();
+  });
+
+  // Mutation: let decodeTerrainTile's error out (junk bytes reject the
+  // render) or send decodes to runTerrainBand in `runHere`.
+  it("decodes here with no helper: a tile to its values, junk to null", async () => {
+    vi.stubGlobal(
+      "Worker",
+      class {
+        constructor() {
+          throw new Error("no nested workers");
+        }
+      },
+    );
+    // terrarium (128, 0, 0) is 0 m, (128, 1, 128) is 1.5 m.
+    const pixels = new Uint8ClampedArray(256 * 256 * 4);
+    pixels.set([128, 0, 0, 255, 128, 1, 128, 255]);
+    vi.stubGlobal("createImageBitmap", async (blob: Blob) => {
+      if (blob.size < 8) throw new Error("not an image");
+      return { close() {} };
+    });
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return {
+            clearRect() {},
+            drawImage() {},
+            getImageData: () => ({ data: pixels }),
+          };
+        }
+      },
+    );
+    const pool = new TerrainPool({ count: 2 });
+    expect(pool.size).toBe(0);
+    const values = await pool.decode(new ArrayBuffer(8));
+    expect([...values!.subarray(0, 2)]).toEqual([0, 1.5]);
+    expect(await pool.decode(new ArrayBuffer(2))).toBeNull();
+  });
+
+  // Mutation: drop the `terminated` check in `add` (with no helper left the
+  // band would run here and settle).
+  it("takes no work once ended", async () => {
+    const made = fakeHelpers();
+    const pool = new TerrainPool({ count: 1 });
+    pool.terminate();
+    expect(made[0]!.terminate).toHaveBeenCalled();
+    let settled = false;
+    void pool.band(band()).finally(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(settled).toBe(false);
+    expect(made[0]!.posted).toHaveLength(0);
   });
 });

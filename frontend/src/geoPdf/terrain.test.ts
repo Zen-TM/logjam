@@ -622,8 +622,8 @@ describe("resampleGrid", () => {
     ).toBe(true);
   });
 
-  // The four-pixel blend resampleGrid was first written as, kept here so the
-  // separable one is checked against it.
+  // Reference four-pixel bilinear; resampleGrid must match it to within a
+  // level.
   function fourPixelBilinear(
     src: Uint8ClampedArray,
     srcW: number,
@@ -669,20 +669,32 @@ describe("resampleGrid", () => {
     return out;
   }
 
-  // Blending each grid row across first groups the sums differently, which
-  // could move a byte only where a value sits within ~1e-13 of a rounding
-  // tie; on these grids, none does. Mutation: swap the weights of the two
-  // rows (gy and fy), or keep the upper row when moving down a grid row.
-  it("blends as the four-pixel bilinear, edges, exact scales and clear pixels included", () => {
-    for (const p of [
-      place,
-      { scaleX: 2, scaleY: 2, offsetX: 0, offsetY: 0 },
-      { scaleX: 1.99998, scaleY: 1.99996, offsetX: -0.7, offsetY: 3.2 },
-      { scaleX: 0.8, scaleY: 1.5, offsetX: 1.1, offsetY: 2.6 },
-    ]) {
-      expect(resampleGrid(grid, W, H, 0, p, true, outW, 0, outH)).toEqual(
-        fourPixelBilinear(grid, W, H, p, outW, outH),
-      );
+  // resampleGrid blends each grid row across first, which rounds a level
+  // differently from the four-pixel blend on whole columns where one axis's
+  // fraction is exactly dyadic and the other's is not (the last placement,
+  // on a grid whose grey alternates 10 and 11 by column). Mutation: swap the
+  // weights of the two rows (gy and fy), or keep the upper row when moving
+  // down a grid row.
+  it("blends as the four-pixel bilinear to within a level, edges and clear pixels included", () => {
+    const columns = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < W * H; i++) {
+      const g = (i % W) % 2 ? 11 : 10;
+      columns.set([g, g, g, 255], i * 4);
+    }
+    const cases: [Uint8ClampedArray, typeof place][] = [
+      [grid, place],
+      [grid, { scaleX: 2, scaleY: 2, offsetX: 0, offsetY: 0 }],
+      [grid, { scaleX: 1.99998, scaleY: 1.99996, offsetX: -0.7, offsetY: 3.2 }],
+      [grid, { scaleX: 0.8, scaleY: 1.5, offsetX: 1.1, offsetY: 2.6 }],
+      [columns, { scaleX: 2, scaleY: 3.1, offsetX: 0.25, offsetY: 7.9 }],
+    ];
+    for (const [src, p] of cases) {
+      const got = resampleGrid(src, W, H, 0, p, true, 80, 0, outH);
+      const want = fourPixelBilinear(src, W, H, p, 80, outH);
+      let worst = 0;
+      for (let i = 0; i < got.length; i++)
+        worst = Math.max(worst, Math.abs(got[i]! - want[i]!));
+      expect(worst).toBeLessThanOrEqual(1);
     }
   });
 

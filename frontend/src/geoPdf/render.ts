@@ -829,11 +829,11 @@ async function renderInner(
    * work through this strip's encode too; no further ahead, as a strip's
    * bands are a canvas's worth of RGBA per layer.
    */
-  const terrainOf = new Map<number, Promise<TerrainBands | null>[]>();
+  const terrainOf = new Map<number, (Promise<TerrainBands | null> | null)[]>();
   const startTerrain = (strip: Strip) => {
     let work = terrainOf.get(strip.index);
     if (!work) {
-      work = terrainPlans.map(async (p) => {
+      const started = terrainPlans.map(async (p) => {
         await Promise.all(
           p.blocks[strip.index]!.reads.map(
             (r) => p.entries.get(terrainReadKey(r))!.promise,
@@ -844,7 +844,8 @@ async function renderInner(
       });
       // Awaited in layer order when drawn; an abort first must not leave a
       // rejection unheard.
-      for (const w of work) w.catch(() => {});
+      for (const w of started) w.catch(() => {});
+      work = started;
       terrainOf.set(strip.index, work);
     }
     return work;
@@ -886,8 +887,17 @@ async function renderInner(
     timings.fetchWaitMs += performance.now() - waitStart;
 
     const drawStart = performance.now();
-    // Time in the draw spent waiting for base tiles: counted as fetch wait.
+    // Time in the draw spent waiting for tiles: counted as fetch wait.
     let drawWaitMs = 0;
+    const waitFor = async (batch: TileEntry[]) => {
+      const start = performance.now();
+      await Promise.all(batch.map((e) => e.promise));
+      check();
+      const waited = performance.now() - start;
+      timings.fetchWaitMs += waited;
+      drawWaitMs += waited;
+      return waited;
+    };
     let canvas: OffscreenCanvas;
     let ctx: Ctx | null;
     try {
@@ -914,13 +924,7 @@ async function renderInner(
       const rows = myBase.filter((e) => reachesRows(e.rect, top, bottom));
       for (let i = 0; i < rows.length; i += DECODE_BATCH) {
         const batch = rows.slice(i, i + DECODE_BATCH);
-        const waiting = performance.now();
-        await Promise.all(batch.map((e) => e.promise));
-        check();
-        const waited = performance.now() - waiting;
-        timings.fetchWaitMs += waited;
-        drawWaitMs += waited;
-        mark += waited;
+        mark += await waitFor(batch);
         const images = await Promise.all(
           batch.map(async (e) => {
             const bytes = await e.promise!;
@@ -942,6 +946,8 @@ async function renderInner(
       for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
         const bands = await terrainWork[i]!;
+        // Let go as soon as drawn; the other layer's may still be painting.
+        terrainWork[i] = null;
         check();
         if (bands) {
           scratch ??= new OffscreenCanvas(nativeW, canvasH);
@@ -966,11 +972,9 @@ async function renderInner(
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
-      // Drawn: the bands are let go before the next strip's are painted.
       terrainOf.delete(strip.index);
-      terrainWork.length = 0;
-      const next = strips[strip.index + 1];
-      if (next) startTerrain(next);
+      if (scratch) scratch.width = scratch.height = 0;
+      scratch = null;
 
       // 3. Contour lines, then vegetation, then the labels over both.
       mark = performance.now();
@@ -981,6 +985,7 @@ async function renderInner(
         const mine = entries.filter((e) => reachesRows(e.rect, top, bottom));
         for (let i = 0; i < mine.length; i += DECODE_BATCH) {
           const batch = mine.slice(i, i + DECODE_BATCH);
+          mark += await waitFor(batch);
           const images = await Promise.all(
             batch.map(async (e) => {
               const bytes = await e.promise!;
@@ -1060,12 +1065,10 @@ async function renderInner(
 
       // 5. The strip must have drawn: Safari fails a canvas past its limit
       // silently, reading back transparent black.
-      // Crop the halo off. The terrain scratch canvas is let go first, so no
-      // more canvases are alive than peakCanvasPx counts.
+      // Crop the halo off. The terrain scratch canvas is already let go, so
+      // no more canvases are alive than peakCanvasPx counts.
       let out = canvas;
       if (span.above > 0) {
-        if (scratch) scratch.width = scratch.height = 0;
-        scratch = null;
         cropped = new OffscreenCanvas(nativeW, strip.renderHeight);
         const cctx = cropped.getContext("2d");
         if (!cctx) throw new TooLarge();

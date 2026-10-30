@@ -159,11 +159,10 @@ export function hillshadePixels(
   const hi = 127 / 255;
   const T = DEM_NO_DATA_BELOW;
 
-  // The loop is written for a browser that runs it unoptimised (Android's
-  // Advanced Protection turns Chrome's JavaScript optimiser off, and the
-  // render is then several times slower): no call it can avoid, each height
-  // read once. The arithmetic is the original's, step for step, so the bytes
-  // are too (terrain.test.ts, "the faster terrain loops").
+  // Written for an engine that does not optimise it (a browser with its
+  // JavaScript optimiser off runs it several times slower): no call it can
+  // avoid, each height read once. Guard for the bytes: `originalHillshade`
+  // in terrain.test.ts ("the faster terrain loops").
   for (let y = rect.y0; y < rect.y1; y++) {
     const lat = tileY2lat(tileY + (y + rowOffset + 0.5) / TILE_SIZE, zoom);
     const cosLat = Math.cos(lat * DEG_TO_RAD);
@@ -596,14 +595,13 @@ export function resampleGrid(
     xb[px] = clamp(x0 + 1, 0, maxX) * 4;
   }
   // Separable: each grid row is blended across once, into premultiplied
-  // alpha and grey, and an output row blends the two rows it falls between.
-  // A grid row serves about two output rows on each side, so this is about
-  // half the work of blending four pixels per output pixel, which matters
-  // most where the browser does not optimise (see hillshadePixels). The sums
-  // are the four-pixel blend's, grouped differently: a byte can differ only
-  // where a value falls within about 1e-13 of a rounding tie, by one level
-  // (none in 26 M bytes of a made-up hillshade). Guard: terrain.test.ts,
-  // "blends as the four-pixel bilinear".
+  // alpha and grey, and an output row blends the two rows it falls between,
+  // so one row's blend serves the output rows on both sides of it. The sums
+  // are the four-pixel blend's, grouped differently, so a byte can round a
+  // level differently from it, on whole rows or columns where one axis's
+  // fraction is exactly dyadic (0.5, 0.25, ...) and the other's is not.
+  // Guard: terrain.test.ts, "blends as the four-pixel bilinear to within a
+  // level".
   let alphaA = new Float64Array(outW);
   let greyA = new Float64Array(outW);
   let alphaB = new Float64Array(outW);

@@ -57,6 +57,8 @@ export function bandRows(
   };
 }
 
+let paintBuffer = new Uint8ClampedArray(0);
+
 /** Paint and resample one band: RGBA for `outH` rows of `outW`. */
 export function runTerrainBand(job: TerrainBand): Uint8ClampedArray {
   const rows = job.values.length / job.width;
@@ -74,7 +76,12 @@ export function runTerrainBand(job: TerrainBand): Uint8ClampedArray {
     job.outY,
     job.outH,
   );
-  const out = new Uint8ClampedArray(job.values.length * 4);
+  // The painted pixels are read once, by the resample below, so one buffer
+  // serves every band this thread paints: a helper then leaves no band-sized
+  // garbage behind it but the rows it was sent.
+  const size = job.values.length * 4;
+  if (paintBuffer.length < size) paintBuffer = new Uint8ClampedArray(size);
+  const out = paintBuffer.subarray(0, size).fill(0);
   const pixels =
     job.kind === "hillshade"
       ? hillshadePixels(grid, job.zoom, job.tileY, out, job.gridRow0, rect)

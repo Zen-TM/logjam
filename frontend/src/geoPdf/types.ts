@@ -37,7 +37,7 @@ export type RenderDebug = {
   noPool?: boolean;
   /** Start this many helpers whatever the cores, so a test does not depend on the runner. */
   poolSize?: number;
-  /** The first helper throws on its first band. */
+  /** The helper given the first band throws on it. */
   failHelper?: boolean;
   /** Return the map's pixels as drawn, before JPEG. */
   collectPixels?: boolean;
