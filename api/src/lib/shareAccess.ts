@@ -357,6 +357,21 @@ export async function directlySharedIds(
 }
 
 /**
+ * Ids of the places shared with this user. Inside an OR, use them as an
+ * `id IN` / `placeId IN` arm, not a `shares: { some }` relation filter: that
+ * arm is a correlated EXISTS no index serves, so the whole OR scans its table.
+ * Alone, as in GET /places/shared, the relation filter is fine. Guard:
+ * queryPlans.test.ts.
+ */
+export async function sharedPlaceIdsFor(userId: string): Promise<string[]> {
+  const rows = await prisma.placeShare.findMany({
+    where: { sharedWithId: userId },
+    select: { placeId: true },
+  });
+  return rows.map((row) => row.placeId);
+}
+
+/**
  * Everyone a direct share of this entity currently reaches. Feeds the
  * tombstone fan-out on delete, so the recipients forget the row rather than
  * keeping it in their mirror forever.
