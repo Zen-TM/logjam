@@ -39,8 +39,9 @@ export function chainBeforeIds(
  * bottom). Without the remount, after a switch from imagery to the vector
  * map the contour lines, still chained to each other, stay over its roads
  * and labels; and offline, a newly saved area's stack, the one the Terrain
- * group anchors in, mounts under an older one's opaque background. Mounted
- * together, the stacks go in `basemaps` order, the first on top.
+ * group anchors in, mounts under an older one, whose tiles hide the Terrain
+ * group where the two overlap. Mounted together, the stacks go in `basemaps`
+ * order, the first on top.
  * Guard: layerOrder.test.ts ("basemapMountKeys", and "MapScreen keys its
  * stacks and the Terrain group by basemapMountKeys").
  */

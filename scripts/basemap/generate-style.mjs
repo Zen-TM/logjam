@@ -97,7 +97,11 @@ for (const flavorName of ["light", "dark"]) {
     );
   }
 
-  const converted = layerList.map((layer) => ({
+  // Logjam GPS mounts one stack per saved area, so a stack's `background`
+  // would hide every stack under it; the shell style paints the one background.
+  // Guard: mobile/src/map/basemap/protomapsLayers.test.ts.
+  const stack = layerList.filter((layer) => layer.type !== "background");
+  const converted = stack.map((layer) => ({
     id: layer.id,
     type: layer.type,
     ...(layer["source-layer"] && { sourceLayer: layer["source-layer"] }),

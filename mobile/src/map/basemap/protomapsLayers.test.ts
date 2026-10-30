@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 
 import { protomapsLayerDefs, type ProtomapsFlavor } from "./protomapsLayers";
 
+// Mutation: drop the filter in generate-style.mjs and regenerate, and offline
+// the top saved area's stack paints over every other saved area.
+describe.each<ProtomapsFlavor>(["light", "dark"])(
+  "the %s basemap Logjam GPS draws",
+  (flavor) => {
+    it("paints only where a tile has data, so one saved area's stack shows through another's", () => {
+      expect(
+        protomapsLayerDefs(flavor).map((layer) => layer.type),
+      ).not.toContain("background");
+    });
+  },
+);
+
 // Mutation: rename an anchor, regenerate the style without it, or pick one the
 // roads or labels sit under, and the Terrain group waits for a layer that
 // never mounts, or draws over them.

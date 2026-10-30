@@ -1,10 +1,6 @@
 // Mounts the generated Protomaps basemap layer set as MLRN components:
 // the shell style stays empty, the resolver supplies the source, and these
 // layers bind to it declaratively.
-//
-// The generated set's `background` layer mounts at the bottom of the band
-// (land colour under the tiles), above the shell's own background at index 0,
-// and unmounts cleanly with the rest on basemap swap.
 import { memo } from "react";
 import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 
@@ -22,7 +18,7 @@ export function protomapsLayerCount(flavor: ProtomapsFlavor): number {
 /**
  * A basemap layer's id on the map: its style id under its source's. Layer ids
  * must be unique across the whole map, and offline the stack mounts ONCE PER
- * DOWNLOADED REGION: every stack emitting the same fixed `pm-background`,
+ * DOWNLOADED REGION: every stack emitting the same fixed `pm-earth`,
  * `pm-water`, … would mean the second saved vector region collides with the
  * first and never draws. The source id is already unique per region.
  */
@@ -49,11 +45,8 @@ function layerComponent(
     layerIndex,
     type: def.type,
     style: def.style,
-    // A background layer has no source; everything else binds to the one the
-    // resolver mounted.
-    ...(def.type === "background"
-      ? {}
-      : { source: sourceID, "source-layer": def.sourceLayer }),
+    source: sourceID,
+    "source-layer": def.sourceLayer,
     ...(def.filter && { filter: def.filter }),
     ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
     ...(def.maxzoom !== undefined && { maxzoom: def.maxzoom }),
