@@ -237,8 +237,11 @@ describe("a sharee of a place of the sender's own type", () => {
           (p) => p.id === id,
         )?.fieldDefsSnapshot as { key: string }[] | undefined
       )?.map((d) => d.key);
-    expect(keysOf(places[0].id)).toEqual(["alice_only"]);
-    expect(keysOf(places[1].id)).toEqual(["carol_only"]);
+    // Each also carries its owner's fields that apply to every type.
+    expect(keysOf(places[0].id)).toContain("alice_only");
+    expect(keysOf(places[0].id)).not.toContain("carol_only");
+    expect(keysOf(places[1].id)).toContain("carol_only");
+    expect(keysOf(places[1].id)).not.toContain("alice_only");
   });
 
   it("gets NO snapshot for a system type, which it already holds", async () => {
