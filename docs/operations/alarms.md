@@ -17,10 +17,12 @@ that goes wrong between deploys.
 |---|---|---|
 | `logjam-api-5xx` | The API logged 10 or more 5xx responses in two of the last three 5-minute windows | Did a deploy just run? If its smoke test failed, check the automatic rollback finished. If a release is to blame, roll it back |
 | `logjam-api-environment-degraded` | Elastic Beanstalk reported the API environment Degraded or Severe in every minute for 10 minutes | Read the environment's health causes. If a deploy just ran, roll it back. Otherwise look for a crash loop in the API log |
-| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
+| `logjam-worker-failures` | Three or more worker tasks (topo, topo export, pre-deploy migrate, place registry, gauges) stopped with a non-zero exit or failed to start within an hour | Read `/aws/events/logjam-worker-failures` for which task, its exit code and ECS's reason, then that worker's own log group |
 | `logjam-topo-stuck-task` | Some task in `logjam-cluster` (any family) has been running in every hour of the last six | Find the job, check whether the reaper stopped it, stop the task by hand if not |
 | `logjam-place-registry-failed` | The monthly place registry build stopped with a non-zero exit or failed to start | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-place-registry` |
 | `logjam-place-registry-not-launched` | EventBridge Scheduler's call to start the monthly build returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
+| `logjam-gauges-failed` | The river gauges job stopped with a non-zero exit or failed to start; the published readings are getting older | Read `/aws/events/logjam-worker-failures` for its exit code and ECS's reason, then `/ecs/logjam-gauges` |
+| `logjam-gauges-not-launched` | EventBridge Scheduler's call to start the gauges job returned an error | Check whether a retry started the task anyway; if not, read the `RunTask` error in CloudTrail |
 | `logjam-rds-free-storage-low` | The database has less than 4 GiB free | Storage autoscaling should grow it; check it did, and what is filling it |
 | `logjam-rds-cpu-high` | Database CPU above 90% for 15 minutes | Look for a slow or runaway query, and whether a recent release added it |
 | `logjam-pgaudit-delivery-stalled` | No database audit records reached the audit stream in 24 hours | Check the RDS log export and the subscription filter in `infra/terraform/envs/prod/audit.tf` |
@@ -165,3 +167,38 @@ re-evaluates. If none arrives, check the topic's subscription is confirmed:
 `aws sns list-subscriptions-by-topic --topic-arn <topic arn>` (the topic is
 the only thing here Terraform does not fully own: its email subscription
 was made by hand).
+
+## River gauges
+
+The river gauge files ([0044](../decisions/0044-river-gauges-are-public-files-from-waternsw-and-bom.md))
+are written by the ECS task `logjam-gauges`, which EventBridge Scheduler starts
+every two hours from its own schedule group. A failed run publishes nothing:
+`master/gauges/v1/latest.json` stays as it was, and clients show its age. The
+task reads WaterNSW's key from the Secrets Manager secret
+`logjam/waternsw-api-key`, whose value is set by hand. Its quota is 29 calls a
+day: do not start extra runs.
+
+### `logjam-gauges-failed`
+
+A metric filter on `/aws/events/logjam-worker-failures` counts the task's
+non-zero exits and failed starts.
+
+1. Read `/aws/events/logjam-worker-failures`: `detail.containers[0].exitCode`
+   and `detail.stoppedReason`. "ResourceInitializationError ... secret" means
+   the secret has no value yet, or the execution role cannot read it.
+2. Read `/ecs/logjam-gauges`. "WATERNSW_API_KEY is not set" or a 401 means the
+   key is missing or expired: put a new value in the secret. "returned no
+   usable hot readings" means WaterNSW answered with nothing: wait for the next
+   run. "refusing to publish" means `topo/gauges.json` lost most of its gauges.
+3. Do not rerun by hand in a loop: each run spends calls from the day's 29.
+
+### `logjam-gauges-not-launched`
+
+EventBridge Scheduler's `TargetErrorCount` for the `logjam-gauges` schedule
+group. Any target error alarms, including one a retry got past.
+
+1. Look in ECS for a `logjam-gauges` task started after the alarm; if one ran,
+   this was a passing error.
+2. If none ran, find the `RunTask` call by the role `logjam-gauges-scheduler` in
+   CloudTrail and read its error: a role, subnet or task definition problem,
+   fixed in Terraform.

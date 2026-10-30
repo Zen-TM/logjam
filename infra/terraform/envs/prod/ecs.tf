@@ -404,3 +404,96 @@ resource "aws_scheduler_schedule" "place_registry" {
     }
   }
 }
+
+# River gauges (ADR 0044): every two hours, read WaterNSW's latest levels and
+# flows and publish them under master/gauges/ in the topo bucket; once a day
+# also extend each gauge's history from the Bureau of Meteorology. Same image
+# as the topo workers, so pin-release.sh repins it on each topo deploy. No
+# database; its one secret is WaterNSW's API key, whose value is set by hand.
+resource "aws_secretsmanager_secret" "waternsw_api_key" {
+  name        = "logjam/waternsw-api-key"
+  description = "WaterNSW Water Data API subscription key (Basic tier, 29 calls a day). Read by the logjam-gauges task. Value set by hand, never in Terraform."
+}
+
+resource "aws_ecs_task_definition" "gauges" {
+  container_definitions = jsonencode([{
+    entryPoint = ["python3", "/app/build_gauges.py", "run"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "S3_BUCKET_TOPO"
+      value = module.topo_jobs.bucket_id
+    }]
+    essential = true
+    # Floor only — CI re-registers this def pinned to a sha (see header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.gauges.name
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    name = "gauges"
+    secrets = [{
+      name      = "WATERNSW_API_KEY"
+      valueFrom = aws_secretsmanager_secret.waternsw_api_key.arn
+    }]
+  }])
+  # The smallest Fargate size: the job holds a few hundred readings and, on
+  # the daily sweep, one gauge's history at a time. Its time goes in waiting
+  # on the APIs' rate limits, not in CPU or memory.
+  cpu                      = "256"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  family                   = "logjam-gauges"
+  memory                   = "512"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.gauges.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+}
+
+# Its own schedule group: the not-launched alarm's only dimension is the group
+# (see monitoring.tf), so a shared group would mix this schedule's errors with
+# the place registry's.
+resource "aws_scheduler_schedule_group" "gauges" {
+  name = "logjam-gauges"
+}
+
+# Every two hours; build_gauges.py's RUNS_PER_DAY and the 29-calls-a-day quota
+# assume it (guard: topo/tests/test_gauges.py). Created DISABLED: applying
+# makes the schedule live before the maintainer can put the API key's value in
+# the secret, and a run without it fails every two hours. Enable it, after
+# the value is set, by changing `state` to "ENABLED" and applying.
+resource "aws_scheduler_schedule" "gauges" {
+  name                = "logjam-gauges"
+  group_name          = aws_scheduler_schedule_group.gauges.name
+  schedule_expression = "rate(2 hours)"
+  state               = "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.gauges_scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.gauges.arn_without_revision
+      launch_type         = "FARGATE"
+
+      network_configuration {
+        subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
+        security_groups  = [aws_security_group.worker.id]
+        assign_public_ip = true
+      }
+    }
+  }
+}

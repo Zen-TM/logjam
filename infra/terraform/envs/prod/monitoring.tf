@@ -383,3 +383,61 @@ resource "aws_cloudwatch_metric_alarm" "place_registry_not_launched" {
   alarm_actions = [aws_sns_topic.alerts.arn]
   ok_actions    = [aws_sns_topic.alerts.arn]
 }
+
+# ── River gauges ───────────────────────────────────────────────────────────
+
+# A failed run leaves the published readings as they were; clients show their
+# age. One failure alarms: the job runs every two hours, and a key or a
+# WaterNSW outage should be known before the readings go a day stale.
+resource "aws_cloudwatch_log_metric_filter" "gauges_failures" {
+  name           = "logjam-gauges-failures"
+  log_group_name = aws_cloudwatch_log_group.worker_failures.name
+  pattern        = "{ $.detail.group = \"family:${aws_ecs_task_definition.gauges.family}\" }"
+
+  metric_transformation {
+    namespace = "Logjam/Workers"
+    name      = "GaugesFailures"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "gauges_failed" {
+  alarm_name        = "logjam-gauges-failed"
+  alarm_description = "The river gauges job stopped with a non-zero exit or failed to start; the published readings are unchanged and getting older. First: read ${aws_cloudwatch_log_group.worker_failures.name} for its exit code and stoppedReason, then ${aws_cloudwatch_log_group.gauges.name}. ${local.alarms_doc}"
+
+  namespace   = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].namespace
+  metric_name = aws_cloudwatch_log_metric_filter.gauges_failures.metric_transformation[0].name
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}
+
+# The scheduler's RunTask call itself failed. The dimension is the schedule
+# group, which holds just this schedule: the place registry has its own.
+resource "aws_cloudwatch_metric_alarm" "gauges_not_launched" {
+  alarm_name        = "logjam-gauges-not-launched"
+  alarm_description = "EventBridge Scheduler could not launch the river gauges job (RunTask returned an error). First: check whether a ${aws_ecs_task_definition.gauges.family} task ran anyway after a retry; if not, read the RunTask error in CloudTrail (event RunTask by role ${aws_iam_role.gauges_scheduler.name}). ${local.alarms_doc}"
+
+  namespace   = "AWS/Scheduler"
+  metric_name = "TargetErrorCount"
+  dimensions = {
+    ScheduleGroup = aws_scheduler_schedule.gauges.group_name
+  }
+
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+}

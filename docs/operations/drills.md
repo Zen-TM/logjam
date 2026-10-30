@@ -50,7 +50,7 @@ note times and surprises. [rollback.md](rollback.md) has the commands.
 - [ ] **API forward:** the same with the newest sha. Time: ____
 - [ ] **Frontend back and forward.** Times: ____ / ____
 - [ ] **Worker back and forward.** `logjam-topo-worker`,
-      `logjam-topo-export-worker` and `logjam-place-registry` carry the
+      `logjam-topo-export-worker`, `logjam-place-registry` and `logjam-gauges` carry the
       chosen tag. Times: ____ / ____
 - [ ] **Refusals change nothing:** a short sha fails the sha check; a sha
       with no ECR image (or no `releases/<sha>/`) fails before any swap.
