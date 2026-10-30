@@ -13,6 +13,7 @@ import {
   resolveCopyPlaceType,
   strandValuesOnTypeChange,
 } from "../lib/placeCopy";
+import { sharedPlaceIdsFor } from "../lib/shareAccess";
 import { serializeSharedPlace } from "../lib/placeVisibility";
 import { Prisma } from "@prisma/client";
 import { getParam } from "../lib/getParam";
@@ -162,7 +163,7 @@ const router = Router();
 const LIST_TAKE = 500;
 
 // Which list a fetch is serving. This is an ACCESS decision, not a formatting
-// one — see placeListInclude.
+// one — see withPlaceListCounts.
 export type PlaceListScope = "owned" | "shared";
 
 // Per-place `_count` is OWNER-PRIVATE and rides the OWNED list only.
@@ -181,23 +182,48 @@ export type PlaceListScope = "owned" | "shared";
 // On the owned list the counts are the owner's own data: `shares` powers the
 // "shared by me" filter + card badge, `tripLogLinks` the completion filter +
 // per-row trip count.
-export function placeListInclude(
+//
+// Counted for the page's ids only: a `_count` include makes Prisma aggregate
+// the whole trip_log_places and place_shares tables. Guard: queryPlans.test.ts.
+export async function withPlaceListCounts<T extends { id: string }>(
   scope: PlaceListScope,
-): Prisma.PlaceInclude | undefined {
-  if (scope === "shared") return undefined;
-  return { _count: { select: { tripLogLinks: true, shares: true } } };
+  rows: T[],
+) {
+  if (scope === "shared") return rows;
+  const placeId = { in: rows.map((row) => row.id) };
+  const [trips, shares] = await Promise.all([
+    prisma.tripLogPlace.groupBy({
+      by: ["placeId"],
+      where: { placeId },
+      _count: { _all: true },
+    }),
+    prisma.placeShare.groupBy({
+      by: ["placeId"],
+      where: { placeId },
+      _count: { _all: true },
+    }),
+  ]);
+  const tripLogLinks = new Map(trips.map((g) => [g.placeId, g._count._all]));
+  const shareCounts = new Map(shares.map((g) => [g.placeId, g._count._all]));
+  return rows.map((row) => ({
+    ...row,
+    _count: {
+      tripLogLinks: tripLogLinks.get(row.id) ?? 0,
+      shares: shareCounts.get(row.id) ?? 0,
+    },
+  }));
 }
 
 async function fetchPlaces(
   where: Prisma.PlaceWhereInput,
   scope: PlaceListScope,
 ) {
-  return prisma.place.findMany({
+  const rows = await prisma.place.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: LIST_TAKE,
-    include: placeListInclude(scope),
   });
+  return withPlaceListCounts(scope, rows);
 }
 
 // GET /places — owned places
@@ -231,7 +257,7 @@ router.get(
 
 // GET /places/shared — places shared with me.
 // Scope "shared" drops the owner-private `_count` (trip tally + share fan-out)
-// — see placeListInclude.
+// — see withPlaceListCounts.
 router.get(
   "/shared",
   requireAuth,
@@ -262,7 +288,7 @@ router.get(
       where: {
         OR: [
           { ownerId: user.id },
-          { shares: { some: { sharedWithId: user.id } } },
+          { id: { in: await sharedPlaceIdsFor(user.id) } },
         ],
       },
       select: { id: true },

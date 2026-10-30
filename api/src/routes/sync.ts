@@ -93,6 +93,7 @@ import {
   deleteSharesFor,
   directlySharedIds,
   directShareeIds,
+  sharedPlaceIdsFor,
   shareCountsFor,
 } from "../lib/shareAccess";
 
@@ -247,11 +248,7 @@ router.get(
 
     // Visibility sets, computed ONCE per request. Never an id from the
     // request.
-    const sharedPlaceRows = await prisma.placeShare.findMany({
-      where: { sharedWithId: user.id },
-      select: { placeId: true },
-    });
-    const sharedPlaceIds = sharedPlaceRows.map((row) => row.placeId);
+    const sharedPlaceIds = await sharedPlaceIdsFor(user.id);
     // Direct per-item shares — the second, independent source of visibility
     // (lib/shareAccess.ts). Share.entityId is polymorphic so there is no
     // relation filter to express this with; the ids come back as a set.

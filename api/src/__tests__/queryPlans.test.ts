@@ -64,7 +64,10 @@ const app = express()
 const READ_PATHS = [
   "/users/me",
   "/place-types",
+  "/places",
   "/places/shared",
+  "/places/tracks",
+  "/routes",
   `/places/${SHARED_PLACE_ID}`,
   `/places/${BOB_SHARED_PLACE_ID}`,
   "/trips",
