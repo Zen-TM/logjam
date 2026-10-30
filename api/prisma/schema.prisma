@@ -774,6 +774,8 @@ model Share {
   @@index([sharedWithId, entityType])
   // "Who can see this" — the owner's recipient list, and revoke-all on delete.
   @@index([entityType, entityId])
+  // The sharer's list, and the cascade when they delete their account.
+  @@index([sharedById])
   @@map("shares")
 }
 
