@@ -478,6 +478,7 @@ function LayersTab({
   > = {
     places: () => entryRow("places"),
     ways: () => entryRow("ways"),
+    gauges: () => entryRow("gauges"),
     geoPdfs: () => entryRow("geoPdfs"),
     importFile: () => (
       <Row
