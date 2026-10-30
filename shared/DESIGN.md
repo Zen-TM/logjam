@@ -301,14 +301,16 @@ renumber.
   confused may explain itself, if every line changes what the user does next.
 - **An explanation waits until it is asked for, where the question comes up.**
   What one control means is its hint. How a whole screen or feature works
-  (its rules, how a number is counted) is behind a `help` button in its hero:
-  a dialog on Logjam Web, a sheet on Logjam GPS. An empty state may explain,
+  (its rules, how a number is counted) is behind a `help` button, opening a
+  dialog on Logjam Web and a sheet on Logjam GPS: in the hero where the screen
+  has one, otherwise beside the thing it explains. An empty state may explain,
   having nothing else to show. Never a section of the page: on a long list it
   ends up where nobody looks.
 - **A switch's label is at most 20 characters and its hint at most 30**, so
   the row is two lines on a phone. Over that, the label has become a sentence
   or the hint a rule: keep what changes the user's choice, and move the rest
-  behind help.
+  behind help. Review holds it: switch copy lives in contracts, expressions
+  and literals alike, out of any one scan's reach.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
