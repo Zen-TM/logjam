@@ -3,10 +3,12 @@
 // paints the DEM rows it reads and resamples them onto its map rows with the
 // same functions the whole strip would use, so the bands put side by side are
 // the bytes of the strip done in one piece (terrainJobs.test.ts holds that).
-import type { SlopeBand } from "@logjam/shared";
+import { TILE_SIZE, type SlopeBand } from "@logjam/shared";
 import {
+  decodeTerrarium,
   hillshadePixels,
   resampleGrid,
+  resampleReach,
   slopePixels,
   type GridPlacement,
 } from "./terrain";
@@ -59,25 +61,57 @@ export function bandRows(
 export function runTerrainBand(job: TerrainBand): Uint8ClampedArray {
   const rows = job.values.length / job.width;
   const grid = { values: job.values, width: job.width, height: rows };
-  const pixels =
-    job.kind === "hillshade"
-      ? hillshadePixels(
-          grid,
-          job.zoom,
-          job.tileY,
-          new Uint8ClampedArray(job.values.length * 4),
-          job.gridRow0,
-        )
-      : slopePixels(grid, job.bands);
-  return resampleGrid(
-    pixels,
+  const srcRow0 = job.blockRow0 + job.gridRow0;
+  // Only the pixels the resample reads are painted: the grid is whole tiles
+  // across, wider than the map.
+  const rect = resampleReach(
     job.width,
     rows,
-    job.blockRow0 + job.gridRow0,
+    srcRow0,
     job.place,
     job.smooth,
     job.outW,
     job.outY,
     job.outH,
   );
+  const out = new Uint8ClampedArray(job.values.length * 4);
+  const pixels =
+    job.kind === "hillshade"
+      ? hillshadePixels(grid, job.zoom, job.tileY, out, job.gridRow0, rect)
+      : slopePixels(grid, job.bands, out, rect);
+  return resampleGrid(
+    pixels,
+    job.width,
+    rows,
+    srcRow0,
+    job.place,
+    job.smooth,
+    job.outW,
+    job.outY,
+    job.outH,
+  );
+}
+
+let tileCtx: OffscreenCanvasRenderingContext2D | null = null;
+
+/** A terrarium PNG's values (heights or degrees), or null when it will not decode. */
+export async function decodeTerrainTile(
+  bytes: ArrayBuffer,
+): Promise<Float32Array | null> {
+  try {
+    const bmp = await createImageBitmap(new Blob([bytes]), {
+      premultiplyAlpha: "none",
+      colorSpaceConversion: "none",
+    });
+    tileCtx ??= new OffscreenCanvas(TILE_SIZE, TILE_SIZE).getContext("2d", {
+      willReadFrequently: true,
+    })!;
+    tileCtx.clearRect(0, 0, TILE_SIZE, TILE_SIZE);
+    tileCtx.drawImage(bmp, 0, 0);
+    bmp.close();
+    const { data } = tileCtx.getImageData(0, 0, TILE_SIZE, TILE_SIZE);
+    return decodeTerrarium(data, TILE_SIZE, TILE_SIZE).values;
+  } catch {
+    return null;
+  }
 }
