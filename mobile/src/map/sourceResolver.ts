@@ -551,8 +551,8 @@ export const holdsSlope = (
   artifact.kind === "slope-region" && artifact.logicalKey === NSW_SLOPE.id;
 
 /**
- * Whether a saved file draws in the Terrain group offline, where the layers
- * sheet has it on.
+ * Whether a saved file is one the Terrain group can draw offline, whatever
+ * its switch says.
  * Guard: `offlineMask.test.ts` ("offlineMaskBoxes").
  */
 export const drawsTerrain = (

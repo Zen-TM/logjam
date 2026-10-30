@@ -5,9 +5,9 @@
 // a soft and wrong one, over ground the phone has no real data for.
 //
 // So the map draws its own edge: a fill over everywhere EXCEPT the downloaded
-// regions, mounted directly above the basemap band. Inside a region you see
-// the tiles you saved; outside it you see that there is nothing there, which is
-// the true answer.
+// regions and saved Terrain clips (`offlineMaskBoxes`), mounted directly above
+// the basemap band. Inside a region you see the tiles you saved; outside it you
+// see that there is nothing there, which is the true answer.
 //
 // The complement is built as DISJOINT RECTANGLES, not as a world polygon with
 // a hole per region. Holes are the obvious encoding and they do not survive
