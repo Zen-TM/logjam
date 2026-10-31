@@ -71,6 +71,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
@@ -248,14 +249,13 @@ export function PickPointScreen({
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
                   sourceID={sourceIdFor(resolved.key)}
-                  startIndex={1}
                 />
               ) : (
                 <Layer
                   key={`pick-basemap-${resolved.key}`}
                   type="raster"
                   id={`pick-basemap-${resolved.key}`}
-                  layerIndex={1}
+                  beforeId={BAND_MARKERS.land}
                   style={{ rasterOpacity: 1 }}
                 />
               )}
