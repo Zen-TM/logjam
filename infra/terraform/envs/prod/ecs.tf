@@ -75,6 +75,12 @@ resource "aws_ecs_task_definition" "api_script" {
       name  = "NODE_ENV"
       value = "production"
       }, {
+      name  = "OIDC_AUDIENCE"
+      value = "545ofbb8l9d1sl6ggbmk6oonn9"
+      }, {
+      name  = "OIDC_ISSUER"
+      value = "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_x5zPhJXMk"
+      }, {
       name  = "S3_BUCKET_MEDIA"
       value = "logjam-media"
       }, {
