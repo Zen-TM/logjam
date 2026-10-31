@@ -33,6 +33,7 @@ import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { wipeAllSyncData } from "../sync/syncDb";
+import { stopGaugesForWipe } from "../gauges/gaugeStorage";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
@@ -90,6 +91,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
     stoppedInTime(stopWeatherForWipe()),
+    stoppedInTime(stopGaugesForWipe()),
     stoppedInTime(forgetSharpenedAreas()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");

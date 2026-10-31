@@ -6,9 +6,10 @@
 // - TOPO overlay auto-download: same order or larger, Wi-Fi by default.
 // - PLACE NAMES refresh: one build a month, PLACE_REGISTRY_DOWNLOAD_ESTIMATE
 //   in placeRegistry.ts, Wi-Fi by default.
-// - SYNC: a few kilobytes of JSON, ALLOWED on mobile data by default — a queued
-//   trip log that waits for Wi-Fi is a trip log that is only on one phone when
-//   it matters.
+// - SYNC: a few kilobytes of JSON, and the river gauge feed (about 300 KB
+//   gzipped, at most every 5 minutes in the foreground), ALLOWED on mobile
+//   data by default — a queued trip log that waits for Wi-Fi is a trip log
+//   that is only on one phone when it matters.
 //
 // The check is `isConnectionExpensive`, the platform's own answer, not
 // `type === "cellular"`: a metered hotspot is Wi-Fi by type and mobile data by
@@ -29,7 +30,7 @@ const KEYS: Record<MeteredJob, string> = {
   placeNames: "meteredPlaceNames",
   sync: "meteredSync",
   // Media PUTs ride this op, not `sync` — up to 30 MB an image, 500 MB a video,
-  // nothing like the "a few kilobytes of JSON" `sync` was sized for.
+  // nothing like the kilobytes of JSON (and gauge file) `sync` was sized for.
   mediaUpload: "meteredMediaUpload",
 };
 

@@ -742,7 +742,7 @@ describe("the logbook's stats", () => {
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
   // list, and each client differs only by what a row declares (`on`).
-  it("is Logjam Web's rows, less the declared Logjam Web-only gauges row, plus the phone's GeoPDF row", () => {
+  it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
@@ -753,6 +753,7 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "geoPdfs",
+      "gauges",
       "importFile",
     ]);
   });

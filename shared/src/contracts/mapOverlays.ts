@@ -16,17 +16,12 @@ export const MAP_OVERLAYS = {
     { key: "places" },
     { key: "ways" },
     {
-      key: "gauges",
-      on: "web",
-      reason:
-        "Logjam GPS adds river gauges in a later change; until then only Logjam Web draws them.",
-    },
-    {
       key: "geoPdfs",
       on: "gps",
       reason:
         "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
     },
+    { key: "gauges" },
     { key: "importFile" },
   ],
   copy: {

@@ -2,8 +2,8 @@
 // pressed. Readings, never advice: no word here calls a river safe, high or
 // runnable, and nothing is coloured by value. Guard: gauges.test.ts.
 //
-// Online only, and Logjam Web only for now: the file is public and the same
-// for everyone (ADR 0044), so there is nothing to keep per user.
+// The file is public and the same for everyone (ADR 0044), so it holds
+// nothing per user; Logjam GPS keeps its last copy for use offline.
 import { gaugeSeries, type Gauge } from "../gauges.js";
 import type { ProfileSeries } from "../profileSeries.js";
 import { PAIRED_STAT_LABELS, pairedStatLayout } from "../statPairs.js";

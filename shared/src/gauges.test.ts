@@ -3,7 +3,11 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { GAUGES, MAP_OVERLAYS } from "./contracts/index.js";
+import {
+  contractSectionKeys,
+  GAUGES,
+  MAP_OVERLAYS,
+} from "./contracts/index.js";
 import {
   formatGaugeFlow,
   formatGaugeLevel,
@@ -253,6 +257,19 @@ describe("the WaterNSW credit", () => {
     const attribution = /ATTRIBUTION = \(([^)]*)\)/.exec(builder)?.[1] ?? "";
     expect(attribution.replace(/"\s*"/g, "")).toContain(notice);
   });
+});
+
+describe("the Overlays list", () => {
+  // Mutation: move gauges above `geoPdfs` in the contract.
+  it.each(["web", "gps"] as const)(
+    "ends with the gauges, then the import, on %s",
+    (client) => {
+      expect(contractSectionKeys(MAP_OVERLAYS, client).slice(-2)).toEqual([
+        "gauges",
+        "importFile",
+      ]);
+    },
+  );
 });
 
 describe("gaugeStats", () => {
