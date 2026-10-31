@@ -186,6 +186,9 @@ jobs:
           EXPO_PUBLIC_AUTH_MODE: fake
           EXPO_PUBLIC_API_URL: http://127.0.0.1:8080
           EXPO_PUBLIC_WEB_URL: http://localhost:5173
+          # Its default is prod's CDN. The value ci.yml gives TOPO_CDN_BASE_URL;
+          # the bucket is empty, so the map shows third-party layers only.
+          EXPO_PUBLIC_TOPO_CDN_BASE_URL: http://127.0.0.1:4566/logjam-topo-local
         run: |
           npx expo start --dev-client --port 8081 > "$RUNNER_TEMP/logs/metro.log" 2>&1 &
           for _ in $(seq 1 90); do

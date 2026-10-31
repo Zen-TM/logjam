@@ -28,7 +28,7 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
-        key: dev-apk-v1-${{ inputs.legacy_root }}-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json', 'mobile/app.config.ts', 'mobile/plugins/**', 'mobile/patches/**', 'mobile/modules/**', 'mobile/maplibre/**', '.github/actions/build-dev-apk/action.yml') }}
+        key: dev-apk-v1-${{ inputs.legacy_root }}-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json', 'mobile/app.config.ts', 'mobile/assets/**', 'mobile/certs/**', 'mobile/plugins/**', 'mobile/patches/**', 'mobile/modules/**', 'mobile/maplibre/**', '.github/actions/build-dev-apk/action.yml') }}
     - if: steps.cache.outputs.cache-hit != 'true'
       uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
       with:
