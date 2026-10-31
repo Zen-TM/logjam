@@ -468,15 +468,12 @@ resource "aws_scheduler_schedule_group" "gauges" {
 }
 
 # Every two hours; build_gauges.py's RUNS_PER_DAY and the 29-calls-a-day quota
-# assume it (guard: topo/tests/test_gauges.py). Created DISABLED: applying
-# makes the schedule live before the maintainer can put the API key's value in
-# the secret, and a run without it fails every two hours. Enable it, after
-# the value is set, by changing `state` to "ENABLED" and applying.
+# assume it (guard: topo/tests/test_gauges.py).
 resource "aws_scheduler_schedule" "gauges" {
   name                = "logjam-gauges"
   group_name          = aws_scheduler_schedule_group.gauges.name
   schedule_expression = "rate(2 hours)"
-  state               = "DISABLED"
+  state               = "ENABLED"
 
   flexible_time_window {
     mode = "OFF"
