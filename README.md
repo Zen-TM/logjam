@@ -122,6 +122,7 @@ with the stack up (`test`/`test` are MiniStack's dummy credentials):
 curl -u test:test --upload-file shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles \
   http://127.0.0.1:4566/logjam-topo-local/master/dem/nsw-5m.pmtiles
 # contours: master/contours/nsw-10m.pmtiles
+# land: master/land/nsw-tenure.pmtiles
 ```
 
 The vector basemap (`master/basemap/protomaps-nsw.pmtiles`) has no local source,

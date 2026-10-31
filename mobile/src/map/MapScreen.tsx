@@ -49,6 +49,7 @@ import {
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
   type ColorReliefLayerSpecification,
+  type FillLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -85,6 +86,9 @@ import {
   type TrackPass,
   drawsNswContours,
   drawsNswHillshade,
+  landFillColor,
+  landNameOf,
+  NSW_LAND,
   slopeReliefColor,
   terrainBeforeIds,
   type TerrainLayerKey,
@@ -367,6 +371,9 @@ import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 
 /** The shared expression builder's untyped result, as MLRN types the paint. */
+type FillColor = NonNullable<
+  NonNullable<FillLayerSpecification["paint"]>["fill-color"]
+>;
 type ColorReliefColor = NonNullable<
   NonNullable<ColorReliefLayerSpecification["paint"]>["color-relief-color"]
 >;
@@ -915,6 +922,9 @@ export function MapScreen({
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
+  const [tappedLand, setTappedLand] = useState<string | null>(null);
+  /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
+  const landAskedFor = useRef<MapPoint | null>(null);
   const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -1414,6 +1424,23 @@ export function MapScreen({
           )
         : [],
     [renderedBasemapId, terrainLayers.contours, ctx, areasEpoch],
+  );
+  const landResolved = useMemo(
+    () =>
+      terrainLayers.land
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-land", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.land, viewportBbox, ctx, areasEpoch],
+  );
+  const landLayerIds = useMemo(
+    () => landResolved.map((r) => `nsw-land-${r.key}`),
+    [landResolved],
   );
   const slopeResolved = useMemo(
     () =>
@@ -2065,9 +2092,31 @@ export function MapScreen({
       }
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
-      setTappedPoint({ latitude: lat, longitude: lon });
+      const tapped = { latitude: lat, longitude: lon };
+      setTappedPoint(tapped);
+      setTappedLand(null);
+      landAskedFor.current = tapped;
+      // From the tiles on the phone, so this works offline and asks no one.
+      if (landLayerIds.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(event.nativeEvent.point, {
+            layers: landLayerIds,
+          })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedLand(landNameOf(features));
+          })
+          // Never a failure to show: the sheet just has no land figure.
+          .catch(() => undefined);
+      }
     },
-    [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
+    [
+      addToolPoint,
+      anchorDeleteSideFor,
+      collectingPoints,
+      landLayerIds,
+      pressedAnchorIndex,
+    ],
   );
 
   /** One place's verbs, from its pin. */
@@ -4392,6 +4441,7 @@ export function MapScreen({
   const attributionText = mapDataAttribution(basemapResolved, {
     contours: contoursResolved,
     slope: slopeResolved,
+    land: landResolved,
     hillshade: hillshadeResolved,
   });
 
@@ -4420,6 +4470,7 @@ export function MapScreen({
       topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
     ),
     slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    land: landLayerIds,
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
@@ -4607,6 +4658,25 @@ export function MapScreen({
               beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
               minzoom={r.layerMinZoom ?? 0}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+            />
+          </ResolvedSource>
+        ))}
+        {landResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <Layer
+              key={`nsw-land-${r.key}`}
+              type="fill"
+              id={`nsw-land-${r.key}`}
+              source-layer={NSW_LAND.sourceLayer}
+              beforeId={groundBefore[`nsw-land-${r.key}`]}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              paint={{
+                "fill-color": landFillColor() as FillColor,
+                // Tiles join in the middle of a holding, and an antialiased
+                // edge there would draw the tile grid across the tint.
+                "fill-antialias": false,
+              }}
             />
           </ResolvedSource>
         ))}
@@ -5328,6 +5398,7 @@ export function MapScreen({
       <MapPointSheet
         allowNetwork={!offlineOnly}
         point={tappedPoint}
+        land={tappedLand}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}

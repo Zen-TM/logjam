@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAP_TERRAIN, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import { MAP_TERRAIN, NSW_LAND, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
 import { TerrainPane } from "./LayersPopover";
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
@@ -34,12 +34,13 @@ function draw(
 }
 
 describe("the Terrain group on Logjam Web", () => {
-  it("lists contours, slope and hillshade in the contract's order", () => {
+  it("lists contours, slope, land and hillshade in the contract's order", () => {
     draw();
-    expect(screen.getAllByRole("switch")).toHaveLength(3);
+    expect(screen.getAllByRole("switch")).toHaveLength(4);
     const text = document.body.textContent ?? "";
     expect(text.indexOf(copy.contours)).toBeLessThan(text.indexOf(copy.slope));
-    expect(text.indexOf(copy.slope)).toBeLessThan(text.indexOf(copy.hillshade));
+    expect(text.indexOf(copy.slope)).toBeLessThan(text.indexOf(copy.land));
+    expect(text.indexOf(copy.land)).toBeLessThan(text.indexOf(copy.hillshade));
   });
 
   it("switches each layer by its key", () => {
@@ -61,7 +62,7 @@ describe("the Terrain group on Logjam Web", () => {
     ).toBeNull();
     cleanup();
     const props = draw("protomaps", undefined, true);
-    expect(screen.getAllByRole("switch")).toHaveLength(4);
+    expect(screen.getAllByRole("switch")).toHaveLength(5);
     fireEvent.click(screen.getByRole("switch", { name: "Show vegetation" }));
     expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
   });
@@ -75,6 +76,18 @@ describe("the Terrain group on Logjam Web", () => {
     expect(
       screen.getByRole("dialog", { name: copy.vegetation }).textContent,
     ).toContain(copy.vegetationLegend);
+  });
+
+  // Mutation: drop the caveat, and Sydney's gaps and Land Council freehold
+  // read as fact. The credit is a CC BY term of the data.
+  it("opens the land legend with its classes, caveat and credit", () => {
+    draw();
+    fireEvent.click(screen.getByRole("button", { name: copy.landAbout }));
+    const legend = screen.getByRole("dialog", { name: copy.land }).textContent;
+    expect(legend).toContain(copy.landLegend);
+    expect(legend).toContain("Private land");
+    expect(legend).toContain(copy.landCaveat);
+    expect(legend).toContain(NSW_LAND.credit);
   });
 
   it("counts the sharpened areas and opens them", () => {
@@ -116,6 +129,14 @@ describe("the Terrain group on Logjam Web", () => {
     ).toBe(false);
   });
 
+  // Mutation: drop the subtitle, and a tint can be read as permission to enter.
+  it("offers Land off by default, and says what it does not show", () => {
+    draw("protomaps");
+    const land = screen.getByRole("switch", { name: "Show land" });
+    expect(land.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(copy.landHint)).toBeTruthy();
+  });
+
   // Mutation: read `layers[key]` alone as `checked`, and a stored-on switch
   // shows ON over a basemap that draws nothing for it.
   it("reads off while a basemap disables it, and on again elsewhere", () => {
@@ -126,6 +147,7 @@ describe("the Terrain group on Logjam Web", () => {
     const stored = {
       contours: true,
       slope: true,
+      land: false,
       hillshade: true,
       vegetation: true,
     };
