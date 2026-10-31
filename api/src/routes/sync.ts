@@ -17,6 +17,7 @@ import { AppError, malformed } from "../middleware/errorHandler";
 import {
   assertValidPlaceType,
   createPlaceType,
+  defsForForeignPlaceTypes,
   defsForPlaceType,
   deletePlaceType,
   placeTypeInUse,
@@ -390,18 +391,12 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    for (const place of places) {
-      if (place.ownerId === user.id) continue;
-      if (sharedDefsByType.has(place.placeTypeId)) continue;
-      const type = await prisma.placeType.findUnique({
-        where: { id: place.placeTypeId },
-        select: { ownerId: true },
-      });
-      if (!type || type.ownerId === null) continue; // system type: already held
-      sharedDefsByType.set(
-        place.placeTypeId,
-        await defsForPlaceType(type.ownerId, place.placeTypeId),
-      );
+    for (const [id, defs] of await defsForForeignPlaceTypes([
+      ...new Set(
+        places.filter((p) => p.ownerId !== user.id).map((p) => p.placeTypeId),
+      ),
+    ])) {
+      sharedDefsByType.set(id, defs);
     }
 
     // A link is OWNER-PRIVATE: both its endpoints belong to `ownerId` (asserted

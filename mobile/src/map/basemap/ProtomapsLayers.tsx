@@ -5,15 +5,11 @@ import { memo } from "react";
 import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 
 import {
+  protomapsBandMarkers,
   protomapsLayerDefs,
   type ProtomapsFlavor,
   type ProtomapsLayerDef,
 } from "./protomapsLayers";
-
-/** Number of style layers mounted for a flavor — callers stack above this. */
-export function protomapsLayerCount(flavor: ProtomapsFlavor): number {
-  return protomapsLayerDefs(flavor).length;
-}
 
 /**
  * A basemap layer's id on the map: its style id under its source's. Layer ids
@@ -29,7 +25,7 @@ export function protomapsLayerId(sourceID: string, styleId: string): string {
 function layerComponent(
   def: ProtomapsLayerDef,
   sourceID: string,
-  layerIndex: number,
+  beforeId: string,
 ) {
   const id = protomapsLayerId(sourceID, def.id);
   // One cast for the whole prop bag. The generated defs carry a merged
@@ -42,7 +38,7 @@ function layerComponent(
   // express, and the values come straight from @protomaps/basemaps.
   const props = {
     id,
-    layerIndex,
+    beforeId,
     type: def.type,
     style: def.style,
     source: sourceID,
@@ -55,9 +51,8 @@ function layerComponent(
 }
 
 /**
- * The full basemap layer stack for one flavor, bound to `sourceID` and pinned
- * at layerIndex `startIndex..startIndex+count-1` (keeps the basemap band
- * below topo overlays and place layers across source remounts).
+ * The full basemap layer stack for one flavor, bound to `sourceID`, each layer
+ * under its band's marker (`BAND_MARKERS`).
  */
 // MEMOISED, and it matters more here than anywhere else on the map: MLRN
 // memoises none of its layer components, and each one re-runs `transformStyle`
@@ -68,16 +63,15 @@ function layerComponent(
 export const ProtomapsLayers = memo(function ProtomapsLayers({
   flavor,
   sourceID,
-  startIndex,
 }: {
   flavor: ProtomapsFlavor;
   sourceID: string;
-  startIndex: number;
 }) {
+  const markers = protomapsBandMarkers(flavor);
   return (
     <>
       {protomapsLayerDefs(flavor).map((def, i) =>
-        layerComponent(def, sourceID, startIndex + i),
+        layerComponent(def, sourceID, markers[i]),
       )}
     </>
   );
