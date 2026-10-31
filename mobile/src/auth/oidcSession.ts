@@ -333,8 +333,12 @@ function refresh(stored: Stored): Promise<Session | null> {
     } catch (err) {
       if ((err as Error).name === REFRESH_REJECTED) {
         // Tokens only: the local identity stays, so the same user signing in
-        // again keeps their data.
-        await clearStored().catch(console.error);
+        // again keeps their data. Not a session that replaced this one while
+        // the request was out.
+        const current = await readStored().catch(() => null);
+        if (current?.refreshToken === stored.refreshToken) {
+          await clearStored().catch(console.error);
+        }
       }
       throw err;
     }

@@ -9,7 +9,6 @@
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { messageFromError } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
@@ -20,7 +19,7 @@ import {
 } from "../legalLinks";
 import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, SwitchRow, TextField, TextLink } from "../ui";
-import { consentFormProblem } from "./consentForm";
+import { consentFormProblem, consentSubmitFailure } from "./consentForm";
 
 export function ConsentGate({
   consentVersion,
@@ -45,7 +44,12 @@ export function ConsentGate({
   const [username, setUsername] = useState(currentUsername);
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Retry is offered only for a failed request; a missing tick is fixed by
+  // ticking it.
+  const [banner, setBanner] = useState<{
+    message: string;
+    retry: boolean;
+  } | null>(null);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
   const insets = useSafeAreaInsets();
 
@@ -61,11 +65,12 @@ export function ConsentGate({
       return;
     }
     if (problem) {
-      setError(problem.message);
+      setBanner(problem);
       return;
     }
     setSubmitting(true);
-    setError(null);
+    setBanner(null);
+    setUsernameError(null);
     try {
       await (newAccount
         ? updateConsent(consentVersion, username.trim())
@@ -73,12 +78,9 @@ export function ConsentGate({
       onConsented();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(
-          err,
-          "Couldn't record your consent. Please try again.",
-        ),
-      );
+      const failure = consentSubmitFailure(err, newAccount);
+      if (failure.field === "username") setUsernameError(failure.message);
+      else setBanner(failure);
     } finally {
       setSubmitting(false);
     }
@@ -110,6 +112,7 @@ export function ConsentGate({
           onChangeText={(text) => {
             setUsername(text);
             setUsernameError(null);
+            setBanner(null);
           }}
           error={usernameError}
           hint="What friends see when you share a place with them."
@@ -132,7 +135,7 @@ export function ConsentGate({
         checked={agreed}
         onChange={(next) => {
           setAgreed(next);
-          setError(null);
+          setBanner(null);
         }}
       />
       {newAccount ? (
@@ -141,11 +144,16 @@ export function ConsentGate({
           checked={ageConfirmed}
           onChange={(next) => {
             setAgeConfirmed(next);
-            setError(null);
+            setBanner(null);
           }}
         />
       ) : null}
-      {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
+      {banner ? (
+        <ErrorBanner
+          message={banner.message}
+          onRetry={banner.retry ? agree : undefined}
+        />
+      ) : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />
       <Button label="Sign out" variant="ghost" onPress={() => onSignOut()} />
     </ScrollView>

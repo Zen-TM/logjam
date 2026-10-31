@@ -250,6 +250,20 @@ describe("refresh", () => {
     expect(stored()).not.toBeNull();
   });
 
+  // Mutation: clear unconditionally in the REFRESH_REJECTED branch and the old
+  // session's late rejection deletes the tokens of the one signed in since.
+  it("does not delete a newer session when the old one's refresh is rejected", async () => {
+    store(STALE());
+    let release!: (r: unknown) => void;
+    fetchMock.mockReturnValue(new Promise((r) => (release = r)));
+    const pending = getSession().catch((e: unknown) => e);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    store(FRESH(), { refreshToken: "refresh-2" });
+    release(answer(400, { error: "invalid_grant" }));
+    await pending;
+    expect(stored()).not.toBeNull();
+  });
+
   // Mutation: remove the `current?.refreshToken` re-read before the write.
   it("does not bring a session back that was signed out while the refresh ran", async () => {
     store(STALE());
