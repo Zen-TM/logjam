@@ -38,6 +38,7 @@ import {
   normalizeUserUiPreferences,
   TRACK_MIME_TYPES,
   validatePlacePayload,
+  isValidGaugeId,
   type UserSentence,
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
@@ -66,8 +67,9 @@ export function validatePlaceTextFields(payload: {
   altNames?: unknown;
   notes?: unknown;
   attributes?: unknown;
+  gaugeId?: unknown;
 }): AppError | null {
-  const { name, altNames, notes, attributes } = payload;
+  const { name, altNames, notes, attributes, gaugeId } = payload;
 
   if (name !== undefined) {
     if (typeof name !== "string") return malformed("name must be a string");
@@ -103,6 +105,9 @@ export function validatePlaceTextFields(payload: {
   // body cap is its ceiling. Only the type matters for the 500-vs-400 bug.
   if (notes !== undefined && notes !== null && typeof notes !== "string")
     return malformed("notes must be a string or null");
+
+  if (gaugeId !== undefined && gaugeId !== null && !isValidGaugeId(gaugeId))
+    return malformed("gaugeId must be letters and digits, 1 to 20 long");
 
   if (attributes !== undefined && attributes !== null) {
     if (typeof attributes !== "object" || Array.isArray(attributes))
@@ -349,6 +354,7 @@ router.post(
       longitude,
       placeTypeId,
       notes,
+      gaugeId,
       elevation,
       linkedPlaceIds,
       fieldValues,
@@ -411,6 +417,7 @@ router.post(
           latitude,
           longitude,
           notes,
+          gaugeId: gaugeId ?? null,
           elevation: elevation ?? null,
           fieldValues: asFieldValues(fieldValues) as Prisma.InputJsonValue,
         },
@@ -693,6 +700,7 @@ router.patch(
       latitude,
       longitude,
       notes,
+      gaugeId,
       elevation,
       linkedPlaceIds,
       fieldValues,
@@ -747,6 +755,7 @@ router.patch(
         ...(latitude !== undefined && { latitude }),
         ...(longitude !== undefined && { longitude }),
         ...(notes !== undefined && { notes }),
+        ...(gaugeId !== undefined && { gaugeId }),
         ...(elevation !== undefined && { elevation }),
         ...(placeTypeId !== undefined && { placeTypeId: typeId }),
         // The reconciliation overrides both, because it is derived FROM them.

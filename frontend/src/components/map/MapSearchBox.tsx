@@ -1,5 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
+  GAUGES,
+  gaugeDisplayName,
   geocode,
   GEOCODE_MIN_QUERY_LENGTH,
   PLACE_REGISTRY_ATTRIBUTION,
@@ -7,6 +9,7 @@ import {
   PLACE_SEARCH_MIN_QUERY_LENGTH,
   placeResultDetail,
   searchLocationsLabel,
+  type Gauge,
   type GeocodeResult,
   type PlaceResult,
 } from "@logjam/shared";
@@ -14,13 +17,16 @@ import { searchPlaceRegistry, type TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
 import { Icon } from "../../ui";
+import { useGauges } from "../gauges/useGauges";
 
 const PLACE_RESULTS = 5;
+const GAUGE_RESULTS = 3;
 // Few enough that "Search locations for …" stays in view below them.
 const REGISTRY_RESULTS = 8;
 
 type Option =
   | { kind: "place"; id: string; place: TPlace; shared: boolean }
+  | { kind: "gauge"; id: string; gauge: Gauge; name: string }
   | { kind: "registry"; id: string; result: PlaceResult }
   | { kind: "askLocations"; id: string }
   | { kind: "location"; id: string; result: GeocodeResult };
@@ -28,8 +34,9 @@ type Option =
 /**
  * Search places and locations, top-left over the map; `/` focuses it.
  *
- * Your own places match as you type, locally, and come first. Then the place
- * registry, every named OpenStreetMap feature in NSW, through our API as you
+ * Your own places match as you type, locally, and come first. Then river
+ * gauges, also matched here, from the public file, fetched while the box has
+ * focus whether or not the layer is on. Then the place registry, every named OpenStreetMap feature in NSW, through our API as you
  * type (ADR 0034). Street addresses come from the public geocoder, and ONLY
  * when asked for — the last option is "Search locations for …". A search box
  * that geocoded every keystroke would send the name of every canyon a user
@@ -43,15 +50,18 @@ export default function MapSearchBox({
   places,
   sharedPlaces,
   onSelectPlace,
+  onSelectGauge,
   onSelectLocation,
 }: {
   places: TPlace[];
   sharedPlaces: TPlace[];
   onSelectPlace: (place: TPlace) => void;
+  onSelectGauge: (gauge: Gauge) => void;
   onSelectLocation: (lat: number, lon: number) => void;
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
+  const { file: gaugeFile } = useGauges(focused);
   // The highlighted option by id, not position, so it stays on the same row
   // when an answer adds or removes rows around it.
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -157,8 +167,17 @@ export default function MapSearchBox({
         shared: true,
       })),
     ].slice(0, PLACE_RESULTS);
+    const gaugeOptions: Option[] = (gaugeFile?.gauges ?? [])
+      .flatMap((gauge) => {
+        const name = gaugeDisplayName(gauge.name);
+        return name.toLowerCase().includes(needle)
+          ? [{ kind: "gauge" as const, id: `g-${gauge.id}`, gauge, name }]
+          : [];
+      })
+      .slice(0, GAUGE_RESULTS);
     const ours: Option[] = [
       ...placeOptions,
+      ...gaugeOptions,
       ...(answer?.results ?? []).map((result, index) => ({
         kind: "registry" as const,
         id: `r${answer?.n}-${index}`,
@@ -177,7 +196,15 @@ export default function MapSearchBox({
       ];
     }
     return [...ours, { kind: "askLocations" as const, id: "ask" }];
-  }, [trimmed, places, sharedPlaces, answer, locationQuery, locations]);
+  }, [
+    trimmed,
+    places,
+    sharedPlaces,
+    gaugeFile,
+    answer,
+    locationQuery,
+    locations,
+  ]);
 
   const open = focused && trimmed !== "";
   const activeIndex = options.findIndex((option) => option.id === activeId);
@@ -210,6 +237,7 @@ export default function MapSearchBox({
       return;
     }
     if (option.kind === "place") onSelectPlace(option.place);
+    else if (option.kind === "gauge") onSelectGauge(option.gauge);
     else onSelectLocation(option.result.lat, option.result.lon);
     reset();
     inputRef.current?.blur();
@@ -284,19 +312,25 @@ export default function MapSearchBox({
                   ? option.shared
                     ? "friends"
                     : "place"
-                  : "map";
+                  : option.kind === "gauge"
+                    ? "gauge"
+                    : "map";
               const label =
                 option.kind === "place"
                   ? option.place.name
-                  : option.kind === "registry"
-                    ? option.result.name
-                    : option.kind === "location"
-                      ? option.result.displayName
-                      : searchLocationsLabel(trimmed);
+                  : option.kind === "gauge"
+                    ? option.name
+                    : option.kind === "registry"
+                      ? option.result.name
+                      : option.kind === "location"
+                        ? option.result.displayName
+                        : searchLocationsLabel(trimmed);
               const detail =
                 option.kind === "registry"
                   ? placeResultDetail(option.result)
-                  : null;
+                  : option.kind === "gauge"
+                    ? GAUGES.title
+                    : null;
               return (
                 <li
                   key={option.id}

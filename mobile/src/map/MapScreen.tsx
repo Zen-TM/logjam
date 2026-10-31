@@ -73,6 +73,7 @@ import {
   haversineMeters,
   initialBearingDegrees,
   MAP_OVERLAY_REFINEMENTS,
+  GAUGES,
   MAP_OVERLAYS,
   messageFromError,
   pickNextTrackColor,
@@ -220,6 +221,8 @@ import {
   readTerrainLayers,
   setBasemapPreference,
   setTerrainLayers,
+  readGaugesLayer,
+  setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
@@ -248,6 +251,9 @@ import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
+import { GaugeSheet } from "../gauges/GaugeSheet";
+import { GaugesLayer } from "../gauges/GaugesLayer";
+import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
 import { routeSlotOccupant } from "../places/routeSlot";
@@ -1027,6 +1033,18 @@ export function MapScreen({
     ReadonlySet<string>
   >(() => new Set<string>());
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
+  const [showGauges, setShowGaugesState] = useState(readGaugesLayer);
+  const setShowGauges = useCallback((on: boolean) => {
+    setShowGaugesState(on);
+    setGaugesLayer(on);
+  }, []);
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(showGauges);
+  const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
   const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(
     null,
@@ -2054,9 +2072,39 @@ export function MapScreen({
 
   /** One place's verbs, from its pin. */
   const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
+  /** When a place pin last took a press: a gauge under it yields. */
+  const pinPressedAt = useRef(0);
+  const handleGaugePress = useCallback(
+    (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
+      stopSourcePress(event);
+      const [lon, lat] = event.nativeEvent.lngLat;
+      const id = event.nativeEvent.features[0]?.properties?.id;
+      // Both sources hear one press, in either order: after the pin has had
+      // its turn, a gauge acts only if no pin took the press.
+      setTimeout(() => {
+        if (Date.now() - pinPressedAt.current < 250) return;
+        if (collectingPoints) void addToolPoint(lon, lat);
+        else if (typeof id === "string") {
+          // Whichever press lands last wins: the gauge replaces what a
+          // pin or a point press had open.
+          setTappedPoint(null);
+          setOptionsPlaceId(null);
+          setGaugeNow(Date.now());
+          setGaugeId(id);
+        }
+      }, 0);
+    },
+    [addToolPoint, collectingPoints],
+  );
+  const openGauge = showGauges
+    ? gaugeFile?.gauges.find((g) => g.id === gaugeId)
+    : undefined;
+
   const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
+      pinPressedAt.current = Date.now();
+      setGaugeId(null);
       // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
       // while a point-collecting tool is armed this has to place the point
       // itself — otherwise tapping near a place does nothing and reads as
@@ -4214,6 +4262,19 @@ export function MapScreen({
           : undefined,
     },
     {
+      key: "gauges",
+      icon: "gauge",
+      hue: MAP_INK.gauge,
+      title: MAP_OVERLAYS.copy.gauges,
+      // Live state only: a layer on with nothing to draw says so.
+      note:
+        showGauges && gaugesSettled && !gaugeFile
+          ? GAUGES.copy.failed
+          : undefined,
+      value: showGauges,
+      onChange: setShowGauges,
+    },
+    {
       key: "geoPdfs",
       icon: "geoPdf",
       hue: assetHue.geoPdf,
@@ -4546,6 +4607,10 @@ export function MapScreen({
               beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
               minzoom={r.layerMinZoom ?? 0}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              // Lit from the map, not the default viewport: MapLibre Native
+              // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
+              // the shading would depend on the bearing the layer mounted at.
+              paint={{ "hillshade-illumination-anchor": "map" }}
             />
           </ResolvedSource>
         ))}
@@ -4725,6 +4790,14 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
+        {showGauges && gaugeFile ? (
+          <GaugesLayer
+            file={gaugeFile}
+            now={gaugesNow}
+            onPress={handleGaugePress}
+          />
+        ) : null}
+
         {/* Place overlays: authed API GeoJSON — never baked into tiles
             (privacy rule). Shared under owned; one definition, also drawn by
             the place point-picker (PlacePinsLayer). */}
@@ -4863,6 +4936,13 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSelectSaved={(item) => {
+            if (item.gaugeId) {
+              setShowGauges(true);
+              setTappedPoint(null);
+              setOptionsPlaceId(null);
+              setGaugeNow(Date.now());
+              setGaugeId(item.gaugeId);
+            }
             item
               .resolveBbox()
               .then((bbox) => {
@@ -5238,6 +5318,14 @@ export function MapScreen({
           </Text>
         ))}
       </BottomSheet>
+
+      <GaugeSheet
+        gauge={openGauge ?? null}
+        attribution={gaugeFile?.attribution ?? ""}
+        generatedAt={gaugeFile?.generatedAt ?? ""}
+        now={gaugeNow}
+        onClose={() => setGaugeId(null)}
+      />
 
       {/* Tap: "what's there?" — the question that comes before the long
           press's "something goes here". */}

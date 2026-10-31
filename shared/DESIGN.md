@@ -85,8 +85,10 @@ renumber.
   comes from the few steps and from weight and colour, not from a size of its
   own.
 - **A title does not repeat a count the screen already shows.**
-- **A pair is drawn on one line** (ascent and descent, highest and lowest);
-  a figure with no partner takes the whole line. Pairs: `statPairs.ts`.
+- **A pair is drawn on one line** (ascent and descent, highest and lowest,
+  level and flow); among more figures, the ones that match up still share a
+  line, and a figure with no partner takes the whole line. Pairs:
+  `statPairs.ts`.
 
 ## 3. Getting around and getting out
 
@@ -242,6 +244,8 @@ renumber.
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
   for looking.** Never the only way to read something, except a maintainer
   message, which has no page.
+- **A sheet spaces what it stacks**: `BottomSheet` sets the gap between its
+  children, so a list in a sheet needs no wrapper to keep its rows apart.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title

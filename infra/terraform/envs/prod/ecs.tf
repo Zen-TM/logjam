@@ -78,6 +78,15 @@ resource "aws_ecs_task_definition" "api_script" {
       name  = "S3_BUCKET_MEDIA"
       value = "logjam-media"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
       }, {
@@ -106,7 +115,7 @@ resource "aws_ecs_task_definition" "api_script" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -146,6 +155,15 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name  = "EMAIL_FROM"
       value = "noreply@notifications.logjamnsw.com"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
       }, {
@@ -174,7 +192,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -281,6 +299,15 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name  = "FRONTEND_URL"
       value = "https://logjamnsw.com/"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
     }]
@@ -306,7 +333,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []

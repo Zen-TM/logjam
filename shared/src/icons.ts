@@ -102,6 +102,7 @@ export const ICONS = {
   // — things: what a row or tile is —
   map: { web: "map", gps: "map" }, // a map, the Maps tab, show on map
   place: { web: "map-pin", gps: "map-pin" },
+  gauge: { web: "droplets", gps: "mci:water-outline" }, // a river gauge
   trip: { web: "book-open", gps: "book-open" },
   saved: { web: "folder", gps: "folder" }, // Saved: everything kept on this phone
   route: { web: "route", gps: "mci:map-marker-path" },

@@ -23,6 +23,7 @@ import {
   type BasemapCatalogEntry,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
+  type RoutedTerrain,
   type SharpenedArea,
   type SharpenedOverlay,
   type TerrainArchiveLayer,
@@ -342,7 +343,7 @@ const boxesMeet = (
 ) => w1 <= e2 && w2 <= e1 && s1 <= n2 && s2 <= n1;
 
 /** An area as routing reads it: `tiles` is the archive its TileJSON names. */
-type RoutedArea = SharpenedArea & { tiles: string };
+type RoutedArea = RoutedTerrain & { tiles: string };
 
 /**
  * The kind each of an area's saved clips is filed as: the statewide clip's of
@@ -385,33 +386,67 @@ function savedAreaClips(
 }
 
 /**
+ * The statewide clips saved on this phone, as areas to route: drawing two
+ * paints their shared tiles twice, so from z15 each tile comes from one.
+ * A clip holds every z15 tile its save's box touches. Guard:
+ * `sourceResolver.test.ts` ("routes two saved clips offline").
+ */
+function savedStatewideClips(
+  ctx: ResolveContext,
+  holds: (clip: MapArtifact) => boolean,
+  credit: string,
+): RoutedArea[] {
+  return ctx.artifacts.flatMap((clip) =>
+    holds(clip) && clip.bbox
+      ? [
+          {
+            id: clip.id,
+            zmax: clip.maxzoom ?? 15,
+            tiles15: tileRectCovering(15, clip.bbox),
+            coverage: clip.bbox,
+            contours: false,
+            credit,
+            createdAt: "",
+            tiles: `pmtiles://file://${clip.path}`,
+          },
+        ]
+      : [],
+  );
+}
+
+/**
  * The Terrain group where the user can see a sharpened area: the statewide
  * source up to the zoom routing starts at, then one source per
  * `terrainRoutes` rectangle, each kept to its tiles by its TileJSON's bounds
  * and read from one archive. Online, the areas are the list's, each read at
  * its fixed address (sharpenedArchives.ts). Offline, they are the area clips
- * saved on this phone, and each statewide rectangle reads every saved
- * statewide clip that reaches it. With no area, the statewide source alone as before.
+ * saved on this phone and, for a layer that draws one statewide clip when
+ * two or more are saved, those clips too. Otherwise each statewide rectangle
+ * reads every saved statewide clip that reaches it. With no area, the
+ * statewide source alone as before.
  * Guard: `sourceResolver.test.ts` ("routes the Terrain group", "routes saved
- * areas offline").
+ * areas offline", "routes two saved clips offline").
  */
 function routeTerrain(
   statewide: ResolvedTileSource[],
   archive: { id: string; minzoom: number; maxzoom: number; credit: string },
   layer: TerrainArchiveLayer,
   ctx: ResolveContext,
+  holds?: (clip: MapArtifact) => boolean,
 ): ResolvedTileSource[] {
   const drawn = statewide.flatMap((s) =>
     s.status === "ok" && s.url ? [s] : [],
   );
   const online = drawn.some((s) => s.origin === "remote");
   if (online && drawn.length !== 1) return statewide;
+  const clips =
+    !online && holds ? savedStatewideClips(ctx, holds, archive.credit) : [];
   const areas: RoutedArea[] = online
     ? (ctx.sharpenedAreas ?? []).map((area) => ({
         ...area,
         tiles: `pmtiles://${sharpenedArchiveAddress(area.id, layer)}`,
       }))
-    : savedAreaClips(ctx, layer);
+    : [...savedAreaClips(ctx, layer), ...(clips.length > 1 ? clips : [])];
   if (areas.length === 0) return statewide;
   const z = TERRAIN_ROUTED_FROM[layer];
   const sourceType = layer === "contours" ? "vector" : "raster-dem";
@@ -564,17 +599,19 @@ export const drawsTerrain = (
   holdsContours(artifact) || holdsSlope(artifact) || holdsHillshade(artifact);
 
 /**
- * The one slope clip drawn offline: the saved area nearest the middle of the
- * screen, and of those holding it, the biggest, so a canyon saved inside a
- * wider area doesn't crop the slope to its own edge (before the map first
- * settles, the biggest area). A clip is whole tiles, so areas saved near each
- * other share their low-zoom tiles, and the bands are translucent: drawing
- * every clip paints those tiles twice, darker, with a seam where the overlap
- * ends.
+ * The one clip drawn offline below the zoom `routeTerrain` takes over: the one
+ * covering most of the screen, then the nearest its middle, then the biggest,
+ * so a canyon saved inside a wider area doesn't crop the slope to its own edge
+ * (before the map first settles, the biggest area). A clip is whole tiles, so
+ * areas saved near each other share their low-zoom tiles, and the bands are
+ * translucent: drawing every clip paints those tiles twice, darker, with a seam
+ * where the overlap ends. Side-by-side saves can still show a line here, at
+ * the edge of the clip drawn.
  * Guard: `sourceResolver.test.ts` ("draws one slope clip offline", "draws the
- * wider clip where a saved area sits inside another").
+ * wider clip where a saved area sits inside another", "draws the clip covering
+ * most of the screen").
  */
-function nearestRegion(viewport: Viewport | null | undefined) {
+function mainRegion(viewport: Viewport | null | undefined) {
   return (regions: MapArtifact[]): MapArtifact[] => {
     const lng = viewport ? (viewport.west + viewport.east) / 2 : 0;
     const lat = viewport ? (viewport.south + viewport.north) / 2 : 0;
@@ -589,8 +626,20 @@ function nearestRegion(viewport: Viewport | null | undefined) {
     };
     const size = ({ bbox }: MapArtifact) =>
       bbox ? (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]) : 0;
+    const onScreen = ({ bbox }: MapArtifact) => {
+      if (!bbox || !viewport) return 0;
+      const [west, south, east, north] = bbox;
+      const wide =
+        Math.min(east, viewport.east) - Math.max(west, viewport.west);
+      const tall =
+        Math.min(north, viewport.north) - Math.max(south, viewport.south);
+      return Math.max(wide, 0) * Math.max(tall, 0);
+    };
     return [...regions]
-      .sort((a, b) => away(a) - away(b) || size(b) - size(a))
+      .sort(
+        (a, b) =>
+          onScreen(b) - onScreen(a) || away(a) - away(b) || size(b) - size(a),
+      )
       .slice(0, 1);
   };
 }
@@ -694,12 +743,13 @@ export function resolveMapSource(
           "raster-dem",
           "slope-region",
           ctx,
-          nearestRegion(ref.viewport),
+          mainRegion(ref.viewport),
           holdsSlope,
         ),
         NSW_SLOPE,
         "slope",
         ctx,
+        holdsSlope,
       );
     // The saved height clip is registered as a plain raster (the sampler
     // reads its bytes); here it is drawn as the DEM it is.
@@ -711,7 +761,7 @@ export function resolveMapSource(
           "dem-region",
           ctx,
           (regions) =>
-            nearestRegion(ref.viewport)(regions).map((r) => ({
+            mainRegion(ref.viewport)(regions).map((r) => ({
               ...r,
               sourceType: "raster-dem",
             })),
@@ -720,6 +770,7 @@ export function resolveMapSource(
         NSW_HILLSHADE,
         "heights",
         ctx,
+        holdsHillshade,
       );
     case "geopdf-import":
     case "vector-import":

@@ -8,6 +8,7 @@ import {
 import {
   contractSectionKeys,
   MAP_LAYERS,
+  MAP_OVERLAYS,
   MAP_TERRAIN,
   PLACE_TYPE_COLORS,
   takesNswContours,
@@ -89,6 +90,8 @@ export default function LayersPopover({
   setShowPlaces,
   showWays,
   setShowWays,
+  showGauges,
+  setShowGauges,
   placeCount,
   wayCount,
   completedTopoJobs,
@@ -119,6 +122,8 @@ export default function LayersPopover({
   setShowPlaces: (v: boolean) => void;
   showWays: boolean;
   setShowWays: (v: boolean) => void;
+  showGauges: boolean;
+  setShowGauges: (v: boolean) => void;
   /** Every place drawn: the user's own and the ones shared with them. */
   placeCount: number;
   /** Null while the lines are not loaded (they load with their layer). */
@@ -170,7 +175,7 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const overlaysOn = [showPlaces, showWays].filter(Boolean).length;
+  const overlaysOn = [showPlaces, showWays, showGauges].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -312,6 +317,13 @@ export default function LayersPopover({
                     }
                     checked={showWays}
                     onToggle={setShowWays}
+                  />
+                  <OverlayRow
+                    icon="gauge"
+                    hue="var(--color-accent)"
+                    title={MAP_OVERLAYS.copy.gauges}
+                    checked={showGauges}
+                    onToggle={setShowGauges}
                   />
                   {/* The list ends with the way to add to it: the same
                       import the Ways and Logs lists offer. */}
@@ -497,7 +509,7 @@ function OverlayRow({
   icon: Glyph;
   hue: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   onOpen?: () => void;

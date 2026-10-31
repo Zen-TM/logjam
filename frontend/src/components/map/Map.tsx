@@ -13,11 +13,14 @@ import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
+  MAP_LABEL_MIN_ZOOM,
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
+  gaugeDisplayName,
+  latestGaugeReading,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
@@ -27,6 +30,17 @@ import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
+import GaugePopover from "../gauges/GaugePopover";
+import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
+import { useGauges } from "../gauges/useGauges";
+import {
+  GAUGE_BELOW,
+  GAUGE_LABELS,
+  GAUGE_LAYER,
+  PRESSABLE_LAYERS,
+  pressClosedGauge,
+  pressedGaugeId,
+} from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
 import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
@@ -40,6 +54,9 @@ import {
   nearestSegment,
   snapSegment,
   ARROW_FEATURE_KIND,
+  GAUGE_ICON_IMAGE,
+  GAUGE_ICON_SDF_URI,
+  GAUGE_ICON_SIZE,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
@@ -204,13 +221,10 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
     map.setPaintProperty(id, "circle-color", accent);
     map.setPaintProperty(id, "circle-stroke-color", accent);
   }
-  if (map.getLayer("place-labels")) {
-    map.setPaintProperty("place-labels", "text-color", label);
-    map.setPaintProperty("place-labels", "text-halo-color", halo);
-  }
-  if (map.getLayer("shared-place-labels")) {
-    map.setPaintProperty("shared-place-labels", "text-color", label);
-    map.setPaintProperty("shared-place-labels", "text-halo-color", halo);
+  for (const id of ["place-labels", "shared-place-labels", GAUGE_LABELS]) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, "text-color", label);
+    map.setPaintProperty(id, "text-halo-color", halo);
   }
 }
 
@@ -499,6 +513,8 @@ function Map({
   onCancelPickCoords,
   showPlaces,
   showWays,
+  showGauges,
+  onShowGauges,
   placeTracks,
   standaloneTracks,
   routes,
@@ -569,6 +585,9 @@ function Map({
   /** Every line: routes, imported and recorded files, and the tracks on places
    *  friends shared. */
   showWays: boolean;
+  /** The river gauge drops, an optional layer (off until asked for). */
+  showGauges: boolean;
+  onShowGauges: () => void;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -779,6 +798,16 @@ function Map({
   const closeAsked = useCallback(() => {
     askedClosedAt.current = Date.now();
     setAsked(null);
+  }, []);
+  // The river gauge pressed, if any; the drops come from the public file.
+  const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
+  if (!showGauges && gaugeId) setGaugeId(null);
+  const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
+  const closedGaugeRef = useRef<{ id: string; at: number } | null>(null);
+  const closeGauge = useCallback((id: string) => {
+    closedGaugeRef.current = { id, at: performance.now() };
+    setGaugeId(null);
   }, []);
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
@@ -1386,7 +1415,7 @@ function Map({
         id: "place-labels",
         type: "symbol",
         source: "places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
@@ -1405,7 +1434,7 @@ function Map({
         id: "shared-place-labels",
         type: "symbol",
         source: "shared-places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
@@ -1421,6 +1450,74 @@ function Map({
       });
 
       applyPlaceThemePaint(map);
+
+      map.addSource("gauges", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      // One colour for every gauge: a drop says where a gauge is, never what
+      // it read. A gauge with no recent reading is only fainter.
+      map.addLayer(
+        {
+          id: GAUGE_LAYER,
+          type: "symbol",
+          source: "gauges",
+          layout: {
+            visibility: "none",
+            "icon-image": GAUGE_ICON_IMAGE,
+            "icon-size": GAUGE_ICON_SIZE,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint: {
+            "icon-color": MAP_INK.gauge,
+            "icon-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "icon-halo-color": MAP_INK.ring,
+            "icon-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      // Under the pins, so a place's own name wins any collision with one.
+      map.addLayer(
+        {
+          id: GAUGE_LABELS,
+          type: "symbol",
+          source: "gauges",
+          minzoom: MAP_LABEL_MIN_ZOOM,
+          layout: {
+            visibility: "none",
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": 12,
+            "text-max-width": 10,
+            "text-offset": [0, 1.2],
+            "text-anchor": "top",
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.on("click", GAUGE_LAYER, (e) => {
+        if (pickModeRef.current || drawingRouteRef.current) return;
+        const id = pressedGaugeId(map, [e.point.x, e.point.y]);
+        if (
+          id &&
+          !pressClosedGauge(id, closedGaugeRef.current, performance.now())
+        )
+          setGaugeId(id);
+      });
+      map.on("mouseenter", GAUGE_LAYER, () => {
+        if (pickModeRef.current) return;
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", GAUGE_LAYER, () => {
+        map.getCanvas().style.cursor = "";
+      });
 
       map.on("click", "place-circles", (e) => {
         if (pickModeRef.current) return;
@@ -1726,14 +1823,7 @@ function Map({
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
     // Everything on the map that has a press of its own.
-    const PRESSABLE = [
-      "place-circles",
-      "shared-place-halos",
-      "shared-place-circles",
-      "routes-hit",
-      "place-tracks-hit",
-      "standalone-tracks-hit",
-    ];
+    const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
     // Pressing the panel's own dismissal and the map in one gesture.
@@ -1885,6 +1975,27 @@ function Map({
       );
     }
   }, [showPlaces, showWays, drawingRoute, measuring, mapLoaded]);
+
+  // The river gauge drops, drawn from the file while the layer is on.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    for (const id of [GAUGE_LAYER, GAUGE_LABELS])
+      map.setLayoutProperty(id, "visibility", showGauges ? "visible" : "none");
+    const now = Date.now();
+    (map.getSource("gauges") as maplibregl.GeoJSONSource).setData({
+      type: "FeatureCollection",
+      features: (gaugeFile?.gauges ?? []).map((g) => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [g.lon, g.lat] },
+        properties: {
+          id: g.id,
+          name: gaugeDisplayName(g.name),
+          recent: latestGaugeReading(g, now) !== null,
+        },
+      })),
+    });
+  }, [showGauges, gaugeFile, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
@@ -2363,7 +2474,13 @@ function Map({
       // The route arrowhead. Registered as an SDF, which is what lets ONE image
       // take each route's own colour through `icon-color` — a plain bitmap
       // ignores the tint and every route would share one arrow colour.
-      if (id === ROUTE_ARROW_IMAGE) {
+      const sdfUri =
+        id === ROUTE_ARROW_IMAGE
+          ? ROUTE_ARROW_SDF_URI
+          : id === GAUGE_ICON_IMAGE
+            ? GAUGE_ICON_SDF_URI
+            : null;
+      if (sdfUri) {
         if (map.hasImage(id)) return;
         const arrow = new Image();
         arrow.onload = () => {
@@ -2392,7 +2509,7 @@ function Map({
             { sdf: true },
           );
         };
-        arrow.src = ROUTE_ARROW_SDF_URI;
+        arrow.src = sdfUri;
         return;
       }
     };
@@ -3128,6 +3245,16 @@ function Map({
             onSelectPlace={(place) => {
               selectPlaceRef.current(place.id);
             }}
+            onSelectGauge={(gauge) => {
+              onShowGauges();
+              // After the flight: a gauge's panel closes when the map moves.
+              mapRef.current?.once("moveend", () => setGaugeId(gauge.id));
+              mapRef.current?.flyTo({
+                center: [gauge.lon, gauge.lat],
+                zoom: 13,
+                duration: 1200,
+              });
+            }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({
                 center: [lon, lat],
@@ -3149,6 +3276,26 @@ function Map({
           onMeasure={onMeasureFrom}
         />
       )}
+      {openGauge && gaugeFile && drawableMap && showGauges && (
+        <GaugePopover
+          key={`${openGauge.id}:${gaugeFile.generatedAt}`}
+          map={drawableMap}
+          gauge={openGauge}
+          attribution={gaugeFile.attribution}
+          generatedAt={gaugeFile.generatedAt}
+          onClose={closeGauge}
+        />
+      )}
+      <GaugeLoadNotice
+        failed={gaugesFailed}
+        modeActive={
+          pickingCoords ||
+          selectingBbox ||
+          selectingGeoPdfExtent ||
+          drawingRoute
+        }
+        className={classes.pickBanner}
+      />
       {pickingCoords && (
         <>
           <div className={classes.pickBanner}>

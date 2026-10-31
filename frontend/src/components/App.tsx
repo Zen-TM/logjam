@@ -224,6 +224,11 @@ function App() {
   // would silently empty the map of someone who had only ever hidden a friend's.
   const [showPlaces, setShowPlaces] = useStoredState("logjam.showPlaces", true);
   const [showWays, setShowWays] = useStoredState("logjam.showWays", true);
+  // Off until asked for: the layer fetches a public file only while it is on.
+  const [showGauges, setShowGauges] = useStoredState(
+    "logjam.showGauges",
+    false,
+  );
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -1603,6 +1608,8 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays}
+            showGauges={showGauges}
+            onShowGauges={() => setShowGauges(true)}
             placeTracks={placeTracks}
             standaloneTracks={standaloneTracks}
             routes={routes}
@@ -1749,6 +1756,8 @@ function App() {
           setShowPlaces={setShowPlaces}
           showWays={showWays}
           setShowWays={setShowWays}
+          showGauges={showGauges}
+          setShowGauges={setShowGauges}
           placeCount={places.length + sharedPlaces.length}
           wayCount={showWays ? wayCount : null}
           completedTopoJobs={completedTopoJobs}

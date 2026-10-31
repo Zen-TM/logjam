@@ -19,7 +19,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 |--------|----------|---------|-----------------|
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
-| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness fade, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
+| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -43,7 +43,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 
 `pipeline.py` renders a ticked job's vegetation layer: PDAL counts the
 returns over the ground, they become a scrub push-through density weighted by
-the SVTM formation, and a grey fade marks ground burned since the capture. Each
+the SVTM formation, and amber stripes and a border mark ground burned since the capture. Each
 point cloud's ground is its own class 2 where it has any, and SMRF's where it
 has none.
 

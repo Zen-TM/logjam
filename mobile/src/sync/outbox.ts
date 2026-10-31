@@ -628,6 +628,7 @@ export async function deletePlaceTypeLocal(id: string): Promise<void> {
 const PLACE_UPDATE_COLUMNS: Record<string, ColumnSpec> = {
   name: "name",
   notes: "notes",
+  gaugeId: "gauge_id",
   latitude: "latitude",
   longitude: "longitude",
   placeTypeId: "place_type_id",
@@ -685,6 +686,8 @@ export type PlaceDraftFields = {
   placeTypeId: string;
   altNames?: string[];
   notes?: string | null;
+  /** A river gauge the user chose (a guest's place can have one too). */
+  gaugeId?: string | null;
   /** Metres. Optional on every place; a dropped marker usually has one. */
   elevation?: number | null;
   /** Type-specific values, keyed by definition key — the seven grades
@@ -715,6 +718,7 @@ export async function createPlaceLocal(
     placeTypeId: draft.placeTypeId,
     altNames,
     ...(draft.notes != null && { notes: draft.notes }),
+    ...(draft.gaugeId != null && { gaugeId: draft.gaugeId }),
     ...(draft.elevation != null && { elevation: draft.elevation }),
     ...(Object.keys(fieldValues).length > 0 && { fieldValues }),
   };
@@ -733,10 +737,10 @@ export async function createPlaceLocal(
     await db.runAsync(
       `INSERT INTO places
          (id, sync_role, name, latitude, longitude, alt_names_json,
-          place_type_id, notes, elevation, field_values_json,
+          place_type_id, notes, gauge_id, elevation, field_values_json,
           field_defs_snapshot_json, foreign_fields_json, forked_from_id,
           created_at, updated_at, extra_json, dirty_fields_json)
-       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
+       VALUES (?, 'owner', ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, ?)`,
       id,
       draft.name,
       draft.latitude,
@@ -744,6 +748,7 @@ export async function createPlaceLocal(
       JSON.stringify(altNames),
       draft.placeTypeId,
       draft.notes ?? null,
+      draft.gaugeId ?? null,
       draft.elevation ?? null,
       JSON.stringify(fieldValues),
       now,

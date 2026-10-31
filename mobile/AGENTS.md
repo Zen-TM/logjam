@@ -12,7 +12,8 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   Point a dev client at `127.0.0.1:8081`, never `10.0.2.2` (emulator too).
 - **Never hand-edit `/android` or `/ios`:** add native capability with a config
   plugin and `npx expo install`. After a native change,
-  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`.
+  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`,
+  or `gh workflow run dev-apk.yml --ref <branch>` for the dev variant's APK.
   A release APK for a device is only `./scripts/build-local-apk.sh`, prod-pointed
   ones too: it bakes in `.env` unless the shell overrides it (header has the
   recipe).
@@ -53,6 +54,14 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
   background work needs the maintainer's sign-off. [0013](../docs/decisions/0013-background-work-battery-rules.md), [0010](../docs/decisions/0010-map-sensors-only-while-focused.md)
 
 ## Builds and verify
+
+- **`mobile-emulator.yml` launches the dev build on an emulator** over a live
+  local stack, runs `maestro/smoke.yaml` through `scripts/emulator-smoke.sh`
+  and checks the added place reached Postgres. It selects by visible text, so
+  rewording "Add a place" or a field label means updating the flow; it never
+  asserts the map's pixels (a software GPU). The dev APK is cached on the
+  native inputs listed in `.github/actions/build-dev-apk/action.yml`: add a
+  new native directory to that key.
 
 - `npm run typecheck`, `lint` and `test` gate every change. Nothing in CI
   bundles: run `npx expo export --platform android` before a Gradle build.

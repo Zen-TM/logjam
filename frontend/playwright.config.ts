@@ -49,14 +49,14 @@ export default defineConfig({
   webServer: isLocal
     ? [
         {
-          command: "npm run dev",
-          url: "http://localhost:5173",
+          command: `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
+          url: baseURL,
           reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "fake" },
           timeout: 60_000,
         },
         {
-          command: "npm run dev -- --port 5199 --strictPort",
+          command: `npm run dev -- --port ${new URL(SIGN_IN_URL).port} --strictPort`,
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "cognito" },
