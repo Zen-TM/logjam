@@ -4263,7 +4263,7 @@ export function MapScreen({
     },
     {
       key: "gauges",
-      icon: "sensors",
+      icon: "gauge",
       hue: MAP_INK.gauge,
       title: MAP_OVERLAYS.copy.gauges,
       count: gaugeFile?.gauges.length ?? 0,

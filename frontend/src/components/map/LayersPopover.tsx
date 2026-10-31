@@ -319,7 +319,7 @@ export default function LayersPopover({
                     onToggle={setShowWays}
                   />
                   <OverlayRow
-                    icon="sensors"
+                    icon="gauge"
                     hue="var(--color-accent)"
                     title={MAP_OVERLAYS.copy.gauges}
                     subtitle={MAP_OVERLAYS.copy.gaugesHint}
