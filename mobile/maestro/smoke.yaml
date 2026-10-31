@@ -51,7 +51,9 @@ appId: com.logjamnsw.mobile.dev
 - hideKeyboard
 - takeScreenshot: 2-form
 - tapOn: "Add place"
+# The list is alphabetical and the place is not on screen: the form closing is
+# the UI's half, and the script's query is the proof.
 - extendedWaitUntil:
-    visible: ${PLACE_NAME}
+    notVisible: "Also known as"
     timeout: 20000
 - takeScreenshot: 3-saved
