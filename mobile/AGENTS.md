@@ -55,6 +55,14 @@ navigation failure. [0006](../docs/decisions/0006-on-device-data-privacy.md)
 
 ## Builds and verify
 
+- **`mobile-emulator.yml` launches the dev build on an emulator** over a live
+  local stack, runs `maestro/smoke.yaml` through `scripts/emulator-smoke.sh`
+  and checks the added place reached Postgres. It selects by visible text, so
+  rewording "Add a place" or a field label means updating the flow; it never
+  asserts the map's pixels (a software GPU). The dev APK is cached on the
+  native inputs listed in `.github/actions/build-dev-apk/action.yml`: add a
+  new native directory to that key.
+
 - `npm run typecheck`, `lint` and `test` gate every change. Nothing in CI
   bundles: run `npx expo export --platform android` before a Gradle build.
 - **Metro does not rebuild `shared/`** (typecheck does): `make shared` first.
