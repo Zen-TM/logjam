@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { overlayAttributionLines } from "./geoPdfBaseLayers.js";

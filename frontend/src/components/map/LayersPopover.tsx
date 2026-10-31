@@ -494,10 +494,7 @@ export function TerrainPane({
         <ul className={classes.landLegend}>
           {LAND_CLASSES.map(({ name, colour }) => (
             <li key={name}>
-              <span
-                className={classes.landSwatch}
-                style={{ background: colour }}
-              />
+              <IconTile icon="layers" hue={colour} />
               {name}
             </li>
           ))}
