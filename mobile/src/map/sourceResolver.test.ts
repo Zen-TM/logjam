@@ -78,6 +78,23 @@ describe("basemap resolution", () => {
     });
   });
 
+  // Mutation: drop the `.reverse()`, and where two saves overlap the older one
+  // draws on top. The registry lists the newest first.
+  it("offline: lists saved regions oldest first, so the newest mounts on top", () => {
+    const save = (id: string, path: string) =>
+      artifact({ id, kind: "basemap-region", logicalKey: "protomaps", path });
+    const newest = save("new", "/files/maps/new.pmtiles");
+    const oldest = save("old", "/files/maps/old.pmtiles");
+    const resolved = resolveMapSource(
+      { kind: "basemap", basemapId: "protomaps" },
+      ctx({ connectivity: "offline", artifacts: [newest, oldest] }),
+    );
+    expect(resolved.map((r) => (r.status === "ok" ? r.url : null))).toEqual([
+      "pmtiles://file:///files/maps/old.pmtiles",
+      "pmtiles://file:///files/maps/new.pmtiles",
+    ]);
+  });
+
   it("offline: resolves to ALL downloaded regions with bounds and zoom clamps", () => {
     const regions = [
       artifact({

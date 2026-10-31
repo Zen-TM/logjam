@@ -92,6 +92,7 @@ import { sharpenedAreasOf } from "./sharpenedArchives";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
@@ -638,14 +639,13 @@ export function RegionDownloadScreen({
                   <ProtomapsLayers
                     flavor={PROTOMAPS_FLAVOR}
                     sourceID={sourceIdFor(resolved.key)}
-                    startIndex={1}
                   />
                 ) : (
                   <Layer
                     key={`region-preview-${resolved.key}`}
                     type="raster"
                     id={`region-preview-${resolved.key}`}
-                    layerIndex={1}
+                    beforeId={BAND_MARKERS.land}
                     style={{ rasterOpacity: 1 }}
                   />
                 )}
