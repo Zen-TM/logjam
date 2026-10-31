@@ -23,6 +23,7 @@
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  profileSpan,
   sameSeries,
   type ProfilePoint,
   type ProfileSeries,
@@ -286,7 +287,7 @@ export function ProfileChart({
   // already say the data had nothing here.
   if (min == null || max == null || series.points.length < 2) return null;
 
-  const span = Math.max(1, max - min);
+  const span = profileSpan(min, max);
   const scrubbed = scrubIndex == null ? null : columns[scrubIndex];
 
   return (

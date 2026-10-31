@@ -94,8 +94,9 @@ export type LayerToggleEntry = {
   icon: Glyph;
   hue: string;
   title: string;
-  /** How many of this kind exist — NOT how many are visible. */
-  count: number;
+  /** How many of this kind exist — NOT how many are visible. Left out where
+   *  the number is no one's: the same 279 river gauges for everybody. */
+  count?: number;
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
@@ -446,7 +447,11 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
         hue={entry.hue}
         title={entry.title}
         description={entry.note}
-        badge={<Text style={styles.count}>{entry.count}</Text>}
+        badge={
+          entry.count === undefined ? undefined : (
+            <Text style={styles.count}>{entry.count}</Text>
+          )
+        }
         checked={entry.value}
         onChange={entry.onChange}
       />
