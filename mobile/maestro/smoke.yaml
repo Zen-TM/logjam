@@ -39,7 +39,10 @@ appId: com.logjamnsw.mobile.dev
     index: 1
 - inputText: ${PLACE_NAME}
 - hideKeyboard
-- scroll
+# Drag the sheet's content up (`scroll` leaves it where it is).
+- swipe:
+    start: 50%, 72%
+    end: 50%, 30%
 - tapOn:
     text: "Latitude"
     index: 1
