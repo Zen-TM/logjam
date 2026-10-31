@@ -2153,19 +2153,28 @@ def _box_blur(
     return out
 
 
-def _encode_fire_stale(stale_mask: np.ndarray, cell_m: float) -> np.ndarray:
+def _encode_fire_stale(
+    burnt_mask: np.ndarray, valid_mask: np.ndarray, cell_m: float
+) -> np.ndarray:
     """float32 fire_stale.tif band: 0 outside burnt ground, 1 + k inside, where
     k is 1 at the smoothed fire boundary and 0 a band-width (~40 m) in.
 
+    `burnt_mask` is the fire alone (not gated by data), so the boundary is a
+    real fire boundary: neither the AOI edge nor the edge of the survey data
+    is one. `valid_mask` only clips the result so stripes do not draw off the
+    survey; it is blurred first, so small holes in density do not punch gaps.
+
     Runs once on the whole AOI, not per render tile, so tiles cut from it
-    share no seam (guard: test_stale_overlay.py::test_tiles_sharing_a_boundary_agree).
-    Blurs are edge-padded: an AOI edge is not a fire edge, so burnt ground
-    reaching it gets no band there (guard: test_burnt_all_over_gets_stripes_and_no_band).
+    share no seam (guard: test_stale_overlay.py::test_tiles_sharing_a_boundary_agree_on_band_values).
+    Blurs are edge-padded, so burnt ground reaching the AOI edge gets no band
+    there (guard: test_burnt_all_over_gets_stripes_and_no_band); a survey
+    edge inside a burn gets none either (guard: test_survey_edge_inside_a_burn_has_no_band).
     """
-    inside = _box_blur(stale_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
+    inside = _box_blur(burnt_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
     d = _box_blur(inside, FIRE_STALE_BAND_BLUR_M, cell_m, 3)
     k = np.clip((1.0 - d) * 2.0, 0.0, 1.0)
-    return np.where(inside, 1.0 + k, 0.0).astype(np.float32)
+    has_data = _box_blur(valid_mask, FIRE_STALE_SMOOTH_M, cell_m, 4) >= 0.5
+    return np.where(inside & has_data, 1.0 + k, 0.0).astype(np.float32)
 
 
 def apply_fire_history(
@@ -2251,6 +2260,11 @@ def apply_fire_history(
     stale_mask, stale_fraction = _compute_stale_mask(
         fire_year_arr, capture_year, valid_mask
     )
+    # The boundary comes from the fire alone: gating by data would draw a band
+    # along the survey edge.
+    burnt_mask = _compute_stale_mask(
+        fire_year_arr, capture_year, np.ones_like(valid_mask)
+    )[0]
 
     burned_years_in_aoi = fire_year_arr[fire_year_arr != 0]
     fire_years_min = (
@@ -2275,7 +2289,9 @@ def apply_fire_history(
     out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
     out_ds.SetProjection(dtm_ds.GetProjection())
     band = out_ds.GetRasterBand(1)
-    band.WriteArray(_encode_fire_stale(stale_mask, abs(dtm_ds.GetGeoTransform()[1])))
+    band.WriteArray(
+        _encode_fire_stale(burnt_mask, valid_mask, abs(dtm_ds.GetGeoTransform()[1]))
+    )
     out_ds.FlushCache()
     out_ds = None
     dtm_ds = None

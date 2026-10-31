@@ -116,9 +116,9 @@ class TestBurntGroundMarking(unittest.TestCase):
         # a multiple of 256 that the shifted raster below does not have.
         mask = np.zeros((TILE_SIZE, 3 * TILE_SIZE), dtype=bool)
         mask[:, TILE_SIZE - 3 :] = True  # fire edge 3 px left of the first cut
-        a = _encode_fire_stale(mask, CELL_M)
+        a = _encode_fire_stale(mask, np.ones_like(mask), CELL_M)
         shift = 100  # in B the same ground sits 100 px left, cut elsewhere
-        b = _encode_fire_stale(mask[:, shift:], CELL_M)
+        b = _encode_fire_stale(mask[:, shift:], np.ones_like(mask[:, shift:]), CELL_M)
         # Away from either raster's own border the two agree exactly.
         lo, hi = shift + 80, 3 * TILE_SIZE - 80
         np.testing.assert_allclose(
@@ -134,7 +134,8 @@ class TestBurntGroundMarking(unittest.TestCase):
         # An area sharpened wholly inside a fire: the AOI edge is not a fire
         # edge. Mutation: zero-pad instead of edge-pad in _box_blur (mode="edge"
         # -> "constant") -> a band and line appear along the raster edge.
-        enc = _encode_fire_stale(np.ones((300, 300), dtype=bool), CELL_M)
+        ones = np.ones((300, 300), dtype=bool)
+        enc = _encode_fire_stale(ones, ones, CELL_M)
         np.testing.assert_array_equal(enc, np.ones_like(enc))
         out = self._render(self._full(0.0), enc[:TILE_SIZE, :TILE_SIZE])
         P = FIRE_STALE_STRIPE_PERIOD
@@ -145,6 +146,32 @@ class TestBurntGroundMarking(unittest.TestCase):
             self.assertTrue(np.all(out[centre, ch] == FIRE_STALE_AMBER[ch]))
         self.assertTrue(np.all(out[q == P // 2, 3] == 0))  # nothing between stripes
 
+    def test_survey_edge_inside_a_burn_has_no_band(self):
+        # Burnt all over, but the survey (density) stops at column 150. The
+        # survey edge is not a fire edge. Mutation: pass the data-gated mask as
+        # burnt_mask (`burnt & valid`) to _encode_fire_stale -> a band and line
+        # run along column 150.
+        burnt = np.ones((300, 300), dtype=bool)
+        valid = np.ones((300, 300), dtype=bool)
+        valid[:, 150:] = False
+        enc = _encode_fire_stale(burnt, valid, CELL_M)
+        self.assertTrue(
+            np.all(enc[:, :140] == 1.0)
+        )  # stripes, no band, up to the strip
+        self.assertTrue(np.all(enc[:, 160:] == 0.0))  # nothing drawn off the survey
+        gated = _encode_fire_stale(burnt & valid, valid, CELL_M)
+        self.assertTrue((gated[:, :150] > 1.0).any())  # what the mutation would do
+
+    def test_small_density_holes_do_not_punch_gaps_in_the_encoding(self):
+        # Mutation: clip with the raw mask (`valid_mask` instead of the blurred
+        # `has_data` in _encode_fire_stale) -> zeros where density is NaN.
+        burnt = np.ones((300, 300), dtype=bool)
+        valid = np.ones((300, 300), dtype=bool)
+        valid[100:103, 100:103] = False
+        valid[200, :] = False
+        enc = _encode_fire_stale(burnt, valid, CELL_M)
+        np.testing.assert_array_equal(enc, np.ones_like(enc))
+
     def test_stripes_draw_on_a_tile_with_no_density(self):
         # Mutation: return early when no cell meets minRatio
         # (`if not mask.any(): return img`) -> transparent tile.
@@ -153,11 +180,13 @@ class TestBurntGroundMarking(unittest.TestCase):
 
     def test_encoding_range_and_unburnt(self):
         self.assertFalse(
-            _encode_fire_stale(np.zeros((50, 50), dtype=bool), CELL_M).any()
+            _encode_fire_stale(
+                np.zeros((50, 50), dtype=bool), np.ones((50, 50), dtype=bool), CELL_M
+            ).any()
         )
         mask = np.zeros((200, 200), dtype=bool)
         mask[:, 100:] = True
-        enc = _encode_fire_stale(mask, 1.0)
+        enc = _encode_fire_stale(mask, np.ones_like(mask), 1.0)
         self.assertEqual(enc.dtype, np.float32)
         self.assertEqual(enc[50, 5], 0.0)
         self.assertGreater(enc[50, 101], 1.5)  # at the edge, near 2
