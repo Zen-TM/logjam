@@ -210,8 +210,10 @@ resource "aws_cognito_managed_login_branding" "main" {
     }
   })
 
+  # A copy, not frontend/public's file: a change outside envs/prod would skip the
+  # plan and apply (ADR 0024) and surface as drift.
   asset {
-    bytes      = filebase64("${path.module}/../../../../frontend/public/email-logo-lockup.png")
+    bytes      = filebase64("${path.module}/assets/email-logo-lockup.png")
     category   = "FORM_LOGO"
     color_mode = "DYNAMIC"
     extension  = "PNG"
