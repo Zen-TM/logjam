@@ -481,8 +481,6 @@ describe("statewide slope and hillshade", () => {
     expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
     expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
   });
-  // Mutation: drop the `logicalKey` test, and a sharpened area's contour or
-  // slope clip (filed as the same kind) enables the statewide switch.
   // Mutation: resolve Land with no `nearestRegion`, and two saved areas that
   // share a low-zoom tile paint its translucent tint twice, with a seam.
   it("draws one land clip offline, and the archive online", () => {
@@ -507,6 +505,8 @@ describe("statewide slope and hillshade", () => {
     );
   });
 
+  // Mutation: drop the `logicalKey` test, and a sharpened area's contour or
+  // slope clip (filed as the same kind) enables the statewide switch.
   it("holdsContours and holdsSlope: the statewide clip, not an area's", () => {
     expect(
       holdsContours({ kind: "contours-region", logicalKey: "nsw-contours" }),
