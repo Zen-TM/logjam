@@ -48,6 +48,17 @@ describe("app variant", () => {
     );
   });
 
+  // Mutation: stop dropping codeSigningCertificate in app.config.ts. Metro then
+  // fails every dev client request for want of the signing key (the emulator
+  // smoke check, mobile-emulator.yml, goes red).
+  it("dev is not code-signed, the real app is", () => {
+    expect(resolve({}).updates?.codeSigningCertificate).toBeDefined();
+    const dev = resolve({ LOGJAM_APP_VARIANT: "dev" });
+    expect(dev.updates?.codeSigningCertificate).toBeUndefined();
+    expect(dev.updates?.codeSigningMetadata).toBeUndefined();
+    expect(dev.updates?.url).toBe(appJson.expo.updates?.url);
+  });
+
   // Mutation: drop any one of the dev overrides in app.config.ts.
   it("dev changes the id, the name and every scheme together", () => {
     const real = resolve({});
@@ -70,8 +81,15 @@ describe("app variant", () => {
       ios,
       android,
       plugins,
+      updates,
       ...rest
     }: Config) => ({
+      // Code signing is the one update setting that differs, tested below.
+      updates: {
+        ...updates,
+        codeSigningCertificate: null,
+        codeSigningMetadata: null,
+      },
       ...rest,
       ios: { ...ios, bundleIdentifier: null },
       android: { ...android, package: null },
