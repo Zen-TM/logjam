@@ -52,7 +52,7 @@ export type SharpenedArea = {
 /**
  * What routing reads of an archive. Logjam GPS also routes statewide clips,
  * whose z15 `zmax` ranks them under every sharpened area. Guard:
- * mobile/src/map/sourceResolver.test.ts ("reads a sharpened area's clip").
+ * `sharpen.test.ts` ("puts a statewide clip").
  */
 export type RoutedTerrain = Omit<SharpenedArea, "zmax"> & { zmax: number };
 
