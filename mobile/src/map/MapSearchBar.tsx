@@ -15,7 +15,8 @@
 // forbids search as you type, and a box that geocoded every keystroke would
 // send every canyon name typed to a third party. Tap a result to recentre.
 //
-// IT SEARCHES THE USER'S OWN THINGS FIRST, and those never touch the network.
+// IT SEARCHES THE USER'S OWN THINGS FIRST, then the river gauges, and those
+// never touch the network.
 // A box that can find Katoomba but not the place you saved last week answers
 // the question nobody has standing in the bush; saved matches are
 // ranked on the device (`localSearch.ts`), appear from the second keystroke
@@ -66,6 +67,8 @@ import {
   placeIndex,
   usePlaceRegistryStatus,
 } from "../offline/placeRegistry";
+import { gaugeSearchItems } from "../gauges/gaugeSearch";
+import { useGauges } from "../gauges/useGauges";
 import { rankLocalMatches, type LocalSearchCandidate } from "./localSearch";
 import {
   askPlacesOnline,
@@ -104,6 +107,8 @@ export type SavedSearchItem = {
   kindLabel: string;
   /** Matched but never displayed: alt names. */
   alternates?: readonly string[];
+  /** Set on a river gauge, whose sheet opens when it is chosen. */
+  gaugeId?: string;
   resolveBbox: () => Promise<Bbox | null>;
 };
 
@@ -275,17 +280,22 @@ export function MapSearchBar({
     setPlaceAnswer(null);
   };
 
+  // Whether or not their layer is on, and only while the bar is open.
+  const { file: gaugeFile } = useGauges(expanded);
+
   // NOT debounced and not memoised on the query: it is a substring scan over
   // one person's saved rows, and it has to answer on the keystroke — the whole
   // point of the local half is that it costs nothing to run.
   const candidates: LocalSearchCandidate<SavedSearchItem>[] = useMemo(
     () =>
-      savedItems.map((item) => ({
-        title: item.title,
-        alternates: item.alternates,
-        value: item,
-      })),
-    [savedItems],
+      [...savedItems, ...gaugeSearchItems(gaugeFile?.gauges ?? [])].map(
+        (item) => ({
+          title: item.title,
+          alternates: item.alternates,
+          value: item,
+        }),
+      ),
+    [savedItems, gaugeFile],
   );
   const localMatches = expanded
     ? rankLocalMatches(query, candidates, MAX_LOCAL_RESULTS).map((m) => m.value)
