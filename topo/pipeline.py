@@ -226,7 +226,7 @@ class Benchmark:
             "outputTileCount": self._output_tile_count,
             "zoomMin": self._zoom_min,
             "zoomMax": self._zoom_max,
-            # Stale-fire caution overlay metrics (see set_fire_staleness) — both
+            # Stale-fire fade metrics (see set_fire_staleness) — both
             # None when fire-staleness detection was disabled/unavailable.
             "fireStaleFraction": self._fire_stale_fraction,
             "fireCaptureYear": self._fire_capture_year,
@@ -466,16 +466,18 @@ VEGETATION_DEFAULTS = {
     "alphaMax": 255,
 }
 
-# Stale-fire caution overlay, drawn INTO the vegetation layer (no new MBTiles
-# layer) over cells where fire_stale.tif flags LiDAR-predates-most-recent-fire
-# (see apply_fire_history). Not settings-driven — fixed caution styling so the
-# hatch reads consistently across jobs/presets. Applied independent of scrub
-# density: a stale, currently-open-looking cell still gets flagged, since it
-# may have regrown since capture.
-FIRE_STALE_HATCH_COLOUR = (217, 119, 6)  # caution amber (RGB)
-FIRE_STALE_HATCH_ALPHA = 150  # semi-transparent — underlying veg colour still shows
-FIRE_STALE_HATCH_PERIOD_PX = 8  # diagonal stripe repeats every N px
-FIRE_STALE_HATCH_STRIPE_PX = 2  # stripe width (px) within each period
+# Stale-fire fade, drawn INTO the vegetation layer (no new MBTiles layer) over
+# cells where fire_stale.tif flags LiDAR-predates-most-recent-fire (see
+# apply_fire_history). Not settings-driven: fixed styling so it reads the same
+# across jobs/presets. Applied independent of scrub density: a stale,
+# currently-open-looking cell still gets a faint wash, since it may have
+# regrown since capture. Strengths are 0-1 (feathered when fire_stale.tif is
+# written), so full strength is these values.
+FIRE_STALE_FADE_GREY = (150, 150, 150)  # neutral: reads on light and dark basemaps
+FIRE_STALE_FADE_MIX = 0.55  # share of the green ramp replaced by grey at full strength
+FIRE_STALE_FADE_ALPHA_KEEP = 0.6  # share of the ramp's alpha kept at full strength
+FIRE_STALE_WASH_ALPHA = 34  # alpha of the grey wash where there is no visible density
+FIRE_STALE_FEATHER_PX = 13  # box-blur width on the 1 m DTM grid; 3 passes ~ a 6 m sigma
 
 # Slope thresholds (degrees) → RGBA colour. Defaults for the Default preset.
 SLOPE_DEFAULT_BANDS = [
@@ -2125,6 +2127,30 @@ def _compute_stale_mask(
     return stale_mask, stale_fraction
 
 
+def _feather_stale(stale_mask: np.ndarray) -> np.ndarray:
+    """0-1 float32 strength: the stale mask blurred once over the whole AOI.
+
+    This must run on the full raster, not per render tile: a blur that only
+    sees one tile fades towards the tile edge and leaves a seam against the
+    next (guard: test_stale_overlay.py::test_feathered_strength_has_no_seam).
+    Edge-padded so burnt ground that reaches the AOI edge stays at full
+    strength. No scipy (see _dilate_mask's note): a cumsum box blur, three
+    passes, ~Gaussian.
+    """
+    out = stale_mask.astype(np.float32)
+    w = FIRE_STALE_FEATHER_PX
+    n_rows, n_cols = out.shape
+    for _ in range(3):
+        for axis in (0, 1):
+            pad = [(w // 2 + 1, w // 2) if a == axis else (0, 0) for a in (0, 1)]
+            c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis, dtype=np.float64)
+            n = (n_rows, n_cols)[axis]
+            hi = np.take(c, np.arange(w, w + n), axis=axis)
+            lo = np.take(c, np.arange(0, n), axis=axis)
+            out = ((hi - lo) / w).astype(np.float32)
+    return np.clip(out, 0.0, 1.0)
+
+
 def apply_fire_history(
     density_arr: np.ndarray,
     dtm_path: str,
@@ -2143,8 +2169,9 @@ def apply_fire_history(
     S3 (/vsis3/ path, or a local path override) onto the DTM grid — same
     approach as apply_svtm_weighting, so GDAL only fetches the AOI tiles.
 
-    Writes work_dir/fire_stale.tif (uint8, 1=stale/0=not, aligned to the DTM
-    grid/projection) and work_dir/fire_stale_summary.json (capture_year,
+    Writes work_dir/fire_stale.tif (float32 0-1 feathered strength, 1 deep in
+    stale ground, aligned to the DTM grid/projection; stale_fraction still
+    counts the unfeathered cells) and work_dir/fire_stale_summary.json (capture_year,
     stale_fraction, fire_years_min, fire_years_max) as a side effect.
 
     Returns density_arr unchanged in all cases, including every no-op path:
@@ -2216,7 +2243,7 @@ def apply_fire_history(
         int(burned_years_in_aoi.max()) if burned_years_in_aoi.size else None
     )
 
-    # Write fire_stale.tif — aligned to the DTM grid, for a future render overlay.
+    # Write fire_stale.tif — aligned to the DTM grid, feathered so tiles cut from it share no seam.
     dtm_ds = gdal.Open(dtm_path)
     stale_path = os.path.join(work_dir, "fire_stale.tif")
     driver = gdal.GetDriverByName("GTiff")
@@ -2225,14 +2252,13 @@ def apply_fire_history(
         dtm_ds.RasterXSize,
         dtm_ds.RasterYSize,
         1,
-        gdal.GDT_Byte,
+        gdal.GDT_Float32,
         options=["COMPRESS=LZW"],
     )
     out_ds.SetGeoTransform(dtm_ds.GetGeoTransform())
     out_ds.SetProjection(dtm_ds.GetProjection())
     band = out_ds.GetRasterBand(1)
-    band.WriteArray(stale_mask.astype(np.uint8))
-    band.SetNoDataValue(0)
+    band.WriteArray(_feather_stale(stale_mask))
     out_ds.FlushCache()
     out_ds = None
     dtm_ds = None
@@ -2856,7 +2882,7 @@ def render_vegetation_tile(
     stale_arr: Optional[np.ndarray] = None,
 ) -> Image.Image:
     """Render scrub density (0–1 ratio) as a sparse→dense colour ramp, with an
-    optional stale-fire caution hatch drawn into the same layer.
+    optional stale-fire fade drawn into the same layer.
 
     density_arr contains the normalised point ratio (scrub-band returns / total
     returns per cell). Values below minRatio are transparent. A sqrt curve
@@ -2865,13 +2891,14 @@ def render_vegetation_tile(
     Sparse/dense colours and alpha endpoints come from `settings.vegetation`.
 
     stale_arr, when given, is a fire_stale.tif window on the SAME grid as
-    density_arr (1 = LiDAR capture predates that cell's most-recent fire, see
-    apply_fire_history's docstring). Every stale cell gets a diagonal
-    caution-amber hatch, applied REGARDLESS of whether that cell has any scrub
-    density — a stale, currently-open-looking cell still needs the caution,
-    since it may have regrown since the scan. Passing None (fire-staleness
-    detection disabled/unavailable for this job) is a pure no-op: output is
-    identical to calling this function without the parameter at all.
+    density_arr: a 0-1 strength, 1 where the LiDAR capture predates that
+    cell's most-recent fire (see apply_fire_history, which feathers it). Cells
+    with visible density keep the green ramp, blended towards grey at reduced
+    alpha, so denser still reads darker. Stale cells with none get a faint
+    grey wash, since open-looking ground may have regrown since the scan.
+    Passing None (fire-staleness detection disabled/unavailable for this job)
+    is a pure no-op: output is identical to calling this function without the
+    parameter at all.
     """
     img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
     if density_arr is None:
@@ -2891,20 +2918,19 @@ def render_vegetation_tile(
 
     mask = np.isfinite(density_arr) & (density_arr >= min_ratio)
 
-    # Whether the hatch overlay has any work to do this tile — computed before
-    # the density-mask early return so a stale-but-otherwise-fully-transparent
-    # tile (no cell meets minRatio) still gets its caution hatch.
-    stale_mask = None
+    # Computed before the density-mask early return so a stale tile with no
+    # cell meeting minRatio still gets its wash.
+    strength = None
     if stale_arr is not None:
         if stale_arr.shape != density_arr.shape:
             log.warning(
                 f"fire_stale array shape {stale_arr.shape} != density array shape "
-                f"{density_arr.shape} — skipping stale-fire hatch overlay for this tile."
+                f"{density_arr.shape} — skipping stale-fire fade for this tile."
             )
         else:
-            stale_mask = stale_arr > 0
+            strength = np.clip(np.nan_to_num(stale_arr.astype(np.float32)), 0.0, 1.0)
 
-    has_stale = stale_mask is not None and stale_mask.any()
+    has_stale = strength is not None and bool(strength.any())
 
     if not mask.any() and not has_stale:
         return img
@@ -2927,15 +2953,18 @@ def render_vegetation_tile(
     )
 
     if has_stale:
-        row_idx, col_idx = np.indices((TILE_SIZE, TILE_SIZE))
-        hatch = (
-            (row_idx + col_idx) % FIRE_STALE_HATCH_PERIOD_PX
-            < FIRE_STALE_HATCH_STRIPE_PX
-        ) & stale_mask
-        rgba[hatch, 0] = FIRE_STALE_HATCH_COLOUR[0]
-        rgba[hatch, 1] = FIRE_STALE_HATCH_COLOUR[1]
-        rgba[hatch, 2] = FIRE_STALE_HATCH_COLOUR[2]
-        rgba[hatch, 3] = FIRE_STALE_HATCH_ALPHA
+        grey = np.array(FIRE_STALE_FADE_GREY, dtype=np.float32)
+        mix = (strength * FIRE_STALE_FADE_MIX)[..., None]
+        faded = rgba[..., :3] * (1 - mix) + grey * mix
+        faded_a = rgba[..., 3] * (1 - strength * (1 - FIRE_STALE_FADE_ALPHA_KEEP))
+        wash_a = strength * FIRE_STALE_WASH_ALPHA
+        wash = ~mask
+        rgb = np.where(wash[..., None], grey, faded)
+        alpha = np.where(wash, wash_a, np.maximum(faded_a, wash_a))
+        rgba[..., :3] = np.where(strength[..., None] > 0, rgb, rgba[..., :3]).astype(
+            np.uint8
+        )
+        rgba[..., 3] = np.where(strength > 0, alpha, rgba[..., 3]).astype(np.uint8)
 
     return Image.fromarray(rgba)
 
