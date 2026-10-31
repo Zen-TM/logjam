@@ -46,7 +46,9 @@ describe("GaugeView", () => {
       "credit",
     ]);
     expect(screen.getByText("Made Up River at One")).toBeTruthy();
-    expect(screen.getByText(GAUGES.copy.level)).toBeTruthy();
+    // The stat and its chart.
+    expect(screen.getAllByText(GAUGES.copy.level)).toHaveLength(2);
+    expect(screen.getAllByText(GAUGES.copy.flow)).toHaveLength(2);
     expect(screen.getByText("0.95 m")).toBeTruthy();
     expect(screen.getByText("130 ML/d")).toBeTruthy();
     expect(screen.getByText(/Latest reading 1 h ago/)).toBeTruthy();
@@ -54,7 +56,7 @@ describe("GaugeView", () => {
     expect(screen.getByText(file.attribution)).toBeTruthy();
   });
 
-  // Mutation: return the chart from `gaugeWeekChart` at one reading.
+  // Mutation: return a chart from `gaugeWeekCharts` at one reading.
   it("has no chart heading until there is a line to draw", () => {
     view({ ...withFlow, readings: [[now / 1000 - 3600, 0.95, 130]] });
     expect(screen.queryByText(GAUGES.copy.graph)).toBeNull();

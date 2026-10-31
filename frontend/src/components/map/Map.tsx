@@ -13,6 +13,7 @@ import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
+  MAP_LABEL_MIN_ZOOM,
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
   type MapPointCoord,
@@ -56,7 +57,6 @@ import {
   GAUGE_ICON_IMAGE,
   GAUGE_ICON_SDF_URI,
   GAUGE_ICON_SIZE,
-  GAUGE_LABEL_MIN_ZOOM,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
@@ -1413,7 +1413,7 @@ function Map({
         id: "place-labels",
         type: "symbol",
         source: "places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
@@ -1432,7 +1432,7 @@ function Map({
         id: "shared-place-labels",
         type: "symbol",
         source: "shared-places",
-        minzoom: 9,
+        minzoom: MAP_LABEL_MIN_ZOOM,
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
@@ -1482,7 +1482,7 @@ function Map({
           id: GAUGE_LABELS,
           type: "symbol",
           source: "gauges",
-          minzoom: GAUGE_LABEL_MIN_ZOOM,
+          minzoom: MAP_LABEL_MIN_ZOOM,
           layout: {
             visibility: "none",
             "text-field": ["get", "name"],

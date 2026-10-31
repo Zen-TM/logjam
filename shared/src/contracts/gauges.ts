@@ -21,7 +21,6 @@ export const GAUGES = {
   ],
   copy: {
     overlay: "River gauges",
-    overlayHint: "Water level and flow, as each gauge last read.",
     level: PAIRED_STAT_LABELS.level,
     flow: PAIRED_STAT_LABELS.flow,
     age: "Latest reading",
@@ -177,18 +176,18 @@ export function gaugeStats(gauge: Gauge, latest: GaugeLatest, now: number) {
   );
 }
 
-/** What the week's chart draws: the value the stat leads with, since a level
- *  chart over "No level reading" would disagree with itself. Null under two
- *  readings: one point draws no line, so the heading goes too. */
-export function gaugeWeekChart(
+/** The week's charts, level above flow. A value under two readings has none,
+ *  since one point draws no line; with neither, the heading goes too. */
+export function gaugeWeekCharts(
   gauge: Gauge,
   latest: GaugeLatest | null,
-): { charted: "level" | "flow"; series: ProfileSeries } | null {
-  if (!latest) return null;
-  const charted = latest.level !== null ? "level" : "flow";
-  const series = gaugeSeries(gauge.readings, charted);
-  const readings = series.points.filter((p) => p.value !== null).length;
-  return readings < 2 ? null : { charted, series };
+): { charted: "level" | "flow"; series: ProfileSeries }[] {
+  if (!latest) return [];
+  return (["level", "flow"] as const).flatMap((charted) => {
+    const series = gaugeSeries(gauge.readings, charted);
+    const readings = series.points.filter((p) => p.value !== null).length;
+    return readings < 2 ? [] : [{ charted, series }];
+  });
 }
 
 export function formatGaugeLevel(metres: number): string {

@@ -28,7 +28,6 @@ export const MAP_OVERLAYS = {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
     gauges: GAUGES.copy.overlay,
-    gaugesHint: GAUGES.copy.overlayHint,
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },
