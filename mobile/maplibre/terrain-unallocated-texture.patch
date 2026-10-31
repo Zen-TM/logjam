@@ -1,0 +1,67 @@
+diff --git a/include/mln/vulkan/texture2d.hpp b/include/mln/vulkan/texture2d.hpp
+index df0954e..cd8df0a 100644
+--- a/include/mln/vulkan/texture2d.hpp
++++ b/include/mln/vulkan/texture2d.hpp
+@@ -77,6 +77,7 @@ public:
+                          const vk::UniqueCommandBuffer& buffer,
+                          bool submit);
+ 
++    bool hasImage() const noexcept { return imageAllocation != nullptr; }
+     bool needsUpload() const noexcept override { return !!imageData; };
+ 
+     vk::Format getVulkanFormat() const { return vulkanFormat(pixelFormat, channelType); }
+diff --git a/src/mln/renderer/render_terrain.cpp b/src/mln/renderer/render_terrain.cpp
+index b210f05..2e8b26e 100644
+--- a/src/mln/renderer/render_terrain.cpp
++++ b/src/mln/renderer/render_terrain.cpp
+@@ -966,7 +966,9 @@ void RenderTerrain::prepareDepthTarget(PaintParameters& parameters) {
+ }
+ 
+ const std::shared_ptr<gfx::Texture2D>& RenderTerrain::getDepthTexture(gfx::Context& context) {
+-    if (depthRenderTarget && depthRenderTarget->getTexture()) {
++    // renderDepth returns early while the depth group is empty, so until then the target's
++    // texture has no image: a symbol drawn on an early frame must take the placeholder.
++    if (depthRenderTarget && depthRenderTarget->getTexture() && depthLayerGroup && !depthLayerGroup->empty()) {
+         return depthRenderTarget->getTexture();
+     }
+     if (!placeholderDepthTexture) {
+diff --git a/src/mln/vulkan/descriptor_set.cpp b/src/mln/vulkan/descriptor_set.cpp
+index 3ef145d..ce478eb 100644
+--- a/src/mln/vulkan/descriptor_set.cpp
++++ b/src/mln/vulkan/descriptor_set.cpp
+@@ -4,6 +4,7 @@
+ #include <mln/vulkan/command_encoder.hpp>
+ #include <mln/vulkan/texture2d.hpp>
+ #include <mln/util/logging.hpp>
++#include <mln/util/string.hpp>
+ #include <mln/util/instrumentation.hpp>
+ #include <mln/util/monotonic_timer.hpp>
+ 
+@@ -217,9 +218,17 @@ void ImageDescriptorSet::update(const std::array<gfx::Texture2DPtr, shaders::max
+     const auto& backend = context.getBackend();
+     const auto& device = backend.getDevice();
+ 
++    bool unallocated = false;
+     for (size_t id = 0; id < shaders::maxTextureCountPerShader; ++id) {
+         const auto& texture = id < textures.size() ? textures[id] : nullptr;
+-        auto& textureImpl = texture ? static_cast<Texture2D&>(*texture) : *context.getDummyTexture();
++        auto* bound = static_cast<Texture2D*>(texture.get());
++        if (bound && !bound->hasImage()) {
++            // Logjam spike: never draw a texture without an image; say which slot and retry.
++            Log::Warning(Event::Render, "logjam-terrain: texture slot " + util::toString(id) + " has no image");
++            bound = nullptr;
++            unallocated = true;
++        }
++        auto& textureImpl = bound ? *bound : *context.getDummyTexture();
+ 
+         const auto descriptorImageInfo = vk::DescriptorImageInfo()
+                                              .setImageLayout(textureImpl.getVulkanImageLayout())
+@@ -236,7 +245,7 @@ void ImageDescriptorSet::update(const std::array<gfx::Texture2DPtr, shaders::max
+         device->updateDescriptorSets(writeDescriptorSet, nullptr, backend.getDispatcher());
+     }
+ 
+-    dirty[frameIndex] = false;
++    dirty[frameIndex] = unallocated;
+ }
+ 
+ } // namespace vulkan

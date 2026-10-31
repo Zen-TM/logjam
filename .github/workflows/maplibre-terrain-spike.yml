@@ -16,7 +16,7 @@ permissions:
 env:
   MAPLIBRE_SHA: 48625f06030bb12418025ce59a7f4fdf418dbd9a
   UPSTREAM: "13.7.1"
-  VERSION: 13.7.1-logjam-terrain.1
+  VERSION: 13.7.1-logjam-terrain.2
 
 jobs:
   build:
