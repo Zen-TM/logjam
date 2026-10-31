@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import { GAUGES, type Gauge } from "@logjam/shared";
 import { useIsMobile } from "../../useIsMobile";
@@ -18,9 +18,10 @@ export default function GaugePopover({
   gauge: Gauge;
   attribution: string;
   generatedAt: string;
-  onClose: () => void;
+  onClose: (id: string) => void;
 }) {
   const narrow = useIsMobile();
+  const close = useCallback(() => onClose(gauge.id), [onClose, gauge.id]);
   const [now] = useState(Date.now);
   const [anchorEl] = useState(() => document.createElement("div"));
   const anchorRef = useRef<HTMLElement | null>(anchorEl);
@@ -28,17 +29,17 @@ export default function GaugePopover({
     const marker = new maplibregl.Marker({ element: anchorEl })
       .setLngLat([gauge.lon, gauge.lat])
       .addTo(map);
-    map.on("movestart", onClose);
+    map.on("movestart", close);
     return () => {
-      map.off("movestart", onClose);
+      map.off("movestart", close);
       marker.remove();
     };
-  }, [map, gauge.lon, gauge.lat, anchorEl, onClose]);
+  }, [map, gauge.lon, gauge.lat, anchorEl, close]);
   return (
     <Popover
       open
       onClose={() => {
-        onClose();
+        close();
         map.getCanvas().focus();
       }}
       anchorRef={anchorRef}

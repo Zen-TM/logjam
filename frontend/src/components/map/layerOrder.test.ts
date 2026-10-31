@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   GAUGE_BELOW,
   GAUGE_LAYER,
+  pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
   stackTopoLayers,
@@ -174,6 +175,15 @@ describe("GAUGE_LAYER", () => {
         [1, 1],
       ),
     ).toBeNull();
+  });
+
+  // Mutation: return false, and pressing an open gauge reopens its panel.
+  it("treats a press on the gauge whose panel it just closed as closing it", () => {
+    const closed = { id: "212290", at: 1000 };
+    expect(pressClosedGauge("212290", closed, 1100)).toBe(true);
+    expect(pressClosedGauge("212291", closed, 1100)).toBe(false);
+    expect(pressClosedGauge("212290", closed, 2000)).toBe(false);
+    expect(pressClosedGauge("212290", null, 1100)).toBe(false);
   });
 
   it("is pressable, so a gauge press does not also ask 'what is here?'", () => {
