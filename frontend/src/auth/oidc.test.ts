@@ -4,6 +4,7 @@ import { ErrorResponse } from "oidc-client-ts";
 const m = vi.hoisted(() => ({
   getUser: vi.fn(),
   removeUser: vi.fn(async () => {}),
+  revokeTokens: vi.fn(async () => {}),
   signinSilent: vi.fn(),
   signinCallback: vi.fn(),
   signinRedirect: vi.fn(async () => {}),
@@ -15,6 +16,7 @@ vi.mock("oidc-client-ts", async (orig) => ({
   UserManager: class {
     getUser = m.getUser;
     removeUser = m.removeUser;
+    revokeTokens = m.revokeTokens;
     signinSilent = m.signinSilent;
     signinCallback = m.signinCallback;
     signinRedirect = m.signinRedirect;
@@ -186,6 +188,34 @@ describe("signOutRedirect", () => {
     expect(to.origin + to.pathname).toBe("https://auth.example.com/logout");
     expect(to.searchParams.get("client_id")).toBe("cid");
     expect(to.searchParams.get("logout_uri")).toBe(`${origin}/`);
+  });
+
+  // Mutation: drop the revokeTokens call and the refresh token outlives the
+  // sign-out; let its failure propagate and the second test goes red.
+  it("revokes the refresh token before it leaves", async () => {
+    const { signOutRedirect } = await load();
+    m.getUser.mockResolvedValue(stored());
+    m.getMetadata.mockResolvedValue({
+      end_session_endpoint: "https://auth.example.com/logout",
+    });
+    await signOutRedirect();
+    expect(m.revokeTokens).toHaveBeenCalledWith(["refresh_token"]);
+    expect(m.revokeTokens.mock.invocationCallOrder[0]).toBeLessThan(
+      m.removeUser.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("still signs out when the revoke fails", async () => {
+    const { signOutRedirect } = await load();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    m.getUser.mockResolvedValue(stored());
+    m.getMetadata.mockResolvedValue({
+      end_session_endpoint: "https://auth.example.com/logout",
+    });
+    m.revokeTokens.mockRejectedValue(new TypeError("Failed to fetch"));
+    await signOutRedirect();
+    expect(m.removeUser).toHaveBeenCalledOnce();
+    expect(assign).toHaveBeenCalledOnce();
   });
 
   it("still leaves when the provider cannot be asked", async () => {

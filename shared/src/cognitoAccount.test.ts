@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmEmailChange,
-  deleteCognitoUser,
   globalSignOut,
   requestEmailChange,
 } from "./cognitoAccount.js";
@@ -38,11 +37,10 @@ describe("cognitoAccount", () => {
     });
   });
 
-  it("sends the code, the sign-out and the delete as their own operations", async () => {
+  it("sends the code and the sign-out as their own operations", async () => {
     const f = stubFetch({ ok: true });
     await confirmEmailChange(ISSUER, "AT", "123456");
     await globalSignOut(ISSUER, "AT");
-    await deleteCognitoUser(ISSUER, "AT");
     const targets = f.mock.calls.map(
       (c) =>
         (
@@ -55,7 +53,6 @@ describe("cognitoAccount", () => {
     expect(targets).toEqual([
       "AWSCognitoIdentityProviderService.VerifyUserAttribute",
       "AWSCognitoIdentityProviderService.GlobalSignOut",
-      "AWSCognitoIdentityProviderService.DeleteUser",
     ]);
   });
 

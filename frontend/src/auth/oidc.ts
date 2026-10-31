@@ -136,6 +136,13 @@ export async function signOutRedirect(): Promise<void> {
   } catch (err) {
     console.error(err);
   }
+  // /logout only clears the hosted session cookie; revoking is what ends the
+  // refresh token (ADR 0041). Best effort: a failure never blocks sign-out.
+  try {
+    await m.revokeTokens(["refresh_token"]);
+  } catch (err) {
+    console.error(err);
+  }
   await m.removeUser();
   if (!endpoint) {
     window.location.assign(home());

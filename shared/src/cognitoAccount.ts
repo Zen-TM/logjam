@@ -1,5 +1,5 @@
 // Cognito's account calls with the access token, over plain fetch (no
-// Amplify): change email, global sign-out, delete. Each needs the
+// Amplify): change email and global sign-out. Each needs the
 // aws.cognito.signin.user.admin scope (oidc.ts) and a Cognito issuer.
 import { parseCognitoIssuer } from "./cognitoIssuer.js";
 
@@ -60,6 +60,3 @@ export const confirmEmailChange = (
 
 export const globalSignOut = (issuer: string, accessToken: string) =>
   call(issuer, "GlobalSignOut", { AccessToken: accessToken });
-
-export const deleteCognitoUser = (issuer: string, accessToken: string) =>
-  call(issuer, "DeleteUser", { AccessToken: accessToken });
