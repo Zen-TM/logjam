@@ -528,79 +528,71 @@ router.delete(
         ? friendship.addresseeId
         : friendship.requesterId;
 
-    // Collect the shares being revoked BEFORE deleting them, so we can also
-    // purge each recipient's place_shared notification for the now-unshared
-    // place. Unfriend revokes shares in both directions, so the
-    // notification purge targets both users' recipient rows.
-    const revokedShares = await prisma.placeShare.findMany({
-      where: {
-        OR: [
-          { sharedById: user.id, sharedWithId: otherId },
-          { sharedById: otherId, sharedWithId: user.id },
-        ],
-      },
-      select: { id: true, placeId: true, sharedById: true, sharedWithId: true },
-    });
-
-    // Place-level media ids of every place whose share is being revoked —
-    // each sharee's mirror must forget the place AND its media (sync
-    // tombstone fan-out, written in the same transaction below).
-    const revokedPlaceIds = revokedShares.map((s) => s.placeId);
-    const revokedPlaceMedia =
-      revokedPlaceIds.length > 0
-        ? await prisma.media.findMany({
-            where: { linkedType: "place", linkedId: { in: revokedPlaceIds } },
-            select: { id: true, linkedType: true, linkedId: true },
-          })
-        : [];
-    const mediaIdsByPlace = new Map<string, string[]>();
-    for (const m of revokedPlaceMedia) {
-      const placeId = placeIdOfMedia(m);
-      if (placeId === null) continue;
-      const list = mediaIdsByPlace.get(placeId) ?? [];
-      list.push(m.id);
-      mediaIdsByPlace.set(placeId, list);
-    }
-    // A linked route rides with the shared place record, so unfriending
-    // revokes it too.
-    const revokedRoutes =
-      revokedPlaceIds.length > 0
-        ? await prisma.route.findMany({
-            where: { placeId: { in: revokedPlaceIds } },
-            select: { id: true, placeId: true },
-          })
-        : [];
-    const routeIdByPlace = new Map(
-      revokedRoutes.map((route) => [route.placeId!, route.id]),
-    );
-    const unfriendTombstones = [
-      ...friendshipDeleteTombstones({
-        friendshipId: id,
-        userIds: [friendship.requesterId, friendship.addresseeId],
-      }),
-      ...revokedShares.flatMap((s) =>
-        shareRevokeTombstones({
-          placeOwnerId: s.sharedById,
-          shareeId: s.sharedWithId,
-          shareId: s.id,
-          placeId: s.placeId,
-          placeMediaIds: mediaIdsByPlace.get(s.placeId) ?? [],
-          routeId: routeIdByPlace.get(s.placeId) ?? null,
-        }),
-      ),
-    ];
-
     await prisma.$transaction(async (tx) => {
+      // The place shares in both directions, taken from their delete: each one
+      // gets its tombstones and its recipient's place_shared purge below, and
+      // a share made after a separate read would get neither.
+      const revokedShares = await tx.$queryRaw<
+        {
+          id: string;
+          placeId: string;
+          sharedById: string;
+          sharedWithId: string;
+        }[]
+      >`DELETE FROM place_shares
+         WHERE (shared_by_id = ${user.id} AND shared_with_id = ${otherId})
+            OR (shared_by_id = ${otherId} AND shared_with_id = ${user.id})
+        RETURNING id, place_id AS "placeId", shared_by_id AS "sharedById",
+                  shared_with_id AS "sharedWithId"`;
+
+      // Place-level media ids of every place whose share is being revoked —
+      // each sharee's mirror must forget the place AND its media (sync
+      // tombstone fan-out, written in the same transaction below).
+      const revokedPlaceIds = revokedShares.map((s) => s.placeId);
+      const revokedPlaceMedia =
+        revokedPlaceIds.length > 0
+          ? await tx.media.findMany({
+              where: { linkedType: "place", linkedId: { in: revokedPlaceIds } },
+              select: { id: true, linkedType: true, linkedId: true },
+            })
+          : [];
+      const mediaIdsByPlace = new Map<string, string[]>();
+      for (const m of revokedPlaceMedia) {
+        const placeId = placeIdOfMedia(m);
+        if (placeId === null) continue;
+        const list = mediaIdsByPlace.get(placeId) ?? [];
+        list.push(m.id);
+        mediaIdsByPlace.set(placeId, list);
+      }
+      // A linked route rides with the shared place record, so unfriending
+      // revokes it too.
+      const revokedRoutes =
+        revokedPlaceIds.length > 0
+          ? await tx.route.findMany({
+              where: { placeId: { in: revokedPlaceIds } },
+              select: { id: true, placeId: true },
+            })
+          : [];
+      const routeIdByPlace = new Map(
+        revokedRoutes.map((route) => [route.placeId!, route.id]),
+      );
+      const unfriendTombstones = [
+        ...friendshipDeleteTombstones({
+          friendshipId: id,
+          userIds: [friendship.requesterId, friendship.addresseeId],
+        }),
+        ...revokedShares.flatMap((s) =>
+          shareRevokeTombstones({
+            placeOwnerId: s.sharedById,
+            shareeId: s.sharedWithId,
+            shareId: s.id,
+            placeId: s.placeId,
+            placeMediaIds: mediaIdsByPlace.get(s.placeId) ?? [],
+            routeId: routeIdByPlace.get(s.placeId) ?? null,
+          }),
+        ),
+      ];
       await writeTombstones(tx, unfriendTombstones);
-      // Revoke any places shared between these two users
-      await tx.placeShare.deleteMany({
-        where: {
-          OR: [
-            { sharedById: user.id, sharedWithId: otherId },
-            { sharedById: otherId, sharedWithId: user.id },
-          ],
-        },
-      });
       // Every OTHER share type between the two users: direct per-item Shares
       // (waypoint / route / topo job) in both directions, plus
       // file sends the recipient has not taken yet. Place shares are the
