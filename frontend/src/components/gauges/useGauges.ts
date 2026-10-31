@@ -9,8 +9,8 @@ export const GAUGE_REFRESH_MS = 5 * 60_000;
 
 /**
  * The gauge readings: a public file, the same for everyone (ADR 0044), asked
- * for only while the layer is on and again every five minutes while the tab is
- * visible. A failed or malformed fetch keeps the last good file.
+ * for only while something shows them and again every five minutes while the
+ * tab is visible. A failed or malformed fetch keeps the last good file.
  */
 export function useGauges(enabled: boolean): {
   file: GaugeLatestFile | null;
