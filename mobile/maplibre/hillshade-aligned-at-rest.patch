@@ -1,6 +1,6 @@
-diff --git a/src/mbgl/renderer/layers/hillshade_layer_tweaker.cpp b/src/mbgl/renderer/layers/hillshade_layer_tweaker.cpp
---- a/src/mbgl/renderer/layers/hillshade_layer_tweaker.cpp
-+++ b/src/mbgl/renderer/layers/hillshade_layer_tweaker.cpp
+diff --git a/src/mln/renderer/layers/hillshade_layer_tweaker.cpp b/src/mln/renderer/layers/hillshade_layer_tweaker.cpp
+--- a/src/mln/renderer/layers/hillshade_layer_tweaker.cpp
++++ b/src/mln/renderer/layers/hillshade_layer_tweaker.cpp
 @@ -173,7 +173,7 @@ void HillshadeLayerTweaker::execute(LayerGroupBase& layerGroup, const PaintParam
          const UnwrappedTileID tileID = drawable.getTileID()->toUnwrapped();
  

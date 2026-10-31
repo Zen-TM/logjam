@@ -1,0 +1,88 @@
+name: MapLibre terrain spike
+
+# Spike only, never for main: builds MapLibre Android's feature/terrain-3d at a
+# pinned commit into workflow artifacts. No release is published. The AAR feeds
+# dev-apk.yml through mobile/maplibre/spike-run; the test app is the benchmark.
+on:
+  push:
+    branches: [spike/terrain-3d]
+    paths:
+      - "mobile/maplibre/*.patch"
+      - ".github/workflows/maplibre-terrain-spike.yml"
+
+permissions:
+  contents: read
+
+env:
+  MAPLIBRE_SHA: 48625f06030bb12418025ce59a7f4fdf418dbd9a
+  UPSTREAM: "13.7.1"
+  VERSION: 13.7.1-logjam-terrain.1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          tool-cache: true
+          android: false
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: logjam
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: maplibre/maplibre-native
+          ref: ${{ env.MAPLIBRE_SHA }}
+          path: maplibre-native
+          submodules: recursive
+          persist-credentials: false
+      - name: Apply the patch
+        run: git -C maplibre-native apply --verbose "$GITHUB_WORKSPACE"/logjam/mobile/maplibre/*.patch
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+      - name: Build the Vulkan AAR, arm64 only
+        working-directory: maplibre-native/platform/android
+        env:
+          IS_LOCAL_DEVELOPMENT: "false"
+        run: |
+          echo "cmake.dir=$(dirname "$(dirname "$(command -v cmake)")")" >> local.properties
+          npm install --ignore-scripts
+          RENDERER=vulkan BUILDTYPE=Release make android-lib-arm-v8
+      - name: Package for Maven
+        run: |
+          mkdir dist
+          cp maplibre-native/platform/android/MapLibreAndroid/build/outputs/aar/MapLibreAndroid-vulkan-release.aar \
+            "dist/android-sdk-vulkan-$VERSION.aar"
+          curl -fsSL "https://repo1.maven.org/maven2/org/maplibre/gl/android-sdk-vulkan/$UPSTREAM/android-sdk-vulkan-$UPSTREAM.pom" |
+            sed -e "s#<version>$UPSTREAM</version>#<version>$VERSION</version>#" \
+              -e '/do_not_remove: published-with-gradle-metadata/d' > "dist/android-sdk-vulkan-$VERSION.pom"
+          grep -q "<version>$VERSION</version>" "dist/android-sdk-vulkan-$VERSION.pom"
+          (cd dist && sha256sum ./* > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: terrain-dist
+          path: dist/
+          if-no-files-found: error
+      # After the AAR's upload, so a failure here keeps the library.
+      - name: Build the benchmark test app
+        working-directory: maplibre-native/platform/android
+        env:
+          IS_LOCAL_DEVELOPMENT: "false"
+        run: ./gradlew --max-workers=4 -Pmapbox.buildtype=release -Pmaplibre.abis=arm64-v8a :MapLibreAndroidTestApp:assembleVulkanRelease
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: terrain-testapp
+          path: maplibre-native/platform/android/MapLibreAndroidTestApp/build/outputs/apk/**/*.apk
+          if-no-files-found: error
