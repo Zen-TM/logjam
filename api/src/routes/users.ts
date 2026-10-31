@@ -86,7 +86,12 @@ export async function createUserForSignup(params: {
   for (let attempt = 0; attempt < candidateUsernames.length; attempt++) {
     try {
       return await prisma.user.create({
-        data: { cognitoId: sub, email, username: candidateUsernames[attempt] },
+        data: {
+          cognitoId: sub,
+          subject: sub,
+          email,
+          username: candidateUsernames[attempt],
+        },
       });
     } catch (e) {
       if (
@@ -274,7 +279,7 @@ router.get(
         );
         user = await prisma.user.update({
           where: { id: emailOwner.id },
-          data: { cognitoId: sub },
+          data: { cognitoId: sub, subject: sub },
         });
       } else {
         // No row owns this email (or a concurrent request for this same sub is

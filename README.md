@@ -202,7 +202,7 @@ export DB_PASSWORD_PROD="..."
 make snapshot
 # → snapshots/latest.sql (gitignored)
 # All user emails replaced with user-<id>@local
-# Real cognitoIds replaced with sanitized-<id>
+# Real identity-provider subjects replaced with sanitized-<id>
 # Canyon/trip notes cleared
 
 # 3. Start env with snapshot

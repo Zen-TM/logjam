@@ -50,7 +50,7 @@ docker exec "$CONTAINER" psql -U "$DBUSER" -d postgres -c "CREATE DATABASE $DB" 
 
 echo "==> applying every migration BEFORE $PHASE_1B"
 for dir in $(ls -d "$MIGRATIONS"/*/ | sort); do
-  case "$dir" in *"$PHASE_1B"* | *"$PHASE_1C"*) continue ;; esac
+  case "$dir" in *"$PHASE_1B"*) break ;; esac
   psql_ "$DB" < "$dir/migration.sql" >/dev/null
 done
 
