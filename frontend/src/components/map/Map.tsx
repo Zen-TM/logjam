@@ -514,6 +514,7 @@ function Map({
   showPlaces,
   showWays,
   showGauges,
+  onShowGauges,
   placeTracks,
   standaloneTracks,
   routes,
@@ -586,6 +587,7 @@ function Map({
   showWays: boolean;
   /** The river gauge drops, an optional layer (off until asked for). */
   showGauges: boolean;
+  onShowGauges: () => void;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -3242,6 +3244,16 @@ function Map({
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
               selectPlaceRef.current(place.id);
+            }}
+            onSelectGauge={(gauge) => {
+              onShowGauges();
+              // After the flight: a gauge's panel closes when the map moves.
+              mapRef.current?.once("moveend", () => setGaugeId(gauge.id));
+              mapRef.current?.flyTo({
+                center: [gauge.lon, gauge.lat],
+                zoom: 13,
+                duration: 1200,
+              });
             }}
             onSelectLocation={(lat, lon) =>
               mapRef.current?.flyTo({
