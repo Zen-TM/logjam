@@ -137,15 +137,13 @@ const usernameSchema = z
   .max(32)
   .regex(/^[A-Za-z0-9_.-]+$/);
 
-const isUUID = (s: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
-
 /**
  * The name a new account starts with, which other users then see and search.
- * The token's own username counts only if it is a valid name that is neither a
- * generated UUID nor the email or its local part (Managed Login's sign-up has
- * no username field, so what arrives is often one of those). Otherwise a
- * neutral name from the sub: never anything derived from the email.
+ * The token's own username counts only if it is a valid name that doesn't
+ * contain the email's local part. usernameSchema already refuses an email or a
+ * UUID, which is what arrives from a Managed Login sign-up, which has no
+ * username field. Otherwise a neutral name from the sub: never anything derived
+ * from the email.
  * Guard: users.unit.test.ts.
  */
 export function initialUsernameFor(params: {
@@ -155,12 +153,9 @@ export function initialUsernameFor(params: {
 }): string {
   const { sub, email, username } = params;
   const parsed = usernameSchema.safeParse(username);
-  if (parsed.success && !isUUID(parsed.data)) {
-    const name = parsed.data.toLowerCase();
-    const local = email.split("@")[0].toLowerCase();
-    if (!name.includes(email.toLowerCase()) && !name.includes(local)) {
-      return parsed.data;
-    }
+  const local = email.split("@")[0].toLowerCase();
+  if (parsed.success && !parsed.data.toLowerCase().includes(local)) {
+    return parsed.data;
   }
   return `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
 }

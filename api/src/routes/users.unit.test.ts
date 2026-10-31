@@ -127,9 +127,9 @@ describe("createUserForSignup", () => {
 });
 
 // First-login name. Mutation that turns each red: let the email's local part
-// through (the local-part and email cases), drop the UUID test, drop the
-// usernameSchema check (the invalid case), or derive the fallback from the
-// email instead of the sub.
+// through (the local-part cases), drop the usernameSchema check (the UUID,
+// email and invalid cases), or derive the fallback from the email instead of
+// the sub.
 describe("initialUsernameFor", () => {
   const sub = "9f1c2b3a-0000-4000-8000-000000000001";
   // sha256(sub) first 8 hex
