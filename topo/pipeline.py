@@ -472,9 +472,9 @@ VEGETATION_DEFAULTS = {
 # it reads the same across jobs/presets. The green density ramp is never
 # touched: a grey fade read as thinner scrub in prod, so amber goes on top.
 FIRE_STALE_AMBER = (217, 119, 6)
-FIRE_STALE_STRIPE_PERIOD = (
-    32  # tile px; must divide TILE_SIZE or lines break at tile edges
-)
+# Tile px. Must divide TILE_SIZE or lines break at tile edges
+# (test_stale_overlay.py::test_stripes_join_across_a_tile_edge).
+FIRE_STALE_STRIPE_PERIOD = 32
 FIRE_STALE_STRIPE_HALF_WIDTH = 1.4  # tile px
 FIRE_STALE_STRIPE_ALPHA = 130
 FIRE_STALE_BAND_ALPHA = 120  # at the fire boundary, fading inwards as k ** 1.5
