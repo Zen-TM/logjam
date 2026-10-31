@@ -1444,10 +1444,14 @@ export function MapScreen({
   // saved height clip offline), with no viewport so panning never changes the
   // style. A style change reloads the map, so it must be stable.
   const [terrain3d, setTerrain3dState] = useState(readTerrain3d);
-  const chooseTerrain3d = useCallback((on: boolean) => {
-    setTerrain3dState(on);
-    setTerrain3d(on);
-  }, []);
+  const chooseTerrain3d = useCallback(
+    (on: boolean) => {
+      setTerrain3dState(on);
+      setTerrain3d(on);
+      setCameraStop({ pitch: on ? 60 : 0, duration: 800 });
+    },
+    [setCameraStop],
+  );
   const terrainDem = useMemo<TerrainDem | null>(() => {
     if (!terrain3d) return null;
     const r = resolveMapSource({ kind: "nsw-hillshade" }, ctx).find(
