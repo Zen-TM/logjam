@@ -56,6 +56,29 @@ describe("GaugeView", () => {
     expect(screen.getByText(file.attribution)).toBeTruthy();
   });
 
+  // Mutation: draw the × outside the heading's row, or whatever `onClose` says.
+  it("puts the way out on the name's line, only where it has its own surface", () => {
+    const onClose = vi.fn();
+    render(
+      <GaugeView
+        gauge={withFlow}
+        attribution={file.attribution}
+        generatedAt={file.generatedAt}
+        now={now}
+        onClose={onClose}
+      />,
+    );
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(
+      screen.getByRole("heading", { level: 2 }).parentElement?.contains(close),
+    ).toBe(true);
+    close.click();
+    expect(onClose).toHaveBeenCalledOnce();
+    cleanup();
+    view(withFlow);
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+  });
+
   // Mutation: return a chart from `gaugeWeekCharts` at one reading.
   it("has no chart heading until there is a line to draw", () => {
     view({ ...withFlow, readings: [[now / 1000 - 3600, 0.95, 130]] });
