@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 
 vi.mock("../services/prisma", () => ({
@@ -8,7 +9,7 @@ vi.mock("../services/prisma", () => ({
 }));
 
 import prisma from "../services/prisma";
-import { createUserForSignup } from "./users";
+import { createUserForSignup, initialUsernameFor } from "./users";
 
 const create = (prisma as unknown as { user: { create: Mock } }).user.create;
 const findUnique = (prisma as unknown as { user: { findUnique: Mock } }).user
@@ -122,5 +123,43 @@ describe("createUserForSignup", () => {
     await expect(
       createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),
     ).rejects.toBe(boom);
+  });
+});
+
+// First-login name. Mutation that turns each red: let the email's local part
+// through (the local-part and email cases), drop the UUID test, drop the
+// usernameSchema check (the invalid case), or derive the fallback from the
+// email instead of the sub.
+describe("initialUsernameFor", () => {
+  const sub = "9f1c2b3a-0000-4000-8000-000000000001";
+  // sha256(sub) first 8 hex
+  const neutral = `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
+  const name = (username: string, email = "jane.doe@example.com") =>
+    initialUsernameFor({ sub, email, username });
+
+  it("keeps a valid name the user chose", () => {
+    expect(name("canyoneer_42")).toBe("canyoneer_42");
+  });
+  it("is neutral for a UUID username", () => {
+    expect(name("0b9f8a6e-1c2d-4e3f-8a9b-0c1d2e3f4a5b")).toBe(neutral);
+  });
+  it("is neutral for the email's local part, in any case", () => {
+    expect(name("jane.doe")).toBe(neutral);
+    expect(name("Jane.Doe")).toBe(neutral);
+  });
+  it("is neutral for a name containing the local part", () => {
+    expect(name("jane.doe99")).toBe(neutral);
+  });
+  it("is neutral for the email itself", () => {
+    expect(name("jane.doe@example.com")).toBe(neutral);
+  });
+  it("is neutral for a name that fails the username rules", () => {
+    expect(name("ab")).toBe(neutral);
+    expect(name("has space")).toBe(neutral);
+    expect(name("x".repeat(33))).toBe(neutral);
+  });
+  it("never carries the email in the neutral name", () => {
+    expect(neutral).toMatch(/^user-[0-9a-f]{8}$/);
+    expect(neutral).not.toContain("jane");
   });
 });

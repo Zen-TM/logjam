@@ -1,4 +1,5 @@
 import {
+  AdminDeleteUserCommand,
   AdminGetUserCommand,
   UserNotFoundException,
 } from "@aws-sdk/client-cognito-identity-provider";
@@ -14,6 +15,12 @@ export interface IdentityProvider {
    * answer lets routes/users.ts re-point an account, so it must be certain.
    */
   userExists(sub: string): Promise<boolean>;
+  /**
+   * Remove this subject's identity, after routes/users.ts has deleted
+   * Logjam's data. Already gone counts as done; any other failure throws, and
+   * the caller logs it without failing the account delete.
+   */
+  deleteUser(sub: string): Promise<void>;
 }
 
 function cognitoProvider(region: string, poolId: string): IdentityProvider {
@@ -36,12 +43,27 @@ function cognitoProvider(region: string, poolId: string): IdentityProvider {
         return true;
       }
     },
+    async deleteUser(sub) {
+      try {
+        await client.send(
+          new AdminDeleteUserCommand({ UserPoolId: poolId, Username: sub }),
+        );
+      } catch (err) {
+        if (err instanceof UserNotFoundException) return;
+        throw err;
+      }
+    },
   };
 }
 
 // No directory to ask (fake auth, or an issuer we have no adapter for): every
-// identity exists, so the rebind never fires and the 409 stands.
-const fallback: IdentityProvider = { userExists: async () => true };
+// identity exists, so the rebind never fires and the 409 stands. Deleting is a
+// no-op: with no adapter there is no directory Logjam may write to, so the
+// identity outlives the account until its operator removes it.
+const fallback: IdentityProvider = {
+  userExists: async () => true,
+  deleteUser: async () => {},
+};
 
 export function identityProvider(): IdentityProvider {
   const cognito = parseCognitoIssuer(getEnv().OIDC_ISSUER ?? "");
