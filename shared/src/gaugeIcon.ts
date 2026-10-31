@@ -6,9 +6,5 @@ export { GAUGE_ICON_SDF_URI } from "./gaugeDropSdf.js";
 /** Style-image name. Registered once per map, by whatever owns the style. */
 export const GAUGE_ICON_IMAGE = "gauge-drop";
 
-/** Names appear from here, about a 50 km view; further out the state's worth
- *  of them would only collide. */
-export const GAUGE_LABEL_MIN_ZOOM = 10;
-
 /** Scales the 64x64 source image, whose drop is 45 px tall, to about 25 px. */
 export const GAUGE_ICON_SIZE = 0.55;

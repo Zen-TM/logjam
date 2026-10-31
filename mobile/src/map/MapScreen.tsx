@@ -4266,7 +4266,6 @@ export function MapScreen({
       icon: "gauge",
       hue: MAP_INK.gauge,
       title: MAP_OVERLAYS.copy.gauges,
-      count: gaugeFile?.gauges.length ?? 0,
       // Live state only: a layer on with nothing to draw says so.
       note:
         showGauges && gaugesSettled && !gaugeFile

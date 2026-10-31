@@ -15,20 +15,19 @@ export const MAP_OVERLAYS = {
   sections: [
     { key: "places" },
     { key: "ways" },
-    { key: "gauges" },
     {
       key: "geoPdfs",
       on: "gps",
       reason:
         "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
     },
+    { key: "gauges" },
     { key: "importFile" },
   ],
   copy: {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
     gauges: GAUGES.copy.overlay,
-    gaugesHint: GAUGES.copy.overlayHint,
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },

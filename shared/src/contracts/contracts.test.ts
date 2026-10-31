@@ -761,8 +761,8 @@ describe("the map's overlays list", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
       "places",
       "ways",
-      "gauges",
       "geoPdfs",
+      "gauges",
       "importFile",
     ]);
   });
