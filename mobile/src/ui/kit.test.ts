@@ -10,6 +10,18 @@ import { barrelComponents, kitComponentsFor } from "@logjam/shared";
 // Mutations that turn it red: export a new component from index.ts without
 // declaring it; delete a declared one's export line; rename one in the barrel
 // (`Hero` back to `HeroHeader`).
+// Mutation: drop `style={styles.content}`, and rows stacked in a sheet touch.
+describe("BottomSheet", () => {
+  it("spaces what it stacks", () => {
+    const sheet = readFileSync(
+      new URL("./BottomSheet.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(sheet).toContain("style={styles.content}");
+    expect(sheet).toMatch(/content: \{ gap: spacing\(1\) \}/);
+  });
+});
+
 describe("the Logjam GPS kit barrel", () => {
   it("exports exactly the declared components", () => {
     const barrel = readFileSync(new URL("./index.ts", import.meta.url), "utf8");

@@ -57,6 +57,7 @@ import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
+import { PlaceGaugeSection } from "../gauges/PlaceGaugeSection";
 import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
@@ -66,6 +67,7 @@ import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createPlaceLinkLocal,
   deletePlaceLinkLocal,
+  updatePlaceLocal,
   updateRouteLocal,
 } from "../sync/outbox";
 import {
@@ -396,6 +398,26 @@ export function PlaceDetailScreen({
     ),
 
     weather: () => <PlaceWeatherSection place={place} />,
+
+    // A sharee sees the owner's pick, read-only, and nothing when none is set.
+    gauge: () =>
+      place.gaugeId || isOwner ? (
+        <>
+          <SectionHeader title={copy.gauge} />
+          <PlaceGaugeSection
+            latitude={place.latitude}
+            longitude={place.longitude}
+            gaugeId={place.gaugeId}
+            owned={isOwner}
+            onChange={(gaugeId) =>
+              updatePlaceLocal(placeId, { gaugeId }).catch((err: unknown) => {
+                console.error(err);
+                notify(copy.gaugeSaveFailed, "error");
+              })
+            }
+          />
+        </>
+      ) : null,
 
     // Named for the TYPE, like the form and the filter sheet: on a campsite
     // these are Capacity and Is-a-cave, which are system definitions, not custom ones.

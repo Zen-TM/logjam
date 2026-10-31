@@ -71,7 +71,8 @@ service.**
   safe, high or runnable.
 - **A sharee sees the place's gauge, read-only; a trip's gauge reading stays
   owner-only,** because trips are. The column that links a place to a gauge
-  arrives in a later PR, with the sharee test for this boundary.
+  is `Place.gaugeId` (updated 2026-10-31); a copy of a place does not carry
+  it. Guard: `api/src/__tests__/shareBoundary.test.ts`.
 - **A client fetches a gauge's history from our own CDN,** one file per gauge.
   The CDN logs show which gauge a client opened, and we hold those logs;
   WaterNSW and BoM never see a client. Shipping every gauge's history to every

@@ -62,3 +62,18 @@ describe("the map's gauge layer", () => {
     expect(read("./useGauges.ts")).toContain("if (!enabled) return;");
   });
 });
+
+describe("a place's gauge section", () => {
+  const section = read("./PlaceGaugeSection.tsx");
+  // Mutation: call `onChange(` anywhere but a Row's onPress (say, an effect
+  // that picks the nearest), or draw the Rows without `owned &&`.
+  it("changes the gauge only on a press, and only for the owner", () => {
+    expect(section.match(/onChange\(/g)).toHaveLength(2);
+    expect(section).not.toContain("useEffect");
+    expect(section).toContain("{owned && (");
+    expect(section).toContain("{owned && gaugeId && (");
+  });
+  it("loads the file only for the owner or a place that has a gauge", () => {
+    expect(section).toContain("useGauges(owned || !!gaugeId)");
+  });
+});
