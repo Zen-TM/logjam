@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-30T12:00:00Z",
+  "coldSweptAt": "2026-10-30T12:00:00Z",
+  "attribution": "\u00a9 State of New South Wales through WaterNSW. History via the Bureau of Meteorology, \u00a9 WaterNSW (CC BY).",
+  "gauges": [
+    {
+      "id": "900001",
+      "name": "MADE UP R @ ONE",
+      "lat": -33.418,
+      "lon": 150.726,
+      "hot": true,
+      "hasFlow": true,
+      "readings": [
+        [1793350800, 0.9, 110.0],
+        [1793354400, 0.95, 120.5],
+        [1793358000, null, 130.0]
+      ]
+    },
+    {
+      "id": "900002",
+      "name": "MADE UP CK @ TWO",
+      "lat": -33.5,
+      "lon": 150.3,
+      "hot": false,
+      "hasFlow": false,
+      "readings": [[1793354400, 0.4, null]]
+    },
+    {
+      "id": "900003",
+      "name": "MADE UP R @ THREE",
+      "lat": -34.0,
+      "lon": 150.6,
+      "hot": false,
+      "hasFlow": false,
+      "readings": []
+    }
+  ]
+}

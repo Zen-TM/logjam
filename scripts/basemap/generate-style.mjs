@@ -60,6 +60,22 @@ function toMlrnStyle(layer) {
   return style;
 }
 
+/** `color` at `opacity` over `under`, both #rrggbb, as an opaque #rrggbb. */
+function blend(color, opacity, under) {
+  const channels = (hex) =>
+    [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+  const below = channels(under);
+  const mixed = channels(color).map((value, i) =>
+    Math.round(value * opacity + below[i] * (1 - opacity)),
+  );
+  return `#${mixed.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** The rail line drawn opaque, in the colour it has over bare land. */
+function opaqueRail({ lineOpacity, ...style }, earth) {
+  return { ...style, lineColor: blend(style.lineColor, lineOpacity, earth) };
+}
+
 function collectFontStacks(layerList) {
   const stacks = new Set();
   // text-font is either a plain string array (the stack itself) or an
@@ -100,7 +116,19 @@ for (const flavorName of ["light", "dark"]) {
   // Logjam GPS mounts one stack per saved area, so a stack's `background`
   // would hide every stack under it; the shell style paints the one background.
   // Guard: mobile/src/map/basemap/protomapsLayers.test.ts.
-  const stack = layerList.filter((layer) => layer.type !== "background");
+  const stack = layerList.filter(
+    (layer) => layer.type !== "background" && layer.id !== "buildings",
+  );
+  // Saved areas that share a tile each draw it, and a newer area's land hides
+  // only the layers under the water. Above that, a translucent layer paints
+  // twice and darkens, with a line where the shared tiles end. Buildings can go
+  // under the water, where the Terrain group shades them; rail has to stay over
+  // it, so it goes opaque. Guard: mobile/src/map/basemap/protomapsLayers.test.ts.
+  stack.splice(
+    stack.findIndex((layer) => layer.id === "water"),
+    0,
+    layerList.find((layer) => layer.id === "buildings"),
+  );
   const converted = stack.map((layer) => ({
     id: layer.id,
     type: layer.type,
@@ -108,7 +136,10 @@ for (const flavorName of ["light", "dark"]) {
     ...(layer.filter !== undefined && { filter: layer.filter }),
     ...(layer.minzoom !== undefined && { minzoom: layer.minzoom }),
     ...(layer.maxzoom !== undefined && { maxzoom: layer.maxzoom }),
-    style: toMlrnStyle(layer),
+    style:
+      layer.id === "roads_rail"
+        ? opaqueRail(toMlrnStyle(layer), namedFlavor(flavorName).earth)
+        : toMlrnStyle(layer),
   }));
 
   const output = {

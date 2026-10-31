@@ -60,10 +60,10 @@ though it is not *finished*, so a card never reports work that will never move.
 no signal), `src/map/offlineMask.ts` fills everywhere outside the downloaded
 regions with the page colour, mounted directly above the basemap band. Two
 things are load-bearing there: the mask is a MultiPolygon of the COMPLEMENT as
-disjoint rectangles, and its `layerIndex` is `1 + basemapLayerCount` — an
-offline basemap mounts one raster layer *per region*, all asking for index 1, so
-assuming a single basemap layer buries the mask under one of them and it renders
-half the screen.
+disjoint rectangles, and it is placed by name, with a `beforeId` from
+`src/map/layerOrder.ts`, not by `layerIndex` (updated 2026-10-30) — an offline
+basemap mounts its layers *per region*, so assuming a single basemap layer buries
+the mask under one of them and it renders half the screen.
 
 **Every region download also saves the DEM, and that is not optional.** The plan
 in `shared/src/mapRegionEstimate.ts` appends a `terrarium` source

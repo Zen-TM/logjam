@@ -125,6 +125,96 @@ resource "aws_iam_role_policy" "place_registry_scheduler" {
   })
 }
 
+# Task role for the gauges job (ecs.tf): it may list, read and replace what is
+# under master/gauges/ in the topo bucket, and nothing else.
+resource "aws_iam_role" "gauges" {
+  name = "logjam-gauges-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "gauges" {
+  name = "logjam-gauges-publish"
+  role = aws_iam_role.gauges.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "PublishGauges"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/gauges/*"
+      },
+      {
+        # read_json() and history_ids() in topo/build_gauges.py list before
+        # they read, as upload() does for the place registry.
+        Sid       = "ListGauges"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/gauges/*" } }
+      },
+    ]
+  })
+}
+
+# What EventBridge Scheduler assumes to launch the job: RunTask on that one
+# family, in the one cluster, passing only its two roles.
+resource "aws_iam_role" "gauges_scheduler" {
+  name = "logjam-gauges-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "gauges_scheduler" {
+  name = "logjam-gauges-runtask"
+  role = aws_iam_role.gauges_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunGaugesTask"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        Resource = [
+          aws_ecs_task_definition.gauges.arn_without_revision,
+          "${aws_ecs_task_definition.gauges.arn_without_revision}:*",
+        ]
+        Condition = {
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.main.arn }
+        }
+      },
+      {
+        Sid    = "PassGaugesRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.gauges.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
@@ -214,6 +304,20 @@ resource "aws_iam_policy" "resend_api_key_access" {
   })
 }
 
+# Lets the ECS execution role inject WATERNSW_API_KEY into the gauges task at
+# launch. The value lives in Secrets Manager, set by hand.
+resource "aws_iam_policy" "waternsw_api_key_access" {
+  name = "WaternswApiKeyAccess"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.waternsw_api_key.arn
+    }]
+  })
+}
+
 resource "aws_iam_policy" "topo_worker" {
   name = "logjam-topo-worker-policy"
   policy = jsonencode({
@@ -250,6 +354,11 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
 resource "aws_iam_role_policy_attachment" "ecs_exec_resend_api_key" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = aws_iam_policy.resend_api_key_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_exec_waternsw_api_key" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.waternsw_api_key_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "topo_worker_aws_managed" {
@@ -683,6 +792,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
           aws_iam_role.ecs_task_execution.arn,
           aws_iam_role.topo_worker.arn,
           aws_iam_role.place_registry.arn,
+          aws_iam_role.gauges.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }

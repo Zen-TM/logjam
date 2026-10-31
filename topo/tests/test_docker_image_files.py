@@ -29,6 +29,7 @@ _ENTRYPOINTS = (
     "sharpen.py",
     "export_worker.py",
     "build_place_registry.py",
+    "build_gauges.py",
     "build_nsw_dem.py",
 )
 
