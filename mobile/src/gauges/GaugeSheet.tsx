@@ -11,7 +11,8 @@ import {
   gaugeAges,
   gaugeDisplayName,
   gaugeFileNote,
-  gaugeSeries,
+  gaugeStats,
+  gaugeWeekChart,
   latestGaugeReading,
   type Gauge,
   type ProfileSeries,
@@ -56,37 +57,9 @@ export const GAUGE_SECTIONS: Record<
   SectionKeysOn<typeof GAUGES, "gps">,
   (props: Props & { styles: ReturnType<typeof useStyles> }) => ReactNode
 > = {
-  level: ({ gauge, now }) => {
+  reading: ({ gauge, now }) => {
     const latest = latestGaugeReading(gauge, now);
-    const age = latest && gaugeAges(latest, now).level;
-    return latest ? (
-      <StatGrid
-        stats={[
-          {
-            label: age ? `${GAUGES.copy.level}, ${age}` : GAUGES.copy.level,
-            value:
-              latest.level === null
-                ? GAUGES.copy.noLevel
-                : formatGaugeLevel(latest.level),
-            span: !gauge.hasFlow,
-          },
-        ]}
-      />
-    ) : null;
-  },
-  flow: ({ gauge, now }) => {
-    const latest = latestGaugeReading(gauge, now);
-    const age = latest && gaugeAges(latest, now).flow;
-    return latest && gauge.hasFlow ? (
-      <StatGrid
-        stats={[
-          {
-            label: age ? `${GAUGES.copy.flow}, ${age}` : GAUGES.copy.flow,
-            value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow),
-          },
-        ]}
-      />
-    ) : null;
+    return latest ? <StatGrid stats={gaugeStats(gauge, latest, now)} /> : null;
   },
   age: ({ gauge, generatedAt, now, styles }) => {
     const latest = latestGaugeReading(gauge, now);
@@ -96,25 +69,22 @@ export const GAUGE_SECTIONS: Record<
     return text ? <Text style={styles.note}>{text}</Text> : null;
   },
   graph: ({ gauge, now, styles }) => {
-    // The chart follows the stat: a level chart over "No level reading" would
-    // disagree with itself.
-    const latest = latestGaugeReading(gauge, now);
-    const charted = latest?.level != null ? "level" : "flow";
-    const week = gaugeSeries(gauge.readings, charted);
-    if (!latest || week.min === null) return null;
-    const { series, start } = fromZero(week);
-    return (
+    const week = gaugeWeekChart(gauge, latestGaugeReading(gauge, now));
+    const shifted = week && fromZero(week.series);
+    return week && shifted ? (
       <>
         <Text style={styles.title}>{GAUGES.copy.graph}</Text>
         <ProfileChart
-          series={series}
-          formatValue={charted === "level" ? formatGaugeLevel : formatGaugeFlow}
-          formatX={(x) => DAY_FORMAT.format(x + start)}
+          series={shifted.series}
+          formatValue={
+            week.charted === "level" ? formatGaugeLevel : formatGaugeFlow
+          }
+          formatX={(x) => DAY_FORMAT.format(x + shifted.start)}
           hint="Press or drag for readings."
-          accessibilityLabel={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
+          accessibilityLabel={`${GAUGES.copy[week.charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
         />
       </>
-    );
+    ) : null;
   },
   credit: ({ attribution, styles }) => (
     <Text style={styles.note}>{attribution || GAUGES.copy.credit}</Text>

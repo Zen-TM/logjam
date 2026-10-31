@@ -48,6 +48,9 @@ KEY_ENV = "WATERNSW_API_KEY"
 KEY_HEADER = "Ocp-Apim-Subscription-Key"
 LEVEL_VARIABLE = "StreamWaterLevel"  # metres
 FLOW_VARIABLE = "FlowRate"  # ML/day
+# Readings WaterNSW itself calls wrong: 255 Data Unavailable, which the portal
+# sends as 0.000, and 59 Spike or data not replaced. Why these two: ADR 0044.
+DROPPED_QUALITIES = {"59", "255"}
 # The API takes up to 20 sites and 4 variables a call.
 SITES_PER_CALL = 20
 # The Basic tier: 29 calls per 24 h and 5 per minute.
@@ -121,15 +124,15 @@ def calls_per_day(hot: int, total: int) -> int:
 def parse_records(records: List[dict]) -> Dict[str, Dict[int, list]]:
     """{siteId: {epoch: [level, flow]}} from a Latest response's records.
 
-    A reading with no value or quality 255 (Data Unavailable) is dropped: the
-    portal sends those as 0.000, which would draw as a dry river. A level and
-    a flow at one time share one reading."""
+    A reading with no value or a DROPPED_QUALITIES code is left out, so the
+    gauge keeps its last good reading and shows that reading's age. A level
+    and a flow at one time share one reading."""
     out: Dict[str, Dict[int, list]] = {}
     for rec in records:
         slot = {LEVEL_VARIABLE: 1, FLOW_VARIABLE: 2}.get(rec.get("variableName"))
         if slot is None or rec.get("value") is None:
             continue
-        if str(rec.get("qualityCode")) == "255":
+        if str(rec.get("qualityCode")) in DROPPED_QUALITIES:
             continue
         row = out.setdefault(str(rec["siteId"]), {}).setdefault(
             aest_epoch(rec["timeStamp"]), [None, None]

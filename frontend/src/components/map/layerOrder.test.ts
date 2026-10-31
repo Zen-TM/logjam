@@ -180,6 +180,6 @@ describe("GAUGE_LAYER", () => {
     const pressable = /const PRESSABLE = \[([^\]]*)\]/.exec(source)?.[1];
     expect(pressable).toContain("GAUGE_LAYER");
     expect(pressable).toContain("PRESSABLE_LAYERS");
-    expect(GAUGE_LAYER).toBe("gauge-circles");
+    expect(GAUGE_LAYER).toBe("gauge-drops");
   });
 });

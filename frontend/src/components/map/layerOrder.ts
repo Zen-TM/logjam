@@ -13,13 +13,13 @@ import { terrainBeforeIds, type TerrainLayerKey } from "@logjam/shared";
 export const TOPO_CEILING = "place-tracks-hit";
 
 /**
- * The gauge dots go over the topo band and under every pin, so a pin on a
+ * The gauge drops go over the topo band and under every pin, so a pin on a
  * gauge is the one pressed. Guard: `layerOrder.test.ts`.
  */
-export const GAUGE_LAYER = "gauge-circles";
+export const GAUGE_LAYER = "gauge-drops";
 export const GAUGE_BELOW = "place-highlight";
 
-/** Everything else on the map with a press of its own. A gauge dot under one
+/** Everything else on the map with a press of its own. A gauge drop under one
  *  of these is not the thing pressed. */
 export const PRESSABLE_LAYERS = [
   "place-circles",
