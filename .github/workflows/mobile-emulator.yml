@@ -232,6 +232,7 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
+          cores: 3
           force-avd-creation: false
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true

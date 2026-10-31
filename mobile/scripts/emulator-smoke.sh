@@ -33,6 +33,12 @@ adb install -r -t "$APK" > /dev/null
 for _ in $(seq 1 20); do adb shell pm path "$PKG" | grep -q package && break; sleep 3; done
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 
+# Typing is where the emulator has gone "device offline" under load (Maestro's
+# adb call fails mid-inputText). The software GPU already has the cores busy, and
+# Gboard adds suggestion, GIF and clipboard work to every field: no keyboard UI
+# is a lighter one, and `input text` needs none.
+adb shell ime list -s | grep -v '^$' | while read -r ime; do adb shell ime disable "$ime" > /dev/null || true; done
+
 # A 320x640 screen at 160 dpi cannot show the add-place form, and a sheet that
 # scrolls under Maestro's swipes is a flake to chase. Pack more dp into the same
 # pixels, which also costs the software GPU nothing.
@@ -75,6 +81,8 @@ for attempt in 1 2; do
   { adb devices -l; adb reverse --list; } > "$LOGS/adb-$attempt.txt" 2>&1 || true
   adb exec-out screencap -p > "$OUT/failed-$attempt.png" || true
   adb shell am force-stop "$PKG"
+  adb reconnect offline || true
+  adb wait-for-device
   reverse
 done
 adb exec-out screencap -p > "$OUT/final.png" || true
