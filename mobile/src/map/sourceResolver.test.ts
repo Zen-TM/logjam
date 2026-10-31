@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { SharpenedOverlay } from "@logjam/shared";
-import { tileRectBounds } from "./terrainRoutes";
+import { tileRectBounds, tileRectCovering } from "./terrainRoutes";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -524,7 +524,7 @@ describe("statewide slope and hillshade", () => {
   });
   // Mutation: draw every slope clip, as the contours do, and where two saved
   // areas share a tile its bands are painted twice, darker.
-  it("draws one slope clip offline, the area nearest the middle of the screen", () => {
+  it("draws one slope clip offline, of those on screen the one covering most", () => {
     const at = (id: string, west: number): MapArtifact =>
       artifact({
         id,
@@ -539,8 +539,8 @@ describe("statewide slope and hillshade", () => {
       artifacts: [at("katoomba", 150.3), at("blackheath", 150.25)],
     });
     const drawn = (viewport: Viewport | null) =>
-      resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
-        (r) => r.status === "ok" && r.url,
+      resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap((r) =>
+        r.status === "ok" && r.url ? [r.url] : [],
       );
     const screen = (lng: number): Viewport => ({
       west: lng - 0.02,
@@ -583,10 +583,41 @@ describe("statewide slope and hillshade", () => {
     };
     for (const viewport of [screen, null])
       expect(
-        resolveMapSource({ kind: "nsw-slope", viewport }, offline).map(
-          (r) => r.status === "ok" && r.url,
+        resolveMapSource({ kind: "nsw-slope", viewport }, offline).flatMap(
+          (r) => (r.status === "ok" && r.url ? [r.url] : []),
         ),
       ).toEqual(["pmtiles://file:///maps/valley.pmtiles"]);
+  });
+  // Mutation: drop `onScreen` from the sort, and the small clip nearer the
+  // middle wins, cutting the shading off across most of the screen.
+  it("draws the clip covering most of the screen", () => {
+    const clip = (id: string, west: number, east: number): MapArtifact =>
+      artifact({
+        id,
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+        path: `/maps/${id}.pmtiles`,
+        bbox: [west, -33.8, east, -33.7],
+      });
+    const viewport: Viewport = {
+      west: 150.28,
+      south: -33.76,
+      east: 150.34,
+      north: -33.74,
+    };
+    expect(
+      resolveMapSource(
+        { kind: "nsw-slope", viewport },
+        ctx({
+          connectivity: "offline",
+          artifacts: [
+            clip("small", 150.305, 150.315),
+            clip("wide", 150.2, 150.3),
+          ],
+        }),
+      ).flatMap((r) => (r.status === "ok" && r.url ? [r.url] : [])),
+    ).toEqual(["pmtiles://file:///maps/wide.pmtiles"]);
   });
 });
 
@@ -791,6 +822,64 @@ describe("routes saved areas offline", () => {
     for (const r of routed)
       if (r !== own[0])
         expect(r.tileJson?.tiles).toEqual(["pmtiles://file:///maps/s.pmtiles"]);
+  });
+
+  // Mutation: leave `savedStatewideClips` out of the areas, and past z14 the
+  // shading stops at the edge of the one clip drawn; route them without bounds,
+  // and shared tiles paint twice.
+  it("routes two saved clips offline, each z15 tile from one of them", () => {
+    const west = clip(
+      "west",
+      "dem-region",
+      "nsw-5m",
+      [-179, 84.8, -178.8, 84.9],
+    );
+    const east = clip(
+      "east",
+      "dem-region",
+      "nsw-5m",
+      [-178.9, 84.8, -178.7, 84.9],
+    );
+    const [whole, ...routed] = ok(
+      resolveMapSource({ kind: "nsw-hillshade" }, offline([west, east], [])),
+    );
+    expect(whole).toMatchObject({ layerMaxZoom: 15 });
+    const readers = (x: number, y: number) =>
+      routed.flatMap((r) => {
+        const [x0, y0, x1, y1] = tileRectCovering(15, r.tileJson!.bounds!);
+        return x >= x0 && x <= x1 && y >= y0 && y <= y1
+          ? r.tileJson!.tiles
+          : [];
+      });
+    const a = tileRectCovering(15, west.bbox!);
+    const b = tileRectCovering(15, east.bbox!);
+    for (const y of [a[1], a[3]]) {
+      expect(readers(a[0], y)).toEqual(["pmtiles://file:///maps/west.pmtiles"]);
+      expect(readers(b[2], y)).toEqual(["pmtiles://file:///maps/east.pmtiles"]);
+      expect(readers(b[0], y)).toHaveLength(1);
+      expect(readers(a[2], y)).toHaveLength(1);
+      expect(readers(b[2] + 1, y)).toEqual([]);
+    }
+    for (const r of routed)
+      expect(r).toMatchObject({ layerMinZoom: 15, tileJson: { maxzoom: 15 } });
+  });
+
+  // Mutation: rank a statewide clip level with an area, and 5 m shading
+  // replaces the 1 m shading the user saved.
+  it("reads a sharpened area's clip over the statewide clips under it", () => {
+    const routed = ok(
+      resolveMapSource(
+        { kind: "nsw-hillshade" },
+        offline([
+          clip("s1", "dem-region", "nsw-5m", areaBounds),
+          clip("s2", "dem-region", "nsw-5m", areaBounds),
+          clip("a", "dem-region", "lidar-area-1", areaBounds),
+        ]),
+      ),
+    ).filter((r) => r.tileJson);
+    expect(routed.map((r) => r.tileJson!.tiles)).toEqual([
+      ["pmtiles://file:///maps/a.pmtiles"],
+    ]);
   });
 
   // Red if the statewide clip lookup takes an area's clip of the same kind:

@@ -50,6 +50,13 @@ export type SharpenedArea = {
 };
 
 /**
+ * What routing reads of an archive. Logjam GPS also routes statewide clips,
+ * whose z15 `zmax` ranks them under every sharpened area. Guard:
+ * mobile/src/map/sourceResolver.test.ts ("reads a sharpened area's clip").
+ */
+export type RoutedTerrain = Omit<SharpenedArea, "zmax"> & { zmax: number };
+
+/**
  * A sharpened area in `GET /topo-jobs/completed-overlays` (its `sharpened`
  * field): the area, and its archives as presigned URLs that expire with the
  * response's `expiresAt`. A sharee gets the same. The archive keys reach a
@@ -96,8 +103,8 @@ export const TERRAIN_ROUTED_FROM = {
  * area answers the height.
  */
 export function compareSharpenedAreas(
-  a: SharpenedArea,
-  b: SharpenedArea,
+  a: RoutedTerrain,
+  b: RoutedTerrain,
 ): number {
   if (a.zmax !== b.zmax) return b.zmax - a.zmax;
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
@@ -134,7 +141,7 @@ export function demSourcesFor(
 }
 
 /** Where a terrain tile comes from: the statewide archive, an area's, or none. */
-export type TerrainTileAnswer<A extends SharpenedArea = SharpenedArea> =
+export type TerrainTileAnswer<A extends RoutedTerrain = SharpenedArea> =
   | "statewide"
   | "absent"
   | A;
@@ -161,7 +168,7 @@ const holds = (
  * tile is never absent. The zooms are `TERRAIN_ROUTED_FROM`. Guard:
  * `sharpen.test.ts`.
  */
-export function terrainTileArchive<A extends SharpenedArea>(
+export function terrainTileArchive<A extends RoutedTerrain>(
   areas: readonly A[],
   layer: TerrainArchiveLayer,
   z: number,
