@@ -39,6 +39,9 @@ export const MAP_POINT = {
     // From the API's point route on Logjam Web and from the DEM tiles on
     // Logjam GPS; both say nothing where the fine DEM cannot tell.
     { key: "slope" },
+    // Read from the Land overlay's own tiles on the device, only while it is
+    // drawn: no coordinate goes anywhere for this.
+    { key: "land" },
   ],
   copy: {
     position: "Position",
@@ -46,6 +49,7 @@ export const MAP_POINT = {
     distance: "Distance",
     bearing: "Bearing",
     slope: "Slope",
+    land: "Land",
     elevationChecking: "Checking…",
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
@@ -149,7 +153,7 @@ export type MapPointElevation =
   | { state: "unavailable" };
 
 export type MapPointFact = {
-  key: "position" | "elevation" | "distance" | "bearing" | "slope";
+  key: "position" | "elevation" | "distance" | "bearing" | "slope" | "land";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -167,15 +171,18 @@ export function mapPointPosition(point: MapPointCoord): string {
  * The figures for a point, in order. `from` is the viewer's own fix, or null
  * when the device has none: distance and bearing are then left out rather than
  * asked for. `slopeDegrees` is `demSlopeAt`'s answer: null or absent wherever
- * the fine DEM cannot tell, and then there is no slope figure at all.
+ * the fine DEM cannot tell, and then there is no slope figure at all. `land`
+ * is the Land overlay's name for the class drawn at the point: null or absent
+ * with the overlay off or nothing there, and then there is no land figure.
  */
 export function mapPointFacts(input: {
   point: MapPointCoord;
   elevation: MapPointElevation;
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
+  land?: string | null;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees } = input;
+  const { point, elevation, from, slopeDegrees, land } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -229,5 +236,6 @@ export function mapPointFacts(input: {
       label: copy.slope,
       value: `${Math.round(slopeDegrees)}°`,
     });
+  if (land) facts.push({ key: "land", label: copy.land, value: land });
   return facts;
 }

@@ -7,9 +7,11 @@ import {
 } from "react";
 import {
   contractSectionKeys,
+  LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  NSW_LAND,
   PLACE_TYPE_COLORS,
   takesNswContours,
   takesNswHillshade,
@@ -369,6 +371,7 @@ export function TerrainPane({
   onOpenSharpened: () => void;
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const [landLegendOpen, setLandLegendOpen] = useState(false);
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
@@ -414,6 +417,27 @@ export function TerrainPane({
           onClick={onOpenSlopeBands}
         />,
       ),
+    land: () => (
+      <Row
+        key="land"
+        title={terrainCopy.land}
+        subtitle={terrainCopy.landHint}
+        trailing={
+          <>
+            <IconButton
+              icon="help"
+              label={terrainCopy.landAbout}
+              onClick={() => setLandLegendOpen(true)}
+            />
+            <Toggle
+              checked={layers.land}
+              onChange={(on) => onChange("land", on)}
+              label="Show land"
+            />
+          </>
+        }
+      />
+    ),
     hillshade: () => row("hillshade"),
     vegetation: () =>
       hasVegetation ? (
@@ -460,6 +484,26 @@ export function TerrainPane({
         onClose={() => setLegendOpen(false)}
       >
         <p>{terrainCopy.vegetationLegend}</p>
+      </Dialog>
+      <Dialog
+        open={landLegendOpen}
+        title={terrainCopy.land}
+        onClose={() => setLandLegendOpen(false)}
+      >
+        <p>{terrainCopy.landLegend}</p>
+        <ul className={classes.landLegend}>
+          {LAND_CLASSES.map(({ name, colour }) => (
+            <li key={name}>
+              <span
+                className={classes.landSwatch}
+                style={{ background: colour }}
+              />
+              {name}
+            </li>
+          ))}
+        </ul>
+        <p>{terrainCopy.landCaveat}</p>
+        <p>{NSW_LAND.credit}</p>
       </Dialog>
     </div>
   );

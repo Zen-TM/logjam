@@ -10,6 +10,7 @@ export const MAP_TERRAIN = {
   sections: [
     { key: "contours" },
     { key: "slope" },
+    { key: "land" },
     { key: "hillshade" },
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
@@ -29,6 +30,7 @@ export const MAP_TERRAIN = {
   copy: {
     contours: "Contours",
     slope: "Slope",
+    land: "Land",
     hillshade: "Hillshade",
     vegetation: "Vegetation",
     sharpenedAreas: "Sharpened areas",
@@ -37,6 +39,15 @@ export const MAP_TERRAIN = {
     vegetationAbout: "About vegetation",
     vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
+    // Under the Land row, so nobody reads a tint as permission.
+    landHint: "Who holds it, not entry rights",
+    // Behind the Land row's help button, titled with its label.
+    landAbout: "About land",
+    landLegend:
+      "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.",
+    // The source's two known gaps, said beside the legend they qualify.
+    landCaveat:
+      "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
