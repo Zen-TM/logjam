@@ -12,12 +12,15 @@ import {
   GAUGE_ICON_IMAGE,
   GAUGE_ICON_SDF_URI,
   GAUGE_ICON_SIZE,
+  GAUGE_LABEL_MIN_ZOOM,
+  gaugeDisplayName,
   latestGaugeReading,
   MAP_INK,
   type GaugeLatestFile,
 } from "@logjam/shared";
 
 import { PIN_FLOOR } from "../map/layerOrder";
+import { PIN_LABEL_TEXT } from "../map/mapLabelText";
 
 const FAINT = 0.35;
 const RECENT = ["case", ["get", "recent"], 1, FAINT] as unknown as number;
@@ -45,7 +48,11 @@ export const GaugesLayer = memo(function GaugesLayer({
           type: "Point" as const,
           coordinates: [g.lon, g.lat] as [number, number],
         },
-        properties: { id: g.id, recent: latestGaugeReading(g, now) !== null },
+        properties: {
+          id: g.id,
+          name: gaugeDisplayName(g.name),
+          recent: latestGaugeReading(g, now) !== null,
+        },
       })),
     };
   }, [file, now]);
@@ -67,6 +74,24 @@ export const GaugesLayer = memo(function GaugesLayer({
             iconOpacity: RECENT,
             iconHaloColor: MAP_INK.ring,
             iconHaloWidth: 1.5,
+          }}
+        />
+        {/* Under the pins, so a place's own name wins any collision. */}
+        <Layer
+          key="gauge-labels"
+          type="symbol"
+          id="gauge-labels"
+          beforeId={PIN_FLOOR}
+          minzoom={GAUGE_LABEL_MIN_ZOOM}
+          style={{
+            textField: ["get", "name"] as unknown as string,
+            ...PIN_LABEL_TEXT,
+            textMaxWidth: 10,
+            textColor: MAP_INK.label,
+            textHaloColor: MAP_INK.casing,
+            textHaloWidth: 1,
+            textAnchor: "top",
+            textOffset: [0, 1.2],
           }}
         />
       </GeoJSONSource>

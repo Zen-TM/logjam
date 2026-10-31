@@ -17,6 +17,7 @@ export const TOPO_CEILING = "place-tracks-hit";
  * gauge is the one pressed. Guard: `layerOrder.test.ts`.
  */
 export const GAUGE_LAYER = "gauge-drops";
+export const GAUGE_LABELS = "gauge-labels";
 export const GAUGE_BELOW = "place-highlight";
 
 /** Everything else on the map with a press of its own. A gauge drop under one
