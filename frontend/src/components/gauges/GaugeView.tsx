@@ -8,7 +8,7 @@ import {
   gaugeDisplayName,
   gaugeFileNote,
   gaugeStats,
-  gaugeWeekChart,
+  gaugeWeekCharts,
   latestGaugeReading,
   type Gauge,
 } from "@logjam/shared";
@@ -40,7 +40,7 @@ export function GaugeView({
   const latest = latestGaugeReading(gauge, now);
   const fileNote = gaugeFileNote(generatedAt, now);
   const ages = latest && gaugeAges(latest, now);
-  const week = gaugeWeekChart(gauge, latest);
+  const week = gaugeWeekCharts(gauge, latest);
   const sections: Record<
     (typeof GAUGES.sections)[number]["key"],
     () => ReactNode
@@ -63,18 +63,23 @@ export function GaugeView({
         </p>
       ),
     graph: () =>
-      week ? (
+      week.length > 0 ? (
         <section>
           <h3 className={classes.graphTitle}>{GAUGES.copy.graph}</h3>
-          <ProfileChart
-            series={week.series}
-            formatValue={
-              week.charted === "level" ? formatGaugeLevel : formatGaugeFlow
-            }
-            formatX={(x) => DAY_FORMAT.format(x)}
-            label={`${GAUGES.copy[week.charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
-            color="var(--color-accent)"
-          />
+          {week.map(({ charted, series }) => (
+            <div key={charted}>
+              <p className={classes.muted}>{GAUGES.copy[charted]}</p>
+              <ProfileChart
+                series={series}
+                formatValue={
+                  charted === "level" ? formatGaugeLevel : formatGaugeFlow
+                }
+                formatX={(x) => DAY_FORMAT.format(x)}
+                label={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
+                color="var(--color-accent)"
+              />
+            </div>
+          ))}
         </section>
       ) : null,
     credit: () => (

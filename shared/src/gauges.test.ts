@@ -13,7 +13,7 @@ import {
   gaugeFileNote,
   latestGaugeReading,
   gaugeStats,
-  gaugeWeekChart,
+  gaugeWeekCharts,
 } from "./contracts/gauges.js";
 import {
   type Gauge,
@@ -291,7 +291,7 @@ describe("gaugeStats", () => {
   });
 });
 
-describe("gaugeWeekChart", () => {
+describe("gaugeWeekCharts", () => {
   const gauge = (readings: [number, number | null, number | null][]) => ({
     id: "900001",
     name: "MADE UP R @ ONE",
@@ -302,29 +302,37 @@ describe("gaugeWeekChart", () => {
     readings,
   });
   const latest = { level: 0.9, levelAt: 1000, flow: 120, flowAt: 1000 };
+  const charted = (rows: Parameters<typeof gauge>[0]) =>
+    gaugeWeekCharts(gauge(rows), latest).map((chart) => chart.charted);
 
   it("has nothing to draw from no reading or one", () => {
-    expect(gaugeWeekChart(gauge([]), null)).toBeNull();
-    expect(gaugeWeekChart(gauge([[1, 0.9, 120]]), latest)).toBeNull();
+    expect(gaugeWeekCharts(gauge([]), null)).toEqual([]);
+    expect(charted([[1, 0.9, 120]])).toEqual([]);
+  });
+
+  // Mutation: return only the first chart.
+  it("draws the level above the flow", () => {
+    expect(
+      charted([
+        [1, 0.9, 110],
+        [2, 0.8, 120],
+      ]),
+    ).toEqual(["level", "flow"]);
   });
 
   // Mutation: count rows rather than values.
-  it("counts readings of the charted value, not rows", () => {
-    const rows = gauge([
-      [1, 0.9, null],
-      [2, null, 120],
-    ]);
-    expect(gaugeWeekChart(rows, latest)).toBeNull();
-  });
-
-  // Mutation: always chart the level.
-  it("charts the flow of a gauge with no level reading", () => {
-    const rows = gauge([
-      [1, null, 110],
-      [2, null, 120],
-    ]);
-    expect(gaugeWeekChart(rows, { ...latest, level: null })?.charted).toBe(
-      "flow",
-    );
+  it("counts each value's own readings, not rows", () => {
+    expect(
+      charted([
+        [1, 0.9, null],
+        [2, null, 120],
+      ]),
+    ).toEqual([]);
+    expect(
+      charted([
+        [1, null, 110],
+        [2, null, 120],
+      ]),
+    ).toEqual(["flow"]);
   });
 });
