@@ -713,12 +713,13 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
   })
 }
 
-# Scoped Cognito grant. Already present live as inline policy
-# `LogjamCognitoAdminUser`; codified here (same name + document) so it is
-# repo-visible and survives the AmazonCognitoPowerUser detach. Because the name
-# and body match the live inline policy exactly, apply is a content-identical
-# PutRolePolicy upsert (no functional change), it only brings the grant into
-# Terraform state.
+# Scoped Cognito grant, inline policy `LogjamCognitoAdminUser` (the name is
+# historic: it also holds AdminDeleteUser now). Codified here so it is
+# repo-visible and survives the AmazonCognitoPowerUser detach. AdminGetUser is
+# live already; AdminDeleteUser is added for account deletion (#437), where
+# the API deletes the identity at Cognito after the user's Logjam data. Exactly
+# these two actions, on the one pool: guards.tftest.hcl
+# (cognito_client_scopes_and_api_grant).
 resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
   name = "LogjamCognitoAdminUser"
   role = "logjam-eb-role"
@@ -726,7 +727,7 @@ resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = "cognito-idp:AdminGetUser"
+      Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]
       Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
     }]
   })
