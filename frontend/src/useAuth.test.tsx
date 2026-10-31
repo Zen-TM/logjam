@@ -1,46 +1,52 @@
-// Guard: Amplify's global sign-out swallows a failed GlobalSignOut and still
-// clears the browser. Drop the forced refresh in signOutEverywhere and the
-// first two tests go red; drop the `!tokens` check and the second does.
+// Guards for the sign-in state machine and the two sign-outs. Drop the forced
+// refresh in signOutEverywhere and the first two signOutEverywhere tests go
+// red; drop the `await` on globalSignOut and the third does.
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const amplify = vi.hoisted(() => ({
-  signOut: vi.fn(),
-  signIn: vi.fn(),
-  fetchAuthSession: vi.fn(),
+const oidc = vi.hoisted(() => ({
+  completeSignInFromUrl: vi.fn(),
+  loadSession: vi.fn(),
+  signInRedirect: vi.fn(),
+  endProviderSession: vi.fn(),
+  hasCognitoAccount: vi.fn(() => true),
+  issuerUrl: vi.fn(() => "https://cognito-idp.r.amazonaws.com/r_P"),
 }));
+const globalSignOut = vi.hoisted(() => vi.fn());
 const clearTripDraft = vi.hoisted(() => vi.fn());
 const reload = vi.hoisted(() => vi.fn());
-
-vi.mock("aws-amplify/auth", () => ({
-  ...amplify,
-  signUp: vi.fn(),
-  confirmSignUp: vi.fn(),
-  resendSignUpCode: vi.fn(),
-  resetPassword: vi.fn(),
-  confirmResetPassword: vi.fn(),
-}));
+const assign = vi.hoisted(() => vi.fn());
 const setSessionExpiredHandler = vi.hoisted(() => vi.fn());
 const clearTileCache = vi.hoisted(() => vi.fn(async () => {}));
-vi.mock("./placeUtils", () => ({
-  apiFetch: vi.fn(async () => ({})),
-  setSessionExpiredHandler,
+const apiFetch = vi.hoisted(() => vi.fn(async () => ({})));
+
+vi.mock("./auth/oidc", () => oidc);
+vi.mock("@logjam/shared", async (orig) => ({
+  ...(await orig<typeof import("@logjam/shared")>()),
+  globalSignOut,
 }));
+vi.mock("./placeUtils", () => ({ apiFetch, setSessionExpiredHandler }));
 vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
 vi.mock("./tripDraft", () => ({ clearTripDraft }));
 
-import { useAuth } from "./useAuth";
+import { useAuth, signOut, signOutEverywhere } from "./useAuth";
 
-// A real session, not the fake one local dev and e2e run on, which skips Amplify.
+const session = { id_token: "id", access_token: "at" };
+
+// A real session, not the fake one local dev and e2e run on, which skips OIDC.
 beforeEach(() => {
-  vi.stubEnv("VITE_AUTH_MODE", "cognito");
+  vi.stubEnv("VITE_AUTH_MODE", "oidc");
   vi.clearAllMocks();
   clearTileCache.mockImplementation(async () => {});
-  amplify.signOut.mockResolvedValue(undefined);
-  amplify.fetchAuthSession.mockResolvedValue({ tokens: { idToken: {} } });
+  oidc.completeSignInFromUrl.mockResolvedValue(null);
+  oidc.loadSession.mockResolvedValue(session);
+  oidc.endProviderSession.mockResolvedValue(
+    "https://auth.example.com/logout?x=1",
+  );
+  globalSignOut.mockResolvedValue(undefined);
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { reload },
+    value: { reload, assign },
   });
 });
 
@@ -52,51 +58,115 @@ async function signedIn() {
   return hook;
 }
 
-describe("signOut", () => {
-  it("ends this browser's session only", async () => {
-    const { result } = await signedIn();
-    await act(() => result.current.signOut());
-    expect(amplify.signOut).toHaveBeenCalledWith({ global: false });
-    expect(reload).toHaveBeenCalledOnce();
+describe("the sign-in callback", () => {
+  // Mutation: let the catch fall through to setState("authenticated"), or
+  // swallow the error, and a refused sign-in looks like a signed-in user.
+  it("shows the error on the sign-in screen and does not sign in", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    oidc.completeSignInFromUrl.mockRejectedValue(new Error("access_denied"));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(result.current.error).toBe("Sign in failed. Please try again.");
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(oidc.loadSession).not.toHaveBeenCalled();
   });
 
-  // The GeoPDF tile cache shows which areas a user printed, so it goes with
-  // the session down every exit that is known to be one. Mutation: drop
-  // `clearTileCache()` from endSession and the first test goes red. The expiry
-  // and no-session paths are covered twice over (their own call, and the
-  // `state === "signIn"` effect), so drop both to turn those tests red.
-  it("empties the GeoPDF tile cache before it reloads", async () => {
-    const { result } = await signedIn();
-    reload.mockImplementation(() => expect(clearTileCache).toHaveBeenCalled());
-    await act(() => result.current.signOut());
+  it("offers another try: signing in again clears the error and redirects", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    oidc.completeSignInFromUrl.mockRejectedValue(new Error("access_denied"));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await act(() => result.current.signIn());
+    expect(oidc.signInRedirect).toHaveBeenCalledOnce();
+    expect(result.current.error).toBeNull();
+  });
+
+  it("shows a redirect that cannot start (discovery unreachable) as an error", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    oidc.loadSession.mockResolvedValue(null);
+    oidc.signInRedirect.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    await act(() => result.current.signIn());
+    expect(result.current.error).toMatch(/connect/i);
+  });
+
+  // Mutation: setState("authenticated") before the clear or the /users/me
+  // await (or drop either) and `state` is already authenticated inside the
+  // mocks, or the order differs.
+  it("empties the tile cache and provisions the user before it flips to authenticated", async () => {
+    oidc.completeSignInFromUrl.mockResolvedValue(session);
+    // One log of renders and of the two awaited steps, in the order they ran.
+    const log: string[] = [];
+    clearTileCache.mockImplementation(async () => {
+      log.push("clear");
+      // Let React render anything already set, so an early flip is seen.
+      await new Promise((r) => setTimeout(r, 5));
+    });
+    apiFetch.mockImplementation(async () => {
+      log.push("me");
+      await new Promise((r) => setTimeout(r, 5));
+      return {};
+    });
+    const hook = renderHook(() => {
+      const auth = useAuth();
+      if (log[log.length - 1] !== auth.state) log.push(auth.state);
+      return auth;
+    });
+    await waitFor(() =>
+      expect(hook.result.current.state).toBe("authenticated"),
+    );
+    expect(log).toEqual(["loading", "clear", "me", "authenticated"]);
+    expect(oidc.loadSession).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop `if (cancelled) return;` after the callback try/catch: the
+  // unmounted (first StrictMode) pass provisions and flips state too.
+  it("does nothing more once the hook has unmounted", async () => {
+    let finish: (u: unknown) => void = () => {};
+    oidc.completeSignInFromUrl.mockReturnValue(
+      new Promise((r) => (finish = r)),
+    );
+    const hook = renderHook(() => useAuth());
+    hook.unmount();
+    finish(session);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(clearTileCache).not.toHaveBeenCalled();
+  });
+});
+
+describe("the session check", () => {
+  it("empties the tile cache when the tab opens with no session", async () => {
+    oidc.loadSession.mockResolvedValue(null);
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
     expect(clearTileCache).toHaveBeenCalled();
-    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: restore `void clearTileCache()` in the mount `.catch`, or drop
+  // the `sessionCheckFailed` guard on the `state === "signIn"` effect: either
+  // clears the cache of a user who is still signed in, just offline.
+  it("keeps the tile cache when the session check itself fails", async () => {
+    oidc.loadSession.mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(clearTileCache).not.toHaveBeenCalled();
+  });
+
+  it("keeps it while signed in", async () => {
+    await signedIn();
+    expect(clearTileCache).not.toHaveBeenCalled();
   });
 
   // Mutation: drop the effect on `state === "signIn"`: the expiry and
   // no-session tests still pass on their direct calls, this one does not.
   it("empties it whenever the sign-in screen shows, after the workers are gone", async () => {
-    const { result } = await signedIn();
-    clearTileCache.mockClear();
-    act(() => result.current.goToSignIn());
-    await waitFor(() => expect(clearTileCache).toHaveBeenCalled());
-  });
-
-  // Mutation: drop the second `clearTileCache()` after amplifySignOut: a
-  // worker's write during the sign-out round trip survives the reload.
-  it("empties it again after the sign-out round trip, before it reloads", async () => {
-    const { result } = await signedIn();
-    clearTileCache.mockClear();
-    let signOutDone = false;
-    amplify.signOut.mockImplementation(async () => {
-      signOutDone = true;
-    });
-    reload.mockImplementation(() => {
-      expect(signOutDone).toBe(true);
-      expect(clearTileCache).toHaveBeenCalledTimes(2);
-    });
-    await act(() => result.current.signOut());
-    expect(reload).toHaveBeenCalledOnce();
+    oidc.loadSession.mockResolvedValue(null);
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state).toBe("signIn"));
+    expect(clearTileCache.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("empties it when the session expires mid-use", async () => {
@@ -108,76 +178,83 @@ describe("signOut", () => {
     act(() => expire());
     expect(clearTileCache).toHaveBeenCalled();
   });
+});
 
-  it("empties it when the tab opens with no session", async () => {
-    amplify.fetchAuthSession.mockResolvedValue({ tokens: undefined });
-    const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.state).toBe("signIn"));
-    expect(clearTileCache).toHaveBeenCalled();
-  });
-
-  // Mutation: restore `void clearTileCache()` in the mount `.catch`, or drop
-  // the `sessionCheckFailed` guard on the `state === "signIn"` effect: either
-  // clears the cache of a user who is still signed in, just offline.
-  it("keeps it when the session check itself fails", async () => {
-    amplify.fetchAuthSession.mockRejectedValue(new Error("offline"));
-    const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.state).toBe("signIn"));
-    act(() => result.current.goToSignUp());
-    act(() => result.current.goToSignIn());
-    expect(clearTileCache).not.toHaveBeenCalled();
-  });
-
-  // Mutation: drop `await clearTileCache()` from handleSignIn and someone else
-  // signing in after a failed check inherits the last user's cache.
-  it("empties it at a successful sign-in, before the state flips", async () => {
-    amplify.fetchAuthSession.mockRejectedValue(new Error("offline"));
-    amplify.signIn.mockResolvedValue({ isSignedIn: true });
-    const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.state).toBe("signIn"));
-    expect(clearTileCache).not.toHaveBeenCalled();
-    clearTileCache.mockImplementation(async () => {
-      expect(result.current.state).toBe("signIn");
-    });
-    await act(() => result.current.signIn("bob", "pw"));
-    expect(clearTileCache).toHaveBeenCalledOnce();
-    expect(result.current.state).toBe("authenticated");
-  });
-
-  it("keeps it while signed in", async () => {
+describe("signOut", () => {
+  // Mutation: drop the endProviderSession call and the provider's session (and
+  // the stored tokens) outlive the sign-out.
+  it("ends the provider's session, with the draft and tile cache cleared first", async () => {
     await signedIn();
-    expect(clearTileCache).not.toHaveBeenCalled();
+    const calls: string[] = [];
+    clearTripDraft.mockImplementation(() => calls.push("draft"));
+    clearTileCache.mockImplementation(async () => {
+      calls.push("tiles");
+    });
+    oidc.endProviderSession.mockImplementation(async () => {
+      calls.push("redirect");
+      return "https://auth.example.com/logout?x=1";
+    });
+    assign.mockImplementation(() => calls.push("navigate"));
+    await act(() => signOut());
+    // Mutation: navigate before the second clear (the old order) and the
+    // clear can be aborted by the page leaving.
+    expect(calls).toEqual(["draft", "tiles", "redirect", "tiles", "navigate"]);
+    expect(assign).toHaveBeenCalledWith("https://auth.example.com/logout?x=1");
+    expect(globalSignOut).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("reloads when the provider cannot be reached, so a corrupt session is still escapable", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    oidc.endProviderSession.mockRejectedValue(new Error("boom"));
+    await signOut();
+    expect(reload).toHaveBeenCalledOnce();
+  });
+
+  it("only reloads under fake auth, which has no provider", async () => {
+    vi.stubEnv("VITE_AUTH_MODE", "fake");
+    await signOut();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
+    expect(reload).toHaveBeenCalledOnce();
   });
 });
 
 describe("signOutEverywhere", () => {
-  it("stays signed in, with the draft kept, when the refresh cannot reach Logjam", async () => {
-    const { result } = await signedIn();
-    amplify.fetchAuthSession.mockRejectedValue(new Error("offline"));
-    await expect(result.current.signOutEverywhere()).rejects.toThrow("offline");
-    expect(amplify.signOut).not.toHaveBeenCalled();
+  it("stays signed in, with the draft kept, when the refresh cannot reach the provider", async () => {
+    oidc.loadSession.mockRejectedValue(new Error("offline"));
+    await expect(signOutEverywhere()).rejects.toThrow("offline");
+    expect(globalSignOut).not.toHaveBeenCalled();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
     expect(clearTripDraft).not.toHaveBeenCalled();
+  });
+
+  it("stays signed in when the refresh is rejected and leaves no session", async () => {
+    oidc.loadSession.mockResolvedValue(null);
+    await expect(signOutEverywhere()).rejects.toThrow();
+    expect(globalSignOut).not.toHaveBeenCalled();
+    expect(clearTripDraft).not.toHaveBeenCalled();
+  });
+
+  // Mutation: catch the GlobalSignOut failure (Amplify's old behaviour) and
+  // every other session lives on while this one looks signed out.
+  it("throws, clearing nothing, when GlobalSignOut fails", async () => {
+    globalSignOut.mockRejectedValue(new Error("NotAuthorizedException"));
+    await expect(signOutEverywhere()).rejects.toThrow("NotAuthorized");
+    expect(clearTripDraft).not.toHaveBeenCalled();
+    expect(clearTileCache).not.toHaveBeenCalled();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("stays signed in when the refresh is rejected and leaves no tokens", async () => {
-    const { result } = await signedIn();
-    amplify.fetchAuthSession.mockResolvedValue({ tokens: undefined });
-    await expect(result.current.signOutEverywhere()).rejects.toThrow();
-    expect(amplify.signOut).not.toHaveBeenCalled();
-    expect(reload).not.toHaveBeenCalled();
-  });
-
-  it("refreshes first, then revokes every session and clears the draft", async () => {
-    const { result } = await signedIn();
-    amplify.fetchAuthSession.mockClear();
-    await act(() => result.current.signOutEverywhere());
-    expect(amplify.fetchAuthSession).toHaveBeenCalledWith({
-      forceRefresh: true,
-    });
-    expect(amplify.signOut).toHaveBeenCalledWith({ global: true });
+  it("refreshes first, revokes every session with the fresh token, then signs out", async () => {
+    oidc.loadSession.mockResolvedValue({ ...session, access_token: "fresh" });
+    await signOutEverywhere();
+    expect(oidc.loadSession).toHaveBeenCalledWith(true);
+    expect(globalSignOut).toHaveBeenCalledWith(
+      "https://cognito-idp.r.amazonaws.com/r_P",
+      "fresh",
+    );
     expect(clearTripDraft).toHaveBeenCalledOnce();
-    expect(clearTileCache).toHaveBeenCalled();
-    expect(reload).toHaveBeenCalledOnce();
+    expect(oidc.endProviderSession).toHaveBeenCalledOnce();
   });
 });

@@ -1314,7 +1314,7 @@ test.describe("narrow web", () => {
     // page rather than a thing centred in one.
     await page.goto(SIGN_IN_URL);
     await expect(
-      page.getByRole("button", { name: "Sign in", exact: true }),
+      page.getByRole("button", { name: "Sign in or create an account" }),
     ).toBeVisible({
       timeout: 15_000,
     });
@@ -1329,20 +1329,20 @@ test.describe("narrow web", () => {
 // variant of something above — they are screens the dev stack cannot reach by
 // navigation.
 //
-// Two are reachable here anyway: the gate and the offer are ordinary responses
-// away, and SignIn is one env var away on the second local server. The third of
-// each — confirmSignUp, confirmForgotPassword — needs a mailbox and a real pool,
-// which is `auth-lifecycle.spec.ts`'s ground, not this file's.
+// Each is reachable here anyway: the gate and the offer are ordinary responses
+// away, and SignIn is one env var away on the second local server. What the
+// provider's own page shows is not Logjam Web's to test, and a real sign-in
+// needs a real pool, which is `auth-lifecycle.spec.ts`'s ground.
 test.describe("surfaces fake auth never shows", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("the sign-in page, its sign-up form and the reset form", async ({
-    page,
-  }) => {
+  test("the sign-in page", async ({ page }) => {
     // The same bundle with `VITE_AUTH_MODE` not fake: no stored session, so
-    // `fetchAuthSession()` resolves empty and useAuth lands on "signIn".
+    // the session check resolves empty and useAuth lands on "signIn".
     await page.goto(SIGN_IN_URL);
-    const signIn = page.getByRole("button", { name: "Sign in", exact: true });
+    const signIn = page.getByRole("button", {
+      name: "Sign in or create an account",
+    });
     await expect(signIn).toBeVisible({ timeout: 15_000 });
     // The terrain behind the card is drawn from the NSW DEM, whose licence
     // wants its credit shown with it, naming the area once that has loaded
@@ -1355,28 +1355,36 @@ test.describe("surfaces fake auth never shows", () => {
         )
         .filter({ visible: true }),
     ).toBeVisible();
+    // The way in is never disabled (shared/DESIGN.md §5), and Logjam Web has
+    // no field of its own left to fill.
+    await expect(signIn).toBeEnabled();
+    await expect(page.locator("input")).toHaveCount(0);
     await expectNoViolations(page);
+  });
 
-    // Sign-up is where the two ticks live, and where the Terms and Privacy
-    // links sit BESIDE them rather than inside their labels — a link in a label
-    // toggles the control it labels, so reading the terms would answer the
-    // question about them (SignIn.tsx).
-    await page.getByRole("button", { name: "Sign up", exact: true }).click();
-    await expect(page.getByLabel("Confirm password")).toBeVisible();
-    await expectNoViolations(page);
-    // The way in is never disabled: pressing it says what is missing
-    // (shared/DESIGN.md §5).
-    const create = page.getByRole("button", { name: "Sign up", exact: true });
-    await expect(create).toBeEnabled();
-    await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
-    await page.getByRole("checkbox", { name: /18 years of age/ }).check();
-    await expect(create).toBeEnabled();
+  test("the consent gate, on a brand-new account", async ({ page }) => {
+    // The provider's sign-up page cannot ask for a username, the terms or an
+    // age, so the gate does, for an account with no consent recorded.
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({
+        response,
+        json: { ...user, consentVersion: null },
+      });
+    });
+    await page.goto("/");
 
-    // And back out to the reset form, which is the third reachable state.
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await page.getByRole("button", { name: "Forgot password?" }).click();
     await expect(
-      page.getByRole("button", { name: "Send reset code" }),
+      page.getByRole("heading", { name: "Welcome to Logjam" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Username")).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: /agree to the Terms of Use/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: /18 years of age/ }),
     ).toBeVisible();
     await expectNoViolations(page);
   });
