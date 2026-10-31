@@ -29,6 +29,15 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   searchPlaceRegistry,
 }));
 
+const { gaugeFile } = vi.hoisted(() => ({
+  gaugeFile: {
+    current: null as { gauges: Record<string, unknown>[] } | null,
+  },
+}));
+vi.mock("../gauges/useGauges", () => ({
+  useGauges: () => ({ file: gaugeFile.current, failed: false, now: 0 }),
+}));
+
 const FALLS: PlaceResult = {
   name: "Katoomba Falls",
   kind: "Waterfall",
@@ -60,6 +69,7 @@ function renderBox(
       places={[]}
       sharedPlaces={[]}
       onSelectPlace={() => {}}
+      onSelectGauge={() => {}}
       onSelectLocation={() => {}}
       {...props}
     />,
@@ -77,6 +87,27 @@ const settle = () =>
   act(() => vi.advanceTimersByTimeAsync(PLACE_SEARCH_DEBOUNCE_MS));
 
 describe("MapSearchBox", () => {
+  // Mutation: match the raw name, or leave `gaugeOptions` out of the list.
+  it("finds a gauge by its readable name, and hands it back", async () => {
+    gaugeFile.current = {
+      gauges: [
+        { id: "900001", name: "MADE UP R @ ONE" },
+        { id: "900002", name: "OTHER CK @ TWO" },
+      ],
+    };
+    const onSelectGauge = vi.fn();
+    const input = renderBox({ onSelectGauge });
+    type(input, "made up river");
+    await settle();
+    const option = screen.getByRole("option", {
+      name: "Made Up River at One, River gauge",
+    });
+    expect(screen.queryByText("Other Creek at Two")).toBeNull();
+    fireEvent.pointerDown(option);
+    expect(onSelectGauge.mock.calls[0]?.[0]).toMatchObject({ id: "900001" });
+    gaugeFile.current = null;
+  });
+
   // Mutation: start the geocode effect from the query instead of from
   // `locationQuery`, which only "Search locations for …" sets.
   it("sends a query to the public geocoder only when the user asks it to", async () => {
