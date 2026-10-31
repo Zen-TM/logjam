@@ -53,3 +53,12 @@ export const setGaugesLayer = (on: boolean): boolean =>
 export function setBasemapPreference(basemapId: BasemapId): boolean {
   return writePref(BASEMAP_PREF_KEY, basemapId);
 }
+
+const TERRAIN_3D_PREF_KEY = "map3dTerrain";
+
+/** 3D terrain costs frames and battery, so it is off until switched on. */
+export const readTerrain3d = (): boolean =>
+  readPref(TERRAIN_3D_PREF_KEY) === "on";
+
+export const setTerrain3d = (on: boolean): boolean =>
+  writePref(TERRAIN_3D_PREF_KEY, on ? "on" : "off");

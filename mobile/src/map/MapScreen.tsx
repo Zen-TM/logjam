@@ -222,6 +222,8 @@ import {
   setBasemapPreference,
   setTerrainLayers,
   readGaugesLayer,
+  readTerrain3d,
+  setTerrain3d,
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
@@ -314,7 +316,7 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
-import { useShellStyle } from "./basemap/shellStyle";
+import { useShellStyle, type TerrainDem } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
 import {
   ANCHOR_DROP_SELECT_MS,
@@ -881,10 +883,6 @@ export function MapScreen({
   // style. Post-install launches resolve in ~ms; install failure falls back
   // to the remote asset host (online-only labels).
   const basemapAssets = useBasemapAssets();
-  const shellStyle = useShellStyle(
-    basemapAssets.localBaseUrl,
-    PROTOMAPS_FLAVOR,
-  );
   // Whether the Map (and therefore the camera) is mounted at all — the same
   // condition as the render gate at the bottom of this component. Anything that
   // drives the camera from an effect has to wait for this.
@@ -1440,6 +1438,34 @@ export function MapScreen({
           )
         : [],
     [renderedBasemapId, terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
+  );
+
+  // 3D terrain's DEM: the hillshade's own resolution (statewide online, a
+  // saved height clip offline), with no viewport so panning never changes the
+  // style. A style change reloads the map, so it must be stable.
+  const [terrain3d, setTerrain3dState] = useState(readTerrain3d);
+  const chooseTerrain3d = useCallback((on: boolean) => {
+    setTerrain3dState(on);
+    setTerrain3d(on);
+  }, []);
+  const terrainDem = useMemo<TerrainDem | null>(() => {
+    if (!terrain3d) return null;
+    const r = resolveMapSource({ kind: "nsw-hillshade" }, ctx).find(
+      (s) => s.status === "ok" && (s.url != null || s.tiles != null),
+    );
+    if (r?.status !== "ok") return null;
+    return {
+      ...(r.url != null && { url: r.url }),
+      ...(r.tiles != null && { tiles: r.tiles }),
+      ...(r.minZoom != null && { minzoom: r.minZoom }),
+      ...(r.maxZoom != null && { maxzoom: r.maxZoom }),
+      ...(r.attribution != null && { attribution: r.attribution }),
+    };
+  }, [terrain3d, ctx]);
+  const shellStyle = useShellStyle(
+    basemapAssets.localBaseUrl,
+    PROTOMAPS_FLAVOR,
+    terrainDem,
   );
 
   /**
@@ -5535,6 +5561,8 @@ export function MapScreen({
         onBasemapChange={chooseBasemap}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
+        terrain3d={terrain3d}
+        onTerrain3dChange={chooseTerrain3d}
         artifacts={artifacts}
         hasVegetation={mergedOverlays.jobs.some((job) =>
           job.layers.some((layer) => layer.name === "vegetation"),

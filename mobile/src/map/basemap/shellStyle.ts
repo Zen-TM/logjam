@@ -21,10 +21,29 @@ export const BASEMAP_ASSETS_REMOTE_BASE =
 
 export type ProtomapsFlavor = "light" | "dark";
 
+export const TERRAIN_SOURCE_ID = "terrain-dem";
+/** Same factor as Logjam Web's `map.setTerrain` (frontend terrainSource.ts). */
+export const TERRAIN_EXAGGERATION = 1.5;
+
+/**
+ * The DEM for 3D terrain, from `resolveMapSource` (`nsw-hillshade`): a root
+ * `terrain` names a source in the same style, so this one rides the style
+ * rather than a declarative component, and gets its OWN source even though
+ * the hillshade layer reads the same tiles (upstream's advice).
+ */
+export type TerrainDem = {
+  url?: string;
+  tiles?: string[];
+  minzoom?: number;
+  maxzoom?: number;
+  attribution?: string;
+};
+
 export function buildShellStyle(
   localAssetsBaseUrl: string | null,
   flavor: ProtomapsFlavor,
   theme: ThemeTokens,
+  terrain: TerrainDem | null = null,
 ): StyleSpecification {
   const base = (localAssetsBaseUrl ?? BASEMAP_ASSETS_REMOTE_BASE).replace(
     /\/+$/,
@@ -32,7 +51,16 @@ export function buildShellStyle(
   );
   return {
     version: 8,
-    sources: {},
+    sources: terrain
+      ? {
+          [TERRAIN_SOURCE_ID]: {
+            type: "raster-dem",
+            ...terrain,
+            tileSize: 256,
+            encoding: "terrarium",
+          },
+        }
+      : {},
     layers: [
       // A background layer so the style is never empty. It is the PAGE colour,
       // and it has to be the same colour the offline mask paints with: zoomed
@@ -51,6 +79,12 @@ export function buildShellStyle(
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,
     sprite: `${base}/sprites/v4/${flavor}`,
+    ...(terrain && {
+      terrain: {
+        source: TERRAIN_SOURCE_ID,
+        exaggeration: TERRAIN_EXAGGERATION,
+      },
+    }),
   };
 }
 
@@ -62,10 +96,11 @@ export function buildShellStyle(
 export function useShellStyle(
   localAssetsBaseUrl: string | null,
   flavor: ProtomapsFlavor,
+  terrain: TerrainDem | null = null,
 ): StyleSpecification {
   const theme = useTheme();
   return useMemo(
-    () => buildShellStyle(localAssetsBaseUrl, flavor, theme),
-    [localAssetsBaseUrl, flavor, theme],
+    () => buildShellStyle(localAssetsBaseUrl, flavor, theme, terrain),
+    [localAssetsBaseUrl, flavor, theme, terrain],
   );
 }

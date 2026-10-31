@@ -134,6 +134,8 @@ export function MapLayersSheet({
   onBasemapChange,
   terrainLayers,
   onTerrainLayerChange,
+  terrain3d,
+  onTerrain3dChange,
   artifacts,
   layers,
   hasVegetation,
@@ -150,6 +152,8 @@ export function MapLayersSheet({
   onBasemapChange: (id: BasemapId) => void;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
+  terrain3d: boolean;
+  onTerrain3dChange: (on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
@@ -189,6 +193,8 @@ export function MapLayersSheet({
       <TerrainTab
         layers={terrainLayers}
         onChange={onTerrainLayerChange}
+        terrain3d={terrain3d}
+        onTerrain3dChange={onTerrain3dChange}
         basemapId={basemapId}
         online={online}
         artifacts={artifacts}
@@ -303,6 +309,8 @@ function BasemapTab({
 function TerrainTab({
   layers,
   onChange,
+  terrain3d,
+  onTerrain3dChange,
   basemapId,
   online,
   artifacts,
@@ -311,6 +319,8 @@ function TerrainTab({
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
+  terrain3d: boolean;
+  onTerrain3dChange: (on: boolean) => void;
   basemapId: BasemapId;
   online: boolean;
   /** What is saved on this phone: offline, a layer needs a clip of itself. */
@@ -365,6 +375,13 @@ function TerrainTab({
   } as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
   return (
     <View style={styles.body}>
+      {/* Spike: not a MAP_TERRAIN section, so Logjam Web's contract is untouched. */}
+      <SwitchRow
+        title="3D terrain"
+        style={styles.itemRow}
+        checked={terrain3d}
+        onChange={onTerrain3dChange}
+      />
       {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
     </View>
   );
