@@ -922,11 +922,9 @@ export function MapScreen({
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
-  /** The land class under a tap: an answer for an older tap is never shown. */
-  const [tappedLand, setTappedLand] = useState<{
-    point: MapPoint;
-    name: string | null;
-  } | null>(null);
+  const [tappedLand, setTappedLand] = useState<string | null>(null);
+  /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
+  const landAskedFor = useRef<MapPoint | null>(null);
   const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -2097,15 +2095,17 @@ export function MapScreen({
       const tapped = { latitude: lat, longitude: lon };
       setTappedPoint(tapped);
       setTappedLand(null);
+      landAskedFor.current = tapped;
       // From the tiles on the phone, so this works offline and asks no one.
       if (landLayerIds.length > 0) {
         mapRef.current
           ?.queryRenderedFeatures(event.nativeEvent.point, {
             layers: landLayerIds,
           })
-          .then((features) =>
-            setTappedLand({ point: tapped, name: landNameOf(features) }),
-          )
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedLand(landNameOf(features));
+          })
           // Never a failure to show: the sheet just has no land figure.
           .catch(() => undefined);
       }
@@ -5402,7 +5402,7 @@ export function MapScreen({
       <MapPointSheet
         allowNetwork={!offlineOnly}
         point={tappedPoint}
-        land={tappedLand?.point === tappedPoint ? tappedLand.name : null}
+        land={tappedLand}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}
