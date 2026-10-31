@@ -162,8 +162,8 @@ export function geoPdfNativeMegapixels(
 }
 
 /**
- * The deepest zoom the renderer fetches a base layer at: its cache's own
- * deepest, or z18 for a name it does not know.
+ * The deepest zoom a base layer is printed at: a raster cache's own deepest,
+ * or z18, as for overlays, for a vector base, which draws at any resolution.
  */
 export function geoPdfMaxNativeZoom(baseLayer: string): number {
   return GEOPDF_BASE_LAYER_CONFIG[baseLayer]?.maxNativeZoom ?? 18;

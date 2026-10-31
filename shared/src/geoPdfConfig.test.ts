@@ -13,7 +13,7 @@ function validConfig(): GeoPdfConfig {
     orientation: "portrait",
     extent: { north: -33.4, south: -33.6, east: 150.4, west: 150.2 },
     scale: 25000,
-    baseLayer: "osm",
+    baseLayer: "six-topo",
     overlays: ["hillshade", "contours"],
     elements: { compass: true, scaleText: true, scaleBar: true },
     placeMarkers: [{ lat: -33.5, lon: 150.3, name: "Test", color: "owned" }],
