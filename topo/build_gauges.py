@@ -479,7 +479,7 @@ def registry() -> List[dict]:
             for st in bom_list(
                 request="getStationList",
                 station_no=",".join(ids[i : i + 10]),
-                returnfields="station_no,station_name,station_latitude,station_longitude,custom_attributes",
+                returnfields="station_no,station_longname,station_latitude,station_longitude,custom_attributes",
             ):
                 lat, lon = (
                     float(st["station_latitude"] or 0),
@@ -492,7 +492,7 @@ def registry() -> List[dict]:
                 out.append(
                     {
                         "id": no,
-                        "name": st["station_name"],
+                        "name": st["station_longname"],
                         "lat": round(lat, 5),
                         "lon": round(lon, 5),
                         "hot": no in HOT,
