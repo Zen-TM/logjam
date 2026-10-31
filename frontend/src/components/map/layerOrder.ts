@@ -50,6 +50,21 @@ export function pressedGaugeId(
     ?.properties?.id;
   return typeof id === "string" ? id : null;
 }
+/** How long after its panel closes a press on the gauge still counts as the
+ *  press that closed it. */
+export const GAUGE_RETAP_MS = 500;
+
+/** Whether a press on gauge `id` is the one that just closed its panel. The
+ *  panel closes on pointerdown and the map's click comes after, so without
+ *  this the same press would open it again. */
+export function pressClosedGauge(
+  id: string,
+  closed: { id: string; at: number } | null,
+  now: number,
+): boolean {
+  return closed?.id === id && now - closed.at < GAUGE_RETAP_MS;
+}
+
 /**
  * Stacks the topo entries' layers (`groups`, bottom of the map first) directly
  * under `TOPO_CEILING`, each group's layers in their own order.

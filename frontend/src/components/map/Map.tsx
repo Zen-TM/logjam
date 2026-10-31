@@ -37,6 +37,7 @@ import {
   GAUGE_LABELS,
   GAUGE_LAYER,
   PRESSABLE_LAYERS,
+  pressClosedGauge,
   pressedGaugeId,
 } from "./layerOrder";
 import type { PlaceHighlight } from "./placeHighlight";
@@ -801,7 +802,11 @@ function Map({
   const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
-  const closeGauge = useCallback(() => setGaugeId(null), []);
+  const closedGaugeRef = useRef<{ id: string; at: number } | null>(null);
+  const closeGauge = useCallback((id: string) => {
+    closedGaugeRef.current = { id, at: performance.now() };
+    setGaugeId(null);
+  }, []);
   const selectRouteRef = useRef(selectRoute);
   useEffect(() => {
     selectRouteRef.current = selectRoute;
@@ -1498,7 +1503,11 @@ function Map({
       map.on("click", GAUGE_LAYER, (e) => {
         if (pickModeRef.current || drawingRouteRef.current) return;
         const id = pressedGaugeId(map, [e.point.x, e.point.y]);
-        if (id) setGaugeId(id);
+        if (
+          id &&
+          !pressClosedGauge(id, closedGaugeRef.current, performance.now())
+        )
+          setGaugeId(id);
       });
       map.on("mouseenter", GAUGE_LAYER, () => {
         if (pickModeRef.current) return;
