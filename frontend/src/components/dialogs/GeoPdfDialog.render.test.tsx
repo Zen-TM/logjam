@@ -60,6 +60,7 @@ vi.mock("../map/Map", () => ({
   BASE_LAYERS: [
     { id: "six-topo", name: "Topo", kind: "raster", tiles: [] },
     { id: "six-imagery", name: "Imagery", kind: "raster", tiles: [] },
+    { id: "osm-cycle", name: "Cycle", kind: "raster", tiles: [] },
   ],
 }));
 
@@ -248,12 +249,13 @@ describe("GeoPdfDialog, remembers the last settings", () => {
     );
     cleanup();
 
-    // "osm" is a valid GeoPDF layer the dialog has no chip for.
+    // A base its provider's terms keep off the print, stored before they did.
     localStorage.setItem(
       GEOPDF_SETTINGS_KEY,
-      JSON.stringify({ baseLayer: "osm" }),
+      JSON.stringify({ baseLayer: "osm-cycle" }),
     );
     render(dialog({ open: true }));
+    expect(screen.queryByRole("radio", { name: "Cycle" })).toBeNull();
     expect(screen.getByRole("radio", { name: "Topo" }).ariaChecked).toBe(
       "true",
     );

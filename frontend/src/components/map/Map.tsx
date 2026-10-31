@@ -249,8 +249,8 @@ const PROTOMAPS_SOURCE_ID = "protomaps";
 // while the GeoPDF renderer keeps fetching its native 20).
 //
 // `kind` rides along because the two entry kinds are not interchangeable
-// downstream: raster entries are XYZ templates the GeoPDF renderer can fetch,
-// the vector entry is a PMTiles archive it cannot.
+// downstream: a raster entry is an XYZ template, the vector entry a PMTiles
+// archive drawn from its style.
 //
 // The raster "osm" entry ("Default") is left out: the vector basemap draws the
 // same OpenStreetMap cartography and is the default, so offering both put two
