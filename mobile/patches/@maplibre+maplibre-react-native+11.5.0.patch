@@ -1,3 +1,16 @@
+diff --git a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
+index b088909..35527e9 100644
+--- a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
++++ b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/components/mapview/MLRNMapView.kt
+@@ -458,6 +458,8 @@ open class MLRNMapView(
+ 
+     override fun onMapReady(mapLibreMap: MapLibreMap) {
+         this.mapLibreMap = mapLibreMap
++        // Logjam patch: off, the camera sits at sea level and over high ground ends up underground, drawing nothing.
++        mapLibreMap.setCenterClampedToGround(true)
+ 
+         val uiSettings = mapLibreMap.uiSettings
+         if (attributionGravity == null) attributionGravity = Gravity.END or Gravity.BOTTOM
 diff --git a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt b/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt
 index 7db7762..8b63fc2 100644
 --- a/node_modules/@maplibre/maplibre-react-native/android/src/main/java/org/maplibre/reactnative/modules/TransformRequestInterceptor.kt
