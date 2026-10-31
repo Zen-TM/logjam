@@ -44,7 +44,7 @@ export function PlaceGauge({
   const [picking, setPicking] = useState(false);
   const { file, failed, now } = useGauges(owned || !!gaugeId);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
-  const tile = <IconTile icon="place" hue="var(--color-accent)" />;
+  const tile = <IconTile icon="gauge" hue="var(--color-accent)" />;
   return (
     <>
       {gaugeId &&
@@ -93,7 +93,7 @@ export function PlaceGauge({
       )}
       {owned && picking && (
         <Row
-          leading={tile}
+          leading={<IconTile icon="close" hue="var(--color-accent)" />}
           title={copy.cancelPick}
           onOpen={() => setPicking(false)}
         />

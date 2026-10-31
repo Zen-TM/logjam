@@ -12,6 +12,8 @@ import {
   gaugeDisplayName,
   gaugeFileNote,
   latestGaugeReading,
+  gaugeStats,
+  gaugeWeekChart,
   tripGaugeLines,
 } from "./contracts/gauges.js";
 import {
@@ -389,5 +391,79 @@ describe("the WaterNSW credit", () => {
     );
     const attribution = /ATTRIBUTION = \(([^)]*)\)/.exec(builder)?.[1] ?? "";
     expect(attribution.replace(/"\s*"/g, "")).toContain(notice);
+  });
+});
+
+describe("gaugeStats", () => {
+  const gauge = {
+    id: "900001",
+    name: "MADE UP R @ ONE",
+    lat: -33,
+    lon: 150,
+    hot: false,
+    hasFlow: true,
+    readings: [],
+  };
+  const latest = { level: 0.9, levelAt: 1000, flow: 120, flowAt: 1000 };
+
+  // Mutation: span either stat, or drop the pair from STAT_PAIRS.
+  it("sets level beside flow, each on half the line", () => {
+    expect(gaugeStats(gauge, latest, 2000)).toEqual([
+      { label: "Level", value: "0.90 m", span: false },
+      { label: "Flow", value: "120 ML/d", span: false },
+    ]);
+  });
+
+  it("gives a level with no flow beside it the whole line", () => {
+    expect(gaugeStats({ ...gauge, hasFlow: false }, latest, 2000)).toEqual([
+      { label: "Level", value: "0.90 m", span: true },
+    ]);
+  });
+
+  // Mutation: match the pair on the labels with their ages in them.
+  it("keeps the pair when each value says its own age", () => {
+    const stale = { ...latest, levelAt: 0, flowAt: 2 * 3_600_000 };
+    expect(gaugeStats(gauge, stale, 3 * 3_600_000)).toEqual([
+      { label: "Level, 3 h ago", value: "0.90 m", span: false },
+      { label: "Flow, 1 h ago", value: "120 ML/d", span: false },
+    ]);
+  });
+});
+
+describe("gaugeWeekChart", () => {
+  const gauge = (readings: [number, number | null, number | null][]) => ({
+    id: "900001",
+    name: "MADE UP R @ ONE",
+    lat: -33,
+    lon: 150,
+    hot: false,
+    hasFlow: true,
+    readings,
+  });
+  const latest = { level: 0.9, levelAt: 1000, flow: 120, flowAt: 1000 };
+
+  it("has nothing to draw from no reading or one", () => {
+    expect(gaugeWeekChart(gauge([]), null)).toBeNull();
+    expect(gaugeWeekChart(gauge([[1, 0.9, 120]]), latest)).toBeNull();
+  });
+
+  // Mutation: count rows rather than values.
+  it("counts readings of the charted value, not rows", () => {
+    const rows = gauge([
+      [1, 0.9, null],
+      [2, null, 120],
+    ]);
+    expect(gaugeWeekChart(rows, latest)).toBeNull();
+  });
+
+  // Mutation: always chart the level.
+  it("charts the flow of a gauge with no level reading", () => {
+    const rows = gauge([
+      [1, null, 110],
+      [2, null, 120],
+    ]);
+    expect(gaugeWeekChart(rows, { ...latest, level: null })?.charted).toBe(
+      "flow",
+    );
   });
 });

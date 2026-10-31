@@ -75,14 +75,14 @@ export function PlaceGaugeSection({
         ))}
       {owned && (
         <Row
-          icon="place"
+          icon="gauge"
           title={gaugeId ? copy.changeGauge : copy.chooseGauge}
           onPress={() => setPicking(true)}
         />
       )}
       {owned && gaugeId && (
         <Row
-          icon="place"
+          icon="gauge"
           title={copy.removeGauge}
           onPress={() => onChange(null)}
         />
@@ -106,7 +106,7 @@ export function PlaceGaugeSection({
                 return (
                   <Row
                     key={gauge.id}
-                    icon="place"
+                    icon="gauge"
                     title={gaugeDisplayName(gauge.name)}
                     subtitle={[
                       formatDistanceM(distanceM),
