@@ -1,5 +1,10 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { NSW_CONTOURS, NSW_HILLSHADE, NSW_SLOPE } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  NSW_CONTOURS,
+  NSW_HILLSHADE,
+  NSW_SLOPE,
+} from "@logjam/shared";
 // Deliberate subpath imports: the import parser is kept out of the shared
 // barrel so pdf-lib never rides into the web bundle.
 import {
@@ -25,6 +30,8 @@ import {
 //    `block.r0 * TILE_SIZE` argument to resampleGrid)
 //  - refusal: drop the `checkPlan` call in render.ts
 //  - pixel check: drop the `opaque(...)` test in render.ts's strip loop
+//  - vector labels: draw a label only in the strip holding its anchor
+//    (`label.y < top || label.y >= bottom` in drawBasemapLabels)
 //  - cancel: have the client wait for the worker instead of terminating it
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
@@ -34,10 +41,14 @@ test.skip(
 );
 
 const archives = statewideArchives();
+const PROTOMAPS_ARCHIVE = BASEMAP_CATALOG.find(
+  (entry) => entry.id === "protomaps",
+)!.urlTemplate;
 const ARCHIVE_PATHS: Record<string, Buffer> = {
   [NSW_HILLSHADE.archivePath]: archives.heights,
   [NSW_SLOPE.archivePath]: archives.slope,
   [NSW_CONTOURS.archivePath]: archives.contours,
+  [PROTOMAPS_ARCHIVE]: archives.basemap,
 };
 
 type Seen = { tiles: number; archives: number };
@@ -100,7 +111,7 @@ async function openBench(page: Page) {
 test.describe("the in-browser GeoPDF renderer", () => {
   test.setTimeout(120_000);
 
-  for (const scenario of ["shade", "contours"]) {
+  for (const scenario of ["shade", "contours", "vector"]) {
     // Every strip's rows must equal the same rows of a one-strip render, byte
     // for byte, at every layer: base tiles, terrain resampled from a DEM
     // block, contour lines and labels, the map elements.
@@ -116,6 +127,20 @@ test.describe("the in-browser GeoPDF renderer", () => {
       expect(r).toMatchObject({ ok: true });
     });
   }
+
+  // Strict: the check above lets through a few thousand pixels, as much as a
+  // label cut at a strip's edge.
+  test("a vector base's labels cross a strip's edge whole", async ({
+    page,
+  }) => {
+    await stubNetwork(page);
+    await openBench(page);
+    const r = await page.evaluate(() =>
+      window.geoPdfBench.seamCheck("vector", 700_000, { overlays: [] }, true),
+    );
+    expect(r.strips).toBeGreaterThan(3);
+    expect(r).toMatchObject({ ok: true });
+  });
 
   // The terrain's helper workers cut a strip into bands. Mutation: pass
   // hillshadePixels a `rowOffset` of 0 in runTerrainBand (terrainJobs.ts, the

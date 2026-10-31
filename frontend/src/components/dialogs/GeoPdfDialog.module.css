@@ -37,6 +37,17 @@
   min-width: 0;
 }
 
+.baseLayer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.baseLayerLabel {
+  composes: detail from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
 .checkList {
   display: flex;
   flex-direction: column;

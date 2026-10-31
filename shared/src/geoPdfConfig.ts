@@ -1,4 +1,5 @@
 import type { PaperSize, Orientation, CoordMode } from "./geoPdfExtent.js";
+import { BASEMAP_CATALOG } from "./geoPdfBaseLayers.js";
 import { TERRAIN_LAYER_KEYS } from "./terrain.js";
 
 export interface PlaceMarker {
@@ -38,14 +39,9 @@ export const VALID_GEOPDF_PAPER_SIZES = new Set<string>([
   "custom",
 ]);
 
-export const VALID_GEOPDF_BASE_LAYERS = new Set<string>([
-  "osm",
-  "osm-topo",
-  "osm-cycle",
-  "six-topo",
-  "six-base",
-  "six-imagery",
-]);
+export const VALID_GEOPDF_BASE_LAYERS = new Set<string>(
+  BASEMAP_CATALOG.filter((entry) => entry.printable).map((entry) => entry.id),
+);
 
 // The Terrain group's layers (the statewide ones, and a sharpened area's own
 // of the same name) and the vegetation only a sharpened area draws. Guard:

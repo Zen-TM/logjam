@@ -118,11 +118,14 @@
   color: var(--color-text);
 }
 
+.galleryPane {
+  padding: 0 12px 12px;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 0 12px 12px;
 }
 
 .tile {
