@@ -882,6 +882,61 @@ test.describe("desktop", () => {
     ).toBeFocused();
   });
 
+  // Stubbed: the gauge file is public and never fetched from prod here.
+  test("a river gauge's panel", async ({ page }) => {
+    const now = Math.floor(Date.now() / 1000);
+    await page.route("**/master/gauges/v1/latest.json", (route) =>
+      route.fulfill({
+        json: {
+          version: 1,
+          generatedAt: new Date().toISOString(),
+          coldSweptAt: new Date().toISOString(),
+          attribution: "Made-up readings. Real data: WaterNSW.",
+          gauges: [
+            {
+              id: "212290",
+              name: "COLO R @ UPPER COLO",
+              lat: -33.8688,
+              lon: 151.2093,
+              hot: true,
+              hasFlow: true,
+              readings: [60, 40, 20, 0].map((m, i) => [
+                now - m * 3600,
+                1 + i / 10,
+                40 + i,
+              ]),
+            },
+          ],
+        },
+      }),
+    );
+    // Nothing but the gauge may sit under the pressed point.
+    await page.route(
+      /\/(places|routes)(\/shared|\/tracks)?(\?.*)?$/,
+      (route) =>
+        route.request().method() === "GET"
+          ? route.fulfill({ json: [] })
+          : route.continue(),
+    );
+    await page.addInitScript(() =>
+      localStorage.setItem("logjam.showGauges", "true"),
+    );
+    await openApp(page);
+    // The canvas is on screen before the map has loaded and its handlers are
+    // attached; the zoom buttons are enabled once it has.
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const box = (await page.locator("canvas.maplibregl-canvas").boundingBox())!;
+    const panel = page.getByRole("dialog", { name: "River gauge" });
+    // The dot is drawn once the file has arrived, which nothing on the page
+    // announces: press the gauge at the map's start view until the panel opens.
+    await expect(async () => {
+      await page.keyboard.press("Escape");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(panel).toBeVisible({ timeout: 1_500 });
+    }).toPass({ timeout: 15_000 });
+    await expectNoViolations(page, "[role='dialog'][aria-label='River gauge']");
+  });
+
   test("the Layers popover's Terrain tab, and its slope bands", async ({
     page,
   }) => {
