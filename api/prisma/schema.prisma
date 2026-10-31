@@ -9,9 +9,12 @@ datasource db {
 
 model User {
   id                      String              @id @default(uuid())
-  cognitoId               String              @unique @map("cognito_id")
+  // Retired by the rename to subject: still a column (nullable, dropped by the
+  // next deploy) but @ignore keeps it out of the client and the code, while
+  // the schema still describes the database for the drift check.
+  cognitoId               String?             @unique @map("cognito_id") @ignore
   // The identity provider's `sub`. Replaces cognitoId over four deploys
-  // (expand/contract, ADR 0003); every read is on this column from the second.
+  // (expand/contract, ADR 0003); the only identity column the code touches.
   subject                 String              @unique @map("subject")
   username                String              @unique
   email                   String              @unique
