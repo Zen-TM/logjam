@@ -16,6 +16,7 @@ import type {
 } from "@logjam/shared";
 
 import { getOfflineDb } from "../offline/registryDb";
+import { withSyncTransaction } from "../sync/syncDb";
 
 /** recording/paused = the single active track; done = saved. */
 export type TrackState = "recording" | "paused" | "done";
@@ -350,7 +351,7 @@ export async function deleteTrack(id: string): Promise<void> {
   // All three or none — a crash between them must not leave orphaned
   // track_point / track_point_rejected rows (location history) with no track
   // row to delete them.
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     await db.runAsync("DELETE FROM track_point WHERE trackId = ?", id);
     await db.runAsync("DELETE FROM track_point_rejected WHERE trackId = ?", id);
     await db.runAsync("DELETE FROM track WHERE id = ?", id);
@@ -423,7 +424,7 @@ export async function appendRejectedFixes(
 ): Promise<void> {
   if (fixes.length === 0) return;
   const db = await getOfflineDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
       "SELECT MAX(seq) AS maxSeq FROM track_point_rejected WHERE trackId = ?",
       trackId,
@@ -466,7 +467,7 @@ export async function appendTrackPoints(
 ): Promise<void> {
   if (points.length === 0) return;
   const db = await getOfflineDb();
-  await db.withTransactionAsync(async () => {
+  await withSyncTransaction(db, async () => {
     const maxRow = await db.getFirstAsync<{ maxSeq: number | null }>(
       "SELECT MAX(seq) AS maxSeq FROM track_point WHERE trackId = ?",
       trackId,

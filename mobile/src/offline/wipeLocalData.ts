@@ -32,7 +32,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
-import { wipeAllSyncData } from "../sync/syncDb";
+import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
 import { stopGaugesForWipe } from "../gauges/gaugeStorage";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
@@ -133,7 +133,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
 
   try {
     const db = await getOfflineDb();
-    await db.withTransactionAsync(async () => {
+    await withSyncTransaction(db, async () => {
       for (const table of OFFLINE_TABLES) {
         await db.runAsync(`DELETE FROM ${table}`);
       }
