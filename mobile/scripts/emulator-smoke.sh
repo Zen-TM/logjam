@@ -28,7 +28,9 @@ trap 'adb logcat -d > "$LOGS/logcat.txt" 2>&1 || true' EXIT
 # Run id in the name, so a rerun on a reused database cannot pass on last run's row.
 PLACE_NAME="Smoke Test Gully ${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
 
-adb install -r -t "$APK" > /dev/null
+# A clean install: nothing from an earlier run on this AVD, nor its places.
+adb uninstall "$PKG" > /dev/null 2>&1 || true
+adb install -t "$APK" > /dev/null
 # Right after boot the package manager cannot always resolve a package yet.
 for _ in $(seq 1 20); do adb shell pm path "$PKG" | grep -q package && break; sleep 3; done
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
