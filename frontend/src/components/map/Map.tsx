@@ -18,6 +18,7 @@ import {
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
+  gaugeDisplayName,
   latestGaugeReading,
   nswContourStyle,
   TERRAIN_LAYER_KEYS,
@@ -33,6 +34,7 @@ import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
 import { useGauges } from "../gauges/useGauges";
 import {
   GAUGE_BELOW,
+  GAUGE_LABELS,
   GAUGE_LAYER,
   PRESSABLE_LAYERS,
   pressedGaugeId,
@@ -53,6 +55,7 @@ import {
   GAUGE_ICON_IMAGE,
   GAUGE_ICON_SDF_URI,
   GAUGE_ICON_SIZE,
+  GAUGE_LABEL_MIN_ZOOM,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
@@ -217,13 +220,10 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
     map.setPaintProperty(id, "circle-color", accent);
     map.setPaintProperty(id, "circle-stroke-color", accent);
   }
-  if (map.getLayer("place-labels")) {
-    map.setPaintProperty("place-labels", "text-color", label);
-    map.setPaintProperty("place-labels", "text-halo-color", halo);
-  }
-  if (map.getLayer("shared-place-labels")) {
-    map.setPaintProperty("shared-place-labels", "text-color", label);
-    map.setPaintProperty("shared-place-labels", "text-halo-color", halo);
+  for (const id of ["place-labels", "shared-place-labels", GAUGE_LABELS]) {
+    if (!map.getLayer(id)) continue;
+    map.setPaintProperty(id, "text-color", label);
+    map.setPaintProperty(id, "text-halo-color", halo);
   }
 }
 
@@ -1471,6 +1471,30 @@ function Map({
         },
         GAUGE_BELOW,
       );
+      // Under the pins, so a place's own name wins any collision with one.
+      map.addLayer(
+        {
+          id: GAUGE_LABELS,
+          type: "symbol",
+          source: "gauges",
+          minzoom: GAUGE_LABEL_MIN_ZOOM,
+          layout: {
+            visibility: "none",
+            "text-field": ["get", "name"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": 12,
+            "text-max-width": 10,
+            "text-offset": [0, 1.2],
+            "text-anchor": "top",
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
       map.on("click", GAUGE_LAYER, (e) => {
         if (pickModeRef.current || drawingRouteRef.current) return;
         const id = pressedGaugeId(map, [e.point.x, e.point.y]);
@@ -1945,18 +1969,19 @@ function Map({
   useEffect(() => {
     const map = mapRef.current;
     if (!mapLoaded || !map) return;
-    map.setLayoutProperty(
-      GAUGE_LAYER,
-      "visibility",
-      showGauges ? "visible" : "none",
-    );
+    for (const id of [GAUGE_LAYER, GAUGE_LABELS])
+      map.setLayoutProperty(id, "visibility", showGauges ? "visible" : "none");
     const now = Date.now();
     (map.getSource("gauges") as maplibregl.GeoJSONSource).setData({
       type: "FeatureCollection",
       features: (gaugeFile?.gauges ?? []).map((g) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [g.lon, g.lat] },
-        properties: { id: g.id, recent: latestGaugeReading(g, now) !== null },
+        properties: {
+          id: g.id,
+          name: gaugeDisplayName(g.name),
+          recent: latestGaugeReading(g, now) !== null,
+        },
       })),
     });
   }, [showGauges, gaugeFile, mapLoaded]);

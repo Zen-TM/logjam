@@ -127,6 +127,26 @@ describe("the gauge panel's words", () => {
       "Hunter downstream of Glenbawn",
     );
     expect(gaugeDisplayName("McKIMMS CORNER")).toBe("McKIMMS Corner");
+    expect(gaugeDisplayName("KOWMUNG RIVER AT CEDAR FORD")).toBe(
+      "Kowmung River at Cedar Ford",
+    );
+    // Mutation: drop the stream rule, and these read "Upstream Lake Lyell"
+    // and "Upstream of of".
+    expect(gaugeDisplayName("COXS RIVER UPSTREAM LAKE LYELL")).toBe(
+      "Coxs River upstream of Lake Lyell",
+    );
+    expect(gaugeDisplayName("HUNTER RIVER DOWN STREAM SADDLERS CREEK")).toBe(
+      "Hunter River downstream of Saddlers Creek",
+    );
+    expect(gaugeDisplayName("NEUBECKS CREEK UPSTREAM OF WALLERAWANG")).toBe(
+      "Neubecks Creek upstream of Wallerawang",
+    );
+    expect(gaugeDisplayName("WOLLONDILLY RIVER @ ROSSI WEIR (SITE NO.2)")).toBe(
+      "Wollondilly River at Rossi Weir (Site No.2)",
+    );
+    expect(gaugeDisplayName("Waratah Rivulet at Fire RD 9J")).toBe(
+      "Waratah Rivulet at Fire Road 9J",
+    );
   });
 
   it("reads the newest level and the newest flow each on their own, within 7 days", () => {
