@@ -1173,9 +1173,9 @@ function App() {
 
   // Blocking re-consent gate: a signed-in user whose recorded consent version
   // is stale or absent must re-consent before using Logjam Web (the
-  // privacy.html / tos.html "re-consent on next sign-in" promise). The
-  // pending-key fast path keeps the gate from flashing for fresh sign-ups
-  // whose consent PATCH (recorded by the effect above) is still in flight.
+  // privacy.html / tos.html "re-consent on next sign-in" promise). A new
+  // account lands here too and answers the questions the provider's sign-up
+  // page cannot ask.
   // Decided once, up beside the data hooks the same answer holds back
   // (`consentGate`), so the gate and the fetches can never disagree.
   if (consentBlocked && currentUser) {

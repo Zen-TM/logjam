@@ -9,7 +9,7 @@ import {
   issuerUrl,
   loadSession,
   signInRedirect,
-  signOutRedirect,
+  endProviderSession,
 } from "./auth/oidc";
 
 // Calls GET /users/me after sign-in. The API creates a new user record
@@ -33,22 +33,23 @@ async function endSession() {
   // The GeoPDF tile cache shows which areas were printed: same line. It
   // clears here because the user is known to be signing out.
   await clearTileCache();
-  // Leave unconditionally, matching RootErrorBoundary.handleSignOut's
-  // identical flow: a rejection would propagate into an onClick handler that
-  // ignores promises and leave the UI looking signed in with the draft gone.
+  // Leave unconditionally, matching RootErrorBoundary's flow: a rejection
+  // would propagate into an onClick handler that ignores promises and leave the
+  // UI looking signed in with the draft gone.
+  let to: string | null = null;
   try {
-    if (import.meta.env.VITE_AUTH_MODE === "fake") {
-      window.location.reload();
-    } else {
-      await signOutRedirect();
+    if (import.meta.env.VITE_AUTH_MODE !== "fake") {
+      to = await endProviderSession();
     }
   } catch (err) {
     console.error(err);
-    window.location.reload();
   }
   // Once more: a render or prefetch worker may have written while the
-  // sign-out was in flight, and the navigation does not end it first.
+  // sign-out was in flight. Before the navigation, which would abort it
+  // (frontend/AGENTS.md, ADR 0043).
   await clearTileCache();
+  if (to) window.location.assign(to);
+  else window.location.reload();
 }
 
 export const signOut = endSession;
@@ -100,6 +101,7 @@ export function useAuth() {
         setState("signIn");
         return;
       }
+      if (cancelled) return;
       if (signedInNow) {
         // Whoever signs in starts with an empty tile cache, even after a
         // failed session check that left the last user's in place.

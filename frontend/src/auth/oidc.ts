@@ -99,7 +99,9 @@ export function loadSession(force = false): Promise<User | null> {
       // The library keeps the old refresh token: Cognito sends no new one.
       return await m.signinSilent();
     } catch (err) {
-      if (err instanceof ErrorResponse) {
+      // Only a refused grant ends the session: a 500 server_error or 503
+      // temporarily_unavailable leaves a good refresh token in place.
+      if (err instanceof ErrorResponse && err.error === "invalid_grant") {
         await m.removeUser();
         return null;
       }
@@ -123,11 +125,14 @@ export async function accessToken(): Promise<string> {
 export const issuerUrl = issuer;
 
 /**
- * Forgets the session here and sends the browser to the provider's end-session
- * page, which returns to Logjam Web signed out. A provider without one (or
- * unreachable) just reloads: the local session is already gone.
+ * Ends the provider-side session as far as it can from here (revokes the
+ * refresh token, forgets the session locally) and returns where the browser
+ * should go next: the provider's end-session page, which returns to Logjam Web
+ * signed out, or home when the provider has none (or cannot be asked). The
+ * caller navigates, after it has finished its own clearing: a navigation
+ * already started can abort that.
  */
-export async function signOutRedirect(): Promise<void> {
+export async function endProviderSession(): Promise<string> {
   const m = userManager();
   const user = await m.getUser();
   let endpoint: string | undefined;
@@ -144,17 +149,12 @@ export async function signOutRedirect(): Promise<void> {
     console.error(err);
   }
   await m.removeUser();
-  if (!endpoint) {
-    window.location.assign(home());
-    return;
-  }
-  window.location.assign(
-    endSessionUrl({
-      endpoint,
-      issuer: issuer(),
-      clientId: clientId(),
-      postLogoutRedirect: home(),
-      idToken: user?.id_token,
-    }),
-  );
+  if (!endpoint) return home();
+  return endSessionUrl({
+    endpoint,
+    issuer: issuer(),
+    clientId: clientId(),
+    postLogoutRedirect: home(),
+    idToken: user?.id_token,
+  });
 }

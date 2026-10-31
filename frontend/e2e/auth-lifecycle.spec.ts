@@ -54,8 +54,15 @@ test.describe("real Cognito auth lifecycle", () => {
     // App.tsx blocks behind ConsentGate when needsReconsent() — agree if shown.
     const agree = page.getByRole("button", { name: /Agree and continue/i });
     if (await agree.isVisible({ timeout: 10_000 }).catch(() => false)) {
-      // The gate's checkbox must be ticked before the button enables.
-      await page.getByRole("checkbox").first().check();
+      // A brand-new account is also asked for a username (prefilled) and its
+      // age; the returning user's gate has one checkbox. Check them all.
+      const username = page.getByLabel("Username");
+      if (await username.isVisible().catch(() => false)) {
+        await username.fill(`e2e${Date.now() % 1e9}`);
+      }
+      for (const box of await page.getByRole("checkbox").all()) {
+        await box.check();
+      }
       await agree.click();
     }
 

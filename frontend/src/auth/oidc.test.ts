@@ -26,7 +26,6 @@ vi.mock("oidc-client-ts", async (orig) => ({
 
 const COGNITO =
   "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_x5zPhJXMk";
-const assign = vi.fn();
 
 function setUrl(path: string) {
   window.history.replaceState({}, "", path);
@@ -100,6 +99,18 @@ describe("loadSession", () => {
 
   // Mutation: treat every refresh failure as rejection (drop the instanceof)
   // and an offline refresh deletes a session the provider still honours.
+  // Mutation: drop the `err.error === "invalid_grant"` test and a 503 wipes a
+  // refresh token that was fine.
+  it("keeps the session through a provider outage (server_error, 503)", async () => {
+    const { loadSession } = await load();
+    m.getUser.mockResolvedValue(stored({ expires_in: 0 }));
+    for (const error of ["server_error", "temporarily_unavailable"]) {
+      m.signinSilent.mockRejectedValueOnce(new ErrorResponse({ error }));
+      await expect(loadSession()).rejects.toThrow();
+    }
+    expect(m.removeUser).not.toHaveBeenCalled();
+  });
+
   it("removes the session when the provider rejects the refresh, and only then", async () => {
     const { loadSession } = await load();
     m.getUser.mockResolvedValue(stored({ expires_in: 0 }));
@@ -164,27 +175,19 @@ describe("signInRedirect", () => {
   });
 });
 
-describe("signOutRedirect", () => {
-  // jsdom cannot navigate: give the redirect somewhere to land.
+describe("endProviderSession", () => {
   const origin = window.location.origin;
-  beforeEach(() => {
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { origin, assign },
-    });
-  });
 
-  // Mutation: navigate without removeUser, or skip the navigation, and the
-  // provider's session (or this browser's) outlives the sign-out.
+  // Mutation: drop removeUser, or return home instead of the end-session URL,
+  // and the provider's session (or this browser's) outlives the sign-out.
   it("forgets the session here, then ends the provider's", async () => {
-    const { signOutRedirect } = await load();
+    const { endProviderSession } = await load();
     m.getUser.mockResolvedValue(stored());
     m.getMetadata.mockResolvedValue({
       end_session_endpoint: "https://auth.example.com/logout",
     });
-    await signOutRedirect();
+    const to = new URL(await endProviderSession());
     expect(m.removeUser).toHaveBeenCalledOnce();
-    const to = new URL(assign.mock.calls[0][0]);
     expect(to.origin + to.pathname).toBe("https://auth.example.com/logout");
     expect(to.searchParams.get("client_id")).toBe("cid");
     expect(to.searchParams.get("logout_uri")).toBe(`${origin}/`);
@@ -193,12 +196,12 @@ describe("signOutRedirect", () => {
   // Mutation: drop the revokeTokens call and the refresh token outlives the
   // sign-out; let its failure propagate and the second test goes red.
   it("revokes the refresh token before it leaves", async () => {
-    const { signOutRedirect } = await load();
+    const { endProviderSession } = await load();
     m.getUser.mockResolvedValue(stored());
     m.getMetadata.mockResolvedValue({
       end_session_endpoint: "https://auth.example.com/logout",
     });
-    await signOutRedirect();
+    await endProviderSession();
     expect(m.revokeTokens).toHaveBeenCalledWith(["refresh_token"]);
     expect(m.revokeTokens.mock.invocationCallOrder[0]).toBeLessThan(
       m.removeUser.mock.invocationCallOrder[0],
@@ -206,25 +209,23 @@ describe("signOutRedirect", () => {
   });
 
   it("still signs out when the revoke fails", async () => {
-    const { signOutRedirect } = await load();
+    const { endProviderSession } = await load();
     vi.spyOn(console, "error").mockImplementation(() => {});
     m.getUser.mockResolvedValue(stored());
     m.getMetadata.mockResolvedValue({
       end_session_endpoint: "https://auth.example.com/logout",
     });
     m.revokeTokens.mockRejectedValue(new TypeError("Failed to fetch"));
-    await signOutRedirect();
+    await endProviderSession();
     expect(m.removeUser).toHaveBeenCalledOnce();
-    expect(assign).toHaveBeenCalledOnce();
   });
 
   it("still leaves when the provider cannot be asked", async () => {
-    const { signOutRedirect } = await load();
+    const { endProviderSession } = await load();
     vi.spyOn(console, "error").mockImplementation(() => {});
     m.getUser.mockResolvedValue(stored());
     m.getMetadata.mockRejectedValue(new Error("offline"));
-    await signOutRedirect();
+    expect(await endProviderSession()).toBe(`${origin}/`);
     expect(m.removeUser).toHaveBeenCalledOnce();
-    expect(assign).toHaveBeenCalledWith(`${origin}/`);
   });
 });

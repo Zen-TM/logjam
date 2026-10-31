@@ -11,13 +11,20 @@ import { RootErrorBoundary } from "./RootErrorBoundary";
 // session cleanup as the app's own sign-out rather than a bare reload.
 
 const mocks = vi.hoisted(() => ({
-  signOut: vi.fn(async () => {}),
+  signOut: vi.fn(async () => "https://auth.example.com/logout"),
+  assign: vi.fn(),
   clearTripDraft: vi.fn(),
   clearTileCache: vi.fn(async () => {}),
   reload: vi.fn(),
 }));
 
-vi.mock("../../auth/oidc", () => ({ signOutRedirect: mocks.signOut }));
+vi.mock("../../auth/oidc", () => ({
+  endProviderSession: mocks.signOut,
+  loadSession: vi.fn(),
+  completeSignInFromUrl: vi.fn(),
+  signInRedirect: vi.fn(),
+  issuerUrl: vi.fn(),
+}));
 vi.mock("../../tripDraft", () => ({ clearTripDraft: mocks.clearTripDraft }));
 vi.mock("../../geoPdf/cache", () => ({
   clearTileCache: mocks.clearTileCache,
@@ -28,14 +35,16 @@ function Thrower(): never {
 }
 
 beforeEach(() => {
+  vi.stubEnv("VITE_AUTH_MODE", "oidc");
   mocks.signOut.mockClear();
   mocks.clearTripDraft.mockClear();
   mocks.clearTileCache.mockClear();
   mocks.reload.mockClear();
+  mocks.assign.mockClear();
   // jsdom cannot navigate: give the recovery verbs somewhere to land.
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { reload: mocks.reload },
+    value: { reload: mocks.reload, assign: mocks.assign },
   });
   // React logs the caught error itself; the boundary's own line is asserted
   // below, and the rest would only be noise.
@@ -43,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   cleanup();
   vi.restoreAllMocks();
 });
@@ -99,7 +109,8 @@ describe("RootErrorBoundary", () => {
     await vi.waitFor(() =>
       expect(mocks.clearTileCache).toHaveBeenCalledTimes(2),
     );
-    // The redirect leaves; a reload here would race it.
+    // The redirect leaves, after both clears; a reload here would race it.
+    await vi.waitFor(() => expect(mocks.assign).toHaveBeenCalled());
     expect(mocks.reload).not.toHaveBeenCalled();
   });
 

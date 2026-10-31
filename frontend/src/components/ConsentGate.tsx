@@ -2,6 +2,7 @@ import { useState } from "react";
 import { isValidUsername, USERNAME_RULE } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
+import { ApiError } from "../errors/ApiError";
 import BrandMark from "./brand/BrandMark";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
 import classes from "./ConsentGate.module.css";
@@ -73,12 +74,21 @@ function ConsentGate({
       onAccepted(user);
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(
-          err,
-          "Couldn't record your consent. Please try again.",
-        ),
+      const message = messageFromError(
+        err,
+        "Couldn't record your consent. Please try again.",
       );
+      // A refused username belongs to its field and clears on edit
+      // (shared/DESIGN.md §11, §12); it is not worth a retry.
+      if (
+        newAccount &&
+        err instanceof ApiError &&
+        [400, 409].includes(err.status)
+      ) {
+        setUsernameError(message);
+      } else {
+        setError(message);
+      }
       setSubmitting(false);
     }
   }

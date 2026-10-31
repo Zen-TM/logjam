@@ -94,7 +94,9 @@ describe("ConsentGate for a new account", () => {
     expect(recordConsent).toHaveBeenCalledWith("2026-09-28", "bob_the-1");
   });
 
-  it("shows the API's message for a taken username and stays", async () => {
+  // Mutation: send the refusal to the banner (setError) and it has a retry
+  // button and sits away from the field; drop the clear-on-edit and it stays.
+  it("shows the API's message for a taken username under the field, clearing on edit", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     recordConsent.mockRejectedValue(
       new ApiError(
@@ -110,5 +112,14 @@ describe("ConsentGate for a new account", () => {
     agree();
     await screen.findByText("That username is taken. Choose another.");
     expect(onAccepted).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: /retry|try again/i }),
+    ).toBeNull();
+    fireEvent.change(screen.getByLabelText("Username"), {
+      target: { value: "other" },
+    });
+    expect(
+      screen.queryByText("That username is taken. Choose another."),
+    ).toBeNull();
   });
 });

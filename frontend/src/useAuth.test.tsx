@@ -8,13 +8,14 @@ const oidc = vi.hoisted(() => ({
   completeSignInFromUrl: vi.fn(),
   loadSession: vi.fn(),
   signInRedirect: vi.fn(),
-  signOutRedirect: vi.fn(),
+  endProviderSession: vi.fn(),
   hasCognitoAccount: vi.fn(() => true),
   issuerUrl: vi.fn(() => "https://cognito-idp.r.amazonaws.com/r_P"),
 }));
 const globalSignOut = vi.hoisted(() => vi.fn());
 const clearTripDraft = vi.hoisted(() => vi.fn());
 const reload = vi.hoisted(() => vi.fn());
+const assign = vi.hoisted(() => vi.fn());
 const setSessionExpiredHandler = vi.hoisted(() => vi.fn());
 const clearTileCache = vi.hoisted(() => vi.fn(async () => {}));
 const apiFetch = vi.hoisted(() => vi.fn(async () => ({})));
@@ -39,11 +40,13 @@ beforeEach(() => {
   clearTileCache.mockImplementation(async () => {});
   oidc.completeSignInFromUrl.mockResolvedValue(null);
   oidc.loadSession.mockResolvedValue(session);
-  oidc.signOutRedirect.mockResolvedValue(undefined);
+  oidc.endProviderSession.mockResolvedValue(
+    "https://auth.example.com/logout?x=1",
+  );
   globalSignOut.mockResolvedValue(undefined);
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { reload },
+    value: { reload, assign },
   });
 });
 
@@ -88,23 +91,48 @@ describe("the sign-in callback", () => {
     expect(result.current.error).toMatch(/connect/i);
   });
 
-  // Mutation: drop `await clearTileCache()` after the callback and someone
-  // else signing in after a failed check inherits the last user's cache; flip
-  // the order with setState and the tiles are cleared behind a signed-in UI.
+  // Mutation: setState("authenticated") before the clear or the /users/me
+  // await (or drop either) and `state` is already authenticated inside the
+  // mocks, or the order differs.
   it("empties the tile cache and provisions the user before it flips to authenticated", async () => {
     oidc.completeSignInFromUrl.mockResolvedValue(session);
-    const order: string[] = [];
+    // One log of renders and of the two awaited steps, in the order they ran.
+    const log: string[] = [];
     clearTileCache.mockImplementation(async () => {
-      order.push("clear");
+      log.push("clear");
+      // Let React render anything already set, so an early flip is seen.
+      await new Promise((r) => setTimeout(r, 5));
     });
     apiFetch.mockImplementation(async () => {
-      order.push("me");
+      log.push("me");
+      await new Promise((r) => setTimeout(r, 5));
       return {};
     });
-    const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.state).toBe("authenticated"));
-    expect(order).toEqual(["clear", "me"]);
+    const hook = renderHook(() => {
+      const auth = useAuth();
+      if (log[log.length - 1] !== auth.state) log.push(auth.state);
+      return auth;
+    });
+    await waitFor(() =>
+      expect(hook.result.current.state).toBe("authenticated"),
+    );
+    expect(log).toEqual(["loading", "clear", "me", "authenticated"]);
     expect(oidc.loadSession).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop `if (cancelled) return;` after the callback try/catch: the
+  // unmounted (first StrictMode) pass provisions and flips state too.
+  it("does nothing more once the hook has unmounted", async () => {
+    let finish: (u: unknown) => void = () => {};
+    oidc.completeSignInFromUrl.mockReturnValue(
+      new Promise((r) => (finish = r)),
+    );
+    const hook = renderHook(() => useAuth());
+    hook.unmount();
+    finish(session);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(clearTileCache).not.toHaveBeenCalled();
   });
 });
 
@@ -153,7 +181,7 @@ describe("the session check", () => {
 });
 
 describe("signOut", () => {
-  // Mutation: drop the signOutRedirect call and the provider's session (and
+  // Mutation: drop the endProviderSession call and the provider's session (and
   // the stored tokens) outlive the sign-out.
   it("ends the provider's session, with the draft and tile cache cleared first", async () => {
     await signedIn();
@@ -162,18 +190,23 @@ describe("signOut", () => {
     clearTileCache.mockImplementation(async () => {
       calls.push("tiles");
     });
-    oidc.signOutRedirect.mockImplementation(async () => {
+    oidc.endProviderSession.mockImplementation(async () => {
       calls.push("redirect");
+      return "https://auth.example.com/logout?x=1";
     });
+    assign.mockImplementation(() => calls.push("navigate"));
     await act(() => signOut());
-    expect(calls).toEqual(["draft", "tiles", "redirect", "tiles"]);
+    // Mutation: navigate before the second clear (the old order) and the
+    // clear can be aborted by the page leaving.
+    expect(calls).toEqual(["draft", "tiles", "redirect", "tiles", "navigate"]);
+    expect(assign).toHaveBeenCalledWith("https://auth.example.com/logout?x=1");
     expect(globalSignOut).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
 
   it("reloads when the provider cannot be reached, so a corrupt session is still escapable", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    oidc.signOutRedirect.mockRejectedValue(new Error("boom"));
+    oidc.endProviderSession.mockRejectedValue(new Error("boom"));
     await signOut();
     expect(reload).toHaveBeenCalledOnce();
   });
@@ -181,7 +214,7 @@ describe("signOut", () => {
   it("only reloads under fake auth, which has no provider", async () => {
     vi.stubEnv("VITE_AUTH_MODE", "fake");
     await signOut();
-    expect(oidc.signOutRedirect).not.toHaveBeenCalled();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalledOnce();
   });
 });
@@ -191,7 +224,7 @@ describe("signOutEverywhere", () => {
     oidc.loadSession.mockRejectedValue(new Error("offline"));
     await expect(signOutEverywhere()).rejects.toThrow("offline");
     expect(globalSignOut).not.toHaveBeenCalled();
-    expect(oidc.signOutRedirect).not.toHaveBeenCalled();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
     expect(clearTripDraft).not.toHaveBeenCalled();
   });
 
@@ -209,7 +242,7 @@ describe("signOutEverywhere", () => {
     await expect(signOutEverywhere()).rejects.toThrow("NotAuthorized");
     expect(clearTripDraft).not.toHaveBeenCalled();
     expect(clearTileCache).not.toHaveBeenCalled();
-    expect(oidc.signOutRedirect).not.toHaveBeenCalled();
+    expect(oidc.endProviderSession).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });
 
@@ -222,6 +255,6 @@ describe("signOutEverywhere", () => {
       "fresh",
     );
     expect(clearTripDraft).toHaveBeenCalledOnce();
-    expect(oidc.signOutRedirect).toHaveBeenCalledOnce();
+    expect(oidc.endProviderSession).toHaveBeenCalledOnce();
   });
 });
