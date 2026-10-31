@@ -26,7 +26,7 @@ import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
-import { logger } from "../lib/logger";
+import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
@@ -136,6 +136,30 @@ const usernameSchema = z
   .min(3)
   .max(32)
   .regex(/^[A-Za-z0-9_.-]+$/);
+
+/**
+ * The name a new account starts with, which other users then see and search.
+ * The token's own username counts only if it is a valid name that doesn't
+ * contain the email's local part. usernameSchema already refuses an email or a
+ * UUID, which is what arrives from a Managed Login sign-up, which has no
+ * username field. Otherwise a neutral name from the sub: never anything derived
+ * from the email.
+ * Guard: users.unit.test.ts.
+ */
+export function initialUsernameFor(params: {
+  sub: string;
+  email: string;
+  username: string;
+}): string {
+  const { sub, email, username } = params;
+  const parsed = usernameSchema.safeParse(username);
+  const local = email.split("@")[0].toLowerCase();
+  if (parsed.success && !parsed.data.toLowerCase().includes(local)) {
+    return parsed.data;
+  }
+  return `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
+}
+
 const USERNAME_RULE = say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
 
 const router = Router();
@@ -212,12 +236,7 @@ router.get(
     });
 
     // First time this user has hit the API — create their DB record.
-    // Prefer preferred_username from Cognito; fall back to email prefix rather
-    // than raw cognito:username which can be an auto-generated UUID.
-    const isUUID = (s: string) =>
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
-    const initialUsername =
-      username && !isUUID(username) ? username : email.split("@")[0];
+    const initialUsername = initialUsernameFor({ sub, email, username });
 
     if (!user) {
       // Resolve provisioning deterministically rather than depending on which
@@ -751,6 +770,14 @@ router.delete(
       prisma.customFieldDef.deleteMany({ where: { ownerId: user.id } }),
       prisma.user.delete({ where: { id: user.id } }),
     ]);
+
+    // Logjam's data is gone either way; the identity at the provider is a
+    // clean-up we report but never fail the request over.
+    try {
+      await identityProvider().deleteUser(sub);
+    } catch (err) {
+      logger.warn({ err: safeErrorForLog(err) }, "identity_delete_failed");
+    }
 
     res.status(204).end();
   },

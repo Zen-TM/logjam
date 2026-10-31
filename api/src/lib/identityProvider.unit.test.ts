@@ -50,6 +50,29 @@ describe("identityProvider — Cognito issuer", () => {
     send.mockRejectedValue(new Error("AccessDenied"));
     expect(await identityProvider().userExists("sub-1")).toBe(true);
   });
+
+  // Mutation: rethrow UserNotFoundException, or swallow every error.
+  it("deletes the user by sub, and treats already-gone as done", async () => {
+    send.mockResolvedValue({});
+    await identityProvider().deleteUser("sub-1");
+    expect(send.mock.calls[0][0].input).toEqual({
+      UserPoolId: "eu-west-1_AbCd123",
+      Username: "sub-1",
+    });
+    send.mockRejectedValue(
+      new UserNotFoundException({ message: "", $metadata: {} }),
+    );
+    await expect(
+      identityProvider().deleteUser("sub-1"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("lets any other delete failure through to the caller", async () => {
+    send.mockRejectedValue(new Error("AccessDenied"));
+    await expect(identityProvider().deleteUser("sub-1")).rejects.toThrow(
+      "AccessDenied",
+    );
+  });
 });
 
 describe("identityProvider — any other issuer, or none", () => {
@@ -61,4 +84,12 @@ describe("identityProvider — any other issuer, or none", () => {
       expect(cognitoIdpClient).not.toHaveBeenCalled();
     },
   );
+
+  it("deletes nothing", async () => {
+    issuer = undefined;
+    await expect(
+      identityProvider().deleteUser("sub-1"),
+    ).resolves.toBeUndefined();
+    expect(cognitoIdpClient).not.toHaveBeenCalled();
+  });
 });

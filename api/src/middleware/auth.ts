@@ -178,23 +178,23 @@ export function requireAuth(
       // Assert the identity claims this app relies on are present and typed.
       // A partially-populated req.user (undefined email) would otherwise reach
       // prisma.user.create and either crash or create an inconsistent row.
-      const username =
-        payload.preferred_username || payload["cognito:username"];
       if (
         typeof payload.sub !== "string" ||
-        typeof payload.email !== "string" ||
-        typeof username !== "string" ||
-        username.length === 0
+        typeof payload.email !== "string"
       ) {
         next(signInAgain("Token is missing required identity claims"));
         return;
       }
 
+      // Optional: not every provider sends one, and only a first login reads it
+      // (initialUsernameFor in routes/users.ts names the account without it).
+      const username =
+        payload.preferred_username || payload["cognito:username"];
       req.user = {
         sub: payload.sub,
         email: payload.email,
         emailVerified: payload.email_verified === true,
-        username,
+        username: typeof username === "string" ? username : "",
       };
 
       next();
