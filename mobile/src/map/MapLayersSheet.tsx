@@ -609,7 +609,7 @@ function OfflineTab({
 const useStyles = makeStyles((theme, textRole) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
   // (DESIGN.md).
-  rail: { paddingBottom: spacing(1.5) },
+  rail: { paddingBottom: spacing(0.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
   // A row something above it has already decided for.

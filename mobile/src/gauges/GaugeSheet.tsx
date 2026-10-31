@@ -96,27 +96,32 @@ export const GAUGE_SECTIONS: Record<
   ),
 };
 
+/** The gauge's sections in a column: the sheet's body, and a place page's. */
+export function GaugeBody(props: Props) {
+  const styles = useStyles();
+  return (
+    <View style={styles.stack}>
+      {contractSectionKeys(GAUGES, "gps").map((key) => (
+        <Fragment key={key}>
+          {GAUGE_SECTIONS[key]({ ...props, styles })}
+        </Fragment>
+      ))}
+    </View>
+  );
+}
+
 export function GaugeSheet({
   gauge,
   onClose,
   ...rest
 }: Omit<Props, "gauge"> & { gauge: Gauge | null; onClose: () => void }) {
-  const styles = useStyles();
   return (
     <BottomSheet
       visible={gauge !== null}
       onClose={onClose}
       title={gauge ? gaugeDisplayName(gauge.name) : GAUGES.title}
     >
-      {gauge ? (
-        <View style={styles.stack}>
-          {contractSectionKeys(GAUGES, "gps").map((key) => (
-            <Fragment key={key}>
-              {GAUGE_SECTIONS[key]({ ...rest, gauge, styles })}
-            </Fragment>
-          ))}
-        </View>
-      ) : null}
+      {gauge ? <GaugeBody {...rest} gauge={gauge} /> : null}
     </BottomSheet>
   );
 }

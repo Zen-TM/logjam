@@ -29,7 +29,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * A bump is not only for a column that moved. Any time a client has missed rows
  * it cannot re-request, the wipe-and-refill is the mechanism.
  */
-export const MIRROR_SCHEMA_VERSION = 12;
+export const MIRROR_SCHEMA_VERSION = 13;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 

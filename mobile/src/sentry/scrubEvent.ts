@@ -62,6 +62,7 @@ const SENSITIVE_KEYS = new Set([
   "name",
   "altnames",
   "notes",
+  "gaugeid",
   // Generic free-text keys: a place, trip or media caption can reach a payload
   // under any of these. Tracing is off, so no span `description` is lost.
   "description",

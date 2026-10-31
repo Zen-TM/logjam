@@ -15,9 +15,12 @@ export const GAUGE_REFRESH_MS = 5 * 60_000;
 export function useGauges(enabled: boolean): {
   file: GaugeLatestFile | null;
   failed: boolean;
+  /** Epoch ms, renewed with each load, so a panel left open keeps ages true. */
+  now: number;
 } {
   const [file, setFile] = useState<GaugeLatestFile | null>(null);
   const [failed, setFailed] = useState(false);
+  const [now, setNow] = useState(Date.now);
   useEffect(() => {
     if (!enabled) return;
     let lastAt = 0;
@@ -26,6 +29,7 @@ export function useGauges(enabled: boolean): {
       controller?.abort();
       const abort = (controller = new AbortController());
       lastAt = Date.now();
+      setNow(lastAt);
       fetch(`/${GAUGE_LATEST_PATH}`, { signal: abort.signal })
         .then((res) => (res.ok ? res.json() : null))
         .then((json) => {
@@ -56,5 +60,5 @@ export function useGauges(enabled: boolean): {
     };
   }, [enabled]);
   // Only a first load that failed is said; the 5-minute timer is the retry.
-  return { file, failed: enabled && failed && !file };
+  return { file, failed: enabled && failed && !file, now };
 }

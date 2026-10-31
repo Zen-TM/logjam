@@ -244,6 +244,8 @@ renumber.
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
   for looking.** Never the only way to read something, except a maintainer
   message, which has no page.
+- **A sheet spaces what it stacks**: `BottomSheet` sets the gap between its
+  children, so a list in a sheet needs no wrapper to keep its rows apart.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title

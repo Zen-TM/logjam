@@ -55,6 +55,7 @@ const PLACE_KNOWN = [
   "longitude",
   "placeTypeId",
   "notes",
+  "gaugeId",
   "elevation",
   "fieldValues",
   "fieldDefsSnapshot",
@@ -160,10 +161,10 @@ export async function upsertPlace(
   await db.runAsync(
     `INSERT OR REPLACE INTO places
        (id, sync_role, name, latitude, longitude, alt_names_json,
-        place_type_id, notes, elevation, field_values_json,
+        place_type_id, notes, gauge_id, elevation, field_values_json,
         field_defs_snapshot_json, foreign_fields_json, forked_from_id,
         created_at, updated_at, extra_json, dirty_fields_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id,
     row.syncRole,
     row.name,
@@ -172,6 +173,7 @@ export async function upsertPlace(
     JSON.stringify(row.altNames ?? []),
     row.placeTypeId,
     row.notes,
+    row.gaugeId ?? null,
     row.elevation ?? null,
     JSON.stringify(row.fieldValues ?? {}),
     // Present only on a place of a type this account does not own — a shared
@@ -693,6 +695,7 @@ type PlaceRow = {
   alt_names_json: string | null;
   place_type_id: string;
   notes: string | null;
+  gauge_id: string | null;
   elevation: number | null;
   field_values_json: string | null;
   field_defs_snapshot_json: string | null;
@@ -771,6 +774,7 @@ function rowToPlace(row: PlaceRow): MirrorPlace {
     longitude: row.longitude,
     placeTypeId: row.place_type_id,
     notes: row.notes,
+    gaugeId: row.gauge_id,
     elevation: row.elevation,
     fieldValues: parseJson(row.field_values_json, {}),
     fieldDefsSnapshot: row.field_defs_snapshot_json
