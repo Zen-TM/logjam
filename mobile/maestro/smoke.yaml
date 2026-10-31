@@ -26,6 +26,12 @@ env:
       visible: "Continue"
     commands:
       - tapOn: "Continue"
+# The intro opens the developer menu behind it.
+- runFlow:
+    when:
+      visible: "Toggle performance monitor"
+    commands:
+      - back
 - extendedWaitUntil:
     visible: "Places"
     timeout: 30000
