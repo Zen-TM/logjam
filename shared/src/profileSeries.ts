@@ -38,6 +38,13 @@ export type ProfileSeries = {
   max: number | null;
 };
 
+/** What a chart scales a series' values over: its own range, however small,
+ *  so a river that moved 9 cm in a week still fills the chart. A series of one
+ *  value has no range, and a chart must not divide by it. */
+export function profileSpan(min: number, max: number): number {
+  return max - min || 1;
+}
+
 /** A DEM or GPS height profile over DISTANCE, scaled between its own ends. */
 export function elevationSeries(
   profile: ElevationProfile,

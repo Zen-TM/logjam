@@ -10,7 +10,7 @@ outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
 PMTiles where needed) and dispatches to the renderer for its
 {format, bundling, layers}. Either way it uploads the artefact to:
     s3://$S3_BUCKET_TOPO/exports/<exportJobId>/<filename>
-and emails the user a download link via Resend (see email_send.py).
+and emails the user a download link (see email_send.py).
 
 Required env:
     EXPORT_JOB_ID       UUID of the TopoExportJob row
@@ -22,8 +22,8 @@ Required env:
                         connection string is composed at import time (see
                         compose_database_url below).
 Optional env:
-    RESEND_API_KEY      Resend API key (skips email if unset; see email_send.py)
-    EMAIL_FROM          verified sender (skips email if unset)
+    SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM
+                        email; skipped if any is unset (see email_send.py)
     FRONTEND_URL        for the deep-link in the email body
     AWS_REGION          default ap-southeast-2
 """

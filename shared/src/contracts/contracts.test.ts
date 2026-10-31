@@ -354,6 +354,15 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
   });
 
+  // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
+  it("gives both clients and a sharee the gauge section", () => {
+    for (const client of ["web", "gps"] as const)
+      for (const owned of [true, false])
+        expect(contractSectionsFor(PLACE_PAGE, client, owned)).toContain(
+          "gauge",
+        );
+  });
+
   // Red when a primary verb is dropped from the page's verbs: the buttons and
   // the ⋯ must never disagree about what a place can do.
   it("draws as buttons only verbs the page offers", () => {
@@ -742,7 +751,7 @@ describe("the logbook's stats", () => {
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
   // list, and each client differs only by what a row declares (`on`).
-  it("is Logjam Web's rows, less the declared Logjam Web-only gauges row, plus the phone's GeoPDF row", () => {
+  it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
@@ -753,6 +762,7 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "geoPdfs",
+      "gauges",
       "importFile",
     ]);
   });

@@ -33,11 +33,13 @@ locals {
     { name = "DB_USER", value = "logjam" },
     { name = "DB_PASSWORD", value = "logjam" },
     { name = "S3_BUCKET_TOPO", value = module.topo.bucket_id },
-    # RESEND_API_KEY blank by default → email_send.py / services/email.ts no-op
-    # (no real sends in local dev). Set TF_VAR_resend_api_key + TF_VAR_email_from
-    # to test real sends — see variables.tf.
-    { name = "EMAIL_FROM", value = var.email_from },
-    { name = "RESEND_API_KEY", value = var.resend_api_key },
+    # Mail lands in Mailpit (docker-compose.yml); its inbox is localhost:8025.
+    { name = "EMAIL_FROM", value = "noreply@logjam.local" },
+    { name = "SMTP_HOST", value = "mailpit" },
+    { name = "SMTP_PORT", value = "1025" },
+    { name = "SMTP_USER", value = "logjam" },
+    { name = "SMTP_PASSWORD", value = "logjam" },
+    { name = "SMTP_CA_CERT", value = filebase64("${local.repo_root}/infra/mailpit/dev-tls-cert.pem") },
     { name = "FRONTEND_URL", value = "http://localhost:5173/" },
   ]
 }
