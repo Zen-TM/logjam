@@ -15,7 +15,7 @@ appId: com.logjamnsw.mobile.dev
 # are not visible behind it.
 - extendedWaitUntil:
     visible: "Not now|Places"
-    timeout: 240000
+    timeout: 120000
 - runFlow:
     when:
       visible: "Not now"

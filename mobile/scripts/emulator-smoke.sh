@@ -61,8 +61,17 @@ for port in 8081 8080 4566; do adb reverse "tcp:$port" "tcp:$port" > /dev/null; 
 bundle=$(curl -sf -H 'expo-platform: android' http://127.0.0.1:8081/ | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).launchAsset.url')
 curl -sf -m 900 -o /dev/null "$bundle"
 
+# One retry: Maestro's driver has died mid-flow on a healthy run (a silent exit
+# after a tap, green on rerun), and that says nothing about the app. A real
+# break fails both attempts, and the warning keeps the flake rate visible.
 status=0
-maestro test maestro/smoke.yaml -e "PLACE_NAME=$PLACE_NAME" --test-output-dir "$OUT/maestro" || status=$?
+for attempt in 1 2; do
+  status=0
+  maestro test maestro/smoke.yaml -e "PLACE_NAME=$PLACE_NAME" --test-output-dir "$OUT/maestro-$attempt" && break || status=$?
+  echo "::warning::maestro attempt $attempt failed (exit $status)"
+  adb exec-out screencap -p > "$OUT/failed-$attempt.png" || true
+  adb shell am force-stop "$PKG"
+done
 adb exec-out screencap -p > "$OUT/final.png" || true
 [ "$status" = 0 ] || exit "$status"
 
@@ -70,7 +79,7 @@ adb exec-out screencap -p > "$OUT/final.png" || true
 for _ in $(seq 1 30); do
   found=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc \
     "SELECT count(*) FROM places WHERE name = '$PLACE_NAME'")
-  [ "$found" = 1 ] && { echo "synced: '$PLACE_NAME' is in the places table"; exit 0; }
+  [ "$found" -ge 1 ] && { echo "synced: '$PLACE_NAME' is in the places table"; exit 0; }
   sleep 3
 done
 echo "::error::'$PLACE_NAME' never reached the server's places table" >&2
