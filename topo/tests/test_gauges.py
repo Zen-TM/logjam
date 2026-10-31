@@ -139,6 +139,12 @@ class TestReadings(unittest.TestCase):
             fresh["900001"][g.aest_epoch("30-Oct-2026 21:00")], [None, 130.0]
         )
 
+    def test_a_spike_is_dropped(self):
+        # Mutation: remove "59" from DROPPED_QUALITIES → red; a bad number
+        # would replace the last good reading.
+        spike = record("900001", "30-Oct-2026 19:00", g.LEVEL_VARIABLE, 9.9, "59")
+        self.assertEqual(g.parse_records([spike]), {})
+
     def test_a_null_value_is_dropped(self):
         # Mutation: keep rows with value None → red.
         rec = record("900001", "30-Oct-2026 19:00", g.LEVEL_VARIABLE, None)
