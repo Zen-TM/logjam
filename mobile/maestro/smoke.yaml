@@ -6,9 +6,9 @@
 # a reword of one of them breaks this flow on purpose: the flow reads the UI.
 # It asserts nothing about the map's pixels, only the chrome around it: the
 # emulator renders on a software GPU.
+# PLACE_NAME comes from the script (-e), so a rerun on a reused database cannot
+# pass on a previous run's row.
 appId: com.logjamnsw.mobile.dev
-env:
-  PLACE_NAME: Smoke Test Gully
 ---
 - openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 # On a fresh install the crash-report question covers the screen, and the tabs
@@ -30,10 +30,17 @@ env:
 - takeScreenshot: 1-map
 - tapOn: "Places"
 - tapOn: "Add a place"
+# The emulator's screen is small, and the keyboard covers the rest of the form.
 - tapOn: "Name"
 - inputText: ${PLACE_NAME}
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Latitude"
 - tapOn: "Latitude"
 - inputText: "-33.5"
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Longitude"
 - tapOn: "Longitude"
 - inputText: "150.25"
 - hideKeyboard
