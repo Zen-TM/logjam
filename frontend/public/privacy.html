@@ -301,7 +301,15 @@
           request says nothing about your places or where you are looking on
           the map. Logjam GPS asks for the same file, only while the layer is
           on and the app is open, and keeps the last copy on the phone so the
-          gauges still show offline; signing out deletes that copy.</li>
+          gauges still show offline; signing out deletes that copy. When a
+          place has a river gauge, its page and your trips&rsquo; pages ask
+          Logjam for that gauge&rsquo;s public history file, once when the page
+          opens, to show its reading on your trip&rsquo;s date. Logjam GPS keeps
+          those files for the gauges on your places, refreshing them when
+          Logjam GPS opens, and signing out deletes them. The request names the
+          gauge and nothing else: Logjam&rsquo;s logs hold which gauge was asked for,
+          not who by name. The dates of your trips are never sent; the date is
+          looked up on your device.</li>
       <li><strong>GeoPDFs:</strong> Logjam Web draws a GeoPDF in your browser.
           It fetches the basemap&rsquo;s tiles for the export area from the
           same providers, in the same way, as the live map does (see Basemap
