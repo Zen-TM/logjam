@@ -66,11 +66,20 @@ async function fetchVerified(name, expected, dest) {
   // A prebuild that keeps `android/` does not fetch again.
   if (fs.existsSync(dest) && sha256(fs.readFileSync(dest)) === expected) return;
   const url = `${RELEASE_URL}/${name}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`withPatchedMapLibre: ${url} answered ${response.status}`);
+  // Spike: the AAR comes from a workflow artifact, not a release.
+  const spikeFile = path.join(__dirname, "../maplibre-spike-dist", name);
+  let bytes;
+  if (fs.existsSync(spikeFile)) {
+    bytes = fs.readFileSync(spikeFile);
+  } else {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `withPatchedMapLibre: ${url} answered ${response.status}`,
+      );
+    }
+    bytes = Buffer.from(await response.arrayBuffer());
   }
-  const bytes = Buffer.from(await response.arrayBuffer());
   const actual = sha256(bytes);
   if (actual !== expected) {
     throw new Error(

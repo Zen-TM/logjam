@@ -49,6 +49,12 @@ runs:
       shell: bash
       working-directory: mobile
       env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh run download "$(cat maplibre/spike-run)" -n terrain-dist -D maplibre-spike-dist --repo "$GITHUB_REPOSITORY"
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: mobile
+      env:
         LOGJAM_APP_VARIANT: dev
       run: npx expo prebuild --platform android --no-install
     - if: steps.cache.outputs.cache-hit != 'true' && inputs.legacy_root == 'true'
