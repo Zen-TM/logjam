@@ -10,6 +10,10 @@ import {
   parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  USERNAME_PATTERN,
+  USERNAME_RULE,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
 import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
@@ -133,9 +137,9 @@ export async function createUserForSignup(params: {
 const usernameSchema = z
   .string()
   .trim()
-  .min(3)
-  .max(32)
-  .regex(/^[A-Za-z0-9_.-]+$/);
+  .min(USERNAME_MIN)
+  .max(USERNAME_MAX)
+  .regex(USERNAME_PATTERN);
 
 /**
  * The name a new account starts with, which other users then see and search.
@@ -159,8 +163,6 @@ export function initialUsernameFor(params: {
   }
   return `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
 }
-
-const USERNAME_RULE = say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
 
 const router = Router();
 
