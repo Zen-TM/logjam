@@ -54,15 +54,22 @@ export const GAUGE_RECENT_MS = 7 * DAY_MS;
 /** A file older than this shows its age beside the readings. */
 export const GAUGE_STALE_FILE_MS = DAY_MS;
 
-// BoM's raw names are upper-case abbreviations: "COLO R @ UPPER COLO".
+// BoM's long names are mostly upper case, some abbreviated: "COLO RIVER AT
+// UPPER COLO", "RICHMOND RV @ OAKLAND ROAD".
 const NAME_WORDS: Record<string, string> = {
   "@": "at",
+  AT: "at",
+  NEAR: "near",
+  OF: "of",
   R: "River",
   RV: "River",
   RIV: "River",
   CK: "Creek",
+  RD: "Road",
   "D/S": "downstream of",
   "U/S": "upstream of",
+  DOWNSTREAM: "downstream",
+  UPSTREAM: "upstream",
 };
 
 /** A gauge's name for reading: "Colo River at Upper Colo". A word the table
@@ -70,6 +77,7 @@ const NAME_WORDS: Record<string, string> = {
 export function gaugeDisplayName(raw: string): string {
   return raw
     .replace(/@/g, " @ ")
+    .replace(/\b(up|down) ?stream( of)?\b/gi, "$1stream of")
     .split(/\s+/)
     .filter(Boolean)
     .map((word) => {
@@ -77,9 +85,11 @@ export function gaugeDisplayName(raw: string): string {
       if (known) return known;
       // Mixed case ("McKIMMS", "Beechwod") was typed by a person: leave it.
       if (word !== word.toUpperCase()) return word;
+      // A code, not a word: "9J", "W4I".
+      if (/\d[A-Z]/.test(word)) return word;
       return word
         .toLowerCase()
-        .replace(/(^|[-'])([a-z])/g, (_, a, b) => a + b.toUpperCase());
+        .replace(/(^|[-'(])([a-z])/g, (_, a, b) => a + b.toUpperCase());
     })
     .join(" ");
 }
