@@ -36,7 +36,7 @@ export const MAP_TERRAIN = {
     // Behind the Vegetation row's help button, titled with its label.
     vegetationAbout: "About vegetation",
     vegetationLegend:
-      "Scrub density for bushbashing: denser reads darker. Orange crosshatching is ground burnt since the survey.",
+      "Scrub density for bushbashing: denser reads darker. Greyed areas have burnt since the survey, so the scrub there may have changed.",
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",

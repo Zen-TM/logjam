@@ -14,6 +14,7 @@ import type { ThemeTokens } from "@logjam/shared";
 import type { StyleSpecification } from "@maplibre/maplibre-react-native";
 
 import { useTheme } from "../../theme";
+import { BAND_MARKERS } from "../layerOrder";
 
 export const BASEMAP_ASSETS_REMOTE_BASE =
   "https://protomaps.github.io/basemaps-assets";
@@ -42,6 +43,11 @@ export function buildShellStyle(
         type: "background",
         paint: { "background-color": theme.page },
       },
+      ...Object.values(BAND_MARKERS).map((id) => ({
+        id,
+        type: "background" as const,
+        layout: { visibility: "none" as const },
+      })),
     ],
     glyphs: `${base}/fonts/{fontstack}/{range}.pbf`,
     sprite: `${base}/sprites/v4/${flavor}`,

@@ -6,6 +6,7 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
+import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
 import type { ScreenContract } from "./types.js";
 
@@ -14,6 +15,12 @@ export const MAP_OVERLAYS = {
   sections: [
     { key: "places" },
     { key: "ways" },
+    {
+      key: "gauges",
+      on: "web",
+      reason:
+        "Logjam GPS adds river gauges in a later change; until then only Logjam Web draws them.",
+    },
     {
       key: "geoPdfs",
       on: "gps",
@@ -25,6 +32,7 @@ export const MAP_OVERLAYS = {
   copy: {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
+    gauges: GAUGES.copy.overlay,
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },

@@ -13,6 +13,59 @@ import { terrainBeforeIds, type TerrainLayerKey } from "@logjam/shared";
 export const TOPO_CEILING = "place-tracks-hit";
 
 /**
+ * The gauge drops go over the topo band and under every pin, so a pin on a
+ * gauge is the one pressed. Guard: `layerOrder.test.ts`.
+ */
+export const GAUGE_LAYER = "gauge-drops";
+export const GAUGE_LABELS = "gauge-labels";
+export const GAUGE_BELOW = "place-highlight";
+
+/** Everything else on the map with a press of its own. A gauge drop under one
+ *  of these is not the thing pressed. */
+export const PRESSABLE_LAYERS = [
+  "place-circles",
+  "shared-place-halos",
+  "shared-place-circles",
+  "routes-hit",
+  "place-tracks-hit",
+  "standalone-tracks-hit",
+];
+
+/** The gauge a press lands on, or null when a pin, route or track is there
+ *  too: each layer's click handler fires on its own, so this picks the winner. */
+export function pressedGaugeId(
+  map: {
+    getLayer(id: string): unknown;
+    queryRenderedFeatures(
+      point: [number, number],
+      options: { layers: string[] },
+    ): { properties?: Record<string, unknown> | null }[];
+  },
+  point: [number, number],
+): string | null {
+  const over = PRESSABLE_LAYERS.filter((id) => map.getLayer(id));
+  if (over.length && map.queryRenderedFeatures(point, { layers: over }).length)
+    return null;
+  const id = map.queryRenderedFeatures(point, { layers: [GAUGE_LAYER] })[0]
+    ?.properties?.id;
+  return typeof id === "string" ? id : null;
+}
+/** How long after its panel closes a press on the gauge still counts as the
+ *  press that closed it. */
+export const GAUGE_RETAP_MS = 500;
+
+/** Whether a press on gauge `id` is the one that just closed its panel. The
+ *  panel closes on pointerdown and the map's click comes after, so without
+ *  this the same press would open it again. */
+export function pressClosedGauge(
+  id: string,
+  closed: { id: string; at: number } | null,
+  now: number,
+): boolean {
+  return closed?.id === id && now - closed.at < GAUGE_RETAP_MS;
+}
+
+/**
  * Stacks the topo entries' layers (`groups`, bottom of the map first) directly
  * under `TOPO_CEILING`, each group's layers in their own order.
  */

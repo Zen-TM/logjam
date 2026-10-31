@@ -5,41 +5,26 @@
 
 \set ON_ERROR_STOP on
 
--- The table is gone, no GeoPDF share or notification is left, nothing else was
--- deleted, and every user's storage is what it was less their completed
--- GeoPDFs, never below 0 (fixture y: 0 less 9000 stays 0).
--- Mutation: drop the migration's UPDATE and the fixture user stays at 5000
--- instead of 2500; drop one DELETE and its count below is not 0; drop the
--- DROP TABLE and the to_regclass check fails.
-SELECT to_regclass('upgrade_check.geo_pdf_uncharge') IS NOT NULL AS geo_pdf_applies \gset
-\if :geo_pdf_applies
+-- Every orphan baseline.sql found is gone and every other notification is
+-- still there (with fixtures: a live and two orphan rows of each type, plus an
+-- announcement). Mutation: drop either DELETE, or its recipient condition, and
+-- a fixture orphan survives; drop its NOT and the live fixture row is deleted.
+SELECT to_regclass('upgrade_check.orphan') IS NOT NULL AS orphans_apply \gset
+\if :orphans_apply
 DO $$
 DECLARE bad BIGINT;
 BEGIN
   SELECT count(*) INTO bad
-    FROM upgrade_check.geo_pdf_uncharge c JOIN users u ON u.id = c.user_id
-   WHERE u.storage_used_bytes IS DISTINCT FROM c.expected;
+    FROM upgrade_check.orphan o JOIN notifications n ON n.id = o.id;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % user(s) not uncharged for their GeoPDFs', bad;
-  END IF;
-
-  IF to_regclass('public.geo_pdf_jobs') IS NOT NULL THEN
-    RAISE EXCEPTION 'upgrade-check: geo_pdf_jobs still exists';
-  END IF;
-
-  SELECT (SELECT count(*) FROM shares WHERE entity_type = 'geoPdfJob')
-       + (SELECT count(*) FROM notifications WHERE type = 'geo_pdf_complete')
-    INTO bad;
-  IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % GeoPDF row(s) left behind', bad;
+    RAISE EXCEPTION 'upgrade-check: % orphan share notification(s) left', bad;
   END IF;
 
   SELECT count(*) INTO bad
-    FROM upgrade_check.kept k
-   WHERE k.shares IS DISTINCT FROM (SELECT count(*) FROM shares)
-      OR k.notifications IS DISTINCT FROM (SELECT count(*) FROM notifications);
+    FROM upgrade_check.kept k LEFT JOIN notifications n ON n.id = k.id
+   WHERE n.id IS NULL;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: the migration deleted shares or notifications that are not GeoPDF''s';
+    RAISE EXCEPTION 'upgrade-check: % notification(s) with a live share, or of another type, deleted', bad;
   END IF;
 END $$;
 DROP SCHEMA upgrade_check CASCADE;

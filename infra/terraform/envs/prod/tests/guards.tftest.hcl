@@ -275,6 +275,35 @@ run "place_registry_role_writes_only_master_places" {
   }
 }
 
+run "gauges_role_writes_only_master_gauges" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.gauges]
+  }
+
+  # Mutation: widening a Resource (`/*`, `/master/*`) or the list prefix,
+  # dropping the prefix condition, or adding an action or a statement lets the
+  # gauges job see, write or delete more than the public gauge files.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.gauges.policy).Statement == [
+      {
+        Sid      = "PublishGauges"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/gauges/*"
+      },
+      {
+        Sid       = "ListGauges"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/gauges/*" } }
+      },
+    ]
+    error_message = "The gauges role may only list, read and write objects under master/gauges/ in the topo bucket."
+  }
+}
+
 run "api_rate_limit_is_one_plain_ip_rule" {
   command = plan
   plan_options {
