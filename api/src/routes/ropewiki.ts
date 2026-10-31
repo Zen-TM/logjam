@@ -20,6 +20,7 @@ import {
 import { getRopeWikiCanyons } from "../services/ropeWikiCache";
 import {
   buildProposals,
+  type DedupePlace,
   mergeFillNulls,
   type DedupeProposal,
 } from "../services/ropewikiDedupe";
@@ -71,7 +72,7 @@ async function applyAutoLinkAndCreate(
   ownerId: string,
   parsed: RopeWikiCanyon[],
   proposals: DedupeProposal[],
-  existingByPlaceId: Map<string, import("@prisma/client").Place>,
+  existingByPlaceId: Map<string, DedupePlace>,
 ): Promise<{
   imported: number;
   autoLinked: number;
@@ -183,6 +184,15 @@ router.post(
 
     const allUserPlaces = await prisma.place.findMany({
       where: { ownerId: user.id },
+      select: {
+        id: true,
+        name: true,
+        altNames: true,
+        latitude: true,
+        longitude: true,
+        fieldValues: true,
+        ropeWikiId: true,
+      },
     });
     const linkedRwIds = new Set(
       allUserPlaces
@@ -558,6 +568,14 @@ router.post(
     if (toCreate.length > 0) {
       const candidatePool = await prisma.place.findMany({
         where: { ownerId: user.id, ropeWikiId: null },
+        select: {
+          id: true,
+          name: true,
+          altNames: true,
+          latitude: true,
+          longitude: true,
+          fieldValues: true,
+        },
       });
       const existingByPlaceId = new Map(candidatePool.map((c) => [c.id, c]));
       const proposals = buildProposals(toCreate, candidatePool);

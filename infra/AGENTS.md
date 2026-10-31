@@ -21,6 +21,9 @@ dev's MiniStack resources and `.env.local` (`terraform/envs/local`, which
   never the console, the CLI or GitHub's Settings pages: what is made by hand
   is drift the next plan undoes. Secret values, the two settings Apps and
   private vulnerability reporting are set by hand (0025).
+- **A new secret** is an `aws_secretsmanager_secret` with no version in
+  Terraform; its value is set by hand and tasks read the resource's `.arn`. A
+  literal ARN is only for a secret made outside Terraform.
 - **CI owns deploy-time fields:** image revisions (`infra/scripts/pin-ecs-task-image.sh`),
   the EB environment's `setting`s and the frontend bucket's contents. Terraform
   ignores them; never make it manage them.

@@ -211,7 +211,7 @@ export function extractionCreditLine(
 // credit wherever the derived material is shared (map UI + exported GeoPDF):
 //   - hillshade / slope / contours → ELVIS LiDAR (Geoscience Australia + NSW), CC BY 4.0
 //   - vegetation                   → NSW State Vegetation Type Map (SVTM), CC BY 4.0,
-//                                     plus NSW NPWS Fire History (fire-staleness hatch
+//                                     plus NSW NPWS Fire History (fire-staleness fade
 //                                     baked into the same layer — see apply_fire_history
 //                                     in topo/pipeline.py), CC BY 4.0
 //   - features                     → OpenStreetMap, ODbL
