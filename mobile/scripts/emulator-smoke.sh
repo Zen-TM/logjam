@@ -33,6 +33,11 @@ adb install -r -t "$APK" > /dev/null
 for _ in $(seq 1 20); do adb shell pm path "$PKG" | grep -q package && break; sleep 3; done
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 
+# A 320x640 screen at 160 dpi cannot show the add-place form, and a sheet that
+# scrolls under Maestro's swipes is a flake to chase. Pack more dp into the same
+# pixels, which also costs the software GPU nothing.
+adb shell wm density 120
+
 # The dev client's menu opens over the first launch, and its floating button
 # covers the top-right of every screen, "Add a place" among them: answer its
 # three preferences before the app first runs (the build is debuggable).
