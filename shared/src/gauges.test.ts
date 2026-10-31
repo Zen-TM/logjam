@@ -144,6 +144,12 @@ describe("the gauge panel's words", () => {
     expect(gaugeDisplayName("WOLLONDILLY RIVER @ ROSSI WEIR (SITE NO.2)")).toBe(
       "Wollondilly River at Rossi Weir (Site No.2)",
     );
+    expect(
+      gaugeDisplayName("MACLEAY RIVER AT D/S GEORGES RIVER JUNCTION"),
+    ).toBe("Macleay River downstream of Georges River Junction");
+    expect(gaugeDisplayName("FORBES RIVER AT BIRDWOOD(FILLY FLAT)")).toBe(
+      "Forbes River at Birdwood (Filly Flat)",
+    );
     expect(gaugeDisplayName("Waratah Rivulet at Fire RD 9J")).toBe(
       "Waratah Rivulet at Fire Road 9J",
     );
