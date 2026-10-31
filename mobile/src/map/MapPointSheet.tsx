@@ -37,6 +37,7 @@ export type MapPoint = MapPointCoord;
 export function MapPointSheet({
   point,
   userCoord,
+  land,
   onClose,
   onNavigate,
   onDropMarker,
@@ -44,6 +45,8 @@ export function MapPointSheet({
   allowNetwork,
 }: {
   point: MapPoint | null;
+  /** The land class drawn at the point, or null: the Land overlay off or empty there. */
+  land: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   onClose: () => void;
@@ -77,6 +80,7 @@ export function MapPointSheet({
           // A new point starts clean: its height must not be the last one's.
           key={`${point.latitude},${point.longitude}`}
           point={point}
+          land={land}
           userCoord={userCoord}
           onClose={onClose}
           onNavigate={onNavigate}
@@ -93,6 +97,7 @@ export function MapPointSheet({
 
 function PointDetail({
   point,
+  land,
   userCoord,
   onClose,
   onNavigate,
@@ -103,6 +108,7 @@ function PointDetail({
   onShowWeather,
 }: {
   point: MapPoint;
+  land: string | null;
   userCoord: [number, number] | null;
   onClose: () => void;
   onNavigate: (point: MapPoint) => void;
@@ -176,6 +182,7 @@ function PointDetail({
       ? { latitude: userCoord[1], longitude: userCoord[0] }
       : null,
     slopeDegrees: slopeDeg,
+    land,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

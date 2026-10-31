@@ -21,7 +21,9 @@ import {
   contourLabelHalo,
   gaugeDisplayName,
   latestGaugeReading,
+  landFillColor,
   nswContourStyle,
+  NSW_LAND,
   TERRAIN_LAYER_KEYS,
   type SharpenedOverlay,
   type TerrainLayerKey,
@@ -37,6 +39,7 @@ import {
   GAUGE_BELOW,
   GAUGE_LABELS,
   GAUGE_LAYER,
+  LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
   pressClosedGauge,
   pressedGaugeId,
@@ -647,7 +650,7 @@ function Map({
     id: string;
     pmtilesUrl: string;
     /** `slope` and `hillshade` are a terrarium DEM, drawn by MapLibre. */
-    format?: "raster" | "vector" | "slope" | "hillshade";
+    format?: "raster" | "vector" | "slope" | "hillshade" | "land";
     attribution?: string;
     /** Read through the terrain router instead of `pmtilesUrl`'s archive. */
     tiles?: RoutedTiles;
@@ -2662,6 +2665,25 @@ function Map({
             attribution,
           });
         }
+      }
+
+      if (fmt === "land") {
+        if (!map.getLayer(LAND_FILL_LAYER)) {
+          map.addLayer({
+            id: LAND_FILL_LAYER,
+            type: "fill",
+            source: srcId,
+            "source-layer": NSW_LAND.sourceLayer,
+            paint: {
+              "fill-color":
+                landFillColor() as maplibregl.ExpressionSpecification,
+              // Tiles join in the middle of a holding, and an antialiased edge
+              // there would draw the tile grid across the tint.
+              "fill-antialias": false,
+            },
+          });
+        }
+        return;
       }
 
       if (fmt === "raster") {

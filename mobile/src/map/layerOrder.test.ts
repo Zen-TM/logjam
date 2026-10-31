@@ -58,7 +58,12 @@ describe("two saved areas and the Terrain group", () => {
   };
   const mountTerrain = (style: string[]) => {
     const pairs = terrainBeforeIds(
-      { hillshade: ["hillshade"], slope: ["slope"], contours: ["contours"] },
+      {
+        hillshade: ["hillshade"],
+        land: ["land"],
+        slope: ["slope"],
+        contours: ["contours"],
+      },
       terrainBandMarker,
     );
     for (const [id, beforeId] of pairs) under(style, id, beforeId);

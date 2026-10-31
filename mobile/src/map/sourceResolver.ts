@@ -17,6 +17,7 @@
 import {
   BASEMAP_CATALOG,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_5M,
   NSW_HILLSHADE,
   NSW_SLOPE,
@@ -65,6 +66,8 @@ export type LogicalLayerRef =
    * `viewport` picks the one clip drawn offline. */
   | { kind: "nsw-slope"; viewport?: Viewport | null }
   | { kind: "nsw-hillshade"; viewport?: Viewport | null }
+  /** The Land overlay (`shared/src/nswLand.ts`); `viewport` as for the slope. */
+  | { kind: "nsw-land"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -112,6 +115,8 @@ export interface MapArtifact {
     | "contours-region"
     /** A clip of the statewide slope, saved the same way. */
     | "slope-region"
+    /** A clip of the Land overlay, saved the same way. */
+    | "land-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
@@ -588,6 +593,9 @@ export const holdsSlope = (
 ): boolean =>
   artifact.kind === "slope-region" && artifact.logicalKey === NSW_SLOPE.id;
 
+export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
+  artifact.kind === "land-region";
+
 /**
  * Whether a saved file is one the Terrain group can draw offline, whatever
  * its switch says.
@@ -596,7 +604,10 @@ export const holdsSlope = (
 export const drawsTerrain = (
   artifact: Pick<MapArtifact, "kind" | "logicalKey" | "minzoom">,
 ): boolean =>
-  holdsContours(artifact) || holdsSlope(artifact) || holdsHillshade(artifact);
+  holdsContours(artifact) ||
+  holdsSlope(artifact) ||
+  holdsLand(artifact) ||
+  holdsHillshade(artifact);
 
 /**
  * The one clip drawn offline below the zoom `routeTerrain` takes over: the one
@@ -735,6 +746,14 @@ export function resolveMapSource(
         NSW_CONTOURS,
         "contours",
         ctx,
+      );
+    case "nsw-land":
+      return resolveStatewide(
+        NSW_LAND,
+        "vector",
+        "land-region",
+        ctx,
+        nearestRegion(ref.viewport),
       );
     case "nsw-slope":
       return routeTerrain(

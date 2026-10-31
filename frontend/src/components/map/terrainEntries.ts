@@ -1,5 +1,6 @@
 import {
   NSW_5M,
+  NSW_LAND,
   type SharpenedOverlay,
   type TerrainLayerKey,
 } from "@logjam/shared";
@@ -8,6 +9,7 @@ import {
   TERRAIN_STATEWIDE,
   routedAttribution,
   terrainTileTemplate,
+  type RoutedTerrainKey,
 } from "./terrainRouter";
 
 /**
@@ -29,6 +31,12 @@ export const TERRAIN_ENTRIES = {
     pmtilesUrl: `${window.location.origin}/${TERRAIN_STATEWIDE.slope.archivePath}`,
     format: "slope" as const,
     attribution: TERRAIN_STATEWIDE.slope.creditHtml,
+  },
+  land: {
+    id: "nswland",
+    pmtilesUrl: `${window.location.origin}/${NSW_LAND.archivePath}`,
+    format: "land" as const,
+    attribution: NSW_LAND.creditHtml,
   },
   hillshade: {
     id: "nswhillshade",
@@ -60,7 +68,7 @@ export function terrainEntries(
 > {
   if (areas.length === 0) return TERRAIN_ENTRIES;
   const deepest = Math.max(...areas.map((a) => a.zmax));
-  const routed = (key: TerrainLayerKey, maxzoom: number) => {
+  const routed = (key: RoutedTerrainKey, maxzoom: number) => {
     const statewide = TERRAIN_STATEWIDE[key];
     const template = terrainTileTemplate(key, areas);
     return {
@@ -79,6 +87,7 @@ export function terrainEntries(
   return {
     contours: routed("contours", TERRAIN_STATEWIDE.contours.maxzoom),
     slope: routed("slope", deepest),
+    land: TERRAIN_ENTRIES.land,
     hillshade: routed("hillshade", deepest),
   };
 }

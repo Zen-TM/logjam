@@ -48,6 +48,7 @@ import {
   DEM_SOURCE_ID,
   NSW_5M,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_SLOPE,
   planRegionForBasemaps,
   type OfflineBasemapId,
@@ -168,6 +169,7 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
   if (basemapId === NSW_CONTOURS.id) return "Contours";
   if (basemapId === NSW_SLOPE.id) return "Slope";
+  if (basemapId === NSW_LAND.id) return "Land";
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }

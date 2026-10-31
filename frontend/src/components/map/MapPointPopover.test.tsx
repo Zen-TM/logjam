@@ -45,6 +45,8 @@ const map = {
   on: vi.fn(),
   off: vi.fn(),
   getCanvas: () => ({ focus: vi.fn() }),
+  project: () => ({ x: 10, y: 20 }),
+  getLayer: () => undefined,
 };
 
 function mount() {
