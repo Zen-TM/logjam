@@ -23,11 +23,13 @@
 
 import { resolveDbCredentials } from "./lib/resolveDbCredentials";
 import { resolveOriginVerifySecret } from "./lib/resolveOriginVerifySecret";
+import { resolveSmtpPassword } from "./lib/resolveSmtpPassword";
 
 async function main(): Promise<void> {
   try {
     await resolveDbCredentials();
     await resolveOriginVerifySecret();
+    await resolveSmtpPassword();
   } catch (err) {
     const e = err as Error;
     console.error(

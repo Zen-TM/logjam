@@ -40,5 +40,7 @@ resource "local_file" "env_local" {
     # subnet/SG values (it runs the container on DOCKER_NETWORK).
     ecs_subnets         = "subnet-local"
     ecs_security_groups = "sg-local"
+
+    smtp_ca_cert = filebase64("${local.repo_root}/infra/mailpit/dev-tls-cert.pem")
   })
 }

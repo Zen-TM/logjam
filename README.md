@@ -50,7 +50,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 - Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
 - ECS Fargate (topo/export workers) · Elastic Beanstalk (API) · ECR (images)
-- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email)
+- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email, over SMTP)
 
 ### Infrastructure as Code & local dev
 

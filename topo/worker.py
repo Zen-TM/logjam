@@ -17,8 +17,8 @@ Required environment variables:
                     composed at import time (see compose_database_url below).
 
 Optional environment variables:
-  RESEND_API_KEY    - Resend API key (skips email if unset; see email_send.py)
-  EMAIL_FROM        - Verified sender address (skips email if unset)
+  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM
+                    - Email; skipped if any is unset (see email_send.py)
   FRONTEND_URL      - Base URL of Logjam Web (e.g. https://logjam.app)
                       Used to build the deep link in the completion email.
                       If unset, email is skipped with a warning.
