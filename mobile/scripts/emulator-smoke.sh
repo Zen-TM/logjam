@@ -56,6 +56,11 @@ adb shell "run-as $PKG sh -c 'mkdir -p shared_prefs && cat > shared_prefs/expo.m
 </map>
 XML
 
+# Where the map opens follows the device's location once it has one, and the
+# emulator's default is a place with no NSW tiles: put it in the Blue Mountains
+# (longitude first) so the screenshots show the same map every run.
+adb emu geo fix 150.25 -33.5 > /dev/null || true
+
 # 127.0.0.1 in the app means the emulator, so every port it dials is reversed.
 # Before the deep link, or the dev client times out.
 reverse() {
