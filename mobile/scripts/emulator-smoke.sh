@@ -33,6 +33,18 @@ adb install -r -t "$APK" > /dev/null
 for _ in $(seq 1 20); do adb shell pm path "$PKG" | grep -q package && break; sleep 3; done
 adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
 
+# The dev client's menu opens over the first launch, and its floating button
+# covers the top-right of every screen, "Add a place" among them: answer its
+# three preferences before the app first runs (the build is debuggable).
+adb shell run-as "$PKG" sh -c 'mkdir -p shared_prefs && cat > shared_prefs/expo.modules.devmenu.sharedpreferences.xml' <<'XML'
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="showFab" value="false" />
+    <boolean name="isOnboardingFinished" value="true" />
+    <boolean name="showsAtLaunch" value="false" />
+</map>
+XML
+
 # 127.0.0.1 in the app means the emulator, so every port it dials is reversed.
 # Before the deep link, or the dev client times out.
 adb reverse --remove-all

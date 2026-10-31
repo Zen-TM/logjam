@@ -11,8 +11,8 @@ env:
   PLACE_NAME: Smoke Test Gully
 ---
 - openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
-# On a fresh install the crash-report question covers the screen, and the dev
-# client's one-off intro sheet may too: neither leaves the tabs visible.
+# On a fresh install the crash-report question covers the screen, and the tabs
+# are not visible behind it.
 - extendedWaitUntil:
     visible: "Not now|Places"
     timeout: 240000
@@ -21,17 +21,6 @@ env:
       visible: "Not now"
     commands:
       - tapOn: "Not now"
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-# The intro opens the developer menu behind it.
-- runFlow:
-    when:
-      visible: "Toggle performance monitor"
-    commands:
-      - back
 - extendedWaitUntil:
     visible: "Places"
     timeout: 30000
