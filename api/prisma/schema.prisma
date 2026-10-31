@@ -11,8 +11,8 @@ model User {
   id                      String              @id @default(uuid())
   cognitoId               String              @unique @map("cognito_id")
   // The identity provider's `sub`. Replaces cognitoId over four deploys
-  // (expand/contract, ADR 0003); nullable until the second.
-  subject                 String?             @unique @map("subject")
+  // (expand/contract, ADR 0003); every read is on this column from the second.
+  subject                 String              @unique @map("subject")
   username                String              @unique
   email                   String              @unique
   uiPreferences           Json                @default("{}") @map("ui_preferences")

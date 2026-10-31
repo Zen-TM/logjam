@@ -21,16 +21,21 @@
 
 \set ON_ERROR_STOP on
 
--- 20261101000000_add_user_subject: users.subject is filled from cognito_id,
--- and cognito_id is left as it was. Off once the base has it.
+-- 20261101000100_user_subject_not_null: a user the previous image created while
+-- the base's migration applied has no subject; the migration fills it from
+-- cognito_id, then makes the column NOT NULL. Off once the base has it.
 SELECT NOT EXISTS (
   SELECT 1 FROM _prisma_migrations
-   WHERE migration_name = '20261101000000_add_user_subject'
+   WHERE migration_name = '20261101000100_user_subject_not_null'
 ) AS subject_applies \gset
 \if :subject_applies
 \if :{?fixtures}
-INSERT INTO users (id, cognito_id, username, email) VALUES
-  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', 'upgrade_x', 'x@upgrade.invalid');
+-- One row the old image made (cognito_id only), one it rebound (a stale
+-- subject), one that already has both.
+INSERT INTO users (id, cognito_id, subject, username, email) VALUES
+  ('upgrade-fixture-x', 'upgrade-fixture-x-sub', NULL, 'upgrade_x', 'x@upgrade.invalid'),
+  ('upgrade-fixture-z', 'upgrade-fixture-z-new', 'upgrade-fixture-z-old', 'upgrade_z', 'z@upgrade.invalid'),
+  ('upgrade-fixture-y', 'upgrade-fixture-y-sub', 'upgrade-fixture-y-sub', 'upgrade_y', 'y@upgrade.invalid');
 \endif
 CREATE SCHEMA IF NOT EXISTS upgrade_check;
 CREATE TABLE upgrade_check.users AS SELECT id, cognito_id FROM users;

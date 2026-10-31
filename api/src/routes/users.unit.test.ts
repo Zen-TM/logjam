@@ -32,7 +32,7 @@ function p2002(index: string): Prisma.PrismaClientKnownRequestError {
 const SUB = "abcdef0123456789-new";
 const EMAIL = "new@example.com";
 const INITIAL = "newuser";
-const ROW = { id: "u1", cognitoId: SUB, email: EMAIL, username: INITIAL };
+const ROW = { id: "u1", subject: SUB, email: EMAIL, username: INITIAL };
 
 beforeEach(() => {
   create.mockReset();
@@ -61,14 +61,6 @@ describe("createUserForSignup", () => {
       cognitoId: SUB,
       subject: SUB,
     });
-  });
-
-  it("recovers the racing row on a subject collision", async () => {
-    create.mockRejectedValueOnce(p2002("users_subject_key"));
-    findUnique.mockResolvedValueOnce(ROW);
-    await expect(
-      createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),
-    ).resolves.toBe(ROW);
   });
 
   it("retries with a sub-suffixed username when the username is taken", async () => {
@@ -115,9 +107,9 @@ describe("createUserForSignup", () => {
     ).resolves.toBe(ROW);
   });
 
-  it("recovers the racing row on a cognitoId collision (concurrent first-login)", async () => {
-    // Postgres reports the cognito_id constraint (not email/username).
-    create.mockRejectedValueOnce(p2002("users_cognito_id_key"));
+  it("recovers the racing row on a subject collision (concurrent first-login)", async () => {
+    // Postgres reports the subject constraint (not email/username).
+    create.mockRejectedValueOnce(p2002("users_subject_key"));
     findUnique.mockResolvedValueOnce(ROW);
     await expect(
       createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),
