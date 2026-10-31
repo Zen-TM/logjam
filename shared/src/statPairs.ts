@@ -1,5 +1,6 @@
 // Which stats are one fact said twice, and so sit on one line: what a line
-// climbs and what it drops, its highest and lowest point (shared/DESIGN.md
+// climbs and what it drops, its highest and lowest point, a river's level and
+// flow (shared/DESIGN.md
 // §2). A stat with no partner on the surface (a distance) takes the full width,
 // so a pair is never split across two rows and a lone figure never hangs off
 // the end of one.
@@ -14,6 +15,8 @@ export const PAIRED_STAT_LABELS = {
   stopped: "Stopped",
   avgSpeed: "Avg speed",
   avgMovingSpeed: "Avg moving speed",
+  level: "Level",
+  flow: "Flow",
 } as const;
 
 const L = PAIRED_STAT_LABELS;
@@ -24,6 +27,7 @@ export const STAT_PAIRS: readonly (readonly [string, string])[] = [
   [L.highPoint, L.lowPoint],
   [L.moving, L.stopped],
   [L.avgSpeed, L.avgMovingSpeed],
+  [L.level, L.flow],
 ];
 
 /**

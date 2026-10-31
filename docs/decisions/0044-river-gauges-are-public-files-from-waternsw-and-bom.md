@@ -51,9 +51,17 @@ service.**
   that gets no chunk through is tried again on the next run, one call each
   time, which leaves room for three failures on a 26-of-29 day. That is
   accepted: a run whose hot call fails stops before the sweep.
-- **A reading of no value, or quality 255 (Data Unavailable), is dropped.**
-  The portal sends those as 0.000, which would read as a dry river. Guard:
-  `topo/tests/test_gauges.py` ("a q255 zero never becomes a reading").
+- **A reading of no value, quality 255 (Data Unavailable) or quality 59 (Spike
+  or data not replaced) is dropped,** and the gauge keeps its last good reading
+  with that reading's age. The portal sends 255 as 0.000, which would read as a
+  dry river, and 59 is WaterNSW saying the number is wrong. Quality 55 (Flat
+  line data) stays: on six flagged gauges over six days it marked spells of a
+  few hours between passed readings, a quiet river rather than a fault, and
+  dropping it would age the gauges someone is most likely to check on a dry
+  week. Codes for a doubtful instrument (56, 135, 137) stay too: they carry
+  ordinary values, and the source does not call those wrong. Guard:
+  `topo/tests/test_gauges.py` ("a q255 zero never becomes a reading", "a spike
+  is dropped").
 - **History comes from BoM's Water Data Online,** daily means of level and
   flow, extended once a day: a gauge without a history file gets its full
   series, otherwise the last 14 days are merged in. It is requested one gauge

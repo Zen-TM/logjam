@@ -7,7 +7,8 @@ import {
   gaugeAges,
   gaugeDisplayName,
   gaugeFileNote,
-  gaugeSeries,
+  gaugeStats,
+  gaugeWeekChart,
   latestGaugeReading,
   type Gauge,
 } from "@logjam/shared";
@@ -39,48 +40,13 @@ export function GaugeView({
   const latest = latestGaugeReading(gauge, now);
   const fileNote = gaugeFileNote(generatedAt, now);
   const ages = latest && gaugeAges(latest, now);
-  // A gauge with a level draws its level; one with only a flow draws that.
-  const levelSeries = gaugeSeries(gauge.readings, "level");
-  const flowSeries = gaugeSeries(gauge.readings, "flow");
-  // The chart follows the stat: a level chart over "No level reading" would
-  // disagree with itself.
-  const charted = latest?.level != null ? "level" : "flow";
-  const series = charted === "level" ? levelSeries : flowSeries;
+  const week = gaugeWeekChart(gauge, latest);
   const sections: Record<
     (typeof GAUGES.sections)[number]["key"],
     () => ReactNode
   > = {
-    level: () =>
-      latest && (
-        <StatGrid
-          stats={[
-            {
-              label: ages?.level
-                ? `${GAUGES.copy.level}, ${ages.level}`
-                : GAUGES.copy.level,
-              value:
-                latest.level === null
-                  ? GAUGES.copy.noLevel
-                  : formatGaugeLevel(latest.level),
-              span: !gauge.hasFlow,
-            },
-          ]}
-        />
-      ),
-    flow: () =>
-      latest &&
-      gauge.hasFlow && (
-        <StatGrid
-          stats={[
-            {
-              label: ages?.flow
-                ? `${GAUGES.copy.flow}, ${ages.flow}`
-                : GAUGES.copy.flow,
-              value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow),
-            },
-          ]}
-        />
-      ),
+    reading: () =>
+      latest && <StatGrid stats={gaugeStats(gauge, latest, now)} />,
     age: () =>
       ages ? (
         (ages.line || fileNote) && (
@@ -97,16 +63,16 @@ export function GaugeView({
         </p>
       ),
     graph: () =>
-      latest && series.min !== null ? (
+      week ? (
         <section>
           <h3 className={classes.graphTitle}>{GAUGES.copy.graph}</h3>
           <ProfileChart
-            series={series}
+            series={week.series}
             formatValue={
-              charted === "level" ? formatGaugeLevel : formatGaugeFlow
+              week.charted === "level" ? formatGaugeLevel : formatGaugeFlow
             }
             formatX={(x) => DAY_FORMAT.format(x)}
-            label={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
+            label={`${GAUGES.copy[week.charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
             color="var(--color-accent)"
           />
         </section>
