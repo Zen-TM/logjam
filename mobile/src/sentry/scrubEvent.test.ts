@@ -282,3 +282,38 @@ describe("scrubMessage", () => {
     expect(scrubMessage(msg)).toBe("failed [redacted-url]\n[redacted-args]");
   });
 });
+
+// Mutation: delete the JWT or custom-scheme replace in redactTilePathPatterns,
+// or a token key from SENSITIVE_KEYS.
+describe("sign-in secrets", () => {
+  const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhYmMifQ.c2lnbmF0dXJl";
+
+  it("strips a token from free text", () => {
+    expect(redactTilePathPatterns(`refresh failed for ${jwt}`)).toBe(
+      "refresh failed for [redacted-token]",
+    );
+  });
+
+  it("strips the redirect that carries the authorization code", () => {
+    expect(
+      redactTilePathPatterns("opened logjam://auth?code=abc&state=xyz"),
+    ).toBe("opened [redacted-url]");
+    expect(redactTilePathPatterns("logjamdev://auth?code=abc")).toBe(
+      "[redacted-url]",
+    );
+  });
+
+  it("censors token keys in structured data", () => {
+    expect(
+      scrubStructure({
+        idToken: jwt,
+        refresh_token: "r",
+        params: { code: "c", code_verifier: "v" },
+      }),
+    ).toEqual({
+      idToken: "[redacted]",
+      refresh_token: "[redacted]",
+      params: { code: "[redacted]", code_verifier: "[redacted]" },
+    });
+  });
+});

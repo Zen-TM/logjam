@@ -1,8 +1,8 @@
 # Guest-mode flow — no account, everything local.
 #
-# Runs in `cognito` auth mode with NO session and NO recorded entry choice, so
-# the app lands on the entry chooser. It never reaches Cognito: the chooser sits
-# in front of the sign-in form, so this flow needs no credentials and no network
+# Runs in `oidc` auth mode with NO session and NO recorded entry choice, so
+# the app lands on the entry chooser. It never reaches the provider: the chooser sits
+# in front of the sign-in button, so this flow needs no credentials and no network
 # beyond Metro. It does need a CLEAN app state — `adb shell pm clear
 # com.logjamnsw.mobile` first, or the stored entry choice skips the chooser.
 #

@@ -28,11 +28,11 @@ its failure and still clears the local tokens.
 - `refresh_token_validity` is 3650 days (the maximum) for the one app client.
   It stays that long only while "Sign out everywhere" exists on both clients.
 - "Sign out everywhere" (`useAuth.signOutEverywhere` in `frontend/`,
-  `cognitoSignOut({ everywhere })` in `mobile/`) calls `GlobalSignOut`, which
+  `signOutEverywhereAtProvider` in `mobile/src/auth/oidcSession.ts`) calls `GlobalSignOut`, which
   revokes every refresh token the user holds.
 - It forces a token refresh first and aborts, clearing and wiping nothing, if
   that fails (`assertCanSignOutEverywhere` on Logjam GPS). Guards:
-  `mobile/src/auth/cognitoSignOut.test.ts`, `frontend/src/useAuth.test.tsx`.
+  `mobile/src/auth/signOutSequence.test.ts`, `frontend/src/useAuth.test.tsx`.
 
 ## Consequences
 

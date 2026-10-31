@@ -38,7 +38,6 @@
     }
   },
   "dependencies": {
-    "@aws-amplify/react-native": "^1.3.3",
     "@expo/vector-icons": "^15.0.3",
     "@logjam/shared": "file:../shared",
     "@maplibre/maplibre-react-native": "^11.5.0",
@@ -49,9 +48,9 @@
     "@react-navigation/native-stack": "^7.20.0",
     "@sentry/react-native": "~8.28.0",
     "@zoontek/react-native-navigation-bar": "^2.0.2",
-    "aws-amplify": "^6.22.2",
     "expo": "~58.0.21",
     "expo-asset": "~58.0.19",
+    "expo-auth-session": "~58.0.16",
     "expo-constants": "~58.0.14",
     "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.17",
@@ -74,6 +73,7 @@
     "expo-updates": "~58.0.19",
     "expo-video": "~58.0.13",
     "expo-video-thumbnails": "~58.0.2",
+    "expo-web-browser": "~58.0.7",
     "fflate": "^0.8.3",
     "react": "19.3.0",
     "react-native": "0.88.1",
