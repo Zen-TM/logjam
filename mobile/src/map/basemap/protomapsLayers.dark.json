@@ -221,6 +221,16 @@
       }
     },
     {
+      "id": "buildings",
+      "type": "fill",
+      "sourceLayer": "buildings",
+      "filter": ["in", "kind", "building", "building_part"],
+      "style": {
+        "fillColor": "#111111",
+        "fillOpacity": 0.5
+      }
+    },
+    {
       "id": "water",
       "type": "fill",
       "sourceLayer": "water",
@@ -542,16 +552,6 @@
           18,
           15
         ]
-      }
-    },
-    {
-      "id": "buildings",
-      "type": "fill",
-      "sourceLayer": "buildings",
-      "filter": ["in", "kind", "building", "building_part"],
-      "style": {
-        "fillColor": "#111111",
-        "fillOpacity": 0.5
       }
     },
     {
@@ -989,8 +989,7 @@
       "filter": ["==", "kind", "rail"],
       "style": {
         "lineDasharray": [0.3, 0.75],
-        "lineOpacity": 0.5,
-        "lineColor": "#000000",
+        "lineColor": "#101010",
         "lineWidth": [
           "interpolate",
           ["exponential", 1.6],
