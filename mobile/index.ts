@@ -3,6 +3,9 @@
 //  2. Sentry init (privacy-scrubbed; no-op without a DSN) — before anything
 //     that could crash.
 //  3. Amplify/Cognito config (tokens → SecureStore) — before any auth call.
+throw new Error(
+  "deliberate startup crash, to prove the emulator check can fail",
+);
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
