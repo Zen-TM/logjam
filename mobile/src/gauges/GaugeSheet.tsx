@@ -12,7 +12,7 @@ import {
   gaugeDisplayName,
   gaugeFileNote,
   gaugeStats,
-  gaugeWeekChart,
+  gaugeWeekCharts,
   latestGaugeReading,
   type Gauge,
   type ProfileSeries,
@@ -69,20 +69,25 @@ export const GAUGE_SECTIONS: Record<
     return text ? <Text style={styles.note}>{text}</Text> : null;
   },
   graph: ({ gauge, now, styles }) => {
-    const week = gaugeWeekChart(gauge, latestGaugeReading(gauge, now));
-    const shifted = week && fromZero(week.series);
-    return week && shifted ? (
+    const week = gaugeWeekCharts(gauge, latestGaugeReading(gauge, now));
+    return week.length > 0 ? (
       <>
         <Text style={styles.title}>{GAUGES.copy.graph}</Text>
-        <ProfileChart
-          series={shifted.series}
-          formatValue={
-            week.charted === "level" ? formatGaugeLevel : formatGaugeFlow
-          }
-          formatX={(x) => DAY_FORMAT.format(x + shifted.start)}
-          hint="Press or drag for readings."
-          accessibilityLabel={`${GAUGES.copy[week.charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
-        />
+        {week.map(({ charted, series }) => {
+          const shifted = fromZero(series);
+          return (
+            <ProfileChart
+              key={charted}
+              series={shifted.series}
+              formatValue={
+                charted === "level" ? formatGaugeLevel : formatGaugeFlow
+              }
+              formatX={(x) => DAY_FORMAT.format(x + shifted.start)}
+              hint={`${GAUGES.copy[charted]}. Press or drag for readings.`}
+              accessibilityLabel={`${GAUGES.copy[charted]}, ${GAUGES.copy.graph.toLowerCase()}`}
+            />
+          );
+        })}
       </>
     ) : null;
   },

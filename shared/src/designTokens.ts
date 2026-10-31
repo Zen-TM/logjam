@@ -41,6 +41,10 @@ export const MAP_INK = {
   labelHalo: "rgba(255,255,255,0.8)",
 } as const;
 
+/** Names on the map, a place's and a gauge's, appear from this zoom on both
+ *  clients: further out they would only collide. */
+export const MAP_LABEL_MIN_ZOOM = 9;
+
 /**
  * The location marker's colour options.
  *

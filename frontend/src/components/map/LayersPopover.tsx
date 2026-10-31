@@ -322,7 +322,6 @@ export default function LayersPopover({
                     icon="gauge"
                     hue="var(--color-accent)"
                     title={MAP_OVERLAYS.copy.gauges}
-                    subtitle={MAP_OVERLAYS.copy.gaugesHint}
                     checked={showGauges}
                     onToggle={setShowGauges}
                   />
@@ -510,7 +509,7 @@ function OverlayRow({
   icon: Glyph;
   hue: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   onOpen?: () => void;

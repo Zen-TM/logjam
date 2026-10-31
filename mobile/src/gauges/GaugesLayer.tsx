@@ -12,10 +12,10 @@ import {
   GAUGE_ICON_IMAGE,
   GAUGE_ICON_SDF_URI,
   GAUGE_ICON_SIZE,
-  GAUGE_LABEL_MIN_ZOOM,
   gaugeDisplayName,
   latestGaugeReading,
   MAP_INK,
+  MAP_LABEL_MIN_ZOOM,
   type GaugeLatestFile,
 } from "@logjam/shared";
 
@@ -82,7 +82,7 @@ export const GaugesLayer = memo(function GaugesLayer({
           type="symbol"
           id="gauge-labels"
           beforeId={PIN_FLOOR}
-          minzoom={GAUGE_LABEL_MIN_ZOOM}
+          minzoom={MAP_LABEL_MIN_ZOOM}
           style={{
             textField: ["get", "name"] as unknown as string,
             ...PIN_LABEL_TEXT,
