@@ -86,7 +86,6 @@ import {
   drawsNswContours,
   drawsNswHillshade,
   slopeReliefColor,
-  TERRAIN_LAYER_KEYS,
   terrainBeforeIds,
   type TerrainLayerKey,
   type TerrainSwitchKey,
@@ -313,7 +312,7 @@ import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { useBasemapAssets } from "./basemap/basemapAssets";
-import { ProtomapsLayers, protomapsLayerId } from "./basemap/ProtomapsLayers";
+import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { withDefaultEasing } from "./cameraStop";
@@ -358,10 +357,11 @@ import {
   type TapSample,
 } from "./doubleTap";
 import {
-  basemapMountKeys,
+  BAND_MARKERS,
   chainBeforeIds,
   PIN_FLOOR,
   ROUTES_FLOOR,
+  terrainBandMarker,
 } from "./layerOrder";
 import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
@@ -4338,10 +4338,9 @@ export function MapScreen({
    *
    * Changing this key unmounts and re-adds the two top layers, which puts them
    * back on top of whatever just arrived. It is a string of everything BELOW
-   * them that can mount or unmount; the layers under `layerIndex` (basemap,
-   * topo band, GeoPDFs, imports) are pinned by index and cannot climb, so they
-   * are deliberately not in it. Anything unpinned added to this map later
-   * belongs here too.
+   * them that can mount or unmount; the anchored layers (basemap, topo band,
+   * GeoPDFs, imports) cannot climb, so they are deliberately not in it.
+   * Anything unpinned added to this map later belongs here too.
    */
   const topStackKey = [
     showTracks ? tracks.map((track) => track.id).join(",") : "",
@@ -4401,9 +4400,7 @@ export function MapScreen({
     [renderedBasemapId],
   );
 
-  // The ground band, bottom to top: the Terrain group (hillshade, slope,
-  // contours: `TERRAIN_LAYER_KEYS` read upwards) when the basemap is a raster,
-  // topo overlays, GeoPDFs, vector imports.
+  // The ground band, bottom to top: topo overlays, GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4425,26 +4422,12 @@ export function MapScreen({
     slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
-  // Over the vector basemap the Terrain group goes inside it, under its roads
-  // and labels (shared TERRAIN_BASEMAP_ANCHORS), in the first stack drawn,
-  // which is the top one (basemapMountKeys): offline, that of the most
-  // recently saved area.
-  const basemapStacks = basemapResolved.filter((r) => r.status === "ok");
-  const mountKeys = basemapMountKeys(basemapStacks);
-  const vectorBasemap = basemapStacks.find((r) => r.sourceType === "vector");
-  const terrainBefore = vectorBasemap
-    ? Object.fromEntries(
-        terrainBeforeIds(terrainLayerIds, (id) =>
-          protomapsLayerId(sourceIdFor(vectorBasemap.key), id),
-        ),
-      )
-    : null;
+  // The Terrain group goes in the basemap's bands: under the vector map's roads
+  // and labels, and over a raster, which sits below them all.
+  const terrainBefore = Object.fromEntries(
+    terrainBeforeIds(terrainLayerIds, terrainBandMarker),
+  );
   const groundIds = [
-    ...(terrainBefore
-      ? []
-      : [...TERRAIN_LAYER_KEYS]
-          .reverse()
-          .flatMap((key) => terrainLayerIds[key])),
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
@@ -4573,30 +4556,23 @@ export function MapScreen({
         {/* Direction arrowhead for saved routes and the draft line. */}
         <RouteArrowImage />
 
-        {/* layerIndex pins z-order across remounts: a swapped basemap source
-            re-adds its layer at the TOP of the stack, burying the place
-            layers — explicit indexes (background=0, basemap band from 1,
-            overlays above the band) keep the basemap underneath while place
-            layers stay on top. The Protomaps band is ~70 layers wide, so the
-            overlay base index depends on the active basemap. */}
+        {/* Each basemap layer goes under its band's marker (BAND_MARKERS): a
+            swapped basemap source would otherwise re-add its layers at the TOP
+            of the stack, burying the place layers. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
-            <ResolvedSource
-              key={`${resolved.key}@${mountKeys.stacks}`}
-              resolved={resolved}
-            >
+            <ResolvedSource key={resolved.key} resolved={resolved}>
               {resolved.sourceType === "vector" ? (
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
                   sourceID={sourceIdFor(resolved.key)}
-                  startIndex={1}
                 />
               ) : (
                 <Layer
                   key={`basemap-layer-${resolved.key}`}
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
-                  layerIndex={1}
+                  beforeId={BAND_MARKERS.land}
                   style={{ rasterOpacity: 1 }}
                 />
               )}
@@ -4623,7 +4599,7 @@ export function MapScreen({
             a terrarium DEM. The bands are a paint expression, so changing
             them on Logjam Web repaints this layer, no rebuild. */}
         {hillshadeResolved.map((r) => (
-          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+          <ResolvedSource key={r.key} resolved={r}>
             <Layer
               key={`nsw-hillshade-${r.key}`}
               type="hillshade"
@@ -4635,7 +4611,7 @@ export function MapScreen({
           </ResolvedSource>
         ))}
         {slopeResolved.map((r) => (
-          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+          <ResolvedSource key={r.key} resolved={r}>
             <Layer
               key={`nsw-slope-${r.key}`}
               type="color-relief"
@@ -4655,7 +4631,7 @@ export function MapScreen({
         {/* The statewide contours: a topo area's contour layers, on the
             statewide archive (or the clips saved from it). */}
         {contoursResolved.map((r) => (
-          <ResolvedSource key={`${r.key}@${mountKeys.terrain}`} resolved={r}>
+          <ResolvedSource key={r.key} resolved={r}>
             <TopoVectorOverlay
               idPrefix={`nsw-contours-${r.key}`}
               sourceID={sourceIdFor(r.key)}

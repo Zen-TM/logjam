@@ -13,6 +13,23 @@ describe.each<ProtomapsFlavor>(["light", "dark"])(
         protomapsLayerDefs(flavor).map((layer) => layer.type),
       ).not.toContain("background");
     });
+
+    // Mutation: put buildings back above the water, or leave rail translucent,
+    // and regenerate: it darkens wherever two saved areas share a tile.
+    it("has nothing translucent from the water up, where saved areas paint over each other", () => {
+      const style = protomapsLayerDefs(flavor);
+      const water = style.findIndex(
+        (layer) => layer.id === TERRAIN_BASEMAP_ANCHORS.hillshade,
+      );
+      const translucent = style
+        .slice(water)
+        .filter(
+          ({ style: paint }) =>
+            "fillOpacity" in paint || "lineOpacity" in paint,
+        )
+        .map((layer) => layer.id);
+      expect(translucent).toEqual([]);
+    });
   },
 );
 

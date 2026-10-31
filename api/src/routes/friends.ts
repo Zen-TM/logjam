@@ -622,6 +622,7 @@ router.delete(
       // referenced this friendship on either party's side.
       await tx.notification.deleteMany({
         where: {
+          userId: { in: [friendship.requesterId, friendship.addresseeId] },
           type: { in: ["friend_request", "friend_request_accepted"] },
           payload: { path: ["friendshipId"], equals: id },
         },
