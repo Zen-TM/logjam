@@ -75,6 +75,11 @@ jobs:
           name: terrain-dist
           path: dist/
           if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: terrain-symbols
+          path: maplibre-native/platform/android/MapLibreAndroid/build/intermediates/merged_native_libs/vulkanRelease/**/*.so
+          if-no-files-found: warn
       # After the AAR's upload, so a failure here keeps the library.
       - name: Build the benchmark test app
         working-directory: maplibre-native/platform/android
