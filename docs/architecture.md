@@ -115,6 +115,7 @@ definitions are in `envs/prod/ecs.tf`:
 | `logjam-topo-worker` | topo worker (`topo/`) | `topo/worker.py`: LiDAR ZIP → tiles | `POST /topo-jobs/:id/start` (`JOB_ID`) |
 | `logjam-topo-export-worker` | topo worker | `topo/export_worker.py`: the statewide terrain over a box → download file | `POST /topo-exports` (`EXPORT_JOB_ID`) |
 | `logjam-place-registry` | topo worker | `topo/build_place_registry.py`: OpenStreetMap NSW extract → the public place registry under `master/places/` | an EventBridge schedule, monthly |
+| `logjam-gauges` | topo worker | `topo/build_gauges.py`: WaterNSW latest readings (every 2 hours) and BoM history (daily) → the public river gauge files under `master/gauges/` | an EventBridge schedule, every 2 hours |
 | `logjam-api-script` | API | a one-off maintainer script (`api/src/scripts/`); formerly the GeoPDF worker, [0043](decisions/0043-geopdfs-render-in-the-browser.md) | the maintainer, by hand ([announcements](operations/announcements.md#in-prod)) |
 | `logjam-api-migrate` | API | `prisma migrate deploy` | the API deploy workflow, before each release |
 
