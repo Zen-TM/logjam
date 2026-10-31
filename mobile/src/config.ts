@@ -4,8 +4,8 @@ import { resolveAuthMode } from "./authMode";
 
 // Runtime config, read from EXPO_PUBLIC_* env at build time (parallels the web
 // VITE_* split: dev vs prod parity via separate env files / EAS profiles).
-// Non-secret values only — Cognito pool/client IDs are public by design; no
-// secrets belong here.
+// Non-secret values only — the OIDC issuer and client ID are public by design;
+// no secrets belong here.
 
 function required(name: string, value: string | undefined): string {
   if (!value) {
@@ -23,8 +23,8 @@ export const config = {
   // Which seeded user a fake-auth dev build acts as ("fake-bob-sub").
   // Unset = alice, the historical default. Ignored outside fake auth.
   fakeSub: process.env.EXPO_PUBLIC_FAKE_SUB ?? null,
-  cognitoUserPoolId: process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID,
-  cognitoClientId: process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID,
+  oidcIssuer: process.env.EXPO_PUBLIC_OIDC_ISSUER,
+  oidcClientId: process.env.EXPO_PUBLIC_OIDC_CLIENT_ID,
   // CDN serving master topo tiles + (future) Protomaps basemap/glyphs —
   // parallels the web TOPO_CDN_BASE_URL.
   topoCdnBaseUrl:

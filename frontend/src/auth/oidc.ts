@@ -7,7 +7,11 @@ import {
   WebStorageStateStore,
   type User,
 } from "oidc-client-ts";
-import { endSessionUrl, oidcScopes, parseCognitoIssuer } from "@logjam/shared";
+import {
+  endSessionUrl,
+  hasCognitoAccount as sharedHasCognitoAccount,
+  oidcScopes,
+} from "@logjam/shared";
 
 const issuer = (): string => import.meta.env.VITE_OIDC_ISSUER ?? "";
 const clientId = (): string => import.meta.env.VITE_OIDC_CLIENT_ID ?? "";
@@ -17,10 +21,7 @@ const home = (): string => `${window.location.origin}/`;
 
 /** Change email, delete and sign out everywhere call Cognito directly. */
 export function hasCognitoAccount(): boolean {
-  return (
-    import.meta.env.VITE_AUTH_MODE === "fake" ||
-    parseCognitoIssuer(issuer()) !== null
-  );
+  return sharedHasCognitoAccount(import.meta.env.VITE_AUTH_MODE, issuer());
 }
 
 let manager: UserManager | undefined;
