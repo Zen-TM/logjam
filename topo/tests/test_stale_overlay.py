@@ -1,12 +1,11 @@
-"""Stale-fire caution overlay drawn into the vegetation tile (pure numpy/PIL,
-no GDAL).
+"""Stale-fire fade drawn into the vegetation tile (pure numpy/PIL, no GDAL).
 
-Covers only render_vegetation_tile's stale_arr overlay logic — the fire_stale
-raster itself is written by apply_fire_history (GDAL warp, integration-tested
-separately, see test_fire_history_apply.py). Same _native_stub convention as
-the rest of the render-tile test suite (test_render_tiles.py): pipeline.py
-imports osgeo at module top, so we stub it first; numpy/PIL must be real
-since these tests do real array/image maths.
+Covers render_vegetation_tile's stale_arr fade and _feather_stale, which
+apply_fire_history runs once over the whole AOI before tiles are cut. The
+raster write itself (GDAL warp) is integration-tested in
+test_fire_history_apply.py. Same _native_stub convention as
+test_render_tiles.py: pipeline.py imports osgeo at module top, so we stub it
+first; numpy/PIL must be real since these tests do real array/image maths.
 """
 
 import os
@@ -21,8 +20,9 @@ try:
     import numpy as np  # noqa: E402
     from pipeline import (  # noqa: E402
         TILE_SIZE,
-        FIRE_STALE_HATCH_COLOUR,
-        FIRE_STALE_HATCH_ALPHA,
+        FIRE_STALE_FADE_GREY,
+        FIRE_STALE_WASH_ALPHA,
+        _feather_stale,
         render_vegetation_tile,
     )
 
@@ -31,15 +31,13 @@ except Exception as _exc:  # noqa: BLE001
     _IMPORT_OK = False
     _IMPORT_ERR = _exc
 
-# These tests do real array/image maths — a MagicMock numpy or PIL (lean host)
-# would only produce nonsense. Same convention as test_render_tiles.py.
 if _IMPORT_OK and (_native_stub.is_stubbed("numpy") or _native_stub.is_stubbed("PIL")):
     _IMPORT_OK = False
     _IMPORT_ERR = "numpy/PIL is stubbed on this host (real array/image maths required)"
 
 
 @unittest.skipUnless(_IMPORT_OK, f"import failed: {globals().get('_IMPORT_ERR', '?')}")
-class TestStaleFireHatchOverlay(unittest.TestCase):
+class TestStaleFireFade(unittest.TestCase):
     SETTINGS = {
         "vegetation": {
             "minRatio": 0.1,
@@ -51,84 +49,120 @@ class TestStaleFireHatchOverlay(unittest.TestCase):
         }
     }
 
-    def _amber_pixels(self, arr):
-        """Boolean mask of pixels matching the caution-amber hatch colour
-        (allow ±1 for uint8 rounding), independent of alpha."""
-        r_ok = (arr[..., 0] >= FIRE_STALE_HATCH_COLOUR[0] - 1) & (
-            arr[..., 0] <= FIRE_STALE_HATCH_COLOUR[0] + 1
+    def _full(self, v, dtype=np.float32):
+        return np.full((TILE_SIZE, TILE_SIZE), v, dtype=dtype)
+
+    def test_open_ground_gets_faint_neutral_wash(self):
+        # Mutation: gate the wash on `mask` (visible density) -> transparent.
+        out = np.array(
+            render_vegetation_tile(self._full(0.0), self.SETTINGS, self._full(1.0))
         )
-        g_ok = (arr[..., 1] >= FIRE_STALE_HATCH_COLOUR[1] - 1) & (
-            arr[..., 1] <= FIRE_STALE_HATCH_COLOUR[1] + 1
+        self.assertTrue(np.all(out[..., 3] == FIRE_STALE_WASH_ALPHA))
+        for ch in range(3):
+            self.assertTrue(np.all(out[..., ch] == FIRE_STALE_FADE_GREY[ch]))
+
+    def test_wash_scales_with_strength(self):
+        out = np.array(
+            render_vegetation_tile(self._full(0.0), self.SETTINGS, self._full(0.5))
         )
-        b_ok = (arr[..., 2] >= FIRE_STALE_HATCH_COLOUR[2] - 1) & (
-            arr[..., 2] <= FIRE_STALE_HATCH_COLOUR[2] + 1
-        )
-        return r_ok & g_ok & b_ok
+        self.assertEqual(out[0, 0, 3], FIRE_STALE_WASH_ALPHA // 2)
 
-    def test_all_stale_produces_amber_hatch_with_gaps(self):
-        # Below minRatio everywhere, so without the overlay this tile would be
-        # fully transparent — the hatch must still appear since it's independent
-        # of density.
-        density = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.float32)
-        stale = np.ones((TILE_SIZE, TILE_SIZE), dtype=np.uint8)
+    def test_density_keeps_ramp_but_greyer_and_fainter(self):
+        # Mutation: drop the blend or the alpha cut -> equal to the plain render.
+        density = self._full(0.5)
+        plain = np.array(render_vegetation_tile(density, self.SETTINGS)).astype(int)
+        faded = np.array(
+            render_vegetation_tile(density, self.SETTINGS, self._full(1.0))
+        ).astype(int)
+        self.assertLess(faded[0, 0, 3], plain[0, 0, 3])
+        self.assertGreater(faded[0, 0, 3], FIRE_STALE_WASH_ALPHA)
+        # Plain ramp is pure green/red; the fade moves every channel towards grey.
+        grey = FIRE_STALE_FADE_GREY[0]
+        for ch in range(3):
+            self.assertLess(
+                abs(faded[0, 0, ch] - grey), abs(plain[0, 0, ch] - grey) + 1
+            )
 
-        out = np.array(render_vegetation_tile(density, self.SETTINGS, stale))
-        amber = self._amber_pixels(out)
-
-        self.assertTrue(amber.any(), "expected some amber hatch pixels")
-        # Cadence check: exactly 2 px in every 8 px diagonal period are amber,
-        # i.e. the hatch is a stripe pattern, not a solid fill.
-        self.assertFalse(amber.all(), "hatch must leave non-amber gaps, not solid-fill")
-        amber_alpha = out[..., 3][amber]
-        self.assertTrue(np.all(amber_alpha == FIRE_STALE_HATCH_ALPHA))
-
-        # Exact expected fraction: stripe is 2 px wide out of an 8 px period.
-        expected_fraction = 2.0 / 8.0
-        actual_fraction = float(amber.sum()) / (TILE_SIZE * TILE_SIZE)
-        self.assertAlmostEqual(actual_fraction, expected_fraction, places=2)
+    def test_denser_still_reads_darker_inside_burnt_ground(self):
+        # Mutation: flatten the ramp under the fade (e.g. fixed colour) -> equal.
+        strength = self._full(1.0)
+        sparse = np.array(
+            render_vegetation_tile(self._full(0.2), self.SETTINGS, strength)
+        )[0, 0].astype(int)
+        dense = np.array(
+            render_vegetation_tile(self._full(0.9), self.SETTINGS, strength)
+        )[0, 0].astype(int)
+        self.assertGreater(dense[3], sparse[3])
 
     def test_stale_arr_none_is_byte_identical_to_no_stale_render(self):
-        # Fire-staleness detection disabled/unavailable for this job — the
-        # overlay must be a pure no-op vs. never having the parameter at all.
         density = (
             np.random.RandomState(42)
             .uniform(0.0, 1.0, size=(TILE_SIZE, TILE_SIZE))
             .astype(np.float32)
         )
-
-        out_without_param = np.array(render_vegetation_tile(density, self.SETTINGS))
-        out_with_none = np.array(render_vegetation_tile(density, self.SETTINGS, None))
-
-        np.testing.assert_array_equal(out_without_param, out_with_none)
-
-    def test_half_stale_confines_amber_to_stale_half(self):
-        density = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.float32)
-        stale = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.uint8)
-        half = TILE_SIZE // 2
-        stale[:, :half] = 1  # left half stale, right half not
-
-        out = np.array(render_vegetation_tile(density, self.SETTINGS, stale))
-        amber = self._amber_pixels(out)
-
-        self.assertTrue(amber[:, :half].any(), "expected amber hatch in the stale half")
-        self.assertFalse(
-            amber[:, half:].any(), "no amber hatch expected outside the stale half"
+        np.testing.assert_array_equal(
+            np.array(render_vegetation_tile(density, self.SETTINGS)),
+            np.array(render_vegetation_tile(density, self.SETTINGS, None)),
         )
 
-    def test_mismatched_shape_skips_overlay_without_crashing(self):
-        density = np.full((TILE_SIZE, TILE_SIZE), 0.5)  # mid-range, well above minRatio
-        wrong_shape_stale = np.ones((TILE_SIZE // 2, TILE_SIZE // 2), dtype=np.uint8)
-
-        out_with_mismatch = np.array(
-            render_vegetation_tile(density, self.SETTINGS, wrong_shape_stale)
+    def test_zero_strength_is_byte_identical_to_unburnt(self):
+        density = self._full(0.5)
+        np.testing.assert_array_equal(
+            np.array(render_vegetation_tile(density, self.SETTINGS)),
+            np.array(render_vegetation_tile(density, self.SETTINGS, self._full(0.0))),
         )
-        out_without_stale = np.array(render_vegetation_tile(density, self.SETTINGS))
 
-        # Defensive skip — no amber hatch, no crash, and density rendering
-        # (unaffected by the skipped overlay) is identical to the no-stale render.
-        amber = self._amber_pixels(out_with_mismatch)
-        self.assertFalse(amber.any())
-        np.testing.assert_array_equal(out_with_mismatch, out_without_stale)
+    def test_nan_strength_counts_as_unburnt(self):
+        stale = self._full(1.0)
+        stale[:, 100:] = np.nan
+        out = np.array(render_vegetation_tile(self._full(0.0), self.SETTINGS, stale))
+        self.assertTrue(np.all(out[:, 100:, 3] == 0))
+        self.assertTrue(np.all(out[:, :100, 3] == FIRE_STALE_WASH_ALPHA))
+
+    def test_mismatched_shape_skips_fade_without_crashing(self):
+        density = self._full(0.5)
+        wrong = np.ones((TILE_SIZE // 2, TILE_SIZE // 2), dtype=np.float32)
+        np.testing.assert_array_equal(
+            np.array(render_vegetation_tile(density, self.SETTINGS, wrong)),
+            np.array(render_vegetation_tile(density, self.SETTINGS)),
+        )
+
+    def test_feathered_strength_has_no_seam(self):
+        # A burnt edge lands exactly on the boundary of two adjacent tiles.
+        # Guard: feathering runs once on the whole raster. Mutation: blur each
+        # 256 px tile on its own (`_feather_stale(mask[:, :256])`) -> the
+        # shared columns jump from 0 to 1 and this fails.
+        mask = np.zeros((TILE_SIZE, 2 * TILE_SIZE), dtype=bool)
+        mask[:, TILE_SIZE:] = True
+        strength = _feather_stale(mask)
+        left = np.array(
+            render_vegetation_tile(
+                self._full(0.0), self.SETTINGS, strength[:, :TILE_SIZE]
+            )
+        ).astype(int)
+        right = np.array(
+            render_vegetation_tile(
+                self._full(0.0), self.SETTINGS, strength[:, TILE_SIZE:]
+            )
+        ).astype(int)
+        seam = np.abs(left[:, -1, 3] - right[:, 0, 3]).max()
+        interior = np.abs(np.diff(left[:, :, 3], axis=1)).max()
+        self.assertLessEqual(seam, interior)
+        # And the edge really is soft, not a 0 -> wash step.
+        self.assertLess(interior, FIRE_STALE_WASH_ALPHA // 4)
+
+    def test_feather_softens_edges_and_keeps_interior_and_aoi_edge(self):
+        mask = np.zeros((200, 200), dtype=bool)
+        mask[:, 100:] = True
+        s = _feather_stale(mask)
+        self.assertEqual(s.dtype, np.float32)
+        self.assertTrue(0.0 < s[50, 99] < 1.0 and 0.0 < s[50, 101] < 1.0)
+        self.assertEqual(s[50, 0], 0.0)
+        self.assertEqual(s[50, 199], 1.0)  # AOI edge is not faded
+        self.assertEqual(s.shape, mask.shape)
+
+    def test_feather_leaves_nothing_where_nothing_burnt(self):
+        self.assertFalse(_feather_stale(np.zeros((50, 50), dtype=bool)).any())
 
 
 if __name__ == "__main__":

@@ -7,16 +7,54 @@
 // therefore land above the pins. Anchoring to a layer by id cannot: the layer
 // waits for its anchor and is inserted directly below it.
 //
-// Bottom to top: basemap, offline mask (both by index, see MapScreen), then
-// the ground band (topo overlays, GeoPDFs, vector imports), place routes,
-// saved routes, recorded tracks, nav line, place pins. The route being drawn
-// is deliberately unanchored and stays on top.
+// Bottom to top: the bands of `BAND_MARKERS`, the offline mask, then the ground
+// band (topo overlays, GeoPDFs, vector imports), place routes, saved routes,
+// recorded tracks, nav line, place pins. The route being drawn is deliberately
+// unanchored and stays on top.
+
+import { TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
 
 /** Lowest place-pin layer, always mounted: everything but the pins goes below it. Guard: mobile/src/map/layerOrder.test.ts. */
 export const PIN_FLOOR = "shared-place-halos";
 
 /** Lowest saved-route layer, always mounted (RoutesLayer never unmounts). Guard: mobile/src/map/layerOrder.test.ts. */
 export const ROUTES_FLOOR = "saved-routes-casing";
+
+/**
+ * Empty layers of the shell style, bottom to top, each the top of a band of
+ * the basemap: a layer goes in directly under its band's marker. Offline there
+ * is one basemap stack per saved area, and the Terrain group lies between the
+ * layers of a stack (shared TERRAIN_BASEMAP_ANCHORS), so the stacks are mounted
+ * band by band, not one above the other: hillshade, slope and contours then lie
+ * under the roads and labels of every saved area. A band is filled in mount
+ * order, the last on top, so nothing has to remount when a saved area joins.
+ * A style reload keeps the bands but can reorder the saved areas inside one,
+ * which shows only where saves overlap: they are clips of the same map.
+ * Guard: layerOrder.test.ts ("two saved areas and the Terrain group").
+ */
+export const BAND_MARKERS = {
+  /** A raster basemap, or a vector stack's land fills. */
+  land: "band-land",
+  /** The hillshade. */
+  shading: "band-shading",
+  /** A vector stack's water fill. */
+  water: "band-water",
+  /** The slope, and the contours above it. */
+  terrain: "band-terrain",
+  /** A vector stack's streams, roads, boundaries and labels. */
+  top: "band-top",
+} as const;
+
+/**
+ * The marker of the Terrain layers anchored at a Protomaps layer. Both anchors
+ * start a band of the stack, so this is what `terrainBeforeIds` reads where
+ * Logjam Web has the layer itself.
+ */
+export function terrainBandMarker(anchor: string): string {
+  return anchor === TERRAIN_BASEMAP_ANCHORS.hillshade
+    ? BAND_MARKERS.shading
+    : BAND_MARKERS.terrain;
+}
 
 /**
  * `beforeId` for each id of a stack listed bottom to top: every layer goes
@@ -28,31 +66,4 @@ export function chainBeforeIds(
   anchor: string,
 ): Record<string, string> {
   return Object.fromEntries(ids.map((id, i) => [id, ids[i + 1] ?? anchor]));
-}
-
-/**
- * The React key suffixes of the basemap stacks and of the Terrain group, so a
- * change in which basemaps are drawn remounts the stacks, and the Terrain
- * group too when the vector map is among them. MLRN moves a mounted
- * layer only when its own `beforeId` changes, and a stack added later goes in
- * under every layer already on the map (its `layerIndex` counts from the
- * bottom). Without the remount, after a switch from imagery to the vector
- * map the contour lines, still chained to each other, stay over its roads
- * and labels; and offline, a newly saved area's stack, the one the Terrain
- * group anchors in, mounts under an older one, whose tiles hide the Terrain
- * group where the two overlap. Mounted together, the stacks go in `basemaps`
- * order, the first on top.
- * Guard: layerOrder.test.ts ("basemapMountKeys", and "MapScreen keys its
- * stacks and the Terrain group by basemapMountKeys").
- */
-export function basemapMountKeys(
-  basemaps: readonly { key: string; sourceType: string }[],
-): { stacks: string; terrain: string } {
-  const stacks = basemaps.map((b) => b.key).join("+");
-  return {
-    stacks,
-    terrain: basemaps.some((b) => b.sourceType === "vector")
-      ? stacks
-      : "ground",
-  };
 }
