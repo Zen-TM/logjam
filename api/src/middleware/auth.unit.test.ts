@@ -63,7 +63,7 @@ let down: boolean;
 beforeAll(async () => {
   server = createServer((req, res) => {
     if (down) return req.socket.destroy();
-    if (req.url?.endsWith("/.well-known/openid-configuration")) {
+    if (req.url === `${PATH}/.well-known/openid-configuration`) {
       res.setHeader("content-type", "application/json");
       res.end(
         JSON.stringify({
