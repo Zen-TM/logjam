@@ -22,6 +22,7 @@ try:
     from pipeline import (  # noqa: E402
         TILE_SIZE,
         FIRE_STALE_AMBER,
+        FIRE_STALE_BAND_ALPHA,
         FIRE_STALE_STRIPE_ALPHA,
         FIRE_STALE_STRIPE_PERIOD,
         _encode_fire_stale,
@@ -129,6 +130,33 @@ class TestBurntGroundMarking(unittest.TestCase):
             np.abs(a[:, TILE_SIZE] - a[:, TILE_SIZE - 1]).max(),
             np.abs(np.diff(a, axis=1)).max() + 1e-6,
         )
+
+    def test_edge_line_stands_out_from_the_band(self):
+        # Mutation: drop the `line * FIRE_STALE_LINE_ALPHA` term -> the edge is
+        # only as strong as the band.
+        burnt = np.zeros((TILE_SIZE, TILE_SIZE), dtype=bool)
+        burnt[:, 128:] = True
+        enc = _encode_fire_stale(burnt, np.ones_like(burnt), 1.0)
+        alpha = self._render(self._full(0.0), enc)[..., 3]
+        edge = alpha[:, np.flatnonzero(enc[0] >= 0.5)[0]]
+        self.assertGreater(edge.min(), FIRE_STALE_BAND_ALPHA + 40)
+
+    def test_edge_line_does_not_depend_on_the_tile_cut(self):
+        # A curved fire edge, rendered cut at 256 and at 128: 128 keeps the
+        # stripes in phase, so any difference is the band or line. Mutation:
+        # take the line from a per-tile gradient
+        # (`np.gradient(np.where(inside, band, 1.0))`) -> pixels differ along
+        # the cut.
+        n = 2 * TILE_SIZE
+        r, c = np.indices((TILE_SIZE, n))
+        burnt = c > 256 + 60 * np.sin(r / 40.0)
+        enc = _encode_fire_stale(burnt, np.ones_like(burnt), 1.0)
+        zero = self._full(0.0)
+        left = self._render(zero, enc[:, :TILE_SIZE])
+        right = self._render(zero, enc[:, TILE_SIZE:])
+        mid = self._render(zero, enc[:, 128 : 128 + TILE_SIZE])
+        joined = np.concatenate([left, right], axis=1)
+        np.testing.assert_array_equal(joined[:, 128 : 128 + TILE_SIZE], mid)
 
     def test_burnt_all_over_gets_stripes_and_no_band(self):
         # An area sharpened wholly inside a fire: the AOI edge is not a fire

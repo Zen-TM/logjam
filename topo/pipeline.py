@@ -479,7 +479,7 @@ FIRE_STALE_STRIPE_HALF_WIDTH = 1.4  # tile px
 FIRE_STALE_STRIPE_ALPHA = 130
 FIRE_STALE_BAND_ALPHA = 120  # at the fire boundary, fading inwards as k ** 1.5
 FIRE_STALE_LINE_ALPHA = 220
-FIRE_STALE_LINE_HALF_WIDTH = 1.0  # tile px
+FIRE_STALE_LINE_FROM = 0.9  # k above this is the edge line, ~3 m of ground
 # Boundary smoothing on the whole AOI, in metres (the fire raster has 100 m
 # cells, so its stair-steps look crude): the stale mask gets 4 box passes
 # ~37 m wide, then the thresholded shape 3 passes ~49 m wide, which makes the
@@ -2991,11 +2991,11 @@ def render_vegetation_tile(
         q = (np.arange(TILE_SIZE)[:, None] + np.arange(TILE_SIZE)[None, :]) % P
         dist = np.minimum(q, P - q)
         stripe = np.clip(1.0 - dist / FIRE_STALE_STRIPE_HALF_WIDTH, 0.0, 1.0)
-        # Edge line: px from the boundary = (1 - k) / |grad k|, since k falls
-        # linearly from 1 at the edge. Outside counts as k = 1 for the gradient.
-        gy, gx = np.gradient(np.where(inside, band, 1.0))
-        px = (1.0 - band) / np.maximum(np.hypot(gx, gy), 1e-3)
-        line = np.clip(1.0 - px / FIRE_STALE_LINE_HALF_WIDTH, 0.0, 1.0)
+        # Edge line from k's value alone: a gradient taken here sees one tile
+        # and seams at its edge (test_edge_line_does_not_depend_on_the_tile_cut).
+        line = np.clip(
+            (band - FIRE_STALE_LINE_FROM) / (1.0 - FIRE_STALE_LINE_FROM), 0.0, 1.0
+        )
         amber_a = np.maximum.reduce(
             [
                 stripe * FIRE_STALE_STRIPE_ALPHA,
