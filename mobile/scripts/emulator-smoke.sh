@@ -16,9 +16,9 @@
 # reaches the places table.
 set -euo pipefail
 
-APK=${1:?apk}
-OUT=${2:?screenshot dir}
-LOGS=${3:?log dir}
+APK=$(realpath "${1:?apk}")
+OUT=$(realpath -m "${2:?screenshot dir}")
+LOGS=$(realpath -m "${3:?log dir}")
 PKG=com.logjamnsw.mobile.dev
 cd "$(dirname "$0")/.."
 mkdir -p "$OUT" "$LOGS"
