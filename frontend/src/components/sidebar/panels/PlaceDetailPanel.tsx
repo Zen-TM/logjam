@@ -755,6 +755,7 @@ function PlaceDetailPanel({
             longitude={current.longitude}
             gaugeId={current.gaugeId}
             owned={isOwnedPlace}
+            tripDates={tripLogs.map((t) => t.date)}
             onChange={(id) => void setGauge(id)}
           />
         </section>

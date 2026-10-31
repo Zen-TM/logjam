@@ -10,6 +10,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   attributeRows,
   contractSectionKeys,
+  distinctGaugeIds,
   formatFieldValue,
   formatTripDate,
   mediaCategory,
@@ -30,6 +31,7 @@ import { messageFromError } from "../../../errors/messageFromError";
 import MediaGallery from "../../media/MediaGallery";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
+import { TripGaugeReading } from "../../gauges/TripGaugeReading";
 import { tripTypeLook } from "./tripTypeIcon";
 import {
   EmptyState,
@@ -155,6 +157,9 @@ function TripDetailPanel({
   const trackCount = media.length - photoCount;
   const attributes = attributeRows(customFieldDefs, trip.customFields);
   const title = tripTitle(trip);
+  const gaugeIds = distinctGaugeIds(
+    trip.places.map((p) => places.find((x) => x.id === p.id)?.gaugeId),
+  );
 
   // A VERB is in the ⋯ (DESIGN.md), and which verbs, in what order and
   // under what words is `TRIP_VERBS`, the declaration the logbook's rows and
@@ -228,6 +233,16 @@ function TripDetailPanel({
           ))
         )}
       </section>
+    ),
+
+    gauge: () => (
+      <TripGaugeReading
+        className={classes.section}
+        title={copy.gauge}
+        gaugeIds={gaugeIds}
+        dates={[trip.date]}
+        when="trip"
+      />
     ),
 
     photos: () => (

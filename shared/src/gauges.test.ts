@@ -7,6 +7,7 @@ import {
   contractSectionKeys,
   GAUGES,
   MAP_OVERLAYS,
+  TRIP_PAGE,
 } from "./contracts/index.js";
 import {
   formatGaugeFlow,
@@ -18,6 +19,7 @@ import {
   latestGaugeReading,
   gaugeStats,
   gaugeWeekCharts,
+  tripGaugeLines,
 } from "./contracts/gauges.js";
 import {
   type Gauge,
@@ -26,7 +28,12 @@ import {
   gaugeSeries,
   GAUGE_LATEST_PATH,
   GAUGE_PREFIX,
+  aestDay,
+  distinctGaugeIds,
+  gaugeReadingOnDay,
   levelOnDate,
+  tripDatesFor,
+  tripGaugeDay,
   nearbyGauges,
   parseGaugeHistory,
   parseGaugeLatest,
@@ -83,6 +90,158 @@ describe("history", () => {
     expect(levelOnDate(history, "2026-10-02")).toBeNull();
     expect(levelOnDate(history, "2026-09-30")).toBeNull();
     expect(levelOnDate(history, "2030-01-01")).toBeNull();
+  });
+});
+
+describe("a gauge on a trip's date", () => {
+  const now = Date.parse("2026-10-30T12:00:00Z");
+  const sec = (iso: string) => Date.parse(iso) / 1000;
+  const gauge: Gauge = {
+    ...latest.gauges[0]!,
+    readings: [
+      // 23:30 AEST on the 28th, then 00:30 AEST on the 29th.
+      [sec("2026-10-28T13:30:00Z"), 1.0, 10],
+      [sec("2026-10-28T14:30:00Z"), 2.0, 20],
+      [sec("2026-10-29T01:30:00Z"), 4.0, null],
+    ],
+  };
+
+  it("takes the day from the date's text, so no time zone moves it", () => {
+    // Mutation: build the day with `new Date(date).getDate()` → red in a zone west of UTC.
+    expect(tripGaugeDay("2026-03-15T00:00:00.000Z")).toBe("2026-03-15");
+    expect(tripGaugeDay("2026-03-15")).toBe("2026-03-15");
+    expect(tripGaugeDay("soon")).toBeNull();
+  });
+
+  it("puts a moment in its AEST day", () => {
+    // Mutation: use the UTC day → red.
+    expect(aestDay(sec("2026-10-28T13:59:59Z") * 1000)).toBe("2026-10-28");
+    expect(aestDay(sec("2026-10-28T14:00:00Z") * 1000)).toBe("2026-10-29");
+  });
+
+  it("reads history first", () => {
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-01", now)).toEqual({
+      level: 0.91,
+      flow: 120.5,
+    });
+  });
+
+  it("falls back to the latest file's mean for a recent day not in history", () => {
+    // Mutation: count the 14:30Z reading in the 28th → red.
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-28", now)).toEqual({
+      level: 1.0,
+      flow: 10,
+    });
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-29", now)).toEqual({
+      level: 3.0,
+      flow: 20,
+    });
+  });
+
+  it("shows nothing for a day before history, without a value, or in the future", () => {
+    // Mutation: fall back to the latest file for an old day → red.
+    expect(gaugeReadingOnDay(gauge, history, "2020-01-01", now)).toBeNull();
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-02", now)).toBeNull();
+    expect(gaugeReadingOnDay(gauge, history, "2026-10-31", now)).toBeNull();
+    expect(gaugeReadingOnDay(gauge, null, "2026-10-20", now)).toBeNull();
+  });
+
+  it("keeps a few distinct gauges", () => {
+    expect(
+      distinctGaugeIds([null, "1", "2", "1", undefined, "3", "4"]),
+    ).toEqual(["1", "2", "3"]);
+  });
+
+  it("puts the trip's reading beside the current one, flow only where the gauge has it", () => {
+    const g = latest.gauges[0]!;
+    expect(
+      tripGaugeLines(
+        [{ gauge: g, history }],
+        ["2026-10-01T00:00:00.000Z"],
+        "trip",
+        now,
+      ),
+    ).toEqual([
+      "Made Up River at One: 0.91 m and 121 ML/d on this trip, 0.95 m and 130 ML/d now.",
+    ]);
+    const noFlow = { ...g, hasFlow: false };
+    expect(
+      tripGaugeLines(
+        [{ gauge: noFlow, history }],
+        ["2026-10-01"],
+        "lastTrip",
+        now,
+      ),
+    ).toEqual([
+      "Made Up River at One: 0.91 m on your last trip here, 0.95 m now.",
+    ]);
+  });
+
+  it("reads only the newest past trip, so the label is true", () => {
+    // Mutation: fall back to an older trip, or count a planned trip → red.
+    const g = { ...latest.gauges[0]!, hasFlow: false };
+    const line = (dates: string[]) =>
+      tripGaugeLines([{ gauge: g, history }], dates, "lastTrip", now);
+    expect(line(["2026-10-01", "2026-12-25", "2026-09-01"])[0]).toContain(
+      "0.91 m on your last trip here",
+    );
+    // The newest past trip, 2 Oct, has no value: nothing older stands in.
+    expect(line(["2026-10-01", "2026-10-02"])).toEqual([
+      GAUGES.copy.noneForDate,
+    ]);
+  });
+
+  it("drops flow from a gauge that has none, so no empty value renders", () => {
+    // Mutation: remove the hasFlow check in gaugeReadingOnDay → red.
+    const g: Gauge = {
+      ...latest.gauges[1]!,
+      readings: [[Math.floor(now / 1000) - 60, null, 5]],
+    };
+    expect(gaugeReadingOnDay(g, null, "2026-10-30", now)).toBeNull();
+    expect(
+      tripGaugeLines(
+        [{ gauge: g, history: null }],
+        ["2026-10-30"],
+        "trip",
+        now,
+      ),
+    ).toEqual([]);
+  });
+
+  it("gives a sharee no trip dates", () => {
+    // Mutation: return the dates for a sharee → red.
+    expect(tripDatesFor(true, ["2026-10-01"])).toEqual(["2026-10-01"]);
+    expect(tripDatesFor(false, ["2026-10-01"])).toEqual([]);
+  });
+
+  it("is silent for a gauge with no history file, and one plain line when a file had no value", () => {
+    const g = latest.gauges[0]!;
+    expect(
+      tripGaugeLines(
+        [{ gauge: g, history: null }],
+        ["2020-01-01"],
+        "trip",
+        now,
+      ),
+    ).toEqual([]);
+    expect(
+      tripGaugeLines([{ gauge: g, history }], ["2026-10-02"], "trip", now),
+    ).toEqual([GAUGES.copy.noneForDate]);
+    expect(
+      tripGaugeLines([{ gauge: g, history }], [], "lastTrip", now),
+    ).toEqual([]);
+  });
+
+  it("says when the gauge has no current reading", () => {
+    const g = { ...latest.gauges[2]!, readings: [] };
+    expect(
+      tripGaugeLines(
+        [{ gauge: g, history: { ...history, id: g.id } }],
+        ["2026-10-01"],
+        "trip",
+        now,
+      )[0],
+    ).toMatch(/on this trip, no recent reading now\.$/);
   });
 });
 
@@ -234,6 +393,13 @@ describe("the gauge panel's words", () => {
   it("has no word of advice and no colour scale", () => {
     const words = JSON.stringify([
       GAUGES.copy,
+      TRIP_PAGE.copy.gauge,
+      tripGaugeLines(
+        [{ gauge: latest.gauges[0]!, history }],
+        ["2026-10-01", "2026-10-02"],
+        "lastTrip",
+        Date.parse("2026-10-30T12:00:00Z"),
+      ),
       MAP_OVERLAYS.copy,
       GAUGES.title,
     ]);
