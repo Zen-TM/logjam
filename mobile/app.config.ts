@@ -64,8 +64,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
   };
   if (!dev) return base;
+  // A dev build is never updated over the air, and Metro would otherwise have
+  // to sign its manifest with the maintainer's private key, which a CI runner
+  // does not have.
+  const { codeSigningCertificate, codeSigningMetadata, ...updates } =
+    base.updates ?? {};
+  void codeSigningCertificate;
+  void codeSigningMetadata;
   return {
     ...base,
+    updates,
     name: `${base.name} Dev`,
     scheme: `${String(base.scheme)}dev`,
     ios: {
