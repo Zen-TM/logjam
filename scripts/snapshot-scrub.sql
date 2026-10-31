@@ -9,7 +9,7 @@
 -- schema without joining this file.
 \set ON_ERROR_STOP on
 
--- Identity: real emails and Cognito ids become safe locals.
+-- Identity: real emails and identity-provider ids become safe locals.
 --
 -- The username uses the full id, not its first 8 characters: dev seed ids share
 -- a `00000000` prefix by design and random uuids can collide on 8 characters,
@@ -18,6 +18,7 @@ UPDATE users
 SET
   email      = 'user-' || id || '@local',
   cognito_id = 'sanitized-' || id,
+  subject    = 'sanitized-' || id,
   username   = 'user-' || id;
 
 -- Everything a user typed. A place NAME is as sensitive as its notes under the
