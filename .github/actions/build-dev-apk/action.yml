@@ -25,7 +25,7 @@ runs:
     # minutes on Gradle. Add a path here when a new directory feeds prebuild or
     # Gradle; this file is in the key so a change to the recipe rebuilds too.
     - id: cache
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
         key: dev-apk-v1-${{ inputs.legacy_root }}-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json', 'mobile/app.config.ts', 'mobile/plugins/**', 'mobile/patches/**', 'mobile/modules/**', 'mobile/maplibre/**', '.github/actions/build-dev-apk/action.yml') }}
@@ -67,3 +67,10 @@ runs:
       env:
         LOGJAM_APP_VARIANT: dev
       run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64
+    # Saved here, not by a post step, so a later failure in the caller (a flaky
+    # emulator) does not throw away 12 minutes of Gradle.
+    - if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+        key: ${{ steps.cache.outputs.cache-primary-key }}
