@@ -78,6 +78,7 @@ export function gaugeDisplayName(raw: string): string {
   return raw
     .replace(/@/g, " @ ")
     .replace(/\b(up|down) ?stream( of)?\b/gi, "$1stream of")
+    .replace(/(\S)\(/g, "$1 (")
     .split(/\s+/)
     .filter(Boolean)
     .map((word) => {
@@ -91,7 +92,8 @@ export function gaugeDisplayName(raw: string): string {
         .toLowerCase()
         .replace(/(^|[-'(])([a-z])/g, (_, a, b) => a + b.toUpperCase());
     })
-    .join(" ");
+    .join(" ")
+    .replace(/ at (up|down)stream of /, " $1stream of ");
 }
 
 export type GaugeLatest = {
