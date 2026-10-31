@@ -14,6 +14,15 @@ appId: com.logjamnsw.mobile.dev
 # On a fresh install the crash-report question covers the screen, and the tabs
 # are not visible behind it.
 - extendedWaitUntil:
+    visible: "Not now|Places|There was a problem loading the project."
+    timeout: 120000
+# The dev client's own error screen (it could not reach Metro): its Reload retries.
+- runFlow:
+    when:
+      visible: "There was a problem loading the project."
+    commands:
+      - tapOn: "Reload"
+- extendedWaitUntil:
     visible: "Not now|Places"
     timeout: 120000
 - runFlow:

@@ -52,8 +52,11 @@ XML
 
 # 127.0.0.1 in the app means the emulator, so every port it dials is reversed.
 # Before the deep link, or the dev client times out.
-adb reverse --remove-all
-for port in 8081 8080 4566; do adb reverse "tcp:$port" "tcp:$port" > /dev/null; done
+reverse() {
+  adb reverse --remove-all
+  for port in 8081 8080 4566; do adb reverse "tcp:$port" "tcp:$port" > /dev/null; done
+}
+reverse
 
 # The first bundle takes minutes on a cold Metro; the dev client gives up on
 # less. Ask for the exact URL the manifest names, or a different bundle is
@@ -69,8 +72,10 @@ for attempt in 1 2; do
   status=0
   maestro test maestro/smoke.yaml -e "PLACE_NAME=$PLACE_NAME" --test-output-dir "$OUT/maestro-$attempt" && break || status=$?
   echo "::warning::maestro attempt $attempt failed (exit $status)"
+  { adb devices -l; adb reverse --list; } > "$LOGS/adb-$attempt.txt" 2>&1 || true
   adb exec-out screencap -p > "$OUT/failed-$attempt.png" || true
   adb shell am force-stop "$PKG"
+  reverse
 done
 adb exec-out screencap -p > "$OUT/final.png" || true
 [ "$status" = 0 ] || exit "$status"
