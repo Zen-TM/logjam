@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { consentFormProblem, consentSubmitFailure } from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
@@ -19,7 +20,6 @@ import {
 } from "../legalLinks";
 import { spacing, makeStyles } from "../theme";
 import { Button, ErrorBanner, SwitchRow, TextField, TextLink } from "../ui";
-import { consentFormProblem, consentSubmitFailure } from "./consentForm";
 
 export function ConsentGate({
   consentVersion,

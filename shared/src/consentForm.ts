@@ -1,12 +1,8 @@
-// What the consent gate checks before it sends anything. Pulled out of the
-// screen so the rules can run in a test (mobile/ has no renderer), and to match
-// Logjam Web's ConsentGate, which asks a new account the same questions.
-import {
-  ApiError,
-  isValidUsername,
-  messageFromError,
-  USERNAME_RULE,
-} from "@logjam/shared";
+// What both consent gates decide before and after they send anything: which
+// questions to ask, where a refusal shows, and whether "Try again" can help.
+// Each client draws the result itself (ADR 0020).
+import { ApiError, messageFromError } from "./apiErrors.js";
+import { isValidUsername, USERNAME_RULE } from "./username.js";
 
 /** `retry`: whether sending again can help. A form problem never can. */
 export type ConsentFormProblem =

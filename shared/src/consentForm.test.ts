@@ -4,9 +4,8 @@
 // account questions to a returning user and the last test goes red.
 import { describe, expect, it } from "vitest";
 
-import { ApiError } from "@logjam/shared";
-
-import { consentFormProblem, consentSubmitFailure } from "./consentForm";
+import { ApiError } from "./apiErrors.js";
+import { consentFormProblem, consentSubmitFailure } from "./consentForm.js";
 
 const ok = { username: "alice.k", agreed: true, ageConfirmed: true };
 

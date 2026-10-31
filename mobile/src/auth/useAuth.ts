@@ -183,7 +183,7 @@ export function useAuth() {
       const result = await signInWithBrowser();
       // A closed sheet is the user's answer, not an error.
       if (result.type === "cancel") return false;
-      const finished = await finishSignIn(result.idToken);
+      const finished = await finishSignIn(result);
       if (!finished.ok) {
         setError(finished.error);
         return false;

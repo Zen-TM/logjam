@@ -40,12 +40,18 @@ vi.mock("./localIdentity", async () => {
 vi.mock("./oidcSession", () => ({
   identityFromIdToken: (t: string) =>
     t === "no-sub" ? null : { sub: t, username: `${t}@example.com` },
-  signOutLocally: async () => {
-    calls.push("signOutLocally");
-  },
 }));
 
-const { finishSignIn } = await import("./finishSignIn");
+const { finishSignIn: finish } = await import("./finishSignIn");
+
+// What signInWithBrowser hands over: the tokens are stored only by `commit`.
+const finishSignIn = (idToken: string) =>
+  finish({
+    idToken,
+    commit: async () => {
+      calls.push("commit");
+    },
+  });
 
 beforeEach(() => {
   calls.length = 0;
@@ -56,7 +62,9 @@ beforeEach(() => {
 
 describe("finishSignIn", () => {
   // Mutation: reorder the wipe before unregisterPush, or the identity write
-  // before the wipe.
+  // before the wipe, or commit before unregisterPush (the DELETE then runs as
+  // the arriving user, the API deletes zero rows and the departing user's
+  // pushes keep reaching this phone).
   it("as a different user: unregisters push, wipes, then records the new identity", async () => {
     readPreviousIdentity.mockResolvedValue({ sub: "old", username: "o" });
     expect(await finishSignIn("new")).toEqual({ ok: true });
@@ -65,6 +73,7 @@ describe("finishSignIn", () => {
       "wipe",
       "clearIdentity",
       "writeIdentity:new",
+      "commit",
       "entryChoice:account",
     ]);
   });
@@ -90,27 +99,28 @@ describe("finishSignIn", () => {
     expect(calls).toContain("wipe");
   });
 
-  // Mutation: carry on after a failed wipe, or skip signOutLocally.
-  it("backs the new session out when the wipe fails, and records nothing", async () => {
+  // Mutation: commit (store the new tokens) before or despite a failed wipe.
+  it("stores nothing when the wipe fails", async () => {
     readPreviousIdentity.mockResolvedValue({ sub: "old", username: "o" });
     wipeAllLocalData.mockResolvedValue({ failed: ["photos"] });
     const result = await finishSignIn("new");
     expect(result).toMatchObject({ ok: false });
-    expect(calls).toEqual(["unregisterPush", "wipe", "signOutLocally"]);
+    expect(calls).toEqual(["unregisterPush", "wipe"]);
   });
 
-  it("backs the new session out when a step throws", async () => {
+  // Mutation: commit before the wipe.
+  it("stores nothing when a step throws", async () => {
     readPreviousIdentity.mockResolvedValue({ sub: "old", username: "o" });
     wipeAllLocalData.mockRejectedValue(new Error("disk"));
     await expect(finishSignIn("new")).rejects.toThrow("disk");
-    expect(calls.at(-1)).toBe("signOutLocally");
+    expect(calls).not.toContain("commit");
   });
 
-  // Mutation: carry on without a sub.
+  // Mutation: carry on without a sub (or commit before checking it).
   it("cancels the sign-in when the ID token has no sub", async () => {
     const result = await finishSignIn("no-sub");
     expect(result).toMatchObject({ ok: false });
-    expect(calls).toEqual(["signOutLocally"]);
+    expect(calls).toEqual([]);
   });
 
   it("signs in even when provisioning cannot reach the API", async () => {

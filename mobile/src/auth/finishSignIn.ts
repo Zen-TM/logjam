@@ -11,32 +11,29 @@ import {
   signInNeedsWipe,
   writeLocalIdentity,
 } from "./localIdentity";
-import { identityFromIdToken, signOutLocally } from "./oidcSession";
+import { identityFromIdToken } from "./oidcSession";
 
 export type FinishedSignIn = { ok: true } | { ok: false; error: string };
 
 /**
- * The tokens are already stored when this runs, so every `ok: false` has taken
- * them out again: the next cold start must not find a session with no identity
- * recorded, which would land the new user straight in the old user's data.
+ * The tokens are NOT stored yet: `signIn.commit()` stores them after the
+ * departing user's push binding and data are gone, so the push DELETE runs
+ * under the departing session (the API deletes only the caller's own rows) and
+ * every `ok: false` leaves the phone as it was, with no half-signed-in state to
+ * undo. If the departing session was already rejected there is none to run it
+ * under and the unregister fails, which it may: it is best effort, and the
+ * server prunes dead tokens (Guard: finishSignIn.test.ts, "unregisters push
+ * before the new tokens are stored").
  */
-export async function finishSignIn(idToken: string): Promise<FinishedSignIn> {
-  try {
-    return await finish(idToken);
-  } catch (err) {
-    // A throw part-way is the same half-signed-in phone.
-    await signOutLocally().catch(console.error);
-    throw err;
-  }
-}
-
-async function finish(idToken: string): Promise<FinishedSignIn> {
-  const identity = identityFromIdToken(idToken);
+export async function finishSignIn(signIn: {
+  idToken: string;
+  commit: () => Promise<void>;
+}): Promise<FinishedSignIn> {
+  const identity = identityFromIdToken(signIn.idToken);
   if (!identity) {
     // No sub, no way to tell whose data is on this phone — and no identity to
     // persist, so the next sign-in would skip this check as well; falling
     // through would sign in blind.
-    await signOutLocally();
     return {
       ok: false,
       error:
@@ -59,7 +56,6 @@ async function finish(idToken: string): Promise<FinishedSignIn> {
     if (wiped.failed.length > 0) {
       // Fail loudly rather than sign in over a half-cleared device: the
       // alternative is silently merging two people's data.
-      await signOutLocally();
       return {
         ok: false,
         error: `Couldn't clear the previous account's ${wiped.failed.join(" and ")} from this phone, so sign-in was cancelled.`,
@@ -68,6 +64,7 @@ async function finish(idToken: string): Promise<FinishedSignIn> {
     await clearLocalIdentity();
   }
   await writeLocalIdentity(identity);
+  await signIn.commit();
   // This install has an account now — never show the entry chooser again.
   writeEntryChoice("account");
   // Await provisioning before opening the app (GET /users/me creates the row;

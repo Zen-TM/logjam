@@ -95,3 +95,4 @@ export * from "./cognitoIssuer.js";
 export * from "./oidc.js";
 export * from "./cognitoAccount.js";
 export * from "./username.js";
+export * from "./consentForm.js";

@@ -240,13 +240,18 @@ async function discover(issuer: string, signal: AbortSignal) {
 
 // ── sign in ──────────────────────────────────────────────────────────────────
 
+/**
+ * `commit` stores the session. It is not stored here: `finishSignIn` may have
+ * to unregister push and wipe the departing user's data under THEIR session
+ * first, and that session is the one in the store until `commit` replaces it.
+ */
 export type BrowserSignIn =
-  | ({ type: "success" } & Session)
+  | ({ type: "success"; commit: () => Promise<void> } & Session)
   | { type: "cancel" };
 
 /**
  * Opens the provider's sign-in and sign-up page in the system browser sheet and
- * stores the session it ends in. Closing the sheet is `cancel`, which changes
+ * returns the session it ends in, to be stored by `commit`. Closing the sheet is `cancel`, which changes
  * nothing; any other failure throws.
  */
 export async function signInWithBrowser(): Promise<BrowserSignIn> {
@@ -280,16 +285,17 @@ export async function signInWithBrowser(): Promise<BrowserSignIn> {
       s,
     ),
   );
-  await writeStored({
+  const next: Stored = {
     idToken: tokens.id_token,
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     tokenEndpoint: doc.token_endpoint,
     revocationEndpoint: doc.revocation_endpoint,
     endSessionEndpoint: doc.end_session_endpoint,
-  });
+  };
   return {
     type: "success",
+    commit: () => writeStored(next),
     idToken: tokens.id_token,
     accessToken: tokens.access_token,
   };

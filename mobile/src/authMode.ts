@@ -1,5 +1,3 @@
-import { parseCognitoIssuer } from "@logjam/shared";
-
 // Fake auth sends a fixed token and skips the provider, so it must never be
 // baked into a build that talks to a real server (Guard: authMode.test.ts).
 // Local dev and the local release-APK loop (scripts/build-local-apk.sh) dial
@@ -20,16 +18,4 @@ export function resolveAuthMode(
     throw new Error("Fake auth is only allowed against a local API");
   }
   return "fake";
-}
-
-/**
- * Change email and sign out everywhere call Cognito directly, so they exist
- * only when the issuer is Cognito (Logjam Web's `hasCognitoAccount`). Fake
- * auth counts, so the rows can be exercised in local dev.
- */
-export function hasCognitoAccount(
-  mode: "oidc" | "fake",
-  issuer: string | undefined,
-): boolean {
-  return mode === "fake" || (!!issuer && parseCognitoIssuer(issuer) !== null);
 }

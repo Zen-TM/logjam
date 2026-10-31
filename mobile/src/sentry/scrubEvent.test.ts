@@ -316,4 +316,12 @@ describe("sign-in secrets", () => {
       params: { code: "[redacted]", code_verifier: "[redacted]" },
     });
   });
+
+  // Mutation: drop "token" from SENSITIVE_KEYS: the revoke call's body is
+  // {token, client_id} and an opaque refresh token has no eyJ prefix.
+  it("censors the revoke call's opaque token", () => {
+    expect(
+      scrubStructure({ token: "opaque-refresh", client_id: "client" }),
+    ).toEqual({ token: "[redacted]", client_id: "client" });
+  });
 });

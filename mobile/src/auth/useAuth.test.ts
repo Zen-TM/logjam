@@ -120,10 +120,11 @@ describe("OIDC sign-in", () => {
   });
 
   it("opens the app once the identity is settled", async () => {
-    signInWithBrowser.mockResolvedValue({ type: "success", idToken: "i" });
+    const success = { type: "success", idToken: "i", commit: vi.fn() };
+    signInWithBrowser.mockResolvedValue(success);
     finishSignIn.mockResolvedValue({ ok: true });
     expect(await useAuth().signIn()).toBe(true);
-    expect(finishSignIn).toHaveBeenCalledWith("i");
+    expect(finishSignIn).toHaveBeenCalledWith(success);
     expect(setState).toHaveBeenLastCalledWith("authenticated");
   });
 

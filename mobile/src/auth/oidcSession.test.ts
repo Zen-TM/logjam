@@ -319,10 +319,14 @@ describe("signInWithBrowser", () => {
     );
   });
 
-  it("stores the tokens and the endpoints a refresh and a sign-out need", async () => {
+  // Mutation: write the session before returning, and finishSignIn's push
+  // DELETE for a departing user runs under the arriving user's tokens.
+  it("stores the session only when committed, with the endpoints a refresh and a sign-out need", async () => {
     prompt.mockResolvedValue({ type: "success", params: { code: "c" } });
     const result = await signInWithBrowser();
-    expect(result.type).toBe("success");
+    if (result.type !== "success") throw new Error("expected success");
+    expect(stored()).toBeNull();
+    await result.commit();
     expect(stored()).toMatchObject({
       accessToken: "a1",
       refreshToken: "r1",

@@ -30,6 +30,7 @@ import {
   confirmEmailChange,
   messageFromError,
   requestEmailChange,
+  hasCognitoAccount,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -38,7 +39,6 @@ import { apiFetch } from "../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
-import { hasCognitoAccount } from "../authMode";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
 import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";

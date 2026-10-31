@@ -59,6 +59,9 @@ export function scrubMessage(message: string): string {
 // Keys whose values could carry place coordinates or names. Mirrors the
 // intent of logger.ts redactPaths; matched case-insensitively at any depth.
 const SENSITIVE_KEYS = new Set([
+  // The token revoke call sends an opaque `token` (a Cognito refresh token has
+  // no `eyJ` prefix for the JWT pattern to catch).
+  "token",
   "latitude",
   "longitude",
   "lat",
