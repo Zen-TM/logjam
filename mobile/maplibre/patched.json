@@ -2,8 +2,8 @@
   "upstream": "13.7.1",
   "version": "13.7.1-logjam-terrain.2",
   "sha256": {
-    "patch": "64c5eaa417ccc2cdd5ea8bf8be92b25025b7e7c3aba42dd5ffa10701b91ecb90",
-    "aar": "16038f0f0712dc1ee0aff43c9cf6d35a6c453314391aa5a433c086dfca9c47a4",
-    "pom": "a0665794b30ca14307842629b9bc5ac70e28e5b08ef1f1dbb863251c7e3d4b7d"
+    "patch": "21bbedbff695a571bbd12a4ab14e2b172be613fe6f6faece30e8c073af5b1023",
+    "aar": "a25f7c26abe5b32e2114a3f3e1993a9c0d1050390e1da90b0bb7ae588f9270a1",
+    "pom": "519569f2839714b1e68fa282d2727d6229fe2558546a402d66822ff1e692df58"
   }
 }
