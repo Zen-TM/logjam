@@ -35,7 +35,7 @@ export const MAP_INK = {
   casing: "#4E4944",
   /** The ring round a point mark, which separates it from any basemap. */
   ring: "#FFFFFF",
-  /** A river gauge's dot: one colour for every gauge, never scaled by reading. */
+  /** A river gauge's drop: one colour for every gauge, never scaled by reading. */
   gauge: "#3B82C4",
   /** The light halo behind a LiDAR topo's own label colour. */
   labelHalo: "rgba(255,255,255,0.8)",

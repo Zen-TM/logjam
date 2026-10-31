@@ -85,8 +85,10 @@ renumber.
   comes from the few steps and from weight and colour, not from a size of its
   own.
 - **A title does not repeat a count the screen already shows.**
-- **A pair is drawn on one line** (ascent and descent, highest and lowest);
-  a figure with no partner takes the whole line. Pairs: `statPairs.ts`.
+- **A pair is drawn on one line** (ascent and descent, highest and lowest,
+  level and flow); among more figures, the ones that match up still share a
+  line, and a figure with no partner takes the whole line. Pairs:
+  `statPairs.ts`.
 
 ## 3. Getting around and getting out
 

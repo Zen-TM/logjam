@@ -50,6 +50,9 @@ import {
   nearestSegment,
   snapSegment,
   ARROW_FEATURE_KIND,
+  GAUGE_ICON_IMAGE,
+  GAUGE_ICON_SDF_URI,
+  GAUGE_ICON_SIZE,
   ROUTE_ARROW_ICON_SIZE,
   ROUTE_ARROW_IMAGE,
   ROUTE_ARROW_MIN_ZOOM,
@@ -580,7 +583,7 @@ function Map({
   /** Every line: routes, imported and recorded files, and the tracks on places
    *  friends shared. */
   showWays: boolean;
-  /** The river gauge dots, an optional layer (off until asked for). */
+  /** The river gauge drops, an optional layer (off until asked for). */
   showGauges: boolean;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
@@ -793,7 +796,7 @@ function Map({
     askedClosedAt.current = Date.now();
     setAsked(null);
   }, []);
-  // The river gauge pressed, if any; the dots come from the public file.
+  // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
   if (!showGauges && gaugeId) setGaugeId(null);
@@ -1445,21 +1448,25 @@ function Map({
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
       });
-      // One colour for every gauge: a dot says where a gauge is, never what it
-      // read. A gauge with no recent reading is only fainter.
+      // One colour for every gauge: a drop says where a gauge is, never what
+      // it read. A gauge with no recent reading is only fainter.
       map.addLayer(
         {
           id: GAUGE_LAYER,
-          type: "circle",
+          type: "symbol",
           source: "gauges",
-          layout: { visibility: "none" },
+          layout: {
+            visibility: "none",
+            "icon-image": GAUGE_ICON_IMAGE,
+            "icon-size": GAUGE_ICON_SIZE,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
           paint: {
-            "circle-radius": 6,
-            "circle-color": MAP_INK.gauge,
-            "circle-opacity": ["case", ["get", "recent"], 1, 0.35],
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": INK,
-            "circle-stroke-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "icon-color": MAP_INK.gauge,
+            "icon-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "icon-halo-color": MAP_INK.ring,
+            "icon-halo-width": 1.5,
           },
         },
         GAUGE_BELOW,
@@ -1934,7 +1941,7 @@ function Map({
     }
   }, [showPlaces, showWays, drawingRoute, measuring, mapLoaded]);
 
-  // The river gauge dots, drawn from the file while the layer is on.
+  // The river gauge drops, drawn from the file while the layer is on.
   useEffect(() => {
     const map = mapRef.current;
     if (!mapLoaded || !map) return;
@@ -2431,7 +2438,13 @@ function Map({
       // The route arrowhead. Registered as an SDF, which is what lets ONE image
       // take each route's own colour through `icon-color` — a plain bitmap
       // ignores the tint and every route would share one arrow colour.
-      if (id === ROUTE_ARROW_IMAGE) {
+      const sdfUri =
+        id === ROUTE_ARROW_IMAGE
+          ? ROUTE_ARROW_SDF_URI
+          : id === GAUGE_ICON_IMAGE
+            ? GAUGE_ICON_SDF_URI
+            : null;
+      if (sdfUri) {
         if (map.hasImage(id)) return;
         const arrow = new Image();
         arrow.onload = () => {
@@ -2460,7 +2473,7 @@ function Map({
             { sdf: true },
           );
         };
-        arrow.src = ROUTE_ARROW_SDF_URI;
+        arrow.src = sdfUri;
         return;
       }
     };

@@ -32,10 +32,15 @@ describe("GaugeView", () => {
   // Mutation that turns it red: leave a contract section out of the renderer
   // map in GaugeView.tsx, or draw one the contract does not name (tsc too).
   it("draws every section of the GAUGES contract, with the file's credit", () => {
-    view({ ...withFlow, readings: [[now / 1000 - 3600, 0.95, 130]] });
+    view({
+      ...withFlow,
+      readings: [
+        [now / 1000 - 7200, 0.9, 120],
+        [now / 1000 - 3600, 0.95, 130],
+      ],
+    });
     expect(contractSectionKeys(GAUGES, "web")).toEqual([
-      "level",
-      "flow",
+      "reading",
       "age",
       "graph",
       "credit",
@@ -47,6 +52,12 @@ describe("GaugeView", () => {
     expect(screen.getByText(/Latest reading 1 h ago/)).toBeTruthy();
     expect(screen.getByText(GAUGES.copy.graph)).toBeTruthy();
     expect(screen.getByText(file.attribution)).toBeTruthy();
+  });
+
+  // Mutation: return the chart from `gaugeWeekChart` at one reading.
+  it("has no chart heading until there is a line to draw", () => {
+    view({ ...withFlow, readings: [[now / 1000 - 3600, 0.95, 130]] });
+    expect(screen.queryByText(GAUGES.copy.graph)).toBeNull();
   });
 
   // Mutation: draw the flow row whatever `hasFlow` says.

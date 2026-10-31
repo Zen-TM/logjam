@@ -4,7 +4,9 @@
 //
 // Online only, and Logjam Web only for now: the file is public and the same
 // for everyone (ADR 0044), so there is nothing to keep per user.
-import type { Gauge } from "../gauges.js";
+import { gaugeSeries, type Gauge } from "../gauges.js";
+import type { ProfileSeries } from "../profileSeries.js";
+import { PAIRED_STAT_LABELS, pairedStatLayout } from "../statPairs.js";
 import type { ScreenContract } from "./types.js";
 
 export const GAUGES = {
@@ -12,8 +14,7 @@ export const GAUGES = {
   question: "What did the river gauge last read?",
   title: "River gauge",
   sections: [
-    { key: "level" },
-    { key: "flow" },
+    { key: "reading" },
     { key: "age" },
     { key: "graph" },
     { key: "credit" },
@@ -21,8 +22,8 @@ export const GAUGES = {
   copy: {
     overlay: "River gauges",
     overlayHint: "Water level and flow, as each gauge last read.",
-    level: "Level",
-    flow: "Flow",
+    level: PAIRED_STAT_LABELS.level,
+    flow: PAIRED_STAT_LABELS.flow,
     age: "Latest reading",
     graph: "Last 7 days",
     noLevel: "No level reading",
@@ -139,6 +140,43 @@ export function gaugeAges(latest: GaugeLatest, now: number): GaugeAges {
     level: gaugeAgo(levelAt, now),
     flow: gaugeAgo(flowAt, now),
   };
+}
+
+/** A gauge's figures: its level beside its flow (`STAT_PAIRS`), or the level
+ *  alone on a gauge with no flow, each saying its own age when the two differ. */
+export function gaugeStats(gauge: Gauge, latest: GaugeLatest, now: number) {
+  const ages = gaugeAges(latest, now);
+  const level = {
+    label: GAUGES.copy.level,
+    value:
+      latest.level === null
+        ? GAUGES.copy.noLevel
+        : formatGaugeLevel(latest.level),
+    age: ages.level,
+  };
+  const flow = {
+    label: GAUGES.copy.flow,
+    value: latest.flow === null ? "-" : formatGaugeFlow(latest.flow),
+    age: ages.flow,
+  };
+  return pairedStatLayout(gauge.hasFlow ? [level, flow] : [level]).map(
+    ({ age, ...stat }) =>
+      age ? { ...stat, label: `${stat.label}, ${age}` } : stat,
+  );
+}
+
+/** What the week's chart draws: the value the stat leads with, since a level
+ *  chart over "No level reading" would disagree with itself. Null under two
+ *  readings: one point draws no line, so the heading goes too. */
+export function gaugeWeekChart(
+  gauge: Gauge,
+  latest: GaugeLatest | null,
+): { charted: "level" | "flow"; series: ProfileSeries } | null {
+  if (!latest) return null;
+  const charted = latest.level !== null ? "level" : "flow";
+  const series = gaugeSeries(gauge.readings, charted);
+  const readings = series.points.filter((p) => p.value !== null).length;
+  return readings < 2 ? null : { charted, series };
 }
 
 export function formatGaugeLevel(metres: number): string {
