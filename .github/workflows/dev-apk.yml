@@ -1,0 +1,66 @@
+name: Dev APK
+
+# The debug build of Logjam GPS under the dev application id, built from the
+# dispatched branch for a phone or emulator running a local stack:
+#
+#   gh workflow run dev-apk.yml --ref <branch>
+#
+# Run it after a native change: JS reaches an installed dev build through Metro.
+# The build embeds no secrets, since a dev build goes without Firebase and its
+# JS and .env values stay with Metro; the artifact is public like the repo.
+on:
+  workflow_dispatch:
+    inputs:
+      legacy_root:
+        description: Trust the root Android before 13 lacks, which SIX Maps chains to
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      LOGJAM_APP_VARIANT: dev
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+      - name: Prebuild
+        working-directory: mobile
+        run: npx expo prebuild --platform android --no-install
+      - name: Trust the legacy root
+        if: inputs.legacy_root
+        working-directory: mobile
+        run: |
+          res=android/app/src/main/res
+          mkdir -p "$res/xml" "$res/raw"
+          cp certs/network_security_config.xml "$res/xml/"
+          cp certs/digicert_tls_rsa4096_root_g5.pem "$res/raw/"
+          sed -i 's|<application |<application android:networkSecurityConfig="@xml/network_security_config" |' android/app/src/main/AndroidManifest.xml
+      # Phones and the x86_64 emulator: the other two ABIs add build time and no device.
+      - name: Build
+        working-directory: mobile/android
+        run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=arm64-v8a,x86_64
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: logjam-dev-apk
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
