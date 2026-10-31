@@ -4607,6 +4607,10 @@ export function MapScreen({
               beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
               minzoom={r.layerMinZoom ?? 0}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              // Lit from the map, not the default viewport: MapLibre Native
+              // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
+              // the shading would depend on the bearing the layer mounted at.
+              paint={{ "hillshade-illumination-anchor": "map" }}
             />
           </ResolvedSource>
         ))}
