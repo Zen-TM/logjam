@@ -36,7 +36,8 @@ env:
     visible: "Places"
     timeout: 30000
 - tapOn: "Map"
-- assertVisible: "Locate me"
+- assertVisible: "Choose layers"
+- assertVisible: "Search for a place"
 - takeScreenshot: 1-map
 - tapOn: "Places"
 - tapOn: "Add a place"
