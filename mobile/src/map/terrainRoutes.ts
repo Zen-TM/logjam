@@ -17,7 +17,7 @@ import {
   TERRAIN_ROUTED_FROM,
   lonLatToTile,
   terrainTileArchive,
-  type SharpenedArea,
+  type RoutedTerrain,
   type TerrainArchiveLayer,
 } from "@logjam/shared";
 
@@ -40,7 +40,7 @@ export type TileRect = readonly [
   y1: number,
 ];
 
-export type TerrainRoute<A extends SharpenedArea> = {
+export type TerrainRoute<A extends RoutedTerrain> = {
   archive: "statewide" | A;
   tiles: TileRect;
 };
@@ -51,7 +51,7 @@ export type TerrainRoute<A extends SharpenedArea> = {
  * its archive is the one `terrainTileArchive` picks for the tile and for
  * every descendant it has.
  */
-export function terrainRoutes<A extends SharpenedArea>(
+export function terrainRoutes<A extends RoutedTerrain>(
   areas: readonly A[],
   layer: TerrainArchiveLayer,
 ): TerrainRoute<A>[] {

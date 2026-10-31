@@ -12,7 +12,8 @@ Expo with a dev client and EAS Build, not Expo Go: it has native modules.
   Point a dev client at `127.0.0.1:8081`, never `10.0.2.2` (emulator too).
 - **Never hand-edit `/android` or `/ios`:** add native capability with a config
   plugin and `npx expo install`. After a native change,
-  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`.
+  `npx expo prebuild -p android` then `./gradlew :app:assembleDebug` in `android/`,
+  or `gh workflow run dev-apk.yml --ref <branch>` for the dev variant's APK.
   A release APK for a device is only `./scripts/build-local-apk.sh`, prod-pointed
   ones too: it bakes in `.env` unless the shell overrides it (header has the
   recipe).
