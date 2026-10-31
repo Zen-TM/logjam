@@ -144,8 +144,9 @@ its own email: it hands each verification code, encrypted with a KMS key, to
 a custom email sender Lambda (`infra/lambda/cognito-email-sender`), which
 sends it through Resend (`envs/prod/lambda_cognito_email.tf`).
 
-**Email and push.** Job emails go through Resend (`api/src/services/email.ts`,
-`topo/email_send.py`); pushes go through Expo's push service
+**Email and push.** Job emails go over SMTP (`api/src/services/email.ts`,
+`topo/email_send.py`), to Resend's relay in prod and to Mailpit in local dev, so
+the provider is config; pushes go through Expo's push service
 (`api/src/services/push.ts`, `topo/push_send.py`). Both are best-effort. The
 in-app notification row is the record.
 

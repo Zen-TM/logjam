@@ -143,8 +143,9 @@ COPY icons/ /app/icons/
 # Required env (export job):   EXPORT_JOB_ID, S3_BUCKET_TOPO, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD
 # (DB_PORT optional, default 5432; DB_USER/DB_PASSWORD are ECS-secrets-injected
 #  from the RDS-managed Secrets Manager secret)
-# Optional: RESEND_API_KEY, EMAIL_FROM, FRONTEND_URL, AWS_REGION (email is a
-#  no-op if RESEND_API_KEY/EMAIL_FROM unset — see email_send.py)
+# Optional: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_FROM,
+#  FRONTEND_URL, AWS_REGION (email is a no-op if any SMTP setting is unset —
+#  see email_send.py)
 #
 # The export worker reuses the Python tile compositor instead of headless
 # MapLibre Native, avoiding the Mesa + node20 + libmaplibre-gl-native stack
