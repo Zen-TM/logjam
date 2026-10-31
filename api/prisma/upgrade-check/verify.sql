@@ -5,30 +5,29 @@
 
 \set ON_ERROR_STOP on
 
--- Every user baseline.sql saw has subject = its cognito_id (the NULL and stale
--- fixture rows included), cognito_id is untouched, and subject can no longer be
--- NULL. Mutation: drop the UPDATE and the NULL fixture row blocks SET NOT NULL;
--- filter it to NULL subjects and the stale row keeps the old one; drop the
--- SET NOT NULL and the nullability check fails.
-SELECT to_regclass('upgrade_check.users') IS NOT NULL AS subject_applies \gset
-\if :subject_applies
+-- No user changed (subject and cognito_id as baseline.sql saw them), and
+-- cognito_id now accepts NULL. Mutation: drop the DROP NOT NULL and the
+-- nullability check fails; make the migration touch either value and the
+-- comparison fails.
+SELECT to_regclass('upgrade_check.users') IS NOT NULL AS nullable_applies \gset
+\if :nullable_applies
 DO $$
 DECLARE bad BIGINT;
 BEGIN
   SELECT count(*) INTO bad
     FROM upgrade_check.users b LEFT JOIN users u ON u.id = b.id
    WHERE u.id IS NULL
-      OR u.subject IS DISTINCT FROM b.cognito_id
+      OR u.subject IS DISTINCT FROM b.subject
       OR u.cognito_id IS DISTINCT FROM b.cognito_id;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % user(s) without subject = their cognito_id', bad;
+    RAISE EXCEPTION 'upgrade-check: % user(s) changed', bad;
   END IF;
 
-  IF EXISTS (
+  IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-     WHERE table_name = 'users' AND column_name = 'subject' AND is_nullable = 'YES'
+     WHERE table_name = 'users' AND column_name = 'cognito_id' AND is_nullable = 'YES'
   ) THEN
-    RAISE EXCEPTION 'upgrade-check: users.subject is still nullable';
+    RAISE EXCEPTION 'upgrade-check: users.cognito_id is still NOT NULL';
   END IF;
 END $$;
 DROP SCHEMA upgrade_check CASCADE;
