@@ -1609,6 +1609,7 @@ function App() {
             // ownership on the way to the map any more.
             showWays={showWays}
             showGauges={showGauges}
+            onShowGauges={() => setShowGauges(true)}
             placeTracks={placeTracks}
             standaloneTracks={standaloneTracks}
             routes={routes}

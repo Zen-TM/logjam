@@ -4956,6 +4956,13 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSelectSaved={(item) => {
+            if (item.gaugeId) {
+              setShowGauges(true);
+              setTappedPoint(null);
+              setOptionsPlaceId(null);
+              setGaugeNow(Date.now());
+              setGaugeId(item.gaugeId);
+            }
             item
               .resolveBbox()
               .then((bbox) => {

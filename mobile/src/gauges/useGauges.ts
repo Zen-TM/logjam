@@ -7,9 +7,9 @@ import { GAUGE_REFRESH_MS, refreshGauges } from "./gaugeFeed";
 import { readCachedGauges } from "./gaugeStorage";
 
 /**
- * The gauge file: the phone's kept copy at once, a fresh one when the layer is
- * switched on, when the app returns to the front and when signal returns.
- * Nothing runs while the layer is off.
+ * The gauge file: the phone's kept copy at once, a fresh one when something
+ * asks for it, when the app returns to the front and when signal returns.
+ * Nothing runs while `enabled` is false.
  */
 export function useGauges(enabled: boolean): {
   file: GaugeLatestFile | null;
