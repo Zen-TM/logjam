@@ -1,0 +1,256 @@
+name: Mobile emulator
+
+# Launches Logjam GPS on an Android emulator over a live local stack and adds a
+# place, then checks the place reached Postgres. ci.yml's `mobile` job stops at
+# the Metro bundle, so on its own a crash at startup or a broken config plugin
+# passes every check.
+#
+# Starts on every pull request and skips inside (the `changes` job), because a
+# required check must report on every PR: infra/scripts/check-required-checks.py.
+# Not required yet; #723 promotes it, by adding "emulator" to required_checks in
+# infra/terraform/envs/github/rulesets.tf.
+#
+# The flow is mobile/maestro/smoke.yaml and the driving logic is
+# mobile/scripts/emulator-smoke.sh. The emulator renders on a software GPU, so
+# the flow asserts the UI around the map and never the map's pixels.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "37 16 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-emulator-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      mobile: ${{ steps.scope.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Does this change need the emulator?
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            infra/scripts/ci-scope.sh scope "$BASE_SHA" "$HEAD_SHA"
+          else
+            infra/scripts/ci-scope.sh all
+          fi
+
+  emulator:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.mobile != 'false' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      # The same two services as ci.yml's api-integration job, which holds the
+      # reasons for their shape.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: logjam
+          POSTGRES_PASSWORD: logjam
+          POSTGRES_DB: logjam
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U logjam"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      ministack:
+        image: ministackorg/ministack
+        env:
+          SERVICES: s3
+          DEFAULT_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        ports:
+          - 4566:4566
+    env:
+      # What the API process needs under AUTH_MODE=fake (see api-integration's
+      # block): the seeded alice, Postgres, and MiniStack for S3.
+      NODE_ENV: development
+      AUTH_MODE: fake
+      FAKE_USER_SUB: fake-alice-sub
+      PORT: 8080
+      API_URL: http://localhost:8080
+      MIN_MOBILE_VERSION: "0.1.0"
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: logjam
+      DB_USER: logjam
+      DB_PASSWORD: logjam
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_REGION: ap-southeast-2
+      AWS_DEFAULT_REGION: ap-southeast-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      S3_BUCKET_MEDIA: logjam-media-local
+      S3_BUCKET_TOPO: logjam-topo-local
+      # A stub that answers OK (started below): nothing here reaches Expo.
+      EXPO_PUSH_URL: http://localhost:9099
+      APK: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+      # Maestro, pinned to a release and the checksum of its zip.
+      MAESTRO_VERSION: 2.11.0
+      MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: mkdir -p "$RUNNER_TEMP/logs" "$RUNNER_TEMP/shots"
+
+      # A hit skips Gradle: the key is the native inputs (the action says which).
+      - id: apk
+        uses: ./.github/actions/build-dev-apk
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            api/package-lock.json
+            mobile/package-lock.json
+      - name: Build shared
+        working-directory: shared
+        run: npm ci && npm run build
+      - name: Install the API
+        working-directory: api
+        run: npm ci && npx prisma generate
+      # A cache hit skipped the APK's install, and Metro needs it.
+      - name: Install the app
+        working-directory: mobile
+        run: test -d node_modules/.bin || npm ci
+
+      - name: Migrate
+        working-directory: api
+        run: npx prisma migrate deploy
+      - name: Wait for MiniStack and create buckets
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4566/_localstack/health | grep -q '"s3": "available"'; then
+              echo "ministack ready"; break
+            fi
+            if [ "$i" = 60 ]; then echo "ministack never became ready"; exit 1; fi
+            sleep 2
+          done
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_MEDIA"
+          aws --endpoint-url=http://localhost:4566 s3 mb "s3://$S3_BUCKET_TOPO"
+      - name: Seed
+        working-directory: api
+        run: npx prisma db seed
+      - name: Build the API
+        working-directory: api
+        run: npm run build
+      - name: Start the API and the Expo push stub
+        working-directory: api
+        run: |
+          node ../infra/scripts/expo-push-stub.mjs &
+          node dist/index.js > "$RUNNER_TEMP/logs/api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/api.pid"
+      - name: Wait for the API
+        run: |
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$(cat "$RUNNER_TEMP/api.pid")" 2>/dev/null; then
+              echo "API process exited during startup:"; cat "$RUNNER_TEMP/logs/api.log"; exit 1
+            fi
+            curl -sf http://localhost:8080/health > /dev/null && exit 0
+            sleep 1
+          done
+          echo "API never answered on :8080:"; cat "$RUNNER_TEMP/logs/api.log"; exit 1
+
+      # The dev variant, as the dev client the APK is asks for it. Fake auth
+      # refuses a non-loopback API URL (src/authMode.ts).
+      - name: Start Metro
+        working-directory: mobile
+        env:
+          CI: "1"
+          EXPO_NO_TELEMETRY: "1"
+          LOGJAM_APP_VARIANT: dev
+          EXPO_PUBLIC_AUTH_MODE: fake
+          EXPO_PUBLIC_API_URL: http://127.0.0.1:8080
+          EXPO_PUBLIC_WEB_URL: http://localhost:5173
+        run: |
+          npx expo start --dev-client --port 8081 > "$RUNNER_TEMP/logs/metro.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            curl -sf http://127.0.0.1:8081/status | grep -q running && exit 0
+            sleep 2
+          done
+          echo "Metro never came up:"; cat "$RUNNER_TEMP/logs/metro.log"; exit 1
+
+      - name: Install Maestro
+        run: |
+          curl -sSLfo "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+
+      # The hosted runner has KVM; its device node is not open to this user.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - id: avd-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api35-google_apis-x86_64-v1
+      - name: Create the AVD and its snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "AVD created for the cache"
+      - name: Smoke test
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash mobile/scripts/emulator-smoke.sh ${{ env.APK }} ${{ runner.temp }}/shots ${{ runner.temp }}/logs
+
+      # Seed data and made-up values only, like the rest of this repo.
+      - name: Upload screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: emulator-screenshots
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload logs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: emulator-logs
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+          retention-days: 7

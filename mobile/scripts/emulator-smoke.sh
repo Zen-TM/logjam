@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# The body of the emulator smoke check (.github/workflows/mobile-emulator.yml),
+# run once an emulator is booted, the API is up on :8080 and Metro on :8081:
+# install the dev APK, point it at this host, drive maestro/smoke.yaml, then ask
+# Postgres whether the place it added reached the server.
+#
+#   scripts/emulator-smoke.sh <apk> <screenshot-dir> <log-dir>
+#
+# Needs adb, maestro and psql on PATH, and DB_* in the environment (the API's).
+# It only reads what the workflow's own throwaway stack holds.
+#
+# Mutation that turns the check red: a throw at the top of mobile/index.ts
+# fails the flow (the app never shows "Places"). The sync half is guarded by
+# the place's name: the flow adds one, and this script fails if no such row
+# reaches the places table.
+set -euo pipefail
+
+APK=${1:?apk}
+OUT=${2:?screenshot dir}
+LOGS=${3:?log dir}
+PKG=com.logjamnsw.mobile.dev
+cd "$(dirname "$0")/.."
+mkdir -p "$OUT" "$LOGS"
+# Whatever the outcome, so a failure arrives with the device's own account of it.
+trap 'adb logcat -d > "$LOGS/logcat.txt" 2>&1 || true' EXIT
+
+# Run id in the name, so a rerun on a reused database cannot pass on last run's row.
+PLACE_NAME="Smoke Test Gully ${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+
+adb install -r -t "$APK" > /dev/null
+# Right after boot the package manager cannot always resolve a package yet.
+for _ in $(seq 1 20); do adb shell pm path "$PKG" | grep -q package && break; sleep 3; done
+adb shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION
+
+# 127.0.0.1 in the app means the emulator, so every port it dials is reversed.
+# Before the deep link, or the dev client times out.
+adb reverse --remove-all
+for port in 8081 8080 4566; do adb reverse "tcp:$port" "tcp:$port" > /dev/null; done
+
+# The first bundle takes minutes on a cold Metro; the dev client gives up on
+# less. Ask for the exact URL the manifest names, or a different bundle is
+# built and nothing is warmed.
+bundle=$(curl -sf -H 'expo-platform: android' http://127.0.0.1:8081/ | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).launchAsset.url')
+curl -sf -m 900 -o /dev/null "$bundle"
+
+status=0
+maestro test maestro/smoke.yaml -e "PLACE_NAME=$PLACE_NAME" --test-output-dir "$OUT/maestro" || status=$?
+adb exec-out screencap -p > "$OUT/final.png" || true
+[ "$status" = 0 ] || exit "$status"
+
+# The place is on the phone the moment the form closes; this is the push.
+for _ in $(seq 1 30); do
+  found=$(PGPASSWORD=$DB_PASSWORD psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -Atc \
+    "SELECT count(*) FROM places WHERE name = '$PLACE_NAME'")
+  [ "$found" = 1 ] && { echo "synced: '$PLACE_NAME' is in the places table"; exit 0; }
+  sleep 3
+done
+echo "::error::'$PLACE_NAME' never reached the server's places table" >&2
+exit 1

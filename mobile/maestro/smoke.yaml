@@ -1,0 +1,46 @@
+# The emulator smoke check (.github/workflows/mobile-emulator.yml, driven by
+# scripts/emulator-smoke.sh): start Logjam GPS under fake auth, reach the map,
+# add a place. The script then asks Postgres whether that place synced.
+#
+# Selects by the visible text and accessibility labels the app already has, so
+# a reword of one of them breaks this flow on purpose: the flow reads the UI.
+# It asserts nothing about the map's pixels, only the chrome around it: the
+# emulator renders on a software GPU.
+appId: com.logjamnsw.mobile.dev
+env:
+  PLACE_NAME: Smoke Test Gully
+---
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+# The dev client's one-off intro sheet, and the crash-report question, only
+# appear on a fresh install.
+- extendedWaitUntil:
+    visible: "Places"
+    timeout: 240000
+- runFlow:
+    when:
+      visible: "Not now"
+    commands:
+      - tapOn: "Not now"
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- tapOn: "Map"
+- assertVisible: "Locate me"
+- takeScreenshot: 1-map
+- tapOn: "Places"
+- tapOn: "Add a place"
+- tapOn: "Name"
+- inputText: ${PLACE_NAME}
+- tapOn: "Latitude"
+- inputText: "-33.5"
+- tapOn: "Longitude"
+- inputText: "150.25"
+- hideKeyboard
+- takeScreenshot: 2-form
+- tapOn: "Add place"
+- extendedWaitUntil:
+    visible: ${PLACE_NAME}
+    timeout: 20000
+- takeScreenshot: 3-saved
