@@ -30,18 +30,26 @@ appId: com.logjamnsw.mobile.dev
 - takeScreenshot: 1-map
 - tapOn: "Places"
 - tapOn: "Add a place"
+# Each field's label and its input both read "Name", "Latitude"...: index 1 is
+# the input, as in e2e/signin.yaml.
 # The emulator's screen is small, and the keyboard covers the rest of the form.
-- tapOn: "Name"
+- tapOn:
+    text: "Name"
+    index: 1
 - inputText: ${PLACE_NAME}
 - hideKeyboard
 - scrollUntilVisible:
     element: "Latitude"
-- tapOn: "Latitude"
+- tapOn:
+    text: "Latitude"
+    index: 1
 - inputText: "-33.5"
 - hideKeyboard
 - scrollUntilVisible:
     element: "Longitude"
-- tapOn: "Longitude"
+- tapOn:
+    text: "Longitude"
+    index: 1
 - inputText: "150.25"
 - hideKeyboard
 - takeScreenshot: 2-form
