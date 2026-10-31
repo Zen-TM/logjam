@@ -101,6 +101,8 @@ export const SYNC_TABLES: readonly TableSchema[] = [
       alt_names_json: "TEXT",
       place_type_id: "TEXT NOT NULL DEFAULT ''",
       notes: "TEXT",
+      // The river gauge the owner picked; a sharee sees it too.
+      gauge_id: "TEXT",
       // Elevation for the place. The icon belongs to the place type.
       elevation: "REAL",
       // JSON column keyed by custom field definition key: campsite and

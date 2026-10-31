@@ -668,7 +668,11 @@ export function BottomSheet({
                     <SheetErrorReveal.Provider value={revealError}>
                       {/* The frame an error measures itself against. Not
                       collapsable, or Android flattens it away. */}
-                      <View ref={contentRef} collapsable={false}>
+                      <View
+                        ref={contentRef}
+                        collapsable={false}
+                        style={styles.content}
+                      >
                         {children}
                       </View>
                     </SheetErrorReveal.Provider>
@@ -727,6 +731,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     color: theme.text,
   },
   scrollContent: { paddingBottom: spacing(2) },
+  // What a sheet stacks gets the rows' gap without a wrapper of its own
+  // (shared/DESIGN.md §10). Guard: kit.test.ts.
+  content: { gap: spacing(1) },
   // Hairline above the pinned action, so it reads as attached to the sheet
   // rather than floating over the last row.
   footer: {

@@ -24,6 +24,12 @@ export function isValidLongitude(value: unknown): value is number {
   );
 }
 
+/** A place's gauge link: a station number or similar. Not checked against the
+ *  registry, which changes; this only bounds what is stored. */
+export function isValidGaugeId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9]{1,20}$/.test(value);
+}
+
 export type NumericConstraint = {
   /** Inclusive lower bound, or null for none. */
   min: number | null;

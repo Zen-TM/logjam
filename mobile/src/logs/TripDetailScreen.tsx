@@ -14,6 +14,7 @@ import { ScrollView, Text, View } from "react-native";
 import {
   attributeRows,
   contractSectionKeys,
+  distinctGaugeIds,
   distinctTripTypes,
   formatTripDate,
   mediaCategory,
@@ -24,6 +25,7 @@ import {
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
+import { TripGaugeReading } from "../gauges/TripGaugeReading";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
@@ -146,6 +148,19 @@ export function TripDetailScreen({
           ))
         )}
       </>
+    ),
+
+    gauge: () => (
+      <TripGaugeReading
+        title={copy.gauge}
+        gaugeIds={distinctGaugeIds(
+          current.places.map(
+            (p) => placesQuery.data?.find((x) => x.id === p.id)?.gaugeId,
+          ),
+        )}
+        dates={[current.date]}
+        when="trip"
+      />
     ),
 
     photos: () => (

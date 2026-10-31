@@ -13,6 +13,7 @@ function registrars() {
     sync: arm("sync"),
     topoAutoDownload: arm("topoAutoDownload"),
     placeRegistryRefresh: arm("placeRegistryRefresh"),
+    gaugeHistoryRefresh: arm("gaugeHistoryRefresh"),
   };
   return { fns, calls, cleanup };
 }
@@ -32,11 +33,15 @@ describe("registerShellTriggers", () => {
   it("arms sync and the auto-download only once linked", () => {
     const guest = registrars();
     registerShellTriggers("guest", guest.fns);
-    expect(guest.calls).toEqual(["placeRegistryRefresh"]);
+    expect(guest.calls).toEqual([
+      "placeRegistryRefresh",
+      "gaugeHistoryRefresh",
+    ]);
 
     const linked = registrars();
     registerShellTriggers("linked", linked.fns);
     expect([...linked.calls].sort()).toEqual([
+      "gaugeHistoryRefresh",
       "placeRegistryRefresh",
       "sync",
       "topoAutoDownload",
@@ -46,6 +51,6 @@ describe("registerShellTriggers", () => {
   it("tears down everything it armed", () => {
     const { fns, cleanup } = registrars();
     registerShellTriggers("linked", fns)();
-    expect(cleanup).toHaveBeenCalledTimes(3);
+    expect(cleanup).toHaveBeenCalledTimes(4);
   });
 });

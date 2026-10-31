@@ -141,6 +141,7 @@ describe("logger redaction", () => {
                 longitude: 150.3,
                 altNames: ["X"],
                 notes: "beta",
+                gaugeId: "210001",
               },
             },
           ],
@@ -155,6 +156,7 @@ describe("logger redaction", () => {
     expect(row.longitude).toBe("[redacted]");
     expect(row.altNames).toBe("[redacted]");
     expect(row.notes).toBe("[redacted]");
+    expect(row.gaugeId).toBe("[redacted]");
   });
 
   // PLACE FIELD VALUES. A user-authored field label names the thing it

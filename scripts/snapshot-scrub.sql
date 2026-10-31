@@ -36,6 +36,7 @@ UPDATE places
 SET name = 'place-' || substring(id::text, 1, 8),
     "altNames" = '{}',
     notes = NULL,
+    gauge_id = NULL,
     field_values = '{}',
     foreign_fields = NULL;
 
