@@ -10,10 +10,8 @@ import {
 } from "./elevationCache";
 import { useElevationProfile, type ProfiledLine } from "./placeUtils";
 
-vi.mock("aws-amplify/auth", () => ({
-  fetchAuthSession: vi.fn().mockResolvedValue({
-    tokens: { idToken: { toString: () => "test-token" } },
-  }),
+vi.mock("./auth/oidc", () => ({
+  loadSession: vi.fn().mockResolvedValue({ id_token: "test-token" }),
 }));
 
 const response = (body: unknown) => ({

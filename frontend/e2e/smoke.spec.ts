@@ -4,7 +4,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 const isLocal = baseURL.startsWith("http://localhost");
 
 // Local dev runs with VITE_AUTH_MODE=fake (auto-authenticated as alice), so the
-// app boots straight into the map. Prod uses real Cognito, so an unauthenticated
+// app boots straight into the map. Prod uses real sign-in, so an unauthenticated
 // visit lands on the sign-in screen. Keep prod smoke auth-free — no committed
 // credentials, no private user data touched (privacy rule).
 test("app loads", async ({ page }) => {
@@ -22,9 +22,9 @@ test("app loads", async ({ page }) => {
       timeout: 15_000,
     });
   } else {
-    // Prod → sign-in form should render for an unauthenticated visitor.
+    // Prod → sign-in screen should render for an unauthenticated visitor.
     await expect(
-      page.getByRole("button", { name: "Sign in", exact: true }),
+      page.getByRole("button", { name: "Sign in or create an account" }),
     ).toBeVisible({ timeout: 15_000 });
   }
 

@@ -59,7 +59,7 @@ export default defineConfig({
           command: "npm run dev -- --port 5199 --strictPort",
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
-          env: { VITE_AUTH_MODE: "cognito" },
+          env: { VITE_AUTH_MODE: "oidc" },
           timeout: 60_000,
         },
       ]

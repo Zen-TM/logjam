@@ -1,12 +1,11 @@
 import { test, expect } from "@playwright/test";
 
-// Real-Cognito auth-lifecycle coverage.
+// Real-provider auth-lifecycle coverage.
 //
-// All other local testing uses fake auth, so token expiry/refresh, the Amplify
-// useAuth state transitions, and the consent pending-key fast path
-// (SignIn.tsx → PENDING_CONSENT_STORAGE_KEY → App.tsx → ConsentGate) only ever
-// run under jsdom mocks. This spec drives a REAL Cognito-backed deployment to
-// exercise that real-auth + consent seam.
+// All other local testing uses fake auth, so the redirect to the provider's
+// sign-in page, the code exchange on the way back and the stored session only
+// ever run under jsdom mocks. This spec drives a REAL Cognito-backed deployment
+// (Managed Login) through them.
 //
 // Gated on env so nothing runs (and no credentials are committed — privacy
 // rule) unless an operator points it at a staging pool with a pre-provisioned,
@@ -23,6 +22,8 @@ import { test, expect } from "@playwright/test";
 // NOT covered here (need external email access / long-running waits):
 //   • sign-up → email-code confirm → first login: requires a mailbox API
 //     (e.g. Mailosaur) to read the Cognito verification code.
+//   • The provider's page is not ours: its field selectors below are the
+//     Managed Login defaults and may need adjusting to the pool's branding.
 //   • full token-expiry → silent-refresh: requires either a short-lived-token
 //     staging app client or a long wait; assert on a refreshed token then.
 
@@ -42,13 +43,16 @@ test.describe("real Cognito auth lifecycle", () => {
   }) => {
     await page.goto(AUTH_URL!);
 
-    // Sign-in form (real Cognito → unauthenticated visitor sees it).
-    await page.getByLabel("Email").fill(EMAIL!);
-    await page.getByLabel("Password").fill(PASSWORD!);
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    // One button sends the browser to the provider's page.
+    await page
+      .getByRole("button", { name: "Sign in or create an account" })
+      .click();
+    await page.locator('input[name="username"]:visible').fill(EMAIL!);
+    await page.locator('input[name="password"]:visible').fill(PASSWORD!);
+    await page.keyboard.press("Enter");
 
     // App.tsx blocks behind ConsentGate when needsReconsent() — agree if shown.
-    const agree = page.getByRole("button", { name: /Agree & continue/i });
+    const agree = page.getByRole("button", { name: /Agree and continue/i });
     if (await agree.isVisible({ timeout: 10_000 }).catch(() => false)) {
       // The gate's checkbox must be ticked before the button enables.
       await page.getByRole("checkbox").first().check();
@@ -60,13 +64,12 @@ test.describe("real Cognito auth lifecycle", () => {
       timeout: 20_000,
     });
 
-    // A Cognito/Amplify token is persisted (session establishes).
-    const hasToken = await page.evaluate(() =>
-      Object.keys(window.localStorage).some((k) =>
-        /CognitoIdentityServiceProvider|amplify/i.test(k),
-      ),
+    // The session is persisted, and the code is out of the address bar.
+    const hasSession = await page.evaluate(() =>
+      Object.keys(window.localStorage).some((k) => k.startsWith("oidc.user:")),
     );
-    expect(hasToken).toBe(true);
+    expect(hasSession).toBe(true);
+    expect(page.url()).not.toMatch(/[?&]code=/);
 
     // Reload reuses the stored session — no bounce back to sign-in.
     await page.reload();
@@ -74,7 +77,7 @@ test.describe("real Cognito auth lifecycle", () => {
       timeout: 20_000,
     });
     await expect(
-      page.getByRole("button", { name: "Sign in", exact: true }),
+      page.getByRole("button", { name: "Sign in or create an account" }),
     ).toHaveCount(0);
   });
 });

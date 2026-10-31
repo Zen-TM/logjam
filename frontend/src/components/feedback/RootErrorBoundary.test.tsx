@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
 }));
 
-vi.mock("aws-amplify/auth", () => ({ signOut: mocks.signOut }));
+vi.mock("../../auth/oidc", () => ({ signOutRedirect: mocks.signOut }));
 vi.mock("../../tripDraft", () => ({ clearTripDraft: mocks.clearTripDraft }));
 vi.mock("../../geoPdf/cache", () => ({
   clearTileCache: mocks.clearTileCache,
@@ -80,7 +80,7 @@ describe("RootErrorBoundary", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("signs out through the same flow the app does, then reloads", async () => {
+  it("signs out through the same flow the app does, ending the provider's session", async () => {
     render(
       <RootErrorBoundary>
         <Thrower />
@@ -95,13 +95,16 @@ describe("RootErrorBoundary", () => {
     // Mutation: drop the clearTileCache call in handleSignOut.
     await vi.waitFor(() => expect(mocks.clearTileCache).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalled());
-    await vi.waitFor(() => expect(mocks.reload).toHaveBeenCalled());
-    // Mutation: drop the clear after signOut in handleSignOut.
-    expect(mocks.clearTileCache).toHaveBeenCalledTimes(2);
+    // Mutation: drop the clear after sign-out in handleSignOut.
+    await vi.waitFor(() =>
+      expect(mocks.clearTileCache).toHaveBeenCalledTimes(2),
+    );
+    // The redirect leaves; a reload here would race it.
+    expect(mocks.reload).not.toHaveBeenCalled();
   });
 
   it("reloads even when signing out fails, so a corrupt session is still escapable", async () => {
-    mocks.signOut.mockRejectedValueOnce(new Error("fake auth has no Amplify"));
+    mocks.signOut.mockRejectedValueOnce(new Error("provider unreachable"));
     render(
       <RootErrorBoundary>
         <Thrower />

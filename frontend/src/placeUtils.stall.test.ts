@@ -3,7 +3,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { putToPresignedUrl } from "./placeUtils";
 
-vi.mock("aws-amplify/auth", () => ({ fetchAuthSession: vi.fn() }));
+vi.mock("./auth/oidc", () => ({ loadSession: vi.fn() }));
 
 /** An XHR whose send never progresses or loads; abort fires onabort. */
 class SilentXhr {

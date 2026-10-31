@@ -122,9 +122,9 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_COGNITO_USER_POOL_ID: ${{ secrets.VITE_COGNITO_USER_POOL_ID }}
-          VITE_COGNITO_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
-          VITE_COGNITO_REGION: ${{ secrets.VITE_COGNITO_REGION }}
+          VITE_AUTH_MODE: oidc
+          VITE_OIDC_ISSUER: https://cognito-idp.${{ secrets.VITE_COGNITO_REGION }}.amazonaws.com/${{ secrets.VITE_COGNITO_USER_POOL_ID }}
+          VITE_OIDC_CLIENT_ID: ${{ secrets.VITE_COGNITO_CLIENT_ID }}
         run: npm run build
 
       # No --delete: the previous release's hashed chunks stay, so a rollback
