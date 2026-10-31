@@ -5,29 +5,27 @@
 
 \set ON_ERROR_STOP on
 
--- No user changed (subject and cognito_id as baseline.sql saw them), and
--- cognito_id now accepts NULL. Mutation: drop the DROP NOT NULL and the
--- nullability check fails; make the migration touch either value and the
--- comparison fails.
-SELECT to_regclass('upgrade_check.users') IS NOT NULL AS nullable_applies \gset
-\if :nullable_applies
+-- Every subject baseline.sql saw is unchanged, and users has neither the
+-- cognito_id column nor its index. Mutation: drop the DROP COLUMN (or the DROP
+-- INDEX) and the existence check fails; drop the wrong column and a subject
+-- goes missing.
+SELECT to_regclass('upgrade_check.users') IS NOT NULL AS drop_applies \gset
+\if :drop_applies
 DO $$
 DECLARE bad BIGINT;
 BEGIN
   SELECT count(*) INTO bad
     FROM upgrade_check.users b LEFT JOIN users u ON u.id = b.id
-   WHERE u.id IS NULL
-      OR u.subject IS DISTINCT FROM b.subject
-      OR u.cognito_id IS DISTINCT FROM b.cognito_id;
+   WHERE u.id IS NULL OR u.subject IS DISTINCT FROM b.subject;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % user(s) changed', bad;
+    RAISE EXCEPTION 'upgrade-check: % user(s) lost or changed their subject', bad;
   END IF;
 
-  IF NOT EXISTS (
+  IF EXISTS (
     SELECT 1 FROM information_schema.columns
-     WHERE table_name = 'users' AND column_name = 'cognito_id' AND is_nullable = 'YES'
-  ) THEN
-    RAISE EXCEPTION 'upgrade-check: users.cognito_id is still NOT NULL';
+     WHERE table_name = 'users' AND column_name = 'cognito_id'
+  ) OR to_regclass('users_cognito_id_key') IS NOT NULL THEN
+    RAISE EXCEPTION 'upgrade-check: users.cognito_id or its index is still there';
   END IF;
 END $$;
 DROP SCHEMA upgrade_check CASCADE;
