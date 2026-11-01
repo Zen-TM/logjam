@@ -131,6 +131,25 @@ test.describe("the in-browser GeoPDF renderer", () => {
     });
   }
 
+  // On the map Land goes in below the base's water (TERRAIN_BASEMAP_ANCHORS).
+  // Mutation: in render.ts, draw the base's next band before `drawLandOnce` for
+  // the slope case, or move `drawLandOnce` after step 3 for the plain one.
+  for (const overlays of [[], ["slope"]] as const) {
+    test(`Land lies under a vector base's water, with [${overlays}]`, async ({
+      page,
+    }) => {
+      await stubNetwork(page);
+      await openBench(page);
+      const r = await page.evaluate(
+        (o) => window.geoPdfBench.landOnWater([...o]),
+        overlays,
+      );
+      expect(r.water).toBeGreaterThan(1000);
+      expect(r.restChanged).toBeGreaterThan(100);
+      expect(r.waterChanged).toBe(0);
+    });
+  }
+
   // Strict: the check above lets through a few thousand pixels, as much as a
   // label cut at a strip's edge.
   test("a vector base's labels cross a strip's edge whole", async ({
