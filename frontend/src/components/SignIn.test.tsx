@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -200,6 +201,24 @@ describe("SignIn under Cognito", () => {
     type("Username", "canyoneer");
     fireEvent.blur(screen.getByLabelText(/^Username/));
     await screen.findByText("That username is taken. Choose another.");
+  });
+
+  // Mutation: drop the `usernameNow` comparison, and a late answer about the old
+  // name lands under the new one.
+  it("drops an answer about a name the field has moved on from", async () => {
+    let answer = (_free: boolean) => {};
+    usernameAvailable.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    draw();
+    press("Sign up");
+    type("Username", "canyoneer");
+    fireEvent.blur(screen.getByLabelText(/^Username/));
+    type("Username", "canyoneer2");
+    await act(async () => answer(false));
+    expect(
+      screen.queryByText("That username is taken. Choose another."),
+    ).toBeNull();
   });
 
   it("signs a verified account in with the username it chose", async () => {

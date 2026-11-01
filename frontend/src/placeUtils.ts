@@ -1094,6 +1094,7 @@ export async function usernameAvailable(username: string): Promise<boolean> {
   try {
     const res = await fetch(
       `${API_BASE_URL}/users/username-available?username=${encodeURIComponent(username)}`,
+      { signal: AbortSignal.timeout(4_000) },
     );
     return !res.ok || (await res.json()).available !== false;
   } catch {
