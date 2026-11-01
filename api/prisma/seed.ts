@@ -1505,6 +1505,7 @@ async function main() {
       {
         id: ALICE_ID,
         cognitoId: ALICE_COGNITO_ID,
+        subject: ALICE_COGNITO_ID,
         username: "alice",
         email: "alice@local",
         consentedAt,
@@ -1514,6 +1515,7 @@ async function main() {
       {
         id: BOB_ID,
         cognitoId: BOB_COGNITO_ID,
+        subject: BOB_COGNITO_ID,
         username: "bob",
         email: "bob@local",
         consentedAt,
@@ -1523,6 +1525,7 @@ async function main() {
       {
         id: CAROL_ID,
         cognitoId: CAROL_COGNITO_ID,
+        subject: CAROL_COGNITO_ID,
         username: "carol",
         email: "carol@local",
         consentedAt,

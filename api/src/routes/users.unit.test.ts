@@ -49,6 +49,28 @@ describe("createUserForSignup", () => {
     expect(create.mock.calls[0][0].data.username).toBe(INITIAL);
   });
 
+  // Mutation: write only cognitoId (or only subject) in createUserForSignup.
+  it("writes the sub to both identity columns", async () => {
+    create.mockResolvedValueOnce(ROW);
+    await createUserForSignup({
+      sub: SUB,
+      email: EMAIL,
+      initialUsername: INITIAL,
+    });
+    expect(create.mock.calls[0][0].data).toMatchObject({
+      cognitoId: SUB,
+      subject: SUB,
+    });
+  });
+
+  it("recovers the racing row on a subject collision", async () => {
+    create.mockRejectedValueOnce(p2002("users_subject_key"));
+    findUnique.mockResolvedValueOnce(ROW);
+    await expect(
+      createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),
+    ).resolves.toBe(ROW);
+  });
+
   it("retries with a sub-suffixed username when the username is taken", async () => {
     const suffixed = { ...ROW, username: `${INITIAL}-${SUB.slice(0, 6)}` };
     create
