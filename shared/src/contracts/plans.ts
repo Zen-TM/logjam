@@ -793,7 +793,7 @@ export const TRIP_PLAN_FORMS = {
     deleteFailed: "Couldn't delete the form.",
     deleted: "Form deleted.",
 
-    // The builder: Logjam Web only (`PLAN_FORM_VERBS`).
+    // The builder, on both clients (`PLAN_FORM_VERBS`).
     newTitle: "New form",
     editTitle: "Edit form",
     startFrom: "Start from",
@@ -823,6 +823,11 @@ export const TRIP_PLAN_FORMS = {
     add: "Add form",
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
+    fromMyPlans: "From your other plans",
+    fromMyPlansEmpty: "You don't lead any other plan with a form yet.",
+    fromMyPlansFailed: "Couldn't load your other plans' forms.",
+    templates: "Templates",
+    formSaved: "Form saved.",
     yes: "Yes",
     no: "No",
     agreed: "Agreed",

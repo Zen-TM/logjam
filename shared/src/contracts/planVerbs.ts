@@ -29,8 +29,6 @@ const ANY: readonly TripPlanRole[] = ["leader", "editor", "member"];
 const WRITERS: readonly TripPlanRole[] = ["leader", "editor"];
 const LEADERS: readonly TripPlanRole[] = ["leader"];
 
-const FORMS_ON_WEB =
-  "A form is built once, at a desk, before the trip; Logjam GPS fills forms in and shows answers.";
 const PRINT_ON_WEB =
   "A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.";
 
@@ -102,8 +100,6 @@ export const PLAN_ADD_VERBS = [
     icon: "form",
     label: "Add a form",
     roles: LEADERS,
-    on: "web",
-    reason: FORMS_ON_WEB,
   },
   { id: "invite", icon: "addFriend", label: "Invite people", roles: LEADERS },
 ] as const satisfies readonly PlanVerbDeclaration[];
@@ -130,8 +126,6 @@ export const PLAN_FORM_VERBS = [
     icon: "edit",
     label: "Edit form",
     roles: LEADERS,
-    on: "web",
-    reason: FORMS_ON_WEB,
   },
   {
     id: "delete",

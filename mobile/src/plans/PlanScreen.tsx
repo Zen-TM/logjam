@@ -20,6 +20,7 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  TRIP_PLAN_MAX_FORMS,
   planVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
@@ -75,6 +76,7 @@ import {
   type ChipOption,
   type ToastMessage,
 } from "../ui";
+import { FormBuilderSheet, type FormBuilderState } from "./FormBuilderSheet";
 import { FormSheet, type FormSheetState } from "./FormSheet";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
@@ -330,6 +332,7 @@ function PlanPage({
   const [tripLogOpen, setTripLogOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
   const [formSheet, setFormSheet] = useState<FormSheetState>(null);
+  const [formBuilder, setFormBuilder] = useState<FormBuilderState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
@@ -493,10 +496,22 @@ function PlanPage({
       ) : null,
     forms:
       view === "forms" ? (
-        <Forms
-          plan={plan}
-          onOpen={(formId, mode) => setFormSheet({ formId, mode })}
-        />
+        <>
+          <Forms
+            plan={plan}
+            onOpen={(formId, mode) => setFormSheet({ formId, mode })}
+          />
+          {adds.has("form") ? (
+            <Button
+              label={planAddVerbLabel("form")}
+              icon="add"
+              variant="outlineAccent"
+              disabled={plan.forms.length >= TRIP_PLAN_MAX_FORMS}
+              disabledReason={`${TRIP_PLAN_MAX_FORMS} forms at most`}
+              onPress={() => setFormBuilder({ mode: "new" })}
+            />
+          ) : null}
+        </>
       ) : null,
     people:
       view === "people" ? (
@@ -601,6 +616,14 @@ function PlanPage({
         onState={setFormSheet}
         onInfo={notify}
         onError={notifyError}
+        onEdit={(formId) => setFormBuilder({ mode: "edit", formId })}
+      />
+      <FormBuilderSheet
+        state={adds.has("form") ? formBuilder : null}
+        plan={plan}
+        online={online}
+        onState={setFormBuilder}
+        onInfo={notify}
       />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
