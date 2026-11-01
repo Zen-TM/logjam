@@ -50,7 +50,14 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { makeStyles, muted, radius, spacing, useTheme } from "../theme";
+import {
+  makeStyles,
+  muted,
+  radius,
+  spacing,
+  useHues,
+  useTheme,
+} from "../theme";
 import {
   BottomSheet,
   Button,
@@ -104,6 +111,7 @@ export function FormBuilderSheet({
   onInfo: (message: string) => void;
 }) {
   const theme = useTheme();
+  const { assetHue } = useHues();
   const styles = useStyles();
   const form =
     state?.mode === "edit"
@@ -299,6 +307,7 @@ export function FormBuilderSheet({
           <SectionHeader title={copy.startFrom} />
           <Row
             icon="add"
+            hue={assetHue.plan}
             title={copy.blank}
             subtitle={copy.chooseBlankHint}
             onPress={() => start(tripPlanBlankForm())}
@@ -308,6 +317,7 @@ export function FormBuilderSheet({
             <Row
               key={id}
               icon="form"
+              hue={assetHue.plan}
               title={TRIP_PLAN_FORM_PRESETS[id].title}
               subtitle={`${TRIP_PLAN_FORM_PRESET_BLURBS[id]} ${pluralCount(
                 TRIP_PLAN_FORM_PRESETS[id].questions.length,
@@ -341,6 +351,7 @@ export function FormBuilderSheet({
                     <Row
                       key={other.formId}
                       icon="copy"
+                      hue={assetHue.plan}
                       title={other.title}
                       subtitle={pluralCount(other.questions.length, "question")}
                       onPress={() => start(valuesOf(other))}

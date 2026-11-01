@@ -232,7 +232,11 @@ export function SectionSheet({
       onClose={back ?? close}
       onBack={back}
       title={
-        state?.mode === "verbs" && section ? section.title : copy.sectionTitle
+        state?.mode === "verbs" && section
+          ? section.title
+          : state?.mode === "add"
+            ? copy.sectionNewTitle
+            : copy.sectionTitle
       }
       // Pinned: a long body outgrows the sheet.
       footer={

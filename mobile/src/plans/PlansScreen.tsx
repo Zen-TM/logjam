@@ -9,6 +9,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -21,6 +22,7 @@ import {
   planLeaveConfirm,
   planVerbsFor,
   tripPlanCounts,
+  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   contractSectionKeys,
   messageFromError,
@@ -28,6 +30,7 @@ import {
   tripPlanBucket,
   listSelectionLabel,
   tripPlanBulkConfirm,
+  TRIP_PLAN_BULK_DELETE_ADDED_LABEL,
   tripPlanCardActionsLabel,
   tripPlanFormsUrgent,
   tripPlanBulkOffers,
@@ -75,6 +78,7 @@ import {
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
 import { startPlanDownload } from "./planDownloads";
+import { LeaveSheet, type LeaveWords } from "./LeaveSheet";
 import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
 import {
   afterPlanWrite,
@@ -225,9 +229,16 @@ export function PlansScreen({
     [clearSelection],
   );
 
-  // Decline and Withdraw request: one call, by status (`leavePlan`); no
-  // confirm, as on Logjam Web.
+  // Decline and Withdraw request: one call, by status (`leavePlan`). Decline
+  // is asked once (it cannot be undone); Withdraw is not.
   const [menuFor, setMenuFor] = useState<TripPlanSummary | null>(null);
+  // The one Leave confirm (`LeaveSheet`), for a card and for bulk; opened from
+  // the menu's `onClosed`, since a sheet can't open while another closes.
+  const [leaveAsk, setLeaveAsk] = useState<{
+    words: (deleteAdded: boolean) => LeaveWords;
+    run: (deleteAdded: boolean) => void;
+  } | null>(null);
+  const parkedAsk = useRef<(() => void) | null>(null);
   // Each plan's own: a second decline doesn't free the first's button.
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   const leave = useCallback(
@@ -305,18 +316,18 @@ export function PlansScreen({
         pageCopy.archiveFailed,
       );
     if (id === "leave")
-      return confirm(
-        planLeaveConfirm(plan.name),
-        false,
-        () =>
-          void write(
-            plan,
-            leavePlan(plan.id),
-            true,
-            pageCopy.left,
-            pageCopy.leaveFailed,
-          ),
-      );
+      return void (parkedAsk.current = () =>
+        setLeaveAsk({
+          words: () => planLeaveConfirm(plan.name),
+          run: (deleteAdded) =>
+            void write(
+              plan,
+              leavePlan(plan.id, deleteAdded),
+              true,
+              pageCopy.left,
+              pageCopy.leaveFailed,
+            ),
+        }));
     const cached = await readCachedPlan(plan.id).catch(() => null);
     const counts = cached
       ? tripPlanCounts(cached.plan)
@@ -350,26 +361,31 @@ export function PlansScreen({
   const runBulk = () => {
     if (!online) return report(OFFLINE, "error");
     const { lead, leave: leaving } = bulk;
-    const words = tripPlanBulkConfirm({
-      lead: lead.length,
-      leave: leaving.length,
-    });
-    confirm(words, words.destructive, () => {
-      void finishBulk([
-        ...lead.map((plan) => ({
-          id: plan.id,
-          kind: "delete" as const,
-          run: () =>
-            deletePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
-        })),
-        ...leaving.map((plan) => ({
-          id: plan.id,
-          kind: "leave" as const,
-          run: () =>
-            leavePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
-        })),
-      ]);
-    });
+    const steps = (deleteAdded: boolean) => [
+      ...lead.map((plan) => ({
+        id: plan.id,
+        kind: "delete" as const,
+        run: () =>
+          deletePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
+      })),
+      ...leaving.map((plan) => ({
+        id: plan.id,
+        kind: "leave" as const,
+        run: () =>
+          leavePlan(plan.id, deleteAdded).then(() =>
+            afterPlanWrite(plan.id, true),
+          ),
+      })),
+    ];
+    const counts = { lead: lead.length, leave: leaving.length };
+    // Only a leave has something of yours to delete.
+    if (leaving.length > 0)
+      return setLeaveAsk({
+        words: (deleteAdded) => tripPlanBulkConfirm(counts, deleteAdded),
+        run: (deleteAdded) => void finishBulk(steps(deleteAdded)),
+      });
+    const words = tripPlanBulkConfirm(counts);
+    confirm(words, words.destructive, () => void finishBulk(steps(false)));
   };
   const runBulkArchive = () => {
     if (!online) return report(OFFLINE, "error");
@@ -396,6 +412,18 @@ export function PlansScreen({
           title={item.name}
           titleNumberOfLines={2}
           subtitle={tripPlanRowSubtitle(item)}
+          // What the card shows, not only its name.
+          accessibilityLabel={[
+            item.name,
+            tripPlanRowSubtitle(item),
+            pill,
+            item.unansweredForms > 0
+              ? tripPlanFormsToAnswerLine(item.unansweredForms)
+              : undefined,
+            planChanged(item, stamp) ? TRIP_PLAN_OFFLINE.changed : undefined,
+          ]
+            .filter(Boolean)
+            .join(", ")}
           // The body opens; a request's only action is its ⋯ (shared/DESIGN.md §9).
           onPress={
             selecting
@@ -409,7 +437,7 @@ export function PlansScreen({
           // An invite or a request can't be picked: it dims while picking.
           disabled={selecting && !planSelectable(item)}
           right={
-            <View style={styles.pills}>
+            <View style={styles.trailing}>
               {pill ? <StatusPill label={pill} tone="outline" /> : null}
               {selecting && planSelectable(item) ? (
                 // The ⋯'s box, so the card keeps its size when selecting starts.
@@ -477,7 +505,19 @@ export function PlansScreen({
                     disabled={!online}
                     disabledReason={OFFLINE}
                     onPress={() =>
-                      leave(item, copy.declined, copy.declineFailed)
+                      Alert.alert(
+                        TRIP_PLAN_JOIN.copy.declineTitle,
+                        TRIP_PLAN_JOIN.copy.declineBody,
+                        [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: copy.decline,
+                            style: "destructive",
+                            onPress: () =>
+                              leave(item, copy.declined, copy.declineFailed),
+                          },
+                        ],
+                      )
                     }
                   />
                 </View>
@@ -691,6 +731,11 @@ export function PlansScreen({
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}
         title={menuFor?.name ?? ""}
+        onClosed={() => {
+          const open = parkedAsk.current;
+          parkedAsk.current = null;
+          open?.();
+        }}
       >
         {menuFor?.status === "requested" ? (
           <Row
@@ -762,6 +807,16 @@ export function PlansScreen({
           </View>
         ) : null}
       </BottomSheet>
+      <LeaveSheet
+        words={leaveAsk?.words ?? null}
+        choiceLabel={TRIP_PLAN_BULK_DELETE_ADDED_LABEL}
+        onClose={() => setLeaveAsk(null)}
+        onConfirm={(deleteAdded) => {
+          const ask = leaveAsk;
+          setLeaveAsk(null);
+          ask?.run(deleteAdded);
+        }}
+      />
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
@@ -780,6 +835,12 @@ const useStyles = makeStyles((theme, textRole) => ({
   footer: { gap: spacing(0.5) },
   menu: { gap: spacing(1) },
   hint: { ...muted(theme, textRole.detail) },
+  // One line, centred: a pill and the ⋯ share a centre line.
+  trailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+  },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

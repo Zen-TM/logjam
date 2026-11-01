@@ -399,7 +399,7 @@ export const TRIP_PLAN_PAGE = {
     // The things on the map.
     itemsPlaces: "Places",
     itemsWays: "Ways",
-    itemsEmpty: "Nothing here yet. Add a place or way of yours.",
+    itemsEmpty: "Places and ways you add show up here.",
     addCopyLine:
       "Everyone in this plan, including people who join later, can see and copy what you add to it.",
     searchByName: "Search by name",
@@ -600,6 +600,12 @@ export const TRIP_PLAN_JOIN = {
     join: "Join",
     decline: "Decline",
     joinFailed: "Couldn't join the plan.",
+    joined: "You joined the plan.",
+    joining: "Joining…",
+    cancel: "Cancel",
+    declineTitle: "Decline this invite?",
+    declineBody:
+      "The invite goes away. A leader would have to invite you again.",
     linkFailed: "This invite link no longer works. Ask for a new one.",
     signIn: "A trip invite is waiting. Create an account or sign in to see it.",
   },

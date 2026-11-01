@@ -5,13 +5,14 @@
 // reason (mobile/DESIGN.md §8); a trip log is the caller's own and queues.
 // Edit and Start a trip log are the caller's: this sheet closes and the
 // caller opens the form.
-import { Fragment, useRef } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import {
   ApiError,
   messageFromError,
   planDeleteConfirm,
   planLeaveConfirm,
+  planLeaveDeleteAddedLabel,
   planVerbs,
   tripPlanCounts,
   tripPlanIsOver,
@@ -26,6 +27,7 @@ import { unavailableReasonText } from "../auth/capabilities";
 import { makeStyles, spacing, useTheme } from "../theme";
 import { BottomSheet, Row, todayDateKey } from "../ui";
 import { archivePlan, deletePlan, leavePlan } from "./plansApi";
+import { LeaveSheet } from "./LeaveSheet";
 import { PlanDownloadRows } from "./PlanDownload";
 import { afterPlanWrite, type CachedPlan } from "./plansCache";
 
@@ -35,6 +37,7 @@ const OFFLINE = unavailableReasonText("needs-connection");
 export function PlanOptionsSheet({
   cached,
   online,
+  me,
   onDownloadMap,
   onClose,
   onEdit,
@@ -47,6 +50,8 @@ export function PlanOptionsSheet({
   /** The plan whose verbs these are; null while the sheet is closed. */
   cached: CachedPlan | null;
   online: boolean;
+  /** The caller's user id: what they added is priced in Leave. */
+  me: string | null;
   /** The region download, framed on the plan's items. */
   onDownloadMap: (bbox: [number, number, number, number]) => void;
   onClose: () => void;
@@ -63,6 +68,15 @@ export function PlanOptionsSheet({
   const theme = useTheme();
   const styles = useStyles();
   const plan = cached?.plan ?? null;
+  const [leaveFor, setLeaveFor] = useState<TripPlanView | null>(null);
+  const added = (target: TripPlanView) => {
+    const mine = <T extends { addedBy: { id: string } | null }>(rows: T[]) =>
+      rows.filter((row) => row.addedBy?.id === me).length;
+    return {
+      places: mine(target.places),
+      ways: mine(target.routes) + mine(target.files),
+    };
+  };
 
   const confirm = (
     words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
@@ -108,7 +122,8 @@ export function PlanOptionsSheet({
       return onClose();
     }
     onClose();
-    if (id === "archive" || id === "unarchive") {
+    if (id === "leave") parked.current = () => setLeaveFor(target);
+    else if (id === "archive" || id === "unarchive") {
       const archived = id === "archive";
       void write(
         target,
@@ -117,17 +132,6 @@ export function PlanOptionsSheet({
         () => onInfo(archived ? copy.archived : copy.unarchived),
         copy.archiveFailed,
       );
-    } else if (id === "leave") {
-      confirm(planLeaveConfirm(target.name), false, () => {
-        onLeaving(true);
-        void write(
-          target,
-          leavePlan(target.id),
-          true,
-          () => onGone(copy.left),
-          copy.leaveFailed,
-        );
-      });
     } else if (id === "delete") {
       confirm(
         planDeleteConfirm(target.name, tripPlanCounts(target)),
@@ -156,45 +160,77 @@ export function PlanOptionsSheet({
       })
     : [];
 
+  const firstSeparated = verbs.findIndex((verb) => verb.separated);
+  // Starting a download is here; its progress stays in the hero.
+  const downloads =
+    plan && cached ? (
+      <PlanDownloadRows
+        cached={cached}
+        online={online}
+        onDownloadMap={onDownloadMap}
+        onStarted={onClose}
+      />
+    ) : null;
+  const leaveCounts = leaveFor ? added(leaveFor) : { places: 0, ways: 0 };
   return (
-    // Titled with the plan, so a mis-tap can't delete the wrong one.
-    <BottomSheet
-      visible={plan !== null}
-      onClose={onClose}
-      onClosed={() => {
-        const open = parked.current;
-        parked.current = null;
-        open?.();
-      }}
-      title={plan?.name ?? ""}
-    >
-      {plan && cached ? (
-        <View style={styles.body}>
-          {verbs.map((verb, index, all) => (
-            <Fragment key={verb.id}>
-              {verb.separated && index > 0 && !all[index - 1].separated ? (
-                <View style={styles.rule} />
-              ) : null}
-              <Row
-                icon={verb.icon}
-                hue={verb.danger ? theme.warning : undefined}
-                title={verb.label}
-                subtitle={live(verb.id) ? verb.disabledReason : OFFLINE}
-                disabled={!live(verb.id) || verb.disabledReason != null}
-                onPress={() => run(verb.id, plan)}
-              />
-            </Fragment>
-          ))}
-          {/* Starting a download is here; its progress stays in the hero. */}
-          <PlanDownloadRows
-            cached={cached}
-            online={online}
-            onDownloadMap={onDownloadMap}
-            onStarted={onClose}
-          />
-        </View>
-      ) : null}
-    </BottomSheet>
+    <>
+      {/* Titled with the plan, so a mis-tap can't delete the wrong one. */}
+      <BottomSheet
+        visible={plan !== null}
+        onClose={onClose}
+        onClosed={() => {
+          const open = parked.current;
+          parked.current = null;
+          open?.();
+        }}
+        title={plan?.name ?? ""}
+      >
+        {plan && cached ? (
+          <View style={styles.body}>
+            {verbs.map((verb, index, all) => (
+              <Fragment key={verb.id}>
+                {/* Before the destructive verbs: the last item is Delete. */}
+                {index === firstSeparated ? downloads : null}
+                {verb.separated && index > 0 && !all[index - 1].separated ? (
+                  <View style={styles.rule} />
+                ) : null}
+                <Row
+                  icon={verb.icon}
+                  hue={verb.danger ? theme.warning : undefined}
+                  title={verb.label}
+                  subtitle={live(verb.id) ? verb.disabledReason : OFFLINE}
+                  disabled={!live(verb.id) || verb.disabledReason != null}
+                  onPress={() => run(verb.id, plan)}
+                />
+              </Fragment>
+            ))}
+            {firstSeparated < 0 ? downloads : null}
+          </View>
+        ) : null}
+      </BottomSheet>
+      <LeaveSheet
+        words={leaveFor ? () => planLeaveConfirm(leaveFor.name) : null}
+        choiceLabel={
+          leaveCounts.places + leaveCounts.ways > 0
+            ? planLeaveDeleteAddedLabel(leaveCounts)
+            : null
+        }
+        onClose={() => setLeaveFor(null)}
+        onConfirm={(deleteAdded) => {
+          const target = leaveFor;
+          setLeaveFor(null);
+          if (!target) return;
+          onLeaving(true);
+          void write(
+            target,
+            leavePlan(target.id, deleteAdded),
+            true,
+            () => onGone(copy.left),
+            copy.leaveFailed,
+          );
+        }}
+      />
+    </>
   );
 }
 

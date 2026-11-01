@@ -205,6 +205,7 @@ export function PlanDetailsSheet({
               set({ startDate: next.start, endDate: next.end });
             }}
           />
+          <Text style={styles.theirs}>{TRIP_PLAN_PAGE.copy.datesHintTap}</Text>
           {values.startDate ? (
             <Button
               label={TRIP_PLAN_PAGE.copy.datesClear}

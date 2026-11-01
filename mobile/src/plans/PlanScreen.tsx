@@ -20,6 +20,7 @@ import {
   mediaDisplayName,
   messageFromError,
   planAddVerbLabel,
+  planItemVerbs,
   TRIP_PLAN_MAX_FORMS,
   tripPlanActionsFor,
   tripPlanAtMost,
@@ -41,7 +42,9 @@ import {
   weatherAge as updatedAgo,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
+  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
+  TRIP_PLANS_LIST,
   type SectionKeysOn,
   type TripPlanItem,
   type TripPlanPageView,
@@ -211,6 +214,7 @@ export function PlanScreen({
   planId,
   name,
   initialView,
+  joined,
   onBack,
   onShowOnMap,
   onDownloadMap,
@@ -222,6 +226,8 @@ export function PlanScreen({
   name: string;
   /** The tab it opens on; the write-up when absent. */
   initialView?: TripPlanPageView;
+  /** Arrived by joining from an invite: say so once. */
+  joined?: boolean;
   onBack: () => void;
   /** The map in plan mode, framed on the plan's items when it has any. */
   onShowOnMap: (
@@ -273,7 +279,7 @@ export function PlanScreen({
   if (shown.kind !== "page" || !cached || myId === undefined)
     return (
       <View style={styles.screen}>
-        <Hero title={name} onBack={onBack} />
+        <Hero eyebrow={TRIP_PLANS_LIST.title} title={name} onBack={onBack} />
         {shown.kind === "gone" ? (
           <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
         ) : shown.kind === "failed" ? (
@@ -303,6 +309,7 @@ export function PlanScreen({
       onDrawRoute={onDrawRoute}
       onGone={onGone}
       onLeaving={setLeaving}
+      joined={joined}
     />
   );
 }
@@ -323,6 +330,7 @@ function PlanPage({
   onDrawRoute,
   onGone,
   onLeaving,
+  joined,
 }: {
   myId: string | null;
   cached: CachedPlan;
@@ -339,8 +347,10 @@ function PlanPage({
   onDrawRoute: (planId: string) => void;
   onGone: (message: string) => void;
   onLeaving: (leaving: boolean) => void;
+  joined?: boolean;
 }) {
   const theme = useTheme();
+  const { assetHue } = useHues();
   const styles = useStyles();
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -349,7 +359,11 @@ function PlanPage({
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
   const [formSheet, setFormSheet] = useState<FormSheetState>(null);
   const [formBuilder, setFormBuilder] = useState<FormBuilderState>(null);
-  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(
+    joined
+      ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "info", nonce: 1 }
+      : null,
+  );
   const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
     setToast({ text, tone, nonce: Date.now() });
   // Stable: FormSheet hands a refusal over from an effect.
@@ -402,6 +416,7 @@ function PlanPage({
   > = {
     hero: (
       <Hero
+        eyebrow={TRIP_PLANS_LIST.title}
         title={plan.name}
         titleNumberOfLines={2}
         onBack={onBack}
@@ -460,7 +475,10 @@ function PlanPage({
             // from a week before the trip.
             <Row
               icon="form"
-              hue={toAnswer.urgent ? theme.warning : undefined}
+              hue={toAnswer.urgent ? theme.warning : assetHue.plan}
+              // A card with its own controls fills like one (UX §4); a press
+              // on its body goes to the forms.
+              onPress={() => onView("forms")}
               title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
               subtitle={online ? undefined : OFFLINE}
               footer={
@@ -595,6 +613,7 @@ function PlanPage({
       <PlanOptionsSheet
         cached={menuOpen ? cached : null}
         online={online}
+        me={myId}
         onDownloadMap={onDownloadMap}
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditOpen(true)}
@@ -778,7 +797,7 @@ function Items({
     <ListEnd>
       <Button
         label={planAddVerbLabel("copy")}
-        icon="copy"
+        icon="add"
         variant="outlineAccent"
         disabled={!online}
         disabledReason={OFFLINE}
@@ -795,7 +814,7 @@ function Items({
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
         <AddCopySheet
-          planId={plan.id}
+          plan={plan}
           visible={adding}
           online={online}
           me={me}
@@ -807,14 +826,20 @@ function Items({
   ) : null;
   const [menuItem, setMenuItem] = useState<TripPlanItem | null>(null);
   /** The item's ⋯ (`PlanItemSheet`): its row's trailing control. */
-  const menu = (item: TripPlanItem) => (
-    <IconButton
-      icon="overflow"
-      accessibilityLabel={tripPlanActionsFor(itemTitle(item))}
-      color={theme.textMuted}
-      onPress={() => setMenuItem(item)}
-    />
-  );
+  const menu = (item: TripPlanItem) =>
+    // A leader's own item on an archived plan has no verb: no ⋯.
+    planItemVerbs(
+      plan.myRole,
+      { kind: item.kind, mine: item.addedBy?.id === me },
+      { archived: plan.archivedAt != null },
+    ).filter((verb) => verb.id !== "download").length === 0 ? undefined : (
+      <IconButton
+        icon="overflow"
+        accessibilityLabel={tripPlanActionsFor(itemTitle(item))}
+        color={theme.textMuted}
+        onPress={() => setMenuItem(item)}
+      />
+    );
   const { assetHue } = useHues();
   const [placeId, setPlaceId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ViewerMedia[] | null>(null);

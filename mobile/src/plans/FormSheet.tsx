@@ -234,23 +234,23 @@ export function FormSheet({
   > | null =
     form && rows
       ? {
-          // The title is the sheet's; its ⋯ is the verbs mode.
-          hero:
-            verbs.length > 0 ? (
-              <View style={styles.actions}>
-                <IconButton
-                  icon="overflow"
-                  accessibilityLabel={copy.actions}
-                  color={theme.textMuted}
-                  onPress={() => onState({ formId: form.id, mode: "verbs" })}
-                />
-              </View>
-            ) : null,
+          // The title is the sheet's; its ⋯ sits beside the visibility line.
+          hero: null,
           visibility: (
             <View style={styles.block}>
-              <Text style={styles.muted}>
-                {tripPlanVisibilityLine(form.visibleTo, form.preset)}
-              </Text>
+              <View style={styles.visibility}>
+                <Text style={[styles.muted, styles.grow]}>
+                  {tripPlanVisibilityLine(form.visibleTo)}
+                </Text>
+                {verbs.length > 0 ? (
+                  <IconButton
+                    icon="overflow"
+                    accessibilityLabel={copy.actions}
+                    color={theme.textMuted}
+                    onPress={() => onState({ formId: form.id, mode: "verbs" })}
+                  />
+                ) : null}
+              </View>
               {tally
                 ? tripPlanFormTallyLines(tally, me ?? undefined).map((line) => (
                     <Text key={line} style={styles.muted}>
@@ -274,7 +274,6 @@ export function FormSheet({
                 <>
                   <Button
                     label={form.myAnswer ? copy.change : copy.answer}
-                    variant="outlineAccent"
                     disabled={!online}
                     disabledReason={OFFLINE}
                     onPress={() => onState({ formId: form.id, mode: "answer" })}
@@ -395,7 +394,8 @@ export function FormSheet({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(2) },
   block: { gap: spacing(1) },
-  actions: { flexDirection: "row", justifyContent: "flex-end" },
+  visibility: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  grow: { flex: 1 },
   person: { gap: spacing(0.5), paddingTop: spacing(1) },
   username: { ...textRole.rowTitle, color: theme.text },
   muted: { ...muted(theme, textRole.detail) },

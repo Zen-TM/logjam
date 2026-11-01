@@ -14,7 +14,7 @@ import {
   tripPlanInviteePill,
   tripPlanRoleWord,
   TRIP_PLAN_INVITE,
-  TRIP_PLAN_ROLES,
+  TRIP_PLAN_ROLES_PICK_ORDER,
   type SectionKeysOn,
   type TripPlanInviteView,
   type TripPlanRole,
@@ -161,8 +161,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       <>
         <Text style={styles.label}>{copy.role}</Text>
         <ChipRail
-          // The default first, the most powerful last, as Logjam Web lists them.
-          options={[...TRIP_PLAN_ROLES].reverse().map((value) => ({
+          options={TRIP_PLAN_ROLES_PICK_ORDER.map((value) => ({
             value,
             label: tripPlanRoleWord(value),
           }))}

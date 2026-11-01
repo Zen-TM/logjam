@@ -4,7 +4,7 @@
 // from the plan afterwards. Logjam Web's twin is PlanInvitedPage. A preview is not cached: it needs a connection, unless the
 // reader has joined since, when the plan opens instead (`opensAsPreview`).
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
 import {
   ApiError,
   contractSectionKeys,
@@ -146,6 +146,21 @@ export function PlanPreview({
     }
   }
 
+  // Asked once: a decline can't be undone.
+  const askDecline = () =>
+    Alert.alert(
+      TRIP_PLAN_JOIN.copy.declineTitle,
+      TRIP_PLAN_JOIN.copy.declineBody,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: copy.decline,
+          style: "destructive",
+          onPress: () => void decline(),
+        },
+      ],
+    );
+
   async function decline() {
     setBusy("decline");
     try {
@@ -199,7 +214,7 @@ export function PlanPreview({
                     loading={busy === "decline"}
                     disabled={!online}
                     disabledReason={OFFLINE}
-                    onPress={() => void decline()}
+                    onPress={askDecline}
                   />
                 </View>
               }

@@ -237,8 +237,16 @@ export function BottomSheet({
   // and lifting by exactly that much is deterministic in both orders.
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   useEffect(() => {
+    // The sheet's window runs under the translucent navigation bar, and
+    // `height` leaves that bar out: the keyboard's top edge against the whole
+    // screen is the lift that clears it.
     const shown = Keyboard.addListener("keyboardDidShow", (event) =>
-      setKeyboardHeight(event.endCoordinates.height),
+      setKeyboardHeight(
+        Math.max(
+          event.endCoordinates.height,
+          SHEET_TRAVEL - event.endCoordinates.screenY,
+        ),
+      ),
     );
     const hidden = Keyboard.addListener("keyboardDidHide", () =>
       setKeyboardHeight(0),

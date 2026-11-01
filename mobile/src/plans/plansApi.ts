@@ -54,8 +54,11 @@ export const archivePlan = (id: string, archived: boolean) =>
 export const deletePlan = (id: string) =>
   apiFetch<void>(plan(id), { method: "DELETE" });
 /** Leave, decline an invite or withdraw a request: one call, by status. */
-export const leavePlan = (id: string) =>
-  apiFetch<void>(`${plan(id)}/members/me`, { method: "DELETE" });
+export const leavePlan = (id: string, deleteAdded = false) =>
+  apiFetch<void>(
+    `${plan(id)}/members/me${deleteAdded ? "?deleteAdded=true" : ""}`,
+    { method: "DELETE" },
+  );
 
 /** What a copy reports beside the new thing's id: a place's photos and files
  *  that didn't come, and whether storage was why. */

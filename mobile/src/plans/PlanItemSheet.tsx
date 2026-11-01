@@ -231,7 +231,15 @@ export function PlanItemSheet({
         parked.current = null;
         open?.();
       }}
-      title={editing ? copy.itemEdit : item ? itemTitle(item) : ""}
+      title={
+        editing
+          ? item?.kind === "place"
+            ? copy.itemEditPlace
+            : copy.itemEditWay
+          : item
+            ? itemTitle(item)
+            : ""
+      }
       footer={
         editing && item ? (
           <FormStack>

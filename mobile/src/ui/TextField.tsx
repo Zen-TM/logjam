@@ -6,7 +6,13 @@ import {
   type TextInputProps,
 } from "react-native";
 
-import { radius, spacing, makeStyles, useTheme } from "../theme";
+import {
+  radius,
+  spacing,
+  makeStyles,
+  placeholderColor,
+  useTheme,
+} from "../theme";
 import { Field } from "./Field";
 
 type TextFieldProps = {
@@ -82,7 +88,7 @@ export function TextField({
       ]}
       value={value}
       onChangeText={onChangeText}
-      placeholderTextColor={theme.textMuted}
+      placeholderTextColor={placeholderColor(theme)}
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       multiline={multiline}

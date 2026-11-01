@@ -269,7 +269,13 @@ type MoreStackParams = {
   // The name rides along for the hero while the cached plan is read.
   /** `view`: the tab it opens on, People for a join request. `invited`: it
    *  opens as the invite's preview (`opensPreview`), until Join. */
-  Plan: { planId: string; name: string; view?: "people"; invited?: boolean };
+  Plan: {
+    planId: string;
+    name: string;
+    view?: "people";
+    invited?: boolean;
+    joined?: boolean;
+  };
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -1326,7 +1332,10 @@ export function AppShell({
                           name={route.params.name}
                           onBack={() => navigation.goBack()}
                           onJoined={() =>
-                            navigation.setParams({ invited: false })
+                            navigation.setParams({
+                              invited: false,
+                              joined: true,
+                            })
                           }
                           onDeclined={(text) =>
                             navigation.popTo("Plans", {
@@ -1339,6 +1348,7 @@ export function AppShell({
                           planId={route.params.planId}
                           name={route.params.name}
                           initialView={route.params.view}
+                          joined={route.params.joined}
                           onBack={() => navigation.goBack()}
                           onShowOnMap={(planId, bbox) =>
                             navigation.getParent()?.navigate("Map", {

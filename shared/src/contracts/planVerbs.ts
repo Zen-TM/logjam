@@ -94,7 +94,7 @@ export const PLAN_ADD_VERBS = [
     label: "Add a write-up section",
     roles: WRITERS,
   },
-  { id: "copy", icon: "copy", label: "Add a place or way", roles: ANY },
+  { id: "copy", icon: "add", label: "Add a place or way", roles: ANY },
   {
     id: "form",
     icon: "form",

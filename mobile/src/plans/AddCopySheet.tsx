@@ -19,10 +19,12 @@ import {
   tripPlanAddOutcome,
   tripPlanAddKey,
   tripPlanAddPicks,
+  tripPlanInPlanIds,
   TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
   type TripPlanItemKind,
   type TripPlanItemGroup,
+  type TripPlanView,
 } from "@logjam/shared";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
@@ -37,6 +39,7 @@ import {
   controlSize,
   makeStyles,
   muted,
+  placeholderColor,
   radius,
   spacing,
   useHues,
@@ -70,18 +73,19 @@ type Pick = {
   altNames?: string[];
   icon: Glyph;
   hue?: string;
+  inPlan?: boolean;
 };
 const keyOf = tripPlanAddKey;
 
 export function AddCopySheet({
-  planId,
+  plan,
   visible,
   online,
   me,
   onClose,
   onDone,
 }: {
-  planId: string;
+  plan: TripPlanView;
   visible: boolean;
   /** The caller's user id: only their own routes are theirs to add. */
   me: string | null;
@@ -151,6 +155,12 @@ export function AddCopySheet({
       ),
     [places.data, routes.data, files, me, pendingCreates, tickedPlaceIds],
   );
+  // Items don't record their source, so "already in the plan" is a match on
+  // name and position (`tripPlanInPlanIds`).
+  const inPlan = useMemo(
+    () => tripPlanInPlanIds(plan, offered),
+    [plan, offered],
+  );
   const rows = useMemo(
     (): Record<TripPlanItemGroup, Pick[]> => ({
       // Places keep the accent, as the plan's own list does.
@@ -161,6 +171,7 @@ export function AddCopySheet({
         altNames: place.altNames,
         bytes: 0,
         icon: "place",
+        inPlan: inPlan.has(place.id),
       })),
       ways: [
         ...offered.routes.map((route) => ({
@@ -170,12 +181,14 @@ export function AddCopySheet({
           bytes: 0,
           icon: "route" as const,
           hue: assetHue.route,
+          inPlan: inPlan.has(route.id),
         })),
         ...offered.files.map((file) => ({
           kind: "media" as const,
           id: file.id,
           title: mediaDisplayName(file),
           bytes: file.fileSizeBytes ?? 0,
+          inPlan: inPlan.has(file.id),
           // A recording and an import look as they do in Saved.
           ...(file.origin === "track"
             ? { icon: "track" as const, hue: assetHue.track }
@@ -183,10 +196,13 @@ export function AddCopySheet({
         })),
       ],
     }),
-    [offered, assetHue],
+    [offered, assetHue, inPlan],
   );
   // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
-  const picks = tripPlanAddPicks([...rows.places, ...rows.ways], ticked);
+  const picks = tripPlanAddPicks(
+    [...rows.places, ...rows.ways].filter((each) => !each.inPlan),
+    ticked,
+  );
   const toggle = useCallback(
     (key: string) =>
       setTicked((was) =>
@@ -211,7 +227,7 @@ export function AddCopySheet({
     let why: string | null = null;
     try {
       for (const pick of picks) {
-        const result = await addPlanItem(planId, {
+        const result = await addPlanItem(plan.id, {
           kind: pick.kind,
           id: pick.id,
         });
@@ -229,7 +245,7 @@ export function AddCopySheet({
       outOfSpace,
       why,
     });
-    if (added > 0) await afterPlanWrite(planId);
+    if (added > 0) await afterPlanWrite(plan.id);
     setBusy(false);
     if (!outcome) return setError(why);
     onClose();
@@ -283,7 +299,7 @@ export function AddCopySheet({
             value={search}
             onChangeText={setSearch}
             placeholder={copy.searchByName}
-            placeholderTextColor={theme.textMuted}
+            placeholderTextColor={placeholderColor(theme)}
             accessibilityLabel={copy.searchByName}
             autoCapitalize="none"
             autoCorrect={false}
@@ -331,10 +347,16 @@ const PickRow = memo(function PickRow({
       icon={pick.icon}
       hue={pick.hue ?? accent}
       title={pick.title}
-      subtitle={pick.bytes > 0 ? formatBytes(pick.bytes) : undefined}
+      subtitle={
+        pick.inPlan
+          ? TRIP_PLAN_PAGE.copy.inPlan
+          : pick.bytes > 0
+            ? formatBytes(pick.bytes)
+            : undefined
+      }
       selected={ticked}
-      disabled={disabled}
-      right={<SelectionMark selected={ticked} />}
+      disabled={disabled || pick.inPlan}
+      right={pick.inPlan ? undefined : <SelectionMark selected={ticked} />}
       onPress={() => onToggle(keyOf(pick))}
     />
   );
