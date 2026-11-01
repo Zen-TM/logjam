@@ -835,11 +835,32 @@ export const TRIP_PLAN_FORMS = {
     add: "Add form",
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
+    // The chooser a new form starts from.
+    chooseTemplates: "Templates",
+    chooseMine: "From your other plans",
+    chooseBlankHint: "Write your own questions.",
+    chooseMineLoading: "Loading your forms…",
+    chooseMineFailed: "Couldn't load your forms from other plans.",
+    chooseMineEmpty: "Forms you make in other plans you lead show up here.",
     yes: "Yes",
     no: "No",
     agreed: "Agreed",
   },
 } as const satisfies ScreenContract;
+
+/** One line under each template in the new-form chooser. */
+export const TRIP_PLAN_FORM_PRESET_BLURBS: Record<
+  TripPlanFormPresetId,
+  string
+> = {
+  gear: "Who needs to borrow what, and wetsuit sizes.",
+  carpool: "Who can drive, who needs a lift, and from where.",
+  experience: "How much canyoning and abseiling people have done.",
+  firstAid: "First aid training and what people carry.",
+  safetyContacts:
+    "Someone to call, and medical details people choose to share.",
+  rules: "The trip's ground rules, for each person to agree to.",
+};
 
 /** Each question kind's name in the builder. */
 export const TRIP_PLAN_QUESTION_KIND_LABELS: Record<
@@ -1233,4 +1254,45 @@ export function tripPlanTripLogStopped(saved: number, why: string): string {
 /** Where Save a copy put it. */
 export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
   return `Saved a copy to your ${kind === "place" ? "places" : "ways"}.`;
+}
+
+// ── Plans list: bulk actions ────────────────────────────────────────
+
+/** A confirm for deleting or leaving several plans, counted. */
+export function tripPlanBulkConfirm(
+  kind: "delete" | "leave",
+  count: number,
+): { confirmTitle: string; confirmBody: string; confirmLabel: string } {
+  const plans = count === 1 ? "1 plan" : `${count} plans`;
+  return kind === "delete"
+    ? {
+        confirmTitle: `Delete ${plans}?`,
+        confirmBody:
+          "Their write-ups, places, ways, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
+        confirmLabel: `Delete ${plans}`,
+      }
+    : {
+        confirmTitle: `Leave ${plans}?`,
+        confirmBody:
+          "You lose access at once. Your answers to their forms go. What you added stays in each plan.",
+        confirmLabel: `Leave ${plans}`,
+      };
+}
+
+/** The toast after a bulk run: all done, or how many of them. */
+export function tripPlanBulkDone(
+  kind: "delete" | "leave" | "archive" | "unarchive",
+  done: number,
+  total: number,
+): string {
+  const verb = {
+    delete: "Deleted",
+    leave: "Left",
+    archive: "Archived",
+    unarchive: "Brought back",
+  }[kind];
+  const plans = total === 1 ? "1 plan" : `${total} plans`;
+  return done === total
+    ? `${verb} ${plans}.`
+    : `${verb} ${done} of ${plans}. The rest didn't go through.`;
 }

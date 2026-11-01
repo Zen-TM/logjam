@@ -11,6 +11,7 @@ import {
   type TripPlanFormPatch,
   type TripPlanFormView,
   type TripPlanInvitedPreview,
+  type TripPlanLeaderForm,
   type TripPlanItem,
   type TripPlanItemAdd,
   type TripPlanItemKind,
@@ -85,6 +86,11 @@ const form = (planId: string, formId: string) =>
 
 export const createForm = (planId: string, body: TripPlanFormCreate) =>
   apiFetch<TripPlanFormView>(`${plan(planId)}/forms`, { method: "POST", body });
+/** Forms of the plans the caller leads, other than `except`, to copy. */
+export const getLeaderForms = (except: string) =>
+  apiFetch<{ forms: TripPlanLeaderForm[] }>(
+    `/plans/leader-forms?except=${encodeURIComponent(except)}`,
+  ).then((body) => body.forms);
 export const patchForm = (
   planId: string,
   formId: string,

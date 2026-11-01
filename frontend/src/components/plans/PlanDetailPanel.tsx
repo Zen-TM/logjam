@@ -732,6 +732,7 @@ export default function PlanDetailPanel({
       )}
       <PlanFormBuilderDialog
         open={building != null}
+        planId={plan.id}
         form={buildingForm}
         onStale={() => refetch({ quiet: true })}
         onClose={() => setBuilding(null)}
