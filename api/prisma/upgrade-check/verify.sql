@@ -5,9 +5,11 @@
 
 \set ON_ERROR_STOP on
 
--- Every user baseline.sql saw has subject = its old cognito_id, and cognito_id
--- is untouched. Mutation: backfill from another column (or not at all) and
--- subject differs; drop the UPDATE and every subject is NULL.
+-- Every user baseline.sql saw has subject = its cognito_id (the NULL and stale
+-- fixture rows included), cognito_id is untouched, and subject can no longer be
+-- NULL. Mutation: drop the UPDATE and the NULL fixture row blocks SET NOT NULL;
+-- filter it to NULL subjects and the stale row keeps the old one; drop the
+-- SET NOT NULL and the nullability check fails.
 SELECT to_regclass('upgrade_check.users') IS NOT NULL AS subject_applies \gset
 \if :subject_applies
 DO $$
@@ -19,7 +21,14 @@ BEGIN
       OR u.subject IS DISTINCT FROM b.cognito_id
       OR u.cognito_id IS DISTINCT FROM b.cognito_id;
   IF bad > 0 THEN
-    RAISE EXCEPTION 'upgrade-check: % user(s) without subject = their old cognito_id', bad;
+    RAISE EXCEPTION 'upgrade-check: % user(s) without subject = their cognito_id', bad;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_name = 'users' AND column_name = 'subject' AND is_nullable = 'YES'
+  ) THEN
+    RAISE EXCEPTION 'upgrade-check: users.subject is still nullable';
   END IF;
 END $$;
 DROP SCHEMA upgrade_check CASCADE;
