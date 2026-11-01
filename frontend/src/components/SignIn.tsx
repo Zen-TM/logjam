@@ -6,15 +6,9 @@
 // the provider's page, which is also where a Cognito sign-in goes when these
 // forms cannot finish it (useAuth).
 //
-// Built on the kit like every other surface (frontend/DESIGN.md). Two notes
-// that are design decisions rather than mechanics:
-//
-//  - **The Terms and Privacy links sit BESIDE the consent tick, not inside its
-//    label.** A link inside a `<label>` toggles the control it labels, so
-//    reading the terms used to tick (or untick) the box that says you agree
-//    with them.
-//  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
-//    the top of the form, and a field's own complaint goes under the field.
+// Built on the kit like every other surface (frontend/DESIGN.md). **The error
+// goes directly above the button it belongs to** (shared/DESIGN.md §11), never
+// at the top of the form, and a field's own complaint goes under the field.
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import classes from "./SignIn.module.css";
 import { isValidEmailFormat } from "../emailValidation";
@@ -29,11 +23,13 @@ import {
 } from "../auth/oidc";
 import Footer from "./Footer";
 import SignInTerrain from "./SignInTerrain";
+import TermsTick from "./TermsTick";
 import useSignInArea from "./useSignInArea";
 import {
   FRIENDS,
   isValidUsername,
   NSW_5M,
+  USERNAME_HINT,
   USERNAME_RULE,
   USERNAME_TAKEN,
 } from "@logjam/shared";
@@ -575,7 +571,7 @@ function CognitoForms({
             }}
             error={usernameError}
             required
-            hint="What friends see when you share a place with them."
+            hint={USERNAME_HINT}
             autoComplete="username"
           />
           <TextField
@@ -596,23 +592,7 @@ function CognitoForms({
             autoComplete="new-password"
           />
           <div className={classes.consent}>
-            <Checkbox
-              label="I agree to the Terms of Use and acknowledge the Privacy Policy."
-              checked={consented}
-              onChange={setConsented}
-            />
-            {/* Beside the tick, never inside its label: a link in a label
-                toggles the control it labels, so reading the terms would
-                change the answer to the question about them. */}
-            <p className={classes.legal}>
-              <a href="/tos.html" target="_blank" rel="noopener noreferrer">
-                Read the Terms of Use
-              </a>
-              {" · "}
-              <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
-                Read the Privacy Policy
-              </a>
-            </p>
+            <TermsTick checked={consented} onChange={setConsented} />
             <Checkbox
               label="I confirm I am 18 years of age or older."
               checked={ageConfirmed}

@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { isValidUsername, USERNAME_RULE } from "@logjam/shared";
+import { isValidUsername, USERNAME_HINT, USERNAME_RULE } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
 import { messageFromError } from "../errors/messageFromError";
 import { ApiError } from "../errors/ApiError";
 import BrandMark from "./brand/BrandMark";
+import TermsTick from "./TermsTick";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
 import classes from "./ConsentGate.module.css";
 
@@ -19,9 +20,8 @@ import classes from "./ConsentGate.module.css";
  * it is welcomed rather than told the terms changed, and picks its username and
  * confirms its age here, in the same request that records the consent.
  *
- * The links to read sit BESIDE the tick rather than
- * inside its label: a link inside a `<label>` toggles the control it labels,
- * so opening the terms would answer the question about them.
+ * The links to read are in the tick's own sentence (TermsTick), and opening one
+ * does not answer the question about it.
  */
 function ConsentGate({
   consentVersion,
@@ -102,7 +102,7 @@ function ConsentGate({
         </h1>
         <p className={classes.body}>
           {newAccount
-            ? "Choose the name friends see when you share a place with them, and review the terms to finish creating your account."
+            ? "Choose your public display name and review the terms to finish creating your account."
             : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Please review them and confirm your agreement to keep using Logjam.`}
         </p>
         {newAccount && (
@@ -114,26 +114,13 @@ function ConsentGate({
               setUsernameError(null);
             }}
             error={usernameError}
-            hint="What friends see when you share a place with them."
+            hint={USERNAME_HINT}
             autoComplete="username"
             disabled={submitting}
           />
         )}
-        <p className={classes.legal}>
-          <a href="/tos.html" target="_blank" rel="noopener noreferrer">
-            Read the Terms of Use
-          </a>
-          {" · "}
-          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
-            Read the Privacy Policy
-          </a>
-        </p>
-        <Checkbox
-          label={
-            newAccount
-              ? "I agree to the Terms of Use and acknowledge the Privacy Policy."
-              : "I agree to the updated Terms and acknowledge the Privacy Policy."
-          }
+        <TermsTick
+          updated={!newAccount}
           checked={agreed}
           onChange={(next) => {
             setAgreed(next);
