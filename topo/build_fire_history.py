@@ -20,7 +20,7 @@ Source & licence: NPWS Fire History - Wildfires and Prescribed Burns, from
          Required attribution: "© State Government of NSW and NSW Department
          of Climate Change, Energy, the Environment and Water 2010". This
          credit must accompany any derived output (this raster, and the
-         fire-staleness fade it drives in the vegetation layer) wherever
+         fire-staleness marking it drives in the vegetation layer) wherever
          shared — see topo/README.md "Data sources & licences" and
          shared/src/geoPdfBaseLayers.ts (GEOPDF_OVERLAY_ATTRIBUTION.vegetation)
          for where it is surfaced in-app and in exported GeoPDFs.

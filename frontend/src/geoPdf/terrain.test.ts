@@ -13,6 +13,7 @@ import {
   slopeBandAt,
   demMetresFromRgb,
   TILE_SIZE,
+  NSW_CONTOURS,
   type SlopeBand,
 } from "@logjam/shared";
 import {
@@ -20,7 +21,7 @@ import {
   contourTilesBySource,
   decodeTerrarium,
   hillshadePixels,
-  nswContourZoom,
+  nswVectorZoom,
   overlaysDrawn,
   slopePixels,
   STATEWIDE,
@@ -174,17 +175,17 @@ describe("decodeTerrarium", () => {
   });
 });
 
-describe("nswContourZoom", () => {
+describe("nswVectorZoom", () => {
   // Logjam Web shows the statewide contours from camera z11, about 1:120 000
   // at lat -33.7. Mutation: gate on the print's 256-based style zoom, one
   // level higher, and a 1:200 000 print draws and credits 50 m lines the map
   // never shows.
   it("reads no contours where the map draws none", () => {
-    expect(nswContourZoom(200000, -33.7, 12)).toBeNull();
-    expect(nswContourZoom(130000, -33.7, 13)).toBeNull();
-    expect(nswContourZoom(110000, -33.7, 13)).toBe(13);
+    expect(nswVectorZoom(NSW_CONTOURS, 200000, -33.7, 12)).toBeNull();
+    expect(nswVectorZoom(NSW_CONTOURS, 130000, -33.7, 13)).toBeNull();
+    expect(nswVectorZoom(NSW_CONTOURS, 110000, -33.7, 13)).toBe(13);
     // The archive stops at z14; deeper prints stretch it.
-    expect(nswContourZoom(25000, -33.7, 16)).toBe(14);
+    expect(nswVectorZoom(NSW_CONTOURS, 25000, -33.7, 16)).toBe(14);
   });
 });
 
