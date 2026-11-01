@@ -339,16 +339,29 @@ describe("useAuth password sign-in", () => {
   it("records a new account's consent before it is signed in", async () => {
     oidc.signInWithPassword.mockResolvedValue(true);
     const { result } = await signedOut();
-    let stateWhenRecorded = "";
-    recordConsent.mockImplementationOnce(async () => {
-      stateWhenRecorded = result.current.state;
-      return {};
-    });
-    await act(() =>
-      result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
+    let recorded = () => {};
+    recordConsent.mockImplementationOnce(
+      () => new Promise((resolve) => (recorded = () => resolve({}))),
     );
-    expect(recordConsent).toHaveBeenCalledWith(expect.any(String), "canyoneer");
-    expect(stateWhenRecorded).toBe("signIn");
+    let signingIn = Promise.resolve();
+    act(() => {
+      signingIn = result.current.signInWithPassword(
+        "a@b.co",
+        "pw",
+        "canyoneer",
+      );
+    });
+    await waitFor(() =>
+      expect(recordConsent).toHaveBeenCalledWith(
+        expect.any(String),
+        "canyoneer",
+      ),
+    );
+    expect(result.current.state).toBe("signIn");
+    await act(async () => {
+      recorded();
+      await signingIn;
+    });
     expect(result.current.state).toBe("authenticated");
   });
 
