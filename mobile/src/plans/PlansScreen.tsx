@@ -270,25 +270,20 @@ export function PlansScreen({
   const report = useCallback(
     (text: string, tone: "info" | "error") =>
       setToast({ text, tone, nonce: Date.now() }),
-    [],
+    [setToast],
   );
   // A plan that is gone for the caller drops from the cache (`gone`).
-  const write = useCallback(
-    (
-      plan: TripPlanSummary,
-      call: Promise<unknown>,
-      gone: boolean,
-      done: string,
-      failed: string,
-    ) =>
-      call
-        .then(() => afterPlanWrite(plan.id, gone))
-        .then(() => report(done, "info"))
-        .catch((err: unknown) =>
-          report(messageFromError(err, failed), "error"),
-        ),
-    [report],
-  );
+  const write = (
+    plan: TripPlanSummary,
+    call: Promise<unknown>,
+    gone: boolean,
+    done: string,
+    failed: string,
+  ) =>
+    call
+      .then(() => afterPlanWrite(plan.id, gone))
+      .then(() => report(done, "info"))
+      .catch((err: unknown) => report(messageFromError(err, failed), "error"));
   const confirm = (
     words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
     destructive: boolean,

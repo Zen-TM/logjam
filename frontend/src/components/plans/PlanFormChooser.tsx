@@ -1,6 +1,6 @@
 // The New form dialog's first step: a blank form, a template, or a copy of a
 // form from another plan the caller leads (`GET /plans/leader-forms`).
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   TRIP_PLAN_FORM_PRESET_BLURBS,
   TRIP_PLAN_FORM_PRESET_IDS,
@@ -32,19 +32,35 @@ export default function PlanFormChooser({
   planId: string;
   onPick: (values: TripPlanFormValues) => void;
 }) {
-  const [mine, setMine] = useState<TripPlanLeaderForm[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Tagged with the request it answers, so a retry reads as loading again
+  // without resetting state inside the effect.
+  const [attempt, setAttempt] = useState(0);
+  const key = `${planId}:${attempt}`;
+  const [fetched, setFetched] = useState<{
+    key: string;
+    forms?: TripPlanLeaderForm[];
+    error?: string;
+  } | null>(null);
+  const answer = fetched?.key === key ? fetched : null;
+  const mine = answer?.forms ?? null;
+  const error = answer?.error ?? null;
 
-  const load = useCallback(() => {
-    setError(null);
+  useEffect(() => {
+    let live = true;
     getLeaderForms(planId)
-      .then(setMine)
+      .then((forms) => live && setFetched({ key, forms }))
       .catch((err) => {
         console.error(err);
-        setError(messageFromError(err, copy.chooseMineFailed));
+        if (live)
+          setFetched({
+            key,
+            error: messageFromError(err, copy.chooseMineFailed),
+          });
       });
-  }, [planId]);
-  useEffect(load, [load]);
+    return () => {
+      live = false;
+    };
+  }, [planId, key]);
 
   return (
     <div className={classes.form}>
@@ -94,7 +110,7 @@ export default function PlanFormChooser({
         />
       ))}
       {error ? (
-        <ErrorState message={error} onRetry={load} />
+        <ErrorState message={error} onRetry={() => setAttempt((n) => n + 1)} />
       ) : mine == null ? (
         <LoadingState label={copy.chooseMineLoading} />
       ) : mine.length === 0 ? (

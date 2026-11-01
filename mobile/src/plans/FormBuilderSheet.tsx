@@ -7,7 +7,6 @@
 // back. Logjam Web's twin is PlanFormBuilderDialog.tsx.
 import {
   memo,
-  useCallback,
   useEffect,
   useState,
   type Dispatch,
@@ -64,6 +63,7 @@ import {
   ChipRail,
   ErrorBanner,
   ErrorState,
+  Field,
   FormStack,
   IconButton,
   LoadingState,
@@ -72,7 +72,6 @@ import {
   SwitchRow,
   TextField,
 } from "../ui";
-import { Field } from "../ui/Field";
 import { createForm, getLeaderForms, patchForm } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
@@ -110,7 +109,6 @@ export function FormBuilderSheet({
   onState: Dispatch<SetStateAction<FormBuilderState>>;
   onInfo: (message: string) => void;
 }) {
-  const theme = useTheme();
   const { assetHue } = useHues();
   const styles = useStyles();
   const form =
@@ -157,21 +155,25 @@ export function FormBuilderSheet({
 
   // The other plans' forms, fetched when the picker is shown.
   const picking = formKey === "new" && values == null;
-  const [others, setOthers] = useState<TripPlanLeaderForm[] | "failed" | null>(
-    null,
-  );
   const [attempt, setAttempt] = useState(0);
+  // Tagged with the request it answers, so a retry reads as loading again
+  // without resetting state inside the effect.
+  const fetchKey = `${plan.id}:${attempt}`;
+  const [fetched, setFetched] = useState<{
+    key: string;
+    result: TripPlanLeaderForm[] | "failed";
+  } | null>(null);
+  const others = fetched?.key === fetchKey ? fetched.result : null;
   useEffect(() => {
     if (!picking || !online) return;
     let live = true;
-    setOthers(null);
     getLeaderForms(plan.id)
-      .then((res) => live && setOthers(res.forms))
-      .catch(() => live && setOthers("failed"));
+      .then((res) => live && setFetched({ key: fetchKey, result: res.forms }))
+      .catch(() => live && setFetched({ key: fetchKey, result: "failed" }));
     return () => {
       live = false;
     };
-  }, [picking, online, plan.id, attempt]);
+  }, [picking, online, plan.id, fetchKey]);
   const start = (next: TripPlanFormValues) => {
     setStarted(next);
     setValues(next);
@@ -185,23 +187,23 @@ export function FormBuilderSheet({
     setValues((was) => (was ? { ...was, ...next } : was));
     setError(null);
   };
-  // Stable and keyed by question id, so typing in one question redraws only
-  // that card (`QuestionCard` is memoised).
-  const changeQuestion = useCallback(
-    (id: string, next: (question: TripPlanQuestion) => TripPlanQuestion) => {
-      setValues((was) =>
-        was
-          ? {
-              ...was,
-              questions: was.questions.map((q) => (q.id === id ? next(q) : q)),
-            }
-          : was,
-      );
-      setError(null);
-    },
-    [],
-  );
-  const moveQuestion = useCallback((id: string, by: -1 | 1) => {
+  // Keyed by question id; the React Compiler keeps them stable so typing in
+  // one question redraws only that card (`QuestionCard` is memoised).
+  const changeQuestion = (
+    id: string,
+    next: (question: TripPlanQuestion) => TripPlanQuestion,
+  ) => {
+    setValues((was) =>
+      was
+        ? {
+            ...was,
+            questions: was.questions.map((q) => (q.id === id ? next(q) : q)),
+          }
+        : was,
+    );
+    setError(null);
+  };
+  const moveQuestion = (id: string, by: -1 | 1) => {
     setValues((was) => {
       if (!was) return was;
       const ids = planSectionsMoved(
@@ -218,14 +220,14 @@ export function FormBuilderSheet({
           }
         : was;
     });
-  }, []);
-  const removeQuestion = useCallback((id: string) => {
+  };
+  const removeQuestion = (id: string) => {
     setValues((was) =>
       was
         ? { ...was, questions: was.questions.filter((q) => q.id !== id) }
         : was,
     );
-  }, []);
+  };
 
   async function submit() {
     if (!values) return;
