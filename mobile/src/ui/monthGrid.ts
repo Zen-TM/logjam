@@ -89,3 +89,19 @@ export function formatMonthLabel({ year, month }: YearMonth): string {
     timeZone: "UTC",
   });
 }
+
+export type DateRange = { start: string | null; end: string | null };
+
+/**
+ * One calendar, two taps: the first sets the start, the second the end, in
+ * either order. A start with no end is a one-day trip. A tap on a finished
+ * range starts a new one.
+ */
+export function tapRange(range: DateRange, tapped: string): DateRange {
+  const { start, end } = range;
+  if (start == null || end != null) return { start: tapped, end: null };
+  if (tapped === start) return { start, end: null };
+  return tapped < start
+    ? { start: tapped, end: start }
+    : { start, end: tapped };
+}

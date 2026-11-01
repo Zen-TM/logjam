@@ -132,7 +132,16 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
     if (!plan && leaving.current) return { stale: false };
     if (plan) held.current = true;
     else if (held.current) setGone(true);
-    setCached(plan);
+    // Same copy (a mirror signal about something else): keep the object, so
+    // the page does not draw again for nothing.
+    setCached((was) =>
+      was &&
+      plan &&
+      was.fetchedAt === plan.fetchedAt &&
+      was.downloadedAt === plan.downloadedAt
+        ? was
+        : plan,
+    );
     setChanged(moved);
     setNow(Date.now());
     return { stale: plan == null || moved };
@@ -316,11 +325,18 @@ function PlanPage({
   );
   const archived = plan.archivedAt != null;
   // Add ▾'s verbs this caller may run; the page draws each where it belongs.
-  const adds = new Set(
-    planVerbsFor(PLAN_ADD_VERBS, "gps", plan.myRole, { archived }).map(
-      (verb) => verb.id,
-    ),
+  const adds = useMemo(
+    () =>
+      new Set(
+        planVerbsFor(PLAN_ADD_VERBS, "gps", plan.myRole, { archived }).map(
+          (verb) => verb.id,
+        ),
+      ),
+    [plan.myRole, archived],
   );
+  // The two sheets that read the whole mirror mount on first use, not with
+  // the page.
+  const tripLogMounted = useOnceOpened(tripLogOpen);
   const today = todayDateKey();
   const notice = tripPlanNotice({
     archived: plan.archivedAt != null,
@@ -526,14 +542,16 @@ function PlanPage({
         onGone={onGone}
         onLeaving={onLeaving}
       />
-      <PlanTripLogSheet
-        plan={tripLogOpen ? plan : null}
-        online={online}
-        onClose={() => setTripLogOpen(false)}
-        // A toast only: the form closes itself after Log trip, and an
-        // attribute added inside it saves without closing it.
-        onSaved={(text, tone) => notify(text, tone)}
-      />
+      {tripLogMounted ? (
+        <PlanTripLogSheet
+          plan={tripLogOpen ? plan : null}
+          online={online}
+          onClose={() => setTripLogOpen(false)}
+          // A toast only: the form closes itself after Log trip, and an
+          // attribute added inside it saves without closing it.
+          onSaved={(text, tone) => notify(text, tone)}
+        />
+      ) : null}
       <PlanDetailsSheet
         visible={editOpen}
         plan={plan}
@@ -580,6 +598,13 @@ function PlanPage({
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
+}
+
+/** True from the first time `open` is, for sheets that cost a mirror read. */
+function useOnceOpened(open: boolean): boolean {
+  const [seen, setSeen] = useState(open);
+  if (open && !seen) setSeen(true);
+  return seen || open;
 }
 
 /** Above the scroll; every other section scrolls under them. */
@@ -672,6 +697,7 @@ function Items({
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
   const [adding, setAdding] = useState(false);
+  const addingMounted = useOnceOpened(adding);
   const styles = useStyles();
   // The button only dims: the words go under it (ui/Button.tsx).
   const add = canAdd ? (
@@ -685,13 +711,15 @@ function Items({
         onPress={() => setAdding(true)}
       />
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-      <AddCopySheet
-        planId={plan.id}
-        visible={adding}
-        online={online}
-        onClose={() => setAdding(false)}
-        onDone={onInfo}
-      />
+      {addingMounted ? (
+        <AddCopySheet
+          planId={plan.id}
+          visible={adding}
+          online={online}
+          onClose={() => setAdding(false)}
+          onDone={onInfo}
+        />
+      ) : null}
     </>
   ) : null;
   /** Save a copy, on each way and map: its row's trailing control, dimmed

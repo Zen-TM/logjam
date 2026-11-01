@@ -8,7 +8,6 @@
 import { useMemo, useState } from "react";
 import { Text } from "react-native";
 import {
-  formatDateKey,
   messageFromError,
   parseTripPlanCreate,
   tripPlanAdoptTheirs,
@@ -26,6 +25,7 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
+import { tapRange } from "../ui/monthGrid";
 import { tripTypeLabel, tripTypeMeta } from "../logs/tripTypeMeta";
 import { makeStyles, muted, useTheme } from "../theme";
 import {
@@ -42,7 +42,7 @@ import {
 } from "../ui";
 
 const copy = TRIP_PLANS_LIST.copy;
-type Mode = "form" | "startDate" | "endDate";
+type Mode = "form" | "dates";
 
 const valuesOf = (plan?: TripPlanView): TripPlanValues => ({
   name: plan?.name ?? "",
@@ -149,15 +149,13 @@ export function PlanDetailsSheet({
   }
 
   const toForm = () => setMode("form");
-  const day = (key: "startDate" | "endDate", label: string) => (
+  const datesRow = (
     <Row
       icon="date"
-      title={
-        values[key] ? formatDateKey(`${values[key]}T00:00:00.000Z`) : "Not set"
-      }
-      subtitle={label}
+      title={tripPlanDatesLabel(values.startDate, values.endDate)}
+      subtitle="Dates"
       right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-      onPress={() => setMode(key)}
+      onPress={() => setMode("dates")}
     />
   );
 
@@ -169,13 +167,7 @@ export function PlanDetailsSheet({
       onClose={mode === "form" ? onClose : toForm}
       onBack={mode === "form" ? undefined : toForm}
       title={
-        mode === "form"
-          ? plan
-            ? copy.editTitle
-            : copy.newTitle
-          : mode === "startDate"
-            ? copy.startDate
-            : copy.endDate
+        mode === "form" ? (plan ? copy.editTitle : copy.newTitle) : "Dates"
       }
       // Pinned: with the keyboard up the form outgrows the sheet.
       footer={
@@ -197,16 +189,24 @@ export function PlanDetailsSheet({
       {!visible ? null : mode !== "form" ? (
         <FormStack>
           <DatePicker
-            value={values[mode]}
-            onChange={(next) => set({ [mode]: next })}
+            value={values.startDate}
+            allowFuture
+            range={{ start: values.startDate, end: values.endDate }}
+            onChange={(tapped) => {
+              const next = tapRange(
+                { start: values.startDate, end: values.endDate },
+                tapped,
+              );
+              set({ startDate: next.start, endDate: next.end });
+            }}
           />
-          {values[mode] ? (
+          {values.startDate ? (
             <Button
-              label="Clear date"
+              label="Clear dates"
               icon="close"
               variant="ghost"
               onPress={() => {
-                set({ [mode]: null });
+                set({ startDate: null, endDate: null });
                 toForm();
               }}
             />
@@ -226,8 +226,7 @@ export function PlanDetailsSheet({
             }}
           />
           {theirs(["name"], current.name)}
-          {day("startDate", copy.startDate)}
-          {day("endDate", copy.endDate)}
+          {datesRow}
           {theirs(
             ["startDate", "endDate"],
             tripPlanDatesLabel(current.startDate, current.endDate),

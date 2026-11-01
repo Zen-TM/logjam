@@ -255,7 +255,7 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
   notifyMirrorChanged();
   // An item gone from the plan takes its downloaded file with it.
   if (began === epoch)
-    await prunePlanFiles(planId, planFiles(plan)).catch(console.error);
+    void prunePlanFiles(planId, planFiles(plan)).catch(console.error);
   return { plan, fetchedAt, downloadedAt };
 }
 
@@ -283,10 +283,11 @@ export function registerPlansPoll(): () => void {
 }
 
 /**
- * After a write: the list and, unless the plan is gone for the caller (left,
- * deleted), the plan itself are fetched again, so the page and the list read
- * what the API now holds. A failed refetch is logged, not thrown: the write
- * itself succeeded.
+ * After a write: the plan, unless it is gone for the caller (left, deleted),
+ * is fetched again, so the page reads what the API now holds; the caller
+ * waits for that alone. The list follows in the background, since no sheet
+ * is waiting on it. A failed refetch is logged, not thrown: the write itself
+ * succeeded.
  */
 export async function afterPlanWrite(
   planId: string,
@@ -300,9 +301,8 @@ export async function afterPlanWrite(
     // Told now: the poll below may fail, and the list must not keep its mark.
     notifyMirrorChanged();
   }
-  await Promise.all([pollPlans(), gone ? undefined : fetchPlan(planId)]).catch(
-    console.error,
-  );
+  void pollPlans().catch(console.error);
+  if (!gone) await fetchPlan(planId).catch(console.error);
 }
 
 /**
