@@ -43,13 +43,9 @@ test.describe("real Cognito auth lifecycle", () => {
   }) => {
     await page.goto(AUTH_URL!);
 
-    // One button sends the browser to the provider's page.
-    await page
-      .getByRole("button", { name: "Sign in or create an account" })
-      .click();
-    await page.locator('input[name="username"]:visible').fill(EMAIL!);
-    await page.locator('input[name="password"]:visible').fill(PASSWORD!);
-    await page.keyboard.press("Enter");
+    await page.getByLabel("Email").fill(EMAIL!);
+    await page.getByLabel("Password").fill(PASSWORD!);
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
 
     // App.tsx blocks behind ConsentGate when needsReconsent() — agree if shown.
     const agree = page.getByRole("button", { name: /Agree and continue/i });
@@ -84,7 +80,7 @@ test.describe("real Cognito auth lifecycle", () => {
       timeout: 20_000,
     });
     await expect(
-      page.getByRole("button", { name: "Sign in or create an account" }),
+      page.getByRole("button", { name: "Sign in", exact: true }),
     ).toHaveCount(0);
   });
 });

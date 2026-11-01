@@ -59,7 +59,13 @@ export default defineConfig({
           command: "npm run dev -- --port 5199 --strictPort",
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
-          env: { VITE_AUTH_MODE: "oidc" },
+          // A Cognito-shaped issuer draws Logjam Web's own forms. The pool does
+          // not exist: nothing here is submitted.
+          env: {
+            VITE_AUTH_MODE: "oidc",
+            VITE_OIDC_ISSUER:
+              "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_e2e",
+          },
           timeout: 60_000,
         },
       ]

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmEmailChange,
   globalSignOut,
+  passwordSignIn,
   requestEmailChange,
 } from "./cognitoAccount.js";
 import { mapAuthError } from "./apiErrors.js";
@@ -94,5 +95,55 @@ describe("cognitoAccount", () => {
       globalSignOut("https://id.example.com/realms/x", "AT"),
     ).rejects.toThrow();
     expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe("passwordSignIn", () => {
+  it("asks for the password flow and returns the tokens", async () => {
+    const f = stubFetch({
+      ok: true,
+      json: {
+        AuthenticationResult: {
+          IdToken: "I",
+          AccessToken: "A",
+          RefreshToken: "R",
+          ExpiresIn: 3600,
+        },
+      },
+    });
+    expect(await passwordSignIn(ISSUER, "client", "a@b.co", "pw")).toEqual({
+      idToken: "I",
+      accessToken: "A",
+      refreshToken: "R",
+      expiresIn: 3600,
+    });
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      ClientId: "client",
+      AuthFlow: "USER_AUTH",
+      AuthParameters: {
+        USERNAME: "a@b.co",
+        PREFERRED_CHALLENGE: "PASSWORD",
+        PASSWORD: "pw",
+      },
+    });
+  });
+
+  // Mutation: read AuthenticationResult without the check, and an MFA account
+  // throws instead of reaching the page that can ask for its code.
+  it("answers null to a challenge", async () => {
+    stubFetch({ ok: true, json: { ChallengeName: "SOFTWARE_TOKEN_MFA" } });
+    expect(await passwordSignIn(ISSUER, "client", "a@b.co", "pw")).toBeNull();
+  });
+
+  it("keeps Cognito's name on a refusal", async () => {
+    stubFetch({
+      ok: false,
+      status: 400,
+      json: { __type: "NotAuthorizedException", message: "no" },
+    });
+    await expect(
+      passwordSignIn(ISSUER, "client", "a@b.co", "pw"),
+    ).rejects.toMatchObject({ name: "NotAuthorizedException" });
   });
 });

@@ -21,7 +21,7 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 const BUDGET: Record<string, number> = {
   "components/App.module.css": 3,
   "components/ConsentGate.module.css": 4,
-  "components/SignIn.module.css": 5,
+  "components/SignIn.module.css": 6,
   "components/common/PlacePicker.module.css": 5,
   "components/dialogs/AddCustomFieldForm.module.css": 1,
   "components/dialogs/ImportResultSummary.module.css": 2,
