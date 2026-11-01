@@ -173,6 +173,7 @@ describe("REGION_ARTIFACT_KINDS", () => {
         "dem-region",
         "contours-region",
         "slope-region",
+        "land-region",
         "basemap-region",
       ]),
     );

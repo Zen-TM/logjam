@@ -157,3 +157,17 @@
   color: var(--color-text);
   text-align: center;
 }
+
+.landLegend {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.landLegend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}

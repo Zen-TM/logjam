@@ -22,6 +22,7 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
+import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
@@ -44,9 +45,6 @@ import {
   useCurrentUser,
   useTopoExports,
   fetchCurrentUser,
-  getCustomFields,
-  getPlaceTypes,
-  recordConsent,
   passesFilters,
   hasActiveFilters,
   emptyFilters,
@@ -58,12 +56,7 @@ import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
-import {
-  PENDING_CONSENT_STORAGE_KEY,
-  consentGate,
-  currentConsentVersionOf,
-  needsReconsent,
-} from "../consent";
+import { consentGate, currentConsentVersionOf } from "../consent";
 import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
@@ -108,7 +101,7 @@ import {
   LIDAR_JOB_COPY,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
-import { useAuth } from "../useAuth";
+import { useAuth, signOut } from "../useAuth";
 import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
@@ -333,13 +326,8 @@ function App() {
   //
   // `useCurrentUser` above and `useAuth` are the two that cannot: they are how
   // the answer arrives. Everything downstream of them gates on this instead.
-  // The localStorage read is deliberately unmemoised — it is a string compare,
-  // and the key is removed in the boot effect below, whose `applyCurrentUser`
-  // re-render is what re-reads it.
-  const { blocked: consentBlocked, settled: consentSettled } = consentGate(
-    currentUser,
-    localStorage.getItem(PENDING_CONSENT_STORAGE_KEY),
-  );
+  const { blocked: consentBlocked, settled: consentSettled } =
+    consentGate(currentUser);
   const loadsUserData = authenticated && consentSettled;
   // All of the user's completed LiDAR jobs (with presigned URLs), forgotten
   // on signing out (useCompletedTopoJobs.ts).
@@ -441,7 +429,7 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, slope, hillshade } = terrainLayers;
+  const { contours, slope, land, hillshade } = terrainLayers;
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -454,6 +442,7 @@ function App() {
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
+      land,
       hillshade: drawsNswHillshade(activeLayerId, hillshade),
     };
     return [
@@ -467,6 +456,7 @@ function App() {
     activeLayerId,
     contours,
     slope,
+    land,
     hillshade,
     vegetationLayers,
     sharpenedAreas,
@@ -732,51 +722,24 @@ function App() {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
 
+  useBootDefinitions(
+    loadsUserData,
+    setPlaceCustomFieldDefs,
+    setCustomFieldDefs,
+    setPlaceTypes,
+  );
   useEffect(() => {
     if (!authenticated) return;
+    // hydrateFromUser stays here: it only re-reads /users/me (the gate's own
+    // request) for the theme, and the gate itself is themed by it.
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
-    // The place definitions come from the row-grain endpoint because only it
-    // carries the scoping. Best-effort: a failure leaves the forms with the
-    // built-in fields alone, and the panels show their own error states.
-    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
-    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
-    getPlaceTypes().then(setPlaceTypes).catch(console.error);
-    fetchCurrentUser()
-      .then((user) => {
-        // Record the consent given on the sign-up form. Only a pending value
-        // matching the current version is recordable (the server 400s any
-        // other), and only while the user's stored version is actually stale —
-        // this also covers a stale-version user who re-signed-up, which the
-        // old `!user.consentedAt` check silently skipped.
-        const pending = localStorage.getItem(PENDING_CONSENT_STORAGE_KEY);
-        if (pending === currentConsentVersionOf(user) && needsReconsent(user)) {
-          recordConsent(pending)
-            .then((updated) => {
-              // Sync the cached user before dropping the pending key so the
-              // ConsentGate never flashes for a fresh sign-up.
-              applyCurrentUser(updated);
-              localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
-            })
-            .catch((err) => {
-              console.error(err);
-              toast.error(
-                messageFromError(
-                  err,
-                  "Couldn't record your consent. It will be retried next time you sign in.",
-                ),
-              );
-            });
-        } else if (pending) {
-          localStorage.removeItem(PENDING_CONSENT_STORAGE_KEY);
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        toast.error(messageFromError(err, "Couldn't load your preferences."));
-      });
-  }, [authenticated, hydrateFromUser, toast, applyCurrentUser]);
+    fetchCurrentUser().catch((err) => {
+      console.error(err);
+      toast.error(messageFromError(err, "Couldn't load your preferences."));
+    });
+  }, [authenticated, hydrateFromUser, toast]);
 
   // Resume tracking any jobs that were pending/processing before page load
   useEffect(() => {
@@ -1109,17 +1072,9 @@ function App() {
   if (!authenticated) {
     return (
       <SignIn
-        authState={auth.state}
         error={auth.error}
-        onSignIn={auth.signIn}
-        onSignUp={auth.signUp}
-        onConfirmSignUp={auth.confirmSignUp}
-        onResendCode={auth.resendSignUpCode}
-        onForgotPassword={auth.forgotPassword}
-        onConfirmForgotPassword={auth.confirmForgotPassword}
-        goToSignUp={auth.goToSignUp}
-        goToSignIn={auth.goToSignIn}
-        goToForgotPassword={auth.goToForgotPassword}
+        onRedirect={auth.signIn}
+        onPasswordSignIn={auth.signInWithPassword}
       />
     );
   }
@@ -1227,17 +1182,19 @@ function App() {
 
   // Blocking re-consent gate: a signed-in user whose recorded consent version
   // is stale or absent must re-consent before using Logjam Web (the
-  // privacy.html / tos.html "re-consent on next sign-in" promise). The
-  // pending-key fast path keeps the gate from flashing for fresh sign-ups
-  // whose consent PATCH (recorded by the effect above) is still in flight.
+  // privacy.html / tos.html "re-consent on next sign-in" promise). A new
+  // account lands here too and answers the questions the provider's sign-up
+  // page cannot ask.
   // Decided once, up beside the data hooks the same answer holds back
   // (`consentGate`), so the gate and the fetches can never disagree.
   if (consentBlocked && currentUser) {
     return (
       <ConsentGate
         consentVersion={currentConsentVersionOf(currentUser)}
+        newAccount={currentUser.consentVersion === null}
+        currentUsername={currentUser.username}
         onAccepted={applyCurrentUser}
-        onSignOut={auth.signOut}
+        onSignOut={signOut}
       />
     );
   }

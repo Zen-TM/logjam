@@ -49,17 +49,23 @@ export default defineConfig({
   webServer: isLocal
     ? [
         {
-          command: "npm run dev",
-          url: "http://localhost:5173",
+          command: `npm run dev -- --port ${new URL(baseURL).port} --strictPort`,
+          url: baseURL,
           reuseExistingServer: !process.env.CI,
           env: { VITE_AUTH_MODE: "fake" },
           timeout: 60_000,
         },
         {
-          command: "npm run dev -- --port 5199 --strictPort",
+          command: `npm run dev -- --port ${new URL(SIGN_IN_URL).port} --strictPort`,
           url: SIGN_IN_URL,
           reuseExistingServer: !process.env.CI,
-          env: { VITE_AUTH_MODE: "cognito" },
+          // A Cognito-shaped issuer draws Logjam Web's own forms. The pool does
+          // not exist: nothing here is submitted.
+          env: {
+            VITE_AUTH_MODE: "oidc",
+            VITE_OIDC_ISSUER:
+              "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_e2e",
+          },
           timeout: 60_000,
         },
       ]
