@@ -22,6 +22,7 @@ import {
   type TripPlanQuestion,
 } from "./tripPlans.js";
 import { apiSentenceViolations } from "./copyRules.js";
+import { ROUTE_ERRORS } from "./routeValidation.js";
 
 function value<T>(parsed: TripPlanParsed<T>): T {
   if (!("value" in parsed)) throw new Error(JSON.stringify(parsed));
@@ -229,7 +230,12 @@ describe("item edits", () => {
   it("refuses a malformed from, and caps its arrays as their to", () => {
     for (const parsed of [
       parseTripPlanPlacePatch({ name: { from: 3, to: "x" } }),
-      parseTripPlanPlacePatch({ position: { from: "x", to: "y" } }),
+      parseTripPlanPlacePatch({
+        position: { from: "x", to: { latitude: -33.7, longitude: 150.3 } },
+      }),
+      parseTripPlanPlacePatch({ notes: { from: 3, to: "x" } }),
+      parseTripPlanRoutePatch({ name: { from: 3, to: "x" } }),
+      parseTripPlanRoutePatch({ color: { from: 3, to: "#fff" } }),
       parseTripPlanPlacePatch({ elevation: { from: "1", to: 1 } }),
       parseTripPlanRoutePatch({ geometry: { from: 5, to: { points: line } } }),
       parseTripPlanRoutePatch({
@@ -264,8 +270,14 @@ describe("item edits", () => {
       expect(parsed).toMatchObject({ status: 413 });
   });
 
-  // Mutation: skip the points check when geometry.to has none.
+  // Mutation: skip the points check when geometry.to has none (the detail
+  // goes from "points is required" to a shape complaint).
   it("refuses a geometry with no points to save", () => {
+    expect(
+      parseTripPlanRoutePatch({
+        geometry: { from: { points: line }, to: {} },
+      }),
+    ).toEqual({ malformed: ROUTE_ERRORS.pointsRequired });
     for (const to of [{}, { anchors: null }, { points: [line[0]] }])
       expect(
         isMalformed(

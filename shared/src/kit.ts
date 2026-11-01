@@ -42,6 +42,9 @@ export const KIT_COMPONENTS = {
   DateRangeFilter: gps(
     "a date range as two bounds that open the sheet's DatePicker; Logjam Web uses two date inputs in a FilterField",
   ),
+  DateRangeField: web(
+    "a date range in one calendar; Logjam GPS's DatePicker takes the same range",
+  ),
   FilterField: web(
     "a filter's label, summary and clear; Logjam GPS's sheet lays its own",
   ),
@@ -96,7 +99,9 @@ export const KIT_COMPONENTS = {
   // One colour picker, a floating palette: Logjam GPS draws the closed-palette
   // mode (a `palette` prop); the free colour with opacity is a topo's cartography.
   ColourField: both,
-  DatePicker: gps("Logjam Web uses the browser's date input"),
+  DatePicker: gps(
+    "Logjam Web uses the browser's date input, and DateRangeField for a range",
+  ),
   RenameForm: gps("the phone's one-field rename sheet body"),
 
   // — surfaces —

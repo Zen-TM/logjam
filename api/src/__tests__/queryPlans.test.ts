@@ -62,6 +62,7 @@ const READ_PATHS: Record<string, [string, ...string[]]> = {
   "/friends/requests": ["/friends/requests"],
   "/friends/:id/shares": ["/friends/:friendship/shares"],
   "/friends/invites": ["/friends/invites"],
+  // Mutation: drop trip_plan_members_user_id_idx and GET /plans turns red.
   "/plans": ["/plans"],
   "/plans/leader-forms": ["/plans/leader-forms"],
   "/plans/:id": [`/plans/${SEED_PLAN_ID}`],
