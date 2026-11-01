@@ -252,9 +252,9 @@ const CAROL_ID = seedId("0", 3);
 
 // Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
 // .env.local (infra/terraform/templates/env.local.tftpl)
-const ALICE_COGNITO_ID = "fake-alice-sub";
-const BOB_COGNITO_ID = "fake-bob-sub";
-const CAROL_COGNITO_ID = "fake-carol-sub";
+const ALICE_SUB = "fake-alice-sub";
+const BOB_SUB = "fake-bob-sub";
+const CAROL_SUB = "fake-carol-sub";
 
 // Stable anchor place ids referenced by the integration suite.
 const PLACE_IDS = [
@@ -1504,8 +1504,7 @@ async function main() {
     data: [
       {
         id: ALICE_ID,
-        cognitoId: ALICE_COGNITO_ID,
-        subject: ALICE_COGNITO_ID,
+        subject: ALICE_SUB,
         username: "alice",
         email: "alice@local",
         consentedAt,
@@ -1514,8 +1513,7 @@ async function main() {
       },
       {
         id: BOB_ID,
-        cognitoId: BOB_COGNITO_ID,
-        subject: BOB_COGNITO_ID,
+        subject: BOB_SUB,
         username: "bob",
         email: "bob@local",
         consentedAt,
@@ -1524,8 +1522,7 @@ async function main() {
       },
       {
         id: CAROL_ID,
-        cognitoId: CAROL_COGNITO_ID,
-        subject: CAROL_COGNITO_ID,
+        subject: CAROL_SUB,
         username: "carol",
         email: "carol@local",
         consentedAt,

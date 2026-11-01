@@ -49,18 +49,15 @@ describe("createUserForSignup", () => {
     expect(create.mock.calls[0][0].data.username).toBe(INITIAL);
   });
 
-  // Mutation: write only cognitoId (or only subject) in createUserForSignup.
-  it("writes the sub to both identity columns", async () => {
+  // Mutation: write nothing (or the email) to subject in createUserForSignup.
+  it("writes the sub to subject", async () => {
     create.mockResolvedValueOnce(ROW);
     await createUserForSignup({
       sub: SUB,
       email: EMAIL,
       initialUsername: INITIAL,
     });
-    expect(create.mock.calls[0][0].data).toMatchObject({
-      cognitoId: SUB,
-      subject: SUB,
-    });
+    expect(create.mock.calls[0][0].data).toMatchObject({ subject: SUB });
   });
 
   it("retries with a sub-suffixed username when the username is taken", async () => {
