@@ -160,6 +160,12 @@ resource "aws_cognito_user_pool_domain" "main" {
   }
 }
 
+# Created with the pool, with Cognito's look; the settings below replace it.
+import {
+  to = aws_cognito_managed_login_branding.main
+  id = "ap-southeast-2_x5zPhJXMk,fba8005a-00cb-4218-9871-ae4b0e62716c"
+}
+
 # Logjam's look on the hosted pages: the Sandstone scheme (the default in
 # shared/src/themeSchemes.ts) and the email logo lockup. Colours are
 # RRGGBBAA hex without "#". Only the page, form and primary button are set;
