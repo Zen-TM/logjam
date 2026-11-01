@@ -15,7 +15,7 @@
 //    with them.
 //  - **The error goes directly above the button it belongs to** (shared/DESIGN.md §11), never at
 //    the top of the form, and a field's own complaint goes under the field.
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import classes from "./SignIn.module.css";
 import { isValidEmailFormat } from "../emailValidation";
 import { messageFromError } from "../errors/messageFromError";
@@ -165,6 +165,7 @@ function CognitoForms({
   const [localError, setLocalError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const usernameNow = useRef("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -205,9 +206,13 @@ function CognitoForms({
   }
 
   async function usernameIsFree(): Promise<boolean> {
-    if (await usernameAvailable(username.trim())) return true;
-    setUsernameError(USERNAME_TAKEN);
-    return false;
+    const asked = username;
+    const free = await usernameAvailable(asked.trim());
+    // The field may have moved on while this was out.
+    if (!free && asked === usernameNow.current) {
+      setUsernameError(USERNAME_TAKEN);
+    }
+    return free;
   }
 
   async function handleSignIn(e: React.FormEvent) {
@@ -562,6 +567,7 @@ function CognitoForms({
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
+              usernameNow.current = e.target.value;
               setUsernameError(null);
             }}
             onBlur={() => {
