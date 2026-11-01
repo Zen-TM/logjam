@@ -9,12 +9,15 @@ import {
   sortTripPlans,
   todayDateKey,
   TRIP_PLANS_LIST,
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_BULK_DELETE_ADDED_LABEL,
   tripPlanBucket,
   listSelectionLabel,
   tripPlanBulkConfirm,
   tripPlanBulkOffers,
   tripPlanBulkDone,
   tripPlanFormsToAnswerLine,
+  tripPlanFormsUrgent,
   tripPlanRowPill,
   TRIP_PLAN_PAGE,
   planDeleteConfirm,
@@ -27,6 +30,7 @@ import {
 } from "@logjam/shared";
 import {
   Button,
+  Checkbox,
   ChipRail,
   EmptyState,
   ErrorState,
@@ -54,21 +58,27 @@ import classes from "./plans.module.css";
 const copy = TRIP_PLANS_LIST.copy;
 const pageCopy = TRIP_PLAN_PAGE.copy;
 
-const RUN: Record<ListVerbId, (id: string) => Promise<unknown>> = {
+const RUN: Record<
+  ListVerbId,
+  (id: string, deleteAdded: boolean) => Promise<unknown>
+> = {
   archive: (id) => archivePlan(id, true),
   unarchive: (id) => archivePlan(id, false),
-  leave: (id) => leavePlan(id),
+  leave: (id, deleteAdded) => leavePlan(id, deleteAdded),
   delete: (id) => deletePlan(id),
 };
 
-function confirmCopy(plans: TripPlanSummary[]) {
+function confirmCopy(plans: TripPlanSummary[], deleteAdded: boolean) {
   const { lead, leave } = tripPlanBulkOffers(plans);
   const one =
     plans.length === 1
       ? lead.length === 1
         ? planDeleteConfirm(plans[0].name, { places: 0, ways: 0 })
         : planLeaveConfirm(plans[0].name)
-      : tripPlanBulkConfirm({ lead: lead.length, leave: leave.length });
+      : tripPlanBulkConfirm(
+          { lead: lead.length, leave: leave.length },
+          deleteAdded,
+        );
   return {
     title: one.confirmTitle,
     message: one.confirmBody,
@@ -128,12 +138,19 @@ export default function PlansPanel({
     : undefined;
   // Delete-or-leave: the plans you lead are deleted, the rest left.
   const [confirm, setConfirm] = useState<TripPlanSummary[] | null>(null);
+  // Leaving keeps what you added unless this is ticked; it starts off.
+  const [deleteAdded, setDeleteAdded] = useState(false);
+  const ask = (plans: TripPlanSummary[]) => {
+    setDeleteAdded(false);
+    setConfirm(plans);
+  };
+  const [declining, setDeclining] = useState<TripPlanSummary | null>(null);
 
   // Each plan with the verb to run on it; the toast counts what went through.
   async function run(jobs: { verb: ListVerbId; plan: TripPlanSummary }[]) {
     setBusyId("bulk");
     const results = await Promise.allSettled(
-      jobs.map(({ verb, plan }) => RUN[verb](plan.id)),
+      jobs.map(({ verb, plan }) => RUN[verb](plan.id, deleteAdded)),
     );
     for (const r of results)
       if (r.status === "rejected") console.error(r.reason);
@@ -187,7 +204,7 @@ export default function PlansPanel({
     }));
   const runOrConfirm = (verb: ListVerbId, plans: TripPlanSummary[]) =>
     verb === "delete" || verb === "leave"
-      ? setConfirm(plans)
+      ? ask(plans)
       : void run(plans.map((plan) => ({ plan, verb })));
 
   // Decline an invite, withdraw a request: the same call, by status.
@@ -249,7 +266,11 @@ export default function PlansPanel({
             {plan.status === "active" && plan.unansweredForms > 0 && (
               <StatusPill
                 label={tripPlanFormsToAnswerLine(plan.unansweredForms)}
-                tone="outline"
+                tone={
+                  tripPlanFormsUrgent(plan.unansweredForms, plan, today)
+                    ? "warning"
+                    : "outline"
+                }
               />
             )}
             {pill && (
@@ -315,7 +336,7 @@ export default function PlansPanel({
                 compact
                 variant="outline"
                 busy={busyId === plan.id}
-                onClick={() => void dropMembership(plan)}
+                onClick={() => setDeclining(plan)}
               >
                 {copy.decline}
               </Button>
@@ -370,7 +391,7 @@ export default function PlansPanel({
               tone={offers.destructive ? "danger" : undefined}
               disabled={busyId != null}
               disabledReason="Working…"
-              onClick={() => setConfirm(selected)}
+              onClick={() => ask(selected)}
             />
           </SelectionBar>
         ) : (
@@ -426,12 +447,41 @@ export default function PlansPanel({
       {confirm && (
         <ConfirmDialog
           open
-          {...confirmCopy(confirm)}
+          {...confirmCopy(confirm, deleteAdded)}
+          message={
+            <>
+              <p>{confirmCopy(confirm, deleteAdded).message}</p>
+              {tripPlanBulkOffers(confirm).leave.length > 0 && (
+                <Checkbox
+                  label={TRIP_PLAN_BULK_DELETE_ADDED_LABEL}
+                  checked={deleteAdded}
+                  onChange={setDeleteAdded}
+                />
+              )}
+            </>
+          }
+          confirmColor={
+            tripPlanBulkOffers(confirm).lead.length > 0 || deleteAdded
+              ? "error"
+              : "primary"
+          }
           busy={busyId != null}
           onConfirm={() => void run(byRole(confirm))}
           onClose={() => setConfirm(null)}
         />
       )}
+      <ConfirmDialog
+        open={declining != null}
+        title={TRIP_PLAN_JOIN.copy.declineTitle}
+        message={TRIP_PLAN_JOIN.copy.declineBody}
+        confirmLabel={copy.decline}
+        busy={busyId != null}
+        onClose={() => setDeclining(null)}
+        onConfirm={() => {
+          const plan = declining;
+          if (plan) void dropMembership(plan).then(() => setDeclining(null));
+        }}
+      />
       <PlanDetailsDialog
         open={creating}
         onClose={() => setCreating(false)}

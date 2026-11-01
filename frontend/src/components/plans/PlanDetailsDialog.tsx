@@ -192,6 +192,7 @@ function PlanDetailsForm({
               prevMonth: TRIP_PLAN_PAGE.copy.datesPrevMonth,
               nextMonth: TRIP_PLAN_PAGE.copy.datesNextMonth,
             }}
+            tapHint={TRIP_PLAN_PAGE.copy.datesHintClick}
             start={values.startDate}
             end={values.endDate}
             onChange={(startDate, endDate) => set({ startDate, endDate })}

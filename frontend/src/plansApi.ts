@@ -1,6 +1,7 @@
 // The /plans calls Logjam Web makes, and the list and plan hooks. Shapes
 // and limits are `@logjam/shared`'s `tripPlans.ts`; nothing here re-lists them.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "./errors/ApiError";
 import {
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
@@ -257,6 +258,8 @@ export function usePlan(
 ) {
   const [view, setView] = useState<TripPlanView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The first load found no such plan for this caller: a retry cannot help.
+  const [gone, setGone] = useState(false);
   const [request, setRequest] = useState({ count: 0, quiet: false });
   // Everything here is one plan's: another id, or the same one opened again
   // after none, starts from nothing. Guard: plansApi.test.tsx.
@@ -265,6 +268,7 @@ export function usePlan(
     setCurrent(id);
     setView(null);
     setError(null);
+    setGone(false);
     setRequest({ count: 0, quiet: false });
   }
   const report = useRef(onBackgroundError);
@@ -286,13 +290,16 @@ export function usePlan(
         loaded.current = id;
         setView(data);
         setError(null);
+        setGone(false);
       })
       .catch((err) => {
         console.error(err);
         if (cancelled) return;
         const message = messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed);
-        if (loaded.current !== id) setError(message);
-        else if (!request.quiet) report.current?.(message);
+        if (loaded.current !== id) {
+          setError(message);
+          setGone(err instanceof ApiError && err.status === 404);
+        } else if (!request.quiet) report.current?.(message);
       });
     return () => {
       cancelled = true;
@@ -311,6 +318,7 @@ export function usePlan(
   return {
     view: view?.id === id ? view : null,
     error,
+    gone,
     refetch,
     setView,
   };

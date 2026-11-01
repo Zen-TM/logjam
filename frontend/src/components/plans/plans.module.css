@@ -128,9 +128,10 @@
 }
 
 .questionLabel {
-  composes: control from "../../textRoles.generated.module.css";
+  /* The kit TextField's own label, so mixed questions look alike. */
+  composes: detail from "../../textRoles.generated.module.css";
   padding: 0;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 /* One question in the builder: its fields, set apart by a hairline. */

@@ -96,7 +96,7 @@ describe("the plans list", () => {
     );
     expect(screen.getByText("Delete 1 plan and leave 1 plan?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(leavePlan).toHaveBeenCalledWith("b"));
+    await waitFor(() => expect(leavePlan).toHaveBeenCalledWith("b", false));
     expect(deletePlan).toHaveBeenCalledWith("a");
   });
 

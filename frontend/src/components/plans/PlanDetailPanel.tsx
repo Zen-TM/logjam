@@ -22,6 +22,7 @@ import {
   planSectionVerbs,
   todayDateKey,
   TRIP_PLAN_FORMS,
+  TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
   tripPlanCounts,
   tripPlanGoing,
@@ -89,6 +90,7 @@ import PlanPrintDialog from "./PlanPrintDialog";
 import PlanPeople from "./PlanPeople";
 import PlanInvitePage from "./PlanInvitePage";
 import PlanItems from "./PlanItems";
+import PlanPlacePage from "./PlanPlacePage";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace, TRoute, TUser } from "../../placeUtils";
@@ -104,6 +106,8 @@ const formsCopy = TRIP_PLAN_FORMS.copy;
 export default function PlanDetailPanel({
   view,
   error,
+  gone = false,
+  name,
   refetch,
   own,
   currentUser,
@@ -120,6 +124,10 @@ export default function PlanDetailPanel({
   /** The full fetch (App holds it: the map draws the plan's items too). */
   view: TripPlanView | null;
   error: string | null;
+  /** The first load found no such plan for the caller: nothing to retry. */
+  gone?: boolean;
+  /** The plan's name from the list, for the hero while the page loads. */
+  name?: string;
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   refetch: (options?: { quiet: boolean }) => void;
   /** The caller's own lists, for Add a place or way. */
@@ -171,6 +179,8 @@ export default function PlanDetailPanel({
   const [deleteAdded, setDeleteAdded] = useState(false);
   // A form's page, one step inside the Forms view; and its two dialogs.
   const [openFormId, setOpenFormId] = useState<string | null>(null);
+  // A place's page, one step inside the Map view.
+  const [viewingPlaceId, setViewingPlaceId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // Focus follows a step inside the plan (a form's page, Invite people): in,
   // onto its back arrow; out, onto what opened it. Both are gone from the
@@ -204,9 +214,15 @@ export default function PlanDetailPanel({
   if (!view) {
     return (
       <div className={classes.root}>
-        <Hero title={copy.loading} onBack={onBack} backLabel={copy.back} />
+        <Hero
+          title={name ?? copy.loading}
+          onBack={onBack}
+          backLabel={copy.back}
+        />
         <div className={classes.emptyArea} role="status">
-          {error ? (
+          {gone ? (
+            <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
+          ) : error ? (
             <ErrorState message={error} onRetry={() => refetch()} />
           ) : (
             <LoadingState label={copy.loading} />
@@ -371,32 +387,45 @@ export default function PlanDetailPanel({
         backLabel={copy.back}
         actions={
           <>
-            {addVerbs.length > 0 && (
-              <Menu
-                label={copy.addMenu}
-                placement="bottom-end"
-                entries={addVerbs.map((verb) => ({
-                  id: verb.id,
-                  label: verb.label,
-                  icon: verb.icon,
-                  onSelect: addRunners[verb.id],
-                  disabledReason:
-                    verb.id === "form" && formsFull
-                      ? formsFullReason
-                      : undefined,
-                }))}
-                trigger={(props) => (
-                  <Button
-                    {...props}
-                    compact
-                    variant="filled"
-                    icon="add"
-                    trailingIcon="expand"
-                  >
-                    {copy.add}
-                  </Button>
-                )}
-              />
+            {addVerbs.length === 1 ? (
+              // One entry is a button, not a menu of one.
+              <Button
+                compact
+                variant="filled"
+                icon="add"
+                onClick={addRunners[addVerbs[0].id]}
+              >
+                {addVerbs[0].label}
+              </Button>
+            ) : (
+              addVerbs.length > 1 && (
+                <Menu
+                  label={copy.addMenu}
+                  placement="bottom-end"
+                  entries={addVerbs.map((verb) => ({
+                    id: verb.id,
+                    label: verb.label,
+                    // The copy glyph means Save a copy.
+                    icon: verb.icon === "copy" ? "add" : verb.icon,
+                    onSelect: addRunners[verb.id],
+                    disabledReason:
+                      verb.id === "form" && formsFull
+                        ? formsFullReason
+                        : undefined,
+                  }))}
+                  trigger={(props) => (
+                    <Button
+                      {...props}
+                      compact
+                      variant="filled"
+                      icon="add"
+                      trailingIcon="expand"
+                    >
+                      {copy.add}
+                    </Button>
+                  )}
+                />
+              )
             )}
             <Menu
               label={copy.actions}
@@ -430,33 +459,34 @@ export default function PlanDetailPanel({
             />
           </div>
         )}
-        {toAnswer.forms.length > 0 && (
-          <div className={classes.noticeCard}>
-            <Row
-              accentEdge={toAnswer.urgent ? "warning" : false}
-              leading={
-                <IconTile
-                  icon="form"
-                  hue={
-                    toAnswer.urgent
-                      ? "var(--color-warning)"
-                      : "var(--color-accent)"
-                  }
-                />
-              }
-              title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
-              footer={toAnswer.forms.map((form) => (
-                <Button
-                  key={form.id}
-                  compact
-                  onClick={() => setAnswering(form.id)}
-                >
-                  {form.title}
-                </Button>
-              ))}
-            />
-          </div>
-        )}
+        {toAnswer.forms.length > 0 &&
+          (tab === "writeUp" || tab === "forms") && (
+            <div className={classes.noticeCard}>
+              <Row
+                accentEdge={toAnswer.urgent ? "warning" : false}
+                leading={
+                  <IconTile
+                    icon="form"
+                    hue={
+                      toAnswer.urgent
+                        ? "var(--color-warning)"
+                        : "var(--color-accent)"
+                    }
+                  />
+                }
+                title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
+                footer={toAnswer.forms.map((form) => (
+                  <Button
+                    key={form.id}
+                    compact
+                    onClick={() => setAnswering(form.id)}
+                  >
+                    {form.title}
+                  </Button>
+                ))}
+              />
+            </div>
+          )}
       </>
     ),
     dates: (
@@ -527,7 +557,7 @@ export default function PlanDetailPanel({
               {section.body ? (
                 <p className={classes.body}>{section.body}</p>
               ) : (
-                <p className={classes.note}>{copy.writeUpEmpty}</p>
+                <p className={classes.note}>{copy.sectionEmpty}</p>
               )}
             </section>
           ))
@@ -553,6 +583,7 @@ export default function PlanDetailPanel({
         onSaved={onOwnChanged}
         onAddCopy={() => setAddingCopy(NOTHING_TICKED)}
         onOpen={onOpenItem}
+        onView={(place) => setViewingPlaceId(place.id)}
       />
     ),
     forms: tab === "forms" && (
@@ -664,6 +695,7 @@ export default function PlanDetailPanel({
       : null;
 
   const openForm = plan.forms.find((form) => form.id === openFormId);
+  const viewingPlace = plan.places.find((place) => place.id === viewingPlaceId);
   const answeringForm = plan.forms.find((form) => form.id === answering);
   const buildingForm =
     building?.id != null
@@ -676,6 +708,11 @@ export default function PlanDetailPanel({
     <div ref={rootRef} className={classes.root}>
       {inviting ? (
         <PlanInvitePage plan={plan} onBack={closeInvite} onInvited={refetch} />
+      ) : viewingPlace ? (
+        <PlanPlacePage
+          place={viewingPlace}
+          onBack={() => setViewingPlaceId(null)}
+        />
       ) : openForm ? (
         <PlanFormPage
           form={openForm}
@@ -711,6 +748,7 @@ export default function PlanDetailPanel({
       {(addingCopy ?? addCopyRequest) && (
         <PlanAddCopyDialog
           planId={plan.id}
+          plan={plan}
           {...own}
           user={currentUser}
           initial={

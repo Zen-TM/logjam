@@ -417,6 +417,9 @@ export const TRIP_PLAN_PAGE = {
     itemEditPlace: "Edit place",
     itemEditWay: "Edit way",
     inPlan: "In the plan",
+    sectionEmpty: "No text yet.",
+    printFormsNote:
+      "Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.",
     itemName: "Name",
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
@@ -868,6 +871,8 @@ export const TRIP_PLAN_FORMS = {
     chooseTemplates: "Templates",
     chooseMine: "From your other plans",
     chooseBlankHint: "Write your own questions.",
+    chooseBack: "Back",
+    chooseFrom: "From",
     chooseMineLoading: "Loading your forms…",
     chooseMineFailed: "Couldn't load your forms from other plans.",
     chooseMineEmpty: "Forms you make in other plans you lead show up here.",

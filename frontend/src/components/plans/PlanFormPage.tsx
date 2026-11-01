@@ -10,6 +10,7 @@ import {
   planVerbsFor,
   PLAN_FORM_VERBS,
   TRIP_PLAN_FORMS,
+  TRIP_PLAN_PAGE,
   tripPlanAnswerText,
   tripPlanSeesAnswers,
   tripPlanVisibilityLine,
@@ -26,6 +27,7 @@ import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
+const pageCopy = TRIP_PLAN_PAGE.copy;
 
 export default function PlanFormPage({
   form,
@@ -137,16 +139,18 @@ export default function PlanFormPage({
       />
     ),
     visibility: (
-      <>
-        <p className={classes.note}>
-          {tripPlanVisibilityLine(form.visibleTo, form.preset)}
-        </p>
-        {tally.map((line) => (
-          <p key={line} className={classes.note}>
-            {line}
-          </p>
-        ))}
-      </>
+      // A leader reads who sees the answers and how many are in, as one
+      // line; the sentence "your answers" is addressed to a member.
+      <p className={classes.note}>
+        {role === "leader"
+          ? [
+              form.visibleTo === "leaders"
+                ? pageCopy.seenByLeaders
+                : pageCopy.seenByMembers,
+              ...tally,
+            ].join(" · ")
+          : tripPlanVisibilityLine(form.visibleTo, form.preset)}
+      </p>
     ),
     mine: (
       <div className={classes.block}>

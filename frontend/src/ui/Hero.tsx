@@ -54,7 +54,12 @@ export function Hero({
   return (
     <header className={classes.hero} data-back={onBack ? true : undefined}>
       {onBack && <IconButton icon="back" label={backLabel} onClick={onBack} />}
-      <h2 className={children ? "visually-hidden" : classes.title}>{title}</h2>
+      <h2
+        className={children ? "visually-hidden" : classes.title}
+        title={title}
+      >
+        {title}
+      </h2>
       {children}
       {actions}
       {close && (
