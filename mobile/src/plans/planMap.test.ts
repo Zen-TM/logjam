@@ -3,7 +3,7 @@ import {
   isPlanPin,
   planBbox,
   planMapSaved,
-  planModeMine,
+  mutedFeatures,
   planModeReducer,
   planModeStart,
 } from "./planMap";
@@ -64,7 +64,6 @@ describe("plan mode on the map", () => {
     });
     expect(next.shownPlanId).toBeNull();
     expect(next.plan).toBeNull();
-    expect(planModeMine(next)).toBe(true);
   });
 
   // Mutation: ignore a read with no cached copy, and a plan the user left
@@ -73,22 +72,6 @@ describe("plan mode on the map", () => {
     const next = planModeReducer(showing, { type: "read", plan: null });
     expect(next.shownPlanId).toBeNull();
     expect(next.plan).toBeNull();
-  });
-
-  // Mutation: carry Show my things into the next plan, and it opens with
-  // the user's own things drawn over it.
-  it("a new plan starts with only its own things", () => {
-    const mineOn = planModeReducer(showing, { type: "toggleMine" });
-    expect(planModeMine(mineOn)).toBe(true);
-    const next = planModeReducer(mineOn, { type: "arrive", planMode: b });
-    expect(next.showMine).toBe(false);
-  });
-
-  // Mutation: make `mine` false whenever a plan id is set, and the map is
-  // empty while the plan is being read.
-  it("draws the user's own things until the plan is read", () => {
-    expect(planModeMine(planModeStart(a))).toBe(true);
-    expect(planModeMine(showing)).toBe(false);
   });
 });
 
@@ -130,5 +113,18 @@ describe("planMapSaved", () => {
         region(null),
       ]),
     ).toBe(false);
+  });
+});
+
+describe("mutedFeatures", () => {
+  // Mutation: return the collection untouched, and a shared place stays as
+  // strong as the plan's own beside it.
+  it("marks every feature muted and keeps its other properties", () => {
+    const fc = { features: [{ properties: { id: "a" } }] };
+    expect(mutedFeatures(fc).features[0].properties).toEqual({
+      id: "a",
+      muted: true,
+    });
+    expect(fc.features[0].properties).toEqual({ id: "a" });
   });
 });

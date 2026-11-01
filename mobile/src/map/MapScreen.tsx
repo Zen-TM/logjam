@@ -105,7 +105,7 @@ import {
 } from "@logjam/shared";
 import {
   isPlanPin,
-  planModeMine,
+  mutedFeatures,
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
@@ -415,9 +415,9 @@ const ANCHOR_DELETE_FLIP_DP = 78;
  *  at one cannot easily hit the other. */
 const ANCHOR_DELETE_GAP_DP = 26;
 
-/** The top padding a plan's fit leaves for the search row, the plan banner
- *  and an offline notice under it (dp, measured on a Pixel). */
-const PLAN_BANNER_CLEARANCE = 290;
+/** The top padding a plan's fit leaves for the search row and an offline
+ *  notice under it (dp). */
+const PLAN_BANNER_CLEARANCE = 190;
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
@@ -1039,7 +1039,7 @@ export function MapScreen({
   );
   if (planMode !== planState.arrivedFor)
     planDispatch({ type: "arrive", planMode });
-  const { shownPlanId, plan: planOnMap, showMine } = planState;
+  const { shownPlanId, plan: planOnMap } = planState;
   const [planPlaceId, setPlanPlaceId] = useState<string | null>(null);
   const leavePlan = () => planDispatch({ type: "leave" });
   // Re-read whenever the cache changes: a plan the user lost leaves the map,
@@ -1061,7 +1061,6 @@ export function MapScreen({
       unsubscribe();
     };
   }, [shownPlanId]);
-  const mine = planModeMine(planState);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
   // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
@@ -1691,13 +1690,17 @@ export function MapScreen({
   const pinsOwned = useMemo(() => {
     if (!planOnMap) return ownedFc;
     const plan = toPlaceFeatureCollection(planOnMap.places, placeTypeColors);
-    if (!mine) return plan;
-    const own = ownedFc.features.map((feature) => ({
-      ...feature,
-      properties: { ...feature.properties, muted: true },
-    }));
-    return { ...plan, features: [...plan.features, ...own] };
-  }, [mine, ownedFc, placeTypeColors, planOnMap]);
+    return {
+      ...plan,
+      features: [...plan.features, ...mutedFeatures(ownedFc).features],
+    };
+  }, [ownedFc, placeTypeColors, planOnMap]);
+  // Shared places are never the plan's, so under a plan they are as faint as
+  // the user's own.
+  const pinsShared = useMemo(
+    () => (planOnMap ? mutedFeatures(sharedFc) : sharedFc),
+    [planOnMap, sharedFc],
+  );
   const planRoutes = planOnMap?.routes;
 
   /** Follow a track between two anchors, if snapping is on and finds one.
@@ -2446,17 +2449,17 @@ export function MapScreen({
   // `path` null means the file synced as a row but its bytes are not on this
   // phone yet — there is nothing to draw. Filtered here rather than guarded at
   // the source below, so the layer indices stay contiguous.
-  const visibleImports =
-    showVectorImports && mine
-      ? imports.filter((imported) => imported.visible && imported.path !== null)
-      : [];
+  const visibleImports = showVectorImports
+    ? imports.filter((imported) => imported.visible && imported.path !== null)
+    : [];
 
   // GeoPDF imports: file management lives in SavedScreen (viewport-independent
   // management); this screen keeps only the ready layers it renders.
   const { geoPdfImports } = useGeoPdfImports();
   const readyGeoPdfs = geoPdfImports.filter((gp) => gp.state === "ready");
-  const readyGeoPdfImports =
-    showGeoPdfs && mine ? readyGeoPdfs.filter((gp) => gp.visible) : [];
+  const readyGeoPdfImports = showGeoPdfs
+    ? readyGeoPdfs.filter((gp) => gp.visible)
+    : [];
 
   // Track recording, markers and navigate-to-point. The recorder
   // itself lives in tracks/trackRecorder (background task); this screen only
@@ -2518,12 +2521,10 @@ export function MapScreen({
       planRoutes
         ? [
             ...planRoutes,
-            ...(mine
-              ? visibleRoutes.map((route) => ({ ...route, muted: true }))
-              : []),
+            ...visibleRoutes.map((route) => ({ ...route, muted: true })),
           ]
         : visibleRoutes,
-    [planRoutes, mine, visibleRoutes],
+    [planRoutes, visibleRoutes],
   );
   // A plan's way has no options sheet of the user's.
   const pressRoute = useCallback(
@@ -4947,7 +4948,7 @@ export function MapScreen({
             Mirror-backed, so it draws with no signal for any file this phone
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
-        {showPlaceRoutes && mine ? (
+        {showPlaceRoutes ? (
           <PlaceRoutesLayer onStatus={setRoutesStatus} />
         ) : null}
 
@@ -4973,7 +4974,7 @@ export function MapScreen({
         <TrackMapLayers
           tracks={tracks}
           liveCoord={userCoord}
-          showTracks={showTracks && mine}
+          showTracks={showTracks}
           onTrackPress={handleTrackPress}
         />
 
@@ -5008,7 +5009,7 @@ export function MapScreen({
             the place point-picker (PlacePinsLayer). */}
         <PlacePinsLayer
           ownedFc={pinsOwned}
-          sharedFc={mine ? sharedFc : EMPTY_PLACES}
+          sharedFc={pinsShared}
           onPress={handlePlacePress}
         />
 
@@ -5125,6 +5126,37 @@ export function MapScreen({
           <FocusPulse bbox={focusPulse.bbox} nonce={focusPulse.nonce} />
         ) : null}
       </Map>
+
+      {/* Plan mode's banner: between the search and record buttons, under the
+          search bar when that expands. */}
+      {planOnMap && !collectingPoints ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.planBanner,
+            {
+              top: insets.top + CHROME_GAP,
+              left: CHROME_GAP + SEARCH_SIZE + spacing(1),
+              right: CHROME_GAP + SEARCH_SIZE + spacing(1),
+            },
+          ]}
+        >
+          <Notice
+            icon="plan"
+            numberOfLines={1}
+            action={
+              <IconButton
+                icon="close"
+                size={16}
+                accessibilityLabel={TRIP_PLAN_PAGE.copy.backToMap}
+                onPress={leavePlan}
+              />
+            }
+          >
+            {planOnMap.name}
+          </Notice>
+        </View>
+      ) : null}
 
       {/* Place search: collapsed button top-left, expands to a full-width bar.
           Hidden while a point-collecting tool is armed — search is not usable
@@ -5272,30 +5304,6 @@ export function MapScreen({
             color={draftColor}
             onColorChange={setDraftColor}
           />
-        ) : null}
-
-        {planOnMap ? (
-          <Notice
-            icon="plan"
-            numberOfLines={2}
-            controls={
-              <>
-                <Chip
-                  label={TRIP_PLAN_PAGE.copy.showMine}
-                  active={showMine}
-                  onPress={() => planDispatch({ type: "toggleMine" })}
-                />
-                <Button
-                  label={TRIP_PLAN_PAGE.copy.backToMap}
-                  compact
-                  variant="ghost"
-                  onPress={leavePlan}
-                />
-              </>
-            }
-          >
-            {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
-          </Notice>
         ) : null}
 
         {/* Offline/unavailable basemap notice (fail visibly, never silently).
@@ -5885,7 +5893,6 @@ function RouteNameForm({
 }
 
 /** The user's shared pins, while a plan is on the map without them. */
-const EMPTY_PLACES = toPlaceFeatureCollection([]);
 
 const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the
@@ -5924,6 +5931,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   // be findable while a recording runs, so it does not live in the column that
   // scrolls tools sideways over itself.
   recordSlot: { position: "absolute" },
+  planBanner: {
+    position: "absolute",
+    height: SEARCH_SIZE,
+    justifyContent: "center",
+  },
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
