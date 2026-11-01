@@ -48,7 +48,11 @@ Logjam GPS has no public release, so no old build needs the Amplify flow
 - **What a provider's sign-up cannot ask, `ConsentGate` asks** before any user
   data loads (`shared/src/consentForm.ts`, `frontend/src/consent.test.ts`).
   Logjam Web's own sign-up form asks up front and records it at first sign-in;
-  if that fails, the gate asks. Until then the account's name is neutral, `user-`
+  if that fails, the gate asks. The form checks a username is free before
+  anything reaches Cognito, through `GET /users/username-available`, a yes or no
+  with no token: usernames are public to anyone with an account, which anyone
+  can make. Guard: `api/src/routes/usersUsernameAvailable.unit.test.ts`. Until
+  then the account's name is neutral, `user-`
   plus a hash of the subject, and never comes from the email
   (`initialUsernameFor`). Guard: `api/src/routes/users.unit.test.ts`.
 - **Whatever the standard does not cover is a provider extra, chosen from the
@@ -73,6 +77,8 @@ Logjam GPS has no public release, so no old build needs the Amplify flow
     SRP sent a proof. `ALLOW_USER_AUTH` must stay on the app client.
   - Two ways in to keep working, and about 400 lines of forms that exist for
     one provider.
+  - A list of names can be tested without an account, at 30 a minute per
+    address.
   - Logjam GPS and any other issuer still get the provider's page, whose copy
     is the provider's, and a new account answers a second form afterwards. They
     depend on that page being up.
