@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAP_TERRAIN, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
-import { TerrainPane } from "./LayersPopover";
+import { MAP_TERRAIN, NSW_LAND, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import { LandRow, TerrainPane } from "./LayersPopover";
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
 HTMLDialogElement.prototype.showModal = function showModal() {
@@ -126,6 +126,7 @@ describe("the Terrain group on Logjam Web", () => {
     const stored = {
       contours: true,
       slope: true,
+      land: false,
       hillshade: true,
       vegetation: true,
     };
@@ -139,5 +140,31 @@ describe("the Terrain group on Logjam Web", () => {
     draw("protomaps", stored);
     expect(on("Show contours")).toBe("true");
     expect(on("Show hillshade")).toBe("true");
+  });
+});
+
+describe("the Land tenure row on Logjam Web", () => {
+  // Mutation: start it on, and every map opens under a layer nobody asked for.
+  it("is off by default, and switches the land key", () => {
+    const onToggle = vi.fn();
+    render(
+      <LandRow checked={TERRAIN_LAYER_DEFAULTS.land} onToggle={onToggle} />,
+    );
+    const land = screen.getByRole("switch", { name: "Show land tenure" });
+    expect(land.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(land);
+    expect(onToggle).toHaveBeenCalledWith(true);
+  });
+
+  // Mutation: drop the caveat, and Sydney's gaps and Land Council freehold
+  // read as fact. The credit is a CC BY term of the data.
+  it("opens its legend with the classes, caveat and credit", () => {
+    render(<LandRow checked={false} onToggle={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: copy.landAbout }));
+    const legend = screen.getByRole("dialog", { name: copy.land }).textContent;
+    expect(legend).toContain(copy.landLegend);
+    expect(legend).toContain("Private land");
+    expect(legend).toContain(copy.landCaveat);
+    expect(legend).toContain(NSW_LAND.credit);
   });
 });

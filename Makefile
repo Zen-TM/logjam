@@ -23,7 +23,7 @@ PACKAGES := . shared api frontend mobile infra/lambda/cognito-email-sender
 ## Start full local env (fake auth, seeded fixtures)
 dev: shared build-workers
 	@echo "Starting infra..."
-	docker compose up -d postgres ministack
+	docker compose up -d postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@$(MAKE) _ministack-tf
 	@echo "Generating Prisma client..."
@@ -51,7 +51,7 @@ dev-snapshot:
 	fi
 	@echo "Wiping volumes and restoring snapshot..."
 	docker compose down -v
-	docker compose up -d postgres ministack
+	docker compose up -d postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@rm -f $(LOCAL_TF)/terraform.tfstate $(LOCAL_TF)/terraform.tfstate.backup
 	@$(MAKE) _ministack-tf
@@ -67,7 +67,7 @@ dev-snapshot:
 ## Reset: wipe DB + MiniStack volumes, restart, re-seed
 reset: shared build-workers
 	docker compose down -v
-	docker compose up -d postgres ministack
+	docker compose up -d postgres ministack mailpit
 	@$(MAKE) _wait-healthy
 	@rm -f $(LOCAL_TF)/terraform.tfstate $(LOCAL_TF)/terraform.tfstate.backup
 	@$(MAKE) _ministack-tf

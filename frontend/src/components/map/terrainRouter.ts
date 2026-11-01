@@ -27,6 +27,9 @@ import { PMTiles } from "pmtiles";
 
 export const TERRAIN_PROTOCOL = "logjam-terrain";
 
+/** Land is no surface a sharpened area replaces: its archive is read as it is. */
+export type RoutedTerrainKey = Exclude<TerrainLayerKey, "land">;
+
 /**
  * Each Terrain layer's statewide archive, declared once: the unrouted
  * entries (terrainEntries.ts) and the router both read it
@@ -37,12 +40,12 @@ export const TERRAIN_STATEWIDE = {
   slope: NSW_SLOPE,
   hillshade: NSW_HILLSHADE,
 } as const satisfies Record<
-  TerrainLayerKey,
+  RoutedTerrainKey,
   { archivePath: string; minzoom: number; maxzoom: number; creditHtml: string }
 >;
 
 /** Which of an area's archives a layer reads: the hillshade shades heights. */
-const ARCHIVE_LAYER: Record<TerrainLayerKey, TerrainArchiveLayer> = {
+const ARCHIVE_LAYER: Record<RoutedTerrainKey, TerrainArchiveLayer> = {
   contours: "contours",
   slope: "slope",
   hillshade: "heights",
@@ -95,7 +98,7 @@ export function areasKey(areas: readonly SharpenedOverlay[]): string {
 
 /** The routed URL template for one Terrain layer. */
 export function terrainTileTemplate(
-  key: TerrainLayerKey,
+  key: RoutedTerrainKey,
   areas: readonly SharpenedOverlay[],
 ): string {
   return `${TERRAIN_PROTOCOL}://${key}/${areasKey(areas)}/{z}/{x}/{y}`;
@@ -124,7 +127,7 @@ export async function terrainTile(
 ): Promise<{ data: Uint8Array }> {
   const match = URL_PATTERN.exec(params.url);
   if (!match) throw new Error("Not a terrain tile URL");
-  const key = match[1] as TerrainLayerKey;
+  const key = match[1] as RoutedTerrainKey;
   const layer = ARCHIVE_LAYER[key];
   const [z, x, y] = [match[2], match[3], match[4]].map(Number) as [
     number,

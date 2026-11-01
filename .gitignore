@@ -15,7 +15,7 @@ __pycache__/
 .env.local
 .env.*.local
 *.env.local
-# Terraform var files may carry secrets (e.g. TF_VAR_resend_api_key overrides)
+# Terraform var files may carry secrets
 *.tfvars
 *.auto.tfvars
 

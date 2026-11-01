@@ -289,9 +289,10 @@ resource "aws_iam_policy" "database_password_access" {
   })
 }
 
-# Lets the ECS execution role inject RESEND_API_KEY into the worker task defs at
-# launch (the three workers send transactional email via Resend; secret value
-# lives in Secrets Manager, never in Terraform/git).
+# Lets the ECS execution role inject the Resend API key as SMTP_PASSWORD into the
+# worker task defs at launch, and the EB API resolve it at boot (Resend's SMTP
+# relay takes the key as its password; secret value lives in Secrets Manager,
+# never in Terraform/git).
 resource "aws_iam_policy" "resend_api_key_access" {
   name = "ResendApiKeyAccess"
   policy = jsonencode({
@@ -349,6 +350,11 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_aws_managed" {
 resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = aws_iam_policy.database_password_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "eb_instance_resend_api_key" {
+  role       = "logjam-eb-role"
+  policy_arn = aws_iam_policy.resend_api_key_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "ecs_exec_resend_api_key" {
@@ -713,12 +719,13 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
   })
 }
 
-# Scoped Cognito grant. Already present live as inline policy
-# `LogjamCognitoAdminUser`; codified here (same name + document) so it is
-# repo-visible and survives the AmazonCognitoPowerUser detach. Because the name
-# and body match the live inline policy exactly, apply is a content-identical
-# PutRolePolicy upsert (no functional change), it only brings the grant into
-# Terraform state.
+# Scoped Cognito grant, inline policy `LogjamCognitoAdminUser` (the name is
+# historic: it also holds AdminDeleteUser now). Codified here so it is
+# repo-visible and survives the AmazonCognitoPowerUser detach. AdminGetUser is
+# live already; AdminDeleteUser is added for account deletion (#437), where
+# the API deletes the identity at Cognito after the user's Logjam data. Exactly
+# these two actions, on the one pool: guards.tftest.hcl
+# (cognito_client_scopes_and_api_grant).
 resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
   name = "LogjamCognitoAdminUser"
   role = "logjam-eb-role"
@@ -726,7 +733,7 @@ resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = "cognito-idp:AdminGetUser"
+      Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]
       Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
     }]
   })

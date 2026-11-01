@@ -47,6 +47,15 @@ describe("shownOverlays", () => {
     hillshade: false,
   };
 
+  // Mutation: drop `key !== "land"`, and any print over one of the user's own
+  // jobs tints the land nobody asked to see.
+  it("prints Land only where the map shows it, job or no job", () => {
+    const shown = (land: boolean) =>
+      shownOverlays(new Set(), true, { ...mapShowsContours, land }, true);
+    expect(shown(false).has("land")).toBe(false);
+    expect(shown(true).has("land")).toBe(true);
+  });
+
   // Mutation: turn every Terrain layer on when no job is in the area
   // (`true || jobInArea`), and a map showing contours alone prints slope and
   // shading.

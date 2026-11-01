@@ -1,12 +1,18 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { layers, namedFlavor } from "@protomaps/basemaps";
-import { drawsOverTerrain, TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
+import {
+  drawsOverTerrain,
+  NSW_LAND,
+  TERRAIN_BASEMAP_ANCHORS,
+} from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import {
   GAUGE_BELOW,
   GAUGE_LAYER,
+  LAND_FILL_LAYER,
+  landClassAt,
   pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
@@ -26,6 +32,30 @@ function fakeMap(ids: string[]) {
     },
   };
 }
+
+describe("landClassAt", () => {
+  const drawn = (properties: Record<string, unknown>) => ({
+    getLayer: (id: string) => (id === LAND_FILL_LAYER ? {} : undefined),
+    queryRenderedFeatures: () => [{ properties }],
+  });
+
+  // Mutation: drop the `getLayer` test, and with the overlay off MapLibre is
+  // queried for a layer it does not have, and throws.
+  it("reads nothing with the overlay off", () => {
+    const off = {
+      getLayer: () => undefined,
+      queryRenderedFeatures: () => {
+        throw new Error("no such layer");
+      },
+    };
+    expect(landClassAt(off, [1, 2])).toBeNull();
+  });
+
+  it("names the class drawn at the point", () => {
+    const map = drawn({ [NSW_LAND.classProperty]: "State Forest" });
+    expect(landClassAt(map, [1, 2])).toBe("State forest");
+  });
+});
 
 describe("stackTopoLayers", () => {
   // Mutation: start from the top of the style instead of `TOPO_CEILING`, and
@@ -72,6 +102,7 @@ describe("moveTerrainIntoBasemap", () => {
       "pm-roads_minor",
       "pm-places_locality",
       "topo-nswhillshade-dem",
+      "topo-nswland-fill",
       "topo-nswslope-dem",
       "topo-nswcontours-minor",
       "topo-nswcontours-labels",
@@ -83,6 +114,7 @@ describe("moveTerrainIntoBasemap", () => {
       {
         contours: ["topo-nswcontours-minor", "topo-nswcontours-labels"],
         slope: ["topo-nswslope-dem"],
+        land: ["topo-nswland-fill"],
         hillshade: ["topo-nswhillshade-dem"],
       },
       "pm-",
@@ -91,6 +123,7 @@ describe("moveTerrainIntoBasemap", () => {
       "pm-earth",
       "pm-landcover",
       "topo-nswhillshade-dem",
+      "topo-nswland-fill",
       "pm-water",
       "topo-nswslope-dem",
       "topo-nswcontours-minor",

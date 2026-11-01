@@ -4,6 +4,7 @@ import {
   lon2tileX,
   getMapDimensions,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_HILLSHADE,
   NSW_SLOPE,
   RASTER_TEMPLATE_DEFAULTS,
@@ -97,6 +98,14 @@ describe("statewideReads", () => {
     expect(paths(statewideReads(input({ overlays: ["contours"] })))).toEqual(
       [],
     );
+  });
+
+  // Mutation: leave Land out of the plan, and a saved print reads it from the
+  // network again, or fails offline.
+  it("adds Land where the print asks for it, over any sheet", () => {
+    expect(paths(statewideReads(input({ overlays: ["land"] })))).toEqual([
+      NSW_LAND.archivePath,
+    ]);
   });
 
   it("is empty for a map with no size", () => {
