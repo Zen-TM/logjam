@@ -46,7 +46,7 @@ cd "$(dirname "$0")/.."
 # The app throws at launch when one of these is unset: fail before the build,
 # not on the device after it. Only fake auth goes without a provider.
 required="EXPO_PUBLIC_API_URL EXPO_PUBLIC_WEB_URL"
-auth_mode=${EXPO_PUBLIC_AUTH_MODE:-$(sed -n 's/^EXPO_PUBLIC_AUTH_MODE=//p' .env)}
+auth_mode=${EXPO_PUBLIC_AUTH_MODE:-$(sed -n 's/^EXPO_PUBLIC_AUTH_MODE=//p' .env 2>/dev/null | tr -d '"'"'"'\r' || true)}
 [ "$auth_mode" = fake ] || required="$required EXPO_PUBLIC_OIDC_ISSUER EXPO_PUBLIC_OIDC_CLIENT_ID"
 for v in $required; do
   [ -n "${!v:-}" ] || grep -qE "^$v=.+" .env || { echo "$v is not set in .env" >&2; exit 1; }
