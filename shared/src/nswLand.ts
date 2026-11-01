@@ -62,6 +62,12 @@ export const LAND_CLASSES = [
 export const LAND_EDGE_MINZOOM = 12;
 
 /**
+ * What a saved area keeps of the archive: the zooms a map draws. The rest stay
+ * for a print at a coarse scale, and a z8 tile weighs what 100 z13 ones do.
+ */
+export const NSW_LAND_CLIP = { ...NSW_LAND, minzoom: LAND_EDGE_MINZOOM };
+
+/**
  * A holding's border, bottom of the map first: two soft lines and a sharp one.
  * Each is its holding's colour and pushed inside its own polygon by `offset`
  * (a tile's rings wind so that positive is inwards), so two holdings meet as

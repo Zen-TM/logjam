@@ -9,7 +9,7 @@ import {
   type DemSource,
 } from "./demSources.js";
 import { NSW_CONTOURS } from "./nswContours.js";
-import { NSW_LAND } from "./nswLand.js";
+import { NSW_LAND_CLIP } from "./nswLand.js";
 import { NSW_HILLSHADE, NSW_SLOPE } from "./terrain.js";
 
 export type RegionBbox = {
@@ -401,15 +401,10 @@ const SLOPE_TILE_BYTES: Record<
 
 /**
  * MEASURED bytes of one tile of the Land overlay at each zoom a clip holds, as
- * stored (gzip), from every tile of a 40 km Blue Mountains box. Most of a clip
- * is its first few tiles: one z8 tile is worth a thousand z13 ones here.
+ * stored (gzip), from every tile of a 40 km Blue Mountains box.
  */
 const LAND_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
   {
-    8: { meanBytes: 352_000, p90Bytes: 376_000 },
-    9: { meanBytes: 188_000, p90Bytes: 227_000 },
-    10: { meanBytes: 73_000, p90Bytes: 101_000 },
-    11: { meanBytes: 23_000, p90Bytes: 42_000 },
     12: { meanBytes: 7_000, p90Bytes: 15_000 },
     13: { meanBytes: 3_600, p90Bytes: 8_500 },
   };
@@ -434,7 +429,7 @@ export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
 }
 
 export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
-  return estimateStatewideClip(bbox, NSW_LAND, LAND_TILE_BYTES);
+  return estimateStatewideClip(bbox, NSW_LAND_CLIP, LAND_TILE_BYTES);
 }
 
 export interface MultiSourceRegionPlan {
