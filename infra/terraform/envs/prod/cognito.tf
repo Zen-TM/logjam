@@ -5,10 +5,9 @@
 # subtle attribute drift from forcing pool replacement. The pool already
 # carries deletion_protection = ACTIVE server-side too.
 #
-# Logjam Web and Logjam GPS sign in through Managed Login (the user pool domain
-# and branding below) with OIDC code + PKCE (#437). Logjam Web's deployed build
-# still signs in with Amplify's SRP flow until its PR lands, so
-# explicit_auth_flows keeps ALLOW_USER_SRP_AUTH until then.
+# Logjam GPS signs in through Managed Login (the user pool domain and branding
+# below) with OIDC code + PKCE. So can Logjam Web, whose own forms use
+# ALLOW_USER_AUTH (docs/decisions/0045).
 
 resource "aws_cognito_user_pool" "main" {
   auto_verified_attributes = ["email"]
@@ -119,12 +118,12 @@ resource "aws_cognito_user_pool_client" "main" {
   auth_session_validity = 3
   # Logjam Web redirects to location.origin + "/" and the site answers on both
   # hosts; logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
-  callback_urls                                 = ["https://logjamnsw.com", "https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  callback_urls                                 = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
   enable_propagate_additional_user_context_data = false
   enable_token_revocation                       = true
-  explicit_auth_flows                           = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH", "ALLOW_USER_SRP_AUTH"]
+  explicit_auth_flows                           = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH"]
   id_token_validity                             = 60
-  logout_urls                                   = ["https://logjamnsw.com", "https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
+  logout_urls                                   = ["https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
   name                                          = "logjam"
   prevent_user_existence_errors                 = "ENABLED"
   read_attributes                               = []
@@ -158,12 +157,6 @@ resource "aws_cognito_user_pool_domain" "main" {
   lifecycle {
     prevent_destroy = true
   }
-}
-
-# Created with the pool, with Cognito's look; the settings below replace it.
-import {
-  to = aws_cognito_managed_login_branding.main
-  id = "ap-southeast-2_x5zPhJXMk,fba8005a-00cb-4218-9871-ae4b0e62716c"
 }
 
 # Logjam's look on the hosted pages: the Sandstone scheme (the default in
