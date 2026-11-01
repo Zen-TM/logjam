@@ -9,6 +9,7 @@ import {
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
   formatBytes,
+  placeMatchesSearch,
   planAddVerbLabel,
   TRIP_PLAN_PAGE,
   tripPlanAddCopiesLabel,
@@ -25,6 +26,7 @@ import {
   ChipRail,
   Dialog,
   ErrorBanner,
+  SearchField,
   SwitchRow,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
@@ -36,7 +38,7 @@ import classes from "./plans.module.css";
 const copy = TRIP_PLAN_PAGE.copy;
 
 type Pick = { kind: TripPlanItemKind; id: string };
-type Row = Pick & { title: string; bytes: number };
+type Row = Pick & { title: string; bytes: number; altNames?: string[] };
 const key = tripPlanAddKey;
 
 export default function PlanAddCopyDialog({
@@ -69,6 +71,7 @@ export default function PlanAddCopyDialog({
   const [bringPhotos, setBringPhotos] = useState(
     user?.uiPreferences?.copyPlaceMedia ?? true,
   );
+  const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,6 +104,7 @@ export default function PlanAddCopyDialog({
       kind: "place" as const,
       id: place.id,
       title: place.name,
+      altNames: place.altNames,
       bytes: 0,
     })),
     ways,
@@ -117,6 +121,11 @@ export default function PlanAddCopyDialog({
     quotaBytes: user?.storageQuotaBytes ?? null,
     usedBytes: user?.storageUsedBytes ?? null,
   });
+
+  // Only what is listed is filtered: ticks outside the search still count.
+  const listed = lists[tab].filter((row) =>
+    placeMatchesSearch({ name: row.title, altNames: row.altNames }, query),
+  );
 
   const toggle = (pick: Pick) =>
     setPicked((was) =>
@@ -204,11 +213,20 @@ export default function PlanAddCopyDialog({
         }}
       >
         <p className={classes.note}>{copy.addCopyLine}</p>
+        {lists[tab].length > 0 && (
+          <SearchField
+            label="Search by name"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        )}
         {lists[tab].length === 0 ? (
           <p className={classes.note}>{copy.nothingToAdd}</p>
+        ) : listed.length === 0 ? (
+          <p className={classes.note}>Nothing matches “{query.trim()}”.</p>
         ) : (
           <div className={classes.question}>
-            {lists[tab].map((row) => (
+            {listed.map((row) => (
               <Checkbox
                 key={key(row)}
                 label={row.title}

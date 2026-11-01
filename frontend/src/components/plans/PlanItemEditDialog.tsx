@@ -1,16 +1,32 @@
-// Edit a plan item's words: a place's name and notes, a way's or a file's
-// name. As a section's form does, each changed field goes as the value last
+// Edit a plan item: a place's details, a way's or a file's name. As a section's form does, each changed field goes as the value last
 // seen and the new one; on a 409 the form stays open with the API's sentence,
 // keeps what was typed and shows what the plan now says, and a field the user
 // never touched follows the plan (`adoptTheirs`). Position, attributes and
 // geometry stay as they came in: those are edited where the thing was made.
+// A place's details (other names, position, elevation, its type's attributes)
+// are edited here as the place editor does, each its own pair.
 import { useId, useState } from "react";
 import {
+  customFieldDisplayLabel,
+  LATITUDE_RANGE,
+  LONGITUDE_RANGE,
   TRIP_PLAN_PAGE,
   tripPlanInPlanNow,
   type TripPlanItem,
 } from "@logjam/shared";
-import { Button, Dialog, ErrorBanner, TextArea, TextField } from "../../ui";
+import {
+  Button,
+  Dialog,
+  ErrorBanner,
+  NumberField,
+  SectionHeader,
+  TextArea,
+  TextField,
+} from "../../ui";
+import CustomFieldInput, {
+  customFieldValueError,
+} from "../dialogs/CustomFieldInput";
+import { numericFieldError } from "../../numberInput";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
@@ -19,8 +35,10 @@ import { patchPlanItem } from "../../plansApi";
 import { wayNameError } from "../sidebar/panels/waysModel";
 import {
   adoptTheirs,
+  ATTR,
   itemPatch,
   itemWords,
+  placeFieldDefs,
   same,
   theirsChanged,
   type ItemWords,
@@ -28,6 +46,8 @@ import {
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
+const LATITUDE = { min: LATITUDE_RANGE.min, max: LATITUDE_RANGE.max };
+const LONGITUDE = { min: LONGITUDE_RANGE.min, max: LONGITUDE_RANGE.max };
 
 export default function PlanItemEditDialog({
   planId,
@@ -62,6 +82,8 @@ export default function PlanItemEditDialog({
   const [asked, setAsked] = useState(false);
   const nameError =
     openedItem.kind === "route" ? wayNameError(values.name, asked) : null;
+  const place = openedItem.kind === "place" ? openedItem : null;
+  const defs = place ? placeFieldDefs(place) : [];
 
   const current = item ? itemWords(item) : null;
   if (item && current && !same(item, seen)) {
@@ -72,21 +94,35 @@ export default function PlanItemEditDialog({
 
   const dirty = !same(values, itemWords(seen));
   /** The plan's words under a field the user edited and the plan changed. */
-  const theirs = (field: keyof ItemWords) =>
+  const theirs = (field: string) =>
     moved && current && theirsChanged(opened, current, values, [field])
       ? current[field]
       : null;
+  const theirsHint = (field: string) =>
+    theirs(field) != null ? tripPlanInPlanNow(theirs(field)!) : undefined;
   const guard = useUnsavedChangesGuard(dirty, onClose);
-  const set = (next: Partial<ItemWords>) => {
+  const set = (next: Record<string, string>) => {
     setValues((was) => ({ ...was, ...next }));
     setError(null);
     setAsked(false);
   };
 
+  const detailsInvalid =
+    place != null &&
+    (values.latitude.trim() === "" ||
+      values.longitude.trim() === "" ||
+      numericFieldError(values.latitude, LATITUDE) != null ||
+      numericFieldError(values.longitude, LONGITUDE) != null ||
+      numericFieldError(values.elevation, {}) != null ||
+      defs.some(
+        (def) => customFieldValueError(def, values[ATTR + def.key]) != null,
+      ));
+
   async function submit() {
     if (!item) return setError(copy.itemGone);
     setAsked(true);
     if (openedItem.kind === "route" && wayNameError(values.name, true)) return;
+    if (place && detailsInvalid) return;
     const patch = itemPatch(seen, values);
     if (!patch) return onClose();
     setBusy(true);
@@ -141,23 +177,72 @@ export default function PlanItemEditDialog({
             data-autofocus
             onChange={(event) => set({ name: event.target.value })}
             error={nameError}
-            hint={
-              theirs("name") != null
-                ? tripPlanInPlanNow(theirs("name")!)
-                : undefined
-            }
+            hint={theirsHint("name")}
           />
-          {openedItem.kind === "place" && (
-            <TextArea
-              label={copy.itemNotes}
-              value={values.notes}
-              onChange={(event) => set({ notes: event.target.value })}
-              hint={
-                theirs("notes") != null
-                  ? tripPlanInPlanNow(theirs("notes")!)
-                  : undefined
-              }
-            />
+          {place && (
+            <>
+              <TextField
+                label={"Other names"}
+                value={values.altNames}
+                onChange={(event) => set({ altNames: event.target.value })}
+                hint={theirsHint("altNames") ?? "Separate them with commas."}
+              />
+              <div className={classes.pair}>
+                <NumberField
+                  label={"Latitude"}
+                  required
+                  value={values.latitude}
+                  onChange={(latitude) => set({ latitude })}
+                  constraints={LATITUDE}
+                  showError={asked}
+                  hint={theirsHint("latitude")}
+                />
+                <NumberField
+                  label={"Longitude"}
+                  required
+                  value={values.longitude}
+                  onChange={(longitude) => set({ longitude })}
+                  constraints={LONGITUDE}
+                  showError={asked}
+                  hint={theirsHint("longitude")}
+                />
+              </div>
+              <NumberField
+                label={"Elevation (m)"}
+                value={values.elevation}
+                onChange={(elevation) => set({ elevation })}
+                constraints={{}}
+                showError={asked}
+                hint={theirsHint("elevation")}
+              />
+              <TextArea
+                label={copy.itemNotes}
+                value={values.notes}
+                onChange={(event) => set({ notes: event.target.value })}
+                hint={theirsHint("notes")}
+              />
+              {defs.length > 0 && (
+                <section className={classes.form}>
+                  <SectionHeader title={"Attributes"} />
+                  {defs.map((def) => (
+                    <div key={def.key}>
+                      <CustomFieldInput
+                        def={def}
+                        value={values[ATTR + def.key]}
+                        onChange={(value) => set({ [ATTR + def.key]: value })}
+                        showError={asked}
+                      />
+                      {theirsHint(ATTR + def.key) && (
+                        <p className={classes.note}>
+                          {customFieldDisplayLabel(def)}:{" "}
+                          {theirsHint(ATTR + def.key)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </section>
+              )}
+            </>
           )}
           {error && <ErrorBanner message={error} />}
         </form>

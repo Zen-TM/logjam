@@ -18,6 +18,7 @@ import {
   Button,
   ErrorState,
   Hero,
+  IconTile,
   LoadingState,
   Row,
   SectionHeader,
@@ -113,16 +114,23 @@ export default function PlanInvitedPage({
       </>
     ),
     notice: (
-      <div className={classes.notice}>
-        <span className={classes.noticeText}>
-          {preview.requiredForms.length > 0 ? copy.answerToJoin : copy.invited}
-        </span>
-        <Button compact variant="filled" onClick={() => setJoining(true)}>
-          {copy.join}
-        </Button>
-        <Button compact busy={busy} onClick={() => void decline()}>
-          {copy.decline}
-        </Button>
+      <div className={classes.noticeCard}>
+        <Row
+          leading={<IconTile icon="plan" hue="var(--hue-plan)" />}
+          title={
+            preview.requiredForms.length > 0 ? copy.answerToJoin : copy.invited
+          }
+          footer={
+            <>
+              <Button compact variant="filled" onClick={() => setJoining(true)}>
+                {copy.join}
+              </Button>
+              <Button compact busy={busy} onClick={() => void decline()}>
+                {copy.decline}
+              </Button>
+            </>
+          }
+        />
       </div>
     ),
     writeUp: preview.sections.map((section) => (

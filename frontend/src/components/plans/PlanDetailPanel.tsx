@@ -55,7 +55,6 @@ import {
   LoadingState,
   ListEnd,
   Menu,
-  Icon,
   Row,
   StatusPill,
 } from "../../ui";
@@ -401,19 +400,22 @@ export default function PlanDetailPanel({
       />
     ),
     notices: notice && (
-      <div className={classes.notice}>
-        <Icon idea={notice.icon} size={16} />
-        <span className={classes.noticeText}>{notice.text}</span>
-        {notice.kind === "over" && (
-          <Button compact onClick={startTripLog}>
-            {PLAN_VERBS.find((verb) => verb.id === "tripLog")!.label}
-          </Button>
-        )}
-        {notice.kind === "answer" && (
-          <Button compact onClick={() => setAnswering(notice.formId)}>
-            {copy.answer}
-          </Button>
-        )}
+      <div className={classes.noticeCard}>
+        <Row
+          leading={<IconTile icon={notice.icon} hue="var(--color-accent)" />}
+          title={notice.text}
+          footer={
+            notice.kind === "over" ? (
+              <Button compact onClick={startTripLog}>
+                {PLAN_VERBS.find((verb) => verb.id === "tripLog")!.label}
+              </Button>
+            ) : notice.kind === "answer" ? (
+              <Button compact onClick={() => setAnswering(notice.formId)}>
+                {copy.answer}
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
     ),
     dates: (

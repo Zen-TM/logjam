@@ -509,7 +509,13 @@ describe("an item's edit over someone else's change", () => {
       id: "pl1",
       name: "Wollangambe",
       notes: "",
-    } as TripPlanItem;
+      altNames: [],
+      latitude: -33.5,
+      longitude: 150.25,
+      elevation: null,
+      placeTypeId: "marker",
+      fieldValues: {},
+    } as unknown as TripPlanItem;
     const view = (now: TripPlanItem) => (
       <PlanItemEditDialog
         planId="p1"

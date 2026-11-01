@@ -18,6 +18,7 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 import { Button, ChipPicker, Dialog, ErrorBanner, TextField } from "../../ui";
+import { DateRangeField } from "../../ui/DateRangeField";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -171,28 +172,17 @@ function PlanDetailsForm({
             error={nameError}
             hint={theirs(["name"], current.name)}
           />
-          <div className={classes.pair}>
-            <TextField
-              label={copy.startDate}
-              type="date"
-              value={values.startDate ?? ""}
-              onChange={(event) =>
-                set({ startDate: event.target.value || null })
-              }
-            />
-            <TextField
-              label={copy.endDate}
-              type="date"
-              value={values.endDate ?? ""}
-              min={values.startDate ?? undefined}
-              onChange={(event) => set({ endDate: event.target.value || null })}
-              // One note for the pair, as they are saved together.
-              hint={theirs(
-                ["startDate", "endDate"],
-                tripPlanDatesLabel(current.startDate, current.endDate),
-              )}
-            />
-          </div>
+          <DateRangeField
+            label="Dates"
+            start={values.startDate}
+            end={values.endDate}
+            onChange={(startDate, endDate) => set({ startDate, endDate })}
+            // One note for the pair, as they are saved together.
+            hint={theirs(
+              ["startDate", "endDate"],
+              tripPlanDatesLabel(current.startDate, current.endDate),
+            )}
+          />
           <ChipPicker
             label={copy.tripTypes}
             options={typeOptions}
