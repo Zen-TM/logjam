@@ -141,3 +141,4 @@ supersede instead.
 | [0042](0042-logjam-web-needs-the-popover-api.md) | Logjam Web needs the Popover API: Safari 17, Chrome 114, Firefox 125, and a static page below that | 2026-10-29 | Accepted |
 | [0043](0043-geopdfs-render-in-the-browser.md) | GeoPDFs render in the browser, and nothing about one reaches the server | 2026-10-29 | Accepted |
 | [0044](0044-river-gauges-are-public-files-from-waternsw-and-bom.md) | River gauges are public files, with readings from WaterNSW and history from the Bureau of Meteorology | 2026-10-30 | Accepted |
+| [0045](0045-clients-speak-oidc-and-logjam-web-keeps-its-forms-under-cognito.md) | Clients speak OIDC, Logjam Web keeps its own forms under Cognito, and a deployment has one issuer | 2026-11-01 | Accepted |

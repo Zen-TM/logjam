@@ -97,3 +97,4 @@ export * from "./oidc.js";
 export * from "./cognitoAccount.js";
 export * from "./username.js";
 export * from "./smtp.js";
+export * from "./consentForm.js";

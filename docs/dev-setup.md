@@ -323,8 +323,10 @@ EXPO_PUBLIC_AUTH_MODE=fake
 - `fake` signs in as the seeded alice, like Logjam Web.
   `EXPO_PUBLIC_FAKE_SUB=fake-bob-sub` picks another seeded user; it is baked
   into the bundle, so restart Metro after changing it.
-- `cognito` shows the real sign-in, and needs the Cognito pool and client IDs
-  and a Cognito test account. You do not need it for everyday work.
+- `oidc` signs in through the provider's page in the system browser, and needs
+  `EXPO_PUBLIC_OIDC_ISSUER` and `EXPO_PUBLIC_OIDC_CLIENT_ID` (Cognito's issuer
+  is `https://cognito-idp.<region>.amazonaws.com/<user-pool-id>`) and a test
+  account. You do not need it for everyday work.
 - Use `127.0.0.1`, not the example's `10.0.2.2`, on an emulator too: the
   `adb reverse` tunnels below make the device's own `127.0.0.1` reach your
   machine.

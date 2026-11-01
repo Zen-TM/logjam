@@ -12,10 +12,14 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
-export function updateConsent(consentVersion: string): Promise<TUser> {
+/** A new account sends its chosen username in the same PATCH as its consent. */
+export function updateConsent(
+  consentVersion: string,
+  username?: string,
+): Promise<TUser> {
   return apiFetch<TUser>("/users/me", {
     method: "PATCH",
-    body: { consentVersion },
+    body: { consentVersion, ...(username && { username }) },
   });
 }
 

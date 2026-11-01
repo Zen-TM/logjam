@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { isValidUsername, USERNAME_HINT, USERNAME_RULE } from "@logjam/shared";
+import {
+  consentFormProblem,
+  consentSubmitFailure,
+  USERNAME_HINT,
+} from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
-import { messageFromError } from "../errors/messageFromError";
-import { ApiError } from "../errors/ApiError";
 import BrandMark from "./brand/BrandMark";
 import TermsTick from "./TermsTick";
 import { Button, Checkbox, ErrorBanner, TextField } from "../ui";
@@ -47,20 +49,18 @@ function ConsentGate({
   const [error, setError] = useState<string | null>(null);
 
   async function handleAgree(): Promise<void> {
-    if (newAccount && !isValidUsername(username)) {
-      setUsernameError(USERNAME_RULE);
+    const problem = consentFormProblem({
+      newAccount,
+      username,
+      agreed,
+      ageConfirmed,
+    });
+    if (problem?.field === "username") {
+      setUsernameError(problem.message);
       return;
     }
-    if (!agreed) {
-      setError(
-        newAccount
-          ? "Agree to the Terms of Use and Privacy Policy to continue."
-          : "Tick the box to agree to the updated terms.",
-      );
-      return;
-    }
-    if (newAccount && !ageConfirmed) {
-      setError("Confirm you are 18 or older to continue.");
+    if (problem) {
+      setError(problem.message);
       return;
     }
     setSubmitting(true);
@@ -74,21 +74,11 @@ function ConsentGate({
       onAccepted(user);
     } catch (err) {
       console.error(err);
-      const message = messageFromError(
-        err,
-        "Couldn't record your consent. Please try again.",
-      );
       // A refused username belongs to its field and clears on edit
       // (shared/DESIGN.md §11, §12); it is not worth a retry.
-      if (
-        newAccount &&
-        err instanceof ApiError &&
-        [400, 409].includes(err.status)
-      ) {
-        setUsernameError(message);
-      } else {
-        setError(message);
-      }
+      const failure = consentSubmitFailure(err, newAccount);
+      if (failure.field === "username") setUsernameError(failure.message);
+      else setError(failure.message);
       setSubmitting(false);
     }
   }

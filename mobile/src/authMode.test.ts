@@ -5,13 +5,11 @@ import { resolveAuthMode } from "./authMode";
 // Mutation that turns this red: drop the LOCAL_HOST check in resolveAuthMode
 // (fake auth would then resolve for the prod API URL).
 describe("resolveAuthMode", () => {
-  it("defaults to cognito, whatever the API", () => {
+  it("defaults to oidc, whatever the API", () => {
     expect(resolveAuthMode(undefined, "https://api.logjamnsw.com")).toBe(
-      "cognito",
+      "oidc",
     );
-    expect(resolveAuthMode("cognito", "https://api.logjamnsw.com")).toBe(
-      "cognito",
-    );
+    expect(resolveAuthMode("oidc", "https://api.logjamnsw.com")).toBe("oidc");
   });
 
   it.each([
@@ -33,7 +31,8 @@ describe("resolveAuthMode", () => {
     expect(() => resolveAuthMode("fake", url)).toThrow();
   });
 
-  it("refuses an unknown mode instead of treating it as cognito or fake", () => {
+  it("refuses an unknown mode instead of treating it as oidc or fake", () => {
     expect(() => resolveAuthMode("Fake", "http://127.0.0.1")).toThrow();
+    expect(() => resolveAuthMode("cognito", "http://127.0.0.1")).toThrow();
   });
 });

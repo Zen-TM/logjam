@@ -14,8 +14,8 @@ import {
   confirmSignUp as cognitoConfirmSignUp,
   endSessionUrl,
   forgotPassword as cognitoForgotPassword,
+  hasCognitoAccount as sharedHasCognitoAccount,
   oidcScopes,
-  parseCognitoIssuer,
   passwordSignIn,
   resendSignUpCode as cognitoResendSignUpCode,
   signUp as cognitoSignUp,
@@ -29,10 +29,7 @@ const home = (): string => `${window.location.origin}/`;
 
 /** Change email, delete and sign out everywhere call Cognito directly. */
 export function hasCognitoAccount(): boolean {
-  return (
-    import.meta.env.VITE_AUTH_MODE === "fake" ||
-    parseCognitoIssuer(issuer()) !== null
-  );
+  return sharedHasCognitoAccount(import.meta.env.VITE_AUTH_MODE, issuer());
 }
 
 let manager: UserManager | undefined;
