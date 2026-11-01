@@ -156,3 +156,13 @@ describe("placeSearchLimiter", () => {
     expect((await search("someone-else")).status).toBe(200);
   });
 });
+
+describe("usernameCheckLimiter", () => {
+  it("is mounted on the username check", () => {
+    const source = readFileSync(
+      join(__dirname, "..", "routes", "users.ts"),
+      "utf8",
+    );
+    expect(source).toMatch(/"\/username-available",\s+usernameCheckLimiter,/);
+  });
+});
