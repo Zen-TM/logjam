@@ -10,7 +10,8 @@
 // settings beside it (DESIGN.md).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TBbox } from "../map/Map";
-import { BASE_LAYER_OPTIONS, seedBaseLayer } from "./geoPdfBaseLayer";
+import BasemapGallery from "../map/BasemapGallery";
+import { PRINTABLE_BASE_LAYERS, seedBaseLayer } from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
@@ -239,7 +240,7 @@ function GeoPdfDialog({
   /** The map's Terrain switches, which a new GeoPDF's overlays start from. */
   terrainLayers: Readonly<Record<TerrainLayerKey, boolean>>;
   completedTopoJobs: CompletedTopoJob[];
-  mapCenter?: { lat: number; lng: number } | null;
+  mapCenter?: { lat: number; lng: number; zoom: number } | null;
   places?: TPlace[];
   sharedPlaces?: TPlace[];
   /** The account's slope bands, as the map draws the statewide slope. */
@@ -366,7 +367,7 @@ function GeoPdfDialog({
   function applyLastSettings() {
     const c = readSettings(
       stored,
-      BASE_LAYER_OPTIONS.map((option) => option.value),
+      PRINTABLE_BASE_LAYERS.map((layer) => layer.id),
     );
     setExtentState((prev: ExtentState) => {
       let updated = {
@@ -1308,18 +1309,20 @@ function GeoPdfDialog({
 
               <section className={classes.group}>
                 <SectionHeader title="Layers" />
-                <SettingsRow label="Base layer">
-                  <ChipRail
+                <div className={classes.baseLayer}>
+                  <span className={classes.baseLayerLabel}>Base layer</span>
+                  <BasemapGallery
                     label="Base layer"
-                    className={classes.railCell}
-                    options={BASE_LAYER_OPTIONS}
-                    value={selectedBaseLayer}
+                    layers={PRINTABLE_BASE_LAYERS}
+                    activeLayerId={selectedBaseLayer}
                     onChange={(id) => {
                       setSelectedBaseLayer(id);
                       markDirty();
                     }}
+                    mapView={mapCenter ?? null}
+                    oneRow
                   />
-                </SettingsRow>
+                </div>
                 <ChipPicker
                   label={MAP_TERRAIN.title}
                   options={TERRAIN_LAYER_KEYS.map((key) => ({

@@ -7,7 +7,7 @@ import {
   detectMgaZone,
   extractionCreditLine,
   fromEastingNorthing,
-  GEOPDF_BASE_LAYER_CONFIG,
+  BASEMAP_CATALOG,
   gridConvergence,
   overlayAttributionLines,
   toEastingNorthing,
@@ -668,7 +668,8 @@ export function attributionLines(
 ): string[] {
   ctx.font = `${mmToPx(1.8, dpi)}px ${MAP_FONT}`;
   const baseAttrib =
-    GEOPDF_BASE_LAYER_CONFIG[input.baseLayer]?.attribution ?? "Base map data";
+    BASEMAP_CATALOG.find((entry) => entry.id === input.baseLayer)
+      ?.attribution ?? "Base map data";
   const maxLineWidth = widthPx * 0.55;
   const wrap = (text: string): string[] => {
     const words = text.split(" ");

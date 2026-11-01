@@ -4,9 +4,8 @@
  * date in frontend/public/privacy.html and tos.html (guard:
  * api/src/constants/consent.unit.test.ts). Clients read the server's answer,
  * not this value, so a Logjam GPS build containing that read survives any bump;
- * they use this value only where no server answer exists yet (the Logjam Web
- * sign-up form) and as the fallback against a server that predates
- * `currentConsentVersion`.
+ * they use this value only as the fallback against a server that predates
+ * `currentConsentVersion` (and, in Logjam GPS, its sign-up form).
  *
  * Logjam GPS builds released before that read existed still strand on the
  * next bump: they gate on their baked constant and send it back, and the API

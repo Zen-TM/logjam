@@ -1,15 +1,11 @@
-import {
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useState, type ReactNode, type RefObject } from "react";
 import {
   contractSectionKeys,
+  LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  NSW_LAND,
   PLACE_TYPE_COLORS,
   takesNswContours,
   takesNswHillshade,
@@ -21,10 +17,8 @@ import type { CompletedTopoJob } from "../../topoLayerTypes";
 import type { GeoJsonPolygonal, TopoJob } from "../dialogs/TopoDialog";
 import type { TFriend } from "../../placeUtils";
 import SharpenedAreasView from "./SharpenedAreasView";
-import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
-import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
+import BasemapGallery, { type BaseLayer } from "./BasemapGallery";
 import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
-import { nextEnabledIndex } from "../../ui/rovingFocus";
 import {
   ChipRail,
   Dialog,
@@ -37,7 +31,6 @@ import {
 } from "../../ui";
 import classes from "./LayersPopover.module.css";
 
-type BaseLayer = TileLayer & { id: string; name: string };
 type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
 
 const copy = MAP_LAYERS.copy;
@@ -45,37 +38,6 @@ const terrainCopy = MAP_TERRAIN.copy;
 
 const countOf = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
-
-/** A drawn scrap of the vector basemap's own palette — land, a creek, a road
- *  and a lane — because a vector basemap has no XYZ tile to thumbnail. */
-function VectorSwatch() {
-  return (
-    <svg
-      className={classes.thumb}
-      viewBox="0 0 40 40"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <rect width="40" height="40" fill={PROTOMAPS_SWATCH.earth} />
-      <path
-        d="M-2 27 C 8 22, 12 32, 22 27 S 34 18, 42 22"
-        fill="none"
-        stroke={PROTOMAPS_SWATCH.water}
-        strokeWidth="3"
-      />
-      <path
-        d="M-2 14 L 42 9"
-        stroke={PROTOMAPS_SWATCH.road}
-        strokeWidth="3.5"
-      />
-      <path
-        d="M14 -2 L 20 42"
-        stroke={PROTOMAPS_SWATCH.minor}
-        strokeWidth="2"
-      />
-    </svg>
-  );
-}
 
 /**
  * What is drawn on the map, in a popover over it — not a page, because it is a
@@ -175,7 +137,12 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const overlaysOn = [showPlaces, showWays, showGauges].filter(Boolean).length;
+  const overlaysOn = [
+    showPlaces,
+    showWays,
+    terrainLayers.land,
+    showGauges,
+  ].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -256,12 +223,15 @@ export default function LayersPopover({
               () => ReactNode
             > = {
               basemap: () => (
-                <BasemapGallery
-                  layers={baseLayers}
-                  activeLayerId={activeLayerId}
-                  onChange={onActiveLayerChange}
-                  mapView={mapView}
-                />
+                <div className={classes.galleryPane}>
+                  <BasemapGallery
+                    label="Map"
+                    layers={baseLayers}
+                    activeLayerId={activeLayerId}
+                    onChange={onActiveLayerChange}
+                    mapView={mapView}
+                  />
+                </div>
               ),
               terrain: () => (
                 <TerrainPane
@@ -317,6 +287,10 @@ export default function LayersPopover({
                     }
                     checked={showWays}
                     onToggle={setShowWays}
+                  />
+                  <LandRow
+                    checked={terrainLayers.land}
+                    onToggle={(on) => onTerrainLayerChange("land", on)}
                   />
                   <OverlayRow
                     icon="gauge"
@@ -496,6 +470,49 @@ function SlopeBandsView({
   );
 }
 
+/** The Land tenure row, with the legend its help button opens. */
+export function LandRow({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  const [legendOpen, setLegendOpen] = useState(false);
+  return (
+    <>
+      <OverlayRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={terrainCopy.land}
+        checked={checked}
+        onToggle={onToggle}
+        help={{
+          label: terrainCopy.landAbout,
+          onClick: () => setLegendOpen(true),
+        }}
+      />
+      <Dialog
+        open={legendOpen}
+        title={terrainCopy.land}
+        onClose={() => setLegendOpen(false)}
+      >
+        <p>{terrainCopy.landLegend}</p>
+        <ul className={classes.landLegend}>
+          {LAND_CLASSES.map(({ name, colour }) => (
+            <li key={name}>
+              <IconTile icon="layers" hue={colour} />
+              {name}
+            </li>
+          ))}
+        </ul>
+        <p>{terrainCopy.landCaveat}</p>
+        <p>{NSW_LAND.credit}</p>
+      </Dialog>
+    </>
+  );
+}
+
 function OverlayRow({
   icon,
   hue,
@@ -505,6 +522,7 @@ function OverlayRow({
   onToggle,
   onOpen,
   openLabel,
+  help,
 }: {
   icon: Glyph;
   hue: string;
@@ -514,6 +532,7 @@ function OverlayRow({
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
   openLabel?: string;
+  help?: { label: string; onClick: () => void };
 }) {
   return (
     <Row
@@ -522,6 +541,9 @@ function OverlayRow({
       subtitle={subtitle}
       trailing={
         <>
+          {help && (
+            <IconButton icon="help" label={help.label} onClick={help.onClick} />
+          )}
           {onOpen && (
             <IconButton
               icon="disclosure"
@@ -537,79 +559,5 @@ function OverlayRow({
         </>
       }
     />
-  );
-}
-
-function BasemapGallery({
-  layers,
-  activeLayerId,
-  onChange,
-  mapView,
-}: {
-  layers: readonly BaseLayer[];
-  activeLayerId: string;
-  onChange: (id: string) => void;
-  mapView: { lng: number; lat: number; zoom: number } | null;
-}) {
-  const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const from = tileRefs.current.findIndex(
-      (tile) => tile === document.activeElement,
-    );
-    const to = nextEnabledIndex(
-      layers.map(() => false),
-      from,
-      event.key,
-    );
-    if (to == null) return;
-    event.preventDefault();
-    tileRefs.current[to]?.focus();
-    onChange(layers[to].id);
-  }
-
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Map"
-      tabIndex={-1}
-      className={classes.gallery}
-      onKeyDown={onKeyDown}
-    >
-      {layers.map((layer, index) => {
-        const active = layer.id === activeLayerId;
-        const thumbnail =
-          mapView && layer.tiles.length > 0
-            ? previewUrlFor(layer, mapView)
-            : null;
-        return (
-          <button
-            key={layer.id}
-            ref={(tile) => {
-              tileRefs.current[index] = tile;
-            }}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            tabIndex={index === (activeIndex < 0 ? 0 : activeIndex) ? 0 : -1}
-            className={classes.tile}
-            onClick={() => onChange(layer.id)}
-          >
-            {thumbnail ? (
-              <img
-                src={thumbnail}
-                alt=""
-                className={classes.thumb}
-                draggable={false}
-              />
-            ) : (
-              <VectorSwatch />
-            )}
-            <span className={classes.caption}>{layer.name}</span>
-          </button>
-        );
-      })}
-    </div>
   );
 }

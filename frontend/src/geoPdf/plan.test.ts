@@ -4,6 +4,7 @@ import {
   lon2tileX,
   getMapDimensions,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_HILLSHADE,
   NSW_SLOPE,
   RASTER_TEMPLATE_DEFAULTS,
@@ -11,7 +12,12 @@ import {
   type SharpenedOverlay,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
-import { statewideReads } from "./plan";
+import {
+  printGeometry,
+  rasterBaseTiles,
+  statewideReads,
+  vectorBasemap,
+} from "./plan";
 import type { GeoPdfRenderInput } from "./types";
 
 // A made-up point inside the NSW coverage.
@@ -99,6 +105,14 @@ describe("statewideReads", () => {
     );
   });
 
+  // Mutation: leave Land out of the plan, and a saved print reads it from the
+  // network again, or fails offline.
+  it("adds Land where the print asks for it, over any sheet", () => {
+    expect(paths(statewideReads(input({ overlays: ["land"] })))).toEqual([
+      NSW_LAND.archivePath,
+    ]);
+  });
+
   it("is empty for a map with no size", () => {
     const empty = input({});
     empty.config.extent = { north: -30, south: -30, east: 150, west: 150 };
@@ -129,5 +143,56 @@ describe("statewideReads", () => {
     };
     expect(statewideReads(input({}, [area]))).toEqual([]);
     expect(statewideReads(plain).length).toBeGreaterThan(0);
+  });
+});
+
+describe("rasterBaseTiles", () => {
+  // Mutation: read at `geometry.zoom`, and a 1:25 000 print's labels land at
+  // half the size, off a base with four times the tiles.
+  it("reads a base with fixed-size labels shallower than the map image", () => {
+    const { config } = input({ baseLayer: "six-base", overlays: [] });
+    const geometry = printGeometry(config);
+    const tiles = rasterBaseTiles(config, geometry);
+    expect(geometry.zoom).toBe(16);
+    expect(tiles.tiles[0]!.z).toBe(15);
+    expect(tiles.scaleX).toBeCloseTo(2, 2);
+  });
+
+  it("reads SIX Topo at the map image's own zoom", () => {
+    const { config } = input({ baseLayer: "six-topo", overlays: [] });
+    expect(rasterBaseTiles(config, printGeometry(config)).tiles[0]!.z).toBe(16);
+  });
+});
+
+describe("vectorBasemap", () => {
+  const print = (baseLayer: string, scale: number) => {
+    const { config } = input({ baseLayer, overlays: [] });
+    const scaled = { ...config, scale };
+    return { config: scaled, geometry: printGeometry(scaled) };
+  };
+
+  it("is nothing for a raster base", () => {
+    const { config, geometry } = print("six-base", 25000);
+    expect(vectorBasemap(config, geometry)).toBeNull();
+  });
+
+  // Mutation: read at the print's own zoom, and a 1:25 000 print asks for
+  // z15 tiles, or for tiles the archive stops short of at a larger scale.
+  it("reads at the style's zoom, up to the archive's deepest", () => {
+    const coarse = print("protomaps", 25000);
+    expect(
+      vectorBasemap(coarse.config, coarse.geometry)!.transform.tiles[0]!.z,
+    ).toBe(14);
+    const fine = print("protomaps", 2000);
+    expect(
+      vectorBasemap(fine.config, fine.geometry)!.transform.tiles[0]!.z,
+    ).toBe(15);
+  });
+
+  it("is warmed by the dialog's prefetch", () => {
+    const vector = input({ baseLayer: "protomaps", overlays: [] });
+    expect(statewideReads(vector).map((r) => r.path)).toContain(
+      "master/basemap/protomaps-nsw.pmtiles",
+    );
   });
 });

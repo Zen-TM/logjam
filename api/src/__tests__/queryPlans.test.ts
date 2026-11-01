@@ -32,6 +32,7 @@ app.use(errorHandler);
 // alice; a `:name` in a request is a seeded id looked up in beforeAll.
 const READ_PATHS: Record<string, [string, ...string[]]> = {
   "/users/me": ["/users/me"],
+  "/users/username-available": ["/users/username-available?username=alice"],
   "/place-types": ["/place-types"],
   "/places": ["/places"],
   "/places/shared": ["/places/shared"],

@@ -3,6 +3,7 @@
 // tiles) around a generic point, built here so no network or archive is
 // needed. Nothing is a real place or a user's data.
 import { deflateSync, crc32 } from "node:zlib";
+import { LAND_CLASSES, NSW_LAND } from "@logjam/shared";
 import { PbfWriter } from "pbf";
 import { zxyToTileId } from "pmtiles";
 
@@ -113,6 +114,52 @@ export const slopePng = (x: number, y: number) =>
     ),
   );
 
+/** Land as squares a little wider than their tile, as a real tile's buffer is,
+ *  of two classes in a checkerboard: a seam or a doubled tint shows at once. */
+export function landMvt(x: number, y: number): Buffer {
+  const zig = (v: number) => (v << 1) ^ (v >> 31);
+  const tile = new PbfWriter();
+  tile.writeMessage(
+    3,
+    (_o, layer) => {
+      layer.writeStringField(1, NSW_LAND.sourceLayer);
+      layer.writeMessage(
+        2,
+        (_f, pbf) => {
+          pbf.writePackedVarint(2, [0, 0]);
+          pbf.writeVarintField(3, 3);
+          const [lo, side] = [-80, 4256];
+          pbf.writePackedVarint(4, [
+            (1 << 3) | 1,
+            zig(lo),
+            zig(lo),
+            (3 << 3) | 2,
+            zig(side),
+            zig(0),
+            zig(0),
+            zig(side),
+            zig(-side),
+            zig(0),
+            (1 << 3) | 7,
+          ]);
+        },
+        null,
+      );
+      layer.writeStringField(3, NSW_LAND.classProperty);
+      layer.writeMessage(
+        4,
+        (_v, pbf) =>
+          pbf.writeStringField(1, LAND_CLASSES[(x + y) % 2 ? 0 : 1].source),
+        null,
+      );
+      layer.writeVarintField(5, 4096);
+      layer.writeVarintField(15, 2);
+    },
+    null,
+  );
+  return Buffer.from(tile.finish());
+}
+
 /** Contours as rings round the centre of z14 tile space: a vector tile with a
  *  `contours` layer, features carrying `elev`. */
 export function contoursMvt(z: number, x: number, y: number): Buffer {
@@ -174,6 +221,105 @@ export function contoursMvt(z: number, x: number, y: number): Buffer {
     },
     null,
   );
+  return Buffer.from(tile.finish());
+}
+
+/**
+ * A made-up vector basemap tile in the Protomaps schema: land, a lake, a road
+ * and a line of invented names, so labels cross tile and strip edges.
+ */
+export function basemapMvt(x: number, y: number): Buffer {
+  const EXTENT = 4096;
+  const zig = (v: number) => (v << 1) ^ (v >> 31);
+  const command = (id: number, count: number) => (count << 3) | id;
+  const square = (a: number, b: number) => [
+    command(1, 1),
+    zig(a),
+    zig(a),
+    command(2, 3),
+    zig(b - a),
+    0,
+    0,
+    zig(b - a),
+    zig(a - b),
+    0,
+    command(7, 1),
+  ];
+  const road = [
+    command(1, 1),
+    zig(-100),
+    zig(2048),
+    command(2, 1),
+    zig(EXTENT + 200),
+    zig(((x + y) % 3) * 200 - 200),
+  ];
+  // A name every eighth of a tile, so that some cross a strip's edge.
+  const names = Array.from({ length: 8 }, (_, row) => ({
+    geometry: [command(1, 1), zig(row % 2 ? 1024 : 3072), zig(256 + row * 512)],
+    text: `Madeup ${x % 7}${y % 7}${row}`,
+    kind: "locality",
+  }));
+  const layers = [
+    {
+      name: "earth",
+      type: 3,
+      features: [{ geometry: square(-64, EXTENT + 64) }],
+    },
+    { name: "water", type: 3, features: [{ geometry: square(900, 2200) }] },
+    { name: "roads", type: 2, features: [{ geometry: road, kind: "highway" }] },
+    { name: "places", type: 1, features: names },
+  ];
+  const tile = new PbfWriter();
+  for (const layer of layers) {
+    tile.writeMessage(
+      3,
+      (l, pbf) => {
+        pbf.writeStringField(1, l.name);
+        const values: (string | number)[] = [];
+        const value = (v: string | number) => {
+          if (!values.includes(v)) values.push(v);
+          return values.indexOf(v);
+        };
+        const keys = ["kind", "name", "name:en", "min_zoom"];
+        for (const f of l.features as {
+          geometry: number[];
+          kind?: string;
+          text?: string;
+        }[]) {
+          pbf.writeMessage(
+            2,
+            (feat, out) => {
+              out.writePackedVarint(2, feat.tags);
+              out.writeVarintField(3, l.type);
+              out.writePackedVarint(4, feat.geometry);
+            },
+            {
+              geometry: f.geometry,
+              tags: [
+                ...(f.kind ? [0, value(f.kind)] : []),
+                ...(f.text
+                  ? [1, value(f.text), 2, value(f.text), 3, value(1)]
+                  : []),
+              ],
+            },
+          );
+        }
+        for (const key of keys) pbf.writeStringField(3, key);
+        for (const v of values)
+          pbf.writeMessage(
+            4,
+            (val, w) =>
+              typeof val === "number"
+                ? w.writeVarintField(5, val)
+                : w.writeStringField(1, val),
+            v,
+          );
+        pbf.writeVarintField(5, EXTENT);
+        pbf.writeVarintField(15, 2);
+      },
+      layer,
+    );
+  }
   return Buffer.from(tile.finish());
 }
 
@@ -259,7 +405,7 @@ export function unreadableHeights(): Buffer {
   return pmtiles(tiles, 2);
 }
 
-/** The three statewide archives round CENTRE, built once. */
+/** The statewide archives round CENTRE, built once. */
 export function statewideArchives() {
   const tilesAt = (z: number, radius: number) => {
     const cx = lon2x(CENTRE.lon, z);
@@ -279,6 +425,15 @@ export function statewideArchives() {
       z15.map(([x, y]) => ({ z: 15, x, y, data: slopePng(x, y) })),
       2,
     ),
+    basemap: pmtiles(
+      tilesAt(14, 3).map(([x, y]) => ({
+        z: 14,
+        x,
+        y,
+        data: basemapMvt(x, y),
+      })),
+      1,
+    ),
     contours: pmtiles(
       tilesAt(14, 3).map(([x, y]) => ({
         z: 14,
@@ -286,6 +441,10 @@ export function statewideArchives() {
         y,
         data: contoursMvt(14, x, y),
       })),
+      1,
+    ),
+    land: pmtiles(
+      tilesAt(13, 3).map(([x, y]) => ({ z: 13, x, y, data: landMvt(x, y) })),
       1,
     ),
   };

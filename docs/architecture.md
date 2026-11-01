@@ -77,7 +77,7 @@ flowchart LR
 ```
 
 **Clients.** Logjam Web is a React SPA in `frontend/`; Logjam GPS is an
-Expo/React Native app in `mobile/`. Both sign in with Cognito and send its
+Expo/React Native app in `mobile/`. Both sign in through OIDC (Cognito in prod) and send its
 JWT to the API. They share logic through `shared/`, not through generated
 UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
 
@@ -138,14 +138,18 @@ and CloudFront reads them through origin access control:
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
 
-**Auth.** One Cognito user pool. The API verifies each request's JWT against
+**Auth.** One Cognito user pool, with a hosted-pages domain and Logjam's
+branding (Managed Login, `envs/prod/cognito.tf`) that both clients sign in
+through. Account deletion has the API call `AdminDeleteUser` on that pool (its
+IAM grant is `AdminGetUser` and `AdminDeleteUser`, `envs/prod/iam.tf`). The API verifies each request's JWT against
 the pool's public keys (`api/src/middleware/auth.ts`). Cognito does not send
 its own email: it hands each verification code, encrypted with a KMS key, to
 a custom email sender Lambda (`infra/lambda/cognito-email-sender`), which
 sends it through Resend (`envs/prod/lambda_cognito_email.tf`).
 
-**Email and push.** Job emails go through Resend (`api/src/services/email.ts`,
-`topo/email_send.py`); pushes go through Expo's push service
+**Email and push.** Job emails go over SMTP (`api/src/services/email.ts`,
+`topo/email_send.py`), to Resend's relay in prod and to Mailpit in local dev, so
+the provider is config; pushes go through Expo's push service
 (`api/src/services/push.ts`, `topo/push_send.py`). Both are best-effort. The
 in-app notification row is the record.
 

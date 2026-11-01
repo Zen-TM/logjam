@@ -1,4 +1,4 @@
-// Expo push notifications — mirrors the Resend email pattern (services/
+// Expo push notifications — mirrors the email pattern (services/
 // email.ts): best-effort fan-out at Notification-creation sites; the
 // in-app Notification row stays the source of truth. No SDK — the Expo push
 // API is one HTTPS POST.

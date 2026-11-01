@@ -1329,10 +1329,10 @@ test.describe("narrow web", () => {
 // variant of something above — they are screens the dev stack cannot reach by
 // navigation.
 //
-// Two are reachable here anyway: the gate and the offer are ordinary responses
-// away, and SignIn is one env var away on the second local server. The third of
-// each — confirmSignUp, confirmForgotPassword — needs a mailbox and a real pool,
-// which is `auth-lifecycle.spec.ts`'s ground, not this file's.
+// Each is reachable here anyway: the gate and the offer are ordinary responses
+// away, and SignIn is one env var away on the second local server. The two
+// code screens need a mailbox, and a real sign-in needs a real pool, which is
+// `auth-lifecycle.spec.ts`'s ground.
 test.describe("surfaces fake auth never shows", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -1340,7 +1340,7 @@ test.describe("surfaces fake auth never shows", () => {
     page,
   }) => {
     // The same bundle with `VITE_AUTH_MODE` not fake: no stored session, so
-    // `fetchAuthSession()` resolves empty and useAuth lands on "signIn".
+    // the session check resolves empty and useAuth lands on "signIn".
     await page.goto(SIGN_IN_URL);
     const signIn = page.getByRole("button", { name: "Sign in", exact: true });
     await expect(signIn).toBeVisible({ timeout: 15_000 });
@@ -1357,10 +1357,9 @@ test.describe("surfaces fake auth never shows", () => {
     ).toBeVisible();
     await expectNoViolations(page);
 
-    // Sign-up is where the two ticks live, and where the Terms and Privacy
-    // links sit BESIDE them rather than inside their labels — a link in a label
-    // toggles the control it labels, so reading the terms would answer the
-    // question about them (SignIn.tsx).
+    // Sign-up is where the two ticks live. The Terms and Privacy links are in
+    // the first one's sentence, which is not a <label>, so reading the terms
+    // doesn't answer the question about them (TermsTick.tsx).
     await page.getByRole("button", { name: "Sign up", exact: true }).click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);
@@ -1377,6 +1376,33 @@ test.describe("surfaces fake auth never shows", () => {
     await page.getByRole("button", { name: "Forgot password?" }).click();
     await expect(
       page.getByRole("button", { name: "Send reset code" }),
+    ).toBeVisible();
+    await expectNoViolations(page);
+  });
+
+  test("the consent gate, on a brand-new account", async ({ page }) => {
+    // A provider's sign-up page cannot ask for a username, the terms or an
+    // age, so the gate does, for an account with no consent recorded.
+    await page.route("**/users/me", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const user = await response.json();
+      await route.fulfill({
+        response,
+        json: { ...user, consentVersion: null },
+      });
+    });
+    await page.goto("/");
+
+    await expect(
+      page.getByRole("heading", { name: "Welcome to Logjam" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel("Username")).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: /agree to the Terms of Use/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: /18 years of age/ }),
     ).toBeVisible();
     await expectNoViolations(page);
   });

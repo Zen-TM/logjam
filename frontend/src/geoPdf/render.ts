@@ -25,6 +25,7 @@ import {
   GEOPDF_PADDING_MM,
   getPaperDimensions,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_HILLSHADE,
   NSW_SLOPE,
   nswContourStyle,
@@ -42,7 +43,7 @@ import { canvasRows, planStrips, type Strip } from "./strips";
 import {
   areasOnPage,
   contourTilesBySource,
-  nswContourZoom,
+  nswVectorZoom,
   overlaysDrawn,
   STATEWIDE,
   terrainCreditLines,
@@ -51,7 +52,12 @@ import {
   type TerrainTileRead,
 } from "./terrain";
 import type { TileCache } from "./cache";
-import { planTerrainBlocks, printGeometry } from "./plan";
+import {
+  planTerrainBlocks,
+  printGeometry,
+  rasterBaseTiles,
+  vectorBasemap,
+} from "./plan";
 import { bandRows } from "./terrainJobs";
 import { TerrainPool } from "./terrainPool";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
@@ -83,6 +89,20 @@ import {
   drawContourLines,
   type ContourTileInput,
 } from "./draw/contours";
+import {
+  buildLand,
+  drawLand,
+  drawLandLegend,
+  landClassesDrawn,
+  type LandTileInput,
+} from "./draw/land";
+import {
+  BASEMAP_BANDS,
+  buildBasemap,
+  drawBasemapBand,
+  drawBasemapLabels,
+  type BasemapTile,
+} from "./draw/basemap";
 import {
   drawMissingTile,
   drawTile,
@@ -130,7 +150,14 @@ const DECODE_BATCH = 8;
 const BANDS_PER_HELPER = 2;
 
 // Priority among reads that the same strip needs first.
-const RANK = { contours: -1, base: 0, hillshade: 1, slope: 2, vegetation: 3 };
+const RANK = {
+  contours: -1,
+  land: -1,
+  base: 0,
+  hillshade: 1,
+  slope: 2,
+  vegetation: 3,
+};
 const PER_STRIP = 8;
 
 // Progress: how the 0..1 bar divides. Measured on the bench fixture run and
@@ -262,7 +289,7 @@ async function renderInner(
   const { north, south, east, west } = config.extent;
   const extent = config.extent;
   const geometry = printGeometry(config);
-  const { centreLat, zoom, nativeW, nativeH, overlayZoom } = geometry;
+  const { centreLat, nativeW, nativeH, overlayZoom } = geometry;
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
   const styleZoom = displayZoomForScale(config.scale, centreLat);
   timings.mapPx = [nativeW, nativeH];
@@ -300,15 +327,7 @@ async function renderInner(
 
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
   const vectorPxScale = elementDpi / STYLE_DPI;
-  const transform = computeTileToMapTransform(
-    zoom,
-    north,
-    south,
-    east,
-    west,
-    nativeW,
-    nativeH,
-  );
+  const baseTiles = rasterBaseTiles(config, geometry);
   const overlayTransform = computeTileToMapTransform(
     overlayZoom,
     north,
@@ -353,8 +372,20 @@ async function renderInner(
     config.overlays.includes("vegetation") && input.vegetationUrls.length > 0;
   const areas = areasOnPage(input.areas, extent);
   const areaById = new Map(areas.map((a) => [a.id, a]));
-  const contourZoom = nswContourZoom(config.scale, centreLat, overlayZoom);
+  const contourZoom = nswVectorZoom(
+    NSW_CONTOURS,
+    config.scale,
+    centreLat,
+    overlayZoom,
+  );
   const wantContours = contourZoom !== null && drawn.contours;
+  const landZoom = nswVectorZoom(
+    NSW_LAND,
+    config.scale,
+    centreLat,
+    overlayZoom,
+  );
+  const wantLand = landZoom !== null && config.overlays.includes("land");
   const baseExtractedAt = new Date();
 
   const statewideUrl = (path: string) => `${input.origin}/${path}`;
@@ -378,22 +409,34 @@ async function renderInner(
     }
     return a;
   };
-  const statewide: Partial<Record<TerrainArchiveLayer, string | null>> = {};
+  const statewide: Partial<
+    Record<TerrainArchiveLayer | "land", string | null>
+  > = {};
+
+  const vectorBase = vectorBasemap(config, geometry);
+  const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
 
   const fontsReady = loadMapFonts(signal);
   // A statewide archive that will not open leaves its layer off the map and
   // out of the credits; an area's archives are tried tile by tile.
-  const openStatewide = async (layer: TerrainArchiveLayer, path: string) => {
+  const openStatewide = async (
+    layer: TerrainArchiveLayer | "land",
+    path: string,
+  ) => {
     const url = statewideUrl(path);
     statewide[layer] = (await fetcher.open(archiveAt(url), url)) ? url : null;
   };
-  await Promise.all([
+  const [, vectorBaseOpened] = await Promise.all([
     fontsReady,
+    vectorBaseUrl
+      ? fetcher.open(archiveAt(vectorBaseUrl), vectorBaseUrl)
+      : false,
     drawn.hillshade
       ? openStatewide("heights", NSW_HILLSHADE.archivePath)
       : null,
     wantSlope ? openStatewide("slope", NSW_SLOPE.archivePath) : null,
     wantContours ? openStatewide("contours", NSW_CONTOURS.archivePath) : null,
+    wantLand ? openStatewide("land", NSW_LAND.archivePath) : null,
   ]);
   check();
 
@@ -434,8 +477,8 @@ async function renderInner(
   // Base tiles.
   const baseEntries: TileEntry[] = [];
   if (baseLayerCfg) {
-    for (const tile of transform.tiles) {
-      const rect = tileRect(tile, transform);
+    for (const tile of baseTiles.tiles) {
+      const rect = tileRect(tile, baseTiles);
       const [first, last] = stripsReaching(rect.y, rect.y + rect.h);
       if (first < 0) continue;
       const url = baseLayerCfg.urlTemplate
@@ -454,6 +497,24 @@ async function renderInner(
       });
     }
   }
+  // A vector base: every tile before the first strip, as its labels are placed
+  // over the whole map.
+  const vectorBaseReads = vectorBaseOpened
+    ? vectorBase!.transform.tiles.map(async (tile) => {
+        const data = await track(
+          "base",
+          fetcher.archive(
+            archiveAt(vectorBaseUrl!),
+            vectorBaseUrl!,
+            tile.z,
+            tile.x,
+            tile.y,
+            RANK.base,
+          ),
+        );
+        return data ? { x: tile.x, y: tile.y, data } : null;
+      })
+    : [];
   const baseOutcome = { loaded: 0 };
   void Promise.all(
     baseEntries.map((e) =>
@@ -611,6 +672,29 @@ async function renderInner(
     }
   }
 
+  // Land, like the contours, is read whole before the first strip.
+  const landTransform =
+    statewide.land && landZoom !== null
+      ? computeTileToMapTransform(
+          landZoom,
+          north,
+          south,
+          east,
+          west,
+          nativeW,
+          nativeH,
+        )
+      : null;
+  const landReads = (landTransform?.tiles ?? []).map((tile) => {
+    const url = statewide.land!;
+    const promise = track(
+      "land",
+      fetcher.archive(archiveAt(url), url, tile.z, tile.x, tile.y, RANK.land),
+    );
+    creditReads.push(promise.then(() => undefined));
+    return { tile, promise };
+  });
+
   // Vegetation: the owner's jobs, oldest first, each over the overlay zoom.
   const vegetation: { entries: TileEntry[]; drew: { any: boolean } }[] = [];
   if (wantVegetation) {
@@ -666,9 +750,37 @@ async function renderInner(
     if (contours.sources.size > 0) drawnTerrain.add("contours");
   }
   contourInputs.length = 0;
+  const landInputs: LandTileInput[] = [];
+  for (const { tile, promise } of landReads) {
+    const data = await promise;
+    if (data) landInputs.push({ x: tile.x, y: tile.y, data });
+  }
+  check();
+  const land =
+    landTransform && landInputs.length > 0
+      ? buildLand(landInputs, landTransform)
+      : [];
+  landInputs.length = 0;
+  const landLegend = landClassesDrawn(land, nativeW, nativeH);
 
   // The credits' upper bound, to find the strips that wait for every read.
   const measure = new OffscreenCanvas(1, 1).getContext("2d")!;
+  const vectorBaseTiles = (await Promise.all(vectorBaseReads)).filter(
+    (t): t is BasemapTile => t !== null,
+  );
+  check();
+  const basemap = vectorBase
+    ? buildBasemap(
+        vectorBaseTiles,
+        vectorBase.transform,
+        vectorBase.styleZoom,
+        vectorPxScale,
+        { width: nativeW, height: nativeH },
+        measure,
+      )
+    : null;
+  if (vectorBase && !basemap?.tilesDrawn)
+    throw new Error("no base tile loaded");
   const margin = mmToPx(5, elementDpi);
   const upperTerrain = new Set<TerrainLayerKey>();
   if (terrainPlans.some((p) => p.key === "hillshade"))
@@ -688,10 +800,10 @@ async function renderInner(
     measure,
     nativeW,
     elementDpi,
-    credit(
-      upperBoundTerrainLines(upperTerrain, areas),
-      wantVegetation ? ["vegetation"] : [],
-    ),
+    credit(upperBoundTerrainLines(upperTerrain, areas), [
+      ...(wantVegetation ? ["vegetation"] : []),
+      ...(landReads.length > 0 ? ["land"] : []),
+    ]),
   );
   const upperBlock = attributionRows(
     upperLines.length,
@@ -914,9 +1026,19 @@ async function renderInner(
       const top = span.from;
       const bottom = span.to;
 
+      // Over a vector base the terrain goes inside it, as on the map
+      // (shared TERRAIN_BASEMAP_ANCHORS): each band before what lies over it.
+      let bandsDrawn = 0;
+      const basemapBandsTo = (band: number) => {
+        if (!basemap) return;
+        for (; bandsDrawn < band; bandsDrawn++)
+          drawBasemapBand(ctx, basemap, bandsDrawn, top, bottom);
+      };
+
       // 1. Base tiles, in tile order, decoded a few at a time, each batch
       // drawn as soon as it is in.
       let mark = performance.now();
+      basemapBandsTo(1);
       const rows = myBase.filter((e) => reachesRows(e.rect, top, bottom));
       for (let i = 0; i < rows.length; i += DECODE_BATCH) {
         const batch = rows.slice(i, i + DECODE_BATCH);
@@ -938,9 +1060,18 @@ async function renderInner(
       for (const e of baseEntries) if (e.last <= strip.index) e.promise = null;
       bump("base", mark);
 
-      // 2. Terrain: hillshade, then slope.
+      // 2. Terrain: hillshade, then Land's borders, then slope.
+      let landDrawn = false;
+      const drawLandOnce = () => {
+        if (!landDrawn) drawLand(ctx, land, top, bottom);
+        landDrawn = true;
+      };
       for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
+        if (p.key === "slope") {
+          drawLandOnce();
+          basemapBandsTo(2);
+        }
         const bands = await terrainWork[i]!;
         // Let go as soon as drawn; the other layer's may still be painting.
         terrainWork[i] = null;
@@ -968,13 +1099,18 @@ async function renderInner(
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
+      drawLandOnce();
       if (scratch) scratch.width = scratch.height = 0;
       scratch = null;
 
       // 3. Contour lines, then vegetation, then the labels over both.
       mark = performance.now();
+      basemapBandsTo(2);
       if (contours) drawContourLines(ctx, contours, top, bottom);
       bump("contours", mark);
+      mark = performance.now();
+      basemapBandsTo(BASEMAP_BANDS);
+      bump("base", mark);
       mark = performance.now();
       for (const entries of myVeg) {
         const mine = entries.filter((e) => reachesRows(e.rect, top, bottom));
@@ -999,6 +1135,7 @@ async function renderInner(
         for (const e of v.entries) if (e.last <= strip.index) e.promise = null;
       bump("vegetation", mark);
       mark = performance.now();
+      if (basemap) drawBasemapLabels(ctx, basemap, top, bottom);
       if (contours) drawContourLabels(ctx, contours, top, bottom);
       bump("labels", mark);
 
@@ -1033,7 +1170,10 @@ async function renderInner(
           elementDpi,
         );
       if (config.elements.compass)
-        drawCompass(ctx, config, stackY, margin, elementDpi);
+        stackY =
+          drawCompass(ctx, config, stackY, margin, elementDpi) -
+          mmToPx(1, elementDpi);
+      drawLandLegend(ctx, landLegend, stackY, margin, padH, padV, elementDpi);
       if (config.elements.title)
         drawTitle(ctx, config.elements.title, margin, padH, padV, elementDpi);
       if (reachesCredits) {
@@ -1041,6 +1181,7 @@ async function renderInner(
         const renderedOverlays: string[] = [];
         if (vegetation.some((v) => v.drew.any))
           renderedOverlays.push("vegetation");
+        if (land.length > 0) renderedOverlays.push("land");
         const terrain = new Set<TerrainLayerKey>(drawnTerrain);
         for (const p of terrainPlans) {
           if (p.credited.size > 0) terrain.add(p.key);
