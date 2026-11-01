@@ -22,6 +22,7 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
+import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
@@ -44,8 +45,6 @@ import {
   useCurrentUser,
   useTopoExports,
   fetchCurrentUser,
-  getCustomFields,
-  getPlaceTypes,
   recordConsent,
   passesFilters,
   hasActiveFilters,
@@ -734,17 +733,19 @@ function App() {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
 
+  useBootDefinitions(
+    loadsUserData,
+    setPlaceCustomFieldDefs,
+    setCustomFieldDefs,
+    setPlaceTypes,
+  );
   useEffect(() => {
     if (!authenticated) return;
+    // hydrateFromUser stays here: it only re-reads /users/me (the gate's own
+    // request) for the theme, and the gate itself is themed by it.
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
-    // The place definitions come from the row-grain endpoint because only it
-    // carries the scoping. Best-effort: a failure leaves the forms with the
-    // built-in fields alone, and the panels show their own error states.
-    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
-    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
-    getPlaceTypes().then(setPlaceTypes).catch(console.error);
     fetchCurrentUser()
       .then((user) => {
         // Record the consent given on the sign-up form. Only a pending value
