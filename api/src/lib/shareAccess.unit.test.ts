@@ -95,7 +95,7 @@ describe("getJobRole", () => {
     expect(await getJobRole(OWNER, "topoJob", job)).toBe("owner");
     expect(await getJobRole(OTHER, "topoJob", job)).toBe("none");
     mocked.share.findUnique.mockResolvedValue({ id: "share-1" });
-    expect(await getJobRole(OTHER, "geoPdfJob", job)).toBe("shared");
+    expect(await getJobRole(OTHER, "topoJob", job)).toBe("shared");
   });
 });
 
@@ -145,15 +145,19 @@ describe("404-not-403 anti-oracle", () => {
 describe("deleteSharesFor", () => {
   it("deletes every share row for the given entities", async () => {
     const tx = {
-      share: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
+      $queryRaw: vi.fn().mockResolvedValue([{ shared_with_id: "u1" }]),
       notification: { deleteMany: vi.fn().mockResolvedValue({ count: 2 }) },
     };
     await deleteSharesFor(tx as never, "route", ["rt-1", "rt-2"]);
-    expect(tx.share.deleteMany).toHaveBeenCalledWith({
-      where: { entityType: "route", entityId: { in: ["rt-1", "rt-2"] } },
-    });
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.calls[0].slice(1)).toEqual([
+      "route",
+      ["rt-1", "rt-2"],
+    ]);
     expect(tx.notification.deleteMany).toHaveBeenCalledWith({
       where: {
+        // Mutation that turns it red: drop `userId`.
+        userId: { in: ["u1"] },
         type: "item_shared",
         AND: [{ payload: { path: ["entityType"], equals: "route" } }],
         OR: [
@@ -166,11 +170,11 @@ describe("deleteSharesFor", () => {
 
   it("issues no query for an empty id list", async () => {
     const tx = {
-      share: { deleteMany: vi.fn() },
+      $queryRaw: vi.fn(),
       notification: { deleteMany: vi.fn() },
     };
     await deleteSharesFor(tx as never, "route", []);
-    expect(tx.share.deleteMany).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
     expect(tx.notification.deleteMany).not.toHaveBeenCalled();
   });
 });
@@ -265,13 +269,12 @@ describe("revokeAllSharesBetween", () => {
       { id: "s1", entityType: "route", entityId: "rt-0", sharedWithId: EX },
       { id: "s2", entityType: "route", entityId: "rt-1", sharedWithId: ME },
       { id: "s3", entityType: "topoJob", entityId: "tj-1", sharedWithId: EX },
-      { id: "s4", entityType: "geoPdfJob", entityId: "gp-1", sharedWithId: EX },
     ]);
     await revokeAllSharesBetween(tx as never, ME, EX);
 
-    // All four Share rows go — a job share is revoked as hard as a route.
+    // All three Share rows go — a job share is revoked as hard as a route.
     expect(tx.share.deleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ["s1", "s2", "s3", "s4"] } },
+      where: { id: { in: ["s1", "s2", "s3"] } },
     });
     // Jobs are not delta-synced, so they get no tombstone (they reconcile on
     // the next list fetch); routes do, one per losing recipient.

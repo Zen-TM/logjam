@@ -384,15 +384,12 @@ export const TRIP_PLAN_PAGE = {
     // The things on the map.
     itemsPlaces: "Places",
     itemsWays: "Ways",
-    itemsMaps: "Maps",
-    itemsEmpty:
-      "Nothing here yet. Add a copy of a place, a way or a map of yours.",
+    itemsEmpty: "Nothing here yet. Add a copy of a place or a way of yours.",
     addCopyLine:
       "Everyone in this plan, including people who join later, can keep a copy.",
     bringPhotos: "Bring its photos",
     photosCountToo: "Photos count too.",
     addCopyFailed: "Couldn't add a copy.",
-    mapsLoadFailed: "Couldn't load your maps.",
     nothingToAdd: "Nothing of yours here yet.",
     nothingTicked: "Tick something to add.",
     saveCopyLine:
@@ -992,12 +989,10 @@ export function tripPlanCounts(plan: {
   places: readonly unknown[];
   routes: readonly unknown[];
   files: readonly unknown[];
-  geoPdfs: readonly unknown[];
-}): { places: number; ways: number; maps: number } {
+}): { places: number; ways: number } {
   return {
     places: plan.places.length,
     ways: plan.routes.length + plan.files.length,
-    maps: plan.geoPdfs.length,
   };
 }
 
@@ -1006,12 +1001,11 @@ export function tripPlanCounts(plan: {
  * to the leader's storage, or deletes (planMembers.ts, `deleteFiles`).
  */
 export function tripPlanFilesChargedTo(
-  plan: Pick<TripPlanView, "files" | "geoPdfs" | "places">,
+  plan: Pick<TripPlanView, "files" | "places">,
   userId: string,
 ): { count: number; bytes: number } {
   const files = [
     ...plan.files,
-    ...plan.geoPdfs,
     ...plan.places.flatMap((place) => place.media),
   ].filter((file) => file.chargedTo?.id === userId);
   return {
@@ -1026,8 +1020,7 @@ export const TRIP_PLAN_ITEM_GROUP = {
   place: "places",
   route: "ways",
   media: "ways",
-  geoPdf: "maps",
-} as const satisfies Record<TripPlanItemKind, "places" | "ways" | "maps">;
+} as const satisfies Record<TripPlanItemKind, "places" | "ways">;
 
 export type TripPlanItemGroup = (typeof TRIP_PLAN_ITEM_GROUP)[TripPlanItemKind];
 
@@ -1038,12 +1031,11 @@ export const TRIP_PLAN_ITEM_GROUPS: readonly {
 }[] = [
   { group: "places", title: TRIP_PLAN_PAGE.copy.itemsPlaces },
   { group: "ways", title: TRIP_PLAN_PAGE.copy.itemsWays },
-  { group: "maps", title: TRIP_PLAN_PAGE.copy.itemsMaps },
 ];
 
 /**
- * What of the caller's own Add a copy offers: their places; their routes and
- * files; and their finished maps. A place brings its linked route always,
+ * What of the caller's own Add a copy offers: their places, routes and
+ * files. A place brings its linked route always,
  * and its files with its photos (api/src/lib/planItems.ts `addPlace`), so a
  * route or file of a place that is ticked is not offered again while it
  * would come with it, and is offered while it would not. Guard: plans.test.ts
@@ -1053,11 +1045,10 @@ export function tripPlanAddable<
   P extends { id: string },
   R extends { ownerId: string; placeId: string | null },
   F extends { linkedPlaceId: string | null },
-  G extends { status: string; syncRole: "owner" | "shared" },
 >(
-  own: { places: P[]; routes: R[]; files: F[]; geoPdfs: G[] },
+  own: { places: P[]; routes: R[]; files: F[] },
   state: { me: string | null; tickedPlaceIds: string[]; copyMedia: boolean },
-): { places: P[]; routes: R[]; files: F[]; geoPdfs: G[] } {
+): { places: P[]; routes: R[]; files: F[] } {
   const ticked = (placeId: string | null) =>
     placeId != null && state.tickedPlaceIds.includes(placeId);
   return {
@@ -1067,9 +1058,6 @@ export function tripPlanAddable<
     ),
     files: own.files.filter(
       (file) => !(state.copyMedia && ticked(file.linkedPlaceId)),
-    ),
-    geoPdfs: own.geoPdfs.filter(
-      (pdf) => pdf.status === "completed" && pdf.syncRole === "owner",
     ),
   };
 }
@@ -1105,7 +1093,7 @@ export function tripPlanAddCopyPrice(
  * the account's storage is known.
  */
 export function tripPlanAddCopyPriceLine(args: {
-  /** The ticked files' and maps' sizes, summed. */
+  /** The ticked files' sizes, summed. */
   bytes: number;
   /** A place is among what is sent. */
   placesPicked: boolean;
@@ -1182,5 +1170,5 @@ export function tripPlanTripLogStopped(saved: number, why: string): string {
 
 /** Where Save a copy put it. */
 export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
-  return `Saved a copy to your ${kind === "place" ? "places" : kind === "geoPdf" ? "maps" : "ways"}.`;
+  return `Saved a copy to your ${kind === "place" ? "places" : "ways"}.`;
 }

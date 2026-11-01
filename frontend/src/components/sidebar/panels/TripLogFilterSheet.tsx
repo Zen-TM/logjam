@@ -98,6 +98,7 @@ export const FILTER_SHEET_SECTIONS: Record<
             logbook and nothing on screen says why. */}
         <SwitchRow
           title={copy.includeMissing}
+          description={copy.includeMissingHint}
           checked={includeUnknowns}
           onChange={onChangeIncludeUnknowns}
         />

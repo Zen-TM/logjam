@@ -6,6 +6,7 @@
 // already on, and (Logjam GPS only) Show on map, absent on the map. Ownership decides the rest:
 // a place shared with you is somebody else's ground, so it is copied and let
 // go of rather than edited and deleted.
+import { LIDAR_JOB_COPY } from "../sharpen.js";
 import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
 
@@ -33,6 +34,9 @@ type VerbDeclaration = {
 
 const NO_MAP_FROM_A_PLACE =
   "Logjam GPS makes a map from an area framed on its map, not from a place.";
+
+const EXPORTED_AT_A_DESK =
+  "A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.";
 
 const OPENING_SHOWS_IT_ON_WEB =
   "On Logjam Web the map sits beside the page, and opening a place already flies it there.";
@@ -62,18 +66,18 @@ export const PLACE_VERBS = [
   {
     id: "makeTopo",
     icon: "lidar",
-    label: "Make a LiDAR topo here",
+    label: LIDAR_JOB_COPY.makeHere,
     for: "both",
     on: "web",
     reason: NO_MAP_FROM_A_PLACE,
   },
   {
-    id: "makeGeoPdf",
-    icon: "geoPdf",
-    label: "Make a GeoPDF here",
+    id: "exportArea",
+    icon: "export",
+    label: "Export the area here",
     for: "both",
     on: "web",
-    reason: NO_MAP_FROM_A_PLACE,
+    reason: EXPORTED_AT_A_DESK,
   },
   {
     id: "share",

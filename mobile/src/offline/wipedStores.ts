@@ -66,7 +66,6 @@ export const OFFLINE_TABLE_FATE = {
   track_point: { loses: ["recordings"] },
   track_point_rejected: { loses: ["recordings"] },
   track: { loses: ["recordings"] },
-  overlay_enabled: { keeps: "Which overlays are switched on: a view setting." },
   route_draft: { loses: ["routeDraft"] },
 } as const satisfies Record<string, StoreFate>;
 
@@ -104,6 +103,11 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
   },
   WEATHER_DIR: {
     keeps: "Forecasts, fetched again with one press.",
+  },
+  GAUGES_DIR: { keeps: "Public gauge readings, fetched again online." },
+  TILEJSON_DIR: { keeps: "Map files, written again when the map opens." },
+  SHARPENED_AREAS_DIR: {
+    keeps: "The account's list of sharpened areas, fetched again online.",
   },
   PLAN_DIR: {
     keeps: "A plan's files, downloaded again from the plan with one press.",

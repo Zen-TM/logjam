@@ -1,6 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { signOut } from "aws-amplify/auth";
-import { clearTripDraft } from "../../tripDraft";
+import { signOut } from "../../useAuth";
 import BrandMark from "../brand/BrandMark";
 import { Button } from "../../ui";
 import classes from "./RootErrorBoundary.module.css";
@@ -36,20 +35,10 @@ export class RootErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
-  private handleSignOut = async (): Promise<void> => {
-    // Best-effort: clear the session in case a corrupt auth state caused the
-    // crash, then reload to a clean sign-in. Reload regardless of outcome
-    // (signOut throws in fake-auth dev, where Amplify isn't configured).
-    // This is a second sign-out path that bypasses useAuth, so it repeats the
-    // draft clear — a draft must not outlive the session down *any* exit.
-    clearTripDraft();
-    try {
-      await signOut();
-    } catch (err) {
-      console.error(err);
-    }
-    window.location.reload();
-  };
+  // The app's own sign-out (draft and tile cache cleared, provider session
+  // ended, reload as the fallback), so a corrupt auth state cannot leave a
+  // second path behind. It never rejects.
+  private handleSignOut = (): Promise<void> => signOut();
 
   render(): ReactNode {
     if (!this.state.hasError) return this.props.children;

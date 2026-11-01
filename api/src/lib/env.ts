@@ -23,11 +23,15 @@ const baseSchema = z.object({
   // ECS workers get DB_USER/DB_PASSWORD injected directly.
   DB_SECRET_ID: z.string().optional(),
 
-  AUTH_MODE: z.enum(["fake", "cognito"]),
+  // "cognito" is an alias of "oidc", kept so no env change has to land in the
+  // same deploy as the code that reads it.
+  AUTH_MODE: z.enum(["fake", "oidc", "cognito"]),
   FAKE_USER_SUB: z.string().optional(),
-  COGNITO_REGION: z.string().optional(),
-  COGNITO_USER_POOL_ID: z.string().optional(),
-  COGNITO_CLIENT_ID: z.string().optional(),
+  // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
+  // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens
+  // are accepted (parsed to OIDC_AUDIENCE_LIST).
+  OIDC_ISSUER: z.string().optional(),
+  OIDC_AUDIENCE: z.string().optional(),
 
   AWS_REGION: z.string().default("ap-southeast-2"),
   AWS_ENDPOINT_URL: z.string().url().optional(),
@@ -65,17 +69,23 @@ const baseSchema = z.object({
   ECS_CLUSTER: z.string().default("logjam-cluster"),
   ECS_TOPO_TASK_DEF: z.string().default("logjam-topo-worker"),
   ECS_TOPO_EXPORT_TASK_DEF: z.string().default("logjam-topo-export-worker"),
-  ECS_GEO_PDF_TASK_DEF: z.string().default("logjam-geo-pdf-worker"),
   ECS_SUBNETS: z.string().optional(),
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Transactional email (Resend). Only the geoPdfWorker sends from the Node
-  // side; the API server itself sends none. Both optional so a worker with no
-  // key configured degrades to a no-op send (services/email.ts) instead of
-  // crashing — mirrors the Python workers' guard. FRONTEND_URL builds the
-  // completion-email deep link.
-  RESEND_API_KEY: z.string().optional(),
+  // Transactional email over SMTP (services/email.ts). All optional so a
+  // process with no provider configured degrades to a no-op send instead of
+  // crashing; SMTP_PORT stays a string so that an empty one does too. The names
+  // are shared with the Python workers (@logjam/shared SMTP_ENV_KEYS).
+  // RESEND_SECRET_ID is the Secrets Manager id src/boot.ts resolves
+  // SMTP_PASSWORD from, on a host with no secrets injection. FRONTEND_URL
+  // builds the completion-email deep link.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_CA_CERT: z.string().optional(),
+  RESEND_SECRET_ID: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   FRONTEND_URL: z.string().url().optional(),
 
@@ -121,12 +131,7 @@ const baseSchema = z.object({
     .default(21_600_000), // 6 h
   // Adaptive runtime estimator (routes/topoJobs.ts): the per-input-tile rate is
   // fitted from recent completed jobs once at least MIN_SAMPLES exist; until
-  // then it falls back to DEFAULT_SECONDS_PER_TILE (conservative,
-  // self-corrects down as real jobs accumulate).
-  TOPO_ESTIMATE_DEFAULT_SECONDS_PER_TILE: z.coerce
-    .number()
-    .positive()
-    .default(510),
+  // then it falls back to a cold-start rate (lib/runtimeEstimates.ts).
   TOPO_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Adaptive runtime estimator for topo exports (lib/runtimeEstimates.ts):
   // fitted per-(format, bundling) bucket from recent completed exports' actual
@@ -141,14 +146,6 @@ const baseSchema = z.object({
     .int()
     .positive()
     .default(3),
-  // Adaptive runtime estimator for GeoPDF jobs (lib/runtimeEstimates.ts): fitted
-  // per-megapixel rate (native render-canvas size) from recent completed jobs.
-  // Falls back to this cold-start rate below MIN_SAMPLES.
-  GEO_PDF_ESTIMATE_DEFAULT_SECONDS_PER_MEGAPIXEL: z.coerce
-    .number()
-    .positive()
-    .default(6),
-  GEO_PDF_ESTIMATE_MIN_SAMPLES: z.coerce.number().int().positive().default(3),
   // Account-wide ceiling on concurrently running worker vCPUs
   // (lib/fargateCapacity.ts). Sits BELOW the AWS Fargate On-Demand vCPU
   // service quota (30 in ap-southeast-2) so excess load becomes a retryable
@@ -202,20 +199,6 @@ const baseSchema = z.object({
     .int()
     .nonnegative()
     .default(604_800_000), // 7 days
-  // GeoPdfJob sweeps (mirrors TOPO_REAPER_EXPORT_*_TIMEOUT_MS): queued rows
-  // older than the QUEUED timeout (task never placed/started) and running
-  // rows older than the RUNNING timeout (worker SIGKILLed before its terminal
-  // write) are force-failed.
-  GEO_PDF_QUEUED_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(900_000), // 15 min
-  GEO_PDF_RUNNING_TIMEOUT_MS: z.coerce
-    .number()
-    .int()
-    .positive()
-    .default(1_800_000), // 30 min
   // Unconfirmed media uploads (presigned PUT done, /media/:id/confirm never
   // called — no Media row exists) are orphans in S3 with no quota charge.
   // Objects older than this with no confirmed row are deleted by the periodic
@@ -260,9 +243,6 @@ const baseSchema = z.object({
   RATE_LIMIT_USER_PATCH_MAX: z.coerce.number().int().positive().optional(),
   // Same contract for the import limiter (bulkImportLimitMax).
   RATE_LIMIT_BULK_IMPORT_MAX: z.coerce.number().int().positive().optional(),
-  // Job id for the one-shot GeoPDF worker container (worker/geoPdfWorker.ts
-  // CLI entrypoint); unset in the API process.
-  GEO_PDF_JOB_ID: z.string().optional(),
   // Commit the image was built from, baked in by api/Dockerfile's GIT_SHA
   // build arg; GET /meta reports it so a deploy can prove what is serving.
   // Not a sha regex: a build without the arg bakes in "", and a malformed
@@ -275,6 +255,7 @@ type Env = z.infer<typeof baseSchema> & {
   ECS_SUBNETS_LIST: string[];
   ECS_SECURITY_GROUPS_LIST: string[];
   CORS_ORIGIN_LIST: string[];
+  OIDC_AUDIENCE_LIST: string[];
 };
 
 const required = (key: keyof z.infer<typeof baseSchema>, val: unknown) =>
@@ -295,13 +276,23 @@ export function validateEnv(): Env {
   const env = parsed.data;
   const missing: string[] = [];
 
-  if (env.AUTH_MODE === "cognito") {
-    const c1 = required("COGNITO_REGION", env.COGNITO_REGION);
-    const c2 = required("COGNITO_USER_POOL_ID", env.COGNITO_USER_POOL_ID);
-    const c3 = required("COGNITO_CLIENT_ID", env.COGNITO_CLIENT_ID);
-    if (c1) missing.push(c1);
-    if (c2) missing.push(c2);
-    if (c3) missing.push(c3);
+  const audienceList = (env.OIDC_AUDIENCE ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (env.AUTH_MODE !== "fake") {
+    const issuer = required("OIDC_ISSUER", env.OIDC_ISSUER);
+    if (issuer) missing.push(issuer);
+    if (audienceList.length === 0) missing.push("OIDC_AUDIENCE");
+    if (
+      env.NODE_ENV === "production" &&
+      env.OIDC_ISSUER &&
+      !env.OIDC_ISSUER.startsWith("https://")
+    ) {
+      console.error("OIDC_ISSUER must be https:// in production.");
+      process.exit(1);
+    }
   }
 
   if (env.AUTH_MODE === "fake" && env.NODE_ENV === "production") {
@@ -369,6 +360,7 @@ export function validateEnv(): Env {
           .filter(Boolean)
       : [],
     CORS_ORIGIN_LIST: corsList,
+    OIDC_AUDIENCE_LIST: audienceList,
   };
 }
 

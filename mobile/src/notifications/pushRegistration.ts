@@ -14,6 +14,7 @@ import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 
 import { apiFetch } from "../api/apiFetch";
+import { pushAvailable } from "./pushAvailable";
 
 const PUSH_TOKEN_KEY = "logjam_push_token";
 
@@ -50,6 +51,9 @@ export async function requestPushPermission(): Promise<boolean> {
 }
 
 async function registerGrantedDevice(): Promise<void> {
+  if (!pushAvailable(Platform.OS, Constants.expoConfig?.android?.package)) {
+    return;
+  }
   try {
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {

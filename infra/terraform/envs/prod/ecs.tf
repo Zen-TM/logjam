@@ -1,7 +1,8 @@
 # ECS task definitions for the three on-demand Fargate workers, the
-# pre-deploy migrate one-shot and the monthly place registry build. Workers are
-# launched via RunTask (api/src/lib/ecsRunTask.ts), the place registry by its
-# schedule below; no long-running services. container_definitions
+# pre-deploy migrate one-shot, the monthly place registry build and the
+# two-hourly river gauges job. Workers are launched via RunTask
+# (api/src/lib/ecsRunTask.ts), the registry and gauges by their schedules
+# below; no long-running services. container_definitions
 # is pinned to the exact live JSON (generated via
 # `terraform plan -generate-config-out`) so the plan stays clean — editing it
 # registers a new task-def revision.
@@ -22,9 +23,11 @@
 #
 # The cluster (aws_ecs_cluster) lives in ecs_cluster.tf.
 
-resource "aws_ecs_task_definition" "geo_pdf_worker" {
+resource "aws_ecs_task_definition" "api_script" {
   container_definitions = jsonencode([{
-    command = ["node", "dist/worker/geoPdfWorker.js"]
+    # Always overridden by the RunTask caller; this refuses a bare start rather
+    # than booting the API server with the production database credentials.
+    command = ["node", "-e", "console.error('api-script needs a command override'); process.exit(1)"]
     environment = [{
       name  = "AUTH_MODE"
       value = "cognito"
@@ -57,10 +60,10 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       value = "noreply@notifications.logjamnsw.com"
       }, {
       name = "ECS_SECURITY_GROUPS"
-      # Dedicated worker SG. Vestigial here (geoPdfWorker is a leaf, never
-      # calls RunTask) but kept in sync so no stale default-SG id lingers in
-      # a committed task def. The operative value is the EB env property of
-      # the same name (operator-owned).
+      # Dedicated worker SG. Vestigial here (a maintainer script never calls
+      # RunTask) but kept in sync so no stale default-SG id lingers in a
+      # committed task def. The operative value is the EB env property of the
+      # same name (operator-owned).
       value = aws_security_group.worker.id
       }, {
       name  = "ECS_SUBNETS"
@@ -72,8 +75,23 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       name  = "NODE_ENV"
       value = "production"
       }, {
+      name  = "OIDC_AUDIENCE"
+      value = "545ofbb8l9d1sl6ggbmk6oonn9"
+      }, {
+      name  = "OIDC_ISSUER"
+      value = "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_x5zPhJXMk"
+      }, {
       name  = "S3_BUCKET_MEDIA"
       value = "logjam-media"
+      }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
       }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
@@ -88,13 +106,13 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       logDriver = "awslogs"
       options = {
         awslogs-create-group  = "true"
-        awslogs-group         = "/ecs/logjam-geo-pdf-worker"
+        awslogs-group         = "/ecs/logjam-api-script"
         awslogs-region        = "ap-southeast-2"
         awslogs-stream-prefix = "ecs"
       }
     }
     mountPoints  = []
-    name         = "geo-pdf-worker"
+    name         = "api-script"
     portMappings = []
     secrets = [{
       name      = "DB_PASSWORD"
@@ -103,7 +121,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -112,7 +130,7 @@ resource "aws_ecs_task_definition" "geo_pdf_worker" {
   cpu                      = "1024"
   enable_fault_injection   = false
   execution_role_arn       = "arn:aws:iam::620853681701:role/ecsTaskExecutionRole"
-  family                   = "logjam-geo-pdf-worker"
+  family                   = "logjam-api-script"
   memory                   = "4096"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -143,6 +161,15 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name  = "EMAIL_FROM"
       value = "noreply@notifications.logjamnsw.com"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
       }, {
@@ -171,7 +198,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -278,6 +305,15 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name  = "FRONTEND_URL"
       value = "https://logjamnsw.com/"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
     }]
@@ -303,7 +339,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -394,6 +430,96 @@ resource "aws_scheduler_schedule" "place_registry" {
 
       # As api/src/lib/ecsRunTask.ts launches the workers: a public IP is
       # the task's only way out to Geofabrik and S3.
+      network_configuration {
+        subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
+        security_groups  = [aws_security_group.worker.id]
+        assign_public_ip = true
+      }
+    }
+  }
+}
+
+# River gauges (ADR 0044): every two hours, read WaterNSW's latest levels and
+# flows and publish them under master/gauges/ in the topo bucket; once a day
+# also extend each gauge's history from the Bureau of Meteorology. Same image
+# as the topo workers, so pin-release.sh repins it on each topo deploy. No
+# database; its one secret is WaterNSW's API key, whose value is set by hand.
+resource "aws_secretsmanager_secret" "waternsw_api_key" {
+  name        = "logjam/waternsw-api-key"
+  description = "WaterNSW Water Data API subscription key (Basic tier, 29 calls a day). Read by the logjam-gauges task. Value set by hand, never in Terraform."
+}
+
+resource "aws_ecs_task_definition" "gauges" {
+  container_definitions = jsonencode([{
+    entryPoint = ["python3", "/app/build_gauges.py", "run"]
+    environment = [{
+      name  = "AWS_REGION"
+      value = "ap-southeast-2"
+      }, {
+      name  = "S3_BUCKET_TOPO"
+      value = module.topo_jobs.bucket_id
+    }]
+    essential = true
+    # Floor only — CI re-registers this def pinned to a sha (see header).
+    image = "620853681701.dkr.ecr.ap-southeast-2.amazonaws.com/logjam-topo-worker:latest"
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        awslogs-group         = aws_cloudwatch_log_group.gauges.name
+        awslogs-region        = "ap-southeast-2"
+        awslogs-stream-prefix = "ecs"
+      }
+    }
+    name = "gauges"
+    secrets = [{
+      name      = "WATERNSW_API_KEY"
+      valueFrom = aws_secretsmanager_secret.waternsw_api_key.arn
+    }]
+  }])
+  # The smallest Fargate size: the job holds a few hundred readings and, on
+  # the daily sweep, one gauge's history at a time. Its time goes in waiting
+  # on the APIs' rate limits, not in CPU or memory.
+  cpu                      = "256"
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  family                   = "logjam-gauges"
+  memory                   = "512"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  task_role_arn            = aws_iam_role.gauges.arn
+
+  runtime_platform {
+    cpu_architecture        = "X86_64"
+    operating_system_family = "LINUX"
+  }
+}
+
+# Its own schedule group: the not-launched alarm's only dimension is the group
+# (see monitoring.tf), so a shared group would mix this schedule's errors with
+# the place registry's.
+resource "aws_scheduler_schedule_group" "gauges" {
+  name = "logjam-gauges"
+}
+
+# Every two hours; build_gauges.py's RUNS_PER_DAY and the 29-calls-a-day quota
+# assume it (guard: topo/tests/test_gauges.py).
+resource "aws_scheduler_schedule" "gauges" {
+  name                = "logjam-gauges"
+  group_name          = aws_scheduler_schedule_group.gauges.name
+  schedule_expression = "rate(2 hours)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_ecs_cluster.main.arn
+    role_arn = aws_iam_role.gauges_scheduler.arn
+
+    ecs_parameters {
+      task_definition_arn = aws_ecs_task_definition.gauges.arn_without_revision
+      launch_type         = "FARGATE"
+
       network_configuration {
         subnets          = [data.aws_subnet.worker_a.id, data.aws_subnet.worker_b.id]
         security_groups  = [aws_security_group.worker.id]

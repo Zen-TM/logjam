@@ -55,6 +55,7 @@ import { useConnectivity } from "./connectivity";
 import { readBasemapPreference } from "./basemapPreference";
 import { useBasemapAssets } from "./basemap/basemapAssets";
 import { ProtomapsLayers } from "./basemap/ProtomapsLayers";
+import { BAND_MARKERS } from "./layerOrder";
 import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { PlacePinsLayer, toPlaceFeatureCollection } from "./PlacePinsLayer";
@@ -269,14 +270,13 @@ export function PickAreaScreen({
                   <ProtomapsLayers
                     flavor={PROTOMAPS_FLAVOR}
                     sourceID={sourceIdFor(resolved.key)}
-                    startIndex={1}
                   />
                 ) : (
                   <Layer
                     key={`pick-area-basemap-${resolved.key}`}
                     type="raster"
                     id={`pick-area-basemap-${resolved.key}`}
-                    layerIndex={1}
+                    beforeId={BAND_MARKERS.land}
                     style={{ rasterOpacity: 1 }}
                   />
                 )}

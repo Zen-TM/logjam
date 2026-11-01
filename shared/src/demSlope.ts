@@ -15,7 +15,7 @@
 // PRIVACY: positions here are precise wilderness coordinates. Nothing logs.
 
 import {
-  covers,
+  demSourceCovers,
   DEM_SOURCES,
   demTileKey,
   type DemSource,
@@ -124,7 +124,8 @@ export async function demSlopeReading(
   for (const source of sources) {
     if (source.coverage === null) continue;
     const { positions, cellM } = demSlopeWindow(lon, lat, source.sampleZoom);
-    if (!positions.every((position) => covers(source, position))) continue;
+    if (!positions.every((position) => demSourceCovers(source, position)))
+      continue;
     const addresses = resolveDemSamples(positions, source.sampleZoom);
     const wanted = new Map<string, DemSampleAddress>();
     for (const address of addresses) wanted.set(demTileKey(address), address);

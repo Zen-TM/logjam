@@ -109,7 +109,8 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const { fetchExtractRequest, planExtract } = await import("@logjam/shared");
+const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_LAND_CLIP, planExtract } =
+  await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
@@ -327,7 +328,7 @@ describe("runRegionClip", () => {
     expect(await settled(pending)).toEqual({ status: "cancelled" });
   });
 
-  // Mutations: drop a DEM or contour clip on any status and a CDN outage
+  // Mutations: drop a DEM, contour or slope clip on any status and a CDN outage
   // saves an area without them, unreported (the 503 line); report a missing
   // one and every area outside its coverage fails a map.
   it("leaves out a DEM or contour archive the CDN lacks, and only that", async () => {
@@ -336,6 +337,8 @@ describe("runRegionClip", () => {
     const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
     expect(await run(dem)).toEqual({ status: "cancelled" });
     expect(await run({ contours: true })).toEqual({ status: "cancelled" });
+    expect(await run({ slope: true })).toEqual({ status: "cancelled" });
+    expect(await run({ land: true })).toEqual({ status: "cancelled" });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",
@@ -349,6 +352,100 @@ describe("runRegionClip", () => {
     expect(await settled(run(dem))).toEqual({
       status: "failed",
       code: "unknown",
+    });
+  });
+
+  // Mutation: file the slope clip as a raster, or under the basemap's key,
+  // and offline the map draws the terrarium PNGs as noise, or not at all.
+  it("files a slope clip as the DEM the map colours", async () => {
+    expect((await run({ slope: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/dem/nsw-5m-slope.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "slope-region",
+        logicalKey: "nsw-5m-slope",
+        sourceType: "raster-dem",
+        minzoom: 8,
+      }),
+    );
+  });
+
+  // Mutation: cut Land from the archive's own z8, and a saved area carries
+  // about five times the bytes in zooms no map draws.
+  it("cuts a land clip from the zoom a map draws it", async () => {
+    expect((await run({ land: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/${NSW_LAND_CLIP.archivePath}`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "land-region",
+        logicalKey: NSW_LAND_CLIP.id,
+        minzoom: LAND_EDGE_MINZOOM,
+      }),
+    );
+  });
+
+  // Mutation: revert `clipArchiveFor` to `dem.sampleZoom` and the height clip
+  // holds z15 alone, so the hillshade vanishes offline below z15 while the
+  // estimate still prices z8-14.
+  it("cuts the nsw-5m height clip from z8, not from the sampler's z15", async () => {
+    const dem = { demSourceId: "nsw-5m", basemapId: "nsw-5m" };
+    expect((await run(dem)).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/master/dem/nsw-5m.pmtiles`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "dem-region",
+        logicalKey: "nsw-5m",
+        minzoom: 8,
+        // The fixture archive stops at z14; the clip's z15 is in `clipArchiveFor`.
+        maxzoom: 14,
+      }),
+    );
+  });
+
+  // A sharpened area's clip: cut from the bucket through the presigned URL,
+  // filed under the area's source id, its bounds its z15 tiles.
+  // Mutations: cut it from the CDN, file it under the statewide key, keep
+  // the saved area's bbox, or let an expired URL drop it silently, and a line
+  // here goes red.
+  it("cuts a sharpened area's clip through its presigned URL, filed under the area", async () => {
+    const { tileRectBounds, tileRectCovering } = await import(
+      "../map/terrainRoutes"
+    );
+    const [x0, y0, x1, y1] = tileRectCovering(15, [150.3, -33.7, 150.4, -33.6]);
+    const tiles = [x0 & ~1, y0 & ~1, x1 | 1, y1 | 1] as const;
+    const url =
+      "https://bucket.example/outputs/a1/contours.pmtiles?X-Amz-Signature=s";
+    const area = { id: "a1", layer: "contours", url, zmax: 17, tiles };
+    expect((await run({ basemapId: "lidar-a1", area })).status).toBe("ready");
+    for (const call of cdn.calls) {
+      expect(call.url).toBe(url);
+      expect(Object.keys(call.init.headers)).toEqual(["range"]);
+    }
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "contours-region",
+        logicalKey: "lidar-a1",
+        sourceType: "vector",
+        bbox: tileRectBounds(15, tiles),
+        minzoom: 14,
+        maxzoom: 14,
+      }),
+    );
+    cdn.failFrom = 0;
+    cdn.status = 403;
+    expect(await run({ basemapId: "lidar-a1", area })).toEqual({
+      status: "failed",
+      code: "source-unavailable",
+      detail: "sharpened-area",
+    });
+    // A host refusing ranges is no expired link.
+    cdn.status = 416;
+    expect(await run({ basemapId: "lidar-a1", area })).toEqual({
+      status: "failed",
+      code: "source-unavailable",
     });
   });
 

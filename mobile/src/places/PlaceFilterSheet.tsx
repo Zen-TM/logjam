@@ -172,6 +172,7 @@ export const FILTER_SHEET_SECTIONS: Record<
         <SwitchRow
           icon="help"
           title={copy.includeMissing}
+          description={copy.includeMissingHint}
           checked={filters.include_unknowns}
           onChange={(next) => patch({ include_unknowns: next })}
         />

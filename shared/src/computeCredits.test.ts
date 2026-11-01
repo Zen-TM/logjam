@@ -9,16 +9,15 @@ import {
 } from "./computeCredits.js";
 
 describe("creditsForRun", () => {
-  it("charges vCPU-minutes, so an 8 vCPU worker costs 8× a 1 vCPU one", () => {
-    expect(creditsForRun("geoPdf", 60)).toBe(1);
+  it("charges vCPU-minutes, so an 8 vCPU worker costs twice a 4 vCPU one", () => {
     expect(creditsForRun("topoExport", 60)).toBe(4);
     expect(creditsForRun("topo", 60)).toBe(8);
   });
 
   it("rounds up — a flood of sub-minute jobs must not be free", () => {
     // The abuse shape a per-job-count limit misses: 1000 two-second renders.
-    expect(creditsForRun("geoPdf", 2)).toBe(1);
-    expect(creditsForRun("geoPdf", 1)).toBe(1);
+    expect(creditsForRun("topoExport", 2)).toBe(1);
+    expect(creditsForRun("topoExport", 1)).toBe(1);
   });
 
   it("treats non-positive and non-finite runtimes as zero", () => {
@@ -36,9 +35,6 @@ describe("creditsForRun", () => {
     expect(creditsForRun("topo", 6 * 3600)).toBeGreaterThan(
       DEFAULT_MONTHLY_COMPUTE_CREDITS,
     );
-    // A 30 min GeoPDF ceiling is 30 credits — 2.5% of the allowance, so normal
-    // PDF use never feels the cap.
-    expect(creditsForRun("geoPdf", 30 * 60)).toBe(30);
   });
 });
 

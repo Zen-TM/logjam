@@ -7,10 +7,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { usePlaces } from "./placeUtils";
 
-vi.mock("aws-amplify/auth", () => ({
-  fetchAuthSession: vi.fn().mockResolvedValue({
-    tokens: { idToken: { toString: () => "test-token" } },
-  }),
+vi.mock("./auth/oidc", () => ({
+  loadSession: vi.fn().mockResolvedValue({ id_token: "test-token" }),
 }));
 
 function fakeResponse(body: unknown) {

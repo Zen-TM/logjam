@@ -46,7 +46,7 @@ Needed before the first release tag.
    `eas credentials --platform android` → Google Service Account. EAS uses it
    for `--auto-submit`.
 5. **EAS environments `preview` and `production`** carry the same variables
-   (`EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_USER_POOL_ID`,
+   (`EXPO_PUBLIC_OIDC_ISSUER`, `EXPO_PUBLIC_OIDC_CLIENT_ID`,
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
    (`mobile/eas.json`).
@@ -71,7 +71,10 @@ tester until you roll it out.
      and start a new empty `## [Unreleased]` above it.
 
    Pick the version by what users see: a patch for fixes only, a minor for
-   anything new. Merge it.
+   anything new. The required `expo-doctor` check runs on this PR, and only on
+   a PR that changes the version: if Expo has published a patch release since
+   the last one, run `cd mobile && npx expo install --fix` and commit the
+   result here. Merge it.
 2. **Qualify** the merge commit ([below](#release-qualification)).
 3. **Optional release candidate:** `git tag mobile-vX.Y.Z-rc.1 <sha>` and
    `git push origin mobile-vX.Y.Z-rc.1`. The APK installs over a `preview`
@@ -107,8 +110,8 @@ needs: [`mobile/e2e/README.md`](../../mobile/e2e/README.md).
 |---|---|---|
 | `browse.yaml` | `fake` | the signed-in shell: tabs, place list from the API, place detail, inbox, account |
 | `map.yaml` | `fake` | map tab, layers picker, the vector basemap and its attribution, locate-me |
-| `guest.yaml` | `cognito`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
-| `signin.yaml` | `cognito`, with the test Cognito user | real sign-in to the shell |
+| `guest.yaml` | `oidc`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
+| `signin.yaml` | `oidc`, with the test Cognito user | real sign-in through the provider's browser sheet to the shell |
 
 A flow that fails is not retried until it passes: find out why. A flow broken
 by an intended UI change is fixed in a PR to `main`, and the release waits
@@ -190,8 +193,10 @@ When a released build needs a fix that is **not** JavaScript only, and `main`
 holds work that should not ship yet: branch `release/mobile-vX.Y.Z` from the
 tag as in step 2 above, cherry-pick, bump to X.Y.(Z+1) and add its
 `CHANGELOG.md` section on the branch (and the same section on `main`), then
-tag `mobile-vX.Y.(Z+1)` on the branch and release as usual. Delete the branch
-once the release is published. If `main` has nothing unready, release from
+tag `mobile-vX.Y.(Z+1)` on the branch and release as usual. The bump is an
+admin push, not a PR, so the required `expo-doctor` check does not run on it:
+the branch keeps the pins of the build it came from. Delete the branch once
+the release is published. If `main` has nothing unready, release from
 `main` instead: no branch.
 
 ## Runtime versions

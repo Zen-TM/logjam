@@ -12,21 +12,16 @@ import {
   mintFriendInviteToken,
 } from "../src/lib/friendInviteToken";
 import {
-  GEO_PDF_FAILURE_MESSAGE,
   TOPO_EXPORT_STOPPED_MESSAGE,
   TOPO_UNREADABLE_MESSAGE,
 } from "../src/lib/failureCopy";
 import {
-  AUTO_EXPORT_DEFAULTS,
   NOTIFICATION_TYPES,
   FILE_SEND_TTL_DAYS,
   FRIEND_INVITE_TTL_DAYS,
   RASTER_TEMPLATE_DEFAULTS,
   VECTOR_STYLE_DEFAULTS,
-  validateGeoPdfConfig,
-  validateGeoPdfTemplateConfig,
   validateRasterTemplateSettings,
-  type GeoPdfConfig,
   enforceCanyoningTag,
   linksCanyon,
   friendInviteUrl,
@@ -44,6 +39,7 @@ import {
   PLACE_REGISTRY_POINTER_PATH,
   PLACE_REGISTRY_PREFIX,
   SYSTEM_PLACE_TYPE_IDS,
+  currentSeason,
   SYSTEM_PLACE_TYPES,
   TRACK_COLORS,
   trackPointsToGpx,
@@ -246,6 +242,9 @@ const prisma = new PrismaClient({ adapter });
 //     trip log. PLACE_IDS[1] also shared with bob. carol is shared NOTHING and
 //     is NOT alice's friend (sharing.test.ts asserts a 403 for share->carol).
 //   - alice<->bob accepted friendship; carol->alice pending request.
+//   - alice and bob have joined the friends leaderboard, with canyon trips in
+//     the current season; carol, bob's friend, has not, so bob's board names
+//     her (leaderboard.test.ts starts by taking both off it).
 // New data uses fresh ids and never mutates those invariants.
 // ---------------------------------------------------------------------------
 
@@ -255,9 +254,9 @@ const CAROL_ID = seedId("0", 3);
 
 // Matches FAKE_USER_SUB default in auth middleware and the Terraform-generated
 // .env.local (infra/terraform/templates/env.local.tftpl)
-const ALICE_COGNITO_ID = "fake-alice-sub";
-const BOB_COGNITO_ID = "fake-bob-sub";
-const CAROL_COGNITO_ID = "fake-carol-sub";
+const ALICE_SUB = "fake-alice-sub";
+const BOB_SUB = "fake-bob-sub";
+const CAROL_SUB = "fake-carol-sub";
 
 // Stable anchor place ids referenced by the integration suite.
 const PLACE_IDS = [
@@ -1298,6 +1297,33 @@ function buildTrips(): SeedTrip[] {
     }
   }
 
+  // This season's canyons, for the friends leaderboard: bob 3, alice 2. Last,
+  // so every trip above keeps its id and date. A week apart from the season's
+  // start and never after today, so a re-seed in any month lands them in the
+  // season it is.
+  const season = currentSeason();
+  const daysIn = Math.floor((Date.now() - season.start.getTime()) / 86_400_000);
+  const isCanyon = (place: SeedPlace) =>
+    seedPlaceTypeId(place.id) === SYSTEM_PLACE_TYPE_IDS.canyon;
+  for (const [userId, places] of [
+    [ALICE_ID, ALICE_PLACES.filter(isCanyon).slice(0, 2)],
+    [BOB_ID, BOB_PLACES.filter(isCanyon).slice(0, 3)],
+  ] as const) {
+    for (const [i, place] of places.entries()) {
+      seed++;
+      trips.push({
+        placeId: place.id,
+        userId,
+        date: new Date(
+          season.start.getTime() +
+            // Sydney's 21 June starts while UTC is still on the 20th: -1 there.
+            Math.max(0, Math.min(i * 7, daysIn)) * 86_400_000,
+        ),
+        notes: `${NOTE_TEMPLATES[seed % NOTE_TEMPLATES.length]} This season.`,
+      });
+    }
+  }
+
   return trips;
 }
 
@@ -1305,8 +1331,7 @@ function buildTrips(): SeedTrip[] {
 //
 // A COMPLETE job has its outputs in S3 behind it, as a vector file does: the
 // topo ones are tiny real PMTiles archives (seedArchives.ts) at the keys the
-// rows name, and a GeoPDF's result is the PDF Logjam's own generator wrote
-// (shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf). Every size a row states
+// row's `sharpen` names. Every size a row states
 // is the length of the bytes uploaded.
 
 /** Minted per seed run; the invite row stores only its hash, as the route does. */
@@ -1334,7 +1359,15 @@ const TOPO_FOOTPRINT = {
     ],
   ],
 };
-/** A made-up contour across the tile, in tile units (extent 4096). */
+/** The z16 tile of the sharpened heights and slope, and the z14 one of its contours. */
+const SHARP_TILE = tileAt(16, 150.3179, -33.6563);
+const CONTOUR_TILE = tileAt(14, 150.3179, -33.6563);
+const CONTOUR_BOUNDS = tileBounds(
+  CONTOUR_TILE.z,
+  CONTOUR_TILE.x,
+  CONTOUR_TILE.y,
+);
+/** A made-up contour across the contour tile, in tile units (extent 4096). */
 const CONTOUR_LINE: [number, number][] = [
   [0, 2600],
   [1200, 2100],
@@ -1343,78 +1376,67 @@ const CONTOUR_LINE: [number, number][] = [
 ];
 /** The same line in degrees, so an export of the layer matches its tile. */
 const CONTOUR_LONLAT = CONTOUR_LINE.map(([x, y]) => [
-  TOPO_BOUNDS[0] + (x / 4096) * (TOPO_BOUNDS[2] - TOPO_BOUNDS[0]),
-  TOPO_BOUNDS[3] - (y / 4096) * (TOPO_BOUNDS[3] - TOPO_BOUNDS[1]),
+  CONTOUR_BOUNDS[0] + (x / 4096) * (CONTOUR_BOUNDS[2] - CONTOUR_BOUNDS[0]),
+  CONTOUR_BOUNDS[3] - (y / 4096) * (CONTOUR_BOUNDS[3] - CONTOUR_BOUNDS[1]),
 ]);
 
 type SeededObject = { key: string; body: Buffer | string; contentType: string };
 
-const TOPO_LAYER_ARCHIVES = [
-  { name: "hillshade", tile: flatPng(150), type: "png" as const },
-  { name: "slope", tile: flatPng(95), type: "png" as const },
+const SHARPEN_ARCHIVES = [
+  {
+    name: "heights",
+    ...SHARP_TILE,
+    tile: flatPng(150),
+    type: "png" as const,
+  },
+  { name: "slope", ...SHARP_TILE, tile: flatPng(95), type: "png" as const },
   {
     name: "contours",
+    ...CONTOUR_TILE,
     tile: lineVectorTile("contours", CONTOUR_LINE),
     type: "mvt" as const,
   },
-].map((layer) => ({
-  ...layer,
-  archive: singleTilePmtiles({ ...TOPO_TILE, ...layer }),
-}));
+].map((layer) => ({ ...layer, archive: singleTilePmtiles(layer) }));
 
-/** The outputs of a complete job: its rows' `s3OutputKeys` and the objects. */
-function topoOutputs(jobId: string) {
-  const keys = TOPO_LAYER_ARCHIVES.map((layer) => ({
-    name: layer.name,
-    // No COG: a raster layer's COG is what an export reads, and building one is
-    // the worker's job. An export of a seeded topo is therefore refused as
-    // "made before exports existed"; the completed export seeded below has its
-    // result and needs no source. Nor can it be drawn on a new GeoPDF: the
-    // archive is one z12 tile and the renderer reads z16.
-    cogKey: null,
-    pmtilesKey: `outputs/${jobId}/${layer.name}.pmtiles`,
-  }));
-  const objects: SeededObject[] = TOPO_LAYER_ARCHIVES.map((layer, i) => ({
-    key: keys[i].pmtilesKey,
+/**
+ * A complete sharpened job's `sharpen` result and the objects behind it, in the
+ * shape topo/worker.py stores (shared/src/__fixtures__/sharpen-result.json).
+ * The z15 block is the whole z14 tile around the heights tile.
+ */
+function sharpenedJob(jobId: string) {
+  const x0 = Math.floor(SHARP_TILE.x / 4) * 2;
+  const y0 = Math.floor(SHARP_TILE.y / 4) * 2;
+  const keys = Object.fromEntries(
+    SHARPEN_ARCHIVES.map((layer) => [
+      layer.name,
+      `outputs/${jobId}/${layer.name}.pmtiles`,
+    ]),
+  );
+  const [west, , , north] = tileBounds(15, x0, y0);
+  const [, south, east] = tileBounds(15, x0 + 1, y0 + 1);
+  const objects: SeededObject[] = SHARPEN_ARCHIVES.map((layer) => ({
+    key: keys[layer.name],
     body: layer.archive,
     contentType: "application/octet-stream",
   }));
   return {
-    keys,
+    sharpen: {
+      v: 1,
+      zmax: 16,
+      tiles15: [x0, y0, x0 + 1, y0 + 1],
+      coverage: [west, south, east, north],
+      ground: "class-2",
+      extracted: "March 2025",
+      credit: "Elevation: made up for Logjam's seed data.",
+      keys,
+      vegetation: false,
+    },
     objects,
     bytes: BigInt(
-      TOPO_LAYER_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
+      SHARPEN_ARCHIVES.reduce((sum, l) => sum + l.archive.length, 0),
     ),
   };
 }
-
-const GEO_PDF_FIXTURE = readFileSync(
-  join(__dirname, "../../shared/src/geoPdfImport/__fixtures__/logjam-a5.pdf"),
-);
-/** The config that fixture was rendered from (see its README). */
-const GEO_PDF_CONFIG: GeoPdfConfig = {
-  paperSize: "A5",
-  orientation: "landscape",
-  extent: { north: -33.6, south: -33.7, east: 150.3, west: 150.2 },
-  scale: 25000,
-  baseLayer: "osm-topo",
-  overlays: [],
-  elements: {
-    title: "Wollemi test sheet",
-    compass: false,
-    scaleText: false,
-    scaleBar: false,
-  },
-};
-/** A layout only: a template holds no extent. */
-const GEO_PDF_TEMPLATE_CONFIG: Omit<GeoPdfConfig, "extent"> = {
-  paperSize: "A4",
-  orientation: "portrait",
-  scale: 25000,
-  baseLayer: "six-topo",
-  overlays: ["hillshade"],
-  elements: { compass: true, scaleText: true, scaleBar: true },
-};
 
 /** Puts seeded objects in a bucket; best effort for the reason uploadSeededFiles gives. */
 async function uploadObjects(
@@ -1472,8 +1494,6 @@ async function main() {
     prisma.announcement.deleteMany(),
     prisma.topoJob.deleteMany(),
     prisma.topoExportJob.deleteMany(),
-    prisma.geoPdfJob.deleteMany(),
-    prisma.geoPdfTemplate.deleteMany(),
     prisma.topoTemplate.deleteMany(),
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
@@ -1495,24 +1515,25 @@ async function main() {
     data: [
       {
         id: ALICE_ID,
-        cognitoId: ALICE_COGNITO_ID,
+        subject: ALICE_SUB,
         username: "alice",
         email: "alice@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
-        uiPreferences: { autoDownloadGeoPdfs: false },
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: BOB_ID,
-        cognitoId: BOB_COGNITO_ID,
+        subject: BOB_SUB,
         username: "bob",
         email: "bob@local",
         consentedAt,
         consentVersion: CURRENT_CONSENT_VERSION,
+        uiPreferences: { leaderboardOptIn: true },
       },
       {
         id: CAROL_ID,
-        cognitoId: CAROL_COGNITO_ID,
+        subject: CAROL_SUB,
         username: "carol",
         email: "carol@local",
         consentedAt,
@@ -2118,8 +2139,8 @@ async function main() {
 
   const aliceTopo = fid(1);
   const bobTopo = fid(4);
-  const aliceTopoOutputs = topoOutputs(aliceTopo);
-  const bobTopoOutputs = topoOutputs(bobTopo);
+  const aliceTopoOutputs = sharpenedJob(aliceTopo);
+  const bobTopoOutputs = sharpenedJob(bobTopo);
   // What a finished run costs the owner's monthly credits is its elapsed time
   // (lib/computeCredits.ts): the worker's own `wallSeconds` for a complete
   // topo, `updatedAt - startedAt` for a failed one. Both are minutes here, as
@@ -2140,8 +2161,8 @@ async function main() {
   });
   await prisma.topoJob.createMany({
     data: [
-      // Complete: what Logjam Web's Maps page and GeoPDF dialog need to draw a
-      // topo and offer it as a layer.
+      // Complete and sharpened: what Logjam Web's Terrain group and
+      // GeoPDF dialog need to show an area and draw its terrain.
       {
         id: aliceTopo,
         userId: ALICE_ID,
@@ -2151,9 +2172,9 @@ async function main() {
         tileCount: 1,
         estimatedSeconds: 600,
         outputTileCount: 1,
-        s3OutputKeys: aliceTopoOutputs.keys,
+        s3OutputKeys: [],
+        sharpen: aliceTopoOutputs.sharpen,
         outputBytes: aliceTopoOutputs.bytes,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(300),
         pipelineMetrics: pipelineMetrics(300),
         ...topoRun(285, 300),
@@ -2179,9 +2200,9 @@ async function main() {
         tileCount: 1,
         estimatedSeconds: 600,
         outputTileCount: 1,
-        s3OutputKeys: bobTopoOutputs.keys,
+        s3OutputKeys: [],
+        sharpen: bobTopoOutputs.sharpen,
         outputBytes: bobTopoOutputs.bytes,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
         createdAt: ago(400),
         pipelineMetrics: pipelineMetrics(300),
         ...topoRun(385, 300),
@@ -2238,57 +2259,6 @@ async function main() {
     ],
   });
 
-  assertValid("the GeoPDF config", validateGeoPdfConfig(GEO_PDF_CONFIG));
-  const geoPdfDone = fid(7);
-  const bobGeoPdf = fid(9);
-  const geoPdfResult = (id: string) => ({
-    resultKey: `exports/geo-pdf/${id}/logjam-export.pdf`,
-    resultBytes: BigInt(GEO_PDF_FIXTURE.length),
-  });
-  await prisma.geoPdfJob.createMany({
-    data: [
-      {
-        id: geoPdfDone,
-        userId: ALICE_ID,
-        config: GEO_PDF_CONFIG as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "completed",
-        ...geoPdfResult(geoPdfDone),
-        startedAt: ago(60),
-        createdAt: ago(62),
-        completedAt: ago(58),
-      },
-      {
-        id: fid(8),
-        userId: ALICE_ID,
-        config: {
-          ...GEO_PDF_CONFIG,
-          elements: { ...GEO_PDF_CONFIG.elements, title: "Failed test sheet" },
-        } as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "failed",
-        errorMessage: GEO_PDF_FAILURE_MESSAGE,
-        startedAt: ago(50),
-        createdAt: ago(52),
-        completedAt: ago(48),
-      },
-      {
-        id: bobGeoPdf,
-        userId: BOB_ID,
-        config: GEO_PDF_CONFIG as object,
-        vectorStyleSnapshot: VECTOR_STYLE_DEFAULTS as object,
-        estimatedSeconds: 30,
-        status: "completed",
-        ...geoPdfResult(bobGeoPdf),
-        startedAt: ago(90),
-        createdAt: ago(92),
-        completedAt: ago(88),
-      },
-    ],
-  });
-
   await prisma.share.createMany({
     data: [
       {
@@ -2298,22 +2268,12 @@ async function main() {
         sharedById: BOB_ID,
         sharedWithId: ALICE_ID,
       },
-      {
-        id: seedId("8", 5),
-        entityType: "geoPdfJob",
-        entityId: bobGeoPdf,
-        sharedById: BOB_ID,
-        sharedWithId: ALICE_ID,
-      },
     ],
   });
 
-  // Templates of both kinds, validated as the routes validate them so the seed
-  // cannot hold a config the API would refuse to store.
-  assertValid(
-    "the GeoPDF template",
-    validateGeoPdfTemplateConfig(GEO_PDF_TEMPLATE_CONFIG),
-  );
+  // Topo templates, validated as POST /topo-jobs validates a job's settings
+  // (they have no route left; these rows are kept for the data export and
+  // account deletion).
   const topoTemplateConfig = validateRasterTemplateSettings({
     ...RASTER_TEMPLATE_DEFAULTS,
     hillshade: { ...RASTER_TEMPLATE_DEFAULTS.hillshade, azimuth: 270 },
@@ -2323,22 +2283,6 @@ async function main() {
       `seed: the topo template is invalid: ${topoTemplateConfig.errors.join("; ")}`,
     );
   }
-  await prisma.geoPdfTemplate.createMany({
-    data: [
-      {
-        id: fid(10),
-        userId: ALICE_ID,
-        name: "A4 portrait with hillshade",
-        config: GEO_PDF_TEMPLATE_CONFIG as object,
-      },
-      {
-        id: fid(11),
-        userId: BOB_ID,
-        name: "Bob's A4",
-        config: { ...GEO_PDF_TEMPLATE_CONFIG, overlays: [] } as object,
-      },
-    ],
-  });
   await prisma.topoTemplate.createMany({
     data: [
       {
@@ -2346,7 +2290,6 @@ async function main() {
         userId: ALICE_ID,
         name: "Low sun",
         config: topoTemplateConfig.value as object,
-        autoExport: AUTO_EXPORT_DEFAULTS as object,
       },
       {
         id: fid(13),
@@ -2580,11 +2523,6 @@ async function main() {
       body: exportFile,
       contentType: "application/geo+json",
     },
-    ...[geoPdfDone, bobGeoPdf].map((id) => ({
-      key: geoPdfResult(id).resultKey,
-      body: GEO_PDF_FIXTURE,
-      contentType: "application/pdf",
-    })),
   ]);
   await uploadObjects("S3_BUCKET_MEDIA", [
     {
@@ -2696,7 +2634,6 @@ async function main() {
           jobId: aliceTopo,
           jobName: "Grand Canyon LiDAR",
           footprint: TOPO_FOOTPRINT,
-          osmFailed: false,
         },
         read: true,
         createdAt: ago(285),
@@ -2723,7 +2660,7 @@ async function main() {
         read: false,
         createdAt: ago(98),
       },
-      // lib/topoJobReaper.ts, auto-export pass
+      // No longer sent (auto-export is gone); an older one still shows.
       {
         userId: ALICE_ID,
         type: "topo_export_skipped",
@@ -2733,29 +2670,6 @@ async function main() {
         },
         read: false,
         createdAt: ago(280),
-      },
-      // api/src/worker/geoPdfWorker.ts: both outcomes use this type
-      {
-        userId: ALICE_ID,
-        type: "geo_pdf_complete",
-        payload: {
-          geoPdfJobId: geoPdfDone,
-          status: "completed",
-          errorMessage: null,
-        },
-        read: false,
-        createdAt: ago(58),
-      },
-      {
-        userId: ALICE_ID,
-        type: "geo_pdf_complete",
-        payload: {
-          geoPdfJobId: fid(8),
-          status: "failed",
-          errorMessage: GEO_PDF_FAILURE_MESSAGE,
-        },
-        read: false,
-        createdAt: ago(48),
       },
       // lib/planMembership.ts, called by routes/planMembers.ts,
       // planInvites.ts and plans.ts
@@ -2835,9 +2749,9 @@ async function main() {
 
   console.log(
     `Seed complete: 3 users, ${ALL_PLACES.length} places (1 fork), 5 place shares ` +
-      `(1 incoming to alice), 4 direct shares (3 incoming to alice), ` +
+      `(1 incoming to alice), 3 direct shares (2 incoming to alice), ` +
       `${trips.length} trip logs, 6 marker places, 3 place links, 7 routes, ` +
-      `6 media, 3 topo jobs, 2 topo exports, 3 GeoPDFs, 4 templates, ` +
+      `6 media, 3 topo jobs, 2 topo exports, 2 topo templates, ` +
       `2 file sends, 1 invite, 4 tombstones, 1 announcement, ` +
       `${NOTIFICATION_TYPES.length} notification types`,
   );

@@ -31,7 +31,6 @@ import {
   tripPlanIsOver,
   tripPlanNotice,
   tripTypeLabel,
-  untitledJobTitle,
   weatherAge as updatedAgo,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_OFFLINE,
@@ -72,7 +71,6 @@ import { FormSheet, type FormSheetState } from "./FormSheet";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
 import {
-  openPlanGeoPdf,
   openPlanMedia,
   PlanDownload,
   usePlanFilesOnPhone,
@@ -332,7 +330,7 @@ function PlanPage({
   });
   const going = tripPlanGoing(plan.members);
   const counts = tripPlanCounts(plan);
-  const itemCount = counts.places + counts.ways + counts.maps;
+  const itemCount = counts.places + counts.ways;
   const views: ChipOption<TripPlanPageView>[] = [
     { value: "writeUp", label: copy.viewWriteUp },
     // A zero is left out (shared/DESIGN.md §11).
@@ -720,7 +718,7 @@ function Items({
   const subtitle = (addedBy: string | undefined, opens: boolean) =>
     opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
   const { ways } = tripPlanCounts(plan);
-  if (plan.places.length + ways + plan.geoPdfs.length === 0)
+  if (plan.places.length + ways === 0)
     return (
       <>
         <EmptyState icon="place" title={copy.itemsEmpty} />
@@ -728,9 +726,7 @@ function Items({
       </>
     );
   // A heading needs a second group to divide from (shared/DESIGN.md §2).
-  const headed =
-    [plan.places.length, ways, plan.geoPdfs.length].filter((n) => n > 0)
-      .length > 1;
+  const headed = [plan.places.length, ways].filter((n) => n > 0).length > 1;
   return (
     <>
       {headed && plan.places.length > 0 ? (
@@ -810,43 +806,6 @@ function Items({
                     )
                       .then(setViewing)
                       .catch(failed)
-                : undefined
-            }
-          />
-        );
-      })}
-      {headed && plan.geoPdfs.length > 0 ? (
-        <SectionHeader title={copy.itemsMaps} count={plan.geoPdfs.length} />
-      ) : null}
-      {plan.geoPdfs.map((pdf) => {
-        const uri = planFileSource(
-          plan.id,
-          files.find((each) => each.id === pdf.id),
-          onPhone,
-          online,
-        );
-        const title = pdf.title ?? untitledJobTitle("geoPdfJob");
-        return (
-          <Row
-            key={pdf.id}
-            icon="geoPdf"
-            hue={assetHue.geoPdf}
-            title={title}
-            right={saveCopy({ kind: "geoPdf", id: pdf.id, title, photos: 0 })}
-            subtitle={subtitle(tripPlanAddedByLine(pdf.addedBy), uri !== null)}
-            // Onto the map as a GeoPDF import on this phone, which leaves
-            // with the plan (`openPlanGeoPdf`).
-            onPress={
-              uri
-                ? () =>
-                    void openPlanGeoPdf(
-                      plan.id,
-                      pdf.id,
-                      title,
-                      files,
-                      onPhone,
-                      online,
-                    ).catch(failed)
                 : undefined
             }
           />

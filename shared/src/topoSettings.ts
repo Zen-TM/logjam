@@ -21,10 +21,10 @@
 // The single source of truth for the layers rendered on the map and selectable
 // as GeoPDF overlays. Composite is intentionally absent — it's MBTiles-only
 // (email download), not a map layer. Everything TS-side derives from this list
-// (TopoLayerKey, RASTER_LAYERS/VECTOR_LAYERS in topoExport.ts, the GeoPDF
-// overlay allowlist); api/src/constants/topoLayers.ts and
-// frontend/src/topoLayerTypes.ts are thin re-exports. The only structurally
-// unavoidable mirror is topo/worker.py → ALL_LAYERS (Python).
+// (TopoLayerKey) except the GeoPDF
+// overlay allowlist, which is declared and must hold every name here but
+// `features` (geoPdfConfig.test.ts); api/src/constants/topoLayers.ts and
+// frontend/src/topoLayerTypes.ts are thin re-exports.
 
 // `surveyPick` declares, per layer, which survey to prefer when an ELVIS ZIP
 // contains multiple overlapping surveys for the same ground footprint:
@@ -34,7 +34,7 @@
 //               than raw point density for the scrub/bushbash layer).
 //   "none"    — layer is not LiDAR-derived (OSM features); selection N/A.
 // Consumed by the topo worker's per-footprint survey selection (topo/pipeline.py
-// select_surveys_by_layer). LAYER_SURVEY_PICK in topo/worker.py mirrors this.
+// select_surveys_by_layer).
 export const TOPO_LAYERS = [
   {
     name: "hillshade",
@@ -90,11 +90,12 @@ export const HILLSHADE_LIMITS = {
   zFactor: { min: 0.1, max: 10 },
 } as const;
 
-export interface SlopeBand {
+// A type, not an interface, so a stored preference of bands is JSON to Prisma.
+export type SlopeBand = {
   fromDeg: number; // inclusive
   toDeg: number; // exclusive
   colour: RgbaHex;
-}
+};
 
 export interface SlopeSettings {
   enabled: boolean;
@@ -164,8 +165,7 @@ export type OsmFeatureKey =
   | "hut";
 
 // Per-category vector style. `enabled` controls both paint-time layer presence
-// in-app and composite-bake-time inclusion. Worker always fetches all
-// categories from Overpass unconditionally.
+// in-app and composite-bake-time inclusion.
 export interface OsmFeatureStyle {
   enabled: boolean;
   colour: RgbaHex;
@@ -421,7 +421,7 @@ function inRange(n: unknown, lo: number, hi: number): n is number {
   return typeof n === "number" && Number.isFinite(n) && n >= lo && n <= hi;
 }
 
-const MAX_SLOPE_BANDS = 8;
+export const MAX_SLOPE_BANDS = 8;
 
 export function validateRasterTemplateSettings(
   input: unknown,
@@ -609,6 +609,32 @@ export function slopeBandsError(bands: SlopeBand[]): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Slope bands from outside (a request body, a stored preference), or null
+ * unless they are well-formed bands the editor itself would accept.
+ */
+export function parseSlopeBands(value: unknown): SlopeBand[] | null {
+  if (!Array.isArray(value)) return null;
+  const bands = value.map((band) =>
+    isObject(band)
+      ? { fromDeg: band.fromDeg, toDeg: band.toDeg, colour: band.colour }
+      : null,
+  );
+  if (
+    bands.some(
+      (band) =>
+        band == null ||
+        typeof band.fromDeg !== "number" ||
+        typeof band.toDeg !== "number" ||
+        typeof band.colour !== "string" ||
+        !HEX_RGBA_RE.test(band.colour),
+    )
+  )
+    return null;
+  const parsed = bands as SlopeBand[];
+  return slopeBandsError(parsed) == null ? parsed : null;
 }
 
 /**

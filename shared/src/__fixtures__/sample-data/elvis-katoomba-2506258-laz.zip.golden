@@ -3,7 +3,7 @@
     "Katoomba201804"
   ],
   "mode": "LAZ_ONLY",
-  "modeLabel": "LiDAR only",
+  "modeLabel": "Ground from the point clouds",
   "tileCount": 1,
   "lazCount": 1,
   "demCount": 0,

@@ -1,5 +1,5 @@
-// Add a copy (`PLAN_ADD_VERBS`): the caller's own places, ways and finished
-// maps, ticked, each sent into the plan as a copy, one request each
+// Add a copy (`PLAN_ADD_VERBS`): the caller's own places, ways and files,
+// ticked, each sent into the plan as a copy, one request each
 // (POST /plans/:id/items), in list order. What is offered is
 // `addableFromMirror`: the caller's own, on the server, less what a ticked
 // place brings. Everyone in the plan can keep a copy of what is added
@@ -18,14 +18,12 @@ import {
   tripPlanAddOutcome,
   tripPlanAddKey,
   tripPlanAddPicks,
-  untitledJobTitle,
   TRIP_PLAN_ITEM_GROUPS,
   TRIP_PLAN_PAGE,
   type TripPlanItemKind,
   type TripPlanItemGroup,
 } from "@logjam/shared";
 
-import { listGeoPdfJobs } from "../api/geoPdfJobs";
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { unavailableReasonText } from "../auth/capabilities";
 import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
@@ -87,11 +85,6 @@ export function AddCopySheet({
   const routes = useMirrorRoutes();
   const pendingCreates = usePendingCreateIds();
   const user = useApiQuery(fetchCurrentUser, copy.addCopyFailed, visible);
-  const maps = useApiQuery(
-    listGeoPdfJobs,
-    copy.mapsLoadFailed,
-    visible && online,
-  );
   const [files, setFiles] = useState<MirrorMedia[]>([]);
   const [group, setGroup] = useState<TripPlanItemGroup>("places");
   const [ticked, setTicked] = useState<string[]>([]);
@@ -141,7 +134,6 @@ export function AddCopySheet({
           places: places.data ?? [],
           routes: routes.data ?? [],
           files,
-          geoPdfs: maps.data ?? [],
         },
         { me, pendingCreates, tickedPlaceIds, copyMedia: withMedia },
       ),
@@ -149,7 +141,6 @@ export function AddCopySheet({
       places.data,
       routes.data,
       files,
-      maps.data,
       me,
       pendingCreates,
       tickedPlaceIds,
@@ -185,20 +176,9 @@ export function AddCopySheet({
           : { icon: "importedFile" as const, hue: assetHue.import }),
       })),
     ],
-    maps: offered.geoPdfs.map((pdf) => ({
-      kind: "geoPdf" as const,
-      id: pdf.id,
-      title: pdf.title ?? untitledJobTitle("geoPdfJob"),
-      bytes: pdf.resultBytes ?? 0,
-      icon: "geoPdf" as const,
-      hue: assetHue.geoPdf,
-    })),
   };
   // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
-  const picks = tripPlanAddPicks(
-    [...rows.places, ...rows.ways, ...rows.maps],
-    ticked,
-  );
+  const picks = tripPlanAddPicks([...rows.places, ...rows.ways], ticked);
   const isTicked = (pick: Pick) => ticked.includes(keyOf(pick));
   const priceLine = tripPlanAddCopyPriceLine({
     bytes: picks.reduce((sum, each) => sum + each.bytes, 0),
@@ -245,9 +225,6 @@ export function AddCopySheet({
   }
 
   const list = rows[group];
-  // The maps are read online; offline (or gone offline mid-read) says so.
-  const mapsOffline = group === "maps" && !online && maps.data == null;
-  const mapsPending = group === "maps" && online && maps.data == null;
   return (
     <BottomSheet
       visible={visible}
@@ -279,11 +256,8 @@ export function AddCopySheet({
           options={TRIP_PLAN_ITEM_GROUPS.map(({ group: value, title }) => ({
             value,
             label: title,
-            // A zero is left out, and so is a count not read yet.
-            count:
-              value === "maps" && maps.data == null
-                ? undefined
-                : rows[value].length || undefined,
+            // A zero is left out.
+            count: rows[value].length || undefined,
           }))}
         />
         {group === "places" && tickedPlaceIds.length > 0 ? (
@@ -294,13 +268,7 @@ export function AddCopySheet({
             onChange={toggleMedia}
           />
         ) : null}
-        {mapsOffline ? (
-          <EmptyState icon="offline" title={OFFLINE} />
-        ) : mapsPending && maps.error ? (
-          <ErrorState message={maps.error} onRetry={maps.refetch} />
-        ) : mapsPending ? (
-          <LoadingState />
-        ) : list.length === 0 ? (
+        {list.length === 0 ? (
           <EmptyState icon="place" title={copy.nothingToAdd} />
         ) : (
           list.map((each) => (

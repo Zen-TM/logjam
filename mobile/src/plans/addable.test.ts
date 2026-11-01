@@ -37,7 +37,6 @@ describe("what Add a copy offers from the mirror", () => {
         places: [place("mine"), place("pending"), place("bobs", "shared")],
         routes: [],
         files: [],
-        geoPdfs: [],
       },
       state,
     );
@@ -51,7 +50,6 @@ describe("what Add a copy offers from the mirror", () => {
         places: [],
         routes: [route("r1", "me"), route("r2", null), route("r3", "bob")],
         files: [],
-        geoPdfs: [],
       },
       state,
     );
@@ -71,7 +69,6 @@ describe("what Add a copy offers from the mirror", () => {
           file("ofBobs", "bobs"),
           file("uploading", null, "pendingUpload"),
         ],
-        geoPdfs: [],
       },
       state,
     );

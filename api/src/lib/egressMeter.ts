@@ -37,7 +37,7 @@ import {
 const LOG_PREFIXES = ["media/", "topo-jobs/"] as const;
 
 /**
- * Resolve job-owned keys to their owners in three batched queries rather than
+ * Resolve job-owned keys to their owners in two batched queries rather than
  * one per record — a single log object routinely holds thousands of lines.
  */
 async function resolveOwners(
@@ -47,7 +47,6 @@ async function resolveOwners(
   const byTable = {
     topoJob: new Set<string>(),
     topoExportJob: new Set<string>(),
-    geoPdfJob: new Set<string>(),
   };
 
   for (const attribution of attributions) {
@@ -55,7 +54,7 @@ async function resolveOwners(
       byTable[attribution.table].add(attribution.jobId);
   }
 
-  const [topoJobs, exportJobs, geoPdfJobs] = await Promise.all([
+  const [topoJobs, exportJobs] = await Promise.all([
     byTable.topoJob.size
       ? prisma.topoJob.findMany({
           where: { id: { in: [...byTable.topoJob] } },
@@ -68,22 +67,10 @@ async function resolveOwners(
           select: { id: true, userId: true },
         })
       : [],
-    byTable.geoPdfJob.size
-      ? prisma.geoPdfJob.findMany({
-          where: { id: { in: [...byTable.geoPdfJob] } },
-          select: { id: true, userId: true, chargedToId: true },
-        })
-      : [],
   ]);
 
   for (const row of [...topoJobs, ...exportJobs]) {
     owners.set(row.id, row.userId);
-  }
-  // A plan's GeoPDF has no owner: its downloads go to whoever its storage
-  // is charged to, and are dropped when that is nobody.
-  for (const row of geoPdfJobs) {
-    const payer = row.userId ?? row.chargedToId;
-    if (payer) owners.set(row.id, payer);
   }
   return owners;
 }

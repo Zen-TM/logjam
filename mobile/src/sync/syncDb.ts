@@ -29,7 +29,7 @@ import { OUTBOX_ENTITIES } from "./outboxTables";
  * A bump is not only for a column that moved. Any time a client has missed rows
  * it cannot re-request, the wipe-and-refill is the mechanism.
  */
-export const MIRROR_SCHEMA_VERSION = 12;
+export const MIRROR_SCHEMA_VERSION = 13;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -181,7 +181,10 @@ async function stampMirrorSchemaVersion(
 // ── single-writer discipline ────────────────────────────────────────────────
 
 /**
- * EVERY multi-statement write to logjam.db goes through here.
+ * EVERY multi-statement write to logjam.db, and every transaction on the
+ * offline database (tracks, wipe), goes through here. The chain is global, so a
+ * long delta page also delays track point writes; that is the price of one lock.
+ * Guard: the "single-writer discipline" test in syncDb.test.ts.
  *
  * expo-sqlite's `withTransactionAsync` is a bare BEGIN / task / COMMIT on the
  * one shared connection, and its own doc comment says the order of execution

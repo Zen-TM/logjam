@@ -1,5 +1,8 @@
 // A profile chart with a scrubber: some value against distance along a line.
 //
+// A series' x must start at 0: the first column sits at x = 0, so a series
+// that starts at epoch time draws flat, with no error.
+//
 // Elevation is what it was built for and still the main reader (a drawn
 // route's height profile), but a recorded track's SPEED is the same picture of
 // a different quantity, so the component takes a plain series plus a
@@ -20,6 +23,7 @@
 // level: a place between 700 and 840 m drawn from zero is a flat bar.
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
+  profileSpan,
   sameSeries,
   type ProfilePoint,
   type ProfileSeries,
@@ -283,7 +287,7 @@ export function ProfileChart({
   // already say the data had nothing here.
   if (min == null || max == null || series.points.length < 2) return null;
 
-  const span = Math.max(1, max - min);
+  const span = profileSpan(min, max);
   const scrubbed = scrubIndex == null ? null : columns[scrubIndex];
 
   return (

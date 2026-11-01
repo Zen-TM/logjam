@@ -36,6 +36,7 @@ import {
   type RegionBbox,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
+  LIDAR_JOB_COPY,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -376,14 +377,14 @@ function PlacesPanel({
     return [
       {
         id: "topo",
-        label: "LiDAR topo",
+        label: LIDAR_JOB_COPY.noun,
         icon: "lidar",
         onSelect: () => onMakeMap(bounds, "topo"),
       },
       {
-        id: "geopdf",
-        label: "GeoPDF",
-        icon: "geoPdf",
+        id: "export",
+        label: "Export this area",
+        icon: "export",
         onSelect: () => onMakeMap(bounds, "geopdf"),
       },
     ];
@@ -429,7 +430,7 @@ function PlacesPanel({
       logTrip: handOff("logTrip"),
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),
-      makeGeoPdf: makeMap("geopdf"),
+      exportArea: makeMap("geopdf"),
       share: () => onSharePlaces([place.id]),
       copy: handOff("copy"),
       copyAndRemove: handOff("copyAndRemove"),
@@ -663,7 +664,7 @@ function PlacesPanel({
           onClear={clearSelection}
         >
           {/* An icon like its siblings: as a labelled filled button the bar ran
-              past one line at 380px. The menu it opens says LiDAR topo or GeoPDF. */}
+              past one line at 380px. The menu it opens says what it makes. */}
           <Menu
             label="Make a map"
             entries={makeMapEntries(selected)}

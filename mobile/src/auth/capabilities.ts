@@ -38,7 +38,7 @@ export type AccountState = "guest" | "linked";
  * sorts its own rows (`screens/settings/offlineRows.ts`).
  */
 export type Capability =
-  /** Sharing a place, waypoint, route, topo or GeoPDF with another user. */
+  /** Sharing a place, waypoint, route or topo with another user. */
   | "sharing"
   /** Friend list, requests and search. */
   | "friends"
@@ -57,8 +57,6 @@ export type Capability =
   | "plans"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
-  /** GeoPDFs generated on the user's Logjam Web account. A LOCAL pdf import is not this. */
-  | "accountGeoPdf"
   /** Location search through our API (POST /places/search), for a phone
    *  without the place registry. Searching the phone's own copy is not this. */
   | "placeSearch"
@@ -94,7 +92,6 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   inbox: false,
   plans: false,
   lidarOverlays: true,
-  accountGeoPdf: true,
   placeSearch: true,
   serverPrefs: true,
   pushNotifications: true,
@@ -141,7 +138,6 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   inbox: "The inbox",
   plans: "Plans",
   lidarOverlays: "LiDAR overlays",
-  accountGeoPdf: "Account GeoPDFs",
   placeSearch: "Location search",
   serverPrefs: "This preference",
   pushNotifications: "Push notifications",
@@ -186,13 +182,12 @@ export function capabilityRowProps(
 }
 
 /**
- * The change-email row. Fake auth (dev only) never configures Amplify, which
- * is what changing an email calls, so the row says why it is dimmed instead of
- * failing on press.
+ * The change-email row. Fake auth (dev only) has no Cognito session to call
+ * with, so the row says why it is dimmed instead of failing on press.
  */
 export function changeEmailRowProps(
   online: boolean,
-  authMode: "cognito" | "fake",
+  authMode: "oidc" | "fake",
 ): { disabled: boolean; subtitle?: string } {
   if (authMode === "fake") {
     return { disabled: true, subtitle: "Not available under fake sign-in." };

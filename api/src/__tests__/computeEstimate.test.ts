@@ -2,7 +2,7 @@ import { describe, it, expect, afterAll } from "vitest";
 import request from "supertest";
 import { randomUUID } from "node:crypto";
 import prisma from "../services/prisma";
-import { API_URL, as, ALICE_SUB, BOB_SUB, BOB_ID, CAROL_SUB } from "./_actors";
+import { API_URL, as, BOB_SUB, BOB_ID } from "./_actors";
 
 // Requires `make dev` (AUTH_MODE=fake). The estimator is read-only, so these
 // drive it as bob (whose quota the boundary test edits) and restore it after.
@@ -23,49 +23,20 @@ describe("POST /compute-estimate — validation", () => {
       400,
     );
     expect((await estimate({ kind: "topo", tileCount: -1 })).status).toBe(400);
-    expect((await estimate({ kind: "topoExport" })).status).toBe(400);
+    // An export of a topo is no longer made, so no longer estimated.
     expect(
       (
         await estimate({
           kind: "topoExport",
           sourceJobId: randomUUID(),
-          format: "not-a-format",
+          format: "mbtiles",
           bundling: "composite",
         })
       ).status,
     ).toBe(400);
+    // A GeoPDF is rendered in the browser, so no longer estimated.
     expect((await estimate({ kind: "geoPdf", config: {} })).status).toBe(400);
     expect((await estimate({ kind: "geoPdf" })).status).toBe(400);
-  });
-});
-
-describe("POST /compute-estimate — topoExport source job", () => {
-  const created: string[] = [];
-  afterAll(async () => {
-    await prisma.topoJob.deleteMany({ where: { id: { in: created } } });
-  });
-
-  it("404s (never 403) a job the caller neither owns nor is shared", async () => {
-    const res = await request(API_URL)
-      .post("/topo-jobs")
-      .set(as(ALICE_SUB))
-      .send({ jobName: "estimate-source" });
-    expect(res.status).toBe(201);
-    const jobId: string = res.body.jobId;
-    created.push(jobId);
-
-    const body = {
-      kind: "topoExport",
-      sourceJobId: jobId,
-      format: "mbtiles",
-      bundling: "composite",
-    };
-    // carol owns nothing here and has no share; an unknown id answers the same.
-    expect((await estimate(body, as(CAROL_SUB))).status).toBe(404);
-    expect(
-      (await estimate({ ...body, sourceJobId: randomUUID() }, as(CAROL_SUB)))
-        .status,
-    ).toBe(404);
   });
 });
 

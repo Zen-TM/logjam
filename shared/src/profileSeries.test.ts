@@ -11,6 +11,7 @@ import type { ElevationProfile } from "./elevation.js";
 import type { TrackDetail } from "./trackStats.js";
 
 import {
+  profileSpan,
   elevationSeries,
   sameSeries,
   storedClimbCaption,
@@ -281,5 +282,31 @@ describe("storedClimbCaption", () => {
     expect(trackHeights(detail, mixed, false).note).toBe(
       "Heights from terrain data",
     );
+  });
+
+  // Mutation: look the chart's name up by the source id itself, and a line
+  // read inside a sharpened area (`lidar-<job id>`) is "terrain data" while
+  // its stored climb says "LiDAR terrain data".
+  it("names a sharpened area's heights as its stored climb does", () => {
+    const detail = { elevation: profile, maxAltitudeM: 40 } as TrackDetail;
+    for (const demSourceIds of [["lidar-x"], ["lidar-x", "lidar-y"]])
+      expect(
+        trackHeights(detail, { ...profile, demSourceIds }, false).note,
+        demSourceIds.join(),
+      ).toBe("Heights from LiDAR terrain data");
+    expect(storedClimbCaption("lidar")).toBe(
+      "Ascent and descent from LiDAR terrain data",
+    );
+  });
+});
+
+describe("profileSpan", () => {
+  // Mutation: floor it at 1, and a gauge that moved 9 cm draws as a flat bar.
+  it("is the series' own range, however small", () => {
+    expect(profileSpan(0.463, 0.551)).toBeCloseTo(0.088);
+  });
+
+  it("is never zero, so a chart of one value can divide by it", () => {
+    expect(profileSpan(0.5, 0.5)).toBe(1);
   });
 });

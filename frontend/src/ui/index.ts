@@ -15,7 +15,6 @@ export { Checkbox } from "./Choice";
 export {
   LiveNumberField,
   NumberField,
-  RangeField,
   SearchField,
   Select,
   TextArea,

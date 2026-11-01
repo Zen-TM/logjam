@@ -71,7 +71,7 @@ describe("assertHasCredits", () => {
   it("refuses on a 429 carrying used/quota/resetAt", async () => {
     usageOf(1200);
     try {
-      await assertHasCredits(user, "geoPdf", 30);
+      await assertHasCredits(user, "topoExport", 30);
       expect.unreachable("should have thrown");
     } catch (err) {
       const appError = err as AppError;
@@ -99,11 +99,11 @@ describe("assertHasCredits", () => {
   });
 
   it("prices the same runtime differently per worker", async () => {
-    // 4 minutes: geoPdf costs 4 credits, topo costs 32. At 1180 used, only the
+    // 4 minutes: an export costs 16 credits, topo costs 32. At 1180 used, only the
     // small one fits — this is the whole point of weighting by vCPU.
     usageOf(1180);
     await expect(
-      assertHasCredits(user, "geoPdf", 240),
+      assertHasCredits(user, "topoExport", 240),
     ).resolves.toBeUndefined();
     usageOf(1180);
     await expect(assertHasCredits(user, "topo", 240)).rejects.toThrow(AppError);
@@ -112,10 +112,12 @@ describe("assertHasCredits", () => {
   it("admits a job that exactly fills the allowance, then refuses the next", async () => {
     // The comparison is `used + cost > quota`, so a job landing exactly on the
     // allowance is admitted and the one after it is not.
-    usageOf(1199);
-    await expect(assertHasCredits(user, "geoPdf", 60)).resolves.toBeUndefined();
-    usageOf(1200);
-    await expect(assertHasCredits(user, "geoPdf", 60)).rejects.toThrow(
+    usageOf(1196);
+    await expect(
+      assertHasCredits(user, "topoExport", 60),
+    ).resolves.toBeUndefined();
+    usageOf(1197);
+    await expect(assertHasCredits(user, "topoExport", 60)).rejects.toThrow(
       AppError,
     );
   });

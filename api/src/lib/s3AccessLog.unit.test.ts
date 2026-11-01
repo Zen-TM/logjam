@@ -8,7 +8,6 @@ import {
   isBillableEgress,
   attributeKey,
 } from "./s3AccessLog";
-import { planResultKeyFor, resultKeyFor } from "./geoPdfResult";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = resolve(here, "__fixtures__/s3-access-log-sample.log");
@@ -47,7 +46,7 @@ describe("parseAccessLogLine", () => {
   });
 
   it("does not let the quoted request URI shift later columns", () => {
-    // The GeoPDF line's request URI contains both spaces and %22 quotes.
+    // The exports/geo-pdf line's request URI contains both spaces and %22 quotes.
     const geoPdf = records.find((r) => r.key.startsWith("exports/geo-pdf/"));
     expect(geoPdf).toBeDefined();
     expect(geoPdf!.httpStatus).toBe(200);
@@ -160,31 +159,12 @@ describe("attributeKey", () => {
     }
   });
 
-  it("distinguishes exports/geo-pdf/<id> from exports/<id>", () => {
-    // These two share a prefix. Testing the generic form first would read the
-    // literal "geo-pdf" as an export job id, and every GeoPDF download would
-    // go unattributed — free egress, silently.
-    expect(attributeKey("exports/geo-pdf/pdf-1/logjam-export.pdf")).toEqual({
-      kind: "job",
-      table: "geoPdfJob",
-      jobId: "pdf-1",
-    });
+  it("attributes exports/<id> to the export job", () => {
     expect(attributeKey("exports/exp-1/out.mbtiles")).toEqual({
       kind: "job",
       table: "topoExportJob",
       jobId: "exp-1",
     });
-  });
-
-  // Mutation: drop the `plans` case from attributeKey.
-  it("attributes the keys the GeoPDF key builders make", () => {
-    for (const key of [resultKeyFor("pdf-1"), planResultKeyFor("pdf-1")]) {
-      expect(attributeKey(key)).toEqual({
-        kind: "job",
-        table: "geoPdfJob",
-        jobId: "pdf-1",
-      });
-    }
   });
 
   it("attributes shared basemap tiles to nobody", () => {

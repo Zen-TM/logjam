@@ -2,10 +2,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { reassignPlaceType } from "./placeUtils";
 
-vi.mock("aws-amplify/auth", () => ({
-  fetchAuthSession: vi.fn().mockResolvedValue({
-    tokens: { idToken: { toString: () => "test-token" } },
-  }),
+vi.mock("./auth/oidc", () => ({
+  loadSession: vi.fn().mockResolvedValue({ id_token: "test-token" }),
 }));
 
 afterEach(() => {

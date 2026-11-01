@@ -1,4 +1,5 @@
-"""export_worker.py pure helpers: what a failed export tells its owner.
+"""export_worker.py pure helpers: what a failed export tells its owner, and
+that an area export's box stays out of the log.
 
 export_worker.py reads required env vars and creates a boto3 client at import
 time, so we set placeholder env before importing. boto3/psycopg2 are stubbed by
@@ -14,6 +15,8 @@ Mutation that turns this red: return `str(error)` from `failure_sentence`.
 import os
 import sys
 import unittest
+from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -27,6 +30,8 @@ os.environ.setdefault("DB_PASSWORD", "test")
 os.environ.setdefault("EXPORT_JOB_ID", "export-123")
 
 try:
+    import export_worker  # noqa: E402
+    from area_export import AreaOutsideNsw  # noqa: E402
     from export_worker import GENERIC_FAILURE, failure_sentence  # noqa: E402
     from renderers.context import ExportTooLarge, RenderError  # noqa: E402
 
@@ -54,6 +59,74 @@ class TestFailureSentence(unittest.TestCase):
         sentence = failure_sentence(ExportTooLarge("would generate over 9 map tiles"))
         self.assertIn("smaller", sentence)
         self.assertNotIn("tiles", sentence)
+
+    # Mutation: map an AreaExportError to GENERIC_FAILURE whatever it is, and
+    # a box in Victoria reads as a fault worth retrying.
+    def test_outside_nsw_says_what_to_do(self):
+        self.assertEqual(
+            failure_sentence(AreaOutsideNsw("no heights tiles in the box")),
+            AreaOutsideNsw.SENTENCE,
+        )
+
+
+@unittest.skipUnless(_IMPORT_OK, lambda: f"export_worker import failed: {_IMPORT_ERR}")
+class TestAreaBoxNeverLogged(unittest.TestCase):
+    # Mutation: put `bbox` in render_area_export's log line, and an export's
+    # box (where someone means to go) is in the worker's log.
+    def test_the_box_is_in_no_log_line(self):
+        row = {
+            "bbox": {
+                "west": 150.123457,
+                "south": -33.765432,
+                "east": 150.2,
+                "north": -33.7,
+            },
+            "format": "gpkg",
+            "layers": ["heights", "contours"],
+            "vector_style_snapshot": {},
+            "source_job_ids": [],
+        }
+        with (
+            mock.patch.object(export_worker, "render_area") as render,
+            mock.patch.object(export_worker, "s3_archives"),
+            self.assertLogs("export_worker", level="DEBUG") as logs,
+        ):
+            export_worker.render_area_export(mock.Mock(), row, Path("/work"))
+        self.assertEqual(
+            render.call_args.args[1], (150.123457, -33.765432, 150.2, -33.7)
+        )
+        for line in logs.output:
+            for number in ("150.12", "33.76", "150.2", "33.7"):
+                self.assertNotIn(number, line)
+
+
+@unittest.skipUnless(_IMPORT_OK, lambda: f"export_worker import failed: {_IMPORT_ERR}")
+class TestSharpenedAreasInTheApisOrder(unittest.TestCase):
+    # Mutation: return the rows in the database's order, and where two areas
+    # overlap the file draws the one the map doesn't (the API sends them in
+    # the router's order). Or keep a row this build can't read.
+    def test_keeps_the_given_order_and_drops_what_is_not_an_area(self):
+        def row(job_id):
+            keys = {k: f"outputs/{job_id}/{k}.pmtiles" for k in ("heights", "slope")}
+            return {
+                "id": job_id,
+                "sharpen": {
+                    "v": 1, "zmax": 16, "tiles15": [0, 0, 1, 1],
+                    "coverage": [0.0, 0.0, 1.0, 1.0], "credit": "c", "keys": keys,
+                },
+                "footprint": None,
+            }  # fmt: skip
+
+        cursor = mock.MagicMock()
+        cursor.fetchall.return_value = [
+            row("b"),
+            row("a"),
+            {"id": "c", "sharpen": None},
+        ]
+        conn = mock.MagicMock()
+        conn.cursor.return_value.__enter__.return_value = cursor
+        areas = export_worker.get_sharpened_areas(conn, ["a", "c", "b", "gone"])
+        self.assertEqual([a.id for a in areas], ["a", "b"])
 
 
 if __name__ == "__main__":

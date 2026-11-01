@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
+import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
   attributeFilterShape,
+  leaderboardHeroTitle,
+  leaderboardNudge,
+  leaderboardPodiumLine,
+  leaderboardBadge,
+  leaderboardButtonLabel,
+  leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   noFriendsMatch,
   noFriendsMessage,
   sendCopyLabel,
   sharePromise,
+  lidarJobSharePromise,
   STATS,
   statsEmptyActivityBody,
   statsHeroTitle,
@@ -34,6 +42,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_OVERLAY_REFINEMENTS,
+  MAP_TERRAIN,
   attributeDeleteConfirm,
   contractSectionKeys,
   deleteAccountPhrase,
@@ -345,6 +354,15 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
   });
 
+  // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
+  it("gives both clients and a sharee the gauge section", () => {
+    for (const client of ["web", "gps"] as const)
+      for (const owned of [true, false])
+        expect(contractSectionsFor(PLACE_PAGE, client, owned)).toContain(
+          "gauge",
+        );
+  });
+
   // Red when a primary verb is dropped from the page's verbs: the buttons and
   // the ⋯ must never disagree about what a place can do.
   it("draws as buttons only verbs the page offers", () => {
@@ -533,9 +551,9 @@ describe("settings", () => {
   });
 
   it("names the surface a notification is shown in", () => {
-    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me when");
+    expect(notificationGroupLead("email", "Logjam Web")).toBe("Email me about");
     expect(notificationGroupLead("inApp", "Logjam GPS")).toBe(
-      "Notify me in Logjam GPS when",
+      "Notify me in Logjam GPS about",
     );
   });
 
@@ -597,12 +615,26 @@ describe("the map's layers", () => {
   it("draws Offline on Logjam GPS only, and says why", () => {
     expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
       "basemap",
+      "terrain",
       "overlays",
     ]);
     expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
       "basemap",
+      "terrain",
       "overlays",
       "offline",
+    ]);
+  });
+
+  // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
+  // client lists the layers in one order and stacks them in another.
+  it("lists the Terrain group in the order it is stacked", () => {
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(rows);
+    expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
+      ...rows,
+      "sharpenedAreas",
+      "slopeBands",
     ]);
   });
 });
@@ -614,6 +646,27 @@ describe("sharing", () => {
     for (const kind of BULK_SHARE_ITEM_TYPES)
       expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
     expect(sharePromise("selection")).toContain("these");
+  });
+
+  // Mutation: the LiDAR topo's promise for a sharpened area, which a friend
+  // can't download or export.
+  it("promises no download or export for a sharpened area", () => {
+    for (const kind of ["sharpenedArea", "lidarJob"] as const) {
+      expect(sharePromise(kind), kind).toMatch(/^Friends you pick/);
+      expect(sharePromise(kind), kind).not.toMatch(/download|export/);
+    }
+  });
+
+  // Mutations: drop the syncRole check, and a row rebuilt from what a phone
+  // saved, a sharpened area perhaps, is promised an older topo's download
+  // and export; or read a sharpened job as an older one.
+  it("promises a LiDAR job by its kind, and only what is true of both when unknown", () => {
+    expect(lidarJobSharePromise({ syncRole: "owner", sharpened: {} })).toBe(
+      "sharpenedArea",
+    );
+    expect(lidarJobSharePromise({ syncRole: "shared" })).toBe("topoJob");
+    expect(lidarJobSharePromise({ sharpened: undefined })).toBe("lidarJob");
+    expect(lidarJobSharePromise(undefined)).toBe("lidarJob");
   });
 
   it("says a place share leaves copies alone, and a route's can be stopped", () => {
@@ -696,19 +749,21 @@ describe("the logbook's stats", () => {
 
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
-  // list, and the phone adds only what it declares (a GeoPDF row, refinements).
-  it("is Logjam Web's rows, with the phone's one declared extra", () => {
+  // list, and each client differs only by what a row declares (`on`).
+  it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
-      "lidarTopos",
+      "land",
+      "gauges",
       "importFile",
     ]);
     expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
       "places",
       "ways",
       "geoPdfs",
-      "lidarTopos",
+      "land",
+      "gauges",
       "importFile",
     ]);
   });
@@ -834,6 +889,20 @@ describe("the map point panel", () => {
     ]);
   });
 
+  // Mutation: push the land fact whatever `land` is, and with the overlay off
+  // the panel has a Land figure with nothing in it.
+  it("has no land figure with the overlay off or nothing drawn there", () => {
+    const facts = (land?: string | null) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "unavailable" },
+        from: null,
+        land,
+      }).map((fact) => fact.key);
+    expect(facts()).not.toContain("land");
+    expect(facts(null)).not.toContain("land");
+  });
+
   it("keeps its sections and facts in step", () => {
     const keys = MAP_POINT.sections.map((section) => section.key);
     const facts = mapPointFacts({
@@ -841,6 +910,7 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
+      land: "Private land",
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");
@@ -929,5 +999,40 @@ describe("the snap words", () => {
       "both",
     ]);
     expect(new Set(MAP_SNAP_OPTIONS.map((o) => o.label)).size).toBe(4);
+  });
+});
+
+describe("the leaderboard", () => {
+  it("says where the user stands, and a board of one as such", () => {
+    expect(leaderboardBadge(2, 4)).toBe("2");
+    expect(leaderboardBadge(1, 1)).toBeNull();
+    expect(leaderboardButtonLabel({ rank: 2, size: 4 })).toBe(
+      "Leaderboard, you're #2 of 4",
+    );
+    expect(leaderboardButtonLabel({ rank: 1, size: 1 })).toBe("Leaderboard");
+    expect(leaderboardButtonLabel(null)).toBe("Leaderboard");
+    expect(leaderboardHeroTitle(2, 4)).toBe("#2 of 4");
+    expect(leaderboardHeroTitle(1, 1)).toBe("Just you so far");
+    expect(leaderboardSeasonLine("2026–27")).toBe("2026–27 season");
+  });
+
+  it("words the podium by place and count", () => {
+    expect(
+      leaderboardPodiumLine({ season: "2025–26", rank: 1, canyonCount: 1 }),
+    ).toBe("You came first in 2025–26, with 1 canyon.");
+    expect(
+      leaderboardPodiumLine({ season: "2025–26", rank: 3, canyonCount: 7 }),
+    ).toBe("You came third in 2025–26, with 7 canyons.");
+  });
+
+  it("names everyone who hasn't joined", () => {
+    expect(leaderboardNudge([])).toBe("");
+    expect(leaderboardNudge(["kit"])).toBe("kit isn't on it yet.");
+    expect(leaderboardNudge(["kit", "bo"])).toBe(
+      "kit and bo aren't on it yet.",
+    );
+    expect(leaderboardNudge(["kit", "bo", "al"])).toBe(
+      "kit, bo and al aren't on it yet.",
+    );
   });
 });

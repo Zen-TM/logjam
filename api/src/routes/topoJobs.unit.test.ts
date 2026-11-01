@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { TOPO_JOB_SELECT, serializeTopoJobFor } from "./topoJobs";
+import { TOPO_JOB_SELECT, serializeTopoJobFor, sharpenMark } from "./topoJobs";
 
 // The job view is the one place three endpoints agree on what a client may see
 // of a TopoJob.
@@ -66,5 +66,21 @@ describe("serializeTopoJobFor", () => {
       }
       expect(emitted.has(column)).toBe(true);
     }
+  });
+});
+
+// Mutation that turns it red: ticking vegetation for a ZIP with no point
+// clouds (the worker's legacy vegetation pass has nothing to read).
+describe("sharpenMark", () => {
+  const ticked = { vegetation: { enabled: true } };
+
+  it("ticks vegetation only when the ZIP has point clouds and the job asks", () => {
+    expect(sharpenMark(3, ticked)).toEqual({ v: 1, vegetation: true });
+    expect(sharpenMark(0, ticked)).toEqual({ v: 1, vegetation: false });
+    expect(sharpenMark(3, { vegetation: { enabled: false } })).toEqual({
+      v: 1,
+      vegetation: false,
+    });
+    expect(sharpenMark(3, null)).toEqual({ v: 1, vegetation: false });
   });
 });

@@ -71,7 +71,7 @@ describe("scrubStructure", () => {
   it("censors coordinate and name keys at any depth", () => {
     const input = {
       place: { name: "Secret", latitude: -33.7, longitude: 150.3, safe: "ok" },
-      list: [{ notes: "private", other: 1 }],
+      list: [{ notes: "private", gaugeId: "210001", other: 1 }],
     };
     expect(scrubStructure(input)).toEqual({
       place: {
@@ -80,7 +80,7 @@ describe("scrubStructure", () => {
         longitude: "[redacted]",
         safe: "ok",
       },
-      list: [{ notes: "[redacted]", other: 1 }],
+      list: [{ notes: "[redacted]", gaugeId: "[redacted]", other: 1 }],
     });
   });
 
@@ -341,5 +341,48 @@ describe("scrubMessage", () => {
   it("applies both args-block and URL/tile redaction", () => {
     const msg = "failed https://x.test/a/1/2/3\n{ latitude: -33 }";
     expect(scrubMessage(msg)).toBe("failed [redacted-url]\n[redacted-args]");
+  });
+});
+
+// Mutation: delete the JWT or custom-scheme replace in redactTilePathPatterns,
+// or a token key from SENSITIVE_KEYS.
+describe("sign-in secrets", () => {
+  const jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhYmMifQ.c2lnbmF0dXJl";
+
+  it("strips a token from free text", () => {
+    expect(redactTilePathPatterns(`refresh failed for ${jwt}`)).toBe(
+      "refresh failed for [redacted-token]",
+    );
+  });
+
+  it("strips the redirect that carries the authorization code", () => {
+    expect(
+      redactTilePathPatterns("opened logjam://auth?code=abc&state=xyz"),
+    ).toBe("opened [redacted-url]");
+    expect(redactTilePathPatterns("logjamdev://auth?code=abc")).toBe(
+      "[redacted-url]",
+    );
+  });
+
+  it("censors token keys in structured data", () => {
+    expect(
+      scrubStructure({
+        idToken: jwt,
+        refresh_token: "r",
+        params: { code: "c", code_verifier: "v" },
+      }),
+    ).toEqual({
+      idToken: "[redacted]",
+      refresh_token: "[redacted]",
+      params: { code: "[redacted]", code_verifier: "[redacted]" },
+    });
+  });
+
+  // Mutation: drop "token" from SENSITIVE_KEYS: the revoke call's body is
+  // {token, client_id} and an opaque refresh token has no eyJ prefix.
+  it("censors the revoke call's opaque token", () => {
+    expect(
+      scrubStructure({ token: "opaque-refresh", client_id: "client" }),
+    ).toEqual({ token: "[redacted]", client_id: "client" });
   });
 });

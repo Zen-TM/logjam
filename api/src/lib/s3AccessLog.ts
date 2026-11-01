@@ -166,10 +166,6 @@ export function isBillableEgress(
  *                                       it; charging the recipient would let
  *                                       anyone drain a stranger's allowance.
  *   inputs|outputs|jobs/<topoJobId>/… → looked up via the job tables
- *   exports/geo-pdf/<geoPdfJobId>/…   → ditto (checked before `exports/`, whose
- *                                       prefix it shares)
- *   plans/geo-pdf/<geoPdfJobId>/…     → ditto (a plan's copy; the job row
- *                                       charges it to chargedToId)
  *   exports/<exportJobId>/…           → ditto
  *   master/…                          → shared basemap, nobody's egress
  *
@@ -180,14 +176,14 @@ export type KeyAttribution =
   | { kind: "user"; userId: string }
   | {
       kind: "job";
-      table: "topoJob" | "topoExportJob" | "geoPdfJob";
+      table: "topoJob" | "topoExportJob";
       jobId: string;
     };
 
 export function attributeKey(key: string): KeyAttribution | null {
   const segments = key.split("/");
   if (segments.length < 2) return null;
-  const [head, second, third] = segments;
+  const [head, second] = segments;
 
   switch (head) {
     case "media":
@@ -198,18 +194,8 @@ export function attributeKey(key: string): KeyAttribution | null {
     case "jobs":
       return second ? { kind: "job", table: "topoJob", jobId: second } : null;
     case "exports":
-      // "exports/geo-pdf/<id>/…" must be tested before the generic form —
-      // otherwise the literal "geo-pdf" is read as an export job id and every
-      // GeoPDF download is silently unattributed.
-      if (second === "geo-pdf") {
-        return third ? { kind: "job", table: "geoPdfJob", jobId: third } : null;
-      }
       return second
         ? { kind: "job", table: "topoExportJob", jobId: second }
-        : null;
-    case "plans":
-      return second === "geo-pdf" && third
-        ? { kind: "job", table: "geoPdfJob", jobId: third }
         : null;
     default:
       // master/* (shared basemap tiles) and anything new we have not taught

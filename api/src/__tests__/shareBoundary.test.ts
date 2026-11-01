@@ -167,6 +167,83 @@ describe("share boundary — recipient view (hybrid model)", () => {
     }
   });
 
+  // Mutation: drop "gaugeId" from SHAREE_VISIBLE_PLACE_FIELDS and add it to
+  // OWNER_PRIVATE_PLACE_FIELDS, or let PATCH skip the owner check: red.
+  it("recipient sees the owner's gauge link read-only, on REST and on the delta", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary gauge");
+    try {
+      const set = await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(ALICE_SUB))
+        .send({ gaugeId: "210001" });
+      expect(set.status).toBe(200);
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+
+      const rest = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(BOB_SUB));
+      expect(rest.body.gaugeId).toBe("210001");
+
+      const delta = await request(API_URL)
+        .get("/sync/delta")
+        .set({ ...as(BOB_SUB), "x-logjam-client": "mobile/0.1.0-test" })
+        .query({ limit: 500 });
+      const row = (delta.body.changes.places as Record<string, unknown>[]).find(
+        (p) => p.id === placeId,
+      );
+      expect(row?.syncRole).toBe("shared");
+      expect(row?.gaugeId).toBe("210001");
+
+      const edit = await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(BOB_SUB))
+        .send({ gaugeId: null });
+      expect(edit.status).toBe(403);
+      const after = await request(API_URL)
+        .get(`/places/${placeId}`)
+        .set(as(ALICE_SUB));
+      expect(after.body.gaugeId).toBe("210001");
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  // Mutation: add `gaugeId: place.gaugeId` to the copy's data in places.ts.
+  it("a copy of a place does not carry the owner's gauge", async () => {
+    const placeId = await createPlace(ALICE_SUB, "share boundary gauge copy");
+    try {
+      await request(API_URL)
+        .patch(`/places/${placeId}`)
+        .set(as(ALICE_SUB))
+        .send({ gaugeId: "210001" })
+        .expect(200);
+      await request(API_URL)
+        .post(`/places/${placeId}/share`)
+        .set(as(ALICE_SUB))
+        .send({ sharedWithUserId: BOB_ID })
+        .expect(201);
+      const copy = await request(API_URL)
+        .post(`/places/${placeId}/copy`)
+        .set(as(BOB_SUB))
+        .send({});
+      expect(copy.status).toBe(201);
+      expect(copy.body.gaugeId ?? null).toBeNull();
+      const got = await request(API_URL)
+        .get(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+      expect(got.body.gaugeId ?? null).toBeNull();
+      await request(API_URL)
+        .delete(`/places/${copy.body.id as string}`)
+        .set(as(BOB_SUB));
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
   it("recipient may copy a shared place under their own account", async () => {
     const res = await request(API_URL)
       .post(`/places/${SHARED_PLACE_ID}/copy`)

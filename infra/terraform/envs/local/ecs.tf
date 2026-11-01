@@ -18,7 +18,7 @@ resource "aws_ecs_cluster" "local" {
 }
 
 locals {
-  # Shared by all three workers. In-network hostnames (postgres / ministack).
+  # Shared by both workers. In-network hostnames (postgres / ministack).
   worker_common_env = [
     { name = "AWS_REGION", value = "ap-southeast-2" },
     # Explicit dummy creds: MiniStack injects AWS_CONTAINER_CREDENTIALS_FULL_URI
@@ -33,11 +33,13 @@ locals {
     { name = "DB_USER", value = "logjam" },
     { name = "DB_PASSWORD", value = "logjam" },
     { name = "S3_BUCKET_TOPO", value = module.topo.bucket_id },
-    # RESEND_API_KEY blank by default → email_send.py / services/email.ts no-op
-    # (no real sends in local dev). Set TF_VAR_resend_api_key + TF_VAR_email_from
-    # to test real sends — see variables.tf.
-    { name = "EMAIL_FROM", value = var.email_from },
-    { name = "RESEND_API_KEY", value = var.resend_api_key },
+    # Mail lands in Mailpit (docker-compose.yml); its inbox is localhost:8025.
+    { name = "EMAIL_FROM", value = "noreply@logjam.local" },
+    { name = "SMTP_HOST", value = "mailpit" },
+    { name = "SMTP_PORT", value = "1025" },
+    { name = "SMTP_USER", value = "logjam" },
+    { name = "SMTP_PASSWORD", value = "logjam" },
+    { name = "SMTP_CA_CERT", value = filebase64("${local.repo_root}/infra/mailpit/dev-tls-cert.pem") },
     { name = "FRONTEND_URL", value = "http://localhost:5173/" },
   ]
 }
@@ -62,39 +64,16 @@ resource "aws_ecs_task_definition" "topo_worker" {
 resource "aws_ecs_task_definition" "topo_export_worker" {
   family = "logjam-topo-export-worker"
   container_definitions = jsonencode([{
-    name        = "topo-export-worker"
-    image       = "logjam-topo-worker:latest"
-    essential   = true
-    entryPoint  = ["python3", "/app/export_worker.py"]
+    name      = "topo-export-worker"
+    image     = "logjam-topo-worker:latest"
+    essential = true
+    # Not entryPoint, as prod has: MiniStack ignores it and runs the image's
+    # CMD, the LiDAR worker, so no export would start.
+    command     = ["python3", "/app/export_worker.py"]
     environment = local.worker_common_env
   }])
   cpu                      = "4096"
   memory                   = "8192"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-}
-
-resource "aws_ecs_task_definition" "geo_pdf_worker" {
-  family = "logjam-geo-pdf-worker"
-  container_definitions = jsonencode([{
-    name      = "geo-pdf-worker"
-    image     = "logjam-api:latest"
-    essential = true
-    command   = ["node", "dist/worker/geoPdfWorker.js"]
-    environment = concat(local.worker_common_env, [
-      { name = "S3_BUCKET_MEDIA", value = module.media.bucket_id },
-      { name = "TOPO_CDN_BASE_URL", value = "http://ministack:4566/${module.topo.bucket_id}" },
-      { name = "AUTH_MODE", value = "fake" },
-      { name = "FAKE_USER_SUB", value = "fake-alice-sub" },
-      { name = "NODE_ENV", value = "development" },
-      { name = "CORS_ORIGIN", value = "http://localhost:5173" },
-      # Prod image bundles the RDS CA → prisma.ts would force TLS; local Postgres
-      # has no SSL. Force a plain connection (see api/src/services/prisma.ts).
-      { name = "DATABASE_SSL", value = "disable" },
-    ])
-  }])
-  cpu                      = "1024"
-  memory                   = "4096"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
 }

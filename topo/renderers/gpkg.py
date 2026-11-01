@@ -4,8 +4,7 @@ a raster tile pyramid.
 Bundling="composite" produces one .gpkg containing every selected layer:
   - raster layers → a single composite tile pyramid table
   - vector layers → one feature table each (`contours_5m`, `osm_features`)
-Bundling="per-layer" is rejected upstream (EXPORT_FORMAT_RULES.gpkg.allowPerLayer
-= false) — GeoPackage is inherently bundled.
+GeoPackage is inherently bundled, so it is always composite.
 
 QGIS handles GPKG raster tile pyramids natively. Many mobile apps (Gaia GPS,
 Avenza) do not yet — frontend dialog calls this out in tooltip copy.

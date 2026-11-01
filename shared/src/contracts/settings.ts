@@ -68,40 +68,29 @@ export const NEW_TYPE_ATTRIBUTES = {
 export type NotificationPreferenceGroup = "email" | "inApp";
 
 /**
- * The notification switches, as data: a new preference is one entry. `what`
- * finishes the group's sentence ("Email me when …"), so a client that draws a
- * switch per sentence and one that draws a group per heading read the same.
+ * The notification switches, as data: a new preference is one entry. Each is
+ * a switch under its group's heading ("Email me about" › "LiDAR maps"), short
+ * enough for a switch label (`SWITCH_COPY_MAX`) on both clients.
  */
 export const NOTIFICATION_PREFERENCES = [
-  { key: "topoEmail", group: "email", what: "a LiDAR map finishes or fails" },
-  {
-    key: "exportEmail",
-    group: "email",
-    what: "a LiDAR map export finishes or fails",
-  },
-  { key: "geoPdfEmail", group: "email", what: "a GeoPDF finishes or fails" },
-  {
-    key: "friendRequestInApp",
-    group: "inApp",
-    what: "someone sends me a friend request",
-  },
-  {
-    key: "shareInApp",
-    group: "inApp",
-    what: "something is shared with me",
-  },
+  // A LiDAR map or an export mails whether it finishes or fails
+  // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
+  { key: "topoEmail", group: "email", label: "LiDAR maps" },
+  { key: "exportEmail", group: "email", label: "LiDAR map exports" },
+  { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
+  { key: "shareInApp", group: "inApp", label: "Shares with me" },
 ] as const satisfies readonly {
   key: keyof NotificationPreferences;
   group: NotificationPreferenceGroup;
-  what: string;
+  label: string;
 }[];
 
-/** "Email me when" / "Notify me in Logjam GPS when": naming the surface. */
+/** The group's heading, naming the surface: "Notify me in Logjam GPS about". */
 export function notificationGroupLead(
   group: NotificationPreferenceGroup,
   surface: "Logjam Web" | "Logjam GPS",
 ): string {
-  return group === "email" ? "Email me when" : `Notify me in ${surface} when`;
+  return group === "email" ? "Email me about" : `Notify me in ${surface} about`;
 }
 
 /**

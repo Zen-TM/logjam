@@ -14,12 +14,38 @@ afterEach(cleanup);
 // back on the gate's button, or `disabled={!canSave}` on the route name's Save.
 describe("pressing a submit with something missing says what", () => {
   it("the consent gate asks for the tick, and records nothing", () => {
-    render(<ConsentGate onAccepted={vi.fn()} onSignOut={vi.fn()} />);
+    render(
+      <ConsentGate
+        consentVersion="2026-09-28"
+        newAccount={false}
+        currentUsername="alice"
+        onAccepted={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
     const agree = screen.getByRole("button", { name: "Agree and continue" });
     expect((agree as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(agree);
     expect(screen.getByRole("alert").textContent).toContain("Tick the box");
     expect(recordConsent).not.toHaveBeenCalled();
+  });
+
+  // Mutation: send CURRENT_CONSENT_VERSION instead of the consentVersion prop
+  // from Agree: the server refuses any version but its own current one.
+  it("the consent gate records the version the server named", () => {
+    vi.mocked(recordConsent).mockResolvedValue({} as never);
+    render(
+      <ConsentGate
+        consentVersion="2999-01-01"
+        newAccount={false}
+        currentUsername="alice"
+        onAccepted={vi.fn()}
+        onSignOut={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Agree and continue" }));
+    expect(recordConsent).toHaveBeenCalledWith("2999-01-01");
   });
 
   it("the route name dialog names the blank field", () => {

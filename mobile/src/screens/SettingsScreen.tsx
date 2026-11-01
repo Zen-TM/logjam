@@ -3,7 +3,8 @@
 //
 // WHY PAGES RATHER THAN ONE LIST: preferences are split into pages by backend
 // and failure mode. Display, map and privacy preferences are device-side —
-// synchronous, no account, no signal needed. Notifications live on the user
+// synchronous, no account, no signal needed — bar the account rows a page
+// names in its header. Notifications live on the user
 // record, requiring both an account and a connection, which
 // `NotificationSettingsScreen` states once at the page level. Custom-field
 // definitions are device-side rows in the local mirror written through the

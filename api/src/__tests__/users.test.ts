@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
+import { MAX_SLOPE_BANDS } from "@logjam/shared";
 
 // Requires `make dev` running with AUTH_MODE=fake (requests = seeded alice).
 //
@@ -72,6 +73,27 @@ describe("users routes (fake auth = alice)", () => {
     expect(res.body.error).toBe("That username is taken. Choose another.");
   });
 
+  // Two usernames that differ only in case are one username (issue #360):
+  // `users_username_as_read_key` holds the lower-case form. Mutation: drop the
+  // index and this rename succeeds, taking alice's username off the seed.
+  it("PATCH /users/me refuses a username that differs only in case", async () => {
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "Bob" });
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe("That username is taken. Choose another.");
+    } finally {
+      // Under the mutation above the rename lands; the export test later in
+      // this file expects "alice" back.
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ username: "alice" });
+    }
+  });
+
   it("PATCH /users/me rejects an invalid themeSchemeId", async () => {
     const res = await request(API_URL)
       .patch("/users/me")
@@ -98,8 +120,32 @@ describe("users routes (fake auth = alice)", () => {
     }
   });
 
+  // An old client (ADR 0022) still sends the retired GeoPDF preferences. They
+  // must not fail the whole request. Mutation: make the body validation strict,
+  // or have isNotificationPreferences reject unknown keys, and this is a 400.
+  it("PATCH /users/me ignores the retired GeoPDF preferences an old client sends", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.notifications.topoEmail;
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({
+          autoDownloadGeoPdfs: true,
+          notifications: { geoPdfEmail: true, topoEmail: !original },
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.notifications.topoEmail).toBe(!original);
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ notifications: { topoEmail: original } });
+    }
+  });
+
   it("PATCH /users/me updates the email notification preferences and restores them", async () => {
-    const keys = ["topoEmail", "exportEmail", "geoPdfEmail"] as const;
+    const keys = ["topoEmail", "exportEmail"] as const;
     const before = await request(API_URL).get("/users/me").set(AUTH);
     const original: Record<string, boolean> = Object.fromEntries(
       keys.map((k) => [k, before.body.uiPreferences.notifications[k]]),
@@ -124,6 +170,60 @@ describe("users routes (fake auth = alice)", () => {
     for (const k of keys) {
       expect(restore.body.uiPreferences.notifications[k]).toBe(original[k]);
     }
+  });
+
+  it("PATCH /users/me stores the user's slope bands, and restores", async () => {
+    const before = await request(API_URL).get("/users/me").set(AUTH);
+    const original = before.body.uiPreferences.slopeBands;
+    expect(original.length).toBeGreaterThan(0);
+    const bands = [
+      { fromDeg: 30, toDeg: 45, colour: "#ffff00ff" },
+      { fromDeg: 45, toDeg: 90, colour: "#ff0000ff" },
+    ];
+    try {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: bands });
+      expect(res.status).toBe(200);
+      expect(res.body.uiPreferences.slopeBands).toEqual(bands);
+    } finally {
+      await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands: original });
+    }
+  });
+
+  // Mutation: store the body's bands without `parseSlopeBands`, and a band
+  // MapLibre cannot draw reaches both clients' maps.
+  it("PATCH /users/me rejects slope bands the editor would not accept", async () => {
+    for (const slopeBands of [
+      [],
+      [{ fromDeg: 40, toDeg: 30, colour: "#ff0000ff" }],
+      [{ fromDeg: 40, toDeg: 50, colour: "red" }],
+    ]) {
+      const res = await request(API_URL)
+        .patch("/users/me")
+        .set(AUTH)
+        .send({ slopeBands });
+      expect(res.status).toBe(400);
+    }
+  });
+
+  // Mutation: drop the length check before `parseSlopeBands`, and an
+  // over-long list is a 400 checked element by element.
+  it("PATCH /users/me answers too many slope bands with 413", async () => {
+    const slopeBands = Array.from({ length: MAX_SLOPE_BANDS + 1 }, (_, i) => ({
+      fromDeg: i * 10,
+      toDeg: i * 10 + 10,
+      colour: "#ff0000ff",
+    }));
+    const res = await request(API_URL)
+      .patch("/users/me")
+      .set(AUTH)
+      .send({ slopeBands });
+    expect(res.status).toBe(413);
   });
 
   // Consent boundary: the server is the integrity half of the
@@ -152,6 +252,11 @@ describe("users routes (fake auth = alice)", () => {
     const res = await request(API_URL).get("/users/me").set(AUTH);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("consentVersion");
+  });
+
+  it("GET /users/me names the current consent version so a build need not bake it", async () => {
+    const res = await request(API_URL).get("/users/me").set(AUTH);
+    expect(res.body.currentConsentVersion).toBe(CURRENT_CONSENT_VERSION);
   });
 
   it("GET /users/me/export returns the caller's data with bigint fields as numbers", async () => {
@@ -207,7 +312,6 @@ describe("users routes (fake auth = alice)", () => {
       "itemSharesReceived",
       "fileSendsSent",
       "fileSendsReceived",
-      "geoPdfJobs",
       "devices",
     ]) {
       expect(Array.isArray(res.body[section]), section).toBe(true);

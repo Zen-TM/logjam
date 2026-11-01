@@ -1,13 +1,15 @@
 /**
  * Topo layer constants — thin re-export. The canonical TOPO_LAYERS list lives
- * in shared/src/topoSettings.ts; the only remaining mirror is
- * topo/worker.py → ALL_LAYERS (Python). The view types below are
- * frontend-local.
+ * in shared/src/topoSettings.ts. The view types below are frontend-local.
  */
 export { TOPO_LAYERS } from "@logjam/shared";
 export type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
 
-import type { TopoLayerName, TopoLayerFormat } from "@logjam/shared";
+import type {
+  SharpenedOverlay,
+  TopoLayerFormat,
+  TopoLayerName,
+} from "@logjam/shared";
 
 /**
  * A topo-job footprint as returned in GeoJSON form by the topo-jobs API.
@@ -34,9 +36,8 @@ export type GeoJsonPolygonal = GeoJsonPolygon | GeoJsonMultiPolygon;
 export type CompletedTopoJob = {
   jobId: string;
   /** Owner vs recipient. The list returns topos shared WITH the user; they are
-   *  read-only, so no re-share and no delete. Export IS allowed — the recipient
-   *  can already see the overlay, and the export is created under their own
-   *  account (POST /topo-exports accepts a shared source job). */
+   *  read-only, so no re-share and no delete. A recipient may export its area,
+   *  under their own account, as anyone may export the statewide terrain. */
   syncRole: "owner" | "shared";
   name: string | null;
   createdAt: string;
@@ -46,6 +47,8 @@ export type CompletedTopoJob = {
     format: TopoLayerFormat;
     pmtilesUrl: string;
   }[];
+  /** A sharpened job's area and archive URLs; absent while the job is still marked. */
+  sharpened?: SharpenedOverlay;
 };
 
 /** Response shape from GET /topo-jobs/completed-overlays. Includes presigned-URL expiry so the client can pre-refetch. */

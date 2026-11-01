@@ -8,33 +8,37 @@ import { estimateExportSeconds } from "./runtimeEstimates";
 import { assertHasCredits } from "./computeCredits";
 import { assertGlobalCapacity } from "./fargateCapacity";
 import type {
+  AreaBbox,
   ExportFormat,
   ExportBundling,
   TopoLayerKey,
 } from "@logjam/shared";
 
-// Cap to prevent users from flooding ECS with queued exports. Shared by the
-// manual export route (POST /topo-exports) and the reaper's auto-export pass so
-// both enforce one limit.
+// Cap to prevent users from flooding ECS with queued exports.
 export const MAX_QUEUED_PER_USER = 5;
+
+// Exports are not charged to storage, so this is what bounds the files one
+// user holds at a time (they expire in 7 days).
+export const MAX_LIVE_PER_USER = 20;
 
 export interface CreateAndLaunchExportInput {
   userId: string;
   sourceJobIds: string[];
-  layers: TopoLayerKey[];
+  layers: readonly TopoLayerKey[] | readonly string[];
   format: ExportFormat;
   bundling: ExportBundling;
   vectorStyleSnapshot: object;
   sourceTileCount: number | null;
-  /** The submitting user's monthly credit allowance, passed in because both
-   * callers have already loaded the user row. */
+  /** The submitting user's monthly credit allowance, passed in because the
+   * route has already loaded the user row. */
   monthlyComputeCredits: number;
+  /** An export of an area: the box, with no source job. */
+  bbox?: AreaBbox;
 }
 
 /**
  * Create a TopoExportJob and launch its Fargate task. The single owner of the
- * concurrency cap + ECS launch + ARN-persist + fail-on-launch sequence, so the
- * manual route and the reaper's auto-export pass behave identically.
+ * concurrency cap + ECS launch + ARN-persist + fail-on-launch sequence.
  *
  * - The cap check + create run in one user-row-locked transaction so concurrent
  *   submissions can't both pass the cap. Throws AppError(429) when at
@@ -84,15 +88,25 @@ export async function createAndLaunchTopoExport(
         say`You can run ${MAX_QUEUED_PER_USER} exports at a time. Wait for one to finish.`,
       );
     }
+    const live = await tx.topoExportJob.count({
+      where: { userId: input.userId, status: { not: "failed" } },
+    });
+    if (live >= MAX_LIVE_PER_USER) {
+      throw new AppError(
+        429,
+        say`You have ${MAX_LIVE_PER_USER} exports already. They are deleted after 7 days, so try again once one expires.`,
+      );
+    }
     return tx.topoExportJob.create({
       data: {
         userId: input.userId,
         sourceJobIds: input.sourceJobIds,
-        layers: input.layers as string[],
+        layers: [...input.layers],
         format: input.format,
         bundling: input.bundling,
         vectorStyleSnapshot: input.vectorStyleSnapshot,
         sourceTileCount: input.sourceTileCount,
+        bbox: input.bbox,
         estimatedSeconds,
         status: "queued",
       },

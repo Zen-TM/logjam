@@ -1,5 +1,5 @@
 // Save a copy (`PLAN_ITEM_VERBS`): the caller's own copy of a plan item, in
-// their places, ways or maps. The copy is theirs from then on, and changes on
+// their places or ways. The copy is theirs from then on, and changes on
 // either side don't reach the other (`saveCopyLine`), so it confirms first;
 // a place with photos asks whether they come, as a friend's copy does
 // (`useRememberedCopyMedia`). Logjam Web's twin is

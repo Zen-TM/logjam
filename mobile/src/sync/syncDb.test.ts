@@ -122,19 +122,26 @@ describe("withSyncTransaction", () => {
 
 describe("single-writer discipline", () => {
   it("is the only place sync code opens a transaction", () => {
-    // The rule, enforced: a bare db.withTransactionAsync anywhere in src/sync
-    // is a writer outside the lock, which is the whole bug back again.
+    // The rule, enforced: a bare db.withTransactionAsync in src/sync,
+    // src/tracks or src/offline is a writer outside the lock, which is the whole
+    // bug back again (#694). Mutation: revert any of them to a bare call.
     const offenders: string[] = [];
-    for (const name of readdirSync(__dirname)) {
-      if (
-        !name.endsWith(".ts") ||
-        name === "syncDb.ts" ||
-        name.endsWith(".test.ts")
-      ) {
-        continue;
+    for (const dir of ["sync", "tracks", "offline"]) {
+      const full = join(__dirname, "..", dir);
+      for (const name of readdirSync(full)) {
+        if (
+          !name.endsWith(".ts") ||
+          name === "syncDb.ts" ||
+          name === "regionMbtiles.ts" || // exclusive transaction on its own connection
+          name.endsWith(".test.ts")
+        ) {
+          continue;
+        }
+        const source = readFileSync(join(full, name), "utf8");
+        if (source.includes(".withTransactionAsync(")) {
+          offenders.push(`${dir}/${name}`);
+        }
       }
-      const source = readFileSync(join(__dirname, name), "utf8");
-      if (source.includes(".withTransactionAsync(")) offenders.push(name);
     }
     expect(offenders).toEqual([]);
   });

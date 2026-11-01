@@ -2,17 +2,24 @@
 
 ## Routes and access
 
-- **Every route but `/health`, `/ready`, `/meta`, `/elevation` and
-  `/places/search`** runs
+- **A router is mounted through `routes/mounts.ts`, never `app.use` in
+  `index.ts`:** `queryPlans.test.ts` reads every GET from that list and fails on
+  one it neither EXPLAINs nor leaves out for a reason. Guard for the `index.ts`
+  half: `src/routes/mounts.unit.test.ts`.
+- **Every route but `/health`, `/ready`, `/meta`, `/places/search` and
+  `/users/username-available`** runs
   `requireAuth`, then `resolveUser(req.user!.sub)` (`lib/resolveUser.ts`) for
-  the internal user; never look a user up by `cognitoId` inline. `/ready`, like
+  the internal user; never look a user up by `subject` inline. `/ready`, like
   `/health`, is the platform's own probe: no user data, no auth. `/meta` is
   unauthenticated on purpose — a build too old to authenticate must still be
   told it is stale, and the body carries server constants only (`meta.ts`);
-  `/elevation` and `/places/search` need auth but no user row, because nothing
-  they touch is stored (`elevation.ts`, `placeSearch.ts`). `/meta`,
-  `/elevation` and `/places/search` stay behind the global rate limiter; `/health` and
-  `/ready` sit before it. A further exception needs the same kind of reason.
+  `/places/search` needs auth but no user row, because nothing it touches is
+  stored (`placeSearch.ts`). `/users/username-available` answers yes or no for
+  the sign-up form: usernames are public to anyone with an account, which anyone
+  can make (`GET /friends/search`), and it has its own limiter. `/meta`,
+  `/elevation` and `/places/search` stay
+  behind the global rate limiter; `/health` and `/ready` sit before it. A
+  further exception needs the same kind of reason.
 - **Every read or write of a user-owned row checks ownership** (`ownerId: user.id`
   or a join through `shares`); never trust an id from the body alone.
 - **A place reaches anyone but its owner only through `lib/placeAccess.ts`**
@@ -20,6 +27,11 @@
   not 403. Guard: `src/__tests__/shareBoundary.test.ts`. [0002](../docs/decisions/0002-place-share-visibility.md)
 - **A response about another user carries their username, never their email**
   (`src/__tests__/friends.test.ts`).
+- **The friends leaderboard is the one count of trip data another user sees,**
+  and only between friends who both opted in (`uiPreferences.leaderboardOptIn`):
+  a username and a number per person, never which places. Guard:
+  `src/routes/leaderboard.unit.test.ts`, `src/__tests__/leaderboard.test.ts`.
+  [0002](../docs/decisions/0002-place-share-visibility.md)
 - **Errors are ``AppError(status, say`…`)``** from `middleware/errorHandler`,
   never `res.status(500)` or a bare `Error`: an upstream that refused is 502, a
   dependency we own that is missing is 503.

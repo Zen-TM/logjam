@@ -12,6 +12,10 @@ import { Icon } from "./Icon";
  * `card` gives it a button's look, for a setting that takes effect at once
  * floating over the map with the buttons beside it, where a `SwitchRow`
  * cannot sit inline and a bare label would sit on the basemap.
+ *
+ * `labelHasLinks` is for a label with links in it. Nothing interactive goes
+ * inside a `<label>` (DESIGN.md), so the line is a plain element that names the
+ * input, and its words still tick the box.
  */
 export function Checkbox({
   label,
@@ -20,6 +24,8 @@ export function Checkbox({
   onChange,
   disabled = false,
   card = false,
+  describedBy,
+  labelHasLinks = false,
 }: {
   label: ReactNode;
   description?: string;
@@ -27,10 +33,15 @@ export function Checkbox({
   onChange: (next: boolean) => void;
   disabled?: boolean;
   card?: boolean;
+  /** Another element that describes it, such as why it is disabled. */
+  describedBy?: string;
+  labelHasLinks?: boolean;
 }) {
   const descriptionId = useId();
+  const labelId = useId();
+  const Line = labelHasLinks ? "div" : "label";
   return (
-    <label
+    <Line
       className={card ? classes.cardCheckbox : classes.checkbox}
       data-disabled={disabled || undefined}
     >
@@ -40,7 +51,12 @@ export function Checkbox({
           className={classes.checkboxInput}
           checked={checked}
           disabled={disabled}
-          aria-describedby={description ? descriptionId : undefined}
+          aria-labelledby={labelHasLinks ? labelId : undefined}
+          aria-describedby={
+            [description ? descriptionId : null, describedBy]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
           onChange={(event) => onChange(event.target.checked)}
         />
         <Icon
@@ -52,13 +68,28 @@ export function Checkbox({
         />
       </span>
       <span className={classes.text}>
-        <span className={classes.title}>{label}</span>
+        {/* A convenience for the pointer: the keyboard has the input itself. */}
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <span
+          id={labelId}
+          className={classes.title}
+          onClick={
+            labelHasLinks
+              ? (event) => {
+                  const link = (event.target as HTMLElement).closest("a");
+                  if (!link && !disabled) onChange(!checked);
+                }
+              : undefined
+          }
+        >
+          {label}
+        </span>
         {description && (
           <span id={descriptionId} className={classes.description}>
             {description}
           </span>
         )}
       </span>
-    </label>
+    </Line>
   );
 }

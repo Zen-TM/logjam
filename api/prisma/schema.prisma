@@ -9,7 +9,9 @@ datasource db {
 
 model User {
   id                      String              @id @default(uuid())
-  cognitoId               String              @unique @map("cognito_id")
+  // The identity provider's `sub`; each deployment accepts one issuer, so it
+  // alone identifies a user.
+  subject                 String              @unique @map("subject")
   username                String              @unique
   email                   String              @unique
   uiPreferences           Json                @default("{}") @map("ui_preferences")
@@ -41,9 +43,7 @@ model User {
   notifications           Notification[]
   topoJobs                TopoJob[]
   topoExportJobs          TopoExportJob[]
-  geoPdfJobs              GeoPdfJob[]         @relation("GeoPdfJobOwner")
   tripLogs                TripLog[]
-  geoPdfTemplates         GeoPdfTemplate[]
   topoTemplates           TopoTemplate[]
   deviceTokens            DeviceToken[]
   placeLinks              PlaceLink[]
@@ -59,8 +59,6 @@ model User {
   routesAdded             Route[]             @relation("RouteAddedBy")
   mediaAdded              Media[]             @relation("MediaAddedBy")
   mediaCharged            Media[]             @relation("MediaChargedTo")
-  geoPdfJobsAdded         GeoPdfJob[]         @relation("GeoPdfJobAddedBy")
-  geoPdfJobsCharged       GeoPdfJob[]         @relation("GeoPdfJobChargedTo")
   tripPlansCreated        TripPlan[]
   tripPlanMemberships     TripPlanMember[]    @relation("TripPlanMemberUser")
   tripPlanMembersInvited  TripPlanMember[]    @relation("TripPlanMemberInvitedBy")
@@ -203,7 +201,7 @@ model CustomFieldDefPlaceType {
 model Place {
   id               String           @id @default(uuid())
   /// Exactly one of ownerId and planId is set: a CHECK in
-  /// 20261019120000_trip_plans, which Prisma cannot declare. A plan-owned row
+  /// 20261101120000_trip_plans, which Prisma cannot declare. A plan-owned row
   /// is nobody's, so every `ownerId: user.id` query skips it.
   ownerId          String?          @map("owner_id")
   planId           String?          @map("plan_id")
@@ -219,6 +217,9 @@ model Place {
   /// waypoint surface today; dropping it in the fold would be silent data loss.
   elevation        Float?
   notes            String?
+  /// A river gauge the owner picked (`GaugeRecord.id`). Not checked against
+  /// the registry: the list changes. Hints at the area; a sharee sees it too, as they see the coordinates.
+  gaugeId          String?        @map("gauge_id")
   /// Type-specific values, keyed by `CustomFieldDef.key`. Replaces the seven
   /// grade columns AND the free-form `attributes` blob. Values that were nested
   /// at `attributes.customFields[key]` are HOISTED to the top level here — see
@@ -500,15 +501,16 @@ model TopoJob {
   estimatedSeconds    Int?      @map("estimated_seconds")
   layerOptions        Json?     @map("layer_options")
   vectorStyleSnapshot Json?     @map("vector_style_snapshot")
-  // Auto-export config captured at submit (AutoExportSettings). When enabled,
-  // the reaper queues a TopoExportJob once this job reaches "complete".
+  // Auto-export, removed: no longer written or read. Dropped by a later
+  // contract migration (ADR 0003).
   autoExport          Json?     @map("auto_export")
-  // Set by the reaper when it has handled the auto-export (queued it or
-  // recorded why it couldn't). Dedup marker: a non-null value means "don't
-  // auto-export again", so overlapping sweeps can't double-queue.
   autoExportedAt      DateTime? @map("auto_exported_at")
   s3InputKey          String?   @map("s3_input_key")
   s3OutputKeys        Json?     @map("s3_output_keys")
+  // /start writes { v: 1, vegetation } to mark a job to
+  // sharpen (topo/sharpen.py), and the worker replaces the mark with its
+  // result: { v, zmax, tiles15, coverage, ground, extracted, keys, vegetation }.
+  sharpen             Json?
   // s3OutputKeys shape: { name: string, cogKey: string|null, pmtilesKey: string|null }[]
   // Raster layers (hillshade/vegetation/slope): cogKey set, pmtilesKey set (for in-app display).
   // Vector layers (contours/features): cogKey null, pmtilesKey set.
@@ -560,12 +562,19 @@ model TopoExportJob {
   sourceJobIds        String[]  @map("source_job_ids")
   // Single-element array for now; multi-job composites are a Stage 3 stretch.
   layers              String[]
-  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features).
+  // Subset of TopoLayerKey (hillshade/vegetation/slope/contours/features), or
+  // of AREA_EXPORT_LAYERS for an export of an area.
   format              String
   // "mbtiles" | "geotiff" | "gpkg" | "geojson" | "gpx" (kmz deferred)
   bundling            String
   // "composite" | "per-layer"
   vectorStyleSnapshot Json      @map("vector_style_snapshot")
+  // An export of an area: {west, south, east, north} in degrees, and no
+  // source job. Null for an export of a LiDAR job. Never logged, as it is a
+  // place: the request logger keeps no body (src/lib/logger.unit.test.ts, "is
+  // not in what the request logger keeps of the request"), and the worker
+  // logs no box (topo/tests/test_export_worker_helpers.py).
+  bbox                Json?
   // Snapshot of the source job's input tileCount at export creation. The
   // source TopoJob is deletable, so this can't be re-derived by join later —
   // it feeds the adaptive runtime estimator (aggregate size only, no place
@@ -593,68 +602,12 @@ model TopoExportJob {
   @@map("topo_export_jobs")
 }
 
-// Async GeoPDF generation (mirrors TopoExportJob). Submitted via POST
-// /geo-pdf, rendered by ECS task `logjam-geo-pdf-worker`
-// (api/src/worker/geoPdfWorker.ts), uploaded to
-// s3://BUCKET/exports/geo-pdf/{id}/logjam-export.pdf.
-model GeoPdfJob {
-  id                  String    @id @default(uuid())
-  // Exactly one of userId and planId: see Place.ownerId.
-  userId              String?   @map("user_id")
-  planId              String?   @map("plan_id")
-  addedById           String?   @map("added_by_id")
-  // As Media.chargedToId.
-  chargedToId         String?   @map("charged_to_id")
-  config              Json
-  vectorStyleSnapshot Json      @map("vector_style_snapshot")
-  // Adaptive processing-time estimate computed at create from past completed
-  // GeoPDFs (size scalar recomputed from each row's retained config) —
-  // mirrors topo_jobs.estimated_seconds.
-  estimatedSeconds    Int?      @map("estimated_seconds")
-  status              String    @default("queued")
-  // queued | running | completed | failed
-  resultKey           String?   @map("result_key")
-  resultBytes         BigInt?   @map("result_bytes")
-  errorMessage        String?   @map("error_message")
-  // Set when the worker transitions the row to "running" — anchors the
-  // reaper's running-timeout (mirrors topo_export_jobs.started_at).
-  startedAt           DateTime? @map("started_at")
-  // ARN of the Fargate task launched for this job — see
-  // TopoExportJob.ecsTaskArn.
-  ecsTaskArn          String?   @map("ecs_task_arn")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  completedAt         DateTime? @map("completed_at")
-  user                User?     @relation("GeoPdfJobOwner", fields: [userId], references: [id], onDelete: Cascade)
-  plan                TripPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
-  addedBy             User?     @relation("GeoPdfJobAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
-  chargedTo           User?     @relation("GeoPdfJobChargedTo", fields: [chargedToId], references: [id], onDelete: SetNull)
-
-  @@index([userId, createdAt])
-  @@index([planId])
-  @@index([addedById])
-  @@index([chargedToId])
-  @@map("geo_pdf_jobs")
-}
-
-model GeoPdfTemplate {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  name      String
-  config    Json
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("geo_pdf_templates")
-}
-
 model TopoTemplate {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
   name       String
   config     Json
+  // Auto-export, removed: no longer written or read (see TopoJob.autoExport).
   autoExport Json?    @map("auto_export")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -828,7 +781,7 @@ model DeviceToken {
 }
 
 // Direct, per-item sharing for the things that are not places: waypoints,
-// routes, LiDAR topo jobs, GeoPDF jobs. A row is a LIVE, REVOCABLE view of a
+// routes, LiDAR topo jobs. A row is a LIVE, REVOCABLE view of a
 // record the sender still owns — contrast FileSend below, which hands over a
 // copy and cannot be taken back.
 //
@@ -864,6 +817,8 @@ model Share {
   @@index([sharedWithId, entityType])
   // "Who can see this" — the owner's recipient list, and revoke-all on delete.
   @@index([entityType, entityId])
+  // The sharer's list, and the cascade when they delete their account.
+  @@index([sharedById])
   @@map("shares")
 }
 
@@ -944,7 +899,7 @@ model EgressLogCursor {
 }
 
 // Plans: a shared space where a group plans a trip. A plan is a second
-// kind of owner: its places, routes, files and GeoPDFs are rows in the usual
+// kind of owner: its places, routes and files are rows in the usual
 // tables with planId set instead of their owner column. Deleting a plan
 // cascades to everything in it. Role, status and visibleTo are strings from
 // shared/src/tripPlans.ts.
@@ -973,7 +928,6 @@ model TripPlan {
   places      Place[]
   routes      Route[]
   media       Media[]
-  geoPdfJobs  GeoPdfJob[]
 
   @@index([createdById])
   @@map("trip_plans")

@@ -40,6 +40,12 @@ vi.mock("../offline/demLookup", () => ({
     sampleElevationsOffline(positions),
 }));
 
+// The account's kept sharpened areas (offline/sharpenedAreaStore.ts).
+let keptAreas: object[] = [];
+vi.mock("../offline/sharpenedAreaStore", () => ({
+  savedSharpenedAreas: async () => keptAreas,
+}));
+
 const canRunNow = vi.fn(async (_job: string) => true);
 vi.mock("../offline/networkPolicy", () => ({
   canRunNow: (job: string) => canRunNow(job),
@@ -269,6 +275,32 @@ describe("the upgrade pass", () => {
     const [finest, , limit] = listTracksDueClimbUpgrade.mock.calls[0]!;
     expect(finest).toBe("nsw-5m");
     expect(limit).toBeLessThanOrEqual(5);
+  });
+
+  // Red if the key leaves the areas out, or finest stays nsw-5m with one
+  // kept: tracks inside a new area would never be asked about again.
+  it("asks again for every track short of lidar once an area is kept, and once per area", async () => {
+    const madeUp = {
+      id: "made-up",
+      zmax: 16,
+      tiles15: [30064, 19644, 30065, 19645],
+      coverage: [150.29, -33.71, 150.33, -33.69],
+      contours: false,
+      credit: "Elevation: a made-up survey.",
+      createdAt: "2026-10-01T00:00:00Z",
+    };
+    await upgradeTrackClimbs();
+    const [, without] = listTracksDueClimbUpgrade.mock.calls[0]!;
+    keptAreas = [madeUp];
+    await upgradeTrackClimbs();
+    const [finest, withArea] = listTracksDueClimbUpgrade.mock.calls[1]!;
+    expect(finest).toBe("lidar");
+    expect(withArea).not.toBe(without);
+    expect(withArea).toContain("lidar-made-up");
+    keptAreas = [madeUp, { ...madeUp, id: "another" }];
+    await upgradeTrackClimbs();
+    expect(listTracksDueClimbUpgrade.mock.calls[2]![1]).not.toBe(withArea);
+    keptAreas = [];
   });
 
   it("takes the saved terrain's answer without a request", async () => {

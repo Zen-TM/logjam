@@ -95,8 +95,30 @@ export const SENSOR_LOG_DIR = `${FileSystem.documentDirectory}sensor-logs/`;
 export const WEATHER_DIR = `${FileSystem.documentDirectory}weather/`;
 
 /**
+ * The sharpened areas the account could last see, without their URLs
+ * (`offline/sharpenedAreaStore.ts`). WIPED: an area's coverage and tile range
+ * say where its owner surveyed.
+ */
+export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-areas/`;
+
+/**
+ * TileJSONs Logjam GPS writes for map sources MLRN can't describe in props
+ * (`map/tileJsonFile.ts`). WIPED: a sharpened area's holds its tile range,
+ * which says where its owner surveyed. Each is written again when the map
+ * next needs it.
+ */
+export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
+
+/**
+ * The last river gauge file (`gauges/gaugeStorage.ts`, ADR 0044). WIPED, though
+ * the file is public and the same for everyone, because every on-device store
+ * joins the wipe (ADR 0006); the next user fetches it again.
+ */
+export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
+
+/**
  * A trip plan's files, downloaded for the trip (`plans/planFiles.ts`): one
- * folder per plan, its photos, files and GeoPDFs inside. WIPED: they are other
+ * folder per plan, its photos and files inside. WIPED: they are other
  * people's places and photos, shared with this account only. A plan dropped
  * from the phone takes its folder with it.
  */
@@ -115,6 +137,9 @@ export const WIPED_DIRS = [
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
   WEATHER_DIR,
+  GAUGES_DIR,
+  TILEJSON_DIR,
+  SHARPENED_AREAS_DIR,
   PLAN_DIR,
 ] as const;
 

@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from "vitest";
 import request from "supertest";
+import prisma from "../services/prisma";
 import {
   API_URL,
   ALICE_SUB,
@@ -15,7 +16,7 @@ import {
 // Revocation, from the side that loses access:
 //
 //   - Unfriending must revoke EVERY share type in both directions
-//     (place, route, topo job, GeoPDF job) plus file sends the recipient
+//     (place, route, topo job) plus file sends the recipient
 //     has not taken yet — while leaving accepted sends alone, because those
 //     are copies the recipient already owns.
 //   - A place_shared notification must stop resolving the place name once the
@@ -238,6 +239,102 @@ describe("unfriend revokes every share type (APIR-007 / decision D2)", () => {
     expect(carolInbox.some((row) => row.fileSendId === acceptedSendId)).toBe(
       true,
     );
+  });
+
+  // Mutations that turn it red: drop either arm of unfriend's DELETE FROM
+  // place_shares, its shareRevokeTombstones, or its place_shared purge.
+  it("revokes place shares both ways, with tombstones and notification purges", async () => {
+    await ensureFriends(BOB_SUB, CAROL_ID, CAROL_SUB);
+    const shareTo = async (ownerSub: string, recipientId: string) => {
+      const place = await request(API_URL)
+        .post("/places")
+        .set(as(ownerSub))
+        .set(CLIENT)
+        .send({
+          placeTypeId: CANYON_TYPE_ID,
+          name: "unfriend-place-probe",
+          latitude: -33.5,
+          longitude: 150.5,
+        });
+      expect(place.status).toBe(201);
+      const placeId = place.body.id as string;
+      expect(
+        (
+          await request(API_URL)
+            .post(`/places/${placeId}/share`)
+            .set(as(ownerSub))
+            .set(CLIENT)
+            .send({ sharedWithUserId: recipientId })
+        ).status,
+      ).toBe(201);
+      return placeId;
+    };
+    const bobPlace = await shareTo(BOB_SUB, CAROL_ID);
+    const carolPlace = await shareTo(CAROL_SUB, BOB_ID);
+    const shares = await prisma.placeShare.findMany({
+      where: { placeId: { in: [bobPlace, carolPlace] } },
+    });
+    expect(shares).toHaveLength(2);
+    // The grant's own notification depends on the recipient's settings.
+    await prisma.notification.createMany({
+      data: shares.map((s) => ({
+        userId: s.sharedWithId,
+        type: "place_shared",
+        payload: { placeId: s.placeId, sharedById: s.sharedById },
+      })),
+    });
+
+    const id = await friendshipId(BOB_SUB, CAROL_ID);
+    expect(
+      (await request(API_URL).delete(`/friends/${id}`).set(as(BOB_SUB))).status,
+    ).toBe(204);
+
+    expect(
+      (await request(API_URL).get(`/places/${bobPlace}`).set(as(CAROL_SUB)))
+        .status,
+    ).toBe(404);
+    expect(
+      (await request(API_URL).get(`/places/${carolPlace}`).set(as(BOB_SUB)))
+        .status,
+    ).toBe(404);
+    expect(
+      await prisma.placeShare.count({
+        where: { id: { in: shares.map((s) => s.id) } },
+      }),
+    ).toBe(0);
+    for (const s of shares) {
+      expect(
+        await prisma.notification.count({
+          where: {
+            userId: s.sharedWithId,
+            type: "place_shared",
+            payload: { path: ["placeId"], equals: s.placeId },
+          },
+        }),
+      ).toBe(0);
+      const tombstones = await prisma.syncTombstone.findMany({
+        where: { entityId: { in: [s.placeId, s.id] } },
+        select: { userId: true, entityType: true, entityId: true },
+      });
+      expect(tombstones).toContainEqual({
+        userId: s.sharedWithId,
+        entityType: "place",
+        entityId: s.placeId,
+      });
+      expect(tombstones).toContainEqual({
+        userId: s.sharedById,
+        entityType: "placeShare",
+        entityId: s.id,
+      });
+    }
+
+    await ensureFriends(BOB_SUB, CAROL_ID, CAROL_SUB);
+    for (const [sub, placeId] of [
+      [BOB_SUB, bobPlace],
+      [CAROL_SUB, carolPlace],
+    ]) {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(sub));
+    }
   });
 });
 

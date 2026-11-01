@@ -5,6 +5,8 @@
 // types fall back to a generic label rather than rendering nothing.
 import type { TNotification } from "./apiTypes.js";
 import { ANNOUNCEMENT } from "./contracts/inbox.js";
+import { formatBytes } from "./format.js";
+import { EXPORT_FORMAT_LABELS, type ExportFormat } from "./topoExport.js";
 
 export type NotificationLabel = {
   text: string;
@@ -28,14 +30,13 @@ const SHARED_ITEM_NOUN: Record<string, string> = {
   waypoint: "a waypoint",
   route: "a route",
   topoJob: "a LiDAR topo",
-  geoPdfJob: "a GeoPDF",
 };
 
 /**
  * Every type a Notification row is stored with, one declaration. The labels
  * below branch on them, the dev seed writes one row of each
  * (api/src/lib/seedCoverage.unit.test.ts), and the label test checks each has a
- * branch. `bulk_shared` and `geo_pdf_failed` are push-only titles and never rows.
+ * branch. `bulk_shared` is a push-only title and never a row.
  */
 export const NOTIFICATION_TYPES = [
   "friend_request",
@@ -47,7 +48,6 @@ export const NOTIFICATION_TYPES = [
   "topo_failed",
   "topo_export_complete",
   "topo_export_skipped",
-  "geo_pdf_complete",
   "egress_quota_warning",
   "egress_quota_exceeded",
   "announcement",
@@ -110,9 +110,6 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         text: str(p.jobName)
           ? `${str(p.jobName)} map ready`
           : "LiDAR map ready",
-        ...(p.osmFailed === true && {
-          detail: "Roads and labels didn't download. Try again.",
-        }),
       };
     case "topo_failed":
       return {
@@ -121,7 +118,9 @@ export function notificationLabel(n: TNotification): NotificationLabel {
           : "LiDAR map failed",
       };
     case "topo_export_complete": {
-      const format = String(p.format ?? "Topo").toUpperCase();
+      const format =
+        EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
+        String(p.format ?? "Topo").toUpperCase();
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,
@@ -130,21 +129,17 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       }
       return {
         text: `${format} export${str(p.jobName) ? ` for ${str(p.jobName)}` : ""} ready`,
+        // Older ones carry no size.
+        ...(typeof p.resultBytes === "number" &&
+          p.resultBytes > 0 && { detail: formatBytes(p.resultBytes) }),
       };
     }
+    // No longer sent (auto-export is gone); older ones stay in the inbox.
     case "topo_export_skipped":
       return {
         text: "Auto-export didn't run",
         ...(str(p.reason) && { detail: str(p.reason)! }),
       };
-    case "geo_pdf_complete":
-      if (p.status === "failed") {
-        return {
-          text: "Couldn't create GeoPDF",
-          ...(str(p.errorMessage) && { detail: str(p.errorMessage)! }),
-        };
-      }
-      return { text: "GeoPDF ready" };
     // Egress has no meter in Logjam GPS or Logjam Web - the allowance sits far
     // above real use, so these two rows are its entire user-facing surface.
     case "egress_quota_warning":
@@ -224,7 +219,6 @@ export type NotificationKind =
   | "people"
   | "topo"
   | "export"
-  | "geoPdf"
   | "message"
   | "plan"
   | "problem";
@@ -260,8 +254,6 @@ export function notificationKind(n: TNotification): NotificationKind {
       return failed ? "problem" : "export";
     case "topo_export_skipped":
       return "problem";
-    case "geo_pdf_complete":
-      return failed ? "problem" : "geoPdf";
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";

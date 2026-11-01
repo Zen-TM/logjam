@@ -250,13 +250,12 @@ function plural(count: number, one: string, many = `${one}s`): string {
 
 /** "2 places, 1 way, 340 MB": a zero is left out (shared/DESIGN.md §11). */
 export function planCountsLabel(
-  counts: { places?: number; ways?: number; maps?: number; files?: number },
+  counts: { places?: number; ways?: number; files?: number },
   size?: string,
 ): string {
   return [
     counts.places ? plural(counts.places, "place") : null,
     counts.ways ? plural(counts.ways, "way") : null,
-    counts.maps ? plural(counts.maps, "map") : null,
     counts.files ? plural(counts.files, "file") : null,
     size,
   ]
@@ -266,7 +265,7 @@ export function planCountsLabel(
 
 export function planDeleteConfirm(
   name: string,
-  counts: { places: number; ways: number; maps: number },
+  counts: { places: number; ways: number },
 ): PlanConfirmCopy {
   const things = planCountsLabel(counts);
   return {
@@ -287,7 +286,7 @@ export function planLeaveConfirm(name: string): PlanConfirmCopy {
 
 /** The leave dialog's box, priced: what deleting what the caller added frees. */
 export function planLeaveDeleteAddedLabel(
-  counts: { places: number; ways: number; maps: number },
+  counts: { places: number; ways: number },
   size?: string,
 ): string {
   return `Also delete what I added (${planCountsLabel(counts, size)})`;
@@ -392,10 +391,9 @@ export const PLAN_ITEM_VERBS = [
 export type PlanItemVerbId = (typeof PLAN_ITEM_VERBS)[number]["id"];
 
 /**
- * The verbs a caller has on one plan item: Download on a file or a map, and
- * Save a copy, for anyone; Edit and Delete on what they added, or on anything
- * for a leader or an editor, as planAccess.ts's `canChangeItem` allows. A
- * map's words are its job's, so a GeoPDF has no Edit.
+ * The verbs a caller has on one plan item: Download on a file, and Save a
+ * copy, for anyone; Edit and Delete on what they added, or on anything for a
+ * leader or an editor, as planAccess.ts's `canChangeItem` allows.
  */
 export function planItemVerbs(
   callerRole: TripPlanRole,
@@ -403,13 +401,9 @@ export function planItemVerbs(
   state: { archived: boolean },
 ): PlanVerb<PlanItemVerbId>[] {
   const changes = callerRole !== "member" || item.mine;
-  const file = item.kind === "media" || item.kind === "geoPdf";
+  const file = item.kind === "media";
   return planVerbsFor(PLAN_ITEM_VERBS, "web", callerRole, state).filter(
-    (verb) =>
-      verb.id === "download"
-        ? file
-        : verb.id === "save" ||
-          (changes && !(verb.id === "edit" && item.kind === "geoPdf")),
+    (verb) => (verb.id === "download" ? file : verb.id === "save" || changes),
   );
 }
 

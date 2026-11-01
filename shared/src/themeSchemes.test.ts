@@ -157,7 +157,6 @@ describe("normalizeUserUiPreferences", () => {
     expect(result.notifications).toEqual({
       topoEmail: false,
       exportEmail: DEFAULT_NOTIFICATION_PREFERENCES.exportEmail,
-      geoPdfEmail: DEFAULT_NOTIFICATION_PREFERENCES.geoPdfEmail,
       friendRequestInApp: DEFAULT_NOTIFICATION_PREFERENCES.friendRequestInApp,
       shareInApp: DEFAULT_NOTIFICATION_PREFERENCES.shareInApp,
     });

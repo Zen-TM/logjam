@@ -1,4 +1,4 @@
-// A plan's places, routes, files and GeoPDFs: Add a copy of something of
+// A plan's places, routes and files: Add a copy of something of
 // yours, Save a copy of something in the plan, delete. Copy and storage
 // rules are lib/planItems.ts's; access is lib/planAccess.ts's.
 import { Router, Response } from "express";
@@ -30,14 +30,12 @@ import {
 } from "../lib/planAccess";
 import {
   addPlanItem,
-  copyGeoPdf,
   copyStandaloneFile,
   deletePlanItem,
   itemNotFound,
   loadPlanItems,
 } from "../lib/planItems";
 import { toMediaItem } from "../lib/mediaPresign";
-import { geoPdfDownloadFilename, presignResult } from "../lib/geoPdfResult";
 import { defsForPlaceType } from "../lib/placeTypes";
 import {
   copyPlaceFor,
@@ -46,7 +44,6 @@ import {
 } from "./places";
 import { parseMediaDisplayName } from "./media";
 import { copyRouteFor } from "./routes";
-import { rowToView } from "./geoPdf";
 
 const router = Router({ mergeParams: true });
 
@@ -67,11 +64,9 @@ async function planRow(planId: string, kind: TripPlanItemKind, id: string) {
       ? await prisma.place.findFirst({ where })
       : kind === "route"
         ? await prisma.route.findFirst({ where })
-        : kind === "media"
-          ? await prisma.media.findFirst({
-              where: { ...where, linkedType: "none" },
-            })
-          : await prisma.geoPdfJob.findFirst({ where });
+        : await prisma.media.findFirst({
+            where: { ...where, linkedType: "none" },
+          });
   if (!row) throw itemNotFound();
   return row;
 }
@@ -91,12 +86,7 @@ router.post(
       kind: input.kind,
       id: added.id,
     });
-    const item = [
-      ...items.places,
-      ...items.routes,
-      ...items.files,
-      ...items.geoPdfs,
-    ][0];
+    const item = [...items.places, ...items.routes, ...items.files][0];
     if (!item) throw itemNotFound();
     res.status(201).json({
       item,
@@ -151,19 +141,6 @@ router.post(
         res.status(201).json(await toMediaItem(row));
         return;
       }
-      case "geoPdf": {
-        const job = await prisma.geoPdfJob.findFirst({
-          where: { id, planId: access.plan.id },
-        });
-        if (!job) throw itemNotFound();
-        const row = await copyGeoPdf(job, user.id, { ownerId: user.id });
-        const download = await presignResult(
-          row.resultKey,
-          geoPdfDownloadFilename(row.config, row.createdAt),
-        );
-        res.status(201).json(rowToView(row, download, user.id));
-        return;
-      }
     }
   },
 );
@@ -204,12 +181,7 @@ router.patch(
     await editPlanItem(access.plan.id, kind, row, req.body);
     // A delete can land between the edit's commit and this read.
     const items = await loadPlanItems(access.plan.id, { kind, id });
-    const item = [
-      ...items.places,
-      ...items.routes,
-      ...items.files,
-      ...items.geoPdfs,
-    ][0];
+    const item = [...items.places, ...items.routes, ...items.files][0];
     if (!item) throw itemNotFound();
     res.json(item);
   },
@@ -381,10 +353,7 @@ async function editFile(planId: string, id: string, body: unknown) {
   );
 }
 
-/**
- * Compare-and-set one item of the plan. A GeoPDF has nothing to edit: its
- * map is fixed when it is made.
- */
+/** Compare-and-set one item of the plan. */
 async function editPlanItem(
   planId: string,
   kind: TripPlanItemKind,
@@ -398,8 +367,6 @@ async function editPlanItem(
       return editRoute(planId, row.id, body);
     case "media":
       return editFile(planId, row.id, body);
-    case "geoPdf":
-      throw malformed("a GeoPDF can't be edited");
   }
 }
 

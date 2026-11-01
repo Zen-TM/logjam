@@ -4,6 +4,7 @@ import {
   extractionCreditLine,
   GEOPDF_OVERLAY_ATTRIBUTION,
 } from "./geoPdfBaseLayers.js";
+import { VALID_GEOPDF_BASE_LAYERS } from "./geoPdfConfig.js";
 
 describe("overlayAttributionLines", () => {
   it("credits both elevation and vegetation sources for the vegetation layer", () => {
@@ -67,5 +68,19 @@ describe("extractionCreditLine", () => {
     expect(
       extractionCreditLine("six-topo", new Date("2026-07-31T23:30:00Z")),
     ).toBe("© Department of Customer Service 2026-07-31");
+  });
+});
+
+describe("the bases a GeoPDF may print", () => {
+  // Mutation: set `printable: true` on osm-cycle, and a print sends a burst of
+  // unviewed tile reads to a server whose policy forbids them.
+  it("are the map's, but for those whose tile terms forbid an unviewed read", () => {
+    expect([...VALID_GEOPDF_BASE_LAYERS].sort()).toEqual([
+      "osm-topo",
+      "protomaps",
+      "six-base",
+      "six-imagery",
+      "six-topo",
+    ]);
   });
 });

@@ -11,9 +11,8 @@ resource "local_file" "env_local" {
     auth_mode     = "fake"
     fake_user_sub = "fake-alice-sub"
 
-    cognito_user_pool_id = var.cognito_user_pool_id
-    cognito_client_id    = var.cognito_client_id
-    cognito_region       = "ap-southeast-2"
+    oidc_issuer   = var.oidc_issuer
+    oidc_audience = var.oidc_audience
 
     db_host     = "localhost"
     db_port     = "5432"
@@ -40,5 +39,7 @@ resource "local_file" "env_local" {
     # subnet/SG values (it runs the container on DOCKER_NETWORK).
     ecs_subnets         = "subnet-local"
     ecs_security_groups = "sg-local"
+
+    smtp_ca_cert = filebase64("${local.repo_root}/infra/mailpit/dev-tls-cert.pem")
   })
 }

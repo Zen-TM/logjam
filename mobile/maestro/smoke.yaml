@@ -1,0 +1,68 @@
+# The emulator smoke check (.github/workflows/mobile-emulator.yml, driven by
+# scripts/emulator-smoke.sh): start Logjam GPS under fake auth, reach the map,
+# add a place. The script then asks Postgres whether that place synced.
+#
+# Selects by the visible text and accessibility labels the app already has, so
+# a reword of one of them breaks this flow on purpose: the flow reads the UI.
+# It asserts nothing about the map's pixels, only the chrome around it: the
+# emulator renders on a software GPU.
+# PLACE_NAME comes from the script (-e), so a rerun on a reused database cannot
+# pass on a previous run's row.
+appId: com.logjamnsw.mobile.dev
+---
+- openLink: "logjamdev://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
+# On a fresh install the crash-report question covers the screen, and the tabs
+# are not visible behind it.
+- extendedWaitUntil:
+    visible: "Not now|Places|There was a problem loading the project."
+    timeout: 120000
+# The dev client's own error screen (it could not reach Metro): its Reload retries.
+- runFlow:
+    when:
+      visible: "There was a problem loading the project."
+    commands:
+      - tapOn: "Reload"
+- extendedWaitUntil:
+    visible: "Not now|Places"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Not now"
+    commands:
+      - tapOn: "Not now"
+- extendedWaitUntil:
+    visible: "Places"
+    timeout: 30000
+- tapOn: "Map"
+- assertVisible: "Choose layers"
+- assertVisible: "Search for a place"
+- takeScreenshot: 1-map
+- tapOn: "Places"
+- tapOn: "Add a place"
+# Each field's label and its input both read "Name", "Latitude"...: index 1 is
+# the input, as in e2e/signin.yaml.
+# The whole form is on screen without scrolling (the script shrinks the display
+# density), so a field is a tap away once the keyboard is down.
+- tapOn:
+    text: "Name"
+    index: 1
+- inputText: ${PLACE_NAME}
+- hideKeyboard
+- tapOn:
+    text: "Latitude"
+    index: 1
+- inputText: "-33.5"
+- hideKeyboard
+- tapOn:
+    text: "Longitude"
+    index: 1
+- inputText: "150.25"
+- hideKeyboard
+- takeScreenshot: 2-form
+- tapOn: "Add place"
+# The list is alphabetical and the place is not on screen: the form closing is
+# the UI's half, and the script's query is the proof.
+- extendedWaitUntil:
+    notVisible: "Also known as"
+    timeout: 20000
+- takeScreenshot: 3-saved

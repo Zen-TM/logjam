@@ -11,6 +11,9 @@ export const TRIP_PAGE = {
     // The date, the title and the trip's types.
     { key: "hero" },
     { key: "places" },
+    // The linked places' river gauges, as they read on this trip's date and
+    // now. Absent when no linked place has a gauge or no date has a value.
+    { key: "gauge" },
     { key: "photos" },
     { key: "routes" },
     { key: "notes" },
@@ -18,6 +21,7 @@ export const TRIP_PAGE = {
   ],
   copy: {
     places: "Places",
+    gauge: "River gauge",
     photos: "Photos & videos",
     routes: "Routes",
     notes: "Notes",

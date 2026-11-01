@@ -36,7 +36,6 @@ const kindMeta = ({
   people: { icon: "friends", hue: notificationHue.people },
   topo: { icon: "lidar", hue: notificationHue.topo },
   export: { icon: "export", hue: notificationHue.export },
-  geoPdf: { icon: "geoPdf", hue: notificationHue.geoPdf },
   plan: { icon: "plan", hue: notificationHue.plan },
   message: { icon: "info", hue: notificationHue.message },
   problem: { icon: "warning", hue: notificationHue.problem },

@@ -444,12 +444,11 @@ describe("a plan's verbs", () => {
   });
 
   it("counts what a delete takes, leaving zeros out", () => {
-    expect(planCountsLabel({ places: 2, ways: 0, maps: 1 }, "340 MB")).toBe(
-      "2 places, 1 map, 340 MB",
+    expect(planCountsLabel({ places: 2, ways: 0 }, "340 MB")).toBe(
+      "2 places, 340 MB",
     );
     expect(
-      planDeleteConfirm("Wollangambe trip", { places: 0, ways: 0, maps: 0 })
-        .confirmBody,
+      planDeleteConfirm("Wollangambe trip", { places: 0, ways: 0 }).confirmBody,
     ).toBe(
       "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
     );
@@ -593,7 +592,7 @@ describe("a plan's items", () => {
 
   // Mutation: drop `whenArchived` from Save a copy, and an archived plan's
   // things can no longer be kept, which the API allows.
-  it("keeps Save a copy on an archived plan, and gives a map no Edit", () => {
+  it("keeps Save a copy on an archived plan", () => {
     expect(
       ids(
         planItemVerbs(
@@ -603,15 +602,12 @@ describe("a plan's items", () => {
         ),
       ),
     ).toEqual(["save"]);
-    expect(
-      ids(planItemVerbs("leader", { kind: "geoPdf", mine: true }, live)),
-    ).toEqual(["download", "save", "delete"]);
   });
 
   // Mutation: offer Download on every kind, and a place's ⋯ has a verb with
   // nothing to fetch; drop its `whenArchived`, and an archived plan's
   // files can't be had.
-  it("puts Download first on a file or a map, archived plans too", () => {
+  it("puts Download first on a file, archived plans too", () => {
     expect(
       ids(planItemVerbs("member", { kind: "media", mine: false }, live)),
     ).toEqual(["download", "save"]);
@@ -619,7 +615,7 @@ describe("a plan's items", () => {
       ids(
         planItemVerbs(
           "member",
-          { kind: "geoPdf", mine: false },
+          { kind: "media", mine: false },
           { archived: true },
         ),
       ),
@@ -653,11 +649,6 @@ describe("what Add a copy offers", () => {
       { id: "f1", linkedPlaceId: null },
       { id: "f2", linkedPlaceId: "p1" },
     ],
-    geoPdfs: [
-      { id: "g1", status: "completed", syncRole: "owner" as const },
-      { id: "g2", status: "running", syncRole: "owner" as const },
-      { id: "g3", status: "completed", syncRole: "shared" as const },
-    ],
   };
   const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 
@@ -684,12 +675,11 @@ describe("what Add a copy offers", () => {
     expect(tripPlanAddCopyPrice(null, "5.0 GB")).toBe("You have 5.0 GB left.");
   });
 
-  // Mutation: drop the owner or status checks, and the API's refusal of
-  // someone else's route or an unfinished map is the user's to read.
-  it("offers only the caller's own routes and their finished maps", () => {
+  // Mutation: drop the owner check, and the API's refusal of someone
+  // else's route is the user's to read.
+  it("offers only the caller's own routes", () => {
     const state = { me: "me", tickedPlaceIds: [], copyMedia: true };
     expect(ids(tripPlanAddable(own, state).routes)).not.toContain("r3");
-    expect(ids(tripPlanAddable(own, state).geoPdfs)).toEqual(["g1"]);
   });
 });
 
@@ -803,9 +793,8 @@ describe("tripPlanCounts", () => {
         places: [1, 2],
         routes: [1],
         files: [1, 2],
-        geoPdfs: [],
       }),
-    ).toEqual({ places: 2, ways: 3, maps: 0 });
+    ).toEqual({ places: 2, ways: 3 });
   });
 });
 
@@ -822,8 +811,7 @@ describe("tripPlanFilesChargedTo", () => {
     expect(
       tripPlanFilesChargedTo(
         {
-          files: [file(tom, "100")],
-          geoPdfs: [file(ann, "50")],
+          files: [file(tom, "100"), file(ann, "50")],
           places: [{ media: [file(tom, "20"), file(ann, "5")] }],
         } as never,
         "tom",
@@ -999,11 +987,13 @@ describe("Add a copy's footer and outcome", () => {
   it("sends only ticks still offered, in list order", () => {
     const place = { kind: "place", id: "p" };
     const unticked = { kind: "route", id: "q" };
-    const pdf = { kind: "geoPdf", id: "g" };
-    const ticked = [pdf, { kind: "route", id: "r" }, place].map(tripPlanAddKey);
-    expect(tripPlanAddPicks([place, unticked, pdf], ticked)).toEqual([
+    const file = { kind: "media", id: "g" };
+    const ticked = [file, { kind: "route", id: "r" }, place].map(
+      tripPlanAddKey,
+    );
+    expect(tripPlanAddPicks([place, unticked, file], ticked)).toEqual([
       place,
-      pdf,
+      file,
     ]);
   });
 

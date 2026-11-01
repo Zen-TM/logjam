@@ -2,7 +2,7 @@
 // the API will copy (the caller's own, already on the server), then shared
 // `tripPlanAddable`'s rule (a route or file a ticked place brings is not
 // offered twice). The API 404s anything else, which stops a run mid-loop.
-import { tripPlanAddable, type GeoPdfJobView } from "@logjam/shared";
+import { tripPlanAddable } from "@logjam/shared";
 
 import type {
   MirrorMedia,
@@ -16,7 +16,6 @@ export function addableFromMirror(
     routes: readonly MirrorRoute[];
     /** Imports and recordings. */
     files: readonly MirrorMedia[];
-    geoPdfs: readonly GeoPdfJobView[];
   },
   state: {
     me: string | null;
@@ -53,7 +52,6 @@ export function addableFromMirror(
           ...file,
           linkedPlaceId: file.linkedType === "place" ? file.linkedId : null,
         })),
-      geoPdfs: [...own.geoPdfs],
     },
     {
       me: state.me,

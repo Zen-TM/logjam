@@ -369,10 +369,6 @@ async function importStagedFile(
     updatedAt: new Date().toISOString(),
   };
   await insertGeoPdfImport(record);
-  // The id as soon as the row exists, before the copy that can be cancelled,
-  // killed or fail: a plan links its import on it (plans/planFiles.ts,
-  // `linkingProgress`). Guard: importPipeline.test.ts.
-  onProgress({ phase: "copying", fraction: 0, label, importId: record.id });
 
   if (!dir.exists) dir.create({ intermediates: true });
   const sourceFile = new File(dir, "source.pdf");
