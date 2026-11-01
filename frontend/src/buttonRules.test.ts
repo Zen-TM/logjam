@@ -20,6 +20,10 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason: "type-to-confirm: the user's own words are the confirmation",
   },
   {
+    file: "components/plans/PlanDetailPanel.tsx",
+    reason: "Add a form at the cap of 20: a limit, not validation, and says so",
+  },
+  {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
     reason: "share and delete are one at a time: one in flight locks the other",
   },

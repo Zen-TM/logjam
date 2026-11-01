@@ -166,8 +166,9 @@ export function Row({
   /** An accent edge down the left side: a property of the row, such as
    *  unread. Its inset shadow is composed with the selected outline rather
    *  than replaced by it, so a selected row keeps it, and the row's box does
-   *  not change size when it comes and goes. */
-  accentEdge?: boolean;
+   *  not change size when it comes and goes. "warning" wears the warning
+   *  tone instead (a form owed within the week). */
+  accentEdge?: boolean | "warning";
   disabled?: boolean;
 }) {
   const subtitleId = useId();
@@ -180,7 +181,7 @@ export function Row({
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
       data-selected={selected}
-      data-accent-edge={accentEdge}
+      data-accent-edge={String(accentEdge)}
       data-disabled={disabled}
       {...rest}
     >

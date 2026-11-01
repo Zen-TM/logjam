@@ -269,7 +269,7 @@ describe("a press on the map while a plan is open", () => {
   // the way page replaces the plan, its bar and its things. Or send a
   // place's file to its place, and with Bring its photos off the line
   // pressed doesn't come.
-  it("asks Add a copy for the user's own file, or a track's place", () => {
+  it("asks Add a place or way for the user's own file, or a track's place", () => {
     expect(planMapPress({ kind: "track", id: "f1" }, own, "me")).toEqual({
       kind: "media",
       id: "f1",
@@ -286,7 +286,7 @@ describe("a press on the map while a plan is open", () => {
   });
 
   // Mutation: drop the owner check, and a friend's route shared with the
-  // user opens an Add a copy the API refuses.
+  // user opens an Add a place or way the API refuses.
   it("asks nothing for the plan's own things or someone else's", () => {
     expect(planMapPress({ kind: "route", id: "r1" }, own, "me")).toEqual({
       kind: "route",

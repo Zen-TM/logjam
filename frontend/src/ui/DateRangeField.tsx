@@ -1,21 +1,16 @@
 import { useState } from "react";
-import {
-  todayDateKey,
-  TRIP_PLAN_PAGE,
-  tripPlanDatesLabel,
-} from "@logjam/shared";
+import { pickDay, todayDateKey, tripPlanDatesLabel } from "@logjam/shared";
 import { Button, IconButton } from "./Button";
-import { pickDay } from "@logjam/shared";
 import { inRange, monthGrid } from "./dateRange";
 import classes from "./DateRangeField.module.css";
 
-const copy = TRIP_PLAN_PAGE.copy;
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 /**
- * A date range in one calendar: the first click is the start, the second the
- * end, and a one-day trip is the start with "Just this day" (or the same day
- * pressed again). A one-day trip has `end` null. Days are "YYYY-MM-DD".
+ * A date range in one calendar: the first click is the start, a later day the
+ * end, and a one-day trip is the start alone (`end` null). A day before the
+ * start starts over. Days are "YYYY-MM-DD". The words come in as `labels`, so
+ * the kit holds none of a page's copy.
  */
 export function DateRangeField({
   label,
@@ -23,21 +18,20 @@ export function DateRangeField({
   end,
   onChange,
   hint,
+  labels,
 }: {
   label: string;
   start: string | null;
   end: string | null;
   onChange: (start: string | null, end: string | null) => void;
   hint?: string;
+  labels: { none: string; clear: string; prevMonth: string; nextMonth: string };
 }) {
   const first = start ?? todayDateKey();
   const [shown, setShown] = useState({
     year: Number(first.slice(0, 4)),
     month: Number(first.slice(5, 7)) - 1,
   });
-  // After the first click the next one ends the range, until the user says
-  // the trip is one day.
-  const [awaitingEnd, setAwaitingEnd] = useState(false);
   const range = { start, end };
 
   const page = (delta: number) =>
@@ -47,8 +41,6 @@ export function DateRangeField({
     });
   const pick = (day: string) => {
     const next = pickDay(range, day);
-    // The same day again confirms a one-day trip.
-    setAwaitingEnd(next.end === null && day !== start);
     onChange(next.start, next.end);
   };
   const monthLabel = new Date(
@@ -63,12 +55,12 @@ export function DateRangeField({
     <fieldset className={classes.field}>
       <legend className={classes.label}>{label}</legend>
       <p className={classes.summary}>
-        {start ? tripPlanDatesLabel(start, end) : copy.datesNone}
+        {start ? tripPlanDatesLabel(start, end) : labels.none}
       </p>
       <div className={classes.head}>
         <IconButton
           icon="back"
-          label={copy.datesPrevMonth}
+          label={labels.prevMonth}
           onClick={() => page(-1)}
         />
         <span className={classes.month} aria-live="polite">
@@ -76,7 +68,7 @@ export function DateRangeField({
         </span>
         <IconButton
           icon="forward"
-          label={copy.datesNextMonth}
+          label={labels.nextMonth}
           onClick={() => page(1)}
         />
       </div>
@@ -101,6 +93,7 @@ export function DateRangeField({
                 .filter(Boolean)
                 .join(" ")}
               aria-pressed={inRange(range, day)}
+              aria-current={day === todayDateKey() ? "date" : undefined}
               aria-label={new Date(`${day}T00:00:00Z`).toLocaleDateString(
                 undefined,
                 { dateStyle: "full", timeZone: "UTC" },
@@ -113,20 +106,8 @@ export function DateRangeField({
         })}
       </div>
       <div className={classes.actions}>
-        {awaitingEnd && (
-          <Button onClick={() => setAwaitingEnd(false)}>
-            {copy.datesJustThisDay}
-          </Button>
-        )}
         {start && (
-          <Button
-            onClick={() => {
-              setAwaitingEnd(false);
-              onChange(null, null);
-            }}
-          >
-            {copy.datesClear}
-          </Button>
+          <Button onClick={() => onChange(null, null)}>{labels.clear}</Button>
         )}
       </div>
       {hint && <p className={classes.summary}>{hint}</p>}

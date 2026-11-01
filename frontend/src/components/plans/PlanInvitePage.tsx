@@ -208,7 +208,7 @@ export default function PlanInvitePage({
       <>
         <div className={classes.block}>
           <p className={classes.note}>{copy.linkHint}</p>
-          <div className={classes.suggestions}>
+          <div className={classes.buttonRow}>
             <Button
               variant="outline"
               icon="link"

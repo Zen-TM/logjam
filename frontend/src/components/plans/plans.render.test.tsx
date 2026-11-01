@@ -8,12 +8,17 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
+  planAddVerbLabel,
+  TRIP_PLAN_MAX_FORMS,
   mediaSkippedSentence,
+  MAX_PLACES_PER_TRIP,
+  TRIP_PLACES_CAP_SENTENCE,
   todayDateKey,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
+  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
   tripPlanInPlanNow,
   TRIP_PLANS_LIST,
   type TripPlanFormView,
@@ -41,6 +46,7 @@ import PlanInvitePage from "./PlanInvitePage";
 import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
+import PlanAnswerDialog from "./PlanAnswerDialog";
 import PlanFormBuilderDialog from "./PlanFormBuilderDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
@@ -226,7 +232,6 @@ function renderPanel(
       currentUser={null}
       onOwnChanged={() => {}}
       onOpenItem={() => {}}
-      copyPlaceMedia
       addCopyRequest={null}
       onAddCopyRequestConsumed={() => {}}
       onBack={() => {}}
@@ -343,6 +348,68 @@ describe("Edit form over another leader's save", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(TRIP_PLAN_FORMS.copy.questionsChanged),
+    ).toBeTruthy();
+  });
+});
+
+describe("a plan's page ends each list with its add button", () => {
+  // Mutation: drop the ListEnd, and a long write-up has no way to add below.
+  it("ends the write-up with Add a write-up section", () => {
+    renderPanel({
+      view: {
+        ...plan,
+        myRole: "leader",
+        sections: [{ id: "s1", title: "Gear", body: "", position: 0 } as never],
+      },
+    });
+    expect(
+      screen.getAllByRole("button", { name: planAddVerbLabel("section") })
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  // Mutation: drop `disabled={formsFull}`, and the API refuses the 21st form.
+  it("stops offering Add a form at the cap", () => {
+    const forms = Array.from({ length: TRIP_PLAN_MAX_FORMS }, (_, i) => ({
+      ...contacts,
+      id: `f${i}`,
+    }));
+    renderPanel({ view: { ...plan, myRole: "leader", forms } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    const add = screen.getByRole("button", { name: planAddVerbLabel("form") });
+    expect(
+      (add as HTMLButtonElement).disabled ||
+        add.getAttribute("aria-disabled") === "true",
+    ).toBe(true);
+  });
+});
+
+describe("answering a form whose audience changes", () => {
+  // Mutation: drop the sentence, and the answer goes to a wider audience than
+  // the person read.
+  it("says who sees the answers changed, before Send", () => {
+    const view = (shown: TripPlanFormView) => (
+      <PlanAnswerDialog
+        open
+        form={shown}
+        onSubmit={async () => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />
+    );
+    const { rerender } = render(view(contacts));
+    expect(
+      screen.queryByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
+    ).toBeNull();
+    rerender(
+      view({
+        ...contacts,
+        visibleTo: "members",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+      }),
+    );
+    expect(
+      screen.getByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
     ).toBeTruthy();
   });
 });
@@ -471,7 +538,6 @@ describe("joining a plan", () => {
     const onJoin = vi.fn(async () => {});
     render(
       <PlanJoinDialog
-        via="link"
         plan={{
           name: "Wollangambe trip",
           startDate: null,
@@ -503,10 +569,24 @@ describe("the forms to answer", () => {
   // told a form is waiting.
   it("shows a member the card, warning in the last week, and opens the form", () => {
     renderPanel({ view: unanswered, myUserId: "u2" });
-    const card = screen.getByText("1 form to answer").closest("[data-urgent]");
-    expect(card?.getAttribute("data-urgent")).toBe("true");
+    const card = screen
+      .getByText("1 form to answer")
+      .closest("[data-accent-edge]");
+    expect(card?.getAttribute("data-accent-edge")).toBe("warning");
     fireEvent.click(screen.getByRole("button", { name: contacts.title }));
     expect(screen.getByRole("dialog", { name: contacts.title })).toBeTruthy();
+  });
+
+  // Mutation: derive the pill from `!form.myAnswer` alone, and a finished trip
+  // keeps warning on every form while the card is gone.
+  it("owes nothing once the trip is over: no card, no pill", () => {
+    renderPanel({
+      view: { ...unanswered, startDate: "2000-01-01", endDate: "2000-01-02" },
+      myUserId: "u2",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(screen.queryByText("1 form to answer")).toBeNull();
+    expect(screen.queryByText("Not answered")).toBeNull();
   });
 
   it("is calm far ahead", () => {
@@ -517,8 +597,8 @@ describe("the forms to answer", () => {
     expect(
       screen
         .getByText("1 form to answer")
-        .closest("[data-urgent]")
-        ?.getAttribute("data-urgent"),
+        .closest("[data-accent-edge]")
+        ?.getAttribute("data-accent-edge"),
     ).toBe("false");
   });
 
@@ -528,7 +608,8 @@ describe("the forms to answer", () => {
     renderPanel({ view: { ...unanswered, myRole: "leader" }, myUserId: "u1" });
     fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
     expect(screen.getByText(/0 of 2 answered/)).toBeTruthy();
-    expect(screen.getByText(/Not answered yet: alice, bob/)).toBeTruthy();
+    // The row stays a row; the missing names are on the form's page.
+    expect(screen.queryByText(/Not answered yet/)).toBeNull();
   });
 });
 
@@ -625,7 +706,7 @@ describe("an item's edit refused", () => {
   });
 });
 
-describe("Add a copy stopped halfway", () => {
+describe("Add a place or way stopped halfway", () => {
   // Mutation: drop `onAdded` from the partial failure, and the copy that
   // landed is missing from the plan until something else refetches it.
   it("says what landed and why it stopped, and shows what landed", async () => {
@@ -687,7 +768,6 @@ describe("Start a trip log after a copy failed", () => {
       <PlanTripLogPlacesDialog
         planId="p1"
         places={[place("a", "Claustral"), place("b", "Ranon")]}
-        copyMedia
         onCopied={onCopied}
         onStale={onStale}
         onDone={onDone}
@@ -714,5 +794,43 @@ describe("Start a trip log after a copy failed", () => {
     );
     expect(savePlanItem).toHaveBeenCalledTimes(3);
     expect(toast.error).toHaveBeenCalledWith(mediaSkippedSentence(2, false));
+  });
+});
+
+describe("Start a trip log with many places", () => {
+  // Mutation: drop `disabled`, and the cap is only an error after the tick.
+  it("dims the unticked places at the cap", () => {
+    const cap = MAX_PLACES_PER_TRIP;
+    const places = Array.from(
+      { length: cap + 1 },
+      (_, i) =>
+        ({
+          kind: "place",
+          id: `p${i}`,
+          name: `Place ${i}`,
+          placeTypeId: "canyon",
+          media: [],
+        }) as unknown as TripPlanPlace,
+    );
+    render(
+      <PlanTripLogPlacesDialog
+        planId="p1"
+        places={places}
+        onCopied={() => {}}
+        onStale={() => {}}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    for (let i = 0; i < cap; i++)
+      fireEvent.click(screen.getByRole("checkbox", { name: `Place ${i}` }));
+    expect(
+      (
+        screen.getByRole("checkbox", {
+          name: `Place ${cap}`,
+        }) as HTMLInputElement
+      ).disabled,
+    ).toBe(true);
+    expect(screen.getByText(TRIP_PLACES_CAP_SENTENCE)).toBeTruthy();
   });
 });

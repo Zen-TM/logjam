@@ -7,13 +7,13 @@ import {
   formatBytes,
   planAddVerbLabel,
   planMemberVerbs,
+  tripPlanRoleWord,
   planRemoveConfirm,
   planSelfRoleConfirm,
   planTurnDownConfirm,
   PLAN_ROLE_OF_VERB,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_JOIN,
-  TRIP_PLANS_LIST,
   tripPlanFilesChargedTo,
   tripPlanGoing,
   tripPlanLetInMessage,
@@ -119,11 +119,7 @@ export default function PlanPeople({
   };
 
   const roleWord = (member: TripPlanMemberView) =>
-    member.role === "leader"
-      ? TRIP_PLANS_LIST.copy.pillLeader
-      : member.role === "editor"
-        ? TRIP_PLANS_LIST.copy.pillEditor
-        : null;
+    member.role === "member" ? null : tripPlanRoleWord(member.role);
 
   const removingFiles = removing
     ? tripPlanFilesChargedTo(plan, removing.user.id)
@@ -210,7 +206,9 @@ export default function PlanPeople({
           })}
         </>
       )}
-      {headed && <SectionHeader title={copy.peopleGoing} />}
+      {headed && (
+        <SectionHeader title={copy.peopleGoing} count={going.length} />
+      )}
       {going.map((member) => {
         const verbs = planMemberVerbs(
           plan.myRole,

@@ -60,6 +60,10 @@
   --edge: inset 3px 0 0 var(--color-accent);
 }
 
+.row[data-accent-edge="warning"] {
+  --edge: inset 3px 0 0 var(--color-warning);
+}
+
 /* Its own line under the text, lined up with the title rather than the tile
    (the tile's 32px and the row's gap), and above the stretched button so
    its controls stay their own. */

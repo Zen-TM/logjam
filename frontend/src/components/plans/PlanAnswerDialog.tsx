@@ -13,6 +13,7 @@ import {
   TRIP_PLAN_FORMS,
   TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH,
   TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH,
+  TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
   tripPlanVisibilityLine,
   type TripPlanAnswerDraft as AnswerDraft,
   type TripPlanAnswers,
@@ -195,7 +196,11 @@ function AnswerForm({
   const [opened] = useState(draft);
   // The form as the draft was last fitted to it.
   const [fittedTo, setFittedTo] = useState(form);
+  // Who sees the answers moved under the person typing: said before Send,
+  // which now carries the new visibility.
+  const [visibilityChanged, setVisibilityChanged] = useState(false);
   if (form.updatedAt !== fittedTo.updatedAt) {
+    if (fittedTo.visibleTo !== form.visibleTo) setVisibilityChanged(true);
     setFittedTo(form);
     setDraft(fitAnswerDraft(fittedTo.questions, form.questions, draft));
   }
@@ -267,6 +272,11 @@ function AnswerForm({
               setError(null);
             }}
           />
+          {visibilityChanged && (
+            <p className={classes.note} role="status">
+              {TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE}
+            </p>
+          )}
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>

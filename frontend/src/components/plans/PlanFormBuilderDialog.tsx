@@ -1,4 +1,4 @@
-// A leader's form builder (Logjam Web only, `PLAN_FORM_VERBS`): a new form
+// A leader's form builder (`PLAN_FORM_VERBS`; Logjam GPS has its own sheet): a new form
 // starts from a preset or blank, then every part can change. One form for
 // making and editing (shared/DESIGN.md §10); an edit sends each changed part
 // as the value last seen and the new one. When the plan is fetched again

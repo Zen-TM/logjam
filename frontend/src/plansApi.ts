@@ -176,7 +176,7 @@ export const redeemInviteLink = (token: string) =>
     body: { token },
   });
 
-/** Add a copy of one of the caller's own things. */
+/** Add one of the caller's own things. */
 export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
   apiFetch<{
     item: TripPlanItem;
@@ -195,7 +195,8 @@ export const savePlanItem = (
   // The copy, as the kind's own copy route answers.
   apiFetch<{ id: string; mediaSkipped?: number; mediaOutOfSpace?: true }>(
     `${item(planId, kind, itemId)}/save`,
-    { method: "POST", body: {} },
+    // A plan's copy always brings the photos (decision on #439).
+    { method: "POST", body: { copyMedia: true } },
   );
 export const patchPlanItem = (
   planId: string,

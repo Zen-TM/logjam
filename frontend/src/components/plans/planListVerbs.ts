@@ -19,12 +19,3 @@ export function listVerbs(plan: TripPlanSummary) {
       (verb.id !== "leave" || plan.role !== "leader"),
   );
 }
-
-/** What a selection can all do: the verbs every picked plan has. */
-export function bulkVerbs(plans: TripPlanSummary[]) {
-  if (plans.length === 0) return [];
-  const [first, ...rest] = plans.map(listVerbs);
-  return first.filter((verb) =>
-    rest.every((verbs) => verbs.some((other) => other.id === verb.id)),
-  );
-}
