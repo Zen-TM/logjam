@@ -356,6 +356,14 @@ export const TRIP_PLAN_PAGE = {
     roleLeader: "You're a leader",
     roleEditor: "You're an editor",
 
+    // The one-calendar date range field.
+    datesField: "Dates",
+    datesNone: "No dates yet",
+    datesPrevMonth: "Previous month",
+    datesNextMonth: "Next month",
+    datesJustThisDay: "Just this day",
+    datesClear: "Clear dates",
+
     views: "Plan view",
     viewWriteUp: "Write-up",
     viewItems: "Map",
@@ -387,6 +395,8 @@ export const TRIP_PLAN_PAGE = {
     itemsEmpty: "Nothing here yet. Add a place or way of yours.",
     addCopyLine:
       "Everyone in this plan, including people who join later, can see and copy what you add to it.",
+    searchByName: "Search by name",
+    searchNoMatch: "Nothing matches that name.",
     photosCountToo: "Photos count too.",
     addCopyFailed: "Couldn't add that.",
     nothingToAdd: "Nothing of yours here yet.",
@@ -402,6 +412,8 @@ export const TRIP_PLAN_PAGE = {
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
     itemDownloadHint: "Click to download",
+    placeTypeFallback: "Place",
+    placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
 
@@ -946,6 +958,10 @@ export const TRIP_PLAN_FORMS_URGENT_DAYS = 7;
 
 /** "1 form to answer", "3 forms to answer": the plan page's card and the
  *  plans list's card say it the same way. Empty for none. */
+export function tripPlanCopyCoordinatesLabel(name: string): string {
+  return `Copy the coordinates of ${name}`;
+}
+
 export function tripPlanFormsToAnswerLine(count: number): string {
   if (count <= 0) return "";
   return count === 1 ? "1 form to answer" : `${count} forms to answer`;

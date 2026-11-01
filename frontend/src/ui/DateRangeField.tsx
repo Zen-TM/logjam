@@ -1,9 +1,14 @@
 import { useState } from "react";
-import { todayDateKey, tripPlanDatesLabel } from "@logjam/shared";
+import {
+  todayDateKey,
+  TRIP_PLAN_PAGE,
+  tripPlanDatesLabel,
+} from "@logjam/shared";
 import { Button, IconButton } from "./Button";
 import { inRange, monthGrid, pickDay } from "./dateRange";
 import classes from "./DateRangeField.module.css";
 
+const copy = TRIP_PLAN_PAGE.copy;
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
 /**
@@ -57,18 +62,22 @@ export function DateRangeField({
     <fieldset className={classes.field}>
       <legend className={classes.label}>{label}</legend>
       <p className={classes.summary}>
-        {start ? tripPlanDatesLabel(start, end) : "No dates yet"}
+        {start ? tripPlanDatesLabel(start, end) : copy.datesNone}
       </p>
       <div className={classes.head}>
         <IconButton
           icon="back"
-          label="Previous month"
+          label={copy.datesPrevMonth}
           onClick={() => page(-1)}
         />
         <span className={classes.month} aria-live="polite">
           {monthLabel}
         </span>
-        <IconButton icon="forward" label="Next month" onClick={() => page(1)} />
+        <IconButton
+          icon="forward"
+          label={copy.datesNextMonth}
+          onClick={() => page(1)}
+        />
       </div>
       <div className={classes.grid}>
         {WEEKDAYS.map((day, i) => (
@@ -104,7 +113,9 @@ export function DateRangeField({
       </div>
       <div className={classes.actions}>
         {awaitingEnd && (
-          <Button onClick={() => setAwaitingEnd(false)}>Just this day</Button>
+          <Button onClick={() => setAwaitingEnd(false)}>
+            {copy.datesJustThisDay}
+          </Button>
         )}
         {start && (
           <Button
@@ -113,7 +124,7 @@ export function DateRangeField({
               onChange(null, null);
             }}
           >
-            Clear dates
+            {copy.datesClear}
           </Button>
         )}
       </div>

@@ -10,7 +10,9 @@ import {
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
   SYSTEM_PLACE_TYPES,
+  TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
+  tripPlanCopyCoordinatesLabel,
   userFieldValues,
   type TripPlanPlace,
 } from "@logjam/shared";
@@ -27,6 +29,7 @@ import PlaceSlideshow from "../media/PlaceSlideshow";
 import classes from "./plans.module.css";
 
 const copy = PLACE_PAGE.copy;
+const planCopy = TRIP_PLAN_PAGE.copy;
 
 export default function PlanPlaceDialog({
   place,
@@ -54,7 +57,7 @@ export default function PlanPlaceDialog({
       window.setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error(err);
-      toast.error("Couldn't copy the coordinates.");
+      toast.error(planCopy.placeCopyFailed);
     }
   }
 
@@ -67,7 +70,10 @@ export default function PlanPlaceDialog({
     >
       <div className={classes.form}>
         <p className={classes.note}>
-          {[type?.name ?? "Place", tripPlanAddedByLine(place.addedBy)]
+          {[
+            type?.name ?? planCopy.placeTypeFallback,
+            tripPlanAddedByLine(place.addedBy),
+          ]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -90,7 +96,7 @@ export default function PlanPlaceDialog({
           trailing={
             <IconButton
               icon={copied ? "done" : "copy"}
-              label={`Copy the coordinates of ${place.name}`}
+              label={tripPlanCopyCoordinatesLabel(place.name)}
               onClick={() => void copyPosition()}
             />
           }

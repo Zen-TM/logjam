@@ -140,11 +140,6 @@ export function formPatch(
     patch.questions = { from: seen.questions, to: now.questions };
   if (now.visibleTo !== seen.visibleTo)
     patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };
-  if (now.requiredToJoin !== seen.requiredToJoin)
-    patch.requiredToJoin = {
-      from: seen.requiredToJoin,
-      to: now.requiredToJoin,
-    };
   return patch;
 }
 

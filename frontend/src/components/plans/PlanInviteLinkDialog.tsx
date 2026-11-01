@@ -63,10 +63,9 @@ export default function PlanInviteLinkDialog({
     <PlanJoinDialog
       via="link"
       plan={{ ...preview, person: preview.leader.username }}
-      onStale={() => void ask(token)}
       onClose={() => setInvite(null)}
-      onJoin={async (answers) => {
-        const result = await redeemInviteLink(token, answers);
+      onJoin={async () => {
+        const result = await redeemInviteLink(token);
         setInvite(null);
         if (result.status === "active") onOpenPlan(result.planId, false);
         else {

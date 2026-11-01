@@ -4,7 +4,6 @@
 // (`planItemVerbs`).
 import { useState } from "react";
 import {
-  formatBytes,
   mediaSkippedSentence,
   planAddVerbLabel,
   planItemDeleteConfirm,
@@ -22,7 +21,6 @@ import {
 } from "@logjam/shared";
 import {
   Button,
-  Checkbox,
   EmptyState,
   IconButton,
   IconTile,
@@ -79,7 +77,6 @@ export default function PlanItems({
   onSaved,
   onAddCopy,
   onOpen,
-  copyPlaceMedia,
 }: {
   plan: TripPlanView;
   myUserId: string | null;
@@ -91,12 +88,9 @@ export default function PlanItems({
   onAddCopy: () => void;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
-  /** The caller's remembered Bring its photos (`uiPreferences`). */
-  copyPlaceMedia: boolean;
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState<TripPlanItem | null>(null);
-  const [bringPhotos, setBringPhotos] = useState(copyPlaceMedia);
   const [deleting, setDeleting] = useState<TripPlanItem | null>(null);
   const [viewing, setViewing] = useState<TripPlanPlace | null>(null);
   const [editing, setEditing] = useState<TripPlanItem | null>(null);
@@ -132,10 +126,7 @@ export default function PlanItems({
 
   const runners = (item: TripPlanItem): Record<PlanItemVerbId, () => void> => ({
     download: () => downloadFile(fileUrl(item)!),
-    save: () => {
-      setBringPhotos(copyPlaceMedia);
-      setSaving(item);
-    },
+    save: () => setSaving(item),
     edit: () => setEditing(item),
     delete: () => setDeleting(item),
   });
@@ -146,10 +137,6 @@ export default function PlanItems({
     </Button>
   );
 
-  const photoBytes =
-    saving?.kind === "place"
-      ? saving.media.reduce((sum, photo) => sum + Number(photo.sizeBytes), 0)
-      : 0;
   const deleteCopy = deleting
     ? planItemDeleteConfirm(
         look(deleting).title,
@@ -220,19 +207,7 @@ export default function PlanItems({
       <ConfirmDialog
         open={saving != null}
         title={saveLabel}
-        message={
-          <>
-            <p>{copy.saveCopyLine}</p>
-            {photoBytes > 0 && (
-              <Checkbox
-                label={copy.bringPhotos}
-                description={formatBytes(photoBytes)}
-                checked={bringPhotos}
-                onChange={setBringPhotos}
-              />
-            )}
-          </>
-        }
+        message={<p>{copy.saveCopyLine}</p>}
         confirmLabel={saveLabel}
         confirmColor="primary"
         busy={busy}
@@ -241,13 +216,7 @@ export default function PlanItems({
           if (!saving) return;
           const item = saving;
           void run(
-            () =>
-              savePlanItem(
-                plan.id,
-                item.kind,
-                item.id,
-                item.kind === "place" ? bringPhotos : undefined,
-              ),
+            () => savePlanItem(plan.id, item.kind, item.id),
             copy.saveCopyFailed,
           ).then((done) => {
             setSaving(null);

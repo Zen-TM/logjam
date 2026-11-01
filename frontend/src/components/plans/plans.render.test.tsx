@@ -9,8 +9,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 import {
   mediaSkippedSentence,
+  todayDateKey,
   TRIP_PLAN_FORMS,
-  TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
@@ -261,7 +261,6 @@ const contacts: TripPlanFormView = {
   preset: null,
   questions: [{ id: "name", kind: "text", label: "Name", required: true }],
   visibleTo: "leaders",
-  requiredToJoin: true,
   position: 0,
   updatedAt: "2026-10-01T00:00:00.000Z",
   myAnswer: null,
@@ -283,6 +282,7 @@ describe("a form's page, for a leader", () => {
         form={contacts}
         role={plan.myRole}
         archived={false}
+        tally={[]}
         members={[
           ...plan.members,
           {
@@ -446,7 +446,6 @@ describe("a plan link opened by someone already invited", () => {
       startDate: null,
       endDate: null,
       leader: { id: "u1", username: "alice" },
-      requiredForms: [],
       membership: "invited",
     } as never);
     window.history.replaceState({}, "", `/#plan-invite=${"c".repeat(43)}`);
@@ -464,12 +463,11 @@ describe("a plan link opened by someone already invited", () => {
   });
 });
 
-describe("joining a plan with Safety contacts to fill in", () => {
-  // Mutation: drop `preset` from the join forms (the API's joinForms or the
-  // type), and a joiner hands over a contact's phone without being told it
-  // may be printed for someone not on the trip.
-  it("says members may print the answers", () => {
-    const contacts = TRIP_PLAN_FORM_PRESETS.safetyContacts;
+describe("joining a plan", () => {
+  // Mutation: render a form's fields in PlanJoinDialog again, and joining
+  // waits on answers the plan no longer requires.
+  it("asks for nothing but the press", async () => {
+    const onJoin = vi.fn(async () => {});
     render(
       <PlanJoinDialog
         via="link"
@@ -478,25 +476,58 @@ describe("joining a plan with Safety contacts to fill in", () => {
           startDate: null,
           endDate: null,
           person: "alice",
-          requiredForms: [
-            {
-              id: "f1",
-              title: contacts.title,
-              preset: "safetyContacts",
-              questions: contacts.questions,
-              visibleTo: "members",
-              updatedAt: "2026-10-19T00:00:00.000Z",
-            },
-          ],
         }}
-        onJoin={async () => {}}
-        onStale={() => {}}
+        onJoin={onJoin}
         onClose={() => {}}
       />,
     );
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_JOIN.copy.askToJoin }),
+    );
+    await waitFor(() => expect(onJoin).toHaveBeenCalledWith());
+  });
+});
+
+describe("the forms to answer", () => {
+  const unanswered: TripPlanView = {
+    ...plan,
+    myRole: "member",
+    startDate: todayDateKey(),
+    endDate: null,
+    forms: [{ ...contacts, answers: [] }],
+  };
+
+  // Mutation: drop the card from the `notices` section, and a member is never
+  // told a form is waiting.
+  it("shows a member the card, warning in the last week, and opens the form", () => {
+    renderPanel({ view: unanswered, myUserId: "u2" });
+    const card = screen.getByText("1 form to answer").closest("[data-urgent]");
+    expect(card?.getAttribute("data-urgent")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: contacts.title }));
+    expect(screen.getByRole("dialog", { name: contacts.title })).toBeTruthy();
+  });
+
+  it("is calm far ahead", () => {
+    renderPanel({
+      view: { ...unanswered, startDate: "2099-01-01" },
+      myUserId: "u2",
+    });
     expect(
-      screen.getByText(/Members may print them for someone not on the trip/),
-    ).toBeTruthy();
+      screen
+        .getByText("1 form to answer")
+        .closest("[data-urgent]")
+        ?.getAttribute("data-urgent"),
+    ).toBe("false");
+  });
+
+  // Mutation: pass `tally={[]}` from the panel, and a leader never sees who
+  // is missing.
+  it("tells a leader how many answered, on the form's page", () => {
+    renderPanel({ view: { ...unanswered, myRole: "leader" }, myUserId: "u1" });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(screen.getByText(/0 of 2 answered/)).toBeTruthy();
+    expect(screen.getByText(/Not answered yet: alice, bob/)).toBeTruthy();
   });
 });
 
@@ -617,7 +648,9 @@ describe("Add a copy stopped halfway", () => {
     );
     fireEvent.click(screen.getByRole("checkbox", { name: "Claustral" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Ranon" }));
-    fireEvent.click(screen.getByRole("button", { name: "Add 2 copies" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add 2 places or ways" }),
+    );
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
         `Added 1 of 2. ${TRIP_PLAN_PAGE.copy.addCopyFailed}`,

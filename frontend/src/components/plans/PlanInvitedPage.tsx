@@ -1,5 +1,5 @@
 // A plan a leader invited the user to by username: what they
-// would join (the write-up, who's going, the forms they answer first) with
+// would join (the write-up and who's going) with
 // Join and Decline. Joining is theirs to choose, so nothing happens
 // until they press Join.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
@@ -9,7 +9,6 @@ import {
   TRIP_PLAN_PREVIEW,
   tripPlanInvitedLine,
   tripPlanPreviewHeaded,
-  tripPlanVisibilityLine,
   type SectionKeysOn,
   type TripPlanInvitedPreview,
 } from "@logjam/shared";
@@ -97,7 +96,7 @@ export default function PlanInvitedPage({
     );
 
   const copy = TRIP_PLAN_PREVIEW.copy;
-  // A heading needs a second group to divide from: the write-up or the forms.
+  // A heading needs a second group to divide from: the write-up.
   const headed = tripPlanPreviewHeaded(preview);
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_PREVIEW, "web">,
@@ -117,9 +116,7 @@ export default function PlanInvitedPage({
       <div className={classes.noticeCard}>
         <Row
           leading={<IconTile icon="plan" hue="var(--hue-plan)" />}
-          title={
-            preview.requiredForms.length > 0 ? copy.answerToJoin : copy.invited
-          }
+          title={copy.invited}
           footer={
             <>
               <Button compact variant="filled" onClick={() => setJoining(true)}>
@@ -139,21 +136,6 @@ export default function PlanInvitedPage({
         {section.body && <p className={classes.body}>{section.body}</p>}
       </section>
     )),
-    // What the notice's "Answer these" means, before Join asks.
-    forms: (
-      <>
-        {preview.requiredForms.length > 0 && headed && (
-          <SectionHeader title={copy.forms} />
-        )}
-        {preview.requiredForms.map((form) => (
-          <Row
-            key={form.id}
-            title={form.title}
-            subtitle={tripPlanVisibilityLine(form.visibleTo, form.preset)}
-          />
-        ))}
-      </>
-    ),
     people: (
       <>
         {headed && (
@@ -194,10 +176,9 @@ export default function PlanInvitedPage({
             ...preview,
             person: preview.invitedBy?.username ?? null,
           }}
-          onStale={() => setFetchCount((n) => n + 1)}
           onClose={() => setJoining(false)}
-          onJoin={async (answers) => {
-            await joinPlan(planId, answers);
+          onJoin={async () => {
+            await joinPlan(planId);
             setJoining(false);
             onJoined();
           }}
