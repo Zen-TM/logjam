@@ -73,12 +73,19 @@ const baseSchema = z.object({
   ECS_SECURITY_GROUPS: z.string().optional(),
   TOPO_CDN_BASE_URL: z.string().url().optional(),
 
-  // Transactional email (Resend). Only the topo job reaper sends from the Node
-  // side. Both optional so a process with no key configured degrades to a
-  // no-op send (services/email.ts) instead of crashing — mirrors the Python
-  // workers' guard. FRONTEND_URL builds the
-  // completion-email deep link.
-  RESEND_API_KEY: z.string().optional(),
+  // Transactional email over SMTP (services/email.ts). All optional so a
+  // process with no provider configured degrades to a no-op send instead of
+  // crashing; SMTP_PORT stays a string so that an empty one does too. The names
+  // are shared with the Python workers (@logjam/shared SMTP_ENV_KEYS).
+  // RESEND_SECRET_ID is the Secrets Manager id src/boot.ts resolves
+  // SMTP_PASSWORD from, on a host with no secrets injection. FRONTEND_URL
+  // builds the completion-email deep link.
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_CA_CERT: z.string().optional(),
+  RESEND_SECRET_ID: z.string().optional(),
   EMAIL_FROM: z.string().optional(),
   FRONTEND_URL: z.string().url().optional(),
 

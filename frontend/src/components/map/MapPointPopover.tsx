@@ -24,6 +24,7 @@ import {
   StatGrid,
   type Stat,
 } from "../../ui";
+import { landClassAt } from "./layerOrder";
 import classes from "./MapPointPopover.module.css";
 
 /**
@@ -82,6 +83,10 @@ export default function MapPointPopover({
     point.latitude,
   );
   const metres = reading?.elevationM ?? null;
+  const [land] = useState(() => {
+    const { x, y } = map.project([point.longitude, point.latitude]);
+    return landClassAt(map, [x, y]);
+  });
 
   // "Show the weather here" swaps the body for the forecast in place and backs
   // out to the facts (shared/DESIGN.md §10). The press is what fetches.
@@ -116,6 +121,7 @@ export default function MapPointPopover({
           : { state: "unavailable" },
     from,
     slopeDegrees: reading?.slopeDegrees ?? null,
+    land,
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,

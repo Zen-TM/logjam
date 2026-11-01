@@ -1,9 +1,8 @@
 # Mobile Maestro flows
 
-UI flows run by hand on an Android emulator or a real Android phone, never in
-CI: GitHub-hosted runners have no reliable hardware acceleration for an
-emulator, so a CI gate would fail for reasons unrelated to Logjam GPS. Passing
-all of them is what qualifies a Logjam GPS release
+UI flows run by hand on an Android emulator or a real Android phone. (The
+emulator smoke check in CI is separate: `../maestro/smoke.yaml`.) Passing all
+of them is what qualifies a Logjam GPS release
 ([docs/operations/mobile-release.md](../../docs/operations/mobile-release.md#release-qualification)).
 
 Every flow opens Logjam GPS through the dev client

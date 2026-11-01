@@ -23,6 +23,9 @@ paths = [
   '''.*\.example$''',
   '''mobile/src/tracks/recordingPreferences\.ts''',
   '''mobile/src/map/sourceResolver\.test\.ts''',
+  # Local Mailpit's self-signed key: public by design, and trusted only by a
+  # sender given it as SMTP_CA_CERT, which prod never is.
+  '''infra/mailpit/dev-tls-key\.pem''',
   # A syncthing in-flight copy of recordingPreferences.ts, committed once in
   # e41c1fb and removed by e96baed (which also gitignored the pattern). It lives
   # only in history; the finding is the same `recordingFixRateV2` key name.

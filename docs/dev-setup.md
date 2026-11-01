@@ -90,7 +90,7 @@ inside the repo prints the major version `mise.toml` pins.
 make dev
 ```
 
-This builds the two worker images, starts Postgres and MiniStack in Docker,
+This builds the two worker images, starts Postgres, MiniStack and Mailpit in Docker,
 provisions MiniStack's S3 buckets and ECS task definitions with Terraform
 (which also writes the root `.env.local` the API reads), runs the database
 migrations and seeds three users with sample places and trips. The first run
@@ -122,6 +122,9 @@ In a third:
 ```bash
 cd frontend && npm run dev
 ```
+
+Email sent by the stack lands in Mailpit, not a real inbox: read it at
+<http://localhost:8025>.
 
 **It worked if** `curl localhost:8080/health` prints `{"status":"ok",...}` and
 Vite prints `Local:   http://localhost:5173/`.
@@ -357,10 +360,10 @@ Maestro UI flows and their prerequisites are in
 |---|---|
 | `make dev` fails with "port is already allocated" or "address already in use" (5432, 4566), or `npm run dev` with `EADDRINUSE` (8080, 5173) | Something else holds the port: another Postgres, another checkout's servers, an old `npm run dev`. Find it with `ss -ltnp \| grep :5432` (macOS: `lsof -i :5432`) and stop it. Every checkout shares one Compose stack, so a second clone's `make dev` reuses the first one's containers. |
 | Metro fails to start on 8081 | Another Metro or React Native tool holds it: stop it, or check `lsof -i :8081`. |
-| Nothing on <http://localhost:5173> after `make dev` | `make dev` starts only Postgres and MiniStack; the API and Logjam Web are the two `npm run dev` terminals from step 4. |
+| Nothing on <http://localhost:5173> after `make dev` | `make dev` starts only Postgres, MiniStack and Mailpit; the API and Logjam Web are the two `npm run dev` terminals from step 4. |
 | A change in `shared/` does not show up in the API, Logjam Web or Logjam GPS | They read the built `shared/dist`, not the source: `make shared`, then restart the API (nodemon does not see it) and Metro. |
 | The API integration suite (`cd api && npm test`) fails with a refused connection, or 500s in tests your change does not touch | The dev database is not reachable: check `docker compose ps`, rerun `make dev`, restart the API. Not a regression. |
-| The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro. Your editor's remote-development feature can forward them for you. |
+| The stack runs on a different machine (or VM or container) from your editor and browser | Everything listens on that machine's `localhost` only. Forward the ports to where your browser and phone are, for example `ssh -L 5173:localhost:5173 -L 8080:localhost:8080 <host>`, and add `-L 8081:localhost:8081` for Metro and `-L 8025:localhost:8025` for Mailpit. Your editor's remote-development feature can forward them for you. |
 | Uploads fail with `InvalidAccessKeyId` (the integration suite's media, track and file tests fail with `presigned PUT failed 403`) | Your shell exports real AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_PROFILE`), which win over the MiniStack ones the API reads from its env file. Start the API without them: `env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN -u AWS_PROFILE npm run dev`. |
 | Logjam GPS opens but has no data, or its edits never sync | `127.0.0.1` in `mobile/.env` means the phone: rerun `npm run dev:android` to restore the `adb reverse` tunnels. |
 

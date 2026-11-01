@@ -34,10 +34,11 @@ const ARCHIVE_PATHS: Record<string, Buffer> = {
  *  host and MiniStack, and the app's own. Anything else fails the test. */
 const ALLOWED_AFTER_MAKE = ["https://maps.six.nsw.gov.au", "http://localhost"];
 const TILE_DELAY_MS = 500;
+const S3_ENDPOINT = process.env.AWS_ENDPOINT_URL ?? "http://localhost:4566";
 
 async function stubTiles(page: Page) {
   // The seeded job's presigned archives: not wanted, so a clean 404.
-  await page.route("http://localhost:4566/**", (route) =>
+  await page.route(`${S3_ENDPOINT}/**`, (route) =>
     route.fulfill({
       status: 404,
       headers: { "access-control-allow-origin": "*" },

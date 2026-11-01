@@ -12,7 +12,7 @@ import {
   latestGaugeReading,
   type Gauge,
 } from "@logjam/shared";
-import { ProfileChart, StatGrid } from "../../ui";
+import { IconButton, ProfileChart, StatGrid } from "../../ui";
 import classes from "./GaugeView.module.css";
 
 const DAY_FORMAT = new Intl.DateTimeFormat("en-AU", {
@@ -31,11 +31,14 @@ export function GaugeView({
   attribution,
   generatedAt,
   now,
+  onClose,
 }: {
   gauge: Gauge;
   attribution: string;
   generatedAt: string;
   now: number;
+  /** Given where the view is a surface of its own: the × beside the name. */
+  onClose?: () => void;
 }) {
   const latest = latestGaugeReading(gauge, now);
   const fileNote = gaugeFileNote(generatedAt, now);
@@ -88,7 +91,10 @@ export function GaugeView({
   };
   return (
     <div className={classes.view}>
-      <h2 className={classes.name}>{gaugeDisplayName(gauge.name)}</h2>
+      <div className={classes.head}>
+        <h2 className={classes.name}>{gaugeDisplayName(gauge.name)}</h2>
+        {onClose && <IconButton icon="close" label="Close" onClick={onClose} />}
+      </div>
       {contractSectionKeys(GAUGES, "web").map((key) => (
         <div key={key}>{sections[key]()}</div>
       ))}
