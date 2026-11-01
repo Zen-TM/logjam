@@ -111,6 +111,7 @@ jobs:
           PROFILE: ${{ steps.tag.outputs.profile }}
         run: |
           set -euo pipefail
+          scripts/check-eas-env.sh "$PROFILE"
           submit=()
           if [ "$PROFILE" = production ]; then submit=(--auto-submit); fi
           eas build --platform android --profile "$PROFILE" "${submit[@]}" \

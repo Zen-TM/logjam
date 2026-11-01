@@ -49,7 +49,8 @@ Needed before the first release tag.
    (`EXPO_PUBLIC_OIDC_ISSUER`, `EXPO_PUBLIC_OIDC_CLIENT_ID`,
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
-   (`mobile/eas.json`).
+   (`mobile/eas.json`). `mobile/scripts/check-eas-env.sh` refuses a store build
+   or an update when either OIDC variable is missing.
 6. **Production access.** The Play developer account is a personal one, so
    Google allows production releases only after a closed test with at least
    12 testers opted in for 14 continuous days, followed by an application in
