@@ -101,11 +101,13 @@ import {
   MAP_INK,
   MAP_MEASURE,
   TRIP_PLAN_PAGE,
+  planRouteNotAdded,
   type SharpenedArea,
 } from "@logjam/shared";
 import {
   isPlanPin,
   mutedFeatures,
+  PLAN_DIM,
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
@@ -828,7 +830,7 @@ export function MapScreen({
   startRecording,
   navigatePlace,
   planMode,
-  onRouteForPlan,
+  onOpenPlan,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -884,8 +886,9 @@ export function MapScreen({
     planId?: string;
     nonce: number;
   } | null;
-  /** A route drawn for a plan was saved: back to that plan's page. */
-  onRouteForPlan?: (planId: string) => void;
+  /** Back to a plan's page: its banner was tapped, or a route drawn for it
+   *  was saved. */
+  onOpenPlan?: (planId: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -1037,9 +1040,9 @@ export function MapScreen({
   // rows' `visible`) so it toggles smoothly and stays toggleable with zero
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
-  // PLAN MODE: the plan's places and ways in place of the user's own, which
-  // come back beside them with "Show my things". Read from the plans cache, so
-  // it works in a canyon for any plan opened before.
+  // PLAN MODE: the plan's places and ways over the user's own, which draw
+  // faint beside them. Read from the plans cache, so it works in a canyon for
+  // any plan opened before.
   // Which plan is shown, and when it goes: `planModeReducer`.
   const [planState, planDispatch] = useReducer(
     planModeReducer,
@@ -2024,13 +2027,11 @@ export function MapScreen({
         setDraftColor(null);
         if (planForRoute) {
           const { planId, routeId } = planForRoute;
-          if (await addDrawnRouteToPlan(planId, routeId))
-            onRouteForPlan?.(planId);
-          else
-            Alert.alert(
-              "Route saved",
-              "It's in Saved, but couldn't be added to the plan. Add it from the plan's Add a place or way.",
-            );
+          if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
+          else {
+            const notAdded = planRouteNotAdded();
+            Alert.alert(notAdded.title, notAdded.body);
+          }
         }
       } catch (err) {
         console.error(err);
@@ -2044,7 +2045,7 @@ export function MapScreen({
       places.data,
       draftPlaceId,
       draftPlanId,
-      onRouteForPlan,
+      onOpenPlan,
       draftColor,
       editingRouteId,
       routeDraft,
@@ -4773,7 +4774,7 @@ export function MapScreen({
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
                   beforeId={BAND_MARKERS.land}
-                  style={{ rasterOpacity: 1 }}
+                  style={{ rasterOpacity: planOnMap ? PLAN_DIM : 1 }}
                 />
               )}
             </ResolvedSource>
@@ -4933,7 +4934,10 @@ export function MapScreen({
               id={`import-fill-${imported.id}`}
               beforeId={groundBefore[`import-fill-${imported.id}`]}
               filter={["==", "$type", "Polygon"] as never}
-              style={{ fillColor: imported.color, fillOpacity: 0.2 }}
+              style={{
+                fillColor: imported.color,
+                fillOpacity: planOnMap ? PLAN_DIM * 0.2 : 0.2,
+              }}
             />
             <Layer
               key={`import-line-${imported.id}`}
@@ -4950,7 +4954,7 @@ export function MapScreen({
               style={{
                 lineColor: imported.color,
                 lineWidth: 3,
-                lineOpacity: 0.9,
+                lineOpacity: planOnMap ? PLAN_DIM : 0.9,
                 lineJoin: "round",
                 lineCap: "round",
               }}
@@ -4966,6 +4970,8 @@ export function MapScreen({
                 circleColor: imported.color,
                 circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 1.5,
+                circleOpacity: planOnMap ? PLAN_DIM : 1,
+                circleStrokeOpacity: planOnMap ? PLAN_DIM : 1,
               }}
             />
           </GeoJSONSource>
@@ -4976,7 +4982,10 @@ export function MapScreen({
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
         {showPlaceRoutes ? (
-          <PlaceRoutesLayer onStatus={setRoutesStatus} />
+          <PlaceRoutesLayer
+            onStatus={setRoutesStatus}
+            dim={planOnMap != null}
+          />
         ) : null}
 
         {/* Saved routes, below the point markers — a route is ink on the map and
@@ -5002,6 +5011,7 @@ export function MapScreen({
           tracks={tracks}
           liveCoord={userCoord}
           showTracks={showTracks}
+          dim={planOnMap != null}
           onTrackPress={handleTrackPress}
         />
 
@@ -5168,20 +5178,26 @@ export function MapScreen({
             },
           ]}
         >
-          <Notice
-            icon="plan"
-            numberOfLines={1}
-            action={
-              <IconButton
-                icon="close"
-                size={16}
-                accessibilityLabel={TRIP_PLAN_PAGE.copy.backToMap}
-                onPress={leavePlan}
-              />
-            }
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={planOnMap.name}
+            onPress={() => onOpenPlan?.(planOnMap.id)}
           >
-            {planOnMap.name}
-          </Notice>
+            <Notice
+              icon="plan"
+              numberOfLines={1}
+              action={
+                <IconButton
+                  icon="close"
+                  size={16}
+                  accessibilityLabel={TRIP_PLAN_PAGE.copy.backToMap}
+                  onPress={leavePlan}
+                />
+              }
+            >
+              {planOnMap.name}
+            </Notice>
+          </Pressable>
         </View>
       ) : null}
 
@@ -5918,8 +5934,6 @@ function RouteNameForm({
     </View>
   );
 }
-
-/** The user's shared pins, while a plan is on the map without them. */
 
 const useStyles = makeStyles((theme, textRole) => ({
   // The selected point's delete button: circular, warning-coloured, and the

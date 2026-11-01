@@ -17,6 +17,8 @@ export function SelectionBar({
   onDelete,
   deleteIcon = "delete",
   deleteLabel = "Delete the selected items",
+  deleteDisabled = false,
+  destructive = true,
 }: {
   /** The words between the close and the buttons — "3 places selected". */
   countLabel: string;
@@ -51,6 +53,11 @@ export function SelectionBar({
   deleteIcon?: React.ComponentProps<typeof IconButton>["icon"];
   /** Screen-reader label for it — REQUIRED to change with the icon. */
   deleteLabel?: string;
+  /** Not now (offline): dimmed, and the label says why. */
+  deleteDisabled?: boolean;
+  /** False when the slot only gives up access (leaving), which never wears
+   *  the warning tone (shared/DESIGN.md §9). */
+  destructive?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -76,8 +83,9 @@ export function SelectionBar({
       <IconButton
         icon={deleteIcon}
         accessibilityLabel={deleteLabel}
-        color={theme.warning}
+        color={destructive ? theme.warning : theme.accent}
         filled
+        disabled={deleteDisabled}
         onPress={onDelete}
       />
     </View>

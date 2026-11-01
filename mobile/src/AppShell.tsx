@@ -370,10 +370,24 @@ function MapStackNav() {
             startRecording={route.params?.startRecording ?? null}
             navigatePlace={route.params?.navigatePlace ?? null}
             planMode={route.params?.planMode ?? null}
-            onRouteForPlan={(planId) =>
+            // The whole More stack is named, so Back from the plan lands on
+            // Plans, whatever More held when the user left for the map.
+            onOpenPlan={(planId) =>
               navigation.getParent()?.navigate("More", {
-                screen: "Plan",
-                params: { planId, name: TRIP_PLANS_LIST.title, view: "items" },
+                state: {
+                  routes: [
+                    { name: "MoreHome" },
+                    { name: "Plans" },
+                    {
+                      name: "Plan",
+                      params: {
+                        planId,
+                        name: TRIP_PLANS_LIST.title,
+                        view: "items",
+                      },
+                    },
+                  ],
+                },
               })
             }
             onPickPoint={(from, hidePlaceId) =>

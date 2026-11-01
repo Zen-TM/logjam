@@ -12,6 +12,7 @@
 // mirror, and are NEVER baked into a tile (root AGENTS.md). Both sources here
 // are client-side GeoJSON handed straight to MapLibre; nothing about them is
 // logged or sent anywhere.
+import { PLAN_DIM } from "../plans/planMap";
 import { memo } from "react";
 import type { NativeSyntheticEvent } from "react-native";
 import {
@@ -63,7 +64,7 @@ export const PLACE_LABEL_EXPR = [
 const MUTED_OPACITY = [
   "case",
   ["==", ["get", "muted"], true],
-  0.4,
+  PLAN_DIM,
   1,
 ] as unknown as number;
 

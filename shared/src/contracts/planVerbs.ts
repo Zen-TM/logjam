@@ -171,6 +171,12 @@ export function planAddVerbLabel(id: PlanAddVerbId): string {
   return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
 }
 
+/** What a route drawn from a plan says when it is saved but not in the plan. */
+export const planRouteNotAdded = () => ({
+  title: "Route saved",
+  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
+});
+
 /** A plan verb's words, where one stands outside its ⋯ (the over notice's
  *  Start a trip log). */
 export function planVerbLabel(id: PlanVerbId): string {

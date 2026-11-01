@@ -109,8 +109,9 @@ import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
   afterPlanWrite,
   fetchPlan,
-  planChanged,
+  planMovedOn,
   readCachedPlan,
+  readCachedPlanStamps,
   readPlansList,
   type CachedPlan,
 } from "./plansCache";
@@ -135,18 +136,12 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
   const [now, setNow] = useState(0);
 
   const reread = useCallback(async () => {
-    const [plan, list] = await Promise.all([
+    const [plan, list, stamps] = await Promise.all([
       readCachedPlan(planId),
       readPlansList(),
+      readCachedPlanStamps(),
     ]);
-    const summary = list?.plans.find((row) => row.id === planId);
-    const moved =
-      plan != null &&
-      summary != null &&
-      planChanged(summary, {
-        updatedAt: plan.plan.updatedAt,
-        downloadedAt: null,
-      });
+    const moved = plan != null && planMovedOn(planId, list, stamps);
     if (!plan && leaving.current) return { stale: false };
     if (plan) held.current = true;
     else if (held.current) setGone(true);

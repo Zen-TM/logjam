@@ -114,6 +114,18 @@ export function planChanged(
   );
 }
 
+/** The same question for one plan from the list and the stamps: the list card
+ *  and the plan's page both ask it of `plan_updated_at`, so they cannot say
+ *  different things about one plan. Guard: plansCache.test.ts ("planMovedOn"). */
+export function planMovedOn(
+  planId: string,
+  list: { plans: Pick<TripPlanSummary, "id" | "updatedAt">[] } | null,
+  stamps: ReadonlyMap<string, CachedPlanStamp>,
+): boolean {
+  const summary = list?.plans.find((row) => row.id === planId);
+  return summary != null && planChanged(summary, stamps.get(planId));
+}
+
 // The sign-out wipe bumps this, so a GET in flight across it cannot write the
 // departing user's plans back after the wipe (ADR 0006: the wipe stops the
 // producers before it deletes). Read before the GET, checked inside the

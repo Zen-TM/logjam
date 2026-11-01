@@ -69,6 +69,8 @@ import {
   tripPlanFormsToAnswerLine,
   tripPlanFormTally,
   tripPlanFormTallyLines,
+  tripPlanFormsUrgent,
+  planRouteNotAdded,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -996,6 +998,19 @@ describe("Add a place or way's footer and outcome", () => {
       message: "Added 1 of 2. No.",
       tone: "error",
     });
+  });
+});
+
+describe("tripPlanFormsUrgent", () => {
+  // Mutation: drop the count check, and a plan with nothing to answer warns.
+  it("is the page's rule for the list card too", () => {
+    const trip = { startDate: "2026-10-08" as const, endDate: null };
+    expect(tripPlanFormsUrgent(1, trip, "2026-10-01")).toBe(true);
+    expect(tripPlanFormsUrgent(1, trip, "2026-09-30")).toBe(false);
+    expect(tripPlanFormsUrgent(0, trip, "2026-10-01")).toBe(false);
+  });
+  it("names the Add a place or way button in the route notice", () => {
+    expect(planRouteNotAdded().body).toContain("Add a place or way");
   });
 });
 

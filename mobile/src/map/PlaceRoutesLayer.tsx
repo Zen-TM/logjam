@@ -22,6 +22,7 @@ import {
   parseVectorImport,
 } from "@logjam/shared";
 
+import { PLAN_DIM } from "../plans/planMap";
 import { ROUTES_FLOOR } from "./layerOrder";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { useMirrorPlaceTracks } from "../sync/useSyncQueries";
@@ -35,10 +36,13 @@ const ROUTE_COLOR = ASSET_HUES.route;
 
 export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
   onStatus,
+  dim = false,
 }: {
   /** Drawn/unavailable counts, so the map can say when it is showing less than
    *  everything (shared/DESIGN.md §11: a map that hides things says so). */
   onStatus: (status: PlaceRoutesStatus) => void;
+  /** Faint, under a plan on the map. */
+  dim?: boolean;
 }) {
   const tracks = useMirrorPlaceTracks(TRACK_MIME_TYPES);
   const [collection, setCollection] =
@@ -108,7 +112,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         style={{
           lineColor: MAP_INK.casing,
           lineWidth: 5,
-          lineOpacity: 0.6,
+          lineOpacity: dim ? PLAN_DIM * 0.6 : 0.6,
           lineCap: "round",
           lineJoin: "round",
         }}
@@ -121,7 +125,7 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
         style={{
           lineColor: ["get", "routeColor"] as unknown as string,
           lineWidth: 2.5,
-          lineOpacity: 0.95,
+          lineOpacity: dim ? PLAN_DIM : 0.95,
           lineCap: "round",
           lineJoin: "round",
         }}
@@ -137,6 +141,8 @@ export const PlaceRoutesLayer = memo(function PlaceRoutesLayer({
           circleColor: ["get", "routeColor"] as unknown as string,
           circleStrokeWidth: 1,
           circleStrokeColor: MAP_INK.casing,
+          circleOpacity: dim ? PLAN_DIM : 1,
+          circleStrokeOpacity: dim ? PLAN_DIM : 1,
         }}
       />
     </GeoJSONSource>
