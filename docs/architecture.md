@@ -138,7 +138,10 @@ and CloudFront reads them through origin access control:
 | access logs | S3 access logs for media and topo-jobs, read by the egress meter | `s3_bucket_access_logs` |
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
 
-**Auth.** One Cognito user pool. The API verifies each request's JWT against
+**Auth.** One Cognito user pool, with a hosted-pages domain and Logjam's
+branding (Managed Login, `envs/prod/cognito.tf`) that both clients sign in
+through. Account deletion has the API call `AdminDeleteUser` on that pool (its
+IAM grant is `AdminGetUser` and `AdminDeleteUser`, `envs/prod/iam.tf`). The API verifies each request's JWT against
 the pool's public keys (`api/src/middleware/auth.ts`). Cognito does not send
 its own email: it hands each verification code, encrypted with a KMS key, to
 a custom email sender Lambda (`infra/lambda/cognito-email-sender`), which
