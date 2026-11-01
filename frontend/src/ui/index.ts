@@ -23,6 +23,7 @@ export {
 export { ColourField } from "./ColourField";
 export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
 export { AttributeFilter } from "./AttributeFilter";
+export { DateRangeField } from "./DateRangeField";
 export { FilterField } from "./FilterField";
 export { RangePills } from "./RangePills";
 export { Tooltip } from "./Tooltip";

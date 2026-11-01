@@ -127,7 +127,6 @@ describe("a form edit", () => {
     title: "Carpooling",
     preset: "carpool",
     visibleTo: "members",
-    requiredToJoin: false,
     questions: [
       {
         id: "how",
@@ -189,7 +188,6 @@ describe("the print summary", () => {
     preset,
     questions: preset ? TRIP_PLAN_FORM_PRESETS[preset].questions : [],
     visibleTo: "members",
-    requiredToJoin: false,
     position: 0,
     updatedAt: "",
     myAnswer: null,

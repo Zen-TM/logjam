@@ -241,7 +241,7 @@ export function FormBuilderSheet({
             title={copy.blank}
             onPress={() => setValues(tripPlanBlankForm())}
           />
-          <SectionHeader title={copy.templates} />
+          <SectionHeader title={copy.chooseTemplates} />
           {TRIP_PLAN_FORM_PRESET_IDS.map((id) => (
             <Row
               key={id}
@@ -256,13 +256,13 @@ export function FormBuilderSheet({
               }
             />
           ))}
-          <SectionHeader title={copy.fromMyPlans} />
+          <SectionHeader title={copy.chooseMine} />
           {!online ? (
             <Text style={styles.note}>{OFFLINE}</Text>
           ) : others === "failed" ? (
-            <Text style={styles.note}>{copy.fromMyPlansFailed}</Text>
+            <Text style={styles.note}>{copy.chooseMineFailed}</Text>
           ) : others == null ? null : others.length === 0 ? (
-            <Text style={styles.note}>{copy.fromMyPlansEmpty}</Text>
+            <Text style={styles.note}>{copy.chooseMineEmpty}</Text>
           ) : (
             others.map((other) => (
               <Row

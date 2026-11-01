@@ -9,6 +9,7 @@ import { useId, useMemo, useState } from "react";
 import {
   parseTripPlanCreate,
   TRIP_PLAN_NAME_MAX_LENGTH,
+  TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   tripPlanDatesLabel,
@@ -173,7 +174,7 @@ function PlanDetailsForm({
             hint={theirs(["name"], current.name)}
           />
           <DateRangeField
-            label="Dates"
+            label={TRIP_PLAN_PAGE.copy.datesField}
             start={values.startDate}
             end={values.endDate}
             onChange={(startDate, endDate) => set({ startDate, endDate })}

@@ -32,6 +32,7 @@ export default function PlanFormPage({
   role,
   archived,
   members,
+  tally,
   onBack,
   onAnswer,
   onVerb,
@@ -41,6 +42,8 @@ export default function PlanFormPage({
   archived: boolean;
   /** Everyone in the plan the caller can see, for the table's rows. */
   members: TripPlanMemberView[];
+  /** A leader's "3 of 5 answered" lines; none for anyone else. */
+  tally: string[];
   onBack: () => void;
   onAnswer: () => void;
   onVerb: (id: PlanFormVerbId) => void;
@@ -134,9 +137,16 @@ export default function PlanFormPage({
       />
     ),
     visibility: (
-      <p className={classes.note}>
-        {tripPlanVisibilityLine(form.visibleTo, form.preset)}
-      </p>
+      <>
+        <p className={classes.note}>
+          {tripPlanVisibilityLine(form.visibleTo, form.preset)}
+        </p>
+        {tally.map((line) => (
+          <p key={line} className={classes.note}>
+            {line}
+          </p>
+        ))}
+      </>
     ),
     mine: (
       <div className={classes.block}>

@@ -356,6 +356,14 @@ export const TRIP_PLAN_PAGE = {
     roleLeader: "You're a leader",
     roleEditor: "You're an editor",
 
+    // The one-calendar date range field.
+    datesField: "Dates",
+    datesNone: "No dates yet",
+    datesPrevMonth: "Previous month",
+    datesNextMonth: "Next month",
+    datesJustThisDay: "Just this day",
+    datesClear: "Clear dates",
+
     views: "Plan view",
     viewWriteUp: "Write-up",
     viewItems: "Map",
@@ -387,6 +395,8 @@ export const TRIP_PLAN_PAGE = {
     itemsEmpty: "Nothing here yet. Add a place or way of yours.",
     addCopyLine:
       "Everyone in this plan, including people who join later, can see and copy what you add to it.",
+    searchByName: "Search by name",
+    searchNoMatch: "Nothing matches that name.",
     photosCountToo: "Photos count too.",
     addCopyFailed: "Couldn't add that.",
     nothingToAdd: "Nothing of yours here yet.",
@@ -409,11 +419,9 @@ export const TRIP_PLAN_PAGE = {
     itemAttributes: "Attributes",
     saveCopyPhotos: "Bring its photos",
     drawRoute: "Draw a route",
-    searchByName: "Search by name",
-    searchNoMatch: "Nothing matches that name.",
-    datesLabel: "Dates",
-    clearDates: "Clear dates",
     itemDownloadHint: "Click to download",
+    placeTypeFallback: "Place",
+    placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
 
@@ -835,16 +843,33 @@ export const TRIP_PLAN_FORMS = {
     add: "Add form",
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
-    fromMyPlans: "From your other plans",
-    fromMyPlansEmpty: "You don't lead any other plan with a form yet.",
-    fromMyPlansFailed: "Couldn't load your other plans' forms.",
-    templates: "Templates",
+    // The chooser a new form starts from.
+    chooseTemplates: "Templates",
+    chooseMine: "From your other plans",
+    chooseBlankHint: "Write your own questions.",
+    chooseMineLoading: "Loading your forms…",
+    chooseMineFailed: "Couldn't load your forms from other plans.",
+    chooseMineEmpty: "Forms you make in other plans you lead show up here.",
     formSaved: "Form saved.",
     yes: "Yes",
     no: "No",
     agreed: "Agreed",
   },
 } as const satisfies ScreenContract;
+
+/** One line under each template in the new-form chooser. */
+export const TRIP_PLAN_FORM_PRESET_BLURBS: Record<
+  TripPlanFormPresetId,
+  string
+> = {
+  gear: "Who needs to borrow what, and wetsuit sizes.",
+  carpool: "Who can drive, who needs a lift, and from where.",
+  experience: "How much canyoning and abseiling people have done.",
+  firstAid: "First aid training and what people carry.",
+  safetyContacts:
+    "Someone to call, and medical details people choose to share.",
+  rules: "The trip's ground rules, for each person to agree to.",
+};
 
 /** Each question kind's name in the builder. */
 export const TRIP_PLAN_QUESTION_KIND_LABELS: Record<
@@ -963,6 +988,10 @@ export const TRIP_PLAN_FORMS_URGENT_DAYS = 7;
 
 /** "1 form to answer", "3 forms to answer": the plan page's card and the
  *  plans list's card say it the same way. Empty for none. */
+export function tripPlanCopyCoordinatesLabel(name: string): string {
+  return `Copy the coordinates of ${name}`;
+}
+
 export function tripPlanFormsToAnswerLine(count: number): string {
   if (count <= 0) return "";
   return count === 1 ? "1 form to answer" : `${count} forms to answer`;
@@ -1261,4 +1290,45 @@ export function tripPlanTripLogStopped(saved: number, why: string): string {
 /** Where Save a copy put it. */
 export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
   return `Saved a copy to your ${kind === "place" ? "places" : "ways"}.`;
+}
+
+// ── Plans list: bulk actions ────────────────────────────────────────
+
+/** A confirm for deleting or leaving several plans, counted. */
+export function tripPlanBulkVerbConfirm(
+  kind: "delete" | "leave",
+  count: number,
+): { confirmTitle: string; confirmBody: string; confirmLabel: string } {
+  const plans = count === 1 ? "1 plan" : `${count} plans`;
+  return kind === "delete"
+    ? {
+        confirmTitle: `Delete ${plans}?`,
+        confirmBody:
+          "Their write-ups, places, ways, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
+        confirmLabel: `Delete ${plans}`,
+      }
+    : {
+        confirmTitle: `Leave ${plans}?`,
+        confirmBody:
+          "You lose access at once. Your answers to their forms go. What you added stays in each plan.",
+        confirmLabel: `Leave ${plans}`,
+      };
+}
+
+/** The toast after a bulk run: all done, or how many of them. */
+export function tripPlanBulkDone(
+  kind: "delete" | "leave" | "archive" | "unarchive",
+  done: number,
+  total: number,
+): string {
+  const verb = {
+    delete: "Deleted",
+    leave: "Left",
+    archive: "Archived",
+    unarchive: "Brought back",
+  }[kind];
+  const plans = total === 1 ? "1 plan" : `${total} plans`;
+  return done === total
+    ? `${verb} ${plans}.`
+    : `${verb} ${done} of ${plans}. The rest didn't go through.`;
 }

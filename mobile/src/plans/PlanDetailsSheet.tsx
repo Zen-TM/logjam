@@ -154,7 +154,7 @@ export function PlanDetailsSheet({
     <Row
       icon="date"
       title={tripPlanDatesLabel(values.startDate, values.endDate)}
-      subtitle={TRIP_PLAN_PAGE.copy.datesLabel}
+      subtitle={TRIP_PLAN_PAGE.copy.datesField}
       right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
       onPress={() => setMode("dates")}
     />
@@ -172,7 +172,7 @@ export function PlanDetailsSheet({
           ? plan
             ? copy.editTitle
             : copy.newTitle
-          : TRIP_PLAN_PAGE.copy.datesLabel
+          : TRIP_PLAN_PAGE.copy.datesField
       }
       // Pinned: with the keyboard up the form outgrows the sheet.
       footer={
@@ -207,7 +207,7 @@ export function PlanDetailsSheet({
           />
           {values.startDate ? (
             <Button
-              label={TRIP_PLAN_PAGE.copy.clearDates}
+              label={TRIP_PLAN_PAGE.copy.datesClear}
               icon="close"
               variant="ghost"
               onPress={() => {

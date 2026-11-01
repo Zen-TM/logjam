@@ -10,7 +10,6 @@ import {
   limitHint,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
-  TRIP_PLAN_SECTION_SUGGESTIONS,
   TRIP_PLAN_SECTION_TITLE_MAX_LENGTH,
   parseTripPlanSectionCreate,
   planAddVerbLabel,
@@ -18,14 +17,7 @@ import {
   type TripPlanSectionPatch,
   type TripPlanSectionView,
 } from "@logjam/shared";
-import {
-  Button,
-  Chip,
-  Dialog,
-  ErrorBanner,
-  TextArea,
-  TextField,
-} from "../../ui";
+import { Button, Dialog, ErrorBanner, TextArea, TextField } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
@@ -169,6 +161,7 @@ function SectionForm({
             value={values.title}
             maxLength={TRIP_PLAN_SECTION_TITLE_MAX_LENGTH}
             data-autofocus
+            placeholder={copy.sectionTitlePlaceholder}
             onChange={(event) => {
               set({ title: event.target.value });
               setTitleError(null);
@@ -180,26 +173,6 @@ function SectionForm({
                 : undefined
             }
           />
-          {!editing && (
-            <div
-              className={classes.suggestions}
-              role="group"
-              aria-label={copy.sectionSuggestions}
-            >
-              {TRIP_PLAN_SECTION_SUGGESTIONS.map((title) => (
-                <Chip
-                  key={title}
-                  label={title}
-                  active={values.title === title}
-                  aria-pressed={values.title === title}
-                  onClick={() => {
-                    set({ title });
-                    setTitleError(null);
-                  }}
-                />
-              ))}
-            </div>
-          )}
           <TextArea
             label={copy.sectionBody}
             value={values.body}

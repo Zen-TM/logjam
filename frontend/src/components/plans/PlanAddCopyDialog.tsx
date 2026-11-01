@@ -27,7 +27,6 @@ import {
   Dialog,
   ErrorBanner,
   SearchField,
-  SwitchRow,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -68,9 +67,6 @@ export default function PlanAddCopyDialog({
     initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : "places",
   );
   const [picked, setPicked] = useState<Pick[]>(initial ? [initial] : []);
-  const [bringPhotos, setBringPhotos] = useState(
-    user?.uiPreferences?.copyPlaceMedia ?? true,
-  );
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +78,6 @@ export default function PlanAddCopyDialog({
       tickedPlaceIds: picked
         .filter((pick) => pick.kind === "place")
         .map((pick) => pick.id),
-      copyMedia: bringPhotos,
     },
   );
   const ways = [
@@ -117,7 +112,6 @@ export default function PlanAddCopyDialog({
   const priceLine = tripPlanAddCopyPriceLine({
     bytes,
     placesPicked: placesChosen,
-    copyMedia: bringPhotos,
     quotaBytes: user?.storageQuotaBytes ?? null,
     usedBytes: user?.storageUsedBytes ?? null,
   });
@@ -146,7 +140,6 @@ export default function PlanAddCopyDialog({
         const reply = await addPlanItem(planId, {
           kind: row.kind,
           id: row.id,
-          ...(row.kind === "place" && { copyMedia: bringPhotos }),
         });
         added += 1;
         skipped += reply.mediaSkipped ?? 0;
@@ -215,7 +208,7 @@ export default function PlanAddCopyDialog({
         <p className={classes.note}>{copy.addCopyLine}</p>
         {lists[tab].length > 0 && (
           <SearchField
-            label="Search by name"
+            label={copy.searchByName}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -223,7 +216,7 @@ export default function PlanAddCopyDialog({
         {lists[tab].length === 0 ? (
           <p className={classes.note}>{copy.nothingToAdd}</p>
         ) : listed.length === 0 ? (
-          <p className={classes.note}>Nothing matches “{query.trim()}”.</p>
+          <p className={classes.note}>{copy.searchNoMatch}</p>
         ) : (
           <div className={classes.question}>
             {listed.map((row) => (
@@ -236,13 +229,6 @@ export default function PlanAddCopyDialog({
               />
             ))}
           </div>
-        )}
-        {placesChosen && (
-          <SwitchRow
-            title={copy.bringPhotos}
-            checked={bringPhotos}
-            onChange={setBringPhotos}
-          />
         )}
         {priceLine && <p className={classes.body}>{priceLine}</p>}
         {error && <ErrorBanner message={error} />}

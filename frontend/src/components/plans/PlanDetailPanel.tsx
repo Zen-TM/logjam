@@ -28,6 +28,10 @@ import {
   tripPlanDatesLine,
   tripPlanIsDated,
   tripPlanIsOver,
+  tripPlanFormsToAnswer,
+  tripPlanFormsToAnswerLine,
+  tripPlanFormTally,
+  tripPlanFormTallyLines,
   tripPlanNotice,
   tripTypeLabel,
   type PlanAddVerbId,
@@ -219,9 +223,13 @@ export default function PlanDetailPanel({
   const today = todayDateKey();
   const archived = plan.archivedAt != null;
   const over = tripPlanIsOver(plan, today);
-  const unansweredRequired =
-    plan.forms.find((form) => form.requiredToJoin && !form.myAnswer) ?? null;
-  const notice = tripPlanNotice({ archived, unansweredRequired, over });
+  const notice = tripPlanNotice({ archived, over });
+  const toAnswer = tripPlanFormsToAnswer(plan, today);
+  /** A form's "3 of 5 answered" lines, for a leader. */
+  const tallyLines = (form: TripPlanFormView) => {
+    const tally = myUserId ? tripPlanFormTally(plan, form, myUserId) : null;
+    return tally ? tripPlanFormTallyLines(tally) : [];
+  };
 
   async function run(
     action: () => Promise<unknown>,
@@ -399,24 +407,53 @@ export default function PlanDetailPanel({
         }
       />
     ),
-    notices: notice && (
-      <div className={classes.noticeCard}>
-        <Row
-          leading={<IconTile icon={notice.icon} hue="var(--color-accent)" />}
-          title={notice.text}
-          footer={
-            notice.kind === "over" ? (
-              <Button compact onClick={startTripLog}>
-                {PLAN_VERBS.find((verb) => verb.id === "tripLog")!.label}
-              </Button>
-            ) : notice.kind === "answer" ? (
-              <Button compact onClick={() => setAnswering(notice.formId)}>
-                {copy.answer}
-              </Button>
-            ) : undefined
-          }
-        />
-      </div>
+    notices: (
+      <>
+        {notice && (
+          <div className={classes.noticeCard}>
+            <Row
+              leading={
+                <IconTile icon={notice.icon} hue="var(--color-accent)" />
+              }
+              title={notice.text}
+              footer={
+                notice.kind === "over" ? (
+                  <Button compact onClick={startTripLog}>
+                    {PLAN_VERBS.find((verb) => verb.id === "tripLog")!.label}
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        )}
+        {toAnswer.forms.length > 0 && (
+          <div className={classes.noticeCard}>
+            <Row
+              data-urgent={toAnswer.urgent}
+              leading={
+                <IconTile
+                  icon="form"
+                  hue={
+                    toAnswer.urgent
+                      ? "var(--color-warning)"
+                      : "var(--color-accent)"
+                  }
+                />
+              }
+              title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
+              footer={toAnswer.forms.map((form) => (
+                <Button
+                  key={form.id}
+                  compact
+                  onClick={() => setAnswering(form.id)}
+                >
+                  {form.title}
+                </Button>
+              ))}
+            />
+          </div>
+        )}
+      </>
     ),
     dates: (
       <p className={classes.datesLine}>
@@ -501,7 +538,6 @@ export default function PlanDetailPanel({
         onSaved={onOwnChanged}
         onAddCopy={() => setAddingCopy(NOTHING_TICKED)}
         onOpen={onOpenItem}
-        copyPlaceMedia={copyPlaceMedia}
       />
     ),
     forms: tab === "forms" && (
@@ -527,11 +563,12 @@ export default function PlanDetailPanel({
             <Row
               key={form.id}
               title={form.title}
-              subtitle={
+              subtitle={[
                 form.visibleTo === "leaders"
                   ? copy.seenByLeaders
-                  : copy.seenByMembers
-              }
+                  : copy.seenByMembers,
+                ...tallyLines(form),
+              ].join(" · ")}
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
               data-form-id={form.id}
               onOpen={() => openFormPage(form.id)}
@@ -539,12 +576,9 @@ export default function PlanDetailPanel({
               // then the form's own verbs, as on its page.
               trailing={
                 <>
-                  {form.requiredToJoin &&
-                    (form.myAnswer ? (
-                      <StatusPill label={copy.pillRequired} tone="outline" />
-                    ) : (
-                      <StatusPill label={copy.pillNotAnswered} tone="warning" />
-                    ))}
+                  {!form.myAnswer && !archived && (
+                    <StatusPill label={copy.pillNotAnswered} tone="warning" />
+                  )}
                   {formVerbs.length > 0 && (
                     <Menu
                       label={`${formsCopy.actions}: ${form.title}`}
@@ -627,6 +661,7 @@ export default function PlanDetailPanel({
           role={role}
           archived={archived}
           members={plan.members}
+          tally={tallyLines(openForm)}
           onBack={closeFormPage}
           onAnswer={() => setAnswering(openForm.id)}
           onVerb={(id) => formRunners(openForm)[id]()}
@@ -697,6 +732,7 @@ export default function PlanDetailPanel({
       )}
       <PlanFormBuilderDialog
         open={building != null}
+        planId={plan.id}
         form={buildingForm}
         onStale={() => refetch({ quiet: true })}
         onClose={() => setBuilding(null)}

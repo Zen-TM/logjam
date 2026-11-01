@@ -11,6 +11,7 @@ import {
   type TripPlanFormPatch,
   type TripPlanFormView,
   type TripPlanInvitedPreview,
+  type TripPlanLeaderForm,
   type TripPlanItem,
   type TripPlanItemAdd,
   type TripPlanItemKind,
@@ -18,7 +19,6 @@ import {
   type TripPlanPlacePatch,
   type TripPlanRoutePatch,
   type TripPlanInviteView,
-  type TripPlanJoinAnswers,
   type TripPlanLinkPreview,
   type TripPlanMemberStatus,
   type TripPlanMemberView,
@@ -86,6 +86,11 @@ const form = (planId: string, formId: string) =>
 
 export const createForm = (planId: string, body: TripPlanFormCreate) =>
   apiFetch<TripPlanFormView>(`${plan(planId)}/forms`, { method: "POST", body });
+/** Forms of the plans the caller leads, other than `except`, to copy. */
+export const getLeaderForms = (except: string) =>
+  apiFetch<{ forms: TripPlanLeaderForm[] }>(
+    `/plans/leader-forms?except=${encodeURIComponent(except)}`,
+  ).then((body) => body.forms);
 export const patchForm = (
   planId: string,
   formId: string,
@@ -157,21 +162,18 @@ export const revokeInviteLink = (planId: string, inviteId: string) =>
   });
 export const getInvitedPreview = (planId: string) =>
   apiFetch<TripPlanInvitedPreview>(`${plan(planId)}/preview`);
-export const joinPlan = (planId: string, answers: TripPlanJoinAnswers) =>
-  apiFetch<TripPlanView>(`${plan(planId)}/join`, {
-    method: "POST",
-    body: { answers },
-  });
+export const joinPlan = (planId: string) =>
+  apiFetch<TripPlanView>(`${plan(planId)}/join`, { method: "POST", body: {} });
 /** The token travels only in a POST body: a URL ends up in logs. */
 export const previewInviteLink = (token: string) =>
   apiFetch<TripPlanLinkPreview>("/plan-invites/preview", {
     method: "POST",
     body: { token },
   });
-export const redeemInviteLink = (token: string, answers: TripPlanJoinAnswers) =>
+export const redeemInviteLink = (token: string) =>
   apiFetch<TripPlanRedeemResult>("/plan-invites/redeem", {
     method: "POST",
-    body: { token, answers },
+    body: { token },
   });
 
 /** Add a copy of one of the caller's own things. */
@@ -189,12 +191,11 @@ export const savePlanItem = (
   planId: string,
   kind: TripPlanItemKind,
   itemId: string,
-  copyMedia?: boolean,
 ) =>
   // The copy, as the kind's own copy route answers.
   apiFetch<{ id: string; mediaSkipped?: number; mediaOutOfSpace?: true }>(
     `${item(planId, kind, itemId)}/save`,
-    { method: "POST", body: copyMedia === undefined ? {} : { copyMedia } },
+    { method: "POST", body: {} },
   );
 export const patchPlanItem = (
   planId: string,
