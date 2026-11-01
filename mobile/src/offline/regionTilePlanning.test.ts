@@ -109,10 +109,10 @@ describe("deadTileBudget", () => {
 });
 
 describe("regionClipSpecs", () => {
-  // Mutation: drop the contours, the slope or the vector map from the list
+  // Mutation: drop the contours, the slope, land or the vector map from the list
   // and this goes red: a saved area is then blank offline, with tools that
   // draw straight lines, or has a Slope switch that draws nothing. That the screen enqueues this list for every account has no guard.
-  it("gives every area the DEM archives, the contours, the slope and the vector map", () => {
+  it("gives every area the DEM archives, the contours, the slope, land and the vector map", () => {
     const run = {
       bbox: BBOX,
       groupId: "g",
@@ -125,17 +125,24 @@ describe("regionClipSpecs", () => {
       label: basemapId,
     }));
     expect(
-      specs.map((s) => [s.basemapId, s.demSourceId, s.contours, s.slope]),
+      specs.map((s) => [
+        s.basemapId,
+        s.demSourceId,
+        s.contours,
+        s.slope,
+        s.land,
+      ]),
     ).toEqual([
-      ["nsw-5m", "nsw-5m", undefined, undefined],
-      ["nsw-contours", undefined, true, undefined],
-      ["nsw-5m-slope", undefined, undefined, true],
-      ["protomaps", undefined, undefined, undefined],
+      ["nsw-5m", "nsw-5m", undefined, undefined, undefined],
+      ["nsw-contours", undefined, true, undefined, undefined],
+      ["nsw-5m-slope", undefined, undefined, true, undefined],
+      ["nsw-land", undefined, undefined, undefined, true],
+      ["protomaps", undefined, undefined, undefined, undefined],
     ]);
     for (const spec of specs) {
       expect(spec).toMatchObject({ taskKind: "clip", ...run });
     }
-    expect(new Set(specs.map((s) => s.id)).size).toBe(4);
+    expect(new Set(specs.map((s) => s.id)).size).toBe(5);
   });
 });
 
