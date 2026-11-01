@@ -109,6 +109,7 @@ import {
   planModeReducer,
   planModeStart,
 } from "../plans/planMap";
+import { addDrawnRouteToPlan } from "../plans/addDrawnRoute";
 import { readCachedPlan } from "../plans/plansCache";
 import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
@@ -827,6 +828,7 @@ export function MapScreen({
   startRecording,
   navigatePlace,
   planMode,
+  onRouteForPlan,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -876,7 +878,14 @@ export function MapScreen({
   // place's id and saves into its route slot; from the Saved tab's add sheet
   // `placeId` is null and the route belongs to nothing until the user links
   // it.
-  drawRouteFor?: { placeId: string | null; nonce: number } | null;
+  drawRouteFor?: {
+    placeId: string | null;
+    /** Drawn from this plan's page: the finished route goes into it. */
+    planId?: string;
+    nonce: number;
+  } | null;
+  /** A route drawn for a plan was saved: back to that plan's page. */
+  onRouteForPlan?: (planId: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -1069,6 +1078,7 @@ export function MapScreen({
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
   // Set when the draw was started from a place page; consumed by the save.
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
+  const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   /** The colour the draft will SAVE with, picked in the tool panel.
    *
    *  Null means "not chosen in this session", which is why the save writes the
@@ -1807,6 +1817,7 @@ export function MapScreen({
       const discard = () => {
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftPlanId(null);
         setDraftColor(null);
         if (typeof then === "function") then();
       };
@@ -1958,6 +1969,7 @@ export function MapScreen({
       // Anchors ride along so a snapped route reopens with the user's own
       // handful of vertices rather than every snapped one.
       const anchors = routeDraft.anchorIndices();
+      let planForRoute: { planId: string; routeId: string } | null = null;
       setSavingRoute(true);
       try {
         if (editingRouteId) {
@@ -1996,18 +2008,30 @@ export function MapScreen({
           // was, so the user can pick a different name or back out themselves.
           if (!filled) return;
         } else {
-          await createRouteLocal({
+          const routeId = await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
+          planForRoute = draftPlanId ? { planId: draftPlanId, routeId } : null;
         }
         setNamingRoute(false);
         routeDraft.close();
         setEditingRouteId(null);
         setDraftPlaceId(null);
+        setDraftPlanId(null);
         setDraftColor(null);
+        if (planForRoute) {
+          const { planId, routeId } = planForRoute;
+          if (await addDrawnRouteToPlan(planId, routeId))
+            onRouteForPlan?.(planId);
+          else
+            Alert.alert(
+              "Route saved",
+              "It's in Saved, but couldn't be added to the plan. Add it from the plan's Add a place or way.",
+            );
+        }
       } catch (err) {
         console.error(err);
         Alert.alert("Route error", "Couldn't save that route.");
@@ -2019,6 +2043,8 @@ export function MapScreen({
       placeTrackMedia,
       places.data,
       draftPlaceId,
+      draftPlanId,
+      onRouteForPlan,
       draftColor,
       editingRouteId,
       routeDraft,
@@ -2946,6 +2972,7 @@ export function MapScreen({
       routeDraft.open();
       setEditingRouteId(null);
       setDraftPlaceId(drawRouteFor.placeId);
+      setDraftPlanId(drawRouteFor.planId ?? null);
       setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
     };
     if (routeDraft.active && routeDraft.points.length > 0) {

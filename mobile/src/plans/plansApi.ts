@@ -14,7 +14,10 @@ import type {
   TripPlanRole,
   TripPlanInviteView,
   TripPlanMemberStatus,
+  TripPlanFilePatch,
   TripPlanPatch,
+  TripPlanPlacePatch,
+  TripPlanRoutePatch,
   TripPlanSectionCreate,
   TripPlanSectionPatch,
   TripPlanSectionView,
@@ -185,3 +188,24 @@ export const revokeInviteLink = (planId: string, inviteId: string) =>
   apiFetch<void>(`${plan(planId)}/invites/${encodeURIComponent(inviteId)}`, {
     method: "DELETE",
   });
+
+const planItem = (planId: string, kind: TripPlanItemKind, itemId: string) =>
+  `${plan(planId)}/items/${kind}/${encodeURIComponent(itemId)}`;
+
+/** Edit an item's words, each field as the value last seen and the new one. */
+export const patchPlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+  body: TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch,
+) =>
+  apiFetch<TripPlanItem>(planItem(planId, kind, itemId), {
+    method: "PATCH",
+    body,
+  });
+
+export const deletePlanItem = (
+  planId: string,
+  kind: TripPlanItemKind,
+  itemId: string,
+) => apiFetch<void>(planItem(planId, kind, itemId), { method: "DELETE" });

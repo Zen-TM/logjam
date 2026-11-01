@@ -36,6 +36,7 @@ import {
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PAGE,
   type SectionKeysOn,
+  type TripPlanItem,
   type TripPlanPageView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -47,8 +48,15 @@ import {
 } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
-import { onMirrorChanged } from "../sync/syncDb";
-import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
+import { getSyncStateValue, onMirrorChanged } from "../sync/syncDb";
+import {
+  formRhythm,
+  makeStyles,
+  muted,
+  spacing,
+  useHues,
+  useTheme,
+} from "../theme";
 import {
   Button,
   ChipRail,
@@ -78,6 +86,7 @@ import {
 import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
+import { itemTitle, PlanItemSheet } from "./PlanItemSheet";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { PlanTripLogSheet } from "./PlanTripLogSheet";
 import {
@@ -201,6 +210,7 @@ export function PlanScreen({
   onBack,
   onShowOnMap,
   onDownloadMap,
+  onDrawRoute,
   onGone,
 }: {
   planId: string;
@@ -216,6 +226,8 @@ export function PlanScreen({
   ) => void;
   /** The region download, framed on the plan's items. */
   onDownloadMap: (bbox: [number, number, number, number]) => void;
+  /** The map with the pen armed; the finished route is added to this plan. */
+  onDrawRoute: (planId: string) => void;
   /** The caller left or deleted the plan: back to Plans, saying so. */
   onGone: (message: string) => void;
 }) {
@@ -272,6 +284,7 @@ export function PlanScreen({
       onBack={onBack}
       onShowOnMap={() => onShowOnMap(planId, planBbox(cached.plan))}
       onDownloadMap={onDownloadMap}
+      onDrawRoute={onDrawRoute}
       onGone={onGone}
       onLeaving={setLeaving}
     />
@@ -290,6 +303,7 @@ function PlanPage({
   onBack,
   onShowOnMap,
   onDownloadMap,
+  onDrawRoute,
   onGone,
   onLeaving,
 }: {
@@ -304,6 +318,7 @@ function PlanPage({
   onBack: () => void;
   onShowOnMap: () => void;
   onDownloadMap: (bbox: [number, number, number, number]) => void;
+  onDrawRoute: (planId: string) => void;
   onGone: (message: string) => void;
   onLeaving: (leaving: boolean) => void;
 }) {
@@ -405,47 +420,36 @@ function PlanPage({
             ) : null}
           </View>
         ) : null}
-        <PlanDownload
-          cached={cached}
-          online={online}
-          now={now}
-          onDownloadMap={onDownloadMap}
-        />
+        <PlanDownload cached={cached} now={now} />
       </Hero>
     ),
     notices: notice ? (
       <View style={styles.notice}>
-        <Notice
-          icon={notice.icon}
-          controls={
-            notice.kind === "answer" ? (
-              // The button only dims: the words go under it (ui/Button.tsx).
-              <View style={styles.noticeControl}>
-                <Button
-                  label={TRIP_PLAN_FORMS.copy.answer}
-                  compact
-                  variant="outlineAccent"
-                  disabled={!online}
-                  disabledReason={OFFLINE}
-                  onPress={() =>
-                    setFormSheet({ formId: notice.formId, mode: "answer" })
-                  }
-                />
-                {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-              </View>
-            ) : notice.kind === "over" ? (
-              // Live offline: a trip log is the caller's own and queues.
-              <Button
-                label={planVerbLabel("tripLog")}
-                compact
-                variant="outlineAccent"
-                onPress={() => setTripLogOpen(true)}
-              />
-            ) : undefined
-          }
-        >
-          {notice.text}
-        </Notice>
+        {notice.kind === "answer" || notice.kind === "over" ? (
+          // A prompt that opens a form is a pressable row, as every other
+          // thing here that opens something.
+          <Row
+            icon={notice.icon}
+            title={notice.text}
+            titleNumberOfLines={3}
+            subtitle={
+              online || notice.kind === "over"
+                ? notice.kind === "answer"
+                  ? TRIP_PLAN_FORMS.copy.answer
+                  : planVerbLabel("tripLog")
+                : OFFLINE
+            }
+            // Live offline: a trip log is the caller's own and queues.
+            disabled={!online && notice.kind === "answer"}
+            onPress={() =>
+              notice.kind === "answer"
+                ? setFormSheet({ formId: notice.formId, mode: "answer" })
+                : setTripLogOpen(true)
+            }
+          />
+        ) : (
+          <Notice icon={notice.icon}>{notice.text}</Notice>
+        )}
       </View>
     ) : null,
     dates: (
@@ -483,6 +487,8 @@ function PlanPage({
           online={online}
           canAdd={adds.has("copy")}
           onInfo={notify}
+          onError={(text) => notify(text, "error")}
+          onDrawRoute={() => onDrawRoute(plan.id)}
         />
       ) : null,
     forms:
@@ -532,8 +538,9 @@ function PlanPage({
       </ScrollView>
 
       <PlanOptionsSheet
-        plan={menuOpen ? plan : null}
+        cached={menuOpen ? cached : null}
         online={online}
+        onDownloadMap={onDownloadMap}
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditOpen(true)}
         onTripLog={() => setTripLogOpen(true)}
@@ -658,9 +665,9 @@ function WriteUp({
       {plan.sections.map((section) => (
         <View key={section.id} style={styles.section}>
           <View style={styles.sectionHead}>
-            <View style={styles.sectionTitle}>
-              <SectionHeader title={section.title} />
-            </View>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              {section.title}
+            </Text>
             {canWrite ? (
               <IconButton
                 icon="overflow"
@@ -687,12 +694,16 @@ function Items({
   online,
   canAdd,
   onInfo,
+  onError,
+  onDrawRoute,
 }: {
   plan: TripPlanView;
   online: boolean;
   /** The caller may Add a copy (and it's live). */
   canAdd: boolean;
   onInfo: (message: string, tone?: "info" | "error") => void;
+  onError: (message: string) => void;
+  onDrawRoute: () => void;
 }) {
   const theme = useTheme();
   const [saving, setSaving] = useState<SaveCopyTarget | null>(null);
@@ -710,6 +721,14 @@ function Items({
         disabledReason={OFFLINE}
         onPress={() => setAdding(true)}
       />
+      <Button
+        label="Draw a route"
+        icon="route"
+        variant="outlineAccent"
+        disabled={!online}
+        disabledReason={OFFLINE}
+        onPress={onDrawRoute}
+      />
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
         <AddCopySheet
@@ -722,15 +741,18 @@ function Items({
       ) : null}
     </>
   ) : null;
-  /** Save a copy, on each way and map: its row's trailing control, dimmed
-   *  offline with the reason in its label (a route's row says it too). */
-  const saveCopy = (target: SaveCopyTarget) => (
+  const [menuItem, setMenuItem] = useState<TripPlanItem | null>(null);
+  const [me, setMe] = useState<string | null>(null);
+  useEffect(() => {
+    void getSyncStateValue("userId").then(setMe).catch(console.error);
+  }, []);
+  /** The item's ⋯ (`PlanItemSheet`): its row's trailing control. */
+  const menu = (item: TripPlanItem) => (
     <IconButton
-      icon={SAVE_A_COPY.icon}
-      accessibilityLabel={`${SAVE_A_COPY.label}: ${target.title}${online ? "" : `. ${OFFLINE}`}`}
+      icon="overflow"
+      accessibilityLabel={`Actions for ${itemTitle(item)}`}
       color={theme.textMuted}
-      disabled={!online}
-      onPress={() => setSaving(target)}
+      onPress={() => setMenuItem(item)}
     />
   );
   const { assetHue } = useHues();
@@ -767,6 +789,7 @@ function Items({
           hue={theme.accent}
           title={each.name}
           subtitle={tripPlanAddedByLine(each.addedBy)}
+          right={menu(each)}
           onPress={() => setPlaceId(each.id)}
         />
       ))}
@@ -786,14 +809,9 @@ function Items({
           icon="route"
           hue={assetHue.route}
           title={route.name}
-          // Its only action is Save a copy, which needs a connection.
+          // Its actions all need a connection.
           subtitle={subtitle(tripPlanAddedByLine(route.addedBy), false)}
-          right={saveCopy({
-            kind: "route",
-            id: route.id,
-            title: route.name,
-            photos: 0,
-          })}
+          right={menu(route)}
         />
       ))}
       {plan.files.map((file) => {
@@ -810,12 +828,7 @@ function Items({
             icon="importedFile"
             hue={assetHue.import}
             title={mediaDisplayName(file.item)}
-            right={saveCopy({
-              kind: "media",
-              id: file.id,
-              title: mediaDisplayName(file.item),
-              photos: 0,
-            })}
+            right={menu(file)}
             subtitle={subtitle(
               tripPlanAddedByLine(file.addedBy),
               // Opens only as a photo or video; a GPX/KML row's one action
@@ -840,6 +853,25 @@ function Items({
         );
       })}
       {add}
+      <PlanItemSheet
+        item={menuItem}
+        planId={plan.id}
+        role={plan.myRole}
+        me={me}
+        archived={plan.archivedAt != null}
+        online={online}
+        onClose={() => setMenuItem(null)}
+        onSave={(item) =>
+          setSaving({
+            kind: item.kind,
+            id: item.id,
+            title: itemTitle(item),
+            photos: item.kind === "place" ? item.media.length : 0,
+          })
+        }
+        onInfo={onInfo}
+        onError={onError}
+      />
       <SaveCopySheet
         planId={plan.id}
         target={saving}
@@ -928,7 +960,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   notice: { paddingHorizontal: spacing(2), paddingTop: spacing(1) },
-  noticeControl: { alignItems: "center", gap: spacing(0.5) },
   dates: {
     ...muted(theme, textRole.detail),
     paddingHorizontal: spacing(2),
@@ -942,7 +973,17 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   section: { gap: spacing(1) },
-  sectionHead: { flexDirection: "row", alignItems: "flex-end" },
-  sectionTitle: { flex: 1 },
+  // The title is SectionHeader's style without its margins, so the ⋯ centres
+  // on the line.
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: formRhythm.section,
+  },
+  sectionTitle: {
+    ...muted(theme, textRole.section),
+    flex: 1,
+    letterSpacing: 0.8,
+  },
   sectionBody: { ...textRole.body, color: theme.text },
 }));
