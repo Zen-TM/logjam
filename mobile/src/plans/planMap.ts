@@ -111,6 +111,9 @@ export function planModeReducer(
   }
 }
 
+/** How faint the user's own things draw under a plan, on every layer. */
+export const PLAN_DIM = 0.4;
+
 /** The same pins, drawn faint (`muted` in the pin layers' style). */
 export function mutedFeatures<F extends { features: { properties: object }[] }>(
   fc: F,

@@ -61,6 +61,7 @@ const {
   fetchPlan,
   opensAsPreview,
   planChanged,
+  planMovedOn,
   planForUrls,
   pollPlans,
   readCachedPlan,
@@ -355,6 +356,27 @@ describe("Download for the trip", () => {
     expect((await readCachedPlan("a"))?.downloadedAt).toBeNull();
     await downloadPlan("a", () => {});
     expect((await readCachedPlan("a"))?.downloadedAt).not.toBeNull();
+  });
+});
+
+describe("planMovedOn", () => {
+  const stamps = new Map([
+    ["a", { updatedAt: "2026-10-01T00:00:00.000Z", downloadedAt: null }],
+  ]);
+  const list = (updatedAt: string) => ({ plans: [{ id: "a", updatedAt }] });
+  // Mutation: read the cached payload's own updatedAt, as the page once did,
+  // and the page and the list card disagree about one plan.
+  it("is the list card's answer from the same stamps", () => {
+    expect(planMovedOn("a", list("2026-10-02T00:00:00.000Z"), stamps)).toBe(
+      true,
+    );
+    expect(planMovedOn("a", list("2026-10-01T00:00:00.000Z"), stamps)).toBe(
+      false,
+    );
+    expect(planMovedOn("a", null, stamps)).toBe(false);
+    expect(planMovedOn("b", list("2026-10-02T00:00:00.000Z"), stamps)).toBe(
+      false,
+    );
   });
 });
 

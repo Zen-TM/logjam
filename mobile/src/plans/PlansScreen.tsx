@@ -28,6 +28,8 @@ import {
   tripPlanBucket,
   listSelectionLabel,
   tripPlanBulkConfirm,
+  tripPlanCardActionsLabel,
+  tripPlanFormsUrgent,
   tripPlanBulkOffers,
   tripPlanFormsToAnswerLine,
   tripPlanRowPill,
@@ -71,7 +73,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { planSelectable } from "./planBulk";
+import { planSelectable, runPlanBulk } from "./planBulk";
 import { startPlanDownload } from "./planDownloads";
 import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
 import {
@@ -166,6 +168,7 @@ export function PlansScreen({
   const shown = plansListView({ plans, failure, settled, online });
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
   const [newOpen, setNewOpen] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [toastAt, setToastAt] = useState<number | undefined>(undefined);
   if (message && message.at !== toastAt) {
@@ -200,6 +203,7 @@ export function PlansScreen({
     clearSelection,
     selectItem,
     selectAll,
+    selectOnly,
     selectedItems,
     selectableItems,
     selecting,
@@ -334,59 +338,50 @@ export function PlansScreen({
   const selectedPlans = selectedItems;
   const bulk = tripPlanBulkOffers(selectedPlans);
   const archivedBucket = bucket === "archived";
+  // The plans that did not go through stay selected, to try again.
+  const finishBulk = async (steps: Parameters<typeof runPlanBulk>[0]) => {
+    const { message, failedIds } = await runPlanBulk(steps);
+    if (failedIds.length > 0) {
+      selectOnly(failedIds);
+      await poll();
+    } else clearSelection();
+    report(message, failedIds.length > 0 ? "error" : "info");
+  };
   const runBulk = () => {
+    if (!online) return report(OFFLINE, "error");
     const { lead, leave: leaving } = bulk;
-    confirm(
-      tripPlanBulkConfirm({ lead: lead.length, leave: leaving.length }),
-      true,
-      () => {
-        void (async () => {
-          const calls = [
-            ...lead.map((plan) =>
-              deletePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
-            ),
-            ...leaving.map((plan) =>
-              leavePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
-            ),
-          ];
-          const failed = (await Promise.allSettled(calls)).filter(
-            (result) => result.status === "rejected",
-          ).length;
-          clearSelection();
-          if (failed > 0) {
-            await poll();
-            report(
-              `Couldn't change ${failed} of ${calls.length} plans.`,
-              "error",
-            );
-          } else
-            report(
-              `Done: ${calls.length} ${calls.length === 1 ? "plan" : "plans"}.`,
-              "info",
-            );
-        })();
-      },
-    );
+    const words = tripPlanBulkConfirm({
+      lead: lead.length,
+      leave: leaving.length,
+    });
+    confirm(words, words.destructive, () => {
+      void finishBulk([
+        ...lead.map((plan) => ({
+          id: plan.id,
+          kind: "delete" as const,
+          run: () =>
+            deletePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
+        })),
+        ...leaving.map((plan) => ({
+          id: plan.id,
+          kind: "leave" as const,
+          run: () =>
+            leavePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
+        })),
+      ]);
+    });
   };
   const runBulkArchive = () => {
+    if (!online) return report(OFFLINE, "error");
     const archived = !archivedBucket;
-    void (async () => {
-      const failed = (
-        await Promise.allSettled(
-          bulk.lead.map((plan) =>
-            archivePlan(plan.id, archived).then(() => afterPlanWrite(plan.id)),
-          ),
-        )
-      ).filter((result) => result.status === "rejected").length;
-      clearSelection();
-      if (failed > 0) {
-        await poll();
-        report(
-          `Couldn't change ${failed} of ${bulk.lead.length} plans.`,
-          "error",
-        );
-      } else report(archived ? pageCopy.archived : pageCopy.unarchived, "info");
-    })();
+    void finishBulk(
+      bulk.lead.map((plan) => ({
+        id: plan.id,
+        kind: archived ? ("archive" as const) : ("unarchive" as const),
+        run: () =>
+          archivePlan(plan.id, archived).then(() => afterPlanWrite(plan.id)),
+      })),
+    );
   };
 
   const renderItem = useCallback(
@@ -411,6 +406,8 @@ export function PlansScreen({
           }
           onLongPress={() => selectItem(item)}
           selected={picked}
+          // An invite or a request can't be picked: it dims while picking.
+          disabled={selecting && !planSelectable(item)}
           right={
             <View style={styles.pills}>
               {pill ? <StatusPill label={pill} tone="outline" /> : null}
@@ -420,7 +417,7 @@ export function PlansScreen({
               ) : item.status !== "invited" ? (
                 <IconButton
                   icon="overflow"
-                  accessibilityLabel={`Actions for ${item.name}`}
+                  accessibilityLabel={tripPlanCardActionsLabel(item.name)}
                   color={theme.textMuted}
                   onPress={() => setMenuFor(item)}
                 />
@@ -439,7 +436,11 @@ export function PlansScreen({
                 {item.unansweredForms > 0 ? (
                   <StatusPill
                     label={tripPlanFormsToAnswerLine(item.unansweredForms)}
-                    tone="outline"
+                    tone={
+                      tripPlanFormsUrgent(item.unansweredForms, item, today)
+                        ? "warning"
+                        : "outline"
+                    }
                   />
                 ) : null}
                 {planChanged(item, stamp) ? (
@@ -500,6 +501,7 @@ export function PlansScreen({
       stamps,
       styles,
       theme.textMuted,
+      today,
     ],
   );
 
@@ -543,10 +545,9 @@ export function PlansScreen({
         onBack={onBack}
         actions={
           <IconButton
-            icon="multiSelect"
-            accessibilityLabel="Select all"
-            disabled={selectableItems.length === 0}
-            onPress={selectAll}
+            icon="overflow"
+            accessibilityLabel={copy.plansActions}
+            onPress={() => setActionsOpen(true)}
           />
         }
       >
@@ -571,13 +572,13 @@ export function PlansScreen({
             countLabel={listSelectionLabel(selectedPlans.length)}
             showSelectAll={selectedPlans.length < selectableItems.length}
             extra={
-              bulk.lead.length > 0 ? (
+              bulk.archive ? (
                 <IconButton
                   icon="archive"
                   accessibilityLabel={
                     archivedBucket
-                      ? "Bring back the selected plans"
-                      : "Archive the selected plans"
+                      ? copy.unarchiveSelected
+                      : copy.archiveSelected
                   }
                   color={theme.accent}
                   disabled={!online}
@@ -588,7 +589,12 @@ export function PlansScreen({
             onClear={clearSelection}
             onSelectAll={selectAll}
             onDelete={runBulk}
-            deleteLabel="Delete or leave the selected plans"
+            deleteIcon={bulk.destructive ? "delete" : "leave"}
+            destructive={bulk.destructive}
+            deleteDisabled={!online}
+            deleteLabel={
+              online ? bulk.deleteLabel : `${bulk.deleteLabel}. ${OFFLINE}`
+            }
           />
         ) : (
           <ChipRail
@@ -666,6 +672,21 @@ export function PlansScreen({
           onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
+      <BottomSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title={copy.plansActions}
+      >
+        <Row
+          icon="multiSelect"
+          title={copy.selectAllPlans}
+          disabled={selectableItems.length === 0}
+          onPress={() => {
+            setActionsOpen(false);
+            selectAll();
+          }}
+        />
+      </BottomSheet>
       <BottomSheet
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}

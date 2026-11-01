@@ -83,8 +83,16 @@ export const TRIP_PLANS_LIST = {
     save: "Save",
     makeFailed: "Couldn't make the plan.",
     saveFailed: "Couldn't save the plan.",
+
+    plansActions: "Plans actions",
+    selectAllPlans: "Select all plans",
+    archiveSelected: "Archive the selected plans",
+    unarchiveSelected: "Bring back the selected plans",
   },
 } as const satisfies ScreenContract;
+
+/** A plan card's ⋯ label. */
+export const tripPlanCardActionsLabel = (name: string) => `Actions for ${name}`;
 
 export type TripPlanBucket = "upcoming" | "past" | "archived";
 
@@ -999,6 +1007,23 @@ export function tripPlanFormsToAnswerLine(count: number): string {
 
 const DAY_MS = 86_400_000;
 
+/** The nudge turns urgent when forms are waiting and the trip starts within
+ *  TRIP_PLAN_FORMS_URGENT_DAYS: one rule for the plan page and the list card. */
+export function tripPlanFormsUrgent(
+  count: number,
+  plan: { startDate: DateOnly | null; endDate: DateOnly | null },
+  today: DateOnly,
+): boolean {
+  const first = firstDay(plan);
+  return (
+    count > 0 &&
+    first != null &&
+    (Date.parse(`${first}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
+      DAY_MS <=
+      TRIP_PLAN_FORMS_URGENT_DAYS
+  );
+}
+
 /**
  * The forms the caller hasn't answered, in the plan's order, and whether the
  * nudge is urgent: the trip's first day is within 7 days (or has come), by
@@ -1015,13 +1040,7 @@ export function tripPlanFormsToAnswer(
       : plan.forms
           .filter((form) => form.myAnswer == null)
           .map(({ id, title }) => ({ id, title }));
-  const first = firstDay(plan);
-  const urgent =
-    forms.length > 0 &&
-    first != null &&
-    (Date.parse(`${first}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
-      DAY_MS <=
-      TRIP_PLAN_FORMS_URGENT_DAYS;
+  const urgent = tripPlanFormsUrgent(forms.length, plan, today);
   return { forms, urgent };
 }
 
