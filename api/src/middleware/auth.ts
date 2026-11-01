@@ -5,7 +5,7 @@ import { say } from "@logjam/shared";
 import { AppError } from "../lib/appError";
 import { getEnv } from "../lib/env";
 
-// Fail fast at module load if AUTH_MODE=fake would bypass Cognito in a non-dev runtime.
+// Fail fast at module load if AUTH_MODE=fake would bypass real auth in a non-dev runtime.
 // These two guards read process.env, not getEnv(), on purpose: they are a
 // second lock beside validateEnv's own fake-in-production check, independent
 // of it, so a bug in either still fails closed.
@@ -33,52 +33,67 @@ if (process.env.AUTH_MODE === "fake") {
 }
 
 // Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
-// MUST run cognito auth. This catches a misconfigured prod task even if the
-// AUTH_MODE=fake heuristics above were somehow all defeated. Guard:
-// src/middleware/auth.unit.test.ts.
+// MUST run real auth ("oidc", or its alias "cognito"). This catches a
+// misconfigured prod task even if the AUTH_MODE=fake heuristics above were
+// somehow all defeated. Guard: src/middleware/auth.unit.test.ts.
 if (
   process.env.ECS_CONTAINER_METADATA_URI_V4 &&
+  process.env.AUTH_MODE !== "oidc" &&
   process.env.AUTH_MODE !== "cognito"
 ) {
   throw new Error(
-    `AUTH_MODE must be "cognito" in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
+    `AUTH_MODE must be "oidc" (or "cognito") in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
   );
 }
 
 let client: jwksClient.JwksClient | null = null;
 
-function getClient() {
-  if (!client) {
-    client = jwksClient({
-      jwksUri: `https://cognito-idp.${getEnv().COGNITO_REGION}.amazonaws.com/${getEnv().COGNITO_USER_POOL_ID}/.well-known/jwks.json`,
-    });
+// The jwks client is cached only once discovery has succeeded, so an issuer
+// outage rejects every request meanwhile and recovers without a restart.
+async function getClient(): Promise<jwksClient.JwksClient> {
+  if (client) return client;
+  const issuer = getEnv().OIDC_ISSUER!;
+  const res = await fetch(
+    `${issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`,
+    { signal: AbortSignal.timeout(5000) },
+  );
+  if (!res.ok) throw new Error(`OIDC discovery answered ${res.status}`);
+  const doc = (await res.json()) as { issuer?: unknown; jwks_uri?: unknown };
+  // A document naming another issuer would let that issuer's keys vouch for ours.
+  if (doc.issuer !== issuer) throw new Error("OIDC discovery issuer mismatch");
+  if (typeof doc.jwks_uri !== "string") {
+    throw new Error("OIDC discovery has no jwks_uri");
   }
+  client = jwksClient({ jwksUri: doc.jwks_uri });
   return client;
 }
 
 function getKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
-  getClient().getSigningKey(header.kid, (err, key) => {
-    if (err) return callback(err);
-    const signingKey = key?.getPublicKey();
-    callback(null, signingKey);
-  });
+  getClient().then(
+    (c) =>
+      c.getSigningKey(header.kid, (err, key) => {
+        if (err) return callback(err);
+        callback(null, key?.getPublicKey());
+      }),
+    (err) => callback(err),
+  );
 }
 
 export interface AuthenticatedRequest extends Request {
   user?: {
-    sub: string; // Cognito user ID
+    sub: string; // the provider's subject id
     email: string;
     emailVerified: boolean;
     username: string;
   };
 }
 
-// Dev-only fake actors, keyed by Cognito sub. Lets integration tests switch the
+// Dev-only fake actors, keyed by sub. Lets integration tests switch the
 // acting user per request via the `x-fake-sub` header so sharee and stranger
 // perspectives are testable without restarting the API. Subs/usernames mirror
 // api/prisma/seed.ts. This is safe: the whole fake branch is unreachable outside
 // AUTH_MODE=fake, which the module-load guard above refuses in any non-dev
-// runtime; the header is never read in cognito mode.
+// runtime; the header is never read in real-auth mode.
 const FAKE_ACTORS: Record<string, { email: string; username: string }> = {
   "fake-alice-sub": { email: "alice@local", username: "alice" },
   "fake-bob-sub": { email: "bob@local", username: "bob" },
@@ -138,10 +153,11 @@ export function requireAuth(
     token,
     getKey,
     {
-      issuer: `https://cognito-idp.${env.COGNITO_REGION}.amazonaws.com/${env.COGNITO_USER_POOL_ID}`,
-      // Cognito ID tokens carry aud=<app client id>. Asserting audience rejects
-      // tokens minted for a different app client in the same user pool.
-      audience: env.COGNITO_CLIENT_ID,
+      // Verbatim, trailing slash included: some providers' issuers have one.
+      issuer: env.OIDC_ISSUER,
+      // ID tokens carry aud=<client id>. Asserting it rejects tokens minted for
+      // another client, and Cognito access tokens, which carry no aud.
+      audience: env.OIDC_AUDIENCE_LIST as [string, ...string[]],
       algorithms: ["RS256"],
     },
     (err, decoded) => {
@@ -152,10 +168,9 @@ export function requireAuth(
 
       const payload = decoded as jwt.JwtPayload;
 
-      // Reject Cognito access tokens (token_use=access). They are signed by the
-      // same JWKS under the same issuer but lack identity claims (email,
-      // preferred_username). Only ID tokens establish identity here.
-      if (payload.token_use !== "id") {
+      // token_use is Cognito's: when present it must say "id" (access tokens
+      // lack the identity claims); a provider without it is judged on aud alone.
+      if (payload.token_use !== undefined && payload.token_use !== "id") {
         next(signInAgain("Invalid token type"));
         return;
       }

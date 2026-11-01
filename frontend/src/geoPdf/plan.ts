@@ -7,6 +7,7 @@ import {
   computeZoom,
   geoPdfMaxNativeZoom,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_HILLSHADE,
   NSW_SLOPE,
   TARGET_DPI,
@@ -18,7 +19,7 @@ import {
   areasOnPage,
   contourTilesBySource,
   demBlockRows,
-  nswContourZoom,
+  nswVectorZoom,
   overlaysDrawn,
   STATEWIDE,
   terrainReadZoom,
@@ -147,7 +148,12 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
       .blocks[0]!.reads)
       if (r.source === STATEWIDE) add(path, r);
   }
-  const contourZoom = nswContourZoom(config.scale, g.centreLat, g.overlayZoom);
+  const contourZoom = nswVectorZoom(
+    NSW_CONTOURS,
+    config.scale,
+    g.centreLat,
+    g.overlayZoom,
+  );
   if (contourZoom !== null && drawn.contours) {
     const { north, south, east, west } = config.extent;
     const t = computeTileToMapTransform(
@@ -161,6 +167,25 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
     );
     const tiles = contourTilesBySource(areas, t.tiles).get(STATEWIDE) ?? [];
     for (const tile of tiles) add(NSW_CONTOURS.archivePath, tile);
+  }
+  const landZoom = nswVectorZoom(
+    NSW_LAND,
+    config.scale,
+    g.centreLat,
+    g.overlayZoom,
+  );
+  if (landZoom !== null && config.overlays.includes("land")) {
+    const { north, south, east, west } = config.extent;
+    const t = computeTileToMapTransform(
+      landZoom,
+      north,
+      south,
+      east,
+      west,
+      g.nativeW,
+      g.nativeH,
+    );
+    for (const tile of t.tiles) add(NSW_LAND.archivePath, tile);
   }
   return [...out.values()];
 }

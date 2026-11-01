@@ -40,6 +40,15 @@ export function setTerrainLayers(
   return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }
 
+const GAUGES_PREF_KEY = "mapGaugesLayer";
+
+/** The river gauge layer, off until the user switches it on. */
+export const readGaugesLayer = (): boolean =>
+  readPref(GAUGES_PREF_KEY) === "on";
+
+export const setGaugesLayer = (on: boolean): boolean =>
+  writePref(GAUGES_PREF_KEY, on ? "on" : "off");
+
 /** False when the device refused to store it, so the caller can say so. */
 export function setBasemapPreference(basemapId: BasemapId): boolean {
   return writePref(BASEMAP_PREF_KEY, basemapId);

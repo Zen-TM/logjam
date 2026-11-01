@@ -1,0 +1,37 @@
+/* Layout only: the figures and the chart are the kit's. */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: calc(var(--space-6) * 5);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-1);
+  padding-top: var(--space-0-5);
+}
+
+.name {
+  composes: heading from "../../textRoles.generated.module.css";
+  margin: 0;
+}
+
+.graphTitle {
+  composes: rowTitle from "../../textRoles.generated.module.css";
+  margin: 0 0 var(--space-0-5);
+}
+
+.muted {
+  composes: detail from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.credit {
+  composes: meta from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}

@@ -71,7 +71,7 @@ describe("scrubStructure", () => {
   it("censors coordinate and name keys at any depth", () => {
     const input = {
       place: { name: "Secret", latitude: -33.7, longitude: 150.3, safe: "ok" },
-      list: [{ notes: "private", other: 1 }],
+      list: [{ notes: "private", gaugeId: "210001", other: 1 }],
     };
     expect(scrubStructure(input)).toEqual({
       place: {
@@ -80,7 +80,7 @@ describe("scrubStructure", () => {
         longitude: "[redacted]",
         safe: "ok",
       },
-      list: [{ notes: "[redacted]", other: 1 }],
+      list: [{ notes: "[redacted]", gaugeId: "[redacted]", other: 1 }],
     });
   });
 

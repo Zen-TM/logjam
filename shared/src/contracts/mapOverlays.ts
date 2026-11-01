@@ -6,7 +6,9 @@
 // A row's switch draws or hides that kind of thing on the map. Whose a thing is
 // never splits a row: "mine" and "shared with me" are the same kind of thing
 // drawn the same way, and the pin itself says whose it is.
+import { GAUGES } from "./gauges.js";
 import { MAP_LAYERS } from "./mapLayers.js";
+import { MAP_TERRAIN } from "./mapTerrain.js";
 import type { ScreenContract } from "./types.js";
 
 export const MAP_OVERLAYS = {
@@ -20,11 +22,15 @@ export const MAP_OVERLAYS = {
       reason:
         "A GeoPDF is imported onto the phone and drawn by its own switch there; Logjam Web makes them but does not draw them.",
     },
+    { key: "land" },
+    { key: "gauges" },
     { key: "importFile" },
   ],
   copy: {
     places: MAP_LAYERS.copy.places,
     ways: MAP_LAYERS.copy.ways,
+    land: MAP_TERRAIN.copy.land,
+    gauges: GAUGES.copy.overlay,
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },

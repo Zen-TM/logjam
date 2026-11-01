@@ -7,8 +7,11 @@ import {
 } from "react";
 import {
   contractSectionKeys,
+  LAND_CLASSES,
   MAP_LAYERS,
+  MAP_OVERLAYS,
   MAP_TERRAIN,
+  NSW_LAND,
   PLACE_TYPE_COLORS,
   takesNswContours,
   takesNswHillshade,
@@ -89,6 +92,8 @@ export default function LayersPopover({
   setShowPlaces,
   showWays,
   setShowWays,
+  showGauges,
+  setShowGauges,
   placeCount,
   wayCount,
   completedTopoJobs,
@@ -119,6 +124,8 @@ export default function LayersPopover({
   setShowPlaces: (v: boolean) => void;
   showWays: boolean;
   setShowWays: (v: boolean) => void;
+  showGauges: boolean;
+  setShowGauges: (v: boolean) => void;
   /** Every place drawn: the user's own and the ones shared with them. */
   placeCount: number;
   /** Null while the lines are not loaded (they load with their layer). */
@@ -170,7 +177,12 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const overlaysOn = [showPlaces, showWays].filter(Boolean).length;
+  const overlaysOn = [
+    showPlaces,
+    showWays,
+    terrainLayers.land,
+    showGauges,
+  ].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -312,6 +324,17 @@ export default function LayersPopover({
                     }
                     checked={showWays}
                     onToggle={setShowWays}
+                  />
+                  <LandRow
+                    checked={terrainLayers.land}
+                    onToggle={(on) => onTerrainLayerChange("land", on)}
+                  />
+                  <OverlayRow
+                    icon="gauge"
+                    hue="var(--color-accent)"
+                    title={MAP_OVERLAYS.copy.gauges}
+                    checked={showGauges}
+                    onToggle={setShowGauges}
                   />
                   {/* The list ends with the way to add to it: the same
                       import the Ways and Logs lists offer. */}
@@ -484,6 +507,49 @@ function SlopeBandsView({
   );
 }
 
+/** The Land tenure row, with the legend its help button opens. */
+export function LandRow({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  const [legendOpen, setLegendOpen] = useState(false);
+  return (
+    <>
+      <OverlayRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={terrainCopy.land}
+        checked={checked}
+        onToggle={onToggle}
+        help={{
+          label: terrainCopy.landAbout,
+          onClick: () => setLegendOpen(true),
+        }}
+      />
+      <Dialog
+        open={legendOpen}
+        title={terrainCopy.land}
+        onClose={() => setLegendOpen(false)}
+      >
+        <p>{terrainCopy.landLegend}</p>
+        <ul className={classes.landLegend}>
+          {LAND_CLASSES.map(({ name, colour }) => (
+            <li key={name}>
+              <IconTile icon="layers" hue={colour} />
+              {name}
+            </li>
+          ))}
+        </ul>
+        <p>{terrainCopy.landCaveat}</p>
+        <p>{NSW_LAND.credit}</p>
+      </Dialog>
+    </>
+  );
+}
+
 function OverlayRow({
   icon,
   hue,
@@ -493,15 +559,17 @@ function OverlayRow({
   onToggle,
   onOpen,
   openLabel,
+  help,
 }: {
   icon: Glyph;
   hue: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   checked: boolean;
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
   openLabel?: string;
+  help?: { label: string; onClick: () => void };
 }) {
   return (
     <Row
@@ -510,6 +578,9 @@ function OverlayRow({
       subtitle={subtitle}
       trailing={
         <>
+          {help && (
+            <IconButton icon="help" label={help.label} onClick={help.onClick} />
+          )}
           {onOpen && (
             <IconButton
               icon="disclosure"

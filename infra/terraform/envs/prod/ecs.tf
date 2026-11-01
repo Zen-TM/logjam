@@ -75,8 +75,23 @@ resource "aws_ecs_task_definition" "api_script" {
       name  = "NODE_ENV"
       value = "production"
       }, {
+      name  = "OIDC_AUDIENCE"
+      value = "545ofbb8l9d1sl6ggbmk6oonn9"
+      }, {
+      name  = "OIDC_ISSUER"
+      value = "https://cognito-idp.ap-southeast-2.amazonaws.com/ap-southeast-2_x5zPhJXMk"
+      }, {
       name  = "S3_BUCKET_MEDIA"
       value = "logjam-media"
+      }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
       }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
@@ -106,7 +121,7 @@ resource "aws_ecs_task_definition" "api_script" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -146,6 +161,15 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name  = "EMAIL_FROM"
       value = "noreply@notifications.logjamnsw.com"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
       }, {
@@ -174,7 +198,7 @@ resource "aws_ecs_task_definition" "topo_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -281,6 +305,15 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name  = "FRONTEND_URL"
       value = "https://logjamnsw.com/"
       }, {
+      name  = "SMTP_HOST"
+      value = "smtp.resend.com"
+      }, {
+      name  = "SMTP_PORT"
+      value = "465"
+      }, {
+      name  = "SMTP_USER"
+      value = "resend"
+      }, {
       name  = "S3_BUCKET_TOPO"
       value = "logjam-topo-jobs"
     }]
@@ -306,7 +339,7 @@ resource "aws_ecs_task_definition" "topo_export_worker" {
       name      = "DB_USER"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/app-db-password-bTvuYd:username::"
       }, {
-      name      = "RESEND_API_KEY"
+      name      = "SMTP_PASSWORD"
       valueFrom = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs:apiKey::"
     }]
     systemControls = []
@@ -468,15 +501,12 @@ resource "aws_scheduler_schedule_group" "gauges" {
 }
 
 # Every two hours; build_gauges.py's RUNS_PER_DAY and the 29-calls-a-day quota
-# assume it (guard: topo/tests/test_gauges.py). Created DISABLED: applying
-# makes the schedule live before the maintainer can put the API key's value in
-# the secret, and a run without it fails every two hours. Enable it, after
-# the value is set, by changing `state` to "ENABLED" and applying.
+# assume it (guard: topo/tests/test_gauges.py).
 resource "aws_scheduler_schedule" "gauges" {
   name                = "logjam-gauges"
   group_name          = aws_scheduler_schedule_group.gauges.name
   schedule_expression = "rate(2 hours)"
-  state               = "DISABLED"
+  state               = "ENABLED"
 
   flexible_time_window {
     mode = "OFF"

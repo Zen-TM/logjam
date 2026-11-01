@@ -290,6 +290,11 @@ def dem_ground(dem_files: List[Path], order: List[int], out: str) -> None:
     )
 
 
+# A TIN, not the mean Z per cell the vegetation pass grids. That grid looks
+# sharper but is mostly fill: at 0.37 ground points/m², 30% of 1 m cells hold
+# a point. Holding back 10% of the class 2 of one steep survey, a 2 m TIN beat
+# it on every slope band (RMSE 0.40 m v 0.43 m; 1.34 m v 1.42 m at 40°+), and
+# a 1 m TIN added only ~2%.
 def _tin_tile(job: Tuple[str, dict, List[str], float, str, str]) -> str:
     """One tile's TIN of class 2 from its own and its neighbours' ground."""
     name, bounds, neighbours, cell, out, work = job

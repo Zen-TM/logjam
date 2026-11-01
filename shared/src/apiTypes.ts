@@ -22,6 +22,8 @@ export type TPlace = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** The river gauge the owner picked; absent from an older server. */
+  gaugeId?: string | null;
   /** Metres. A canyon does not carry one; a marker usually does. */
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Internal `_`-prefixed

@@ -212,6 +212,8 @@ export type SyncDeltaPlaceRow = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** Absent from an older server (additive on protocol 1). */
+  gaugeId?: string | null;
   /** Metres, or null. */
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Replaces the seven
@@ -482,6 +484,7 @@ const PLACE_ROW_SPEC: Record<string, FieldCheck> = {
   longitude: isNumber,
   placeTypeId: isString,
   notes: nullable(isString),
+  gaugeId: (value) => value === undefined || nullable(isString)(value),
   elevation: nullable(isNumber),
   fieldValues: isPlainObject,
   ropeWikiId: nullable(isNumber),

@@ -54,6 +54,23 @@ services:
       timeout: 5s
       retries: 20
 
+  # Mailpit catches everything `make dev` sends: read it at localhost:8025.
+  # STARTTLS with a throwaway certificate, because the senders refuse plaintext
+  # and verify it (api/src/services/email.ts, topo/email_send.py). It takes any
+  # SMTP login.
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    environment:
+      MP_SMTP_TLS_CERT: /certs/dev-tls-cert.pem
+      MP_SMTP_TLS_KEY: /certs/dev-tls-key.pem
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - ./infra/mailpit:/certs:ro
+
 volumes:
   postgres-data:
   ministack-data:

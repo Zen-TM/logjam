@@ -15,6 +15,7 @@ import {
   compareSharpenedAreas,
   demSourcesFor,
   terrainTileArchive,
+  type RoutedTerrain,
   type SharpenedArea,
   LIDAR_JOB_COPY,
 } from "./sharpen.js";
@@ -44,6 +45,21 @@ describe("compareSharpenedAreas", () => {
         .sort(compareSharpenedAreas)
         .map((a) => a.id),
     ).toEqual(["f", "c", "a", "b", "o"]);
+  });
+
+  // Mutation: rank on anything before `zmax`, and a saved statewide clip
+  // beats a newer-dated area's sharper tiles.
+  it("puts a statewide clip, z15 and undated, under every area", () => {
+    const clip: RoutedTerrain = {
+      ...area({ id: "0" }),
+      zmax: 15,
+      createdAt: "",
+    };
+    expect(
+      [clip, area({ id: "o", createdAt: "2026-01-01T00:00:00.000Z" })]
+        .sort(compareSharpenedAreas)
+        .map((a) => a.id),
+    ).toEqual(["o", "0"]);
   });
 });
 

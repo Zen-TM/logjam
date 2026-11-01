@@ -136,6 +136,7 @@ describe("VALID_GEOPDF_OVERLAY_NAMES", () => {
     expect([...VALID_GEOPDF_OVERLAY_NAMES].sort()).toEqual([
       "contours",
       "hillshade",
+      "land",
       "slope",
       "vegetation",
     ]);

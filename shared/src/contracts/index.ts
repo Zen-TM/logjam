@@ -7,6 +7,7 @@ import { MAP_OVERLAYS } from "./mapOverlays.js";
 import { MAP_TERRAIN } from "./mapTerrain.js";
 import { MAP_MEASURE } from "./mapMeasure.js";
 import { MAP_POINT } from "./mapPoint.js";
+import { GAUGES } from "./gauges.js";
 import { WEATHER } from "./weather.js";
 import { ACCOUNT } from "./account.js";
 import { SETTINGS } from "./settings.js";
@@ -39,6 +40,7 @@ export * from "./mapPoint.js";
 export * from "./share.js";
 export * from "./stats.js";
 export * from "./wayVerbs.js";
+export * from "./gauges.js";
 export * from "./weather.js";
 
 /** Every screen contract, so `contracts.test.ts` checks a new one unasked. */
@@ -65,5 +67,6 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   SHARE_SHEET,
   SEND_COPY,
   STATS,
+  GAUGES,
   WEATHER,
 ];

@@ -12,7 +12,7 @@
 // `speedSeries` in `@logjam/shared`): the chart only places them and hands
 // them back to `formatX` and `formatValue` to be read out.
 import { useEffect, useRef, useState } from "react";
-import type { ProfileSeries } from "@logjam/shared";
+import { profileSpan, type ProfileSeries } from "@logjam/shared";
 import classes from "./ProfileChart.module.css";
 
 /** Viewbox units. The SVG scales to its container; these only set the aspect. */
@@ -82,7 +82,7 @@ export function ProfileChart({
   const totalX = (points[points.length - 1]?.x ?? 0) - startX;
   // A flat line would divide by zero; give it a nominal band so the line
   // lands mid-plot rather than at an edge.
-  const span = (max ?? 0) - (min ?? 0) || 1;
+  const span = profileSpan(min ?? 0, max ?? 0);
   const plotHeight = HEIGHT - AXIS_HEIGHT;
   points.forEach((point, index) => {
     if (point.value == null || min == null) return;

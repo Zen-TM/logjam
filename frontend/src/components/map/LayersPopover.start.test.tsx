@@ -37,6 +37,8 @@ function popover(open: boolean, startView: Start) {
         setShowPlaces={noop}
         showWays
         setShowWays={noop}
+        showGauges={false}
+        setShowGauges={noop}
         placeCount={0}
         wayCount={0}
         completedTopoJobs={[]}

@@ -110,6 +110,13 @@ export const SHARPENED_AREAS_DIR = `${FileSystem.documentDirectory}sharpened-are
 export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 
 /**
+ * The last river gauge file (`gauges/gaugeStorage.ts`, ADR 0044). WIPED, though
+ * the file is public and the same for everyone, because every on-device store
+ * joins the wipe (ADR 0006); the next user fetches it again.
+ */
+export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -122,6 +129,7 @@ export const WIPED_DIRS = [
   SCRATCH_DIR,
   SENSOR_LOG_DIR,
   WEATHER_DIR,
+  GAUGES_DIR,
   TILEJSON_DIR,
   SHARPENED_AREAS_DIR,
 ] as const;

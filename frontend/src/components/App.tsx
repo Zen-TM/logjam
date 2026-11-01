@@ -22,6 +22,7 @@ import classes from "./App.module.css";
 import type { TBbox } from "./map/Map";
 import { TERRAIN_ENTRIES, terrainEntries } from "./map/terrainEntries";
 import { setRoutedAreas } from "./map/terrainRouter";
+import { useBootDefinitions } from "../useBootDefinitions";
 import { useCompletedTopoJobs } from "../useCompletedTopoJobs";
 import { createPlaceHighlight } from "./map/placeHighlight";
 import type { TFilters, TPlace, TPlaceType } from "../placeUtils";
@@ -44,8 +45,6 @@ import {
   useCurrentUser,
   useTopoExports,
   fetchCurrentUser,
-  getCustomFields,
-  getPlaceTypes,
   recordConsent,
   passesFilters,
   hasActiveFilters,
@@ -224,6 +223,11 @@ function App() {
   // would silently empty the map of someone who had only ever hidden a friend's.
   const [showPlaces, setShowPlaces] = useStoredState("logjam.showPlaces", true);
   const [showWays, setShowWays] = useStoredState("logjam.showWays", true);
+  // Off until asked for: the layer fetches a public file only while it is on.
+  const [showGauges, setShowGauges] = useStoredState(
+    "logjam.showGauges",
+    false,
+  );
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD
   // can show the running distance and drive undo. `editingRouteId` is null
@@ -436,7 +440,7 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, slope, hillshade } = terrainLayers;
+  const { contours, slope, land, hillshade } = terrainLayers;
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -449,6 +453,7 @@ function App() {
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
+      land,
       hillshade: drawsNswHillshade(activeLayerId, hillshade),
     };
     return [
@@ -462,6 +467,7 @@ function App() {
     activeLayerId,
     contours,
     slope,
+    land,
     hillshade,
     vegetationLayers,
     sharpenedAreas,
@@ -727,17 +733,19 @@ function App() {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
 
+  useBootDefinitions(
+    loadsUserData,
+    setPlaceCustomFieldDefs,
+    setCustomFieldDefs,
+    setPlaceTypes,
+  );
   useEffect(() => {
     if (!authenticated) return;
+    // hydrateFromUser stays here: it only re-reads /users/me (the gate's own
+    // request) for the theme, and the gate itself is themed by it.
     // Best-effort: hydration prefetch for the map/sidebar; UI degrades
     // gracefully (panels show their own empty/error states) if this fails.
     hydrateFromUser().catch(console.error);
-    // The place definitions come from the row-grain endpoint because only it
-    // carries the scoping. Best-effort: a failure leaves the forms with the
-    // built-in fields alone, and the panels show their own error states.
-    getCustomFields("place").then(setPlaceCustomFieldDefs).catch(console.error);
-    getCustomFields("trip-log").then(setCustomFieldDefs).catch(console.error);
-    getPlaceTypes().then(setPlaceTypes).catch(console.error);
     fetchCurrentUser()
       .then((user) => {
         // Record the consent given on the sign-up form. Only a pending value
@@ -1603,6 +1611,8 @@ function App() {
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
             showWays={showWays}
+            showGauges={showGauges}
+            onShowGauges={() => setShowGauges(true)}
             placeTracks={placeTracks}
             standaloneTracks={standaloneTracks}
             routes={routes}
@@ -1749,6 +1759,8 @@ function App() {
           setShowPlaces={setShowPlaces}
           showWays={showWays}
           setShowWays={setShowWays}
+          showGauges={showGauges}
+          setShowGauges={setShowGauges}
           placeCount={places.length + sharedPlaces.length}
           wayCount={showWays ? wayCount : null}
           completedTopoJobs={completedTopoJobs}

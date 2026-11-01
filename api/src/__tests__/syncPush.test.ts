@@ -221,6 +221,54 @@ describe("sync push — FIFO batch lifecycle", () => {
   });
 });
 
+describe("sync push — a place's gauge link", () => {
+  it("stores a good id, clears it with null, and refuses what REST refuses", async () => {
+    const id = randomUUID();
+    const fields = {
+      placeTypeId: MARKER_TYPE_ID,
+      name: "g",
+      latitude: -33.6,
+      longitude: 150.2,
+    };
+    const res = await push(ALICE_SUB, [
+      {
+        opId: "g1",
+        entity: "place",
+        op: "create",
+        id,
+        fields: { ...fields, gaugeId: "210001" },
+      },
+      {
+        opId: "g2",
+        entity: "place",
+        op: "update",
+        id,
+        fields: { gaugeId: "bad id!" },
+      },
+      {
+        opId: "g3",
+        entity: "place",
+        op: "update",
+        id,
+        fields: { gaugeId: null },
+      },
+    ]);
+    expect(res.body.results.map((r: { status: string }) => r.status)).toEqual([
+      "applied",
+      "rejected",
+      "applied",
+    ]);
+    expect(res.body.results[0].row.gaugeId).toBe("210001");
+    expect(res.body.results[2].row.gaugeId).toBeNull();
+    const rest = await request(API_URL)
+      .patch(`/places/${id}`)
+      .set(as(ALICE_SUB))
+      .send({ gaugeId: "bad id!" });
+    expect(rest.status).toBe(400);
+    await request(API_URL).delete(`/places/${id}`).set(as(ALICE_SUB));
+  });
+});
+
 describe("sync push — conflicts", () => {
   // The reply to a push can be lost after the write landed, and the phone
   // sends the op again with its original base. A canyon-linked trip is

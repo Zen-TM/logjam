@@ -354,6 +354,15 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
   });
 
+  // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
+  it("gives both clients and a sharee the gauge section", () => {
+    for (const client of ["web", "gps"] as const)
+      for (const owned of [true, false])
+        expect(contractSectionsFor(PLACE_PAGE, client, owned)).toContain(
+          "gauge",
+        );
+  });
+
   // Red when a primary verb is dropped from the page's verbs: the buttons and
   // the ⋯ must never disagree about what a place can do.
   it("draws as buttons only verbs the page offers", () => {
@@ -620,11 +629,10 @@ describe("the map's layers", () => {
   // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(
-      TERRAIN_SWITCH_KEYS,
-    );
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(rows);
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
-      ...TERRAIN_SWITCH_KEYS,
+      ...rows,
       "sharpenedAreas",
       "slopeBands",
     ]);
@@ -741,17 +749,21 @@ describe("the logbook's stats", () => {
 
 describe("the map's overlays list", () => {
   // Red when Logjam GPS's list drifts from Logjam Web's: the web's rows are the
-  // list, and the phone adds only what it declares (a GeoPDF row, refinements).
-  it("is Logjam Web's rows, with the phone's one declared extra", () => {
+  // list, and each client differs only by what a row declares (`on`).
+  it("is Logjam Web's rows plus the phone's GeoPDF row", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
+      "land",
+      "gauges",
       "importFile",
     ]);
     expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
       "places",
       "ways",
       "geoPdfs",
+      "land",
+      "gauges",
       "importFile",
     ]);
   });
@@ -877,6 +889,20 @@ describe("the map point panel", () => {
     ]);
   });
 
+  // Mutation: push the land fact whatever `land` is, and with the overlay off
+  // the panel has a Land figure with nothing in it.
+  it("has no land figure with the overlay off or nothing drawn there", () => {
+    const facts = (land?: string | null) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "unavailable" },
+        from: null,
+        land,
+      }).map((fact) => fact.key);
+    expect(facts()).not.toContain("land");
+    expect(facts(null)).not.toContain("land");
+  });
+
   it("keeps its sections and facts in step", () => {
     const keys = MAP_POINT.sections.map((section) => section.key);
     const facts = mapPointFacts({
@@ -884,6 +910,7 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
+      land: "Private land",
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");

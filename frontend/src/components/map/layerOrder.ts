@@ -4,13 +4,95 @@
 // whole areas, and over a route they would tint and shade it. Over the vector
 // basemap the Terrain group goes inside the basemap instead, under its roads
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
-import { terrainBeforeIds, type TerrainLayerKey } from "@logjam/shared";
+import {
+  landNameOf,
+  terrainBeforeIds,
+  type TerrainLayerKey,
+} from "@logjam/shared";
 
 /**
  * Lowest track, route or pin layer: the first `Map.tsx` adds on load, and
  * every other one goes on above it. Guard: `layerOrder.test.ts`.
  */
 export const TOPO_CEILING = "place-tracks-hit";
+
+/**
+ * The gauge drops go over the topo band and under every pin, so a pin on a
+ * gauge is the one pressed. Guard: `layerOrder.test.ts`.
+ */
+export const GAUGE_LAYER = "gauge-drops";
+export const GAUGE_LABELS = "gauge-labels";
+export const GAUGE_BELOW = "place-highlight";
+
+/** Everything else on the map with a press of its own. A gauge drop under one
+ *  of these is not the thing pressed. */
+export const PRESSABLE_LAYERS = [
+  "place-circles",
+  "shared-place-halos",
+  "shared-place-circles",
+  "routes-hit",
+  "place-tracks-hit",
+  "standalone-tracks-hit",
+];
+
+/** The Land overlay's fill, by the id `topo-<entry id>-<suffix>` every topo layer has. */
+export const LAND_FILL_LAYER = "topo-nswland-fill";
+export const LAND_EDGE_LAYER = "topo-nswland-edge";
+
+/**
+ * The name of the land class drawn at `point`, or null: the overlay is off, or
+ * no class is drawn there. Read from the tiles on screen, so "What is here?"
+ * sends no coordinate anywhere to answer.
+ */
+export function landClassAt(
+  map: {
+    getLayer(id: string): unknown;
+    queryRenderedFeatures(
+      point: [number, number],
+      options: { layers: string[] },
+    ): { properties?: Record<string, unknown> | null }[];
+  },
+  point: [number, number],
+): string | null {
+  if (!map.getLayer(LAND_FILL_LAYER)) return null;
+  return landNameOf(
+    map.queryRenderedFeatures(point, { layers: [LAND_FILL_LAYER] }),
+  );
+}
+
+/** The gauge a press lands on, or null when a pin, route or track is there
+ *  too: each layer's click handler fires on its own, so this picks the winner. */
+export function pressedGaugeId(
+  map: {
+    getLayer(id: string): unknown;
+    queryRenderedFeatures(
+      point: [number, number],
+      options: { layers: string[] },
+    ): { properties?: Record<string, unknown> | null }[];
+  },
+  point: [number, number],
+): string | null {
+  const over = PRESSABLE_LAYERS.filter((id) => map.getLayer(id));
+  if (over.length && map.queryRenderedFeatures(point, { layers: over }).length)
+    return null;
+  const id = map.queryRenderedFeatures(point, { layers: [GAUGE_LAYER] })[0]
+    ?.properties?.id;
+  return typeof id === "string" ? id : null;
+}
+/** How long after its panel closes a press on the gauge still counts as the
+ *  press that closed it. */
+export const GAUGE_RETAP_MS = 500;
+
+/** Whether a press on gauge `id` is the one that just closed its panel. The
+ *  panel closes on pointerdown and the map's click comes after, so without
+ *  this the same press would open it again. */
+export function pressClosedGauge(
+  id: string,
+  closed: { id: string; at: number } | null,
+  now: number,
+): boolean {
+  return closed?.id === id && now - closed.at < GAUGE_RETAP_MS;
+}
 
 /**
  * Stacks the topo entries' layers (`groups`, bottom of the map first) directly
