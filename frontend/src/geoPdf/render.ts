@@ -84,7 +84,13 @@ import {
   drawContourLines,
   type ContourTileInput,
 } from "./draw/contours";
-import { buildLand, drawLand, type LandTileInput } from "./draw/land";
+import {
+  buildLand,
+  drawLand,
+  drawLandLegend,
+  landClassesDrawn,
+  type LandTileInput,
+} from "./draw/land";
 import {
   drawMissingTile,
   drawTile,
@@ -727,6 +733,7 @@ async function renderInner(
       ? buildLand(landInputs, landTransform)
       : [];
   landInputs.length = 0;
+  const landLegend = landClassesDrawn(land, nativeW, nativeH);
 
   // The credits' upper bound, to find the strips that wait for every read.
   const measure = new OffscreenCanvas(1, 1).getContext("2d")!;
@@ -999,15 +1006,15 @@ async function renderInner(
       for (const e of baseEntries) if (e.last <= strip.index) e.promise = null;
       bump("base", mark);
 
-      // 2. Terrain: hillshade, then Land's tint, then slope.
-      let tinted = false;
-      const tint = () => {
-        if (!tinted) drawLand(ctx, land, top, bottom);
-        tinted = true;
+      // 2. Terrain: hillshade, then Land's borders, then slope.
+      let landDrawn = false;
+      const drawLandOnce = () => {
+        if (!landDrawn) drawLand(ctx, land, top, bottom);
+        landDrawn = true;
       };
       for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
-        if (p.key === "slope") tint();
+        if (p.key === "slope") drawLandOnce();
         const bands = await terrainWork[i]!;
         // Let go as soon as drawn; the other layer's may still be painting.
         terrainWork[i] = null;
@@ -1035,7 +1042,7 @@ async function renderInner(
           if (e.last <= strip.index) e.decoded = null;
         bump(p.key, mark);
       }
-      tint();
+      drawLandOnce();
       if (scratch) scratch.width = scratch.height = 0;
       scratch = null;
 
@@ -1101,7 +1108,10 @@ async function renderInner(
           elementDpi,
         );
       if (config.elements.compass)
-        drawCompass(ctx, config, stackY, margin, elementDpi);
+        stackY =
+          drawCompass(ctx, config, stackY, margin, elementDpi) -
+          mmToPx(1, elementDpi);
+      drawLandLegend(ctx, landLegend, stackY, margin, padH, padV, elementDpi);
       if (config.elements.title)
         drawTitle(ctx, config.elements.title, margin, padH, padV, elementDpi);
       if (reachesCredits) {

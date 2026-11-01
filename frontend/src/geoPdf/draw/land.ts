@@ -1,13 +1,16 @@
 // Land tenure on a print: the same classes and borders as a map.
 import {
+  LAND_CLASSES,
   LAND_EDGE_LINES,
   landClass,
+  MAP_TERRAIN,
   NSW_LAND,
   TILE_SIZE,
   type TileToMapTransform,
 } from "@logjam/shared";
 import { decodeVectorTileLayer } from "../vectorTile";
-import type { Ctx } from "./common";
+import { INK, MAP_FONT, mmToPx, type Ctx } from "./common";
+import { drawElementBackground } from "./elements";
 
 export type LandTileInput = {
   /** Tile coordinates at the land zoom. */
@@ -126,4 +129,110 @@ export function drawLand(
     }
     ctx.restore();
   }
+}
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/** Whether the line from x1,y1 to x2,y2 touches `box` (Liang-Barsky). */
+function touches(x1: number, y1: number, x2: number, y2: number, box: Box) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  let from = 0;
+  let to = 1;
+  for (const [p, q] of [
+    [-dx, x1 - box.left],
+    [dx, box.right - x1],
+    [-dy, y1 - box.top],
+    [dy, box.bottom - y1],
+  ] as const) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else if (p < 0) from = Math.max(from, q / p);
+    else to = Math.min(to, q / p);
+    if (from > to) return false;
+  }
+  return true;
+}
+
+/**
+ * The classes with a border on a map image `width` by `height`, in the legend's
+ * order. Each tile counts only inside its own square: a ring is cut where the
+ * tile's margin ends, and that edge, out in the neighbour's square, is no
+ * border. A class that fills the whole sheet draws nothing to explain.
+ */
+export function landClassesDrawn(
+  shapes: readonly LandShape[],
+  width: number,
+  height: number,
+) {
+  const found = new Set<string>();
+  for (const { color, rings, clip } of shapes) {
+    if (found.has(color)) continue;
+    const box = {
+      left: Math.max(clip.left, 0),
+      top: Math.max(clip.top, 0),
+      right: Math.min(clip.right, width),
+      bottom: Math.min(clip.bottom, height),
+    };
+    const crosses = rings.some((pts) => {
+      for (let j = 0; j < pts.length; j += 2) {
+        const next = (j + 2) % pts.length;
+        const [x1, y1] = [pts[j]!, pts[j + 1]!];
+        if (touches(x1, y1, pts[next]!, pts[next + 1]!, box)) return true;
+      }
+      return false;
+    });
+    if (crosses) found.add(color);
+  }
+  return LAND_CLASSES.filter(({ colour }) => found.has(colour));
+}
+
+/**
+ * The panel saying which colour is who, above `stackY` at the left of the map
+ * like the elements under it. Returns the next `stackY`, which is `stackY` when
+ * there is nothing to explain.
+ */
+export function drawLandLegend(
+  ctx: Ctx,
+  classes: readonly { name: string; colour: string }[],
+  stackY: number,
+  margin: number,
+  padH: number,
+  padV: number,
+  dpi: number,
+): number {
+  if (classes.length === 0) return stackY;
+  const title = MAP_TERRAIN.copy.land;
+  const fontPx = mmToPx(2.6, dpi);
+  const rowH = mmToPx(4, dpi);
+  const swatchW = mmToPx(6, dpi);
+  const swatchH = mmToPx(1.4, dpi);
+  const gap = mmToPx(1.5, dpi);
+
+  ctx.font = `bold ${fontPx}px ${MAP_FONT}`;
+  const titleW = ctx.measureText(title).width;
+  ctx.font = `${fontPx}px ${MAP_FONT}`;
+  const nameW = Math.max(
+    ...classes.map(({ name }) => ctx.measureText(name).width),
+  );
+  const boxW = Math.max(titleW, swatchW + gap + nameW) + padH * 2;
+  const boxH = rowH * (classes.length + 1) + padV * 2;
+  const y = stackY - boxH;
+
+  drawElementBackground(ctx, margin, y, boxW, boxH, dpi);
+  ctx.fillStyle = INK;
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${fontPx}px ${MAP_FONT}`;
+  ctx.fillText(title, margin + padH, y + padV + rowH / 2);
+  ctx.font = `${fontPx}px ${MAP_FONT}`;
+  classes.forEach(({ name, colour }, i) => {
+    const mid = y + padV + rowH * (i + 1.5);
+    ctx.fillStyle = colour;
+    ctx.fillRect(margin + padH, mid - swatchH / 2, swatchW, swatchH);
+    ctx.fillStyle = INK;
+    ctx.fillText(name, margin + padH + swatchW + gap, mid);
+  });
+  ctx.textBaseline = "alphabetic";
+
+  return y - mmToPx(1, dpi);
 }

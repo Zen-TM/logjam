@@ -5,11 +5,18 @@ import {
   computeTileToMapTransform,
   LAND_CLASSES,
   LAND_EDGE_LINES,
+  MAP_TERRAIN,
   NSW_LAND,
   TILE_SIZE,
 } from "@logjam/shared";
 import type { Ctx } from "./common";
-import { buildLand, drawLand } from "./land";
+import {
+  buildLand,
+  drawLand,
+  drawLandLegend,
+  landClassesDrawn,
+  type LandShape,
+} from "./land";
 
 const zig = (v: number) => (v << 1) ^ (v >> 31);
 
@@ -126,5 +133,97 @@ describe("drawLand", () => {
       "clip evenodd",
       ...LAND_EDGE_LINES.map(() => "stroke"),
     ]);
+  });
+});
+
+describe("landClassesDrawn", () => {
+  const square = { left: 0, top: 0, right: 100, bottom: 100 };
+  const shape = (colour: string, ring: number[], clip = square): LandShape => ({
+    color: colour,
+    pixel: 1,
+    clip,
+    rings: [Float64Array.from(ring)],
+  });
+  const [first, second, third] = LAND_CLASSES;
+
+  // Mutation: list the classes in the order the tiles came, and two prints of
+  // one area read in a different order.
+  it("lists the classes with a border on the sheet, in the legend's order", () => {
+    const shapes = [
+      shape(second.colour, [10, 10, 90, 10, 90, 90]),
+      shape(first.colour, [20, 20, 80, 20, 80, 80]),
+    ];
+    expect(landClassesDrawn(shapes, 100, 100)).toEqual([first, second]);
+  });
+
+  // Mutation: test the ring against the whole tile, and a print lists a class
+  // that's only in the part of the tile off the sheet.
+  it("leaves out a class whose border is off the sheet", () => {
+    const shapes = [shape(first.colour, [60, 60, 90, 60, 90, 90])];
+    expect(landClassesDrawn(shapes, 50, 50)).toEqual([]);
+  });
+
+  // Mutation: test the ring against the sheet alone, and every class in a
+  // tile's margin is listed for an edge that is only where the tile was cut.
+  it("doesn't take the edge a tile was cut at for a border", () => {
+    const cut = [-5, -5, 105, -5, 105, 105, -5, 105];
+    expect(landClassesDrawn([shape(third.colour, cut)], 300, 300)).toEqual([]);
+  });
+
+  // Mutation: test vertices alone, and a long straight border across the
+  // sheet explains nothing.
+  it("finds a border that crosses the sheet with no vertex on it", () => {
+    const across = [-500, 50, 500, 50, 500, 600, -500, 600];
+    expect(landClassesDrawn([shape(first.colour, across)], 100, 100)).toEqual([
+      first,
+    ]);
+  });
+});
+
+describe("drawLandLegend", () => {
+  const legendCtx = () => ({
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    arcTo: vi.fn(),
+    closePath: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    fillRect: vi.fn(),
+    fillText: vi.fn(),
+    measureText: () => ({ width: 40 }),
+  });
+
+  // Mutation: draw the panel regardless, and a print with no border carries an
+  // empty box over the map.
+  it("draws nothing with no class to explain", () => {
+    const ctx = legendCtx();
+    const next = drawLandLegend(ctx as unknown as Ctx, [], 500, 10, 4, 3, 96);
+    expect(next).toBe(500);
+    expect(ctx.fillText).not.toHaveBeenCalled();
+  });
+
+  // Mutation: name a row by anything but its class, and the colours say nothing.
+  it("names each class beside its colour, and stacks above stackY", () => {
+    const ctx = legendCtx();
+    const classes = LAND_CLASSES.slice(0, 2);
+    const next = drawLandLegend(
+      ctx as unknown as Ctx,
+      classes,
+      500,
+      10,
+      4,
+      3,
+      96,
+    );
+    expect(ctx.fillText.mock.calls.map(([text]) => text)).toEqual([
+      MAP_TERRAIN.copy.land,
+      ...classes.map((c) => c.name),
+    ]);
+    expect(ctx.fillRect).toHaveBeenCalledTimes(2);
+    expect(next).toBeLessThan(500);
   });
 });
