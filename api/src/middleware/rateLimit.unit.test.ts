@@ -29,6 +29,7 @@ import {
   bulkImportLimiter,
   bulkImportLimitMax,
   globalLimitMax,
+  planMemberInviteLimiter,
   PLACE_SEARCHES_PER_MINUTE,
   userPatchLimitMax,
   usernameCheckLimiter,
@@ -181,5 +182,35 @@ describe("usernameCheckLimiter", () => {
       "utf8",
     );
     expect(source).toMatch(/"\/username-available",\s+usernameCheckLimiter,/);
+  });
+});
+
+describe("planMemberInviteLimiter", () => {
+  // Mutation: raise `max`, or key it on anything but the signed-in user.
+  it("refuses a user's 21st invite in a minute, and only that user", async () => {
+    const app = express();
+    app.use((req, _res, next) => {
+      (req as unknown as { user: { sub: string } }).user = {
+        sub: String(req.header("X-Sub")),
+      };
+      next();
+    });
+    app.post("/", planMemberInviteLimiter, (_req, res) => {
+      res.sendStatus(204);
+    });
+    const as = (sub: string) => request(app).post("/").set("X-Sub", sub);
+    for (let i = 0; i < 20; i++) expect((await as("a")).status).toBe(204);
+    expect((await as("a")).status).toBe(429);
+    expect((await as("b")).status).toBe(204);
+  });
+
+  it("is mounted on the invite route", () => {
+    const source = readFileSync(
+      join(__dirname, "..", "routes", "planMembers.ts"),
+      "utf8",
+    );
+    expect(source).toMatch(
+      /"\/members",\s+requireAuth,\s+planMemberInviteLimiter,/,
+    );
   });
 });

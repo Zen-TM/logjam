@@ -100,6 +100,12 @@ SET title = 'form-' || substring(id::text, 1, 8),
     questions = '[]';
 UPDATE trip_plan_answers SET answers = '{}';
 
+-- Notification payloads are ids, except the few keys that stamp a name before
+-- its source is gone (an expired file's name, a lost plan's name, a failed
+-- topo job's name). The unit test lists them.
+UPDATE notifications
+SET payload = payload - 'planName' - 'filename' - 'jobName';
+
 -- DELIBERATELY NOT SCRUBBED, so the omission reads as a decision:
 --   places.latitude/longitude, routes.points/anchors, media.metadata —
 --   coordinates and geometry. A snapshot exists to give a dev real map data;

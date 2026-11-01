@@ -24,6 +24,7 @@ import {
   type UserSentence,
 } from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
+import { planMemberInviteLimiter } from "../middleware/rateLimit";
 import prisma from "../services/prisma";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
@@ -92,6 +93,7 @@ async function viewOfMember(planId: string, userId: string) {
 router.post(
   "/members",
   requireAuth,
+  planMemberInviteLimiter,
   async (req: AuthenticatedRequest, res: Response) => {
     const { userId, access, forbidden } = await leader(
       req,

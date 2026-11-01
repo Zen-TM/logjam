@@ -4,7 +4,6 @@
 // required. Guard: tripPlanAnswerDraft.test.ts.
 import {
   currentTripPlanAnswers,
-  parseTripPlanAnswers,
   type TripPlanAnswers,
   type TripPlanQuestion,
 } from "./tripPlans.js";
