@@ -16,7 +16,6 @@
 // place would reach that place's sharees (`hasPlaceInheritedAccess`, the
 // place-linked media arm of /sync/delta).
 // Guard: __tests__/planItems.test.ts.
-import { CopyObjectCommand } from "@aws-sdk/client-s3";
 import { Prisma, type Media } from "@prisma/client";
 import {
   asFieldValues,
@@ -32,12 +31,9 @@ import {
   type TripPlanRoute,
   type TripPlanView,
 } from "@logjam/shared";
-import { randomUUID } from "crypto";
 import prisma from "../services/prisma";
-import { s3 } from "../services/awsClients";
 import { AppError, fault } from "../middleware/errorHandler";
 import { getEnv } from "./env";
-import { logger, safeErrorForLog } from "./logger";
 import { requireStillMember, touchPlan } from "./planAccess";
 import { dropMembership, endPlanForOthers } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
