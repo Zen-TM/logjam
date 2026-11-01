@@ -1,8 +1,8 @@
 // A plan's form (`TRIP_PLAN_FORMS`): who sees the answers, the caller's own
 // answer, then everyone's when the caller may see them. Answering is the
-// sheet's sub-mode, back to the form, as SectionSheet's edit is. Building a
-// form is Logjam Web's (the contract's `table` and the builder are `on: "web"`);
-// a leader can delete one here (`PLAN_FORM_VERBS`).
+// sheet's sub-mode, back to the form, as SectionSheet's edit is. A leader's
+// Edit hands over to FormBuilderSheet; Delete is confirmed here
+// (`PLAN_FORM_VERBS`).
 import {
   useEffect,
   useRef,
@@ -83,6 +83,7 @@ export function FormSheet({
   onState,
   onInfo,
   onError,
+  onEdit,
 }: {
   state: FormSheetState;
   plan: TripPlanView;
@@ -91,6 +92,8 @@ export function FormSheet({
   onInfo: (message: string) => void;
   /** A refusal the sheet can no longer show: it closed, or left answering. */
   onError: (message: string) => void;
+  /** A leader's Edit form: the builder takes over. */
+  onEdit: (formId: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -347,6 +350,10 @@ export function FormSheet({
               disabled={!online}
               onPress={() => {
                 if (verb.id === "delete") remove(form);
+                else {
+                  onState(null);
+                  onEdit(form.id);
+                }
               }}
             />
           ))}

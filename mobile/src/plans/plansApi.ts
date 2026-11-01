@@ -5,6 +5,10 @@ import type {
   TripPlanAnswerPut,
   TripPlanAnswerView,
   TripPlanCreate,
+  TripPlanFormCreate,
+  TripPlanFormPatch,
+  TripPlanFormView,
+  TripPlanLeaderForm,
   TripPlanItem,
   TripPlanItemAdd,
   TripPlanItemKind,
@@ -98,6 +102,28 @@ export const putAnswer = (
   apiFetch<TripPlanAnswerView>(
     `${plan(planId)}/forms/${encodeURIComponent(formId)}/answers/me`,
     { method: "PUT", body },
+  );
+
+export const createForm = (planId: string, body: TripPlanFormCreate) =>
+  apiFetch<TripPlanFormView>(`${plan(planId)}/forms`, {
+    method: "POST",
+    body,
+  });
+
+export const patchForm = (
+  planId: string,
+  formId: string,
+  body: TripPlanFormPatch,
+) =>
+  apiFetch<TripPlanFormView>(
+    `${plan(planId)}/forms/${encodeURIComponent(formId)}`,
+    { method: "PATCH", body },
+  );
+
+/** Forms of the other plans the caller leads, to copy into this one. */
+export const getLeaderForms = (exceptPlanId: string) =>
+  apiFetch<{ forms: TripPlanLeaderForm[] }>(
+    `/plans/leader-forms?except=${encodeURIComponent(exceptPlanId)}`,
   );
 
 export const deleteForm = (planId: string, formId: string) =>
