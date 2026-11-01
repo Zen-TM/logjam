@@ -91,6 +91,16 @@ export const globalLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// Before sign-in, so per address. A sign-up form asks once or twice; this is
+// what stops it being a way to test a list of names.
+export const usernameCheckLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const friendsSearchLimiter = rateLimit({
   windowMs: 60_000,
   max: 20,

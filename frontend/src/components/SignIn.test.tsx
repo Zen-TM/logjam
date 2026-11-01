@@ -16,7 +16,10 @@ const oidc = vi.hoisted(() => ({
   confirmForgotPassword: vi.fn(async () => {}),
 }));
 
+const usernameAvailable = vi.hoisted(() => vi.fn(async () => true));
+
 vi.mock("../auth/oidc", () => oidc);
+vi.mock("../placeUtils", () => ({ usernameAvailable }));
 vi.mock("./SignInTerrain", () => ({ default: () => null }));
 vi.mock("./useSignInArea", () => ({ default: () => null }));
 vi.mock("./Footer", () => ({ default: () => null }));
@@ -61,6 +64,7 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   oidc.hasCognitoAccount.mockReturnValue(true);
+  usernameAvailable.mockResolvedValue(true);
 });
 
 describe("SignIn under another issuer", () => {
@@ -173,6 +177,29 @@ describe("SignIn under Cognito", () => {
         undefined,
       ),
     );
+  });
+
+  // Mutation: drop the check in handleSignUp, and someone learns the name is
+  // taken only after the email code.
+  it("stops a taken username before anything is sent to Cognito", async () => {
+    usernameAvailable.mockResolvedValue(false);
+    draw();
+    fillSignUp();
+    fireEvent.click(screen.getByRole("checkbox", { name: /agree to the/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
+    press("Sign up");
+    await screen.findByText("That username is taken. Choose another.");
+    expect(oidc.signUp).not.toHaveBeenCalled();
+    expect(usernameAvailable).toHaveBeenCalledWith("canyoneer");
+  });
+
+  it("says a username is taken on leaving the field", async () => {
+    usernameAvailable.mockResolvedValue(false);
+    draw();
+    press("Sign up");
+    type("Username", "canyoneer");
+    fireEvent.blur(screen.getByLabelText(/^Username/));
+    await screen.findByText("That username is taken. Choose another.");
   });
 
   it("signs a verified account in with the username it chose", async () => {

@@ -35,7 +35,9 @@ import {
   isValidUsername,
   NSW_5M,
   USERNAME_RULE,
+  USERNAME_TAKEN,
 } from "@logjam/shared";
+import { usernameAvailable } from "../placeUtils";
 import { pendingFriendInvite } from "../pendingFriendInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
@@ -202,6 +204,12 @@ function CognitoForms({
     setScreen(next);
   }
 
+  async function usernameIsFree(): Promise<boolean> {
+    if (await usernameAvailable(username.trim())) return true;
+    setUsernameError(USERNAME_TAKEN);
+    return false;
+  }
+
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
@@ -275,6 +283,10 @@ function CognitoForms({
       return;
     }
     setSubmitting(true);
+    if (!(await usernameIsFree())) {
+      setSubmitting(false);
+      return;
+    }
     try {
       await signUp(email, password, name);
       setSignedUpUsername(username);
@@ -551,6 +563,9 @@ function CognitoForms({
             onChange={(e) => {
               setUsername(e.target.value);
               setUsernameError(null);
+            }}
+            onBlur={() => {
+              if (isValidUsername(username)) void usernameIsFree();
             }}
             error={usernameError}
             required

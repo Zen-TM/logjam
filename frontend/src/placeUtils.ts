@@ -1089,6 +1089,18 @@ export function deleteAccount(): Promise<void> {
   return apiFetch<void>("/users/me", { method: "DELETE" });
 }
 
+/** Before sign-up, so no token. Unknown counts as free: the welcome form catches a clash. */
+export async function usernameAvailable(username: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/users/username-available?username=${encodeURIComponent(username)}`,
+    );
+    return !res.ok || (await res.json()).available !== false;
+  } catch {
+    return true;
+  }
+}
+
 export function recordConsent(
   version: string,
   username?: string,
