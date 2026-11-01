@@ -259,6 +259,16 @@ describe("requireAuth — oidc mode, real tokens", () => {
     });
   });
 
+  // Mutation: reject a token with no username claim, and an issuer that sends
+  // none can sign nobody in.
+  it("accepts a token with no username claim", async () => {
+    const { req, err } = await run(
+      sign({ ...CLAIMS, preferred_username: undefined }),
+    );
+    expect(err).toBeUndefined();
+    expect(req.user?.username).toBe("");
+  });
+
   it("falls back to cognito:username", async () => {
     const { req, err } = await run(
       sign({
