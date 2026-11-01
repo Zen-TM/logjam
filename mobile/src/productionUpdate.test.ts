@@ -65,7 +65,7 @@ describe("production OTA guard", () => {
       "update:production",
     ]);
     expect(scripts["update:production"]).toMatch(
-      /^node scripts\/check-production-update\.js && eas update /,
+      /^node scripts\/check-production-update\.js && scripts\/check-eas-env\.sh production && eas update /,
     );
     expect(scripts["promote:production"]).toMatch(
       /^sh -c 'node scripts\/check-production-update\.js promote "\$@" && eas update:republish .* "\$@"' sh$/,
