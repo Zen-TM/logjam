@@ -397,7 +397,7 @@ export type PlanItemVerbId = (typeof PLAN_ITEM_VERBS)[number]["id"];
 
 /**
  * The verbs a caller has on one plan item: Download on a file, and Save a
- * copy, for anyone; Edit and Delete on what they added, or on anything for a
+ * copy on what someone else added (you have your own original); Edit and Delete on what they added, or on anything for a
  * leader or an editor, as planAccess.ts's `canChangeItem` allows.
  */
 export function planItemVerbs(
@@ -408,7 +408,8 @@ export function planItemVerbs(
   const changes = callerRole !== "member" || item.mine;
   const file = item.kind === "media";
   return planVerbsFor(PLAN_ITEM_VERBS, "web", callerRole, state).filter(
-    (verb) => (verb.id === "download" ? file : verb.id === "save" || changes),
+    (verb) =>
+      verb.id === "download" ? file : verb.id === "save" ? !item.mine : changes,
   );
 }
 

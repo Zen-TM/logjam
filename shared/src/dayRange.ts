@@ -4,7 +4,9 @@ export type DayRange = { start: string | null; end: string | null };
 
 /**
  * The range after a tap on `day`: the first sets the start, a later day ends
- * it, and the same day keeps a one-day trip (`end` null). A day before the
+ * it, and the start day again, while the range is only that day, leaves a
+ * one-day trip (`end` null). A one-day trip is `end` null, never `end` equal
+ * to `start`. A day before the
  * start, or any tap on a finished range, starts over: the booking-calendar
  * convention. Guard: dayRange.test.ts.
  */

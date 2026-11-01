@@ -27,6 +27,7 @@ import {
   type PlanMemberVerbId,
   type TripPlanMemberView,
   type TripPlanView,
+  answeredForm,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -46,12 +47,6 @@ import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
-
-/** The first form a person answered, for a leader reading their request. */
-const formAnsweredBy = (plan: TripPlanView, userId: string) =>
-  plan.forms.find((form) =>
-    form.answers.some((answer) => answer.user.id === userId),
-  )?.id ?? null;
 
 export function PeopleView({
   plan,
@@ -247,13 +242,13 @@ export function PeopleView({
                 disabledReason={OFFLINE}
                 onPress={() => turnDown(member)}
               />
-              {formAnsweredBy(plan, member.user.id) ? (
+              {answeredForm(plan, member.user.id) ? (
                 <Button
                   label={copy.seeAnswers}
                   compact
                   variant="ghost"
                   onPress={() =>
-                    onSeeAnswers(formAnsweredBy(plan, member.user.id)!)
+                    onSeeAnswers(answeredForm(plan, member.user.id)!)
                   }
                 />
               ) : null}

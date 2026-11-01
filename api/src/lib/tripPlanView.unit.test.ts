@@ -33,6 +33,15 @@ describe("planSummary unansweredForms", () => {
     // 09 Nov 14:00Z is already 10 Nov in Sydney.
     expect(owed({}, "2026-11-09T14:00:00Z")).toBe(0);
   });
+  // Mutation: drop the leader test from `owing`.
+  it("is zero for a leader, whatever is unanswered", () => {
+    expect(
+      owed({}, "2026-11-02T00:00:00Z", { ...active, role: "leader" }),
+    ).toBe(0);
+    expect(
+      owed({}, "2026-11-02T00:00:00Z", { ...active, role: "editor" }),
+    ).toBe(2);
+  });
   it("is zero for an archived plan or one the caller has no seat in", () => {
     expect(owed({ archivedAt: new Date() }, "2026-11-02T00:00:00Z")).toBe(0);
     expect(

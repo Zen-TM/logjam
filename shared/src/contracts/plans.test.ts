@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { answersFromDraft } from "../tripPlanAnswerDraft.js";
 import {
   TRIP_PLAN_FORM_PRESETS,
+  TRIP_PLAN_ROLES,
+  TRIP_PLAN_ROLES_PICK_ORDER,
   type TripPlanQuestion,
   type TripPlanSummary,
   type DateOnly,
@@ -31,7 +33,6 @@ import {
   tripPlanIsOver,
   tripPlanLeaveState,
   tripPlanNotice,
-  planShowsMine,
   tripPlanRoleWord,
   tripPlanRowPill,
   tripPlanRowSubtitle,
@@ -47,6 +48,8 @@ import {
   planItemDeleteConfirm,
   planItemVerbs,
   tripPlanAddable,
+  tripPlanInPlanIds,
+  answeredForm,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPrice,
   planMemberVerbs,
@@ -305,16 +308,6 @@ describe("a plan's page", () => {
   it("says who added an item, and nothing once their account is gone", () => {
     expect(tripPlanAddedByLine({ username: "tom" })).toBe("Added by tom");
     expect(tripPlanAddedByLine(null)).toBeUndefined();
-  });
-});
-
-// Mutation: return `showMine` alone, and the map is empty of the user's own
-// with no plan on it.
-describe("planShowsMine", () => {
-  it("draws the user's own with no plan, and beside one only when asked", () => {
-    expect(planShowsMine(false, false)).toBe(true);
-    expect(planShowsMine(true, false)).toBe(false);
-    expect(planShowsMine(true, true)).toBe(true);
   });
 });
 
@@ -580,12 +573,21 @@ describe("a plan's items", () => {
     expect(ids(planItemVerbs("member", theirs, live))).toEqual(["save"]);
     expect(
       ids(planItemVerbs("member", { kind: "place", mine: true }, live)),
-    ).toEqual(["save", "edit", "delete"]);
+    ).toEqual(["edit", "delete"]);
     expect(ids(planItemVerbs("editor", theirs, live))).toEqual([
       "save",
       "edit",
       "delete",
     ]);
+  });
+
+  // Mutation: drop the `mine` check, and Save a copy is offered on what the
+  // caller added, whose original they already have.
+  it("offers no Save a copy on what the caller added", () => {
+    for (const role of ["leader", "editor", "member"] as const)
+      expect(
+        ids(planItemVerbs(role, { kind: "place", mine: true }, live)),
+      ).not.toContain("save");
   });
 
   // Mutation: drop `whenArchived` from Save a copy, and an archived plan's
@@ -595,7 +597,7 @@ describe("a plan's items", () => {
       ids(
         planItemVerbs(
           "leader",
-          { kind: "route", mine: true },
+          { kind: "route", mine: false },
           { archived: true },
         ),
       ),
@@ -1018,6 +1020,7 @@ describe("forms to answer", () => {
   const form = (id: string, answered: boolean) =>
     ({ id, title: `Form ${id}`, myAnswer: answered ? {} : null }) as never;
   const plan = (over: object = {}) => ({
+    myRole: "member" as const,
     forms: [form("a", false), form("b", true), form("c", false)],
     startDate: "2026-11-10" as const,
     endDate: null,
@@ -1046,6 +1049,19 @@ describe("forms to answer", () => {
     ).toBe(false);
     const done = plan({ forms: [form("b", true)] });
     expect(tripPlanFormsToAnswer(done, "2026-11-10").urgent).toBe(false);
+  });
+
+  // Mutation: drop the leader check, and the author of a form is told to
+  // answer it (and the urgent card turns on for them).
+  it("never nudges a leader", () => {
+    const led = plan({ myRole: "leader" });
+    expect(tripPlanFormsToAnswer(led, "2026-11-10")).toEqual({
+      forms: [],
+      urgent: false,
+    });
+    expect(
+      tripPlanFormsToAnswer(plan({ myRole: "editor" }), "2026-10-01").forms,
+    ).toHaveLength(2);
   });
 
   it("asks nothing of an archived plan or a trip that is over", () => {
@@ -1122,6 +1138,17 @@ describe("tripPlanBulkConfirm", () => {
     });
   });
 
+  // Mutation: ignore `deleteAdded`, and bulk leave says what you added stays
+  // while it is deleted.
+  it("says whether what you added goes", () => {
+    expect(tripPlanBulkConfirm({ lead: 0, leave: 1 }).confirmBody).toMatch(
+      /What you added stays/,
+    );
+    expect(
+      tripPlanBulkConfirm({ lead: 0, leave: 1 }, true).confirmBody,
+    ).toMatch(/What you added is deleted too/);
+  });
+
   // Mutation: mark a leave-only confirm destructive.
   it("is destructive only when something is deleted", () => {
     expect(tripPlanBulkConfirm({ lead: 0, leave: 3 }).destructive).toBe(false);
@@ -1160,5 +1187,84 @@ describe("tripPlanBulkDone", () => {
       "Archived 2 of 3 plans. The rest didn't go through.",
     );
     expect(tripPlanBulkDone("unarchive", 3, 3)).toBe("Brought back 3 plans.");
+  });
+});
+
+describe("what is already in the plan", () => {
+  const plan = {
+    places: [{ name: "Camp", latitude: -33.1, longitude: 150.2 }],
+    routes: [
+      {
+        name: "Out",
+        points: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+    ],
+    files: [
+      { item: { displayName: null, filename: "a.gpx" }, sizeBytes: "10" },
+    ],
+  } as unknown as Parameters<typeof tripPlanInPlanIds>[0];
+  const own = {
+    places: [
+      { id: "p1", name: "Camp", latitude: -33.1, longitude: 150.2 },
+      { id: "p2", name: "Camp", latitude: -33.2, longitude: 150.2 },
+    ],
+    routes: [
+      {
+        id: "r1",
+        name: "Out",
+        points: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+      { id: "r2", name: "Out", points: [[0, 0]] },
+    ],
+    files: [
+      { id: "f1", filename: "a.gpx", fileSizeBytes: 10 },
+      { id: "f2", filename: "a.gpx", fileSizeBytes: 11 },
+    ],
+  };
+
+  // Mutation: match on name alone, and a second place of the same name
+  // somewhere else is marked as in the plan and can't be added.
+  it("matches by name and position, not name alone", () => {
+    expect([...tripPlanInPlanIds(plan, own)].sort()).toEqual([
+      "f1",
+      "p1",
+      "r1",
+    ]);
+  });
+});
+
+describe("answeredForm", () => {
+  const answer = (id: string) => ({ user: { id, username: id } });
+  // Mutation: ignore the user, and See answers opens a form carol never
+  // answered, or shows on a request with no answers at all.
+  it("opens the first form the person answered, or none", () => {
+    const plan = {
+      forms: [
+        { id: "carpool", answers: [answer("tom")] },
+        { id: "contacts", answers: [answer("tom"), answer("carol")] },
+      ],
+    } as unknown as Parameters<typeof answeredForm>[0];
+    expect(answeredForm(plan, "carol")).toBe("contacts");
+    expect(answeredForm(plan, "sue")).toBeNull();
+  });
+});
+
+describe("invite role order", () => {
+  // Mutation: reorder the list, and the invite picker puts Leader first.
+  it("is Member, Editor, Leader and holds every role", () => {
+    expect([...TRIP_PLAN_ROLES_PICK_ORDER]).toEqual([
+      "member",
+      "editor",
+      "leader",
+    ]);
+    expect([...TRIP_PLAN_ROLES_PICK_ORDER].sort()).toEqual(
+      [...TRIP_PLAN_ROLES].sort(),
+    );
   });
 });

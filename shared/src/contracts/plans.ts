@@ -74,7 +74,7 @@ export const TRIP_PLANS_LIST = {
 
     // The one form for a plan's name, dates and types: New plan, and Edit.
     newTitle: "New plan",
-    editTitle: "Edit name and dates",
+    editTitle: "Edit plan",
     name: "Name",
     nameRequired: "Give the plan a name.",
     tripTypes: "Trip types",
@@ -354,7 +354,6 @@ export const TRIP_PLAN_PAGE = {
 
     // The map while a plan is open.
     barPrefix: "Plan:",
-    showMine: "Show my things",
     backToMap: "Back to my map",
 
     noticeArchived: "Archived. A leader can bring it back to change it.",
@@ -368,6 +367,8 @@ export const TRIP_PLAN_PAGE = {
     datesPrevMonth: "Previous month",
     datesNextMonth: "Next month",
     datesClear: "Clear dates",
+    datesHintTap: "Tap a day twice for a one-day trip.",
+    datesHintClick: "Click a day twice for a one-day trip.",
 
     views: "Plan view",
     viewWriteUp: "Write-up",
@@ -380,7 +381,8 @@ export const TRIP_PLAN_PAGE = {
 
     // The write-up.
     writeUpEmpty: "Nothing written yet.",
-    sectionTitle: "Section",
+    sectionTitle: "Write-up section",
+    sectionNewTitle: "New write-up section",
     sectionTitleField: "Title",
     sectionBody: "Text",
     sectionTitlePlaceholder: "For example, Overview, Gear or Access",
@@ -412,6 +414,9 @@ export const TRIP_PLAN_PAGE = {
     itemDeleteFailed: "Couldn't delete that.",
     itemDeleted: "Deleted from the plan.",
     itemEdit: "Edit",
+    itemEditPlace: "Edit place",
+    itemEditWay: "Edit way",
+    inPlan: "In the plan",
     itemName: "Name",
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
@@ -422,7 +427,6 @@ export const TRIP_PLAN_PAGE = {
     itemLongitude: "Longitude",
     itemElevation: "Elevation (m)",
     itemAttributes: "Attributes",
-    saveCopyPhotos: "Bring its photos",
     drawRoute: "Draw a route",
     itemDownloadHint: "Click to download",
     placeTypeFallback: "Place",
@@ -519,13 +523,6 @@ export function tripPlanNotice(args: {
     return { kind: "archived", icon: "archive", text: copy.noticeArchived };
   if (args.over) return { kind: "over", icon: "trip", text: copy.noticeOver };
   return null;
-}
-
-/** The map draws the user's own things: no plan on it, or Show my things
- *  asked for beside one. Each client turns Show my things off as a plan
- *  opens. */
-export function planShowsMine(planShown: boolean, showMine: boolean): boolean {
-  return !planShown || showMine;
 }
 
 /** Who's going: active members, leaders first, then editors, then members,
@@ -1033,15 +1030,19 @@ export function tripPlanFormsUrgent(
 /**
  * The forms the caller hasn't answered, in the plan's order, and whether the
  * nudge is urgent: the trip's first day is within 7 days (or has come), by
- * date key. Nothing to answer once the trip is over or the plan archived.
+ * date key. Nothing to answer once the trip is over or the plan archived,
+ * and a leader is never nudged: they made the forms and can change them.
  * Guard: plans.test.ts ("forms to answer").
  */
 export function tripPlanFormsToAnswer(
-  plan: Pick<TripPlanView, "forms" | "startDate" | "endDate" | "archivedAt">,
+  plan: Pick<
+    TripPlanView,
+    "forms" | "startDate" | "endDate" | "archivedAt" | "myRole"
+  >,
   today: DateOnly,
 ): { forms: Pick<TripPlanFormView, "id" | "title">[]; urgent: boolean } {
   const forms =
-    plan.archivedAt || tripPlanIsOver(plan, today)
+    plan.myRole === "leader" || plan.archivedAt || tripPlanIsOver(plan, today)
       ? []
       : plan.forms
           .filter((form) => form.myAnswer == null)
@@ -1123,7 +1124,10 @@ export function tripPlanBulkOffers<P extends { role: TripPlanRole }>(
 /** The one confirm for a bulk Delete and leave on the plans list, naming each
  *  count. Leaving alone is not destructive (`destructive`: no danger tone or
  *  trash icon). Guard: plans.test.ts ("tripPlanBulkConfirm"). */
-export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
+export function tripPlanBulkConfirm(
+  counts: { lead: number; leave: number },
+  deleteAdded = false,
+) {
   const { lead, leave } = counts;
   const plans = (count: number) => `${count} ${count === 1 ? "plan" : "plans"}`;
   const parts: string[] = [];
@@ -1133,7 +1137,7 @@ export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
     );
   if (leave > 0)
     parts.push(
-      `Leaving ${plans(leave)} loses you access at once and removes your answers. What you added stays.`,
+      `Leaving ${plans(leave)} loses you access at once and removes your answers. ${deleteAdded ? "What you added is deleted too." : "What you added stays."}`,
     );
   const title =
     lead > 0 && leave > 0
@@ -1148,6 +1152,9 @@ export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
     destructive: lead > 0,
   };
 }
+
+/** Bulk leave's box. Off by default: leaving keeps what you added. */
+export const TRIP_PLAN_BULK_DELETE_ADDED_LABEL = "Also delete what I added";
 
 export function tripPlanLetInMessage(username: string): string {
   return `${username} is in.`;
@@ -1208,6 +1215,72 @@ export const TRIP_PLAN_ITEM_GROUPS: readonly {
   { group: "places", title: TRIP_PLAN_PAGE.copy.itemsPlaces },
   { group: "ways", title: TRIP_PLAN_PAGE.copy.itemsWays },
 ];
+
+/** The first form a person answered, for a leader reading their request. */
+export function answeredForm(
+  plan: Pick<TripPlanView, "forms">,
+  userId: string,
+): string | null {
+  return (
+    plan.forms.find((form) =>
+      form.answers.some((answer) => answer.user.id === userId),
+    )?.id ?? null
+  );
+}
+
+/**
+ * Which of the caller's own places, routes and files are already in the plan.
+ * A plan item records no source (a member must not learn the adder's row id),
+ * so this matches by name and position: a place by name and coordinates, a
+ * route by name and point count, a file by its shown name and size. A thing
+ * renamed or moved since it was added is offered again. Client-side only; the
+ * API takes a second add. Guard: plans.test.ts ("what is already in the plan").
+ */
+export function tripPlanInPlanIds(
+  plan: Pick<TripPlanView, "places" | "routes" | "files">,
+  own: {
+    places: { id: string; name: string; latitude: number; longitude: number }[];
+    routes: { id: string; name: string; points: unknown[] }[];
+    files: {
+      id: string;
+      displayName?: string | null;
+      filename?: string | null;
+      fileSizeBytes?: number | null;
+    }[];
+  },
+): Set<string> {
+  const ids = new Set<string>();
+  for (const place of own.places)
+    if (
+      plan.places.some(
+        (p) =>
+          p.name === place.name &&
+          p.latitude === place.latitude &&
+          p.longitude === place.longitude,
+      )
+    )
+      ids.add(place.id);
+  for (const route of own.routes)
+    if (
+      plan.routes.some(
+        (r) => r.name === route.name && r.points.length === route.points.length,
+      )
+    )
+      ids.add(route.id);
+  for (const file of own.files) {
+    const name = file.displayName ?? file.filename;
+    if (
+      plan.files.some(
+        (f) =>
+          (f.item.displayName ?? f.item.filename) === name &&
+          (file.fileSizeBytes == null ||
+            Number(f.sizeBytes) === file.fileSizeBytes),
+      )
+    )
+      ids.add(file.id);
+  }
+  return ids;
+}
 
 /**
  * What of the caller's own Add a place or way offers: their places, routes and

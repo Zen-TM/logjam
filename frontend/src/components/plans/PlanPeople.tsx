@@ -21,6 +21,7 @@ import {
   type PlanMemberVerbId,
   type TripPlanMemberView,
   type TripPlanView,
+  answeredForm,
 } from "@logjam/shared";
 import {
   Avatar,
@@ -39,7 +40,6 @@ import { messageFromError } from "../../errors/messageFromError";
 import { approveMember, removeMember, setMemberRole } from "../../plansApi";
 import { useBusyIds } from "../../useBusyIds";
 import { menuEntries } from "./planMenu";
-import { answeredForm } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;

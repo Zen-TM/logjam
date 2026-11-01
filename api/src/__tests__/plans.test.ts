@@ -139,7 +139,8 @@ describe("GET /plans", () => {
         (plan: { id: string }) => plan.id === planId,
       )?.unansweredForms;
     expect(await count(BOB_SUB)).toBe(1);
-    expect(await count(ALICE_SUB)).toBe(2);
+    // Alice leads the plan: made the forms, never nudged.
+    expect(await count(ALICE_SUB)).toBe(0);
     await prisma.tripPlanAnswer.create({
       data: { formId: b.id, userId: BOB_ID, answers: {} },
     });

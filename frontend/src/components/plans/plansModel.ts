@@ -107,18 +107,6 @@ export function planSummary(plan: TripPlanView, parts: SummaryParts) {
   };
 }
 
-/** The first form a person answered, for a leader reading their request. */
-export function answeredForm(
-  plan: Pick<TripPlanView, "forms">,
-  userId: string,
-): string | null {
-  return (
-    plan.forms.find((form) =>
-      form.answers.some((answer) => answer.user.id === userId),
-    )?.id ?? null
-  );
-}
-
 /** What a person added, counted as the leave dialog prices it. */
 export function addedBy(plan: TripPlanView, userId: string) {
   const mine = <T extends { addedBy: { id: string } | null }>(items: T[]) =>

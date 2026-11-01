@@ -70,11 +70,13 @@ export function planSummary(
 ): TripPlanSummary {
   const startDate = dateOnly(plan.startDate);
   const endDate = dateOnly(plan.endDate);
-  // Nothing to answer once the plan is archived or the trip is over, as
+  // A leader is never nudged. Nothing to answer once the plan is archived or
+  // the trip is over, as
   // `tripPlanFormsToAnswer` says on the plan's page. NSW's calendar day, as
   // the server doesn't know the caller's.
   const owing =
     membership.status === "active" &&
+    membership.role !== "leader" &&
     !plan.archivedAt &&
     !tripPlanIsOver(
       { startDate, endDate },

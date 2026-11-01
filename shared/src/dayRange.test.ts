@@ -21,9 +21,21 @@ describe("picking a date range", () => {
       start: "2026-11-05",
       end: null,
     });
-    expect(pickDay(started, "2026-11-07")).toEqual(started);
     expect(
       pickDay({ start: "2026-11-07", end: "2026-11-09" }, "2026-11-12"),
     ).toEqual({ start: "2026-11-12", end: null });
+  });
+
+  // Mutation: end the range on the start day ({start, end: start}), and a
+  // one-day trip is stored as two different values.
+  it("the start day again leaves a one-day trip", () => {
+    const one = { start: "2026-11-07", end: null };
+    expect(pickDay(one, "2026-11-07")).toEqual(one);
+    expect(
+      pickDay({ start: "2026-11-07", end: "2026-11-07" }, "2026-11-07"),
+    ).toEqual(one);
+    expect(
+      pickDay({ start: "2026-11-07", end: "2026-11-09" }, "2026-11-07"),
+    ).toEqual(one);
   });
 });

@@ -5,7 +5,7 @@ import {
   type TripPlanFormView,
   type TripPlanView,
 } from "@logjam/shared";
-import { addedBy, answeredForm, planMapPress, planSummary } from "./plansModel";
+import { addedBy, planMapPress, planSummary } from "./plansModel";
 
 describe("the print summary", () => {
   const user = (username: string) => ({ id: username, username });
@@ -229,22 +229,6 @@ describe("what someone going takes or leaves", () => {
       ways: 1,
       bytes: 70,
     });
-  });
-});
-
-describe("a request's answers", () => {
-  const answer = (id: string) => ({ user: { id, username: id } });
-  // Mutation: ignore the user, and See answers opens a form carol never
-  // answered, or shows on a request with no answers at all.
-  it("opens the first form the person answered, or none", () => {
-    const plan = {
-      forms: [
-        { id: "carpool", answers: [answer("tom")] },
-        { id: "contacts", answers: [answer("tom"), answer("carol")] },
-      ],
-    } as unknown as TripPlanView;
-    expect(answeredForm(plan, "carol")).toBe("contacts");
-    expect(answeredForm(plan, "sue")).toBeNull();
   });
 });
 
