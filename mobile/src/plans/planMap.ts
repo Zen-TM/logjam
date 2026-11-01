@@ -1,7 +1,7 @@
 // Plan mode on the map: what the map frames when a plan opens on it. Built at
 // navigation time and never stored, like a place's focus: a region of
 // interest stays off the server (mobile/AGENTS.md).
-import { planShowsMine, type TripPlanView } from "@logjam/shared";
+import type { TripPlanView } from "@logjam/shared";
 
 import type { MapArtifact } from "../map/sourceResolver";
 
@@ -70,7 +70,7 @@ export type PlanModeParam =
 
 /**
  * Plan mode on the map. The plan shown is set by arriving for it, and cleared
- * by Back to my map, by arriving for anything else (the params are replaced,
+ * by the plan's close button, by arriving for anything else (the params are replaced,
  * not merged), or by its cached copy going.
  */
 export type PlanModeState = {
@@ -78,21 +78,17 @@ export type PlanModeState = {
   shownPlanId: string | null;
   /** The plan's cached copy, once read. */
   plan: TripPlanView | null;
-  /** Show my things: the user's own beside the plan's. */
-  showMine: boolean;
 };
 
 export type PlanModeEvent =
   | { type: "arrive"; planMode: PlanModeParam }
   | { type: "read"; plan: TripPlanView | null }
-  | { type: "leave" }
-  | { type: "toggleMine" };
+  | { type: "leave" };
 
 export const planModeStart = (planMode: PlanModeParam): PlanModeState => ({
   arrivedFor: planMode,
   shownPlanId: planMode?.planId ?? null,
   plan: null,
-  showMine: false,
 });
 
 export function planModeReducer(
@@ -112,12 +108,18 @@ export function planModeReducer(
         : { ...state, shownPlanId: null, plan: null };
     case "leave":
       return { ...state, shownPlanId: null, plan: null };
-    case "toggleMine":
-      return { ...state, showMine: !state.showMine };
   }
 }
 
-/** The user's own things are drawn (`planShowsMine`), with the plan open once
- *  it is read. */
-export const planModeMine = (state: PlanModeState) =>
-  planShowsMine(state.plan !== null, state.showMine);
+/** The same pins, drawn faint (`muted` in the pin layers' style). */
+export function mutedFeatures<F extends { features: { properties: object }[] }>(
+  fc: F,
+): F {
+  return {
+    ...fc,
+    features: fc.features.map((feature) => ({
+      ...feature,
+      properties: { ...feature.properties, muted: true },
+    })),
+  };
+}

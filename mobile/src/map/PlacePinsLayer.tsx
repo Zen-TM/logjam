@@ -142,6 +142,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleOpacity: 0,
             circleStrokeColor: SHARED_PLACE_COLOR,
             circleStrokeWidth: 1.5,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
@@ -155,6 +156,8 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleColor: ["get", "color"] as unknown as string,
             circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
+            circleOpacity: MUTED_OPACITY,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
@@ -173,6 +176,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           // would leave the name floating away from its pin.
           style={{
             ...LABEL_STYLE,
+            textOpacity: MUTED_OPACITY,
             textOffset: [0, 2.0],
             textAllowOverlap: true,
           }}

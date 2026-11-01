@@ -12,9 +12,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FlatList, RefreshControl, Text, View } from "react-native";
+import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
+  PLAN_VERBS,
+  planDeleteConfirm,
+  planLeaveConfirm,
+  planVerbsFor,
+  tripPlanCounts,
+  TRIP_PLAN_PAGE,
   contractSectionKeys,
   messageFromError,
   sortTripPlans,
@@ -49,18 +56,25 @@ import {
   ListEnd,
   LoadingState,
   Row,
+  SelectionBar,
+  SelectionMark,
   StatusPill,
   SyncStatusPills,
   Toast,
   todayDateKey,
+  useBulkSelection,
   type ChipOption,
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { createPlan, leavePlan } from "./plansApi";
+import { planBulkConfirm, planBulkSplit, planSelectable } from "./planBulk";
+import { startPlanDownload } from "./planDownloads";
+import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
 import {
+  afterPlanWrite,
   planChanged,
   pollPlans,
+  readCachedPlan,
   readCachedPlanStamps,
   readPlansList,
   type CachedPlanStamp,
@@ -70,6 +84,9 @@ import { plansListView } from "./planViews";
 const copy = TRIP_PLANS_LIST.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 const WITHDRAW = PLAN_REQUEST_VERBS[0];
+const pageCopy = TRIP_PLAN_PAGE.copy;
+const planKey = (plan: TripPlanSummary) => plan.id;
+
 const BUCKETS: TripPlanBucket[] = ["upcoming", "past", "archived"];
 const BUCKET_LABEL: Record<TripPlanBucket, string> = {
   upcoming: copy.bucketUpcoming,
@@ -173,6 +190,34 @@ export function PlansScreen({
     count: byBucket[value].length,
   }));
 
+  // Press and hold a card to select; the bar takes the bucket rail's slot.
+  const {
+    selectedKeys,
+    clearSelection,
+    selectItem,
+    selectAll,
+    selectedItems,
+    selectableItems,
+    selecting,
+  } = useBulkSelection({
+    items: rows,
+    keyOf: planKey,
+    isDeletable: planSelectable,
+  });
+  useFocusEffect(
+    useCallback(() => {
+      clearSelection();
+    }, [clearSelection]),
+  );
+  const changeBucket = useCallback(
+    (next: TripPlanBucket) => {
+      clearSelection();
+      setBucket(next);
+    },
+    [clearSelection],
+  );
+  const [actionsOpen, setActionsOpen] = useState(false);
+
   // Decline and Withdraw request: one call, by status (`leavePlan`); no
   // confirm, as on Logjam Web.
   const [menuFor, setMenuFor] = useState<TripPlanSummary | null>(null);
@@ -204,10 +249,148 @@ export function PlansScreen({
     [poll, setToast],
   );
 
+  const report = useCallback(
+    (text: string, tone: "info" | "error") =>
+      setToast({ text, tone, nonce: Date.now() }),
+    [],
+  );
+  // A plan that is gone for the caller drops from the cache (`gone`).
+  const write = useCallback(
+    (
+      plan: TripPlanSummary,
+      call: Promise<unknown>,
+      gone: boolean,
+      done: string,
+      failed: string,
+    ) =>
+      call
+        .then(() => afterPlanWrite(plan.id, gone))
+        .then(() => report(done, "info"))
+        .catch((err: unknown) =>
+          report(messageFromError(err, failed), "error"),
+        ),
+    [report],
+  );
+  const confirm = (
+    words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
+    destructive: boolean,
+    action: () => void,
+  ) =>
+    Alert.alert(words.confirmTitle, words.confirmBody, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: words.confirmLabel,
+        style: destructive ? "destructive" : "default",
+        onPress: action,
+      },
+    ]);
+  // A card's ⋯: the verbs its own page offers that make sense without it open.
+  const cardAction = async (
+    plan: TripPlanSummary,
+    id: "archive" | "unarchive" | "leave" | "delete",
+  ) => {
+    if (id === "archive" || id === "unarchive")
+      return void write(
+        plan,
+        archivePlan(plan.id, id === "archive"),
+        false,
+        id === "archive" ? pageCopy.archived : pageCopy.unarchived,
+        pageCopy.archiveFailed,
+      );
+    if (id === "leave")
+      return confirm(
+        planLeaveConfirm(plan.name),
+        false,
+        () =>
+          void write(
+            plan,
+            leavePlan(plan.id),
+            true,
+            pageCopy.left,
+            pageCopy.leaveFailed,
+          ),
+      );
+    const cached = await readCachedPlan(plan.id).catch(() => null);
+    const counts = cached
+      ? tripPlanCounts(cached.plan)
+      : { places: 0, ways: 0 };
+    confirm(
+      planDeleteConfirm(plan.name, counts),
+      true,
+      () =>
+        void write(
+          plan,
+          deletePlan(plan.id),
+          true,
+          pageCopy.deleted,
+          pageCopy.deleteFailed,
+        ),
+    );
+  };
+
+  const selectedPlans = selectedItems;
+  const bulk = planBulkSplit(selectedPlans);
+  const archivedBucket = bucket === "archived";
+  const runBulk = () => {
+    const { lead, leave: leaving } = bulk;
+    confirm(
+      planBulkConfirm({ lead: lead.length, leave: leaving.length }),
+      true,
+      () => {
+        void (async () => {
+          const calls = [
+            ...lead.map((plan) =>
+              deletePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
+            ),
+            ...leaving.map((plan) =>
+              leavePlan(plan.id).then(() => afterPlanWrite(plan.id, true)),
+            ),
+          ];
+          const failed = (await Promise.allSettled(calls)).filter(
+            (result) => result.status === "rejected",
+          ).length;
+          clearSelection();
+          if (failed > 0) {
+            await poll();
+            report(
+              `Couldn't change ${failed} of ${calls.length} plans.`,
+              "error",
+            );
+          } else
+            report(
+              `Done: ${calls.length} ${calls.length === 1 ? "plan" : "plans"}.`,
+              "info",
+            );
+        })();
+      },
+    );
+  };
+  const runBulkArchive = () => {
+    const archived = !archivedBucket;
+    void (async () => {
+      const failed = (
+        await Promise.allSettled(
+          bulk.lead.map((plan) =>
+            archivePlan(plan.id, archived).then(() => afterPlanWrite(plan.id)),
+          ),
+        )
+      ).filter((result) => result.status === "rejected").length;
+      clearSelection();
+      if (failed > 0) {
+        await poll();
+        report(
+          `Couldn't change ${failed} of ${bulk.lead.length} plans.`,
+          "error",
+        );
+      } else report(archived ? pageCopy.archived : pageCopy.unarchived, "info");
+    })();
+  };
+
   const renderItem = useCallback(
     ({ item }: { item: TripPlanSummary }) => {
       const stamp = stamps.get(item.id);
       const pill = tripPlanRowPill(item);
+      const picked = selectedKeys.includes(item.id);
       return (
         <Row
           icon="plan"
@@ -217,21 +400,21 @@ export function PlansScreen({
           subtitle={tripPlanRowSubtitle(item)}
           // The body opens; a request's only action is its ⋯ (shared/DESIGN.md §9).
           onPress={
-            item.status !== "requested" ? () => onOpenPlan(item) : undefined
+            selecting
+              ? () => selectItem(item)
+              : item.status !== "requested"
+                ? () => onOpenPlan(item)
+                : undefined
           }
+          onLongPress={() => selectItem(item)}
+          selected={picked}
           right={
             <View style={styles.pills}>
-              {planChanged(item, stamp) ? (
-                <StatusPill label={TRIP_PLAN_OFFLINE.changed} tone="warning" />
-              ) : stamp?.downloadedAt ? (
-                <StatusPill
-                  label={TRIP_PLAN_OFFLINE.downloaded}
-                  tone="muted"
-                  icon="saveOffline"
-                />
-              ) : null}
               {pill ? <StatusPill label={pill} tone="outline" /> : null}
-              {item.status === "requested" ? (
+              {selecting && planSelectable(item) ? (
+                // The ⋯'s box, so the card keeps its size when selecting starts.
+                <SelectionMark selected={picked} />
+              ) : item.status !== "invited" ? (
                 <IconButton
                   icon="overflow"
                   accessibilityLabel={`Actions for ${item.name}`}
@@ -241,9 +424,27 @@ export function PlansScreen({
               ) : null}
             </View>
           }
-          // An invite answers in its footer: Open (the preview) · Decline.
+          // An invite answers in its footer: Open (the preview) · Decline. The
+          // downloaded and changed marks sit under the line, so a long one
+          // can't squeeze the name and dates.
           footer={
-            item.status === "invited" ? (
+            item.status === "active" &&
+            (planChanged(item, stamp) || stamp?.downloadedAt) ? (
+              <View style={styles.pills}>
+                {planChanged(item, stamp) ? (
+                  <StatusPill
+                    label={TRIP_PLAN_OFFLINE.changed}
+                    tone="warning"
+                  />
+                ) : (
+                  <StatusPill
+                    label={TRIP_PLAN_OFFLINE.downloaded}
+                    tone="muted"
+                    icon="saveOffline"
+                  />
+                )}
+              </View>
+            ) : item.status === "invited" ? (
               // Its own taps: a dimmed Decline doesn't fall through to the
               // row's Open.
               <View
@@ -281,6 +482,9 @@ export function PlansScreen({
       leaving,
       onOpenPlan,
       online,
+      selectItem,
+      selectedKeys,
+      selecting,
       setMenuFor,
       stamps,
       styles,
@@ -326,6 +530,13 @@ export function PlansScreen({
         }
         titleNumberOfLines={2}
         onBack={onBack}
+        actions={
+          <IconButton
+            icon="overflow"
+            accessibilityLabel="Plans actions"
+            onPress={() => setActionsOpen(true)}
+          />
+        }
       >
         <View style={styles.pills}>
           <Button
@@ -343,12 +554,38 @@ export function PlansScreen({
     ),
     buckets: (
       <View style={styles.rail}>
-        <ChipRail
-          scroll
-          options={options}
-          value={bucket}
-          onChange={setBucket}
-        />
+        {selecting ? (
+          <SelectionBar
+            countLabel={`${selectedPlans.length} selected`}
+            showSelectAll={selectedPlans.length < selectableItems.length}
+            extra={
+              bulk.lead.length > 0 ? (
+                <IconButton
+                  icon="archive"
+                  accessibilityLabel={
+                    archivedBucket
+                      ? "Bring back the selected plans"
+                      : "Archive the selected plans"
+                  }
+                  color={theme.accent}
+                  disabled={!online}
+                  onPress={runBulkArchive}
+                />
+              ) : null
+            }
+            onClear={clearSelection}
+            onSelectAll={selectAll}
+            onDelete={runBulk}
+            deleteLabel="Delete or leave the selected plans"
+          />
+        ) : (
+          <ChipRail
+            scroll
+            options={options}
+            value={bucket}
+            onChange={changeBucket}
+          />
+        )}
       </View>
     ),
     list:
@@ -418,11 +655,29 @@ export function PlansScreen({
         }}
       />
       <BottomSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        title="Plans actions"
+      >
+        <Row
+          icon="multiSelect"
+          title="Select all"
+          subtitle={
+            selectableItems.length === 0 ? "No plans to select here" : undefined
+          }
+          disabled={selectableItems.length === 0}
+          onPress={() => {
+            setActionsOpen(false);
+            selectAll();
+          }}
+        />
+      </BottomSheet>
+      <BottomSheet
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}
         title={menuFor?.name ?? ""}
       >
-        {menuFor ? (
+        {menuFor?.status === "requested" ? (
           <Row
             icon={WITHDRAW.icon}
             title={WITHDRAW.label}
@@ -434,14 +689,68 @@ export function PlansScreen({
               leave(plan, copy.withdrawn, copy.withdrawFailed);
             }}
           />
+        ) : menuFor ? (
+          <View style={styles.menu}>
+            <Row
+              icon="plan"
+              title={copy.open}
+              onPress={() => {
+                const plan = menuFor;
+                setMenuFor(null);
+                onOpenPlan(plan);
+              }}
+            />
+            <Row
+              icon="saveOffline"
+              title={TRIP_PLAN_OFFLINE.download}
+              subtitle={online ? undefined : OFFLINE}
+              disabled={!online}
+              onPress={() => {
+                const plan = menuFor;
+                setMenuFor(null);
+                void startPlanDownload(plan.id);
+              }}
+            />
+            {planVerbsFor(PLAN_VERBS, "gps", menuFor.role, {
+              archived: menuFor.archivedAt != null,
+            })
+              .filter(
+                (verb) =>
+                  (verb.id === "archive" ||
+                    verb.id === "unarchive" ||
+                    verb.id === "delete" ||
+                    verb.id === "leave") &&
+                  // A leader's Leave depends on who else leads: it is on the
+                  // plan's own page, which knows.
+                  !(verb.id === "leave" && menuFor.role === "leader") &&
+                  verb.id !==
+                    (menuFor.archivedAt != null ? "archive" : "unarchive"),
+              )
+              .map((verb) => (
+                <Row
+                  key={verb.id}
+                  icon={verb.icon}
+                  hue={verb.danger ? theme.warning : undefined}
+                  title={verb.label}
+                  subtitle={online ? undefined : OFFLINE}
+                  disabled={!online}
+                  onPress={() => {
+                    const plan = menuFor;
+                    setMenuFor(null);
+                    void cardAction(
+                      plan,
+                      verb.id as "archive" | "unarchive" | "leave" | "delete",
+                    );
+                  }}
+                />
+              ))}
+          </View>
         ) : null}
       </BottomSheet>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }
-
-const planKey = (plan: TripPlanSummary) => plan.id;
 
 const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
@@ -454,6 +763,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   footer: { gap: spacing(0.5) },
+  menu: { gap: spacing(1) },
   hint: { ...muted(theme, textRole.detail) },
   pills: {
     flexDirection: "row",
