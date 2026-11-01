@@ -3,8 +3,10 @@
 // dialog's background prefetch (prefetch.ts) asks the same question before any
 // render, so both name the same tiles. Pure; nothing here touches the network.
 import {
+  BASEMAP_CATALOG,
   computeTileToMapTransform,
   computeZoom,
+  geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
   NSW_CONTOURS,
   NSW_LAND,
@@ -27,6 +29,7 @@ import {
   terrainTileReads,
   type TerrainTileRead,
 } from "./terrain";
+import { displayZoomForScale } from "./draw/common";
 import type { GeoPdfRenderInput } from "./types";
 
 /** The map's size and the zooms it is drawn and read at. */
@@ -50,6 +53,54 @@ export function printGeometry(config: GeoPdfRenderInput["config"]) {
   };
 }
 export type PrintGeometry = ReturnType<typeof printGeometry>;
+
+/** The tiles a raster base is read from, placed on the print's map image. */
+export function rasterBaseTiles(
+  config: GeoPdfRenderInput["config"],
+  g: PrintGeometry,
+) {
+  const { north, south, east, west } = config.extent;
+  return computeTileToMapTransform(
+    geoPdfBaseTileZoom(config.baseLayer, config.scale, g.centreLat),
+    north,
+    south,
+    east,
+    west,
+    g.nativeW,
+    g.nativeH,
+  );
+}
+
+/**
+ * The archive and tiles a vector base is read from, or null for a raster base.
+ * The tile zoom follows the style zoom it is drawn at, not the print's: more
+ * pixels on the page do not put more features in a tile.
+ */
+export function vectorBasemap(
+  config: GeoPdfRenderInput["config"],
+  g: PrintGeometry,
+) {
+  const entry = BASEMAP_CATALOG.find(
+    (e) => e.id === config.baseLayer && e.kind === "vector",
+  );
+  if (!entry) return null;
+  const { north, south, east, west } = config.extent;
+  const styleZoom = displayZoomForScale(config.scale, g.centreLat);
+  const zoom = Math.floor(Math.min(styleZoom, entry.maxNativeZoom));
+  return {
+    path: entry.urlTemplate,
+    styleZoom,
+    transform: computeTileToMapTransform(
+      Math.max(zoom, 0),
+      north,
+      south,
+      east,
+      west,
+      g.nativeW,
+      g.nativeH,
+    ),
+  };
+}
 
 /** The DEM tiles one layer reads, per strip. */
 export type TerrainBlocks = {
@@ -119,8 +170,8 @@ export type StatewideRead = {
 };
 
 /**
- * Every statewide tile a render of this config reads, each once: the heights
- * for the hillshade, the slope, the contours. Reads an area serves are left
+ * Every statewide tile a render of this config reads, each once: the vector
+ * base, the heights for the hillshade, the slope, the contours. Reads an area serves are left
  * out (they are presigned, never prefetched). The whole map is one span: the
  * strips' blocks overlap by their halo and together cover exactly that.
  */
@@ -133,6 +184,9 @@ export function statewideReads(input: GeoPdfRenderInput): StatewideRead[] {
   const out = new Map<string, StatewideRead>();
   const add = (path: string, r: TileCoord) =>
     out.set(`${path} ${r.z}/${r.x}/${r.y}`, { path, ...r });
+  const basemap = vectorBasemap(config, g);
+  if (basemap)
+    for (const tile of basemap.transform.tiles) add(basemap.path, tile);
   const whole = [{ from: 0, to: g.nativeH }];
   const layers: [boolean, "heights" | "slope"][] = [
     [drawn.hillshade, "heights"],

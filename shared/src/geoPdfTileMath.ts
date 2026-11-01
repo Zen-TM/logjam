@@ -162,11 +162,29 @@ export function geoPdfNativeMegapixels(
 }
 
 /**
- * The deepest zoom the renderer fetches a base layer at: its cache's own
- * deepest, or z18 for a name it does not know.
+ * The deepest zoom a base layer is printed at: a raster cache's own deepest,
+ * or z18, as for overlays, for a vector base, which draws at any resolution.
  */
 export function geoPdfMaxNativeZoom(baseLayer: string): number {
   return GEOPDF_BASE_LAYER_CONFIG[baseLayer]?.maxNativeZoom ?? 18;
+}
+
+/**
+ * The zoom a print reads a raster base's tiles at. The map image stays at the
+ * print's own zoom, so overlays and markers keep their resolution, and a tile
+ * read shallower is stretched up to it.
+ */
+export function geoPdfBaseTileZoom(
+  baseLayer: string,
+  scale: number,
+  latDeg: number,
+): number {
+  return computeZoom(
+    scale,
+    latDeg,
+    GEOPDF_BASE_LAYER_CONFIG[baseLayer]?.printTileDpi ?? TARGET_DPI,
+    geoPdfMaxNativeZoom(baseLayer),
+  );
 }
 
 /** The most the renderer allocates for the map image, at four bytes a pixel. */

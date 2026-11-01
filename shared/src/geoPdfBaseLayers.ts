@@ -20,6 +20,12 @@ const SIX_ATTRIBUTION =
 const SIX_ATTRIBUTION_HTML =
   '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.';
 
+// A tile's labels are a fixed size in pixels, so the deeper a print reads for
+// resolution, the smaller they land on paper. Reading for 85 DPI lands a tile
+// between 85 and 170 DPI, a 10 px label between 4 and 8 pt, against 1 to 2.5 pt
+// at 300 DPI. Guard: geoPdfTileMath.test.ts.
+const LABELLED_TILE_DPI = 85;
+
 export type BasemapCatalogEntry = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
@@ -28,7 +34,8 @@ export type BasemapCatalogEntry = {
    * "raster" = XYZ tile provider (urlTemplate is a {z}/{x}/{y} template).
    * "vector" = self-hosted PMTiles archive (urlTemplate is the CDN-relative
    * archive path; the mobile resolver prefixes the CDN base URL). Web
-   * BASE_LAYERS and the GeoPDF renderer consume raster entries only.
+   * BASE_LAYERS keeps both; the GeoPDF renderer draws a vector entry from
+   * its archive with `frontend/src/geoPdf/draw/basemap.ts`.
    */
   kind: "raster" | "vector";
   urlTemplate: string;
@@ -55,6 +62,19 @@ export type BasemapCatalogEntry = {
    * basemap are download-eligible.
    */
   offlineCapable: boolean;
+  /**
+   * Whether a GeoPDF may be made from this provider. A print fetches every
+   * tile of its page at once, none of them on screen, so this asks the
+   * provider's tile terms, not the licence: every entry's licence allows a
+   * printed sheet with the credit it carries.
+   */
+  printable: boolean;
+  /**
+   * The DPI a print reads this provider's tiles for, where not `TARGET_DPI`.
+   * Left out where deeper tiles lose nothing: imagery has no labels, and SIX
+   * Topo's grow with the zoom, as they are drawn on the sheet.
+   */
+  printTileDpi?: number;
   /**
    * NSW Spatial Services layers additionally need the dated extraction credit
    * (see SIX_EXTRACTION_CREDIT_PREFIX above) appended at draw time.
@@ -86,6 +106,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | <a href="https://protomaps.com">Protomaps</a>',
     offlineCapable: true,
+    // Our own archive, read from our own origin.
+    printable: true,
   },
   {
     id: "osm",
@@ -98,6 +120,10 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
+    // The OSMF tile policy calls "any pre-emptive fetching of tiles other than
+    // those a user is actively viewing" bulk downloading, and forbids it. A
+    // print is exactly that (operations.osmfoundation.org/policies/tiles).
+    printable: false,
   },
   {
     id: "osm-topo",
@@ -107,10 +133,15 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     maxNativeZoom: 17,
     displayMaxZoom: 17,
     attribution:
-      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors",
+      "Base map © OpenTopoMap (CC-BY-SA), © OpenStreetMap contributors, SRTM",
     attributionHtml:
       '<a href="https://github.com/der-stefan/OpenTopoMap">OpenTopo</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
+    // opentopomap.org/about welcomes use elsewhere unless "mass downloads"
+    // overload the server, and offers a script to stitch its tiles for print.
+    // A print's tiles are read at 2 at a time (geoPdf/tiles.ts), never prefetched.
+    printable: true,
+    printTileDpi: LABELLED_TILE_DPI,
   },
   {
     id: "osm-cycle",
@@ -124,6 +155,9 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml:
       '<a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     offlineCapable: false,
+    // cyclosm.org's "fairuse tile policy" is a link to the OSMF's: refused as
+    // "osm" above. Its deep tiles are also rendered on request.
+    printable: false,
   },
   {
     id: "six-topo",
@@ -136,6 +170,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    printable: true,
     requiresExtractionDate: true,
   },
   {
@@ -149,6 +184,8 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attribution: SIX_ATTRIBUTION,
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    printable: true,
+    printTileDpi: LABELLED_TILE_DPI,
     requiresExtractionDate: true,
   },
   {
@@ -163,19 +200,20 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
       "Imagery © State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to spatial.nsw.gov.au.",
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
+    printable: true,
     requiresExtractionDate: true,
   },
 ];
 
-// Legacy keyed view consumed by the GeoPDF renderer/estimator (api). Derived —
-// never hand-edit; extend BASEMAP_CATALOG instead. Raster entries only: the
-// renderer fetches XYZ tiles, which a vector PMTiles archive can't provide.
+// Keyed view of the raster entries, the ones the GeoPDF renderer fetches as XYZ
+// tiles. Derived: never hand-edit; extend BASEMAP_CATALOG instead.
 export const GEOPDF_BASE_LAYER_CONFIG: Record<
   string,
   {
     urlTemplate: string;
     maxNativeZoom: number;
     attribution: string;
+    printTileDpi?: number;
     requiresExtractionDate?: boolean;
   }
 > = Object.fromEntries(
@@ -185,6 +223,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
       urlTemplate: entry.urlTemplate,
       maxNativeZoom: entry.maxNativeZoom,
       attribution: entry.attribution,
+      printTileDpi: entry.printTileDpi,
       requiresExtractionDate: entry.requiresExtractionDate,
     },
   ]),

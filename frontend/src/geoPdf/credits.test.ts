@@ -59,6 +59,18 @@ const DPI = 300;
 const top = (lines: string[]) =>
   attributionRows(lines.length, 2000, 60, DPI).top;
 
+describe("the base map's credit", () => {
+  // Mutation: read the credit from GEOPDF_BASE_LAYER_CONFIG, which holds raster
+  // bases only, and a print of OSM Vector loses the ODbL credit.
+  it("is printed for the vector base", () => {
+    const lines = attributionLines(ctx, WIDTH, DPI, {
+      ...input([], []),
+      baseLayer: "protomaps",
+    });
+    expect(lines.join(" ")).toContain("OpenStreetMap contributors");
+  });
+});
+
 describe("the credit block's upper bound", () => {
   // Mutation: build the bound without the areas (drop `upperAreas` in
   // upperBoundTerrainLines), and a page where areas credit a layer prints

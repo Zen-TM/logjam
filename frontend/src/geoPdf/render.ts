@@ -52,7 +52,12 @@ import {
   type TerrainTileRead,
 } from "./terrain";
 import type { TileCache } from "./cache";
-import { planTerrainBlocks, printGeometry } from "./plan";
+import {
+  planTerrainBlocks,
+  printGeometry,
+  rasterBaseTiles,
+  vectorBasemap,
+} from "./plan";
 import { bandRows } from "./terrainJobs";
 import { TerrainPool } from "./terrainPool";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
@@ -91,6 +96,13 @@ import {
   landClassesDrawn,
   type LandTileInput,
 } from "./draw/land";
+import {
+  BASEMAP_BANDS,
+  buildBasemap,
+  drawBasemapBand,
+  drawBasemapLabels,
+  type BasemapTile,
+} from "./draw/basemap";
 import {
   drawMissingTile,
   drawTile,
@@ -277,7 +289,7 @@ async function renderInner(
   const { north, south, east, west } = config.extent;
   const extent = config.extent;
   const geometry = printGeometry(config);
-  const { centreLat, zoom, nativeW, nativeH, overlayZoom } = geometry;
+  const { centreLat, nativeW, nativeH, overlayZoom } = geometry;
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
   const styleZoom = displayZoomForScale(config.scale, centreLat);
   timings.mapPx = [nativeW, nativeH];
@@ -315,15 +327,7 @@ async function renderInner(
 
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
   const vectorPxScale = elementDpi / STYLE_DPI;
-  const transform = computeTileToMapTransform(
-    zoom,
-    north,
-    south,
-    east,
-    west,
-    nativeW,
-    nativeH,
-  );
+  const baseTiles = rasterBaseTiles(config, geometry);
   const overlayTransform = computeTileToMapTransform(
     overlayZoom,
     north,
@@ -409,6 +413,9 @@ async function renderInner(
     Record<TerrainArchiveLayer | "land", string | null>
   > = {};
 
+  const vectorBase = vectorBasemap(config, geometry);
+  const vectorBaseUrl = vectorBase && statewideUrl(vectorBase.path);
+
   const fontsReady = loadMapFonts(signal);
   // A statewide archive that will not open leaves its layer off the map and
   // out of the credits; an area's archives are tried tile by tile.
@@ -419,8 +426,11 @@ async function renderInner(
     const url = statewideUrl(path);
     statewide[layer] = (await fetcher.open(archiveAt(url), url)) ? url : null;
   };
-  await Promise.all([
+  const [, vectorBaseOpened] = await Promise.all([
     fontsReady,
+    vectorBaseUrl
+      ? fetcher.open(archiveAt(vectorBaseUrl), vectorBaseUrl)
+      : false,
     drawn.hillshade
       ? openStatewide("heights", NSW_HILLSHADE.archivePath)
       : null,
@@ -467,8 +477,8 @@ async function renderInner(
   // Base tiles.
   const baseEntries: TileEntry[] = [];
   if (baseLayerCfg) {
-    for (const tile of transform.tiles) {
-      const rect = tileRect(tile, transform);
+    for (const tile of baseTiles.tiles) {
+      const rect = tileRect(tile, baseTiles);
       const [first, last] = stripsReaching(rect.y, rect.y + rect.h);
       if (first < 0) continue;
       const url = baseLayerCfg.urlTemplate
@@ -487,6 +497,24 @@ async function renderInner(
       });
     }
   }
+  // A vector base: every tile before the first strip, as its labels are placed
+  // over the whole map.
+  const vectorBaseReads = vectorBaseOpened
+    ? vectorBase!.transform.tiles.map(async (tile) => {
+        const data = await track(
+          "base",
+          fetcher.archive(
+            archiveAt(vectorBaseUrl!),
+            vectorBaseUrl!,
+            tile.z,
+            tile.x,
+            tile.y,
+            RANK.base,
+          ),
+        );
+        return data ? { x: tile.x, y: tile.y, data } : null;
+      })
+    : [];
   const baseOutcome = { loaded: 0 };
   void Promise.all(
     baseEntries.map((e) =>
@@ -737,6 +765,22 @@ async function renderInner(
 
   // The credits' upper bound, to find the strips that wait for every read.
   const measure = new OffscreenCanvas(1, 1).getContext("2d")!;
+  const vectorBaseTiles = (await Promise.all(vectorBaseReads)).filter(
+    (t): t is BasemapTile => t !== null,
+  );
+  check();
+  const basemap = vectorBase
+    ? buildBasemap(
+        vectorBaseTiles,
+        vectorBase.transform,
+        vectorBase.styleZoom,
+        vectorPxScale,
+        { width: nativeW, height: nativeH },
+        measure,
+      )
+    : null;
+  if (vectorBase && !basemap?.tilesDrawn)
+    throw new Error("no base tile loaded");
   const margin = mmToPx(5, elementDpi);
   const upperTerrain = new Set<TerrainLayerKey>();
   if (terrainPlans.some((p) => p.key === "hillshade"))
@@ -982,9 +1026,19 @@ async function renderInner(
       const top = span.from;
       const bottom = span.to;
 
+      // Over a vector base the terrain goes inside it, as on the map
+      // (shared TERRAIN_BASEMAP_ANCHORS): each band before what lies over it.
+      let bandsDrawn = 0;
+      const basemapBandsTo = (band: number) => {
+        if (!basemap) return;
+        for (; bandsDrawn < band; bandsDrawn++)
+          drawBasemapBand(ctx, basemap, bandsDrawn, top, bottom);
+      };
+
       // 1. Base tiles, in tile order, decoded a few at a time, each batch
       // drawn as soon as it is in.
       let mark = performance.now();
+      basemapBandsTo(1);
       const rows = myBase.filter((e) => reachesRows(e.rect, top, bottom));
       for (let i = 0; i < rows.length; i += DECODE_BATCH) {
         const batch = rows.slice(i, i + DECODE_BATCH);
@@ -1014,7 +1068,10 @@ async function renderInner(
       };
       for (const [i, p] of terrainPlans.entries()) {
         mark = performance.now();
-        if (p.key === "slope") drawLandOnce();
+        if (p.key === "slope") {
+          drawLandOnce();
+          basemapBandsTo(2);
+        }
         const bands = await terrainWork[i]!;
         // Let go as soon as drawn; the other layer's may still be painting.
         terrainWork[i] = null;
@@ -1048,8 +1105,12 @@ async function renderInner(
 
       // 3. Contour lines, then vegetation, then the labels over both.
       mark = performance.now();
+      basemapBandsTo(2);
       if (contours) drawContourLines(ctx, contours, top, bottom);
       bump("contours", mark);
+      mark = performance.now();
+      basemapBandsTo(BASEMAP_BANDS);
+      bump("base", mark);
       mark = performance.now();
       for (const entries of myVeg) {
         const mine = entries.filter((e) => reachesRows(e.rect, top, bottom));
@@ -1074,6 +1135,7 @@ async function renderInner(
         for (const e of v.entries) if (e.last <= strip.index) e.promise = null;
       bump("vegetation", mark);
       mark = performance.now();
+      if (basemap) drawBasemapLabels(ctx, basemap, top, bottom);
       if (contours) drawContourLabels(ctx, contours, top, bottom);
       bump("labels", mark);
 

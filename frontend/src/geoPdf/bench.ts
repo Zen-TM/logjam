@@ -78,6 +78,10 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
   }),
   land: config({ baseLayer: "six-base", overlays: ["hillshade", "land"] }),
   plain: config({ baseLayer: "six-base", overlays: [] }),
+  vector: config({
+    baseLayer: "protomaps",
+    overlays: ["hillshade", "slope", "contours"],
+  }),
   // Several megapixels more than the others, for timings.
   big: config(
     { baseLayer: "six-base", overlays: ["hillshade", "slope"] },
