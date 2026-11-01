@@ -17,8 +17,6 @@
 UPDATE users
 SET
   email      = 'user-' || id || '@local',
-  -- Retired and no longer written, but rows from before still hold real subs.
-  cognito_id = 'sanitized-' || id,
   subject    = 'sanitized-' || id,
   username   = 'user-' || id;
 
