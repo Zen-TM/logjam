@@ -147,7 +147,9 @@ resource "aws_cognito_user_pool_client" "main" {
 # Managed Login's hosted pages live on this domain. A prefix domain, not a
 # custom one: that needs an ACM certificate and DNS outside Terraform. The CSP
 # already allows https://*.auth.ap-southeast-2.amazoncognito.com. Never
-# destroyed live: it is the issuer of every sign-in.
+# destroyed live: it is the issuer of every sign-in. A pool holds one domain,
+# and it replaced the default prefix the pool was created with, which no client
+# used.
 resource "aws_cognito_user_pool_domain" "main" {
   domain                = "logjamnsw"
   managed_login_version = 2
