@@ -405,8 +405,7 @@ export default function PlanDetailPanel({
                   entries={addVerbs.map((verb) => ({
                     id: verb.id,
                     label: verb.label,
-                    // The copy glyph means Save a copy.
-                    icon: verb.icon === "copy" ? "add" : verb.icon,
+                    icon: verb.icon,
                     onSelect: addRunners[verb.id],
                     disabledReason:
                       verb.id === "form" && formsFull
