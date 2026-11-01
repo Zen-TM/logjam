@@ -377,7 +377,6 @@ describe("plan files and storage", () => {
     const res = await add(ALICE_SUB, {
       kind: "place",
       id: placeId,
-      copyMedia: true,
     });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.mediaCopied).toBe(1);

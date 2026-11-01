@@ -211,17 +211,11 @@ router.patch(
             },
           }),
           ...(patch.visibleTo && { visibleTo: patch.visibleTo.from }),
-          ...(patch.requiredToJoin && {
-            requiredToJoin: patch.requiredToJoin.from,
-          }),
         },
         data: {
           ...(patch.title && { title: patch.title.to }),
           ...(patch.questions && { questions: patch.questions.to }),
           ...(patch.visibleTo && { visibleTo: patch.visibleTo.to }),
-          ...(patch.requiredToJoin && {
-            requiredToJoin: patch.requiredToJoin.to,
-          }),
         },
       });
       if (count === 0) throw new AppError(409, TRIP_PLAN_CHANGED_SENTENCE);
@@ -301,7 +295,6 @@ router.put(
 );
 
 // ── DELETE /plans/:planId/forms/:formId/answers/me ────────────
-// Not for a form required to join: the answer is the price of being in.
 router.delete(
   "/:formId/answers/me",
   requireAuth,
@@ -313,14 +306,9 @@ router.delete(
       await touchPlan(tx, planId);
       const form = await tx.tripPlanForm.findFirst({
         where: { id, planId },
-        select: { requiredToJoin: true },
+        select: { id: true },
       });
       if (!form) throw formNotFound();
-      if (form.requiredToJoin)
-        throw new AppError(
-          409,
-          say`Everyone in this plan answers this form. To take your answer back, leave the plan.`,
-        );
       await tx.tripPlanAnswer.deleteMany({ where: { formId: id, userId } });
     });
     res.status(204).send();

@@ -70,6 +70,8 @@ export type TripPlanSummary = {
   status: TripPlanMemberStatus;
   /** The caller's role; for invited/requested, the role they will get. */
   role: TripPlanRole;
+  /** Forms in the plan the caller hasn't answered; 0 unless they are in it. */
+  unansweredForms: number;
   /** status "requested": who they wait for. */
   waitingFor?: TripPlanUserRef;
   /** status "invited": who invited them. */
@@ -249,7 +251,6 @@ export type TripPlanFormView = {
   preset: TripPlanFormPresetId | null;
   questions: TripPlanQuestion[];
   visibleTo: TripPlanFormVisibility;
-  requiredToJoin: boolean;
   position: number;
   updatedAt: string;
   /** The caller's own answer, always; null if none. */
@@ -263,7 +264,6 @@ export type TripPlanFormCreate = {
   preset?: TripPlanFormPresetId | null;
   questions: TripPlanQuestion[];
   visibleTo: TripPlanFormVisibility;
-  requiredToJoin: boolean;
 };
 
 /**
@@ -296,14 +296,20 @@ export type TripPlanInviteView = {
   createdBy: TripPlanUserRef | null;
 };
 
-/** A form required to join, as a joiner sees it: never anyone's answers.
- *  The joiner echoes `visibleTo` and `updatedAt` (as `formUpdatedAt`);
- *  `preset` tells them a members form may be printed
- *  (`tripPlanVisibilityLine`). */
-export type TripPlanJoinForm = Pick<
-  TripPlanFormView,
-  "id" | "title" | "preset" | "questions" | "visibleTo" | "updatedAt"
->;
+/**
+ * GET /plans/leader-forms: forms of the plans the caller leads, for "copy
+ * from my plans". Enough to show the plan and form and to create the copy
+ * (`TripPlanFormCreate`). `?except=<planId>` leaves out the plan they are in.
+ */
+export type TripPlanLeaderForm = {
+  planId: string;
+  planName: string;
+  formId: string;
+  title: string;
+  preset: TripPlanFormPresetId | null;
+  questions: TripPlanQuestion[];
+  visibleTo: TripPlanFormVisibility;
+};
 
 /** GET /plans/:id/preview: someone a leader invited by username. */
 export type TripPlanInvitedPreview = {
@@ -316,7 +322,6 @@ export type TripPlanInvitedPreview = {
   sections: TripPlanSectionView[];
   /** Active members only. */
   members: TripPlanUserRef[];
-  requiredForms: TripPlanJoinForm[];
 };
 
 /** POST /plan-invites/preview: someone holding a link. No members, no content. */
@@ -327,24 +332,9 @@ export type TripPlanLinkPreview = {
   endDate: DateOnly | null;
   /** Who a request would wait for. */
   leader: TripPlanUserRef;
-  requiredForms: TripPlanJoinForm[];
   /** The caller's membership already, if any. */
   membership: TripPlanMemberStatus | null;
 };
-
-/**
- * POST /plans/:id/join and /plan-invites/redeem: formId → the answers, and
- * the form as shown, checked as the answer PUT checks it. Covers every form
- * required to join.
- */
-export type TripPlanJoinAnswers = Record<
-  string,
-  {
-    answers: TripPlanAnswers;
-    visibleTo: TripPlanFormVisibility;
-    formUpdatedAt: string;
-  }
->;
 
 /** POST /plan-invites/redeem. */
 export type TripPlanRedeemResult =
@@ -386,7 +376,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "Gear to borrow",
     preset: "gear",
     visibleTo: "leaders",
-    requiredToJoin: false,
     questions: [
       {
         id: "items",
@@ -430,7 +419,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "Carpooling",
     preset: "carpool",
     visibleTo: "members",
-    requiredToJoin: false,
     questions: [
       {
         id: "mode",
@@ -470,7 +458,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "Experience",
     preset: "experience",
     visibleTo: "leaders",
-    requiredToJoin: false,
     questions: [
       {
         id: "trips",
@@ -509,7 +496,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "First aid",
     preset: "firstAid",
     visibleTo: "leaders",
-    requiredToJoin: false,
     questions: [
       {
         id: "cert",
@@ -544,7 +530,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "Safety contacts",
     preset: "safetyContacts",
     visibleTo: "members",
-    requiredToJoin: true,
     questions: [
       {
         id: "name",
@@ -579,7 +564,6 @@ export const TRIP_PLAN_FORM_PRESETS: Record<
     title: "Trip rules",
     preset: "rules",
     visibleTo: "leaders",
-    requiredToJoin: true,
     questions: [
       {
         id: "agree",
@@ -618,7 +602,6 @@ export type TripPlanFormPatch = {
   title?: Cas<string>;
   questions?: Cas<TripPlanQuestion[]>;
   visibleTo?: Cas<TripPlanFormVisibility>;
-  requiredToJoin?: Cas<boolean>;
 };
 
 /** What the API answers when a compare-and-set finds the row changed. */
@@ -990,7 +973,6 @@ export function parseTripPlanFormCreate(
       preset,
       questions: questions(input.questions),
       visibleTo: visibility(input.visibleTo, "visibleTo"),
-      requiredToJoin: flag(input.requiredToJoin, "requiredToJoin"),
     };
   });
 }
@@ -1017,13 +999,6 @@ export function parseTripPlanFormPatch(
       patch.visibleTo = {
         from: visibility(from, "visibleTo.from"),
         to: visibility(to, "visibleTo.to"),
-      };
-    }
-    if (input.requiredToJoin !== undefined) {
-      const { from, to } = cas(input.requiredToJoin, "requiredToJoin");
-      patch.requiredToJoin = {
-        from: flag(from, "requiredToJoin.from"),
-        to: flag(to, "requiredToJoin.to"),
       };
     }
     nothingToChange(patch);
@@ -1173,8 +1148,6 @@ export type TripPlanFilePatch = { displayName?: Cas<string | null> };
 export type TripPlanItemAdd = {
   kind: TripPlanItemKind;
   id: string;
-  /** A place's photos come too. Absent: the caller's remembered preference. */
-  copyMedia?: boolean;
 };
 
 /** POST /plans/:id/items. */
@@ -1186,13 +1159,7 @@ export function parseTripPlanItemAdd(
     if (!isTripPlanItemKind(input.kind)) bad("kind is not an item kind");
     const id = text(input.id, "id");
     if (!id) bad("id is empty");
-    if (input.copyMedia !== undefined && typeof input.copyMedia !== "boolean")
-      bad("copyMedia must be a boolean");
-    return {
-      kind: input.kind,
-      id,
-      ...(input.copyMedia !== undefined && { copyMedia: input.copyMedia }),
-    };
+    return { kind: input.kind, id };
   });
 }
 

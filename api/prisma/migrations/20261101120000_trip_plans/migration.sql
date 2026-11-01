@@ -79,7 +79,6 @@ CREATE TABLE "trip_plan_forms" (
     "questions" JSONB NOT NULL DEFAULT '[]',
     "preset" TEXT,
     "visible_to" TEXT NOT NULL,
-    "required_to_join" BOOLEAN NOT NULL DEFAULT false,
     "position" INTEGER NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
