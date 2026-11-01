@@ -4,7 +4,7 @@
 // to join. Drawn from `TRIP_PLAN_FORMS`.
 import { Fragment, type ReactNode } from "react";
 import {
-  tripPlanAnswerRows,
+  tripPlanAnswerTable,
   contractSectionKeys,
   currentTripPlanAnswers,
   planVerbsFor,
@@ -16,11 +16,9 @@ import {
   tripPlanVisibilityLine,
   type PlanFormVerbId,
   type SectionKeysOn,
-  type TripPlanAnswerView,
   type TripPlanFormView,
   type TripPlanMemberView,
   type TripPlanRole,
-  type TripPlanUserRef,
 } from "@logjam/shared";
 import { Button, Hero, IconButton, Menu, SectionHeader } from "../../ui";
 import { menuEntries } from "./planMenu";
@@ -55,13 +53,10 @@ export default function PlanFormPage({
     ? currentTripPlanAnswers(form.questions, form.myAnswer.answers)
     : null;
   // Who's going, each with their answer or none, then those asking to join
-  // who answered (`tripPlanAnswerRows`).
-  const { going: rows, asking } = tripPlanAnswerRows(form, members);
+  // who answered (`tripPlanAnswerTable`, as Logjam GPS draws it).
+  const answers = tripPlanAnswerTable(form, members);
 
-  const table = (
-    title: string,
-    people: { user: TripPlanUserRef; answer?: TripPlanAnswerView }[],
-  ) => (
+  const table = (title: string, people: typeof answers.going) => (
     <div className={classes.block}>
       <SectionHeader title={title} />
       {/* Scrolled sideways on its own, so a keyboard can reach it. */}
@@ -76,38 +71,28 @@ export default function PlanFormPage({
           <thead>
             <tr>
               <th scope="col">{copy.member}</th>
-              {form.questions.map((question) => (
-                <th key={question.id} scope="col">
-                  {question.label}
+              {answers.columns.map((column) => (
+                <th key={column.id} scope="col">
+                  {column.label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {people.map(({ user, answer }) => {
-              const values = answer
-                ? currentTripPlanAnswers(form.questions, answer.answers)
-                : null;
-              return (
-                <tr key={user.id}>
-                  <th scope="row">{user.username}</th>
-                  {values ? (
-                    form.questions.map((question) => (
-                      <td key={question.id}>
-                        {tripPlanAnswerText(question, values[question.id])}
-                      </td>
-                    ))
-                  ) : (
-                    <td
-                      colSpan={form.questions.length}
-                      className={classes.note}
-                    >
-                      {copy.noAnswerYet}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
+            {people.map(({ user, answered, cells }) => (
+              <tr key={user.id}>
+                <th scope="row">{user.username}</th>
+                {answered ? (
+                  cells.map((cell, index) => (
+                    <td key={answers.columns[index].id}>{cell}</td>
+                  ))
+                ) : (
+                  <td colSpan={cells.length} className={classes.note}>
+                    {copy.noAnswerYet}
+                  </td>
+                )}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -185,8 +170,8 @@ export default function PlanFormPage({
     ),
     table: tripPlanSeesAnswers(role, form.visibleTo) && (
       <>
-        {table(copy.answers, rows)}
-        {asking.length > 0 && table(copy.asking, asking)}
+        {table(copy.answers, answers.going)}
+        {answers.asking.length > 0 && table(copy.asking, answers.asking)}
       </>
     ),
   };

@@ -23,12 +23,16 @@
   }
 }
 
-@media print {
-  @page {
-    size: A4;
-    margin: 15mm;
-  }
+/* Top level: browsers ignore an @page nested in @media, and the default margin
+   then left the browser's own header and footer, and so the text, within
+   reach of a printer's unprintable edge (about 5 mm). Guard:
+   PlanSummary.margins.test.ts. */
+@page {
+  size: A4;
+  margin: 15mm;
+}
 
+@media print {
   /* While the summary is mounted, only it prints: no app chrome, no map.
      Any other print of Logjam Web is left alone. Guard: e2e/a11y.spec.ts,
      the Plans case. */

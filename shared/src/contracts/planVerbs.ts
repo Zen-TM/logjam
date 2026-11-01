@@ -32,6 +32,9 @@ const LEADERS: readonly TripPlanRole[] = ["leader"];
 const PRINT_ON_WEB =
   "A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.";
 
+const DRAW_ON_GPS =
+  "A route is drawn with a finger on the phone's map; Logjam Web has the map beside the page to add one from.";
+
 /** The plan's ⋯, in menu order. */
 export const PLAN_VERBS = [
   { id: "edit", icon: "edit", label: "Edit name and dates", roles: WRITERS },
@@ -96,6 +99,14 @@ export const PLAN_ADD_VERBS = [
   },
   { id: "copy", icon: "add", label: "Add a place or way", roles: ANY },
   {
+    id: "route",
+    icon: "route",
+    label: "Draw a route",
+    roles: ANY,
+    on: "gps",
+    reason: DRAW_ON_GPS,
+  },
+  {
     id: "form",
     icon: "form",
     label: "Add a form",
@@ -152,7 +163,11 @@ export const PLAN_VERB_LISTS = [
 ] as const;
 
 export type PlanVerbId = (typeof PLAN_VERBS)[number]["id"];
-export type PlanAddVerbId = (typeof PLAN_ADD_VERBS)[number]["id"];
+/** The add verbs both clients have (Logjam Web's Add ▾ runs one of each). */
+export type PlanAddVerbId = Exclude<
+  (typeof PLAN_ADD_VERBS)[number],
+  { on: "gps" }
+>["id"];
 export type PlanSectionVerbId = (typeof PLAN_SECTION_VERBS)[number]["id"];
 export type PlanFormVerbId = (typeof PLAN_FORM_VERBS)[number]["id"];
 
@@ -167,7 +182,9 @@ export type PlanVerb<Id extends string = string> = {
 };
 
 /** One add verb's words, for a button that offers it outside the menu. */
-export function planAddVerbLabel(id: PlanAddVerbId): string {
+export function planAddVerbLabel(
+  id: (typeof PLAN_ADD_VERBS)[number]["id"],
+): string {
   return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
 }
 

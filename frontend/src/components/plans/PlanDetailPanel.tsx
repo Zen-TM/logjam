@@ -40,6 +40,7 @@ import {
   type PlanAddVerbId,
   type PlanFormVerbId,
   type PlanSectionVerbId,
+  type PlanVerb,
   type PlanVerbId,
   type SectionKeysOn,
   type TripPlanPageView,
@@ -64,6 +65,7 @@ import {
   Menu,
   Row,
   StatusPill,
+  useEscape,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -209,6 +211,15 @@ export default function PlanDetailPanel({
     setInviting(false);
     focusSoon("[data-invite-people]");
   };
+  // Escape steps back out of a form's page, a place's page or Invite people,
+  // as the back arrow does. Only while one is open: on the plan's own page
+  // the press is left to whatever holds it.
+  const inStep = inviting || viewingPlaceId != null || openFormId != null;
+  useEscape(inStep ? rootRef : null, () => {
+    if (inviting) closeInvite();
+    else if (viewingPlaceId != null) setViewingPlaceId(null);
+    else closeFormPage();
+  });
   const [answering, setAnswering] = useState<string | null>(null);
   const [building, setBuilding] = useState<{ id: string | null } | null>(null);
 
@@ -335,7 +346,10 @@ export default function PlanDetailPanel({
     delete: () => setConfirm({ kind: "section", section }),
   });
 
-  const addVerbs = planVerbsFor(PLAN_ADD_VERBS, "web", role, { archived });
+  // The "web" filter drops the GPS-only add verbs (Draw a route).
+  const addVerbs = planVerbsFor(PLAN_ADD_VERBS, "web", role, {
+    archived,
+  }) as PlanVerb<PlanAddVerbId>[];
   const canAddSection = addVerbs.some((verb) => verb.id === "section");
   const heroVerbs = planVerbs("web", role, {
     archived,
@@ -673,10 +687,6 @@ export default function PlanDetailPanel({
         myUserId={myUserId}
         onChanged={refetch}
         onInvite={openInvite}
-        onSeeAnswers={(formId) => {
-          setTab("forms");
-          openFormPage(formId);
-        }}
       />
     ),
   };

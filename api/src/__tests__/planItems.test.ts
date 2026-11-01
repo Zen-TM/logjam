@@ -127,12 +127,13 @@ async function ownFile(sub: string): Promise<string> {
   return presign.body.mediaId as string;
 }
 
-async function ownRoute(sub: string): Promise<string> {
+async function ownRoute(sub: string, placeId?: string): Promise<string> {
   const res = await request(API_URL)
     .post("/routes")
     .set(as(sub))
     .send({
       name: "Test way",
+      ...(placeId && { placeId }),
       points: [
         [150.3, -33.6],
         [150.31, -33.61],
@@ -343,7 +344,9 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     expect(await prisma.place.count({ where: { planId } })).toBe(0);
   });
 
-  // Mutation: requirePlanWrite → a plan-exists check.
+  // Mutation: requirePlanWrite → a plan-exists check in the POST and
+  // touchPlanAsMember → touchPlan in addPlace; either alone is caught by the
+  // other, which answers the same 404.
   it("404s someone not in the plan", async () => {
     const placeId = await ownPlace(CAROL_SUB);
     const res = await add(CAROL_SUB, { kind: "place", id: placeId });
@@ -368,6 +371,8 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     await request(API_URL).delete(`/media/${fileId}`).set(as(ALICE_SUB));
   });
 
+  // Mutation: drop the archivedAt check from requirePlanWrite and from
+  // touchPlanAsMember; either alone is caught by the other.
   it("refuses a write to an archived plan", async () => {
     await prisma.tripPlan.update({
       where: { id: planId },
@@ -378,6 +383,7 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     expect(res.status).toBe(409);
   });
 
+  // Mutation: read req.body unparsed in the POST.
   it("refuses a body only a broken client sends", async () => {
     expect((await add(ALICE_SUB, { kind: "trip", id: "x" })).status).toBe(400);
     expect((await add(ALICE_SUB, { kind: "place" })).status).toBe(400);
@@ -464,8 +470,8 @@ describe("plan files and storage", () => {
     });
     expect(await used(ALICE_ID)).toBe(before + copy.fileSizeBytes);
 
-    // Guard: deleting the plan refunds. Mutation: drop refund() in
-    // deletePlanWithFiles, leaving the cascade to take the rows.
+    // Guard: deleting the plan refunds. Mutation: drop applyStorageChanges
+    // from deletePlanWithFiles, leaving the cascade to take the rows.
     const del = await request(API_URL)
       .delete(`/plans/${planId}`)
       .set(as(ALICE_SUB));
@@ -512,6 +518,7 @@ describe("Save a copy", () => {
     return res.body.item.id;
   }
 
+  // Mutation: save a file with the plan's owner columns (planId, not ownerId).
   it("gives a member their own copy, charged to them", async () => {
     const id = await planFile();
     const before = await used(BOB_ID);
@@ -589,18 +596,25 @@ describe("Save a copy", () => {
     await request(API_URL).delete(`/media/${owned.media}`).set(as(ALICE_SUB));
   });
 
+  // Mutation: copyRouteFor keeps the source's placeId.
   it("copies a route out unlinked", async () => {
-    const routeId = await ownRoute(ALICE_SUB);
-    const added = await add(ALICE_SUB, { kind: "route", id: routeId });
+    const placeId = await ownPlace(ALICE_SUB);
+    const routeId = await ownRoute(ALICE_SUB, placeId);
+    const added = await add(ALICE_SUB, { kind: "place", id: placeId });
     expect(added.status).toBe(201);
+    const planRoute = await prisma.route.findFirstOrThrow({
+      where: { planId },
+    });
+    expect(planRoute.placeId).toBe(added.body.item.id);
     const res = await request(API_URL)
-      .post(`/plans/${planId}/items/route/${added.body.item.id}/save`)
+      .post(`/plans/${planId}/items/route/${planRoute.id}/save`)
       .set(as(BOB_SUB))
       .send({});
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ ownerId: BOB_ID, placeId: null });
     await request(API_URL).delete(`/routes/${res.body.id}`).set(as(BOB_SUB));
     await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
+    await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
   });
 });
 
@@ -787,6 +801,8 @@ describe("compare-and-set", () => {
     expect(cleared.body.fieldValues).toEqual({ a_grade: 2 });
   });
 
+  // Mutation: drop the refusal from placePayloadRefusal and
+  // validatePlaceTextFields in editPlace.
   it("checks `to` as the place form does, and refuses what a broken client sends", async () => {
     const id = await planPlace();
     const cases: [object, number][] = [
@@ -915,6 +931,10 @@ describe("compare-and-set", () => {
     expect(await planUpdatedAt()).toBeGreaterThan(before);
   });
 
+  // Mutation: requirePlanWrite → requirePlanMember in the PATCH (the archived
+  // 409), and drop planId from planRow's and editPlace's reads (the 404, and
+  // the other plan's place left unchanged; each read alone is caught by the
+  // other, and the PATCH's re-read by both).
   it("refuses on an archived plan and 404s an item that isn't in it", async () => {
     const id = await planPlace();
     expect(
@@ -924,6 +944,11 @@ describe("compare-and-set", () => {
         })
       ).status,
     ).toBe(404);
+    // The 404 alone would pass even if the write landed before the re-read.
+    expect(
+      (await prisma.place.findUniqueOrThrow({ where: { id: SHARED_PLACE_ID } }))
+        .notes,
+    ).not.toBe("x");
     await prisma.tripPlan.update({
       where: { id: planId },
       data: { archivedAt: new Date() },
@@ -985,8 +1010,8 @@ describe("storage when someone goes", () => {
   it("leaves a leaver's files charged to them", async () => {
     const id = await planFile(BOB_SUB);
     const [bob, alice] = [await used(BOB_ID), await used(ALICE_ID)];
-    // Mutation: a leave passes the plan's leader as removedBy in
-    // planMembers.ts (the leaver's files then move to alice).
+    // Mutation: a leave passes someone else (the plan's creator) as removedBy
+    // in planMembers.ts, so the leaver's files move to alice.
     await leave();
     expect(await used(BOB_ID)).toBe(bob);
     expect(await used(ALICE_ID)).toBe(alice);
@@ -1045,19 +1070,26 @@ describe("storage when someone goes", () => {
     const source = await ownPlace(BOB_SUB);
     const place = await add(BOB_SUB, { kind: "place", id: source });
     expect(place.status).toBe(201);
+    const sourceRoute = await ownRoute(BOB_SUB);
+    const route = await add(BOB_SUB, { kind: "route", id: sourceRoute });
+    expect(route.status).toBe(201);
     const alices = await planFile(ALICE_SUB);
     const before = await used(BOB_ID);
-    // Mutation: drop the place deleteMany from memberGone.
+    // Mutation: drop the place or the route deleteMany from memberGone.
     await leave("?deleteAdded=true");
     expect(await prisma.media.findUnique({ where: { id } })).toBeNull();
     expect(
       await prisma.place.findUnique({ where: { id: place.body.item.id } }),
+    ).toBeNull();
+    expect(
+      await prisma.route.findUnique({ where: { id: route.body.item.id } }),
     ).toBeNull();
     expect(await prisma.media.findUnique({ where: { id: alices } })).not.toBe(
       null,
     );
     expect(await used(BOB_ID)).toBe(before - SIZE);
     await request(API_URL).delete(`/places/${source}`).set(as(BOB_SUB));
+    await request(API_URL).delete(`/routes/${sourceRoute}`).set(as(BOB_SUB));
   });
 
   it("moves an account's charges to the plan's creator, keeping the file", async () => {
@@ -1194,6 +1226,7 @@ describe("storage when someone goes", () => {
     }
   });
 
+  // Mutation: drop the archivedAt check from touchPlanAsMember.
   it("adds nothing to a plan archived during the add", async () => {
     const placeId = await ownPlace(ALICE_SUB);
     await prisma.tripPlan.update({

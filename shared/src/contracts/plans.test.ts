@@ -49,7 +49,6 @@ import {
   planItemVerbs,
   tripPlanAddable,
   tripPlanInPlanIds,
-  answeredForm,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPrice,
   planMemberVerbs,
@@ -59,6 +58,8 @@ import {
   tripPlanFilesChargedTo,
   tripPlanInviteLinkLine,
   tripPlanAnswerRows,
+  tripPlanAnswerTable,
+  TRIP_PLAN_ANSWER_MISSING,
   tripPlanQuestionChoices,
   opensPreview,
   tripPlanInvitedLine,
@@ -415,6 +416,13 @@ describe("a plan's verbs", () => {
     expect(ids(planVerbsFor(PLAN_ADD_VERBS, "gps", "leader", live))).toEqual([
       "section",
       "copy",
+      "route",
+      "form",
+      "invite",
+    ]);
+    expect(ids(planVerbsFor(PLAN_ADD_VERBS, "web", "leader", live))).toEqual([
+      "section",
+      "copy",
       "form",
       "invite",
     ]);
@@ -609,6 +617,9 @@ describe("a plan's items", () => {
   // nothing to fetch; drop its `whenArchived`, and an archived plan's
   // files can't be had.
   it("puts Download first on a file, archived plans too", () => {
+    expect(
+      ids(planItemVerbs("member", { kind: "place", mine: false }, live)),
+    ).not.toContain("download");
     expect(
       ids(planItemVerbs("member", { kind: "media", mine: false }, live)),
     ).toEqual(["download", "save"]);
@@ -853,6 +864,50 @@ describe("a form's answers as a reader sees them", () => {
   });
 });
 
+describe("the answers table", () => {
+  const user = (id: string) => ({ id, username: id });
+  const questions = [
+    { id: "q1", kind: "text" as const, label: "Phone", required: true },
+    { id: "q2", kind: "yesNo" as const, label: "Driving", required: false },
+  ];
+  const answer = (id: string, answers: Record<string, string | boolean>) => ({
+    user: user(id),
+    answers,
+    updatedAt: "",
+  });
+
+  // Mutation: fill a missing cell with "" or skip the blank check, and a
+  // table cell reads as empty on both clients; or drop a question's column.
+  it("is a column per question and a row per person, blanks marked", () => {
+    const table = tripPlanAnswerTable(
+      {
+        questions,
+        answers: [
+          answer("bob", { q1: "0400", q2: true }),
+          answer("ivy", { q1: "0411" }),
+        ],
+        myAnswer: null,
+      },
+      [
+        { user: user("dave"), status: "active" },
+        { user: user("bob"), status: "active" },
+        { user: user("ivy"), status: "requested" },
+      ],
+    );
+    expect(table.columns).toEqual([
+      { id: "q1", label: "Phone" },
+      { id: "q2", label: "Driving" },
+    ]);
+    expect(table.going.map((r) => [r.user.id, r.answered, r.cells])).toEqual([
+      ["bob", true, ["0400", "Yes"]],
+      ["dave", false, [TRIP_PLAN_ANSWER_MISSING, TRIP_PLAN_ANSWER_MISSING]],
+    ]);
+    expect(table.asking.map((r) => r.cells)).toEqual([
+      ["0411", TRIP_PLAN_ANSWER_MISSING],
+    ]);
+  });
+});
+
 describe("the picks a choice or yes/no question offers", () => {
   // Mutation: give yes/no the values "yes"/"no", and every yes/no answer
   // fails the parser on one client only.
@@ -946,8 +1001,9 @@ describe("Start a trip log's places line", () => {
 describe("Add a place or way's footer and outcome", () => {
   const MB = 1024 * 1024;
   const room = { quotaBytes: MB, usedBytes: 0 };
-  // Mutation: drop `args.placesPicked &&`, and "Photos count too." is said
-  // with no place picked.
+  // Mutation: set `photosToo` to true, and "Photos count too." is said with
+  // no place picked; size a places-only pick (`formatBytes(args.bytes)` with
+  // no null), and the one number beside a charge is "Uses 0 B".
   it("prices what is ticked, photos only when a place is picked", () => {
     expect(
       tripPlanAddCopyPriceLine({
@@ -962,7 +1018,7 @@ describe("Add a place or way's footer and outcome", () => {
         placesPicked: true,
         ...room,
       }),
-    ).toMatch(/Photos count too\.$/);
+    ).toMatch(/^You have .* left\. Photos count too\.$/);
     expect(
       tripPlanAddCopyPriceLine({
         bytes: MB,
@@ -1085,6 +1141,13 @@ describe("form unanswered", () => {
   // Mutation: fold the leader check in, and a leader's forms lose their pill.
   it("marks an unanswered form for any role, and only that", () => {
     expect(tripPlanFormUnanswered(plan, open, "2026-10-01")).toBe(true);
+    expect(
+      tripPlanFormUnanswered(
+        { ...plan, myRole: "leader" } as never,
+        open,
+        "2026-10-01",
+      ),
+    ).toBe(true);
     expect(
       tripPlanFormUnanswered(plan, { myAnswer: {} } as never, "2026-10-01"),
     ).toBe(false);
@@ -1265,22 +1328,6 @@ describe("what is already in the plan", () => {
       "p1",
       "r1",
     ]);
-  });
-});
-
-describe("answeredForm", () => {
-  const answer = (id: string) => ({ user: { id, username: id } });
-  // Mutation: ignore the user, and See answers opens a form carol never
-  // answered, or shows on a request with no answers at all.
-  it("opens the first form the person answered, or none", () => {
-    const plan = {
-      forms: [
-        { id: "carpool", answers: [answer("tom")] },
-        { id: "contacts", answers: [answer("tom"), answer("carol")] },
-      ],
-    } as unknown as Parameters<typeof answeredForm>[0];
-    expect(answeredForm(plan, "carol")).toBe("contacts");
-    expect(answeredForm(plan, "sue")).toBeNull();
   });
 });
 

@@ -246,6 +246,10 @@ renumber.
   message, which has no page.
 - **A sheet spaces what it stacks**: `BottomSheet` sets the gap between its
   children, so a list in a sheet needs no wrapper to keep its rows apart.
+- **A kit container spaces what it stacks.** Any component that takes
+  `children` and can hold more than one (`ListEnd`, `FormStack`, a sheet) sets
+  the gap itself; components carry no outer margin, and a screen never adds a
+  gap around a kit container's children.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title

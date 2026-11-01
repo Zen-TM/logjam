@@ -43,6 +43,7 @@ import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanInviteLinkDialog from "./PlanInviteLinkDialog";
 import PlanJoinDialog from "./PlanJoinDialog";
 import PlanInvitePage from "./PlanInvitePage";
+import { approveMember } from "../../plansApi";
 import PlanPeople from "./PlanPeople";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
@@ -100,6 +101,7 @@ vi.mock("../../plansApi", async (importOriginal) => ({
   savePlanItem: vi.fn(),
   inviteMember: vi.fn(),
   setMemberRole: vi.fn(async () => {}),
+  approveMember: vi.fn(async () => ({})),
   getInviteLinks: vi.fn(async () => []),
   previewInviteLink: vi.fn(),
 }));
@@ -471,6 +473,41 @@ describe("Invite people after a refused invite", () => {
   });
 });
 
+describe("someone asking to join", () => {
+  // Mutation: put the buttons back in a footer, or label them by their
+  // glyph: the row loses its Let in / Turn down on the name's own line.
+  it("is let in or turned down by labelled buttons on their own row", () => {
+    const asking = {
+      ...plan,
+      members: [
+        ...plan.members,
+        {
+          user: {
+            id: "u9",
+            username: "a-very-long-username-that-must-ellipsise",
+          },
+          role: "member",
+          status: "requested",
+        } as TripPlanView["members"][number],
+      ],
+    };
+    render(
+      <PlanPeople
+        plan={asking}
+        myUserId="u1"
+        onChanged={() => {}}
+        onInvite={() => {}}
+      />,
+    );
+    expect(screen.queryByText("See answers")).toBeNull();
+    const letIn = screen.getByRole("button", { name: "Let in" });
+    expect(letIn.closest('[class*="footer"]')).toBeNull();
+    expect(screen.getByRole("button", { name: "Turn down" })).toBeTruthy();
+    fireEvent.click(letIn);
+    expect(approveMember).toHaveBeenCalledWith(asking.id, "u9");
+  });
+});
+
 describe("a leader stepping down on their own row", () => {
   // Mutation: run a self role change at once in PlanPeople, and one tap
   // makes alice a member with no way back by herself.
@@ -488,7 +525,6 @@ describe("a leader stepping down on their own row", () => {
         myUserId="u1"
         onChanged={() => {}}
         onInvite={() => {}}
-        onSeeAnswers={() => {}}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Actions for alice" }));
@@ -619,6 +655,8 @@ describe("the forms to answer", () => {
     expect(screen.getByText(/0 of 2 answered/)).toBeTruthy();
     // The row stays a row; the missing names are on the form's page.
     expect(screen.queryByText(/Not answered yet/)).toBeNull();
+    fireEvent.click(screen.getAllByText(contacts.title)[0]);
+    expect(screen.getByText(/Not answered yet/)).toBeTruthy();
   });
 });
 
@@ -842,7 +880,8 @@ describe("Start a trip log with many places", () => {
       ).disabled,
     ).toBe(true);
     expect(screen.getByText(TRIP_PLACES_CAP_SENTENCE)).toBeTruthy();
-  });
+    // Ticks a whole cap of rows one by one: slow on a busy runner.
+  }, 30_000);
 });
 
 describe("a new form's first step", () => {
@@ -900,5 +939,87 @@ describe("adding what is already in the plan", () => {
     );
     expect(screen.getByText("In the plan")).toBeTruthy();
     expect(screen.queryByRole("checkbox", { name: "Claustral" })).toBeNull();
+  });
+});
+
+describe("opening Add a place or way on a pressed place", () => {
+  // Mutation: drop the scroll in PlanAddCopyDialog, and a place far down a long
+  // list opens out of sight.
+  it("scrolls that place's row to the centre and keeps it ticked", () => {
+    const scroll = vi.spyOn(Element.prototype, "scrollIntoView");
+    const places = ["a", "b", "c"].map(
+      (id) => ({ id, name: `Place ${id}` }) as TPlace,
+    );
+    render(
+      <PlanAddCopyDialog
+        planId="p1"
+        plan={{ places: [], routes: [], files: [] }}
+        places={places}
+        routes={[]}
+        files={[]}
+        user={null}
+        initial={{ kind: "place", id: "c" }}
+        onAdded={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(scroll).toHaveBeenCalledWith({ block: "center" });
+    const row = scroll.mock.contexts[
+      scroll.mock.contexts.length - 1
+    ] as HTMLElement;
+    expect(row.textContent).toContain("Place c");
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Place c" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    scroll.mockRestore();
+  });
+});
+
+describe("sending an answer with a required question empty", () => {
+  // Mutation: put the sentence back in the bottom banner only, and nothing
+  // marks which question is owed.
+  it("says it under that question, and sends nothing", () => {
+    const onSubmit = vi.fn(async () => {});
+    render(
+      <PlanAnswerDialog
+        open
+        form={contacts}
+        onSubmit={onSubmit}
+        onStale={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_FORMS.copy.save }),
+    );
+    const field = screen.getByRole("textbox", { name: /^Name/ });
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText("Answer every question marked required."),
+    ).toBeTruthy();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe("Escape on a step inside the plan's page", () => {
+  // Mutation: drop `useEscape` in PlanDetailPanel, and Escape on a form's page
+  // does nothing while its back arrow works.
+  it("goes back from a form's page", () => {
+    renderPanel({ view: { ...plan, forms: [contacts] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    fireEvent.click(screen.getByRole("button", { name: contacts.title }));
+    expect(
+      screen.getByRole("button", { name: TRIP_PLAN_FORMS.copy.back }),
+    ).toBeTruthy();
+    fireEvent.keyDown(
+      screen.getByRole("button", { name: TRIP_PLAN_FORMS.copy.back }),
+      { key: "Escape" },
+    );
+    expect(
+      screen.queryByRole("region", { name: TRIP_PLAN_FORMS.copy.answers }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: contacts.title })).toBeTruthy();
   });
 });

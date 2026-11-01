@@ -11,7 +11,6 @@ import {
 export const TRIP_PLAN_OFFLINE = {
   downloaded: "Downloaded",
   changed: "Changed since you downloaded it",
-  refresh: "Refresh",
   notDownloaded:
     "Not downloaded yet. Open it once with signal to read it here.",
   // The plan went while this phone held it, or a stale row or push opened it.
@@ -24,7 +23,7 @@ export const TRIP_PLAN_OFFLINE = {
   // It runs only while Logjam GPS is on screen (ADR 0013).
   downloadKeepOpen: "Keep Logjam GPS open until it finishes.",
   // Map data is the existing region download, framed on the plan's items.
-  downloadMap: "Download the map for this area too",
+  downloadMap: "Download the map for this area",
   // Once a saved map region holds the plan's whole area.
   mapDownloaded: "Map downloaded",
 } as const;

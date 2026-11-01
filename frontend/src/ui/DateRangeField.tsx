@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { pickDay, todayDateKey, tripPlanDatesLabel } from "@logjam/shared";
 import { Button, IconButton } from "./Button";
 import { inRange, monthGrid } from "./dateRange";
@@ -6,10 +6,24 @@ import classes from "./DateRangeField.module.css";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
+const addDays = (day: string, by: number) => {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + by);
+  return date.toISOString().slice(0, 10);
+};
+const KEY_STEP: Record<string, number> = {
+  ArrowLeft: -1,
+  ArrowRight: 1,
+  ArrowUp: -7,
+  ArrowDown: 7,
+};
+
 /**
  * A date range in one calendar: the first click is the start, a later day the
  * end, and a one-day trip is the start alone (`end` null). A day before the
- * start starts over. Days are "YYYY-MM-DD". The words come in as `labels`, so
+ * start starts over. Days are "YYYY-MM-DD". The grid is one tab stop: arrows
+ * move by a day or a week (into the next month too), Home and End to the
+ * month's ends, PageUp and PageDown by a month. The words come in as `labels`, so
  * the kit holds none of a page's copy.
  */
 export function DateRangeField({
@@ -35,7 +49,63 @@ export function DateRangeField({
     year: Number(first.slice(0, 4)),
     month: Number(first.slice(5, 7)) - 1,
   });
+  // A start that moved from outside (a 409 adopting the plan's dates) brings
+  // its month into view.
+  const [seenStart, setSeenStart] = useState(start);
+  if (start !== seenStart) {
+    setSeenStart(start);
+    if (start)
+      setShown({
+        year: Number(start.slice(0, 4)),
+        month: Number(start.slice(5, 7)) - 1,
+      });
+  }
   const range = { start, end };
+  const today = todayDateKey();
+  const days = monthGrid(shown.year, shown.month);
+  // The one day in the tab order, and the one the arrow keys move from.
+  const [active, setActive] = useState<string | null>(null);
+  const stop =
+    [active, start, today].find((day) => day && days.includes(day)) ??
+    days.find(Boolean) ??
+    null;
+  const gridRef = useRef<HTMLDivElement>(null);
+  const focusAfterRender = useRef(false);
+  useEffect(() => {
+    if (!focusAfterRender.current) return;
+    focusAfterRender.current = false;
+    gridRef.current
+      ?.querySelector<HTMLElement>(`[data-day="${stop}"]`)
+      ?.focus();
+  });
+  const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!stop) return;
+    const monthOf = (day: string) => ({
+      year: Number(day.slice(0, 4)),
+      month: Number(day.slice(5, 7)) - 1,
+    });
+    let to: string | null = null;
+    if (event.key in KEY_STEP) to = addDays(stop, KEY_STEP[event.key]!);
+    else if (event.key === "Home") to = days.find(Boolean) ?? null;
+    else if (event.key === "End")
+      to = [...days].reverse().find(Boolean) ?? null;
+    else if (event.key === "PageUp" || event.key === "PageDown") {
+      const { year, month } = monthOf(stop);
+      const total = year * 12 + month + (event.key === "PageUp" ? -1 : 1);
+      const target = monthGrid(
+        Math.floor(total / 12),
+        ((total % 12) + 12) % 12,
+      );
+      const column = Number(stop.slice(8)) - 1;
+      to =
+        target.filter(Boolean)[column] ?? [...target].reverse().find(Boolean)!;
+    }
+    if (!to) return;
+    event.preventDefault();
+    focusAfterRender.current = true;
+    setActive(to);
+    setShown(monthOf(to));
+  };
 
   const page = (delta: number) =>
     setShown(({ year, month }) => {
@@ -75,13 +145,21 @@ export function DateRangeField({
           onClick={() => page(1)}
         />
       </div>
-      <div className={classes.grid}>
+      {/* The day buttons are the targets; this only catches their arrow keys. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
+      <div
+        className={classes.grid}
+        ref={gridRef}
+        role="group"
+        aria-label={monthLabel}
+        onKeyDown={move}
+      >
         {WEEKDAYS.map((day, i) => (
           <span key={i} className={classes.weekday} aria-hidden>
             {day}
           </span>
         ))}
-        {monthGrid(shown.year, shown.month).map((day, i) => {
+        {days.map((day, i) => {
           if (!day) return <span key={i} className={classes.blank} />;
           const edge = day === start || day === (end ?? start);
           return (
@@ -92,16 +170,22 @@ export function DateRangeField({
                 classes.cell,
                 inRange(range, day) && classes.inRange,
                 edge && classes.end,
+                day === today && classes.today,
               ]
                 .filter(Boolean)
                 .join(" ")}
+              data-day={day}
+              tabIndex={day === stop ? 0 : -1}
               aria-pressed={inRange(range, day)}
-              aria-current={day === todayDateKey() ? "date" : undefined}
+              aria-current={day === today ? "date" : undefined}
               aria-label={new Date(`${day}T00:00:00Z`).toLocaleDateString(
                 undefined,
                 { dateStyle: "full", timeZone: "UTC" },
               )}
-              onClick={() => pick(day)}
+              onClick={() => {
+                setActive(day);
+                pick(day);
+              }}
             >
               {Number(day.slice(8))}
             </button>

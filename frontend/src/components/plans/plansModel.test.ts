@@ -102,8 +102,10 @@ describe("the print summary", () => {
   const table = (summary: ReturnType<typeof planSummary>, preset: string) =>
     summary.tables.find((each) => each.preset === preset);
 
-  // Mutation: list every form's answers, or the places, and the bee allergy
-  // or the pool's position reaches paper a parent keeps.
+  // Mutation: add the places to planSummary's result, and the pool's position
+  // reaches paper a parent keeps. The bee allergy is kept out three ways
+  // (summaryForms, the ticked presets, the printed columns): no one edit
+  // lets it through.
   it("never carries a place, a coordinate or another form's answers", () => {
     const text = JSON.stringify(planSummary(plan, all));
     expect(text).not.toContain("Secret pool");

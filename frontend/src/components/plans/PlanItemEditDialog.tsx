@@ -147,6 +147,7 @@ export default function PlanItemEditDialog({
       <Dialog
         open
         title={place ? copy.itemEditPlace : copy.itemEditWay}
+        size="large"
         onClose={guard.requestClose}
         dismissible={!busy}
         footer={

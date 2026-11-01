@@ -4,6 +4,7 @@
 // limits and presets are `../tripPlans.ts`.
 import type { IconIdea } from "../icons.js";
 import {
+  currentTripPlanAnswers,
   TRIP_PLAN_INVITE_TTL_DAYS,
   TRIP_PLAN_ROLES,
   TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
@@ -76,6 +77,7 @@ export const TRIP_PLANS_LIST = {
     newTitle: "New plan",
     editTitle: "Edit plan",
     name: "Name",
+    namePlaceholder: "For example, Kanangra weekend",
     nameRequired: "Give the plan a name.",
     tripTypes: "Trip types",
     addTripType: "Add a type",
@@ -249,6 +251,11 @@ export function tripPlanRowPill(
   return plan.role === "member" ? null : tripPlanRoleWord(plan.role);
 }
 
+/** The printed summary's last line, `printed` being the day it was printed. */
+export function tripPlanPrintFooter(printed: string): string {
+  return `From Logjam Web, ${printed}. Correct when printed; the plan may have changed since.`;
+}
+
 /** A role, as a word: "Leader", "Editor", "Member". */
 export function tripPlanRoleWord(role: TripPlanRole): string {
   const copy = TRIP_PLANS_LIST.copy;
@@ -326,7 +333,12 @@ export const TRIP_PLAN_PAGE = {
     // At most one, by priority (`tripPlanNotice`).
     { key: "notices" },
     // One line: dates · trip types · the caller's role.
-    { key: "dates" },
+    {
+      key: "dates",
+      on: "web",
+      reason:
+        "Logjam GPS's header is short so the body gets the screen: the line sits at the top of the write-up instead.",
+    },
     // One rail over the four views below; only the chosen one is drawn.
     { key: "views" },
     { key: "writeUp" },
@@ -420,6 +432,11 @@ export const TRIP_PLAN_PAGE = {
     sectionEmpty: "No text yet.",
     printFormsNote:
       "Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.",
+    printIntro:
+      "For someone not on the trip, such as a parent. It\u2019s a file you keep or send, not a link.",
+    printGoing: "Who's going",
+    printSubmit: "Print or save as PDF",
+    printLeaders: "Leaders:",
     itemName: "Name",
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
@@ -430,7 +447,6 @@ export const TRIP_PLAN_PAGE = {
     itemLongitude: "Longitude",
     itemElevation: "Elevation (m)",
     itemAttributes: "Attributes",
-    drawRoute: "Draw a route",
     itemDownloadHint: "Click to download",
     placeTypeFallback: "Place",
     placeCopyFailed: "Couldn't copy the coordinates.",
@@ -456,7 +472,6 @@ export const TRIP_PLAN_PAGE = {
     peopleInvited: "Invited",
     letIn: "Let in",
     turnDown: "Turn down",
-    seeAnswers: "See answers",
     roleFailed: "Couldn't change their role.",
     letInFailed: "Couldn't let them in.",
     turnDownFailed: "Couldn't turn them down.",
@@ -974,6 +989,48 @@ export function tripPlanAnswerRows(
   };
 }
 
+/** What a table cell holds for an answer that is missing or blank. */
+export const TRIP_PLAN_ANSWER_MISSING = "\u2014";
+
+/**
+ * The answers table both clients draw: a column per question, a row per
+ * person (`tripPlanAnswerRows`' order and audience), every cell already
+ * words. A blank or missing answer is `TRIP_PLAN_ANSWER_MISSING`; `answered`
+ * is false for someone with no answer at all, so a client can say so once
+ * rather than per cell.
+ */
+export function tripPlanAnswerTable(
+  form: Pick<TripPlanFormView, "answers" | "myAnswer" | "questions">,
+  members: Parameters<typeof tripPlanAnswerRows>[1],
+) {
+  const { going, asking } = tripPlanAnswerRows(form, members);
+  const row = ({
+    user,
+    answer,
+  }: {
+    user: TripPlanUserRef;
+    answer?: TripPlanAnswerView;
+  }) => {
+    const values = answer
+      ? currentTripPlanAnswers(form.questions, answer.answers)
+      : null;
+    return {
+      user,
+      answered: answer != null,
+      cells: form.questions.map(
+        (question) =>
+          (values && tripPlanAnswerText(question, values[question.id])) ||
+          TRIP_PLAN_ANSWER_MISSING,
+      ),
+    };
+  };
+  return {
+    columns: form.questions.map(({ id, label }) => ({ id, label })),
+    going: going.map(row),
+    asking: asking.map(row),
+  };
+}
+
 /**
  * The picks a choice or yes/no question offers, as the shared draft holds
  * them: an option's id, or "true"/"false" (`answersFromDraft` turns only
@@ -1242,18 +1299,6 @@ export const TRIP_PLAN_ITEM_GROUPS: readonly {
   { group: "places", title: TRIP_PLAN_PAGE.copy.itemsPlaces },
   { group: "ways", title: TRIP_PLAN_PAGE.copy.itemsWays },
 ];
-
-/** The first form a person answered, for a leader reading their request. */
-export function answeredForm(
-  plan: Pick<TripPlanView, "forms">,
-  userId: string,
-): string | null {
-  return (
-    plan.forms.find((form) =>
-      form.answers.some((answer) => answer.user.id === userId),
-    )?.id ?? null
-  );
-}
 
 /**
  * Which of the caller's own places, routes and files are already in the plan.
