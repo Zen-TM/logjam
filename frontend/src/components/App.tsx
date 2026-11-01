@@ -441,7 +441,7 @@ function App() {
 
   // The Terrain group rides the same list, bottom first and underneath every
   // topo area's own layers, so the Map draws and styles it with the code it has.
-  const { contours, slope, hillshade } = terrainLayers;
+  const { contours, slope, land, hillshade } = terrainLayers;
   const sharpenedAreas = useMemo(
     () => completedTopoJobs.flatMap((job) => job.sharpened ?? []),
     [completedTopoJobs],
@@ -454,6 +454,7 @@ function App() {
     const shown = {
       contours: drawsNswContours(activeLayerId, contours),
       slope,
+      land,
       hillshade: drawsNswHillshade(activeLayerId, hillshade),
     };
     return [
@@ -467,6 +468,7 @@ function App() {
     activeLayerId,
     contours,
     slope,
+    land,
     hillshade,
     vegetationLayers,
     sharpenedAreas,

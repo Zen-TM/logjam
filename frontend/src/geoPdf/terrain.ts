@@ -27,7 +27,6 @@ import {
   lon2tileX,
   metersPerPixel,
   parseRgbaHex,
-  NSW_CONTOURS,
   slopeBandAt,
   terrainCredit,
   terrainTileArchive,
@@ -233,13 +232,15 @@ export function hillshadePixels(
 }
 
 /**
- * The zoom a print at 1:`scale` reads the statewide contours at, or null when
- * Logjam Web would show none at that scale: it loads the archive as a vector
- * source, which asks for nothing below the minzoom in the archive's header.
+ * The zoom a print at 1:`scale` reads a statewide vector `archive` at (the
+ * contours, or Land), or null when Logjam Web would show none at that scale: it
+ * loads the archive as a vector source, which asks for nothing below the
+ * minzoom in the archive's header.
  * The map's camera zoom is 512-based (mapZoom.ts), so it is read through
  * `metersPerPixel`, at one CSS pixel (1/96 in) of screen per `scale` of ground.
  */
-export function nswContourZoom(
+export function nswVectorZoom(
+  archive: { minzoom: number; maxzoom: number },
   scale: number,
   latDeg: number,
   overlayZoom: number,
@@ -247,8 +248,8 @@ export function nswContourZoom(
   const cameraZoom = Math.log2(
     metersPerPixel(latDeg, 0) / ((scale * 0.0254) / 96),
   );
-  if (cameraZoom < NSW_CONTOURS.minzoom) return null;
-  return Math.min(overlayZoom, NSW_CONTOURS.maxzoom);
+  if (cameraZoom < archive.minzoom) return null;
+  return Math.min(overlayZoom, archive.maxzoom);
 }
 
 /** Where a print reads a terrain tile from: the statewide archive, or an area's. */

@@ -69,6 +69,7 @@ export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./demSources.js";
 export * from "./nswContours.js";
+export * from "./nswLand.js";
 export * from "./terrain.js";
 export * from "./demTiles.js";
 export * from "./demSlope.js";

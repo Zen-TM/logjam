@@ -8,6 +8,7 @@ import { unavailableReasonText } from "../auth/capabilities";
 import {
   holdsContours,
   holdsHillshade,
+  holdsLand,
   holdsSlope,
   type BasemapId,
   type MapArtifact,
@@ -47,7 +48,9 @@ export function terrainSwitch(
       ? holdsContours
       : key === "slope"
         ? holdsSlope
-        : holdsHillshade,
+        : key === "land"
+          ? holdsLand
+          : holdsHillshade,
   );
   if (!online && !saved) {
     return {

@@ -38,6 +38,7 @@ import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
+  LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
@@ -61,14 +62,13 @@ import {
   ChipRail,
   Toggle,
   Icon,
-  IconButton,
   type Glyph,
   SwitchRow,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import { terrainSwitch } from "./terrainSwitches";
+import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
@@ -165,13 +165,13 @@ export function MapLayersSheet({
   const styles = useStyles();
 
   const [tab, setTab] = useState<Tab>("basemap");
-  // The vegetation legend: a sub-mode of this sheet, never a second one
+  // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
-  const [legend, setLegend] = useState(false);
+  const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
-    setLegend(false);
+    setLegend(null);
   }
   const online = connectivity === "online";
 
@@ -193,10 +193,24 @@ export function MapLayersSheet({
         online={online}
         artifacts={artifacts}
         hasVegetation={hasVegetation}
-        onOpenLegend={() => setLegend(true)}
+        onOpenLegend={() => setLegend("vegetation")}
       />
     ),
-    overlays: () => <LayersTab layers={layers} onImportFile={onImportFile} />,
+    overlays: () => (
+      <LayersTab
+        layers={layers}
+        onImportFile={onImportFile}
+        land={terrainSwitch(
+          "land",
+          terrainLayers.land,
+          basemapId,
+          online,
+          artifacts,
+        )}
+        onLandChange={(on) => onTerrainLayerChange("land", on)}
+        onOpenLandLegend={() => setLegend("land")}
+      />
+    ),
     offline: () => (
       <OfflineTab
         online={online}
@@ -213,13 +227,15 @@ export function MapLayersSheet({
   return (
     <BottomSheet
       visible={visible}
-      // The legend backs out to the Terrain tab, not out of the sheet.
-      onClose={legend ? () => setLegend(false) : onClose}
-      onBack={legend ? () => setLegend(false) : undefined}
-      title={legend ? MAP_TERRAIN.copy.vegetation : MAP_LAYERS.title}
+      // The legend backs out to its tab, not out of the sheet.
+      onClose={legend ? () => setLegend(null) : onClose}
+      onBack={legend ? () => setLegend(null) : undefined}
+      title={legend ? MAP_TERRAIN.copy[legend] : MAP_LAYERS.title}
       // Over the tab rather than in place of it, so the sheet keeps its height.
       overlay={
-        legend ? (
+        legend === "land" ? (
+          <LandLegend />
+        ) : legend === "vegetation" ? (
           <Text style={styles.legend}>{MAP_TERRAIN.copy.vegetationLegend}</Text>
         ) : null
       }
@@ -344,29 +360,42 @@ function TerrainTab({
         ];
       }),
     ),
-    // The help button sits beside the row, not inside it: the whole row is
-    // one switch to a screen reader, which would swallow a button within.
     vegetation: hasVegetation ? (
-      <View key="vegetation" style={styles.trailing}>
-        <SwitchRow
-          title={MAP_TERRAIN.copy.vegetation}
-          description={MAP_TERRAIN.copy.vegetationHint}
-          style={[styles.itemRow, styles.grow]}
-          checked={layers.vegetation}
-          onChange={(on) => onChange("vegetation", on)}
-        />
-        <IconButton
-          icon="help"
-          accessibilityLabel={MAP_TERRAIN.copy.vegetationAbout}
-          onPress={onOpenLegend}
-        />
-      </View>
+      <SwitchRow
+        key="vegetation"
+        title={MAP_TERRAIN.copy.vegetation}
+        description={MAP_TERRAIN.copy.vegetationHint}
+        style={styles.itemRow}
+        checked={layers.vegetation}
+        onChange={(on) => onChange("vegetation", on)}
+        help={{
+          label: MAP_TERRAIN.copy.vegetationAbout,
+          onPress: onOpenLegend,
+        }}
+      />
     ) : null,
   } as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
   return (
     <View style={styles.body}>
       {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
     </View>
+  );
+}
+
+/** What the Land overlay's colours mean, and what they don't. */
+function LandLegend() {
+  const styles = useStyles();
+  return (
+    <>
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.landLegend}</Text>
+      {LAND_CLASSES.map(({ name, colour }) => (
+        <View key={name} style={styles.landRow}>
+          <View style={[styles.landSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{name}</Text>
+        </View>
+      ))}
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.landCaveat}</Text>
+    </>
   );
 }
 
@@ -462,9 +491,15 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
 function LayersTab({
   layers,
   onImportFile,
+  land,
+  onLandChange,
+  onOpenLandLegend,
 }: {
   layers: LayerToggleEntry[];
   onImportFile: () => void;
+  land: TerrainSwitchState;
+  onLandChange: (on: boolean) => void;
+  onOpenLandLegend: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -483,6 +518,18 @@ function LayersTab({
   > = {
     places: () => entryRow("places"),
     ways: () => entryRow("ways"),
+    land: () => (
+      <SwitchRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={MAP_OVERLAYS.copy.land}
+        description={land.reason}
+        disabled={land.disabled}
+        checked={land.checked}
+        onChange={onLandChange}
+        help={{ label: MAP_TERRAIN.copy.landAbout, onPress: onOpenLandLegend }}
+      />
+    ),
     gauges: () => entryRow("gauges"),
     geoPdfs: () => entryRow("geoPdfs"),
     importFile: () => (
@@ -622,6 +669,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   legend: { ...textRole.body, color: theme.text },
+  landRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  landSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {

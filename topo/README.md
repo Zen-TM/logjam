@@ -20,6 +20,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
 | **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
+| **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
 
@@ -72,6 +73,43 @@ python3 pipeline.py /path/to/elvis.zip --output ./output --workers 4
 | `--progress-file PATH` | none | Write `{done,total,ts}` progress to `PATH` |
 
 A ZIP with no point clouds writes nothing.
+
+---
+
+## Building the Land overlay's archive
+
+`build_land_tenure.py` turns the NSW Land Tenure layer into the one vector
+archive the Land overlay reads. It holds each class at z8 to z13 and nothing
+else: the source has no names or owners. Rebuild it when DPIRD publishes a new
+version; the source last changed in October 2025.
+
+1. Download the File Geodatabase by hand from
+   <https://data.nsw.gov.au/data/dataset/nsw-land-tenure>: SEED refuses a script.
+2. Unzip it into `topo/input/`, then run this from `topo/`:
+
+   ```bash
+   docker compose run --rm topo python3 build_land_tenure.py \
+     /input/NSWLandTenure_Dec2024_V2_SEED.gdb /output/nsw-tenure.pmtiles
+   pmtiles show output/nsw-tenure.pmtiles     # zoom 8 to 13, bounds are NSW
+   ```
+
+   A new release can rename its layer: pass it with `--layer`
+   (`ogrinfo -ro -q <gdb>` lists it). The build stops on a class that
+   `LAND_CLASSES` in `shared/src/nswLand.ts` doesn't have, because a client draws
+   nothing for one. A new version also changes `NSW_LAND.credit`.
+
+The December 2024 v2 file takes 20 minutes on 4 cores and 9 GB, and makes
+178 MB. At z13, 3,200 random points in four boxes had the same class as the
+source.
+
+Publishing is a prod change and the maintainer's to make. The archive goes to
+the topo bucket at the path `NSW_LAND.archivePath` names, and needs no deploy:
+
+```bash
+aws s3 cp output/nsw-tenure.pmtiles s3://logjam-topo-jobs/master/land/nsw-tenure.pmtiles \
+  --content-type application/vnd.pmtiles
+curl -s -o /dev/null -w '%{http_code}\n' -r 0-6 https://logjamnsw.com/master/land/nsw-tenure.pmtiles   # 206
+```
 
 ---
 
