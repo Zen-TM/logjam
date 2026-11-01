@@ -12,9 +12,9 @@ import classes from "./ConsentGate.module.css";
  * to re-consent on next sign-in after a material change. Deliberately not a
  * dismissible dialog: the only ways out are agreeing or signing out.
  *
- * A brand-new account (no consent recorded) lands here too, because the
- * provider's sign-up page cannot ask what the old sign-up form did: it is
- * welcomed rather than told the terms changed, and picks its username and
+ * A brand-new account (no consent recorded) lands here too when it signed up
+ * on a provider's page, which cannot ask what Logjam Web's sign-up form does:
+ * it is welcomed rather than told the terms changed, and picks its username and
  * confirms its age here, in the same request that records the consent.
  *
  * The links to read sit BESIDE the tick rather than

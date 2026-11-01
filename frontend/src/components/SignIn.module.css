@@ -73,10 +73,46 @@
   color: var(--color-text-muted);
 }
 
+.subtitle {
+  composes: paragraph from "../textRoles.generated.module.css";
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+}
+
+/* The two ticks and the pair of links that belong with them. */
+.consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Lined up with the checkbox text above it, not with its box. */
+.legal {
+  composes: detail from "../textRoles.generated.module.css";
+  margin: 0 0 0 1.875rem;
+  color: var(--color-text-muted);
+}
+
+/* A link IN PROSE ON A CARD is `text` and underlined, never accent.
+ * Accent clears 4.5:1 on the page (4.55) and fails it on a card in all four
+ * schemes (3.63–4.05), and it sits at 1.2:1 against the muted sentence it lives
+ * in — so colour alone would not identify it either (1.4.1), which is what the
+ * underline is for. Measured: scripts/wcag-contrast.mjs, DESIGN.md. */
+.legal a {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
 /* A form's one button per line fills it: there is nothing to sit beside. */
 .submit {
   width: 100%;
   justify-content: center;
+}
+
+.switchText {
+  composes: detail from "../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
 }
 
 .successBanner {
@@ -89,6 +125,17 @@
    * the ratio the flat page colour does. `text` on the same wash is
    * 5.24–6.72:1, and the pair is in the contrast script under it. */
   color: var(--color-text);
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-text);
+  font-size: inherit;
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* Narrow, the terrain is a band above a card that fills the width. */

@@ -3,6 +3,7 @@ import { ErrorResponse } from "oidc-client-ts";
 
 const m = vi.hoisted(() => ({
   getUser: vi.fn(),
+  storeUser: vi.fn(async () => {}),
   removeUser: vi.fn(async () => {}),
   revokeTokens: vi.fn(async () => {}),
   signinSilent: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("oidc-client-ts", async (orig) => ({
   ...(await orig<typeof import("oidc-client-ts")>()),
   UserManager: class {
     getUser = m.getUser;
+    storeUser = m.storeUser;
     removeUser = m.removeUser;
     revokeTokens = m.revokeTokens;
     signinSilent = m.signinSilent;
@@ -227,5 +229,46 @@ describe("endProviderSession", () => {
     m.getMetadata.mockRejectedValue(new Error("offline"));
     expect(await endProviderSession()).toBe(`${origin}/`);
     expect(m.removeUser).toHaveBeenCalledOnce();
+  });
+});
+
+describe("signInWithPassword", () => {
+  const jwt = (claims: object) =>
+    `h.${btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(claims)))).replace(/=+$/, "")}.s`;
+  const answer = (body: object) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => body })),
+    );
+
+  // Mutation: store the password, or leave profile empty, and the refresh that
+  // compares the subject fails on the next expired token.
+  it("stores the session the redirect would, and no password", async () => {
+    answer({
+      AuthenticationResult: {
+        IdToken: jwt({ sub: "s1", name: "Zoë" }),
+        AccessToken: "at",
+        RefreshToken: "rt",
+        ExpiresIn: 3600,
+      },
+    });
+    const { signInWithPassword } = await load();
+    expect(await signInWithPassword("a@b.co", "s3cret!")).toBe(true);
+    const user = (m.storeUser.mock.calls as unknown[][])[0][0] as {
+      profile: { sub: string; name: string };
+      refresh_token: string;
+      expires_in: number;
+    };
+    expect(user.profile).toMatchObject({ sub: "s1", name: "Zoë" });
+    expect(user.refresh_token).toBe("rt");
+    expect(user.expires_in).toBeGreaterThan(3500);
+    expect(JSON.stringify(user)).not.toContain("s3cret!");
+  });
+
+  it("stores nothing when Cognito wants more", async () => {
+    answer({ ChallengeName: "SOFTWARE_TOKEN_MFA" });
+    const { signInWithPassword } = await load();
+    expect(await signInWithPassword("a@b.co", "pw")).toBe(false);
+    expect(m.storeUser).not.toHaveBeenCalled();
   });
 });

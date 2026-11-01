@@ -1,16 +1,24 @@
-// The one OIDC sign-in (authorization code + PKCE) for Logjam Web. Tokens live
-// in localStorage so a session survives a closed tab (ADR 0041); they are never
-// logged. Fake auth (local dev, e2e) never reaches this file.
+// Logjam Web's session: OIDC sign-in (authorization code + PKCE), or the same
+// session started from its own forms under a Cognito issuer (ADR 0045). Tokens
+// live in localStorage so a session survives a closed tab (ADR 0041); they are
+// never logged, and a password is never stored. Fake auth (local dev, e2e)
+// never reaches this file.
 import {
   ErrorResponse,
+  User,
   UserManager,
   WebStorageStateStore,
-  type User,
 } from "oidc-client-ts";
 import {
+  confirmForgotPassword as cognitoConfirmForgotPassword,
+  confirmSignUp as cognitoConfirmSignUp,
   endSessionUrl,
+  forgotPassword as cognitoForgotPassword,
   hasCognitoAccount as sharedHasCognitoAccount,
   oidcScopes,
+  passwordSignIn,
+  resendSignUpCode as cognitoResendSignUpCode,
+  signUp as cognitoSignUp,
 } from "@logjam/shared";
 
 const issuer = (): string => import.meta.env.VITE_OIDC_ISSUER ?? "";
@@ -47,6 +55,51 @@ export async function signInRedirect(): Promise<void> {
     scope: oidcScopes(issuer(), meta.scopes_supported),
   });
 }
+
+function jwtClaims(jwt: string): User["profile"] {
+  const b64 = jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+/**
+ * Cognito only (hasCognitoAccount): starts the same session the redirect would,
+ * so refresh, sign-out and everything else cannot tell them apart. False:
+ * Cognito wants more than a password, and the provider's page must ask.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<boolean> {
+  const t = await passwordSignIn(issuer(), clientId(), email, password);
+  if (!t) return false;
+  await userManager().storeUser(
+    new User({
+      id_token: t.idToken,
+      access_token: t.accessToken,
+      refresh_token: t.refreshToken,
+      token_type: "Bearer",
+      scope: "aws.cognito.signin.user.admin",
+      profile: jwtClaims(t.idToken),
+      expires_at: Math.floor(Date.now() / 1000) + t.expiresIn,
+    }),
+  );
+  return true;
+}
+
+export const signUp = (email: string, password: string, name: string) =>
+  cognitoSignUp(issuer(), clientId(), { email, password, name });
+export const confirmSignUp = (email: string, code: string) =>
+  cognitoConfirmSignUp(issuer(), clientId(), email, code);
+export const resendSignUpCode = (email: string) =>
+  cognitoResendSignUpCode(issuer(), clientId(), email);
+export const forgotPassword = (email: string) =>
+  cognitoForgotPassword(issuer(), clientId(), email);
+export const confirmForgotPassword = (
+  email: string,
+  code: string,
+  password: string,
+) => cognitoConfirmForgotPassword(issuer(), clientId(), email, code, password);
 
 const CALLBACK_PARAMS = [
   "code",

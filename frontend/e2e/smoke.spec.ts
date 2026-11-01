@@ -23,9 +23,9 @@ test("app loads", async ({ page }) => {
     });
   } else {
     // Prod → sign-in screen should render for an unauthenticated visitor.
-    await expect(
-      page.getByRole("button", { name: "Sign in or create an account" }),
-    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /^Sign in/ })).toBeVisible({
+      timeout: 15_000,
+    });
   }
 
   // No CSP violations / uncaught errors on first paint.

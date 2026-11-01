@@ -1,6 +1,6 @@
 # 0045. Sign-in happens on the OIDC provider's page, and a deployment has one issuer
 
-- **Date:** 2026-10-31
+- **Date:** 2026-11-01
 - **Status:** Accepted
 - **Supersedes:** —
 

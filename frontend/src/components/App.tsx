@@ -1067,7 +1067,13 @@ function App() {
   }
 
   if (!authenticated) {
-    return <SignIn error={auth.error} onSignIn={auth.signIn} />;
+    return (
+      <SignIn
+        error={auth.error}
+        onRedirect={auth.signIn}
+        onPasswordSignIn={auth.signInWithPassword}
+      />
+    );
   }
 
   const selectedRoute =

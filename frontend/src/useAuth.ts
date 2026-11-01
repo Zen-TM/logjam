@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { globalSignOut } from "@logjam/shared";
-import { apiFetch, setSessionExpiredHandler } from "./placeUtils";
+import { CURRENT_CONSENT_VERSION } from "./consent";
+import {
+  apiFetch,
+  recordConsent,
+  setSessionExpiredHandler,
+} from "./placeUtils";
 import { messageFromError } from "./errors/messageFromError";
 import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
@@ -9,6 +14,7 @@ import {
   issuerUrl,
   loadSession,
   signInRedirect,
+  signInWithPassword,
   endProviderSession,
 } from "./auth/oidc";
 
@@ -20,6 +26,18 @@ async function ensureUserExists() {
 }
 
 export type AuthState = "loading" | "signIn" | "authenticated";
+
+// Cognito's answers about this person or this attempt, which the form shows.
+// Anything else means the form cannot finish here (a flow the app client no
+// longer allows, a forced password reset, a blocked request), so the provider's
+// own page takes over.
+const FORM_ANSWERS = new Set([
+  "NotAuthorizedException",
+  "UserNotConfirmedException",
+  "UserNotFoundException",
+  "LimitExceededException",
+  "TooManyRequestsException",
+]);
 
 // Sign-out needs no hook state, so the account page and the consent gate call
 // these directly instead of mounting a second useAuth (and its session check).
@@ -83,6 +101,20 @@ export function useAuth() {
   // Reset by the next successful sign-in, which clears the cache first.
   const sessionCheckFailed = useRef(false);
 
+  const enterSession = useCallback(async () => {
+    // Whoever signs in starts with an empty tile cache, even after a
+    // failed session check that left the last user's in place.
+    await clearTileCache();
+    sessionCheckFailed.current = false;
+    // Await provisioning before flipping to authenticated: GET /users/me
+    // creates the User row on first login, and every other endpoint 404s
+    // ("User not found") until that row exists. Flipping state first let
+    // the boot-time data hooks race the insert and surface a burst of
+    // error toasts on fresh accounts. Still best-effort: if the API is
+    // unreachable we sign in anyway rather than blocking the user.
+    await ensureUserExists().catch(console.error);
+  }, []);
+
   // On mount: finish a sign-in the provider just sent the browser back from,
   // else check for an existing session in localStorage.
   useEffect(() => {
@@ -103,17 +135,7 @@ export function useAuth() {
       }
       if (cancelled) return;
       if (signedInNow) {
-        // Whoever signs in starts with an empty tile cache, even after a
-        // failed session check that left the last user's in place.
-        await clearTileCache();
-        sessionCheckFailed.current = false;
-        // Await provisioning before flipping to authenticated: GET /users/me
-        // creates the User row on first login, and every other endpoint 404s
-        // ("User not found") until that row exists. Flipping state first let
-        // the boot-time data hooks race the insert and surface a burst of
-        // error toasts on fresh accounts. Still best-effort: if the API is
-        // unreachable we sign in anyway rather than blocking the user.
-        await ensureUserExists().catch(console.error);
+        await enterSession();
         if (!cancelled) setState("authenticated");
         return;
       }
@@ -139,7 +161,7 @@ export function useAuth() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enterSession]);
 
   // The sign-in screen showing means nobody is known to be signed in, so the
   // tile cache goes, except when the session check failed. This runs after the
@@ -180,9 +202,39 @@ export function useAuth() {
     }
   }, []);
 
+  // Logjam Web's own forms (Cognito only). Throws what the form should show.
+  // A new account's sign-up form has already asked for its username, the terms
+  // and its age; if recording them fails, ConsentGate asks again.
+  const handlePasswordSignIn = useCallback(
+    async (email: string, password: string, newAccountUsername?: string) => {
+      setError(null);
+      let signedIn = false;
+      try {
+        signedIn = await signInWithPassword(email, password);
+      } catch (err) {
+        const answered = err instanceof Error && FORM_ANSWERS.has(err.name);
+        if (answered || !navigator.onLine) throw err;
+        console.error(err);
+      }
+      if (!signedIn) {
+        await signInRedirect();
+        return;
+      }
+      await enterSession();
+      if (newAccountUsername) {
+        await recordConsent(CURRENT_CONSENT_VERSION, newAccountUsername).catch(
+          console.error,
+        );
+      }
+      setState("authenticated");
+    },
+    [enterSession],
+  );
+
   return {
     state,
     error,
     signIn: handleSignIn,
+    signInWithPassword: handlePasswordSignIn,
   };
 }

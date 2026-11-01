@@ -8,6 +8,7 @@ const oidc = vi.hoisted(() => ({
   completeSignInFromUrl: vi.fn(),
   loadSession: vi.fn(),
   signInRedirect: vi.fn(),
+  signInWithPassword: vi.fn(),
   endProviderSession: vi.fn(),
   hasCognitoAccount: vi.fn(() => true),
   issuerUrl: vi.fn(() => "https://cognito-idp.r.amazonaws.com/r_P"),
@@ -19,13 +20,18 @@ const assign = vi.hoisted(() => vi.fn());
 const setSessionExpiredHandler = vi.hoisted(() => vi.fn());
 const clearTileCache = vi.hoisted(() => vi.fn(async () => {}));
 const apiFetch = vi.hoisted(() => vi.fn(async () => ({})));
+const recordConsent = vi.hoisted(() => vi.fn(async () => ({})));
 
 vi.mock("./auth/oidc", () => oidc);
 vi.mock("@logjam/shared", async (orig) => ({
   ...(await orig<typeof import("@logjam/shared")>()),
   globalSignOut,
 }));
-vi.mock("./placeUtils", () => ({ apiFetch, setSessionExpiredHandler }));
+vi.mock("./placeUtils", () => ({
+  apiFetch,
+  recordConsent,
+  setSessionExpiredHandler,
+}));
 vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
 vi.mock("./tripDraft", () => ({ clearTripDraft }));
 
@@ -256,5 +262,78 @@ describe("signOutEverywhere", () => {
     );
     expect(clearTripDraft).toHaveBeenCalledOnce();
     expect(oidc.endProviderSession).toHaveBeenCalledOnce();
+  });
+});
+
+// Mutations that turn these red: let an unknown error reach the form, so a
+// client Cognito no longer signs in from here strands the user; send a refused
+// password to the provider's page; or flip to authenticated before the consent
+// is recorded, so a new account meets the gate it has just answered.
+describe("useAuth password sign-in", () => {
+  const signedOut = async () => {
+    oidc.loadSession.mockResolvedValue(null);
+    const hook = renderHook(() => useAuth());
+    await waitFor(() => expect(hook.result.current.state).toBe("signIn"));
+    return hook;
+  };
+  const named = (name: string) => Object.assign(new Error(name), { name });
+
+  beforeEach(() => oidc.signInRedirect.mockResolvedValue(undefined));
+
+  it("signs in on the page, after clearing the last user's tiles", async () => {
+    oidc.signInWithPassword.mockResolvedValue(true);
+    const { result } = await signedOut();
+    clearTileCache.mockClear();
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(clearTileCache).toHaveBeenCalled();
+    expect(apiFetch).toHaveBeenCalledWith("/users/me");
+    expect(oidc.signInRedirect).not.toHaveBeenCalled();
+    expect(result.current.state).toBe("authenticated");
+  });
+
+  it("hands over to the provider's page when Cognito wants more", async () => {
+    oidc.signInWithPassword.mockResolvedValue(false);
+    const { result } = await signedOut();
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(oidc.signInRedirect).toHaveBeenCalledOnce();
+    expect(result.current.state).toBe("signIn");
+  });
+
+  it("hands over to the provider's page when the form cannot finish", async () => {
+    oidc.signInWithPassword.mockRejectedValue(
+      named("InvalidParameterException"),
+    );
+    const { result } = await signedOut();
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(oidc.signInRedirect).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a refused password with the form", async () => {
+    oidc.signInWithPassword.mockRejectedValue(named("NotAuthorizedException"));
+    const { result } = await signedOut();
+    await expect(
+      result.current.signInWithPassword("a@b.co", "pw"),
+    ).rejects.toThrow();
+    expect(oidc.signInRedirect).not.toHaveBeenCalled();
+  });
+
+  it("records a new account's consent before it is signed in", async () => {
+    oidc.signInWithPassword.mockResolvedValue(true);
+    const { result } = await signedOut();
+    await act(() =>
+      result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
+    );
+    expect(recordConsent).toHaveBeenCalledWith(expect.any(String), "canyoneer");
+    expect(result.current.state).toBe("authenticated");
+  });
+
+  it("leaves a failed consent record to the gate", async () => {
+    oidc.signInWithPassword.mockResolvedValue(true);
+    recordConsent.mockRejectedValueOnce(new Error("taken"));
+    const { result } = await signedOut();
+    await act(() =>
+      result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
+    );
+    expect(result.current.state).toBe("authenticated");
   });
 });
