@@ -155,3 +155,9 @@
   opacity: var(--opacity-disabled);
   cursor: default;
 }
+
+/* Prose links on a card are underlined, text-coloured words (DESIGN.md). */
+.title a {
+  color: var(--color-text);
+  text-decoration: underline;
+}

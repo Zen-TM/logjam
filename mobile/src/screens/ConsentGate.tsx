@@ -9,7 +9,11 @@
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { consentFormProblem, consentSubmitFailure } from "@logjam/shared";
+import {
+  consentFormProblem,
+  consentSubmitFailure,
+  USERNAME_HINT,
+} from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
@@ -102,7 +106,7 @@ export function ConsentGate({
       </Text>
       <Text style={styles.body}>
         {newAccount
-          ? "Choose the name friends see when you share a place with them, and review the terms to finish creating your account."
+          ? "Choose your public display name and review the terms to finish creating your account."
           : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Please review them and confirm your agreement to keep using Logjam.`}
       </Text>
       {newAccount ? (
@@ -115,7 +119,7 @@ export function ConsentGate({
             setBanner(null);
           }}
           error={usernameError}
-          hint="What friends see when you share a place with them."
+          hint={USERNAME_HINT}
           autoCapitalize="none"
           autoComplete="username"
           editable={!submitting}

@@ -1357,10 +1357,9 @@ test.describe("surfaces fake auth never shows", () => {
     ).toBeVisible();
     await expectNoViolations(page);
 
-    // Sign-up is where the two ticks live, and where the Terms and Privacy
-    // links sit BESIDE them rather than inside their labels — a link in a label
-    // toggles the control it labels, so reading the terms would answer the
-    // question about them (SignIn.tsx).
+    // Sign-up is where the two ticks live. The Terms and Privacy links are in
+    // the first one's sentence, which is not a <label>, so reading the terms
+    // doesn't answer the question about them (TermsTick.tsx).
     await page.getByRole("button", { name: "Sign up", exact: true }).click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);

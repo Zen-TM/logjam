@@ -260,3 +260,23 @@ describe("SignIn under Cognito", () => {
     );
   });
 });
+
+describe("the terms tick", () => {
+  // Mutations: put the links back in a <label>, or drop the `closest("a")` check,
+  // and opening the terms answers the question about them.
+  it("links its words, and opening one leaves the box alone", () => {
+    draw();
+    press("Sign up");
+    const tick = screen.getByRole("checkbox", {
+      name: "I agree to the Terms of Use and acknowledge the Privacy Policy.",
+    }) as HTMLInputElement;
+    const terms = screen.getByRole("link", { name: "Terms of Use" });
+    expect(terms.getAttribute("href")).toBe("/tos.html");
+    expect(terms.closest("label")).toBeNull();
+    fireEvent.click(terms);
+    fireEvent.click(screen.getByRole("link", { name: "Privacy Policy" }));
+    expect(tick.checked).toBe(false);
+    fireEvent.click(screen.getByText(/I agree to the/));
+    expect(tick.checked).toBe(true);
+  });
+});
