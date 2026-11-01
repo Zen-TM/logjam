@@ -9,6 +9,7 @@ import {
   type DemSource,
 } from "./demSources.js";
 import { NSW_CONTOURS } from "./nswContours.js";
+import { NSW_LAND_CLIP } from "./nswLand.js";
 import { NSW_HILLSHADE, NSW_SLOPE } from "./terrain.js";
 
 export type RegionBbox = {
@@ -398,6 +399,16 @@ const SLOPE_TILE_BYTES: Record<
   15: { meanBytes: 28_000, p90Bytes: 33_000 },
 };
 
+/**
+ * MEASURED bytes of one tile of the Land overlay at each zoom a clip holds, as
+ * stored (gzip), from every tile of a 40 km Blue Mountains box.
+ */
+const LAND_TILE_BYTES: Record<number, { meanBytes: number; p90Bytes: number }> =
+  {
+    12: { meanBytes: 7_000, p90Bytes: 15_000 },
+    13: { meanBytes: 3_600, p90Bytes: 8_500 },
+  };
+
 function estimateStatewideClip(
   bbox: RegionBbox,
   archive: { minzoom: number; maxzoom: number },
@@ -417,11 +428,17 @@ export function estimateSlopeClip(bbox: RegionBbox): RegionSizeEstimate {
   return estimateStatewideClip(bbox, NSW_SLOPE, SLOPE_TILE_BYTES);
 }
 
+export function estimateLandClip(bbox: RegionBbox): RegionSizeEstimate {
+  return estimateStatewideClip(bbox, NSW_LAND_CLIP, LAND_TILE_BYTES);
+}
+
 export interface MultiSourceRegionPlan {
   /** The contour clip: bytes only, like a DEM archive's. */
   contours: RegionSizeEstimate;
   /** The slope clip, the same way. */
   slope: RegionSizeEstimate;
+  /** The Land overlay's clip, the same way. */
+  land: RegionSizeEstimate;
   /**
    * DEM archive clips: cut by byte range from our own CDN, so they count toward
    * the bytes but not toward `totalTiles` or `seconds`, which are about tiles
@@ -455,8 +472,8 @@ export interface MultiSourceRegionPlan {
  * goes offline — which is the trip the download exists for. Costing it into
  * these totals (rather than adding it silently later) is what keeps the size
  * estimate, the tile cap and the free-space check honest. So are the clips
- * of each DEM archive the area touches and of the statewide contours and
- * slope, which every area saves too.
+ * of each DEM archive the area touches and of the statewide contours, slope
+ * and land, which every area saves too.
  */
 export function planRegionForBasemaps(
   bbox: RegionBbox,
@@ -466,6 +483,7 @@ export function planRegionForBasemaps(
 ): MultiSourceRegionPlan {
   const contours = estimateContourClip(bbox);
   const slope = estimateSlopeClip(bbox);
+  const land = estimateLandClip(bbox);
   const demPlan = planRegionTiles(bbox, DEM_ZOOM, DEM_ZOOM);
   const demArchives = planDemDownload(bbox).map((source) => {
     const { perZoom } = planRegionTiles(
@@ -506,10 +524,12 @@ export function planRegionForBasemaps(
   const bytes = (key: keyof RegionSizeEstimate) =>
     [...perSource, ...demArchives].reduce((sum, s) => sum + s.size[key], 0) +
     contours[key] +
-    slope[key];
+    slope[key] +
+    land[key];
   return {
     contours,
     slope,
+    land,
     perSource,
     demArchives,
     totalTiles,

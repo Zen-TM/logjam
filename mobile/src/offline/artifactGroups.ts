@@ -24,6 +24,7 @@ export const REGION_ARTIFACT_KINDS: readonly MapArtifact["kind"][] = [
   "dem-region",
   "contours-region",
   "slope-region",
+  "land-region",
 ];
 
 export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {

@@ -1,10 +1,10 @@
 // Chunked key-value storage adapter (pure — the expo-secure-store binding
 // lives in secureKeyValueStorage.ts so this logic is vitest-testable).
 //
-// Why: Amplify persists Cognito tokens through a KeyValueStorageInterface, and
-// our store is expo-secure-store (Keychain/Keystore, never AsyncStorage:
-// amplifyConfig.test.ts). Android's Keystore-backed SecureStore warns above
-// 2048 bytes per value, and Cognito JWTs regularly exceed that. So values are
+// Why: the sign-in session (oidcSession.ts) is stored in expo-secure-store
+// (Keychain/Keystore, never AsyncStorage: oidcSession.test.ts). Android's
+// Keystore-backed SecureStore warns above 2048 bytes per value, and the three
+// JWTs together regularly exceed that. So values are
 // split into byte-bounded chunks, each stored under a derived key, with a
 // small header at the base key describing the chunk count.
 
@@ -14,8 +14,8 @@ export interface KeyValueBackend {
   remove(key: string): Promise<void>;
 }
 
-// Matches Amplify's KeyValueStorageInterface shape (structural typing — no
-// aws-amplify import here to keep this module pure).
+// A small key-value interface; this module stays free of expo imports so it is
+// vitest-testable.
 export interface KeyValueStorage {
   setItem(key: string, value: string): Promise<void>;
   getItem(key: string): Promise<string | null>;
@@ -65,10 +65,10 @@ export function splitIntoByteChunks(value: string, maxBytes: number): string[] {
   return chunks;
 }
 
-// SecureStore keys must match [A-Za-z0-9._-]. Amplify keys contain other
-// characters (an email-shaped username carries '@'); encode anything outside
+// SecureStore keys must match [A-Za-z0-9._-]. A key may contain other
+// characters (a path-shaped or email-shaped one); encode anything outside
 // the safe set as _xHH_ (hex of the char code), and escape a literal "_x"
-// sequence so the mapping stays injective — two distinct Amplify keys must
+// sequence so the mapping stays injective — two distinct keys must
 // never collide in the store (Guard: chunkedKeyValueStorage.test.ts). Lives
 // here, not in the SecureStore binding, so it stays pure and vitest-testable.
 export function toSecureStoreKey(key: string): string {

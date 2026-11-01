@@ -244,7 +244,8 @@ describe("planRegionForBasemaps", () => {
       job.perSource[0].size.p90Bytes +
         job.demArchives[0].size.p90Bytes +
         job.contours.p90Bytes +
-        job.slope.p90Bytes,
+        job.slope.p90Bytes +
+        job.land.p90Bytes,
     );
   });
 
@@ -270,8 +271,22 @@ describe("planRegionForBasemaps", () => {
       job.perSource[0].size.meanBytes +
         job.demArchives[0].size.meanBytes +
         job.contours.meanBytes +
-        job.slope.meanBytes,
+        job.slope.meanBytes +
+        job.land.meanBytes,
     );
+  });
+
+  // Mutation: halve LAND_TILE_BYTES, and the estimate no longer brackets the
+  // measured clip. (Leaving Land out of the totals turns the two sum tests
+  // above red.)
+  it("prices the land clip from its measured tiles", () => {
+    // A real clip of 40 km of the Blue Mountains is 769 KB.
+    const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
+    const { land } = planRegionForBasemaps(box, [], 15, maxZoomFor);
+    expect(land.meanBytes).toBeGreaterThan(600_000);
+    expect(land.meanBytes).toBeLessThan(950_000);
+    expect(land.p90Bytes).toBeGreaterThan(769_000);
+    expect(land.p90Bytes).toBeLessThan(2_000_000);
   });
 
   // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets

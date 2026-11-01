@@ -174,13 +174,12 @@ export function capabilityRowProps(
 }
 
 /**
- * The change-email row. Fake auth (dev only) never configures Amplify, which
- * is what changing an email calls, so the row says why it is dimmed instead of
- * failing on press.
+ * The change-email row. Fake auth (dev only) has no Cognito session to call
+ * with, so the row says why it is dimmed instead of failing on press.
  */
 export function changeEmailRowProps(
   online: boolean,
-  authMode: "cognito" | "fake",
+  authMode: "oidc" | "fake",
 ): { disabled: boolean; subtitle?: string } {
   if (authMode === "fake") {
     return { disabled: true, subtitle: "Not available under fake sign-in." };

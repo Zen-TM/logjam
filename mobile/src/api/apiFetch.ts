@@ -6,12 +6,13 @@
 //    lever — never drop it).
 //  - No auto-sign-out on token trouble. The web flips to the sign-in screen on
 //    any 401/refresh failure; here that would brick Logjam GPS mid-trip. The
-//    session-rejected handler fires ONLY when Cognito actively rejects the
-//    refresh while online (classifySessionError), never on network failure.
+//    session-rejected handler fires ONLY when the provider actively rejects
+//    the refresh while online (classifySessionError), or there is no session,
+//    never on network failure.
 import { ApiError } from "@logjam/shared";
 
 import { config, CLIENT_VERSION, CLIENT_VERSION_HEADER } from "../config";
-import { fetchAuthSessionWithTimeout } from "../auth/authSession";
+import { getSession } from "../auth/oidcSession";
 import { classifySessionError } from "../auth/sessionErrors";
 import { markNoResponse } from "./noResponse";
 
@@ -28,19 +29,18 @@ function notifySessionRejected(): void {
 
 async function getIdToken(): Promise<string> {
   if (config.authMode === "fake") return "fake-token";
-  // Amplify refreshes automatically via the refresh token when the ID token
-  // (1 h) has expired. Timed out (authSession.ts) rather than bare: this runs
-  // BEFORE fetchWithTimeout below, so a hang here hangs the request no matter
-  // what REQUEST_TIMEOUT_MS says.
+  // Refreshes with the refresh token when the ID token is within a minute of
+  // expiring. Always settles (oidcSession.ts times it out): this runs BEFORE
+  // fetchWithTimeout below, so a hang here hangs the request no matter what
+  // REQUEST_TIMEOUT_MS says.
   try {
-    const session = await fetchAuthSessionWithTimeout();
-    const token = session.tokens?.idToken?.toString();
-    if (!token) {
-      // No token and no throw: no session exists at all (signed out).
+    const session = await getSession();
+    if (!session) {
+      // No session at all (signed out, or the refresh was rejected).
       notifySessionRejected();
       throw new Error("No auth session");
     }
-    return token;
+    return session.idToken;
   } catch (err) {
     if (classifySessionError(err) === "rejected") notifySessionRejected();
     // Transient (offline, flaky network): surface the error to the caller —
@@ -120,7 +120,7 @@ async function throwApiError(
 //
 // Eight screens fetch `/users/me` on mount with nothing between them and no
 // cache of any kind, so opening five places was five identical round-trips —
-// each one a radio wakeup, an Amplify token check and a 15 s timeout's worth of
+// each one a radio wakeup, a token check and a 15 s timeout's worth of
 // hang when there is no signal. The record only changes through a PATCH from
 // this device (which lands its own response in the cache below) or from another
 // device (a minute late is fine for a username and a theme).
@@ -153,7 +153,7 @@ export async function apiFetch<T>(
     return currentUser.value as T;
   }
   // Everything that can fail here fails WITHOUT an answer from the API: no
-  // token because Cognito was unreachable, a refused or reset connection, the
+  // token because the provider was unreachable, a refused or reset connection, the
   // 15 s abort. Marked so the sync engine can tell the link's failures from an
   // op's (noResponse.ts).
   const res = await (async () => {

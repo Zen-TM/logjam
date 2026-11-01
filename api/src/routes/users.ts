@@ -10,6 +10,11 @@ import {
   parseSlopeBands,
   normalizeImportMergePolicy,
   isNotificationPreferences,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  USERNAME_PATTERN,
+  USERNAME_RULE,
+  USERNAME_TAKEN,
 } from "@logjam/shared";
 import { defsForUserResponse } from "../lib/customFieldDefs";
 import { EXPORT_SCHEMA_VERSION, loadExportSections } from "../lib/dataExport";
@@ -18,7 +23,10 @@ import prisma from "../services/prisma";
 import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
-import { userPatchLimiter } from "../middleware/rateLimit";
+import {
+  userPatchLimiter,
+  usernameCheckLimiter,
+} from "../middleware/rateLimit";
 import { identityProvider } from "../lib/identityProvider";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
@@ -138,9 +146,9 @@ export async function createUserForSignup(params: {
 const usernameSchema = z
   .string()
   .trim()
-  .min(3)
-  .max(32)
-  .regex(/^[A-Za-z0-9_.-]+$/);
+  .min(USERNAME_MIN)
+  .max(USERNAME_MAX)
+  .regex(USERNAME_PATTERN);
 
 /**
  * The name a new account starts with, which other users then see and search.
@@ -164,8 +172,6 @@ export function initialUsernameFor(params: {
   }
   return `user-${createHash("sha256").update(sub).digest("hex").slice(0, 8)}`;
 }
-
-const USERNAME_RULE = say`A username is 3 to 32 letters, numbers, dots, dashes or underscores.`;
 
 const router = Router();
 
@@ -227,6 +233,22 @@ async function serializeUserWithUsage(
     monthlyEgressUsedBytes: egress.used.toString(),
   };
 }
+
+// GET /users/username-available — yes or no, before an account exists, so the
+// sign-up form can say a name is taken before the email code rather than after.
+// No auth, by the exception in api/AGENTS.md. lower() is the unique index's own
+// expression, and Prisma's insensitive mode (ILIKE) would not use it.
+router.get(
+  "/username-available",
+  usernameCheckLimiter,
+  async (req, res: Response) => {
+    const parsed = usernameSchema.safeParse(req.query.username);
+    if (!parsed.success) throw new AppError(400, USERNAME_RULE);
+    const rows = await prisma.$queryRaw<unknown[]>`
+      SELECT 1 FROM users WHERE lower(username) = lower(${parsed.data}) LIMIT 1`;
+    res.json({ available: rows.length === 0 });
+  },
+);
 
 // GET /users/me — get current user's profile
 // Creates the user in DB if it's their first request (post-Cognito signup)
@@ -477,7 +499,7 @@ router.patch(
         // The username is the only unique column this route writes.
         // `meta.target` does not name the column under the driver adapter, so
         // any P2002 here indicates a taken username (users.test.ts).
-        throw new AppError(409, say`That username is taken. Choose another.`);
+        throw new AppError(409, USERNAME_TAKEN);
       }
       throw e;
     }

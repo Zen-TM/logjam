@@ -4,7 +4,11 @@
 // whole areas, and over a route they would tint and shade it. Over the vector
 // basemap the Terrain group goes inside the basemap instead, under its roads
 // and labels (shared TERRAIN_BASEMAP_ANCHORS).
-import { terrainBeforeIds, type TerrainLayerKey } from "@logjam/shared";
+import {
+  landNameOf,
+  terrainBeforeIds,
+  type TerrainLayerKey,
+} from "@logjam/shared";
 
 /**
  * Lowest track, route or pin layer: the first `Map.tsx` adds on load, and
@@ -30,6 +34,31 @@ export const PRESSABLE_LAYERS = [
   "place-tracks-hit",
   "standalone-tracks-hit",
 ];
+
+/** The Land overlay's fill, by the id `topo-<entry id>-<suffix>` every topo layer has. */
+export const LAND_FILL_LAYER = "topo-nswland-fill";
+export const LAND_EDGE_LAYER = "topo-nswland-edge";
+
+/**
+ * The name of the land class drawn at `point`, or null: the overlay is off, or
+ * no class is drawn there. Read from the tiles on screen, so "What is here?"
+ * sends no coordinate anywhere to answer.
+ */
+export function landClassAt(
+  map: {
+    getLayer(id: string): unknown;
+    queryRenderedFeatures(
+      point: [number, number],
+      options: { layers: string[] },
+    ): { properties?: Record<string, unknown> | null }[];
+  },
+  point: [number, number],
+): string | null {
+  if (!map.getLayer(LAND_FILL_LAYER)) return null;
+  return landNameOf(
+    map.queryRenderedFeatures(point, { layers: [LAND_FILL_LAYER] }),
+  );
+}
 
 /** The gauge a press lands on, or null when a pin, route or track is there
  *  too: each layer's click handler fires on its own, so this picks the winner. */
