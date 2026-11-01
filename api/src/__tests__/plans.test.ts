@@ -119,6 +119,11 @@ describe("GET /plans", () => {
   // Mutation: count every form rather than those the caller hasn't answered,
   // or count for a plan the caller only has an invite to.
   it("counts the forms the caller hasn't answered", async () => {
+    // Undated, so the count doesn't lapse when the fixed dates pass.
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { startDate: null, endDate: null },
+    });
     const [a, b] = await Promise.all(
       ["A", "B"].map((title, position) =>
         prisma.tripPlanForm.create({
@@ -134,13 +139,45 @@ describe("GET /plans", () => {
         (plan: { id: string }) => plan.id === planId,
       )?.unansweredForms;
     expect(await count(BOB_SUB)).toBe(1);
-    expect(await count(ALICE_SUB)).toBe(2);
+    // Alice leads the plan: made the forms, never nudged.
+    expect(await count(ALICE_SUB)).toBe(0);
     await prisma.tripPlanAnswer.create({
       data: { formId: b.id, userId: BOB_ID, answers: {} },
     });
     expect(await count(BOB_SUB)).toBe(0);
     await membership(CAROL_ID, "invited");
     expect(await count(CAROL_SUB)).toBe(0);
+  });
+
+  // Mutation: count for an archived or finished plan, whose page shows no
+  // forms to answer (`tripPlanFormsToAnswer`).
+  it("counts nothing for an archived or finished plan", async () => {
+    await prisma.tripPlanForm.create({
+      data: { planId, title: "A", visibleTo: "leaders", position: 0 },
+    });
+    const count = async () =>
+      (await request(API_URL).get("/plans").set(as(BOB_SUB))).body.plans.find(
+        (plan: { id: string }) => plan.id === planId,
+      )?.unansweredForms;
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { startDate: null, endDate: null },
+    });
+    expect(await count()).toBe(1);
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { archivedAt: new Date() },
+    });
+    expect(await count()).toBe(0);
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: {
+        archivedAt: null,
+        startDate: new Date("2020-01-01"),
+        endDate: new Date("2020-01-02"),
+      },
+    });
+    expect(await count()).toBe(0);
   });
 
   it("lists every plan the caller is in, invited to or asking to join", async () => {

@@ -29,8 +29,6 @@ const ANY: readonly TripPlanRole[] = ["leader", "editor", "member"];
 const WRITERS: readonly TripPlanRole[] = ["leader", "editor"];
 const LEADERS: readonly TripPlanRole[] = ["leader"];
 
-const FORMS_ON_WEB =
-  "A form is built once, at a desk, before the trip; Logjam GPS fills forms in and shows answers.";
 const PRINT_ON_WEB =
   "A summary is printed or saved as a PDF, which a browser does and a phone's Logjam GPS does not.";
 
@@ -96,14 +94,12 @@ export const PLAN_ADD_VERBS = [
     label: "Add a write-up section",
     roles: WRITERS,
   },
-  { id: "copy", icon: "copy", label: "Add a place or way", roles: ANY },
+  { id: "copy", icon: "add", label: "Add a place or way", roles: ANY },
   {
     id: "form",
     icon: "form",
     label: "Add a form",
     roles: LEADERS,
-    on: "web",
-    reason: FORMS_ON_WEB,
   },
   { id: "invite", icon: "addFriend", label: "Invite people", roles: LEADERS },
 ] as const satisfies readonly PlanVerbDeclaration[];
@@ -130,8 +126,6 @@ export const PLAN_FORM_VERBS = [
     icon: "edit",
     label: "Edit form",
     roles: LEADERS,
-    on: "web",
-    reason: FORMS_ON_WEB,
   },
   {
     id: "delete",
@@ -176,6 +170,12 @@ export type PlanVerb<Id extends string = string> = {
 export function planAddVerbLabel(id: PlanAddVerbId): string {
   return PLAN_ADD_VERBS.find((verb) => verb.id === id)!.label;
 }
+
+/** What a route drawn from a plan says when it is saved but not in the plan. */
+export const planRouteNotAdded = () => ({
+  title: "Route saved",
+  body: `It's in Saved, but couldn't be added to the plan. Add it from the plan's ${planAddVerbLabel("copy")}.`,
+});
 
 /** A plan verb's words, where one stands outside its ⋯ (the over notice's
  *  Start a trip log). */
@@ -397,7 +397,7 @@ export type PlanItemVerbId = (typeof PLAN_ITEM_VERBS)[number]["id"];
 
 /**
  * The verbs a caller has on one plan item: Download on a file, and Save a
- * copy, for anyone; Edit and Delete on what they added, or on anything for a
+ * copy on what someone else added (you have your own original); Edit and Delete on what they added, or on anything for a
  * leader or an editor, as planAccess.ts's `canChangeItem` allows.
  */
 export function planItemVerbs(
@@ -408,7 +408,8 @@ export function planItemVerbs(
   const changes = callerRole !== "member" || item.mine;
   const file = item.kind === "media";
   return planVerbsFor(PLAN_ITEM_VERBS, "web", callerRole, state).filter(
-    (verb) => (verb.id === "download" ? file : verb.id === "save" || changes),
+    (verb) =>
+      verb.id === "download" ? file : verb.id === "save" ? !item.mine : changes,
   );
 }
 
