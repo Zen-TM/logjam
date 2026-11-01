@@ -481,7 +481,7 @@ describe("statewide slope and hillshade", () => {
     expect(holdsHillshade({ ...clip, logicalKey: "terrarium" })).toBe(false);
     expect(holdsHillshade({ ...clip, kind: "slope-region" })).toBe(false);
   });
-  // Mutation: resolve Land with no `nearestRegion`, and two saved areas that
+  // Mutation: resolve Land with no `mainRegion`, and two saved areas that
   // share a low-zoom tile paint its translucent tint twice, with a seam.
   it("draws one land clip offline, and the archive online", () => {
     const at = (id: string, west: number): MapArtifact =>

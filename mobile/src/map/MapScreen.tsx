@@ -49,7 +49,6 @@ import {
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
   type ColorReliefLayerSpecification,
-  type FillLayerSpecification,
   type LineLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -91,7 +90,6 @@ import {
   LAND_EDGE_MINZOOM,
   landColor,
   landEdgeOpacity,
-  landFillOpacity,
   landNameOf,
   NSW_LAND,
   slopeReliefColor,
@@ -376,12 +374,6 @@ import { mapDataAttribution } from "./mapDataCredits";
 import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 
 /** The shared expression builder's untyped result, as MLRN types the paint. */
-type FillColor = NonNullable<
-  NonNullable<FillLayerSpecification["paint"]>["fill-color"]
->;
-type FillOpacity = NonNullable<
-  NonNullable<FillLayerSpecification["paint"]>["fill-opacity"]
->;
 type LineColor = NonNullable<
   NonNullable<LineLayerSpecification["paint"]>["line-color"]
 >;
@@ -4690,15 +4682,10 @@ export function MapScreen({
               id={`nsw-land-${r.key}`}
               source-layer={NSW_LAND.sourceLayer}
               beforeId={groundBefore[`nsw-land-${r.key}`]}
-              minzoom={r.layerMinZoom ?? 0}
+              minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
-              paint={{
-                "fill-color": landColor() as FillColor,
-                "fill-opacity": landFillOpacity() as FillOpacity,
-                // Tiles join in the middle of a holding, and an antialiased
-                // edge there would draw the tile grid across the tint.
-                "fill-antialias": false,
-              }}
+              // Unseen: it is what a tap reads, since a line has no inside.
+              paint={{ "fill-opacity": 0 }}
             />
             {LAND_EDGE_LINES.map(({ width, offset, blur, opacity }, i) => (
               <Layer

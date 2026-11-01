@@ -1,9 +1,7 @@
-// The Land overlay on a print: the same classes, tint and borders as a map
-// close in.
+// Land tenure on a print: the same classes and borders as a map.
 import {
   LAND_EDGE_LINES,
   landClass,
-  landTint,
   NSW_LAND,
   TILE_SIZE,
   type TileToMapTransform,
@@ -20,9 +18,8 @@ export type LandTileInput = {
 
 /** One feature of one tile on the map image: its rings as x,y pairs. */
 export type LandShape = {
+  /** The class's colour. */
   color: string;
-  /** The class's solid colour, for its border. */
-  edge: string;
   /** Map-image pixels to one pixel of a map tile drawn at its own zoom. */
   pixel: number;
   rings: Float64Array[];
@@ -34,7 +31,7 @@ export type LandShape = {
  * Decode every land tile and lay its polygons out on the map image. A tile that
  * does not decode is skipped. A tile's polygons run past its edge into its
  * neighbour's, so each is clipped to a whole-pixel square: two neighbours then
- * share an edge exactly, with no doubled tint and no seam.
+ * share an edge exactly, with no doubled line and no seam.
  */
 export function buildLand(
   tiles: readonly LandTileInput[],
@@ -67,8 +64,7 @@ export function buildLand(
       const scaleX = (size / feature.extent) * transform.scaleX;
       const scaleY = (size / feature.extent) * transform.scaleY;
       shapes.push({
-        color: landTint(kind),
-        edge: kind.colour,
+        color: kind.colour,
         // A map draws a 256-unit tile 512 pixels across.
         pixel: transform.scaleX / 2,
         clip,
@@ -87,10 +83,16 @@ export function buildLand(
 }
 
 /**
- * Tint the shapes whose tile reaches rows `top` to `bottom` of the map image,
- * and draw their borders. A canvas can't push a line inwards, so each is
- * stroked twice as wide with the polygon as its clip, and it has no blur a
- * print can trust in every browser, so the soft lines end in a hard edge.
+ * A soft line's strength on paper against a map's: a canvas line has no blur a
+ * print can trust in every browser, so it stops at a hard edge at full strength,
+ * and reads far stronger than the same line feathered away on a screen.
+ */
+const SOFT_LINE_ON_PAPER = 0.35;
+
+/**
+ * Draw the borders of the shapes whose tile reaches rows `top` to `bottom` of
+ * the map image. A canvas can't push a line inwards, so each is stroked twice
+ * as wide with its holding as the clip.
  */
 export function drawLand(
   ctx: Ctx,
@@ -98,7 +100,7 @@ export function drawLand(
   top: number,
   bottom: number,
 ) {
-  for (const { color, edge, pixel, rings, clip } of shapes) {
+  for (const { color, pixel, rings, clip } of shapes) {
     if (clip.bottom < top || clip.top > bottom) continue;
     ctx.save();
     ctx.beginPath();
@@ -109,22 +111,16 @@ export function drawLand(
       clip.bottom - clip.top,
     );
     ctx.clip();
-    const outline = () => {
-      ctx.beginPath();
-      for (const pts of rings) {
-        ctx.moveTo(pts[0]!, pts[1]!);
-        for (let j = 2; j < pts.length; j += 2)
-          ctx.lineTo(pts[j]!, pts[j + 1]!);
-        ctx.closePath();
-      }
-    };
-    ctx.fillStyle = color;
-    outline();
-    ctx.fill("evenodd");
+    ctx.beginPath();
+    for (const pts of rings) {
+      ctx.moveTo(pts[0]!, pts[1]!);
+      for (let j = 2; j < pts.length; j += 2) ctx.lineTo(pts[j]!, pts[j + 1]!);
+      ctx.closePath();
+    }
     ctx.clip("evenodd");
-    ctx.strokeStyle = edge;
-    for (const { width, offset, opacity } of LAND_EDGE_LINES) {
-      ctx.globalAlpha = opacity;
+    ctx.strokeStyle = color;
+    for (const { width, offset, blur, opacity } of LAND_EDGE_LINES) {
+      ctx.globalAlpha = blur ? opacity * SOFT_LINE_ON_PAPER : opacity;
       ctx.lineWidth = (offset * 2 + width) * pixel;
       ctx.stroke();
     }

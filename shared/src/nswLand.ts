@@ -6,7 +6,6 @@
 // answers that, so neither a name nor a colour here says "allowed" or "no
 // access", and none is red or a traffic-light green.
 import { NSW_5M } from "./demSources.js";
-import { rgbaCssFromHex } from "./topoSettings.js";
 
 export const NSW_LAND = {
   /** A saved clip is filed under this, beside the area it was saved with. */
@@ -56,9 +55,9 @@ export const LAND_CLASSES = [
 ] as const;
 
 /**
- * From this zoom a map draws `LAND_EDGE_LINES`. Further out a tile holds up to
- * 340,000 points, too many to stroke on a phone, and the lines blur into each
- * other: a tint says who holds what there instead.
+ * Land tenure draws from this zoom in. It is what someone standing at a fence
+ * wants, not someone looking at a region, and further out a tile holds up to
+ * 340,000 points, too many to stroke on a phone.
  */
 export const LAND_EDGE_MINZOOM = 12;
 
@@ -81,32 +80,8 @@ export const LAND_EDGE_LINES = [
  */
 export const LAND_TILE_MARGIN_PX = 10;
 
-/** How far past `LAND_EDGE_MINZOOM` the tint takes to fade and the lines to come in. */
+/** How far past `LAND_EDGE_MINZOOM` the lines take to fade in. */
 const LAND_FADE_ZOOMS = 0.75;
-/** A whole holding's tint: a border is what matters once one can be drawn. */
-const LAND_TINT_FAR = 0.2;
-const LAND_TINT_NEAR = 0.07;
-
-/** A class's colour across a holding once its border is drawn, as on a print. */
-export const landTint = ({ colour }: { colour: string }): string =>
-  rgbaCssFromHex(
-    `${colour}${Math.round(LAND_TINT_NEAR * 255)
-      .toString(16)
-      .padStart(2, "0")}`,
-  );
-
-/** The `fill-opacity` expression both clients tint the land with. */
-export function landFillOpacity(): unknown[] {
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    LAND_EDGE_MINZOOM,
-    LAND_TINT_FAR,
-    LAND_EDGE_MINZOOM + LAND_FADE_ZOOMS,
-    LAND_TINT_NEAR,
-  ];
-}
 
 /** The `line-opacity` expression of one of `LAND_EDGE_LINES`. */
 export function landEdgeOpacity(opacity: number): unknown[] {
@@ -121,7 +96,7 @@ export function landEdgeOpacity(opacity: number): unknown[] {
   ];
 }
 
-/** The `fill-color` and `line-color` expression: a class's solid colour. */
+/** The `line-color` expression: a class's colour. */
 export function landColor(): unknown[] {
   return [
     "match",

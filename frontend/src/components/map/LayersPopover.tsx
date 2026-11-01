@@ -177,7 +177,12 @@ export default function LayersPopover({
   const hasVegetation = completedTopoJobs.some((job) =>
     job.layers.some((layer) => layer.name === "vegetation"),
   );
-  const overlaysOn = [showPlaces, showWays, showGauges].filter(Boolean).length;
+  const overlaysOn = [
+    showPlaces,
+    showWays,
+    terrainLayers.land,
+    showGauges,
+  ].filter(Boolean).length;
 
   const close = () => {
     setView("overlays");
@@ -320,6 +325,10 @@ export default function LayersPopover({
                     checked={showWays}
                     onToggle={setShowWays}
                   />
+                  <LandRow
+                    checked={terrainLayers.land}
+                    onToggle={(on) => onTerrainLayerChange("land", on)}
+                  />
                   <OverlayRow
                     icon="gauge"
                     hue="var(--color-accent)"
@@ -371,7 +380,6 @@ export function TerrainPane({
   onOpenSharpened: () => void;
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
-  const [landLegendOpen, setLandLegendOpen] = useState(false);
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
@@ -417,26 +425,6 @@ export function TerrainPane({
           onClick={onOpenSlopeBands}
         />,
       ),
-    land: () => (
-      <Row
-        key="land"
-        title={terrainCopy.land}
-        trailing={
-          <>
-            <IconButton
-              icon="help"
-              label={terrainCopy.landAbout}
-              onClick={() => setLandLegendOpen(true)}
-            />
-            <Toggle
-              checked={layers.land}
-              onChange={(on) => onChange("land", on)}
-              label={`Show ${terrainCopy.land.toLowerCase()}`}
-            />
-          </>
-        }
-      />
-    ),
     hillshade: () => row("hillshade"),
     vegetation: () =>
       hasVegetation ? (
@@ -484,23 +472,6 @@ export function TerrainPane({
       >
         <p>{terrainCopy.vegetationLegend}</p>
       </Dialog>
-      <Dialog
-        open={landLegendOpen}
-        title={terrainCopy.land}
-        onClose={() => setLandLegendOpen(false)}
-      >
-        <p>{terrainCopy.landLegend}</p>
-        <ul className={classes.landLegend}>
-          {LAND_CLASSES.map(({ name, colour }) => (
-            <li key={name}>
-              <IconTile icon="layers" hue={colour} />
-              {name}
-            </li>
-          ))}
-        </ul>
-        <p>{terrainCopy.landCaveat}</p>
-        <p>{NSW_LAND.credit}</p>
-      </Dialog>
     </div>
   );
 }
@@ -536,6 +507,49 @@ function SlopeBandsView({
   );
 }
 
+/** The Land tenure row, with the legend its help button opens. */
+export function LandRow({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  const [legendOpen, setLegendOpen] = useState(false);
+  return (
+    <>
+      <OverlayRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={terrainCopy.land}
+        checked={checked}
+        onToggle={onToggle}
+        help={{
+          label: terrainCopy.landAbout,
+          onClick: () => setLegendOpen(true),
+        }}
+      />
+      <Dialog
+        open={legendOpen}
+        title={terrainCopy.land}
+        onClose={() => setLegendOpen(false)}
+      >
+        <p>{terrainCopy.landLegend}</p>
+        <ul className={classes.landLegend}>
+          {LAND_CLASSES.map(({ name, colour }) => (
+            <li key={name}>
+              <IconTile icon="layers" hue={colour} />
+              {name}
+            </li>
+          ))}
+        </ul>
+        <p>{terrainCopy.landCaveat}</p>
+        <p>{NSW_LAND.credit}</p>
+      </Dialog>
+    </>
+  );
+}
+
 function OverlayRow({
   icon,
   hue,
@@ -545,6 +559,7 @@ function OverlayRow({
   onToggle,
   onOpen,
   openLabel,
+  help,
 }: {
   icon: Glyph;
   hue: string;
@@ -554,6 +569,7 @@ function OverlayRow({
   onToggle: (next: boolean) => void;
   onOpen?: () => void;
   openLabel?: string;
+  help?: { label: string; onClick: () => void };
 }) {
   return (
     <Row
@@ -562,6 +578,9 @@ function OverlayRow({
       subtitle={subtitle}
       trailing={
         <>
+          {help && (
+            <IconButton icon="help" label={help.label} onClick={help.onClick} />
+          )}
           {onOpen && (
             <IconButton
               icon="disclosure"

@@ -113,9 +113,10 @@ export function terrainBeforeIds(
 }
 
 /**
- * Every switch of the Terrain tab: the layers above, and the sharpened areas'
- * optional vegetation layer, which is drawn from their own archives rather
- * than stacked into the basemap, so it is not a `TerrainLayerKey`.
+ * Every stored Terrain switch: the layers above, Land tenure among them though
+ * its row is listed under Overlays, and the sharpened areas' optional vegetation
+ * layer, which is drawn from their own archives rather than stacked into the
+ * basemap, so it is not a `TerrainLayerKey`.
  */
 export const TERRAIN_SWITCH_KEYS = [
   ...TERRAIN_LAYER_KEYS,

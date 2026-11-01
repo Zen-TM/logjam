@@ -629,11 +629,10 @@ describe("the map's layers", () => {
   // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(
-      TERRAIN_SWITCH_KEYS,
-    );
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(rows);
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
-      ...TERRAIN_SWITCH_KEYS,
+      ...rows,
       "sharpenedAreas",
       "slopeBands",
     ]);
@@ -755,6 +754,7 @@ describe("the map's overlays list", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
+      "land",
       "gauges",
       "importFile",
     ]);
@@ -762,6 +762,7 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "geoPdfs",
+      "land",
       "gauges",
       "importFile",
     ]);

@@ -753,7 +753,7 @@ export function resolveMapSource(
         "vector",
         "land-region",
         ctx,
-        nearestRegion(ref.viewport),
+        mainRegion(ref.viewport),
       );
     case "nsw-slope":
       return routeTerrain(

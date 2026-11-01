@@ -62,14 +62,13 @@ import {
   ChipRail,
   Toggle,
   Icon,
-  IconButton,
   type Glyph,
   SwitchRow,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import { terrainSwitch } from "./terrainSwitches";
+import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
@@ -166,7 +165,7 @@ export function MapLayersSheet({
   const styles = useStyles();
 
   const [tab, setTab] = useState<Tab>("basemap");
-  // A Terrain legend: a sub-mode of this sheet, never a second one
+  // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
   const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -194,10 +193,24 @@ export function MapLayersSheet({
         online={online}
         artifacts={artifacts}
         hasVegetation={hasVegetation}
-        onOpenLegend={setLegend}
+        onOpenLegend={() => setLegend("vegetation")}
       />
     ),
-    overlays: () => <LayersTab layers={layers} onImportFile={onImportFile} />,
+    overlays: () => (
+      <LayersTab
+        layers={layers}
+        onImportFile={onImportFile}
+        land={terrainSwitch(
+          "land",
+          terrainLayers.land,
+          basemapId,
+          online,
+          artifacts,
+        )}
+        onLandChange={(on) => onTerrainLayerChange("land", on)}
+        onOpenLandLegend={() => setLegend("land")}
+      />
+    ),
     offline: () => (
       <OfflineTab
         online={online}
@@ -214,7 +227,7 @@ export function MapLayersSheet({
   return (
     <BottomSheet
       visible={visible}
-      // The legend backs out to the Terrain tab, not out of the sheet.
+      // The legend backs out to its tab, not out of the sheet.
       onClose={legend ? () => setLegend(null) : onClose}
       onBack={legend ? () => setLegend(null) : undefined}
       title={legend ? MAP_TERRAIN.copy[legend] : MAP_LAYERS.title}
@@ -320,10 +333,9 @@ function TerrainTab({
   artifacts: readonly MapArtifact[];
   /** A sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
-  onOpenLegend: (legend: "vegetation" | "land") => void;
+  onOpenLegend: () => void;
 }) {
   const styles = useStyles();
-  const land = terrainSwitch("land", layers.land, basemapId, online, artifacts);
   const rows = {
     ...Object.fromEntries(
       TERRAIN_LAYER_KEYS.map((key) => {
@@ -348,21 +360,6 @@ function TerrainTab({
         ];
       }),
     ),
-    land: (
-      <SwitchRow
-        key="land"
-        title={MAP_TERRAIN.copy.land}
-        description={land.reason}
-        disabled={land.disabled}
-        style={styles.itemRow}
-        checked={land.checked}
-        onChange={(on) => onChange("land", on)}
-        help={{
-          label: MAP_TERRAIN.copy.landAbout,
-          onPress: () => onOpenLegend("land"),
-        }}
-      />
-    ),
     vegetation: hasVegetation ? (
       <SwitchRow
         key="vegetation"
@@ -373,7 +370,7 @@ function TerrainTab({
         onChange={(on) => onChange("vegetation", on)}
         help={{
           label: MAP_TERRAIN.copy.vegetationAbout,
-          onPress: () => onOpenLegend("vegetation"),
+          onPress: onOpenLegend,
         }}
       />
     ) : null,
@@ -494,9 +491,15 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
 function LayersTab({
   layers,
   onImportFile,
+  land,
+  onLandChange,
+  onOpenLandLegend,
 }: {
   layers: LayerToggleEntry[];
   onImportFile: () => void;
+  land: TerrainSwitchState;
+  onLandChange: (on: boolean) => void;
+  onOpenLandLegend: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -515,6 +518,18 @@ function LayersTab({
   > = {
     places: () => entryRow("places"),
     ways: () => entryRow("ways"),
+    land: () => (
+      <SwitchRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={MAP_OVERLAYS.copy.land}
+        description={land.reason}
+        disabled={land.disabled}
+        checked={land.checked}
+        onChange={onLandChange}
+        help={{ label: MAP_TERRAIN.copy.landAbout, onPress: onOpenLandLegend }}
+      />
+    ),
     gauges: () => entryRow("gauges"),
     geoPdfs: () => entryRow("geoPdfs"),
     importFile: () => (

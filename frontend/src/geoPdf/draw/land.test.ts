@@ -5,7 +5,6 @@ import {
   computeTileToMapTransform,
   LAND_CLASSES,
   LAND_EDGE_LINES,
-  landTint,
   NSW_LAND,
   TILE_SIZE,
 } from "@logjam/shared";
@@ -53,10 +52,10 @@ const at = (dx: number, tenure: string) => ({
 
 describe("buildLand", () => {
   // Mutation: read the colour from anything but the class, and a print's
-  // tints stop matching the map's legend.
-  it("tints a tile in its class's colour", () => {
+  // borders stop matching the map's legend.
+  it("colours a tile's borders by its class", () => {
     const [shape] = buildLand([at(0, "Private")], t);
-    expect(shape!.color).toBe(landTint(LAND_CLASSES[0]));
+    expect(shape!.color).toBe(LAND_CLASSES[0].colour);
     expect(shape!.rings).toHaveLength(1);
   });
 
@@ -69,7 +68,7 @@ describe("buildLand", () => {
   });
 
   // Mutation: round neither edge, and neighbours overlap by a fraction of a
-  // pixel, which doubles the tint in a line down the print.
+  // pixel, which doubles a border where it crosses the join.
   it("gives neighbouring tiles exactly one shared edge", () => {
     const [a, b] = buildLand([at(0, "Private"), at(1, "Private")], t);
     expect(a!.clip.right).toBe(b!.clip.left);
@@ -94,15 +93,13 @@ describe("drawLand", () => {
       moveTo: vi.fn(),
       lineTo: vi.fn(),
       closePath: vi.fn(),
-      fill: vi.fn(),
       stroke: vi.fn(),
-      fillStyle: "",
     };
     const { top, bottom } = shapes[0]!.clip;
     drawLand(ctx as unknown as Ctx, shapes, bottom + 1, bottom + 100);
-    expect(ctx.fill).not.toHaveBeenCalled();
+    expect(ctx.stroke).not.toHaveBeenCalled();
     drawLand(ctx as unknown as Ctx, shapes, top, bottom);
-    expect(ctx.fill).toHaveBeenCalledWith("evenodd");
+    expect(ctx.stroke).toHaveBeenCalledTimes(LAND_EDGE_LINES.length);
     expect(ctx.clip).toHaveBeenCalledTimes(2);
   });
 
@@ -119,10 +116,8 @@ describe("drawLand", () => {
       moveTo: vi.fn(),
       lineTo: vi.fn(),
       closePath: vi.fn(),
-      fill: vi.fn(),
       clip: (rule?: string) => calls.push(`clip ${rule ?? "tile"}`),
       stroke: log("stroke"),
-      fillStyle: "",
     };
     const shapes = buildLand([at(0, "Private")], t);
     drawLand(ctx as unknown as Ctx, shapes, 0, 800);

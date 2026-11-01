@@ -10,7 +10,6 @@ export const MAP_TERRAIN = {
   sections: [
     { key: "contours" },
     { key: "slope" },
-    { key: "land" },
     { key: "hillshade" },
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
@@ -39,7 +38,9 @@ export const MAP_TERRAIN = {
     vegetationAbout: "About vegetation",
     vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
-    // Behind the Land tenure row's help button, titled with its label.
+    // Land tenure stacks with this group, but its row is in `MAP_OVERLAYS`:
+    // who holds the land is no part of the shape of the ground.
+    // Behind that row's help button, titled with its label.
     landAbout: "About land tenure",
     landLegend:
       "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.",

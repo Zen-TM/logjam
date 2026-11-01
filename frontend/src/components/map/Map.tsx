@@ -25,7 +25,6 @@ import {
   LAND_EDGE_MINZOOM,
   landColor,
   landEdgeOpacity,
-  landFillOpacity,
   nswContourStyle,
   NSW_LAND,
   TERRAIN_LAYER_KEYS,
@@ -2679,14 +2678,9 @@ function Map({
             type: "fill",
             source: srcId,
             "source-layer": NSW_LAND.sourceLayer,
-            paint: {
-              "fill-color": landColor() as maplibregl.ExpressionSpecification,
-              "fill-opacity":
-                landFillOpacity() as maplibregl.ExpressionSpecification,
-              // Tiles join in the middle of a holding, and an antialiased edge
-              // there would draw the tile grid across the tint.
-              "fill-antialias": false,
-            },
+            minzoom: LAND_EDGE_MINZOOM,
+            // Unseen: it is what a tap reads, since a line has no inside.
+            paint: { "fill-opacity": 0 },
           });
         }
         LAND_EDGE_LINES.forEach(({ width, offset, blur, opacity }, i) => {
