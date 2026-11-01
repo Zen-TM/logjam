@@ -15,7 +15,6 @@ const warn = vi.hoisted(() => vi.fn());
 
 const row = vi.hoisted(() => (subject: string) => ({
   id: "user-1",
-  cognitoId: subject,
   subject,
   email: "a@example.com",
   storageUsedBytes: 0n,
