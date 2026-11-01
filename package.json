@@ -19,7 +19,7 @@
     "*.py": "ruff format --force-exclude"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.4",
     "@playwright/mcp": "0.0.83",
     "lint-staged": "^17.6.0",
     "simple-git-hooks": "^2.11.1"
