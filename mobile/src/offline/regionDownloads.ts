@@ -23,6 +23,7 @@ import {
   DEM_SOURCES,
   NSW_CONTOURS,
   NSW_LAND,
+  NSW_LAND_CLIP,
   NSW_SLOPE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
@@ -119,7 +120,7 @@ function clipArchiveFor(spec: RegionClipSpec): {
   }
   if (spec.contours) return cdn(NSW_CONTOURS);
   if (spec.slope) return cdn(NSW_SLOPE);
-  if (spec.land) return cdn(NSW_LAND);
+  if (spec.land) return cdn(NSW_LAND_CLIP);
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
   return cdn({ archivePath: entry.urlTemplate });

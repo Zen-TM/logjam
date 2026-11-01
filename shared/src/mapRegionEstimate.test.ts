@@ -280,13 +280,13 @@ describe("planRegionForBasemaps", () => {
   // measured clip. (Leaving Land out of the totals turns the two sum tests
   // above red.)
   it("prices the land clip from its measured tiles", () => {
-    // A real clip of 40 km of the Blue Mountains is 3.1 MB.
+    // A real clip of 40 km of the Blue Mountains is 769 KB.
     const box = { west: 150.05, south: -33.95, east: 150.5, north: -33.55 };
     const { land } = planRegionForBasemaps(box, [], 15, maxZoomFor);
-    expect(land.meanBytes).toBeGreaterThan(2_400_000);
-    expect(land.meanBytes).toBeLessThan(3_600_000);
-    expect(land.p90Bytes).toBeGreaterThan(3_100_000);
-    expect(land.p90Bytes).toBeLessThan(5_000_000);
+    expect(land.meanBytes).toBeGreaterThan(600_000);
+    expect(land.meanBytes).toBeLessThan(950_000);
+    expect(land.p90Bytes).toBeGreaterThan(769_000);
+    expect(land.p90Bytes).toBeLessThan(2_000_000);
   });
 
   // Mutation: halve SLOPE_TILE_BYTES, and the estimate no longer brackets
