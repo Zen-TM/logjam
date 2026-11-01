@@ -6,7 +6,6 @@ import {
   deleteAccountPhraseMatches,
 } from "@logjam/shared";
 import { useId, useState } from "react";
-import { deleteUser } from "aws-amplify/auth";
 import { deleteAccount } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { Button, Dialog, TextField, ErrorBanner } from "../../ui";
@@ -15,7 +14,7 @@ import classes from "./DeleteAccountDialog.module.css";
 /**
  * The one irreversible thing in the app, and the only place a typed phrase
  * guards a button (DESIGN.md). Everything else destructive is undoable, or
- * loses one row; this ends the account, in both Cognito and our own database.
+ * loses one row; this ends the account, in our own database and at the identity provider (the API does both).
  *
  * The phrase is "delete <username>" rather than "DELETE": it cannot be typed by
  * reflex, and it names the account being ended — which matters on a browser
@@ -63,10 +62,8 @@ function DeleteAccountForm({
     setDeleting(true);
     setError(null);
     try {
-      // Our own record first: a Cognito user with no account row can still
-      // sign in and be repaired, where the reverse cannot.
+      // The API deletes our records, then the sign-in at the provider.
       await deleteAccount();
-      await deleteUser();
       onDeleted();
     } catch (err) {
       console.error(err);
