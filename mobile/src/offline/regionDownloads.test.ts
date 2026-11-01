@@ -109,7 +109,8 @@ vi.mock("@logjam/shared", async (importOriginal) => {
   };
 });
 
-const { fetchExtractRequest, planExtract } = await import("@logjam/shared");
+const { fetchExtractRequest, LAND_EDGE_MINZOOM, NSW_LAND_CLIP, planExtract } =
+  await import("@logjam/shared");
 const { resumeIndex, runRegionClip } = await import("./regionDownloads");
 type RegionCancelToken = { stop: null | "pause" | "cancel" };
 
@@ -366,6 +367,21 @@ describe("runRegionClip", () => {
         logicalKey: "nsw-5m-slope",
         sourceType: "raster-dem",
         minzoom: 8,
+      }),
+    );
+  });
+
+  // Mutation: cut Land from the archive's own z8, and a saved area carries
+  // about five times the bytes in zooms no map draws.
+  it("cuts a land clip from the zoom a map draws it", async () => {
+    expect((await run({ land: true })).status).toBe("ready");
+    for (const { url } of cdn.calls)
+      expect(url).toBe(`${CDN}/${NSW_LAND_CLIP.archivePath}`);
+    expect(insertArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "land-region",
+        logicalKey: NSW_LAND_CLIP.id,
+        minzoom: LAND_EDGE_MINZOOM,
       }),
     );
   });
