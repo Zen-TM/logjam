@@ -823,6 +823,8 @@ export const TRIP_PLAN_FORMS = {
     startFrom: "Start from",
     blank: "A blank form",
     title: "Title",
+    titlePlaceholder: "For example, Gear to borrow",
+    questionPlaceholder: "For example, What size wetsuit do you wear?",
     visibleTo: "Who sees the answers",
     visibleToLeaders: "Leaders",
     visibleToMembers: "Everyone in the plan",
@@ -847,6 +849,11 @@ export const TRIP_PLAN_FORMS = {
     add: "Add form",
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
+    titleNeeded: "Give the form a title.",
+    discardTitle: "Discard changes?",
+    discardBody: "What you changed in this form will be lost.",
+    discardKeep: "Keep editing",
+    discardConfirm: "Discard changes",
     // The chooser a new form starts from.
     chooseTemplates: "Templates",
     chooseMine: "From your other plans",
@@ -1052,16 +1059,20 @@ export function tripPlanFormTally(
 }
 
 /** "3 of 5 answered", and "Not answered yet: bob, carol" when anyone is left. */
-export function tripPlanFormTallyLines(tally: {
-  answered: number;
-  total: number;
-  missing: readonly TripPlanUserRef[];
-}): string[] {
+export function tripPlanFormTallyLines(
+  tally: {
+    answered: number;
+    total: number;
+    missing: readonly TripPlanUserRef[];
+  },
+  /** The viewer's id: their own name reads "you". */
+  me?: string,
+): string[] {
   return [
     `${tally.answered} of ${tally.total} answered`,
     ...(tally.missing.length > 0
       ? [
-          `Not answered yet: ${tally.missing.map((user) => user.username).join(", ")}`,
+          `Not answered yet: ${tally.missing.map((user) => (user.id === me ? "you" : user.username)).join(", ")}`,
         ]
       : []),
   ];
@@ -1338,3 +1349,11 @@ export function tripPlanBulkDone(
     ? `${verb} ${plans}.`
     : `${verb} ${done} of ${plans}. The rest didn't go through.`;
 }
+
+/** "20 forms at most": why an Add control is disabled at its cap. */
+export const tripPlanAtMost = (max: number, noun: string): string =>
+  `${max} ${noun} at most`;
+
+/** A row's ⋯ label: "Actions for Arethusa Canyon". */
+export const tripPlanActionsFor = (name: string): string =>
+  `Actions for ${name}`;

@@ -1,8 +1,7 @@
 // Save a copy (`PLAN_ITEM_VERBS`): the caller's own copy of a plan item, in
 // their places or ways. The copy is theirs from then on, and changes on
-// either side don't reach the other (`saveCopyLine`), so it confirms first;
-// a place with photos asks whether they come, as a friend's copy does
-// (`useRememberedCopyMedia`). Logjam Web's twin is
+// either side don't reach the other (`saveCopyLine`), so it confirms first.
+// A place's photos always come along: nothing to ask. Logjam Web's twin is
 // frontend/src/components/plans/PlanItems.tsx's confirm. It works on an
 // archived plan too.
 //
@@ -23,10 +22,9 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { requestSync } from "../sync/syncEngine";
 import { makeStyles, muted, spacing } from "../theme";
-import { BottomSheet, Button, ErrorBanner, SwitchRow } from "../ui";
+import { BottomSheet, Button, ErrorBanner } from "../ui";
 import { savePlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
@@ -38,12 +36,10 @@ export type SaveCopyTarget = {
   kind: TripPlanItemKind;
   id: string;
   title: string;
-  /** A place's photos: the switch shows only when there are some. */
-  photos: number;
 };
 
 /**
- * Save a copy's panel for `target`: the line, the photos switch, then Save in
+ * Save a copy's panel for `target`: the line, then Save in
  * the footer. A host passes `closable` to its BottomSheet, so a save in
  * flight can't be dismissed and land on the next target. `onFinished` closes
  * the host's sheet before the toast, which a Modal sheet would cover.
@@ -63,7 +59,6 @@ export function useSaveCopyPanel({
   onDone: (message: string, tone: "info" | "error") => void;
 }) {
   const styles = useStyles();
-  const [withMedia, toggleMedia] = useRememberedCopyMedia(target !== null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Each target starts clean.
@@ -73,18 +68,12 @@ export function useSaveCopyPanel({
     setOpenedFor(key);
     setError(null);
   }
-  const asksPhotos = target?.kind === "place" && target.photos > 0;
 
   async function save(item: SaveCopyTarget) {
     setBusy(true);
     setError(null);
     try {
-      const result = await savePlanItem(
-        planId,
-        item.kind,
-        item.id,
-        asksPhotos ? withMedia : undefined,
-      );
+      const result = await savePlanItem(planId, item.kind, item.id, true);
       // The copy is a row of the caller's own, which reaches the phone by
       // the next sync pull: asked for now, so it shows at once.
       void requestSync().catch(console.error);
@@ -120,14 +109,6 @@ export function useSaveCopyPanel({
         <Text style={styles.line}>
           {target.title}. {copy.saveCopyLine}
         </Text>
-        {asksPhotos ? (
-          <SwitchRow
-            title={copy.saveCopyPhotos}
-            checked={withMedia}
-            disabled={busy}
-            onChange={toggleMedia}
-          />
-        ) : null}
       </View>
     ) : null,
     footer: target ? (

@@ -6,12 +6,13 @@
 // (`addCopyLine`), and the files count against the adder's storage
 // (`tripPlanAddCopyPriceLine`). Logjam Web's twin is
 // frontend/src/components/plans/PlanAddCopyDialog.tsx. Online only.
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import {
   formatBytes,
   mediaDisplayName,
   messageFromError,
+  placeMatchesSearch,
   planAddVerbLabel,
   tripPlanAddCopiesLabel,
   tripPlanAddCopyPriceLine,
@@ -27,7 +28,6 @@ import {
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { unavailableReasonText } from "../auth/capabilities";
 import { listStandaloneMedia, type MirrorMedia } from "../sync/mirrorStore";
-import { getSyncStateValue } from "../sync/syncDb";
 import {
   useMirrorPlaces,
   useMirrorRoutes,
@@ -67,6 +67,7 @@ type Pick = {
   id: string;
   title: string;
   bytes: number;
+  altNames?: string[];
   icon: Glyph;
   hue?: string;
 };
@@ -76,11 +77,14 @@ export function AddCopySheet({
   planId,
   visible,
   online,
+  me,
   onClose,
   onDone,
 }: {
   planId: string;
   visible: boolean;
+  /** The caller's user id: only their own routes are theirs to add. */
+  me: string | null;
   online: boolean;
   onClose: () => void;
   onDone: (message: string, tone: "info" | "error") => void;
@@ -98,11 +102,6 @@ export function AddCopySheet({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Only the caller's own routes are theirs to add.
-  const [me, setMe] = useState<string | null>(null);
-  useEffect(() => {
-    void getSyncStateValue("userId").then(setMe).catch(console.error);
-  }, []);
 
   // Files are the mirror's imports and recordings.
   useEffect(() => {
@@ -132,9 +131,14 @@ export function AddCopySheet({
     }
   }
 
-  const tickedPlaceIds = ticked
-    .filter((key) => key.startsWith("place:"))
-    .map((key) => key.slice("place:".length));
+  const tickedKeys = useMemo(() => new Set(ticked), [ticked]);
+  const tickedPlaceIds = useMemo(
+    () =>
+      ticked
+        .filter((key) => key.startsWith("place:"))
+        .map((key) => key.slice("place:".length)),
+    [ticked],
+  );
   const offered = useMemo(
     () =>
       addableFromMirror(
@@ -147,39 +151,49 @@ export function AddCopySheet({
       ),
     [places.data, routes.data, files, me, pendingCreates, tickedPlaceIds],
   );
-  const rows: Record<TripPlanItemGroup, Pick[]> = {
-    // Places keep the accent, as the plan's own list does.
-    places: offered.places.map((place) => ({
-      kind: "place",
-      id: place.id,
-      title: place.name,
-      bytes: 0,
-      icon: "place",
-    })),
-    ways: [
-      ...offered.routes.map((route) => ({
-        kind: "route" as const,
-        id: route.id,
-        title: route.name,
+  const rows = useMemo(
+    (): Record<TripPlanItemGroup, Pick[]> => ({
+      // Places keep the accent, as the plan's own list does.
+      places: offered.places.map((place) => ({
+        kind: "place",
+        id: place.id,
+        title: place.name,
+        altNames: place.altNames,
         bytes: 0,
-        icon: "route" as const,
-        hue: assetHue.route,
+        icon: "place",
       })),
-      ...offered.files.map((file) => ({
-        kind: "media" as const,
-        id: file.id,
-        title: mediaDisplayName(file),
-        bytes: file.fileSizeBytes ?? 0,
-        // A recording and an import look as they do in Saved.
-        ...(file.origin === "track"
-          ? { icon: "track" as const, hue: assetHue.track }
-          : { icon: "importedFile" as const, hue: assetHue.import }),
-      })),
-    ],
-  };
+      ways: [
+        ...offered.routes.map((route) => ({
+          kind: "route" as const,
+          id: route.id,
+          title: route.name,
+          bytes: 0,
+          icon: "route" as const,
+          hue: assetHue.route,
+        })),
+        ...offered.files.map((file) => ({
+          kind: "media" as const,
+          id: file.id,
+          title: mediaDisplayName(file),
+          bytes: file.fileSizeBytes ?? 0,
+          // A recording and an import look as they do in Saved.
+          ...(file.origin === "track"
+            ? { icon: "track" as const, hue: assetHue.track }
+            : { icon: "importedFile" as const, hue: assetHue.import }),
+        })),
+      ],
+    }),
+    [offered, assetHue],
+  );
   // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
   const picks = tripPlanAddPicks([...rows.places, ...rows.ways], ticked);
-  const isTicked = (pick: Pick) => ticked.includes(keyOf(pick));
+  const toggle = useCallback(
+    (key: string) =>
+      setTicked((was) =>
+        was.includes(key) ? was.filter((each) => each !== key) : [...was, key],
+      ),
+    [],
+  );
   const priceLine = tripPlanAddCopyPriceLine({
     bytes: picks.reduce((sum, each) => sum + each.bytes, 0),
     placesPicked: picks.some((each) => each.kind === "place"),
@@ -224,8 +238,8 @@ export function AddCopySheet({
 
   // Ticks outlive a search: they are kept by key, not by what is shown.
   const needle = search.trim().toLowerCase();
-  const list = rows[group].filter(
-    (each) => !needle || each.title.toLowerCase().includes(needle),
+  const list = rows[group].filter((each) =>
+    placeMatchesSearch({ name: each.title, altNames: each.altNames }, search),
   );
   return (
     <BottomSheet
@@ -283,22 +297,13 @@ export function AddCopySheet({
           />
         ) : (
           list.map((each) => (
-            <Row
+            <PickRow
               key={keyOf(each)}
-              icon={each.icon}
-              hue={each.hue ?? theme.accent}
-              title={each.title}
-              subtitle={each.bytes > 0 ? formatBytes(each.bytes) : undefined}
-              selected={isTicked(each)}
+              pick={each}
+              ticked={tickedKeys.has(keyOf(each))}
               disabled={busy}
-              right={<SelectionMark selected={isTicked(each)} />}
-              onPress={() =>
-                setTicked((was) =>
-                  was.includes(keyOf(each))
-                    ? was.filter((key) => key !== keyOf(each))
-                    : [...was, keyOf(each)],
-                )
-              }
+              accent={theme.accent}
+              onToggle={toggle}
             />
           ))
         )}
@@ -306,6 +311,34 @@ export function AddCopySheet({
     </BottomSheet>
   );
 }
+
+/** Memoised: a tick or a keystroke redraws only the rows that changed. */
+const PickRow = memo(function PickRow({
+  pick,
+  ticked,
+  disabled,
+  accent,
+  onToggle,
+}: {
+  pick: Pick;
+  ticked: boolean;
+  disabled: boolean;
+  accent: string;
+  onToggle: (key: string) => void;
+}) {
+  return (
+    <Row
+      icon={pick.icon}
+      hue={pick.hue ?? accent}
+      title={pick.title}
+      subtitle={pick.bytes > 0 ? formatBytes(pick.bytes) : undefined}
+      selected={ticked}
+      disabled={disabled}
+      right={<SelectionMark selected={ticked} />}
+      onPress={() => onToggle(keyOf(pick))}
+    />
+  );
+});
 
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },

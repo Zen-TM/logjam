@@ -4,7 +4,7 @@
 // person's ⋯ (`planMemberVerbs`): another role, or Remove. Every remove sends
 // the status the leader saw, so a stale row removes nobody (409). Every write
 // is online-only, so offline each control is disabled with its reason.
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
@@ -13,6 +13,8 @@ import {
   planAddVerbLabel,
   planMemberVerbs,
   planRemoveConfirm,
+  planSelfRoleConfirm,
+  tripPlanActionsFor,
   planTurnDownConfirm,
   tripPlanFilesChargedTo,
   tripPlanGoing,
@@ -28,12 +30,12 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { getSyncStateValue } from "../sync/syncDb";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
   IconButton,
+  ListEnd,
   Row,
   SectionHeader,
   StatusPill,
@@ -45,31 +47,38 @@ import { afterPlanWrite } from "./plansCache";
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
+/** The first form a person answered, for a leader reading their request. */
+const formAnsweredBy = (plan: TripPlanView, userId: string) =>
+  plan.forms.find((form) =>
+    form.answers.some((answer) => answer.user.id === userId),
+  )?.id ?? null;
+
 export function PeopleView({
   plan,
+  myId,
   canInvite,
   online,
+  onSeeAnswers,
   onInfo,
   onError,
 }: {
   plan: TripPlanView;
+  /** The caller's user id: whose row is theirs. */
+  myId: string | null;
   /** Invite people is the caller's to run (a leader, the plan not archived). */
   canInvite: boolean;
   online: boolean;
+  /** A request's answers: the form sheet opens on the form they answered. */
+  onSeeAnswers: (formId: string) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  // The mirror's own account: whose row is the caller's.
-  const [myId, setMyId] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<TripPlanMemberView | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   // The person a write is running for: their row's controls wait for it.
   const [busyId, setBusyId] = useState<string | null>(null);
-  useEffect(() => {
-    void getSyncStateValue("userId").then(setMyId).catch(console.error);
-  }, []);
 
   const archived = plan.archivedAt != null;
   const write = (
@@ -130,14 +139,32 @@ export function PeopleView({
   const run = (id: PlanMemberVerbId, member: TripPlanMemberView) => {
     setMenuFor(null);
     const role = PLAN_ROLE_OF_VERB[id];
-    if (role)
-      return write(
+    if (!role) return remove(member);
+    const change = () =>
+      write(
         member,
         () => setMemberRole(plan.id, member.user.id, role),
         null,
         copy.roleFailed,
       );
-    remove(member);
+    // A leader stepping down can't undo it themselves: confirmed.
+    if (
+      member.user.id === myId &&
+      member.role === "leader" &&
+      role !== "leader"
+    ) {
+      const confirm = planSelfRoleConfirm(
+        role,
+        going
+          .filter((each) => each.role === "leader" && each.user.id !== myId)
+          .map((each) => each.user.username),
+      );
+      return Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
+        { text: "Cancel", style: "cancel" },
+        { text: confirm.confirmLabel, style: "destructive", onPress: change },
+      ]);
+    }
+    change();
   };
 
   const turnDown = (member: TripPlanMemberView) => {
@@ -181,20 +208,6 @@ export function PeopleView({
 
   return (
     <>
-      {canInvite ? (
-        <>
-          <Button
-            label={planAddVerbLabel("invite")}
-            icon="addFriend"
-            variant="outlineAccent"
-            disabled={!online}
-            disabledReason={OFFLINE}
-            onPress={() => setInviteOpen(true)}
-          />
-          {/* The button only dims: the words go under it (ui/Button.tsx). */}
-          {online ? null : <Text style={styles.note}>{OFFLINE}</Text>}
-        </>
-      ) : null}
       {asking.length > 0 ? (
         <SectionHeader title={copy.peopleAsking} count={asking.length} />
       ) : null}
@@ -234,6 +247,16 @@ export function PeopleView({
                 disabledReason={OFFLINE}
                 onPress={() => turnDown(member)}
               />
+              {formAnsweredBy(plan, member.user.id) ? (
+                <Button
+                  label={copy.seeAnswers}
+                  compact
+                  variant="ghost"
+                  onPress={() =>
+                    onSeeAnswers(formAnsweredBy(plan, member.user.id)!)
+                  }
+                />
+              ) : null}
             </View>
           }
         />
@@ -259,7 +282,9 @@ export function PeopleView({
                 {verbs.length > 0 ? (
                   <IconButton
                     icon="overflow"
-                    accessibilityLabel={`Actions for ${member.user.username}`}
+                    accessibilityLabel={tripPlanActionsFor(
+                      member.user.username,
+                    )}
                     color={theme.textMuted}
                     disabled={busyId === member.user.id}
                     onPress={() => setMenuFor(member)}
@@ -286,25 +311,42 @@ export function PeopleView({
                 : undefined
           }
           right={
-            <Button
-              label={copy.cancelInvite}
-              compact
-              variant="ghost"
-              loading={busyId === member.user.id}
-              disabled={!online}
-              disabledReason={OFFLINE}
-              onPress={() =>
-                write(
-                  member,
-                  () => removeMember(plan.id, member.user.id, "invited"),
-                  copy.inviteCancelled,
-                  copy.cancelInviteFailed,
-                )
-              }
-            />
+            archived ? undefined : (
+              <Button
+                label={copy.cancelInvite}
+                compact
+                variant="ghost"
+                loading={busyId === member.user.id}
+                disabled={!online}
+                disabledReason={OFFLINE}
+                onPress={() =>
+                  write(
+                    member,
+                    () => removeMember(plan.id, member.user.id, "invited"),
+                    copy.inviteCancelled,
+                    copy.cancelInviteFailed,
+                  )
+                }
+              />
+            )
           }
         />
       ))}
+
+      {canInvite ? (
+        <ListEnd>
+          <Button
+            label={planAddVerbLabel("invite")}
+            icon="addFriend"
+            variant="outlineAccent"
+            disabled={!online}
+            disabledReason={OFFLINE}
+            onPress={() => setInviteOpen(true)}
+          />
+          {/* The button only dims: the words go under it (ui/Button.tsx). */}
+          {online ? null : <Text style={styles.note}>{OFFLINE}</Text>}
+        </ListEnd>
+      ) : null}
 
       <BottomSheet
         visible={menuFor !== null}

@@ -16,6 +16,7 @@ import {
   TRIP_PLAN_PAGE,
   SYSTEM_PLACE_TYPES,
   tripPlanAddedByLine,
+  tripPlanCopyCoordinatesLabel,
   type TripPlanPlace,
 } from "@logjam/shared";
 
@@ -60,7 +61,6 @@ export function PlanPlaceSheet({
             kind: "place",
             id: place.id,
             title: place.name,
-            photos: place.media.length,
           }
         : null,
     online,
@@ -108,10 +108,23 @@ export function PlanPlaceSheet({
       ) : place ? (
         <View style={styles.body}>
           <Text style={styles.detail}>
-            {[type?.name ?? "Place", tripPlanAddedByLine(place.addedBy)]
+            {[
+              type?.name ?? TRIP_PLAN_PAGE.copy.placeTypeFallback,
+              tripPlanAddedByLine(place.addedBy),
+            ]
               .filter(Boolean)
               .join(" · ")}
           </Text>
+          {place.altNames.length > 0 ? (
+            <Text style={styles.detail}>
+              {PLACE_PAGE.copy.alsoKnownAs} {place.altNames.join(", ")}
+            </Text>
+          ) : null}
+          {place.notes ? (
+            <Text style={styles.notes} selectable>
+              {place.notes}
+            </Text>
+          ) : null}
           <SectionHeader title={PLACE_PAGE.copy.position} />
           <Row
             icon="place"
@@ -122,7 +135,7 @@ export function PlanPlaceSheet({
                 : undefined
             }
             right={<Icon idea="copy" size={20} color={theme.textMuted} />}
-            accessibilityLabel={`Copy the coordinates of ${place.name}`}
+            accessibilityLabel={tripPlanCopyCoordinatesLabel(place.name)}
             // RN core Clipboard, as the place page's copy.
             onPress={() => {
               Clipboard.setString(position);
@@ -174,11 +187,6 @@ export function PlanPlaceSheet({
             disabled={!online}
             onPress={() => setSaving(true)}
           />
-          {place.notes ? (
-            <Text style={styles.notes} selectable>
-              {place.notes}
-            </Text>
-          ) : null}
         </View>
       ) : null}
       {viewing?.length ? (

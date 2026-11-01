@@ -2,8 +2,10 @@
 // Web's menu renders from), and the form behind Edit, as modes of one sheet
 // (mobile/DESIGN.md §4). Download is left out: a file opens in the viewer
 // from its row. Save a copy is the caller's sheet, opened once this one has
-// closed. Any refused write fetches the plan again and closes the form with
-// the API's sentence: the next Edit starts from the plan as it now is.
+// closed. Any refused write fetches the plan again and fails
+// the save with the API's sentence over the form, which keeps what was typed
+// and shows the plan's value under a field the plan changed meanwhile
+// (`tripPlanInPlanNow`); an item gone from the plan closes the sheet.
 import { Fragment, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
@@ -16,6 +18,10 @@ import {
   messageFromError,
   planItemDeleteConfirm,
   planItemVerbs,
+  tripPlanAdoptTheirs,
+  tripPlanInPlanNow,
+  tripPlanSame,
+  tripPlanTheirsChanged,
   SYSTEM_FIELD_DEFS,
   TRIP_PLAN_PAGE,
   validatePlacePayload,
@@ -49,6 +55,7 @@ export const itemTitle = (item: TripPlanItem) =>
 
 export function PlanItemSheet({
   item,
+  current,
   planId,
   role,
   me,
@@ -61,6 +68,8 @@ export function PlanItemSheet({
 }: {
   /** The item whose ⋯ this is; null while closed. */
   item: TripPlanItem | null;
+  /** That item as the plan now has it, once fetched again. */
+  current: TripPlanItem | null;
   planId: string;
   role: TripPlanRole;
   /** The caller's user id: a member changes only what they added. */
@@ -81,13 +90,36 @@ export function PlanItemSheet({
   const [busy, setBusy] = useState(false);
   // Reset for each item the sheet opens on.
   const [shownFor, setShownFor] = useState<string | null>(null);
+  // What a Save compares against: the item as opened, then as the plan was
+  // fetched again. `opened` is what "changed meanwhile" is measured from.
+  const [seen, setSeen] = useState<TripPlanItem | null>(null);
+  const [opened, setOpened] = useState<ItemWords | null>(null);
+  const [moved, setMoved] = useState(false);
   const key = item ? `${item.kind}:${item.id}` : null;
   if (key !== shownFor) {
     setShownFor(key);
     setEditing(false);
     setError(null);
+    setSeen(item);
+    setMoved(false);
+    setOpened(item ? itemWords(item) : null);
     if (item) setValues(itemWords(item));
+  } else if (seen && current && !tripPlanSame(current, seen)) {
+    setValues(
+      tripPlanAdoptTheirs(itemWords(seen), values, itemWords(current)).values,
+    );
+    setSeen(current);
+    setMoved(true);
   }
+  const nowWords = current ? itemWords(current) : null;
+  /** The plan's words under a field the user edited and the plan changed. */
+  const theirs = (field: string) =>
+    moved &&
+    nowWords &&
+    opened &&
+    tripPlanTheirsChanged([field], values, nowWords, opened)
+      ? tripPlanInPlanNow(nowWords[field])
+      : undefined;
   // A Save a copy is parked and opened from `onClosed`: a sheet can't open
   // while this one is closing.
   const parked = useRef<(() => void) | null>(null);
@@ -156,19 +188,25 @@ export function PlanItemSheet({
       );
       if (problem) return setError(problem);
     }
-    const patch = itemPatch(target, values);
+    const base = seen ?? target;
+    const patch = itemPatch(base, values);
     if (!patch) return onClose();
     setBusy(true);
     try {
-      await patchPlanItem(planId, target.kind, target.id, patch);
+      await patchPlanItem(planId, base.kind, base.id, patch);
       await afterPlanWrite(planId);
       onClose();
     } catch (err) {
       if (err instanceof ApiError) {
-        // Changed, gone, or no longer theirs: say so over the plan as it is.
+        // Changed, gone, or no longer theirs: fetched again, so the form
+        // shows the plan's words; gone or not theirs closes it.
         await afterPlanWrite(planId);
-        onClose();
-        onError(messageFromError(err, copy.itemSaveFailed));
+        const message = messageFromError(err, copy.itemSaveFailed);
+        if (err.status === 409) setError(message);
+        else {
+          onClose();
+          onError(message);
+        }
       } else setError(messageFromError(err, copy.itemSaveFailed));
     } finally {
       setBusy(false);
@@ -236,6 +274,7 @@ export function PlanItemSheet({
           <TextField
             label={copy.itemName}
             value={values.name}
+            hint={theirs("name")}
             autoCapitalize="sentences"
             onChangeText={(name) => set({ name })}
           />
@@ -244,7 +283,7 @@ export function PlanItemSheet({
               <TextField
                 label={copy.itemOtherNames}
                 value={values.altNames}
-                hint={copy.itemOtherNamesHint}
+                hint={theirs("altNames") ?? copy.itemOtherNamesHint}
                 autoCapitalize="words"
                 onChangeText={(altNames) => set({ altNames })}
               />
@@ -253,6 +292,7 @@ export function PlanItemSheet({
                   <TextField
                     label={copy.itemLatitude}
                     value={values.latitude}
+                    hint={theirs("latitude")}
                     keyboardType="numbers-and-punctuation"
                     onChangeText={(latitude) => set({ latitude })}
                   />
@@ -261,6 +301,7 @@ export function PlanItemSheet({
                   <TextField
                     label={copy.itemLongitude}
                     value={values.longitude}
+                    hint={theirs("longitude")}
                     keyboardType="numbers-and-punctuation"
                     onChangeText={(longitude) => set({ longitude })}
                   />
@@ -269,12 +310,14 @@ export function PlanItemSheet({
               <TextField
                 label={copy.itemElevation}
                 value={values.elevation}
+                hint={theirs("elevation")}
                 keyboardType="numbers-and-punctuation"
                 onChangeText={(elevation) => set({ elevation })}
               />
               <TextField
                 label={copy.itemNotes}
                 value={values.notes}
+                hint={theirs("notes")}
                 multiline
                 autoCapitalize="sentences"
                 onChangeText={(notes) => set({ notes })}

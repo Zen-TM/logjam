@@ -15,7 +15,6 @@ import {
 
 import { unavailableReasonText } from "../auth/capabilities";
 import { TripEditSheet } from "../logs/TripEditSheet";
-import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { requestSync } from "../sync/syncEngine";
 import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
 import { makeStyles, muted, spacing } from "../theme";
@@ -31,8 +30,7 @@ const OFFLINE = unavailableReasonText("needs-connection");
  * (shared/DESIGN.md §10), opened on the plan's first day with its name, types
  * and write-up (`tripPlanTripLogPrefill`). A plan with places asks first
  * which were on the trip: each picked one is saved as the caller's own copy
- * (Save a copy, online), in the plan's order, with or without its photos as
- * the account's remembered `copyPlaceMedia` says, and the trip links the
+ * (Save a copy, online), in the plan's order, always with its photos, and the trip links the
  * copies, as frontend/src/components/plans/PlanTripLogPlacesDialog.tsx does.
  * Picking none goes straight to the form, which queues offline.
  */
@@ -86,9 +84,6 @@ export function PlanTripLogSheet({
     setError(null);
   }
   const asking = plan !== null && step === "places";
-  // The stored preference decides (the save sends none, so the server
-  // applies it); the line reads it, as on Logjam Web: no switch here.
-  const [withMedia] = useRememberedCopyMedia(asking);
   // Picks still in the plan, in its order (a refetch can take one away).
   const chosen = plan ? plan.places.filter((p) => picked.includes(p.id)) : [];
 
@@ -98,7 +93,7 @@ export function PlanTripLogSheet({
     const run = await saveTripPlanPlaces({
       picked: chosen,
       copies,
-      save: (placeId) => savePlanItem(target.id, "place", placeId),
+      save: (placeId) => savePlanItem(target.id, "place", placeId, true),
       why: (err) => messageFromError(err, copy.saveCopyFailed),
     });
     setCopies(run.copies);
@@ -166,7 +161,7 @@ export function PlanTripLogSheet({
         {plan ? (
           <View style={styles.body}>
             <Text style={styles.muted}>
-              {tripPlanTripLogPlacesLine(chosen, withMedia)}
+              {tripPlanTripLogPlacesLine(chosen, true)}
             </Text>
             {plan.places.map((place) => {
               const on = picked.includes(place.id);

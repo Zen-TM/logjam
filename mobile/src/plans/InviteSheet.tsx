@@ -123,16 +123,15 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
         return;
       }
       void refreshLinks();
-      const message = tripPlanInviteMessage(
-        plan.name,
-        planInviteUrl(config.webUrl, token),
-      );
+      const url = planInviteUrl(config.webUrl, token);
       if (how === "share") {
+        const message = tripPlanInviteMessage(plan.name, url);
         // A share sheet that won't open leaves the link listed, to turn off.
         await Share.share({ message }).catch(console.error);
       } else {
         // RN core Clipboard, as the place page's copy: no native module.
-        Clipboard.setString(message);
+        // The bare link, as Logjam Web copies it; Share carries the sentence.
+        Clipboard.setString(url);
         setCopied(true);
       }
     } finally {
@@ -162,7 +161,8 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       <>
         <Text style={styles.label}>{copy.role}</Text>
         <ChipRail
-          options={TRIP_PLAN_ROLES.map((value) => ({
+          // The default first, the most powerful last, as Logjam Web lists them.
+          options={[...TRIP_PLAN_ROLES].reverse().map((value) => ({
             value,
             label: tripPlanRoleWord(value),
           }))}
@@ -199,7 +199,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
         <Text style={styles.hint}>{copy.linkHint}</Text>
         <Button
           label={copy.linkCopy}
-          icon="copy"
+          icon="link"
           variant="outlineAccent"
           loading={making === "copy"}
           disabled={!online}
@@ -208,7 +208,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
         />
         <Button
           label={copy.linkShare}
-          icon="link"
+          icon="shareFriend"
           variant="outlineAccent"
           loading={making === "share"}
           disabled={!online}

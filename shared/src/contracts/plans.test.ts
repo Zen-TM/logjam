@@ -1070,6 +1070,13 @@ describe("form tally", () => {
     expect(
       tripPlanFormTallyLines({ answered: 3, total: 3, missing: [] }),
     ).toEqual(["3 of 3 answered"]);
+
+    // Mutation: print the viewer's own username and a leader reads
+    // "Not answered yet: alice" about herself.
+    expect(tripPlanFormTallyLines(tally!, tally!.missing[0].id)).toEqual([
+      "2 of 3 answered",
+      "Not answered yet: you",
+    ]);
   });
 
   // Mutation: drop the role check, and a member of a members-visible form

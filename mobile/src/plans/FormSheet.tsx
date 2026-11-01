@@ -25,6 +25,8 @@ import {
   PLAN_FORM_VERBS,
   tripPlanAnswerRows,
   tripPlanAnswerText,
+  tripPlanFormTally,
+  tripPlanFormTallyLines,
   tripPlanSeesAnswers,
   tripPlanVisibilityLine,
   TRIP_PLAN_FORMS,
@@ -79,6 +81,7 @@ const answerRows = (
 export function FormSheet({
   state,
   plan,
+  me,
   online,
   onState,
   onInfo,
@@ -87,6 +90,8 @@ export function FormSheet({
 }: {
   state: FormSheetState;
   plan: TripPlanView;
+  /** The caller's user id, for a leader's tally. */
+  me: string | null;
   online: boolean;
   onState: Dispatch<SetStateAction<FormSheetState>>;
   onInfo: (message: string) => void;
@@ -155,6 +160,9 @@ export function FormSheet({
           onState({ formId: form.id, mode: "read" });
         }
       : undefined;
+  // Edit hands over to the builder once this sheet has gone: a sheet can't
+  // open while another closes (PlanItemSheet's Save a copy does the same).
+  const parked = useRef<(() => void) | null>(null);
   const close = () => {
     setError(null);
     setChanged(false);
@@ -219,6 +227,7 @@ export function FormSheet({
 
   const sees = form ? tripPlanSeesAnswers(plan.myRole, form.visibleTo) : false;
   const rows = form ? tripPlanAnswerRows(form, plan.members) : null;
+  const tally = form && me ? tripPlanFormTally(plan, form, me) : null;
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_FORMS, "gps">,
     ReactNode
@@ -238,9 +247,18 @@ export function FormSheet({
               </View>
             ) : null,
           visibility: (
-            <Text style={styles.muted}>
-              {tripPlanVisibilityLine(form.visibleTo, form.preset)}
-            </Text>
+            <View style={styles.block}>
+              <Text style={styles.muted}>
+                {tripPlanVisibilityLine(form.visibleTo, form.preset)}
+              </Text>
+              {tally
+                ? tripPlanFormTallyLines(tally, me ?? undefined).map((line) => (
+                    <Text key={line} style={styles.muted}>
+                      {line}
+                    </Text>
+                  ))
+                : null}
+            </View>
           ),
           mine: (
             <View style={styles.block}>
@@ -308,6 +326,11 @@ export function FormSheet({
       onClose={back ?? close}
       title={form?.title ?? ""}
       onBack={back}
+      onClosed={() => {
+        const open = parked.current;
+        parked.current = null;
+        open?.();
+      }}
       footer={
         answering && form ? (
           <View style={styles.footer}>
@@ -351,8 +374,8 @@ export function FormSheet({
               onPress={() => {
                 if (verb.id === "delete") remove(form);
                 else {
+                  parked.current = () => onEdit(form.id);
                   onState(null);
-                  onEdit(form.id);
                 }
               }}
             />

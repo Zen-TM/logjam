@@ -21,6 +21,8 @@ import {
   messageFromError,
   planAddVerbLabel,
   TRIP_PLAN_MAX_FORMS,
+  tripPlanActionsFor,
+  tripPlanAtMost,
   planVerbLabel,
   planVerbsFor,
   PLAN_ADD_VERBS,
@@ -69,6 +71,7 @@ import {
   ErrorState,
   Hero,
   IconButton,
+  ListEnd,
   LoadingState,
   Notice,
   Row,
@@ -246,6 +249,17 @@ export function PlanScreen({
   const { cached, changed, error, gone, refreshing, refresh, now, setLeaving } =
     usePlan(planId, online, block !== null);
   const [view, setView] = useState<TripPlanPageView>(initialView ?? "writeUp");
+  // Read once for the whole page; it draws after it, so nothing pops in
+  // (a leader's tally, a member's own-item ⋯). Null: no mirror account.
+  const [myId, setMyId] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    getSyncStateValue("userId")
+      .then(setMyId)
+      .catch((err: unknown) => {
+        console.error(err);
+        setMyId(null);
+      });
+  }, []);
 
   if (block)
     return (
@@ -261,7 +275,7 @@ export function PlanScreen({
     failure: error,
     online,
   });
-  if (shown.kind !== "page" || !cached)
+  if (shown.kind !== "page" || !cached || myId === undefined)
     return (
       <View style={styles.screen}>
         <Hero title={name} onBack={onBack} />
@@ -279,6 +293,7 @@ export function PlanScreen({
 
   return (
     <PlanPage
+      myId={myId}
       cached={cached}
       now={now}
       changed={changed}
@@ -298,6 +313,7 @@ export function PlanScreen({
 }
 
 function PlanPage({
+  myId,
   cached,
   now,
   changed,
@@ -313,6 +329,7 @@ function PlanPage({
   onGone,
   onLeaving,
 }: {
+  myId: string | null;
   cached: CachedPlan;
   now: number;
   changed: boolean;
@@ -332,10 +349,6 @@ function PlanPage({
   const styles = useStyles();
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
-  const [myId, setMyId] = useState<string | null>(null);
-  useEffect(() => {
-    void getSyncStateValue("userId").then(setMyId).catch(console.error);
-  }, []);
   const [editOpen, setEditOpen] = useState(false);
   const [tripLogOpen, setTripLogOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
@@ -432,7 +445,8 @@ function PlanPage({
       </Hero>
     ),
     notices:
-      notice || toAnswer.forms.length > 0 ? (
+      // The Forms tab lists the same forms, each marked: no second list there.
+      notice || (toAnswer.forms.length > 0 && view !== "forms") ? (
         <View style={styles.notice}>
           {notice?.kind === "over" ? (
             // A prompt that opens something is a pressable row, as every
@@ -509,6 +523,7 @@ function PlanPage({
           plan={plan}
           online={online}
           canAdd={adds.has("copy")}
+          me={myId}
           onInfo={notify}
           onError={(text) => notify(text, "error")}
           onDrawRoute={() => onDrawRoute(plan.id)}
@@ -520,17 +535,24 @@ function PlanPage({
           <Forms
             plan={plan}
             me={myId}
+            toAnswer={new Set(toAnswer.forms.map((form) => form.id))}
             onOpen={(formId, mode) => setFormSheet({ formId, mode })}
           />
           {adds.has("form") ? (
-            <Button
-              label={planAddVerbLabel("form")}
-              icon="add"
-              variant="outlineAccent"
-              disabled={plan.forms.length >= TRIP_PLAN_MAX_FORMS}
-              disabledReason={`${TRIP_PLAN_MAX_FORMS} forms at most`}
-              onPress={() => setFormBuilder({ mode: "new" })}
-            />
+            <ListEnd>
+              <Button
+                label={planAddVerbLabel("form")}
+                icon="add"
+                variant="outlineAccent"
+                disabled={!online || plan.forms.length >= TRIP_PLAN_MAX_FORMS}
+                disabledReason={
+                  online
+                    ? tripPlanAtMost(TRIP_PLAN_MAX_FORMS, "forms")
+                    : OFFLINE
+                }
+                onPress={() => setFormBuilder({ mode: "new" })}
+              />
+            </ListEnd>
           ) : null}
         </>
       ) : null,
@@ -538,6 +560,8 @@ function PlanPage({
       view === "people" ? (
         <PeopleView
           plan={plan}
+          myId={myId}
+          onSeeAnswers={(formId) => setFormSheet({ formId, mode: "read" })}
           canInvite={adds.has("invite")}
           online={online}
           onInfo={notify}
@@ -633,6 +657,7 @@ function PlanPage({
       <FormSheet
         state={formSheet}
         plan={plan}
+        me={myId}
         online={online}
         onState={setFormSheet}
         onInfo={notify}
@@ -658,13 +683,9 @@ function useOnceOpened(open: boolean): boolean {
   return seen || open;
 }
 
-/** Above the scroll; every other section scrolls under them. */
-const PINNED: readonly SectionKeysOn<typeof TRIP_PLAN_PAGE, "gps">[] = [
-  "hero",
-  "notices",
-  "dates",
-  "views",
-];
+/** Above the scroll: the title and its ⋯. The notices, dates and tabs scroll
+ *  with the content, so a tall nudge never eats the page. */
+const PINNED: readonly SectionKeysOn<typeof TRIP_PLAN_PAGE, "gps">[] = ["hero"];
 
 function WriteUp({
   plan,
@@ -692,10 +713,10 @@ function WriteUp({
   );
   // The button only dims: the words go under it (ui/Button.tsx).
   const add = canWrite ? (
-    <>
+    <ListEnd>
       {addButton}
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-    </>
+    </ListEnd>
   ) : null;
   if (plan.sections.length === 0)
     return (
@@ -715,7 +736,7 @@ function WriteUp({
             {canWrite ? (
               <IconButton
                 icon="overflow"
-                accessibilityLabel={`Actions for ${section.title}`}
+                accessibilityLabel={tripPlanActionsFor(section.title)}
                 color={theme.textMuted}
                 onPress={() =>
                   onSection({ mode: "verbs", sectionId: section.id })
@@ -737,14 +758,17 @@ function Items({
   plan,
   online,
   canAdd,
+  me,
   onInfo,
   onError,
   onDrawRoute,
 }: {
   plan: TripPlanView;
   online: boolean;
-  /** The caller may Add a copy (and it's live). */
+  /** The caller may Add a place or way (and it's live). */
   canAdd: boolean;
+  /** The caller's user id: a member changes only what they added. */
+  me: string | null;
   onInfo: (message: string, tone?: "info" | "error") => void;
   onError: (message: string) => void;
   onDrawRoute: () => void;
@@ -756,7 +780,7 @@ function Items({
   const styles = useStyles();
   // The button only dims: the words go under it (ui/Button.tsx).
   const add = canAdd ? (
-    <>
+    <ListEnd>
       <Button
         label={planAddVerbLabel("copy")}
         icon="copy"
@@ -779,22 +803,19 @@ function Items({
           planId={plan.id}
           visible={adding}
           online={online}
+          me={me}
           onClose={() => setAdding(false)}
           onDone={onInfo}
         />
       ) : null}
-    </>
+    </ListEnd>
   ) : null;
   const [menuItem, setMenuItem] = useState<TripPlanItem | null>(null);
-  const [me, setMe] = useState<string | null>(null);
-  useEffect(() => {
-    void getSyncStateValue("userId").then(setMe).catch(console.error);
-  }, []);
   /** The item's ⋯ (`PlanItemSheet`): its row's trailing control. */
   const menu = (item: TripPlanItem) => (
     <IconButton
       icon="overflow"
-      accessibilityLabel={`Actions for ${itemTitle(item)}`}
+      accessibilityLabel={tripPlanActionsFor(itemTitle(item))}
       color={theme.textMuted}
       onPress={() => setMenuItem(item)}
     />
@@ -898,7 +919,8 @@ function Items({
       })}
       {add}
       <PlanItemSheet
-        item={menuItem}
+        item={liveItem(plan, menuItem) ? menuItem : null}
+        current={liveItem(plan, menuItem)}
         planId={plan.id}
         role={plan.myRole}
         me={me}
@@ -910,7 +932,6 @@ function Items({
             kind: item.kind,
             id: item.id,
             title: itemTitle(item),
-            photos: item.kind === "place" ? item.media.length : 0,
           })
         }
         onInfo={onInfo}
@@ -934,14 +955,33 @@ function Items({
   );
 }
 
+/** An item as the plan now has it; null once it is gone. */
+function liveItem(
+  plan: TripPlanView,
+  item: TripPlanItem | null,
+): TripPlanItem | null {
+  if (!item) return null;
+  const rows: readonly TripPlanItem[] =
+    item.kind === "place"
+      ? plan.places
+      : item.kind === "route"
+        ? plan.routes
+        : plan.files;
+  return rows.find((each) => each.id === item.id) ?? null;
+}
+
 function Forms({
   plan,
   me,
+  toAnswer,
   onOpen,
 }: {
   plan: TripPlanView;
   /** The caller's user id, for a leader's tally. */
   me: string | null;
+  /** The forms the page's nudge counts (`tripPlanFormsToAnswer`): only those
+   *  wear "Not answered", so an archived or finished plan marks none. */
+  toAnswer: ReadonlySet<string>;
   /** The form's sheet, read or on its ⋯ (`verbs`). */
   onOpen: (formId: string, mode: "read" | "verbs") => void;
 }) {
@@ -961,60 +1001,62 @@ function Forms({
         }
       />
     );
-  return plan.forms.map((form) => (
-    <Row
-      key={form.id}
-      icon="form"
-      hue={assetHue.plan}
-      title={form.title}
-      subtitle={
-        form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
-      }
-      onPress={() => onOpen(form.id, "read")}
-      // The pills sit under the line: beside the ⋯ they squeezed the title.
-      footer={
-        form.myAnswer &&
-        !(me && tripPlanFormTally(plan, form, me)) ? undefined : (
-          <FormFooter plan={plan} form={form} me={me} />
-        )
-      }
-      right={
-        verbs.length > 0 ? (
-          <IconButton
-            icon="overflow"
-            accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
-            color={theme.textMuted}
-            onPress={() => onOpen(form.id, "verbs")}
-          />
-        ) : undefined
-      }
-    />
-  ));
+  return plan.forms.map((form) => {
+    const tally = me ? tripPlanFormTally(plan, form, me) : null;
+    const pending = toAnswer.has(form.id);
+    return (
+      <Row
+        key={form.id}
+        icon="form"
+        hue={assetHue.plan}
+        title={form.title}
+        subtitle={
+          form.visibleTo === "leaders" ? copy.seenByLeaders : copy.seenByMembers
+        }
+        onPress={() => onOpen(form.id, "read")}
+        // The pills sit under the line: beside the ⋯ they squeezed the title.
+        footer={
+          pending || tally ? (
+            <FormFooter pending={pending} tally={tally} me={me} />
+          ) : undefined
+        }
+        right={
+          verbs.length > 0 ? (
+            <IconButton
+              icon="overflow"
+              accessibilityLabel={`${TRIP_PLAN_FORMS.copy.actions}: ${form.title}`}
+              color={theme.textMuted}
+              onPress={() => onOpen(form.id, "verbs")}
+            />
+          ) : undefined
+        }
+      />
+    );
+  });
 }
 
-/** Under a form's line: whether the caller has answered, and a leader's
+/** Under a form's line: whether the caller still owes it, and a leader's
  *  tally with who hasn't. The pills sit under the line: beside the ⋯ they
  *  squeezed the title. */
 function FormFooter({
-  plan,
-  form,
+  pending,
+  tally,
   me,
 }: {
-  plan: TripPlanView;
-  form: TripPlanView["forms"][number];
+  pending: boolean;
+  tally: ReturnType<typeof tripPlanFormTally>;
   me: string | null;
 }) {
   const styles = useStyles();
-  const tally = me ? tripPlanFormTally(plan, form, me) : null;
   return (
     <View style={styles.formFooter}>
-      {form.myAnswer ? null : (
+      {pending ? (
         <View style={styles.pills}>
           <StatusPill label={copy.pillNotAnswered} tone="warning" />
         </View>
-      )}
+      ) : null}
       {tally
-        ? tripPlanFormTallyLines(tally).map((line) => (
+        ? tripPlanFormTallyLines(tally, me ?? undefined).map((line) => (
             <Text key={line} style={styles.age}>
               {line}
             </Text>
