@@ -1,6 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Amplify } from "aws-amplify";
 import "./index.css";
 import App from "./components/App.tsx";
 import { ThemePreferencesProvider } from "./themePreferences";
@@ -10,17 +9,6 @@ import { captureFriendInvite } from "./pendingFriendInvite";
 
 // Before anything renders or signs in: see pendingFriendInvite.ts.
 captureFriendInvite();
-
-if (import.meta.env.VITE_AUTH_MODE !== "fake") {
-  Amplify.configure({
-    Auth: {
-      Cognito: {
-        userPoolId: import.meta.env.VITE_COGNITO_USER_POOL_ID,
-        userPoolClientId: import.meta.env.VITE_COGNITO_CLIENT_ID,
-      },
-    },
-  });
-}
 
 // No #root: browser-check.js replaced it with the "needs a newer
 // browser" page. Test: src/browserCheck.test.ts.

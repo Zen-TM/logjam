@@ -970,6 +970,8 @@ export function AppShell({
     return (
       <ConsentGate
         consentVersion={currentConsentVersionOf(user)}
+        newAccount={user.consentVersion === null}
+        currentUsername={user.username}
         onConsented={() => {
           setConsented(true);
           userQuery.refetch();

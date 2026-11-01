@@ -27,7 +27,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 - Vite
 - MapLibre GL JS (map rendering)
 - MUI (Material UI) components
-- AWS Amplify (Cognito auth client)
+- oidc-client-ts (OIDC sign-in; Cognito Managed Login in prod)
 
 ### Backend (API)
 
@@ -50,7 +50,7 @@ Canyoning in the Blue Mountains is driven by exploration and discovery in remote
 
 - Cognito (auth) · S3 (media + topo artifacts) · CloudFront (SPA + tile/API CDN, +WAF)
 - ECS Fargate (topo/export workers) · Elastic Beanstalk (API) · ECR (images)
-- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email)
+- RDS (Postgres) · Secrets Manager (DB creds + Resend API key) · Resend (transactional email, over SMTP)
 
 ### Infrastructure as Code & local dev
 
@@ -122,6 +122,7 @@ with the stack up (`test`/`test` are MiniStack's dummy credentials):
 curl -u test:test --upload-file shared/src/__fixtures__/nsw-5m-z15-katoomba.pmtiles \
   http://127.0.0.1:4566/logjam-topo-local/master/dem/nsw-5m.pmtiles
 # contours: master/contours/nsw-10m.pmtiles
+# land: master/land/nsw-tenure.pmtiles
 ```
 
 The vector basemap (`master/basemap/protomaps-nsw.pmtiles`) has no local source,
@@ -149,7 +150,7 @@ and takes the rest from the prod CDN. On a phone, also run
 
 **Fake auth (default for `make dev`)**
 
-No Cognito. The API reads `AUTH_MODE=fake` from `.env.local` and attaches a fixed user to every request. The frontend bypasses Amplify entirely. You're automatically logged in as the active seeded user.
+No Cognito. The API reads `AUTH_MODE=fake` from `.env.local` and attaches a fixed user to every request. The frontend bypasses sign-in entirely. You're automatically logged in as the active seeded user.
 
 To switch which seeded user you're logged in as, restart the API with an override (`.env.local` is Terraform-generated, so a hand edit there is overwritten on the next `make dev`):
 
@@ -161,7 +162,7 @@ cd api && FAKE_USER_SUB=fake-bob-sub npm run dev   # switch to bob
 
 **Real Cognito (`make dev-snapshot`)**
 
-Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapshot and then **prints** the commands to start the servers — you run the API and frontend yourself with the override (`AUTH_MODE=oidc` for the API, `VITE_AUTH_MODE=cognito` for the frontend). The Cognito issuer URL and client ID (`OIDC_ISSUER`, `OIDC_AUDIENCE`) are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
+Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapshot and then **prints** the commands to start the servers — you run the API and frontend yourself with the override (`AUTH_MODE=oidc` for the API, `VITE_AUTH_MODE=oidc` for the frontend). The Cognito issuer URL and client ID (`OIDC_ISSUER`, `OIDC_AUDIENCE`) are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
 
 ### Seeded test data
 
@@ -202,7 +203,7 @@ export DB_PASSWORD_PROD="..."
 make snapshot
 # → snapshots/latest.sql (gitignored)
 # All user emails replaced with user-<id>@local
-# Real identity-provider subjects replaced with sanitized-<id>
+# Real cognitoIds replaced with sanitized-<id>
 # Canyon/trip notes cleared
 
 # 3. Start env with snapshot

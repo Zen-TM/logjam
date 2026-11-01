@@ -127,6 +127,13 @@ describe("terrainCredit", () => {
     expect(terrainCredit([])).toBeNull();
   });
 
+  // Mutation: drop the `land` test, and a print of Land credits it to the 5 m
+  // DEM, which it does not come from.
+  it("leaves Land to its own credit", () => {
+    expect(terrainCredit(["land"])).toBeNull();
+    expect(terrainCredit(["land", "slope"])).toBe(NSW_SLOPE.credit);
+  });
+
   // Mutation: reword only the 5 m credit, ignoring the one passed.
   it("words an area's own credit the same way", () => {
     const survey = "Elevation: derived from a made-up survey. CC BY 3.0 AU.";
@@ -158,6 +165,7 @@ describe("normalizeTerrainLayers", () => {
     expect(TERRAIN_LAYER_DEFAULTS).toEqual({
       contours: true,
       slope: true,
+      land: false,
       hillshade: false,
       vegetation: true,
     });
@@ -167,6 +175,7 @@ describe("normalizeTerrainLayers", () => {
     expect(normalizeTerrainLayers({ contours: false, slope: "yes" })).toEqual({
       contours: false,
       slope: true,
+      land: false,
       hillshade: false,
       vegetation: true,
     });
@@ -251,7 +260,8 @@ describe("terrainBeforeIds", () => {
   }
 
   // Mutation: anchor the slope apart from the contours (say under `water`, with
-  // the shading), and a water fill or a land fill lands between them.
+  // the shading), and a water fill or a land fill lands between them; anchor
+  // Land with the slope, and it tints the lakes.
   it("puts the shading over the land and the slope directly under the contours, under the roads", () => {
     const style = [
       "pm-earth",
@@ -265,6 +275,7 @@ describe("terrainBeforeIds", () => {
       {
         contours: ["c-minor", "c-major", "c-labels"],
         slope: ["slope"],
+        land: ["land"],
         hillshade: ["shade"],
       },
       (id) => `pm-${id}`,
@@ -273,6 +284,7 @@ describe("terrainBeforeIds", () => {
       "pm-earth",
       "pm-landcover",
       "shade",
+      "land",
       "pm-water",
       "slope",
       "c-minor",

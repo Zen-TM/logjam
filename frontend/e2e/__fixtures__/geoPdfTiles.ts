@@ -3,6 +3,7 @@
 // tiles) around a generic point, built here so no network or archive is
 // needed. Nothing is a real place or a user's data.
 import { deflateSync, crc32 } from "node:zlib";
+import { LAND_CLASSES, NSW_LAND } from "@logjam/shared";
 import { PbfWriter } from "pbf";
 import { zxyToTileId } from "pmtiles";
 
@@ -112,6 +113,52 @@ export const slopePng = (x: number, y: number) =>
       ),
     ),
   );
+
+/** Land as squares a little wider than their tile, as a real tile's buffer is,
+ *  of two classes in a checkerboard: a seam or a doubled tint shows at once. */
+export function landMvt(x: number, y: number): Buffer {
+  const zig = (v: number) => (v << 1) ^ (v >> 31);
+  const tile = new PbfWriter();
+  tile.writeMessage(
+    3,
+    (_o, layer) => {
+      layer.writeStringField(1, NSW_LAND.sourceLayer);
+      layer.writeMessage(
+        2,
+        (_f, pbf) => {
+          pbf.writePackedVarint(2, [0, 0]);
+          pbf.writeVarintField(3, 3);
+          const [lo, side] = [-80, 4256];
+          pbf.writePackedVarint(4, [
+            (1 << 3) | 1,
+            zig(lo),
+            zig(lo),
+            (3 << 3) | 2,
+            zig(side),
+            zig(0),
+            zig(0),
+            zig(side),
+            zig(-side),
+            zig(0),
+            (1 << 3) | 7,
+          ]);
+        },
+        null,
+      );
+      layer.writeStringField(3, NSW_LAND.classProperty);
+      layer.writeMessage(
+        4,
+        (_v, pbf) =>
+          pbf.writeStringField(1, LAND_CLASSES[(x + y) % 2 ? 0 : 1].source),
+        null,
+      );
+      layer.writeVarintField(5, 4096);
+      layer.writeVarintField(15, 2);
+    },
+    null,
+  );
+  return Buffer.from(tile.finish());
+}
 
 /** Contours as rings round the centre of z14 tile space: a vector tile with a
  *  `contours` layer, features carrying `elev`. */
@@ -286,6 +333,10 @@ export function statewideArchives() {
         y,
         data: contoursMvt(14, x, y),
       })),
+      1,
+    ),
+    land: pmtiles(
+      tilesAt(13, 3).map(([x, y]) => ({ z: 13, x, y, data: landMvt(x, y) })),
       1,
     ),
   };

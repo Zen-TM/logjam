@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { fetchAuthSession } from "aws-amplify/auth";
+import { loadSession } from "./auth/oidc";
 import type {
   ScopedCustomFieldDef,
   StandaloneFile,
@@ -89,7 +89,7 @@ export type TPlaceShare = {
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 // useAuth registers a handler here so apiFetch can flip the UI back to the
-// sign-in screen when the Cognito refresh token has expired or been revoked.
+// sign-in screen when the refresh token has expired or been revoked.
 // Without this, the UI would stay "authenticated" while every API call 401s.
 let sessionExpiredHandler: (() => void) | null = null;
 export function setSessionExpiredHandler(handler: (() => void) | null) {
@@ -101,16 +101,15 @@ function notifySessionExpired() {
 
 async function getIdToken(): Promise<string> {
   if (import.meta.env.VITE_AUTH_MODE === "fake") return "fake-token";
-  // Amplify automatically refreshes the token using the refresh token when
-  // the ID token has expired (every 1 hour).
+  // loadSession refreshes with the refresh token when the ID token has
+  // expired (every hour), one refresh for however many calls are waiting.
   try {
-    const session = await fetchAuthSession();
-    const token = session.tokens?.idToken?.toString();
-    if (!token) {
+    const user = await loadSession();
+    if (!user?.id_token) {
       notifySessionExpired();
       throw new Error("No auth session");
     }
-    return token;
+    return user.id_token;
   } catch (err) {
     notifySessionExpired();
     throw err;
@@ -1090,10 +1089,26 @@ export function deleteAccount(): Promise<void> {
   return apiFetch<void>("/users/me", { method: "DELETE" });
 }
 
-export function recordConsent(version: string): Promise<TUser> {
+/** Before sign-up, so no token. Unknown counts as free: the welcome form catches a clash. */
+export async function usernameAvailable(username: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${API_BASE_URL}/users/username-available?username=${encodeURIComponent(username)}`,
+      { signal: AbortSignal.timeout(4_000) },
+    );
+    return !res.ok || (await res.json()).available !== false;
+  } catch {
+    return true;
+  }
+}
+
+export function recordConsent(
+  version: string,
+  username?: string,
+): Promise<TUser> {
   return apiFetch<TUser>("/users/me", {
     method: "PATCH",
-    body: { consentVersion: version },
+    body: { consentVersion: version, ...(username && { username }) },
   });
 }
 

@@ -1,5 +1,10 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { NSW_CONTOURS, NSW_HILLSHADE, NSW_SLOPE } from "@logjam/shared";
+import {
+  NSW_CONTOURS,
+  NSW_HILLSHADE,
+  NSW_LAND,
+  NSW_SLOPE,
+} from "@logjam/shared";
 // Deliberate subpath imports: the import parser is kept out of the shared
 // barrel so pdf-lib never rides into the web bundle.
 import {
@@ -38,6 +43,7 @@ const ARCHIVE_PATHS: Record<string, Buffer> = {
   [NSW_HILLSHADE.archivePath]: archives.heights,
   [NSW_SLOPE.archivePath]: archives.slope,
   [NSW_CONTOURS.archivePath]: archives.contours,
+  [NSW_LAND.archivePath]: archives.land,
 };
 
 type Seen = { tiles: number; archives: number };
@@ -100,7 +106,7 @@ async function openBench(page: Page) {
 test.describe("the in-browser GeoPDF renderer", () => {
   test.setTimeout(120_000);
 
-  for (const scenario of ["shade", "contours"]) {
+  for (const scenario of ["shade", "contours", "land"]) {
     // Every strip's rows must equal the same rows of a one-strip render, byte
     // for byte, at every layer: base tiles, terrain resampled from a DEM
     // block, contour lines and labels, the map elements.

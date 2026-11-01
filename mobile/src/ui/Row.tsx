@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
@@ -44,6 +45,8 @@ export function Row({
   selected = false,
   disabled = false,
   accessibilityLabel,
+  accessibilityActions,
+  onAccessibilityAction,
   // TWO lines for the title, and that is a text-size rule rather than a taste
   // one: at a large OS font setting (or a large in-app multiplier) a one-line
   // cap cuts a long title off mid-word, with no way to read the rest. A row
@@ -96,6 +99,12 @@ export function Row({
    */
   disabled?: boolean;
   accessibilityLabel?: string;
+  accessibilityActions?: ComponentProps<
+    typeof Pressable
+  >["accessibilityActions"];
+  onAccessibilityAction?: ComponentProps<
+    typeof Pressable
+  >["onAccessibilityAction"];
   titleNumberOfLines?: number;
   /** Raise it when the subtitle is a short explanation rather than a status. */
   subtitleNumberOfLines?: number;
@@ -170,6 +179,8 @@ export function Row({
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityHint={disabled ? subtitle : undefined}
       accessibilityState={{ disabled, selected, checked }}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}

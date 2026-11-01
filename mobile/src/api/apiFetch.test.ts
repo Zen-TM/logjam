@@ -18,8 +18,8 @@ vi.mock("../config", () => ({
   CLIENT_VERSION: "0.0.0-test",
   CLIENT_VERSION_HEADER: "x-logjam-client",
 }));
-vi.mock("aws-amplify/auth", () => ({
-  fetchAuthSession: async () => ({ tokens: { idToken: "t" } }),
+vi.mock("../auth/oidcSession", () => ({
+  getSession: async () => ({ idToken: "t", accessToken: "a" }),
 }));
 vi.mock("../auth/sessionErrors", () => ({
   classifySessionError: () => "transient",

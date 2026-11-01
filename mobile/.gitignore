@@ -11,7 +11,7 @@ web-build/
 # Local Expo modules: source is committed, Gradle build output is not
 modules/*/android/build/
 
-# Maestro E2E credentials (operator-provided test Cognito user)
+# Maestro E2E credentials (operator-provided test user)
 e2e/.env.maestro
 
 # FCM config: not a secret (it ships inside the APK) but it carries the Firebase
