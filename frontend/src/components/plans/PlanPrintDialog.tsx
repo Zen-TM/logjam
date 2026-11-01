@@ -8,8 +8,10 @@ import { useEffect, useEffectEvent, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   TRIP_PLAN_FORM_PRESETS,
+  PLAN_VERBS,
   TRIP_PLAN_PAGE,
   tripPlanDatesLine,
+  tripPlanPrintFooter,
   tripTypeLabel,
   type TripPlanFormPresetId,
   type TripPlanView,
@@ -17,6 +19,9 @@ import {
 import { Button, Checkbox, Dialog } from "../../ui";
 import { planSummary, summaryForms, type SummaryParts } from "./plansModel";
 import classes from "./PlanSummary.module.css";
+
+const copy = TRIP_PLAN_PAGE.copy;
+const printLabel = PLAN_VERBS.find((verb) => verb.id === "print")!.label;
 
 export default function PlanPrintDialog({
   plan,
@@ -54,13 +59,13 @@ export default function PlanPrintDialog({
     <>
       <Dialog
         open
-        title="Print a summary"
+        title={printLabel}
         onClose={onClose}
         footer={
           <>
             <Button onClick={onClose}>Cancel</Button>
             <Button type="submit" form={formId} variant="filled" icon="print">
-              Print or save as PDF
+              {copy.printSubmit}
             </Button>
           </>
         }
@@ -73,17 +78,14 @@ export default function PlanPrintDialog({
             window.print();
           }}
         >
-          <p className={classes.line}>
-            For someone not on the trip, such as a parent. It&rsquo;s a file you
-            keep or send, not a link.
-          </p>
+          <p className={classes.line}>{copy.printIntro}</p>
           <Checkbox
-            label="Write-up"
+            label={copy.viewWriteUp}
             checked={parts.writeUp}
             onChange={set("writeUp")}
           />
           <Checkbox
-            label="Who's going"
+            label={copy.printGoing}
             checked={parts.going}
             onChange={set("going")}
           />
@@ -95,7 +97,7 @@ export default function PlanPrintDialog({
               onChange={tick(form.preset)}
             />
           ))}
-          <p className={classes.line}>{TRIP_PLAN_PAGE.copy.printFormsNote}</p>
+          <p className={classes.line}>{copy.printFormsNote}</p>
         </form>
       </Dialog>
       <PlanSummary plan={plan} parts={parts} />
@@ -158,7 +160,9 @@ function PlanSummary({
       <h1>{summary.name}</h1>
       <p>{tripPlanDatesLine(plan, "member", tripTypeLabel)}</p>
       {summary.leaders.length > 0 && (
-        <p>Leaders: {summary.leaders.join(", ")}</p>
+        <p>
+          {copy.printLeaders} {summary.leaders.join(", ")}
+        </p>
       )}
       {summary.sections.map((section, index) => (
         <section key={index}>
@@ -167,17 +171,14 @@ function PlanSummary({
         </section>
       ))}
       <SummaryTable
-        caption="Who's going"
+        caption={copy.printGoing}
         head={["Name", "Role"]}
         rows={summary.going}
       />
       {summary.tables.map(({ preset, ...table }) => (
         <SummaryTable key={preset} {...table} />
       ))}
-      <footer>
-        From Logjam Web, {printed}. Correct when printed; the plan may have
-        changed since.
-      </footer>
+      <footer>{tripPlanPrintFooter(printed)}</footer>
     </div>,
     document.body,
   );

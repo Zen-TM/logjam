@@ -62,4 +62,28 @@ describe("the date range calendar", () => {
     expect(screen.getByText(labels.none)).toBeTruthy();
     expect(screen.getByRole("button", { name: labels.nextMonth })).toBeTruthy();
   });
+
+  // Mutation: drop the roving tabindex or the key handler, and the grid is 30
+  // tab stops that ignore the arrows.
+  it("is one tab stop and moves by arrow keys, across months", () => {
+    render(
+      <DateRangeField
+        label="Dates"
+        labels={labels}
+        start="2026-11-30"
+        end={null}
+        onChange={() => {}}
+      />,
+    );
+    const cells = screen
+      .getAllByRole("button", { pressed: false })
+      .concat(screen.getAllByRole("button", { pressed: true }))
+      .filter((cell) => cell.hasAttribute("data-day"));
+    expect(cells.filter((cell) => cell.tabIndex === 0)).toHaveLength(1);
+    day("2026-11-30").focus();
+    fireEvent.keyDown(day("2026-11-30"), { key: "ArrowRight" });
+    expect(document.activeElement).toBe(day("2026-12-01"));
+    fireEvent.keyDown(day("2026-12-01"), { key: "ArrowUp" });
+    expect(document.activeElement).toBe(day("2026-11-24"));
+  });
 });

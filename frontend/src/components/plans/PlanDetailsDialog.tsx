@@ -175,6 +175,7 @@ function PlanDetailsForm({
             label={copy.name}
             required
             value={values.name}
+            placeholder={copy.namePlaceholder}
             data-autofocus
             maxLength={TRIP_PLAN_NAME_MAX_LENGTH}
             onChange={(event) => {

@@ -3,7 +3,7 @@
 // updatedAt). A 409 means the form moved meanwhile: the plan is fetched
 // again, and what was typed is fitted to the form as it now is
 // (`fitAnswerDraft`), so the person sends it against that.
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   tripPlanQuestionChoices,
   answersFromDraft,
@@ -26,6 +26,7 @@ import {
   ChipRail,
   Dialog,
   ErrorBanner,
+  FieldError,
   NumberField,
   TextArea,
   TextField,
@@ -43,10 +44,13 @@ function QuestionField({
   question,
   value,
   onChange,
+  error = null,
 }: {
   question: TripPlanQuestion;
   value: AnswerDraft[string];
   onChange: (next: AnswerDraft[string]) => void;
+  /** Why this answer won't send, under the question it is about. */
+  error?: string | null;
 }) {
   const label = question.required ? `${question.label} *` : question.label;
   const help = question.help || undefined;
@@ -61,6 +65,7 @@ function QuestionField({
           type={question.kind === "phone" ? "tel" : "text"}
           autoComplete={question.kind === "phone" ? "tel" : "off"}
           maxLength={TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH}
+          error={error}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -72,20 +77,24 @@ function QuestionField({
           hint={help}
           required={question.required}
           maxLength={TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH}
+          error={error}
           value={typeof value === "string" ? value : ""}
           onChange={(event) => onChange(event.target.value)}
         />
       );
     case "number":
       return (
-        <NumberField
-          label={label}
-          hint={help}
-          required={question.required}
-          constraints={{ integer: true, min: 0 }}
-          value={typeof value === "string" ? value : ""}
-          onChange={onChange}
-        />
+        <div className={classes.question}>
+          <NumberField
+            label={label}
+            hint={help}
+            required={question.required}
+            constraints={{ integer: true, min: 0 }}
+            value={typeof value === "string" ? value : ""}
+            onChange={onChange}
+          />
+          <FieldError message={error} />
+        </div>
       );
     case "choice":
     case "yesNo": {
@@ -102,6 +111,7 @@ function QuestionField({
             value={typeof value === "string" ? value : ""}
             onChange={onChange}
           />
+          <FieldError message={error} />
         </div>
       );
     }
@@ -125,17 +135,21 @@ function QuestionField({
               }
             />
           ))}
+          <FieldError message={error} />
         </fieldset>
       );
     }
     case "agree":
       return (
-        <Checkbox
-          label={label}
-          description={help}
-          checked={value === true}
-          onChange={onChange}
-        />
+        <div className={classes.question}>
+          <Checkbox
+            label={label}
+            description={help}
+            checked={value === true}
+            onChange={onChange}
+          />
+          <FieldError message={error} />
+        </div>
       );
   }
 }
@@ -145,10 +159,13 @@ export function PlanFormFields({
   form,
   draft,
   onChange,
+  errors = {},
 }: {
   form: Pick<TripPlanFormView, "title" | "preset" | "questions" | "visibleTo">;
   draft: AnswerDraft;
   onChange: (next: AnswerDraft) => void;
+  /** By question id: what stops that answer being sent. */
+  errors?: Record<string, string>;
 }) {
   return (
     <>
@@ -160,6 +177,7 @@ export function PlanFormFields({
           key={question.id}
           question={question}
           value={draft[question.id]}
+          error={errors[question.id] ?? null}
           onChange={(next) => onChange({ ...draft, [question.id]: next })}
         />
       ))}
@@ -205,6 +223,9 @@ function AnswerForm({
     setDraft(fitAnswerDraft(fittedTo.questions, form.questions, draft));
   }
   const [error, setError] = useState<string | null>(null);
+  // By question id, set by a Send that found a question unanswered.
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const bodyRef = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
   const guard = useUnsavedChangesGuard(
     JSON.stringify(draft) !== JSON.stringify(opened),
@@ -217,7 +238,28 @@ function AnswerForm({
       answersFromDraft(form.questions, draft),
     );
     if (!("value" in parsed)) {
-      setError("sentence" in parsed ? parsed.sentence : copy.saveFailed);
+      // Each question on its own, so the sentence lands under the one it is about.
+      const found: Record<string, string> = {};
+      for (const question of form.questions) {
+        const one = parseTripPlanAnswers(
+          [question],
+          answersFromDraft([question], draft),
+        );
+        if (!("value" in one))
+          found[question.id] =
+            "sentence" in one ? one.sentence : copy.saveFailed;
+      }
+      setErrors(found);
+      if (Object.keys(found).length === 0)
+        setError("sentence" in parsed ? parsed.sentence : copy.saveFailed);
+      else
+        requestAnimationFrame(() => {
+          const first = bodyRef.current?.querySelector<HTMLElement>(
+            "[aria-invalid='true'], [role='alert']",
+          );
+          first?.scrollIntoView({ block: "center" });
+          first?.focus();
+        });
       return;
     }
     setBusy(true);
@@ -257,6 +299,7 @@ function AnswerForm({
       >
         <form
           id={formId}
+          ref={bodyRef}
           className={classes.form}
           noValidate
           onSubmit={(event) => {
@@ -267,9 +310,11 @@ function AnswerForm({
           <PlanFormFields
             form={form}
             draft={draft}
+            errors={errors}
             onChange={(next) => {
               setDraft(next);
               setError(null);
+              setErrors({});
             }}
           />
           {visibilityChanged && (

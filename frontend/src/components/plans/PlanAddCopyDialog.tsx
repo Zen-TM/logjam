@@ -2,7 +2,7 @@
 // they commit, then added one request each, in order, as POST /plans/:id/items
 // takes one thing. A stop halfway says what landed and why it stopped, in the
 // API's words.
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   tripPlanAddKey,
   tripPlanAddPicks,
@@ -75,6 +75,7 @@ export default function PlanAddCopyDialog({
 }) {
   const toast = useToast();
   const formId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
   const [tab, setTab] = useState<TripPlanItemGroup>(
     initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : "places",
   );
@@ -144,6 +145,16 @@ export default function PlanAddCopyDialog({
         ? was.filter((p) => key(p) !== key(pick))
         : [...was, pick],
     );
+
+  // The pressed place sits in a list of every place the user has: bring its
+  // row into view on arrival. After the dialog is shown (this effect is the
+  // parent's, so it runs after the dialog's own layout effect).
+  useEffect(() => {
+    if (!initial) return;
+    formRef.current
+      ?.querySelector(`[data-pick="${CSS.escape(key(initial))}"]`)
+      ?.scrollIntoView({ block: "center" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- on arrival only
 
   async function submit() {
     if (chosen.length === 0) return setError(copy.nothingTicked);
@@ -216,6 +227,7 @@ export default function PlanAddCopyDialog({
     >
       <form
         id={formId}
+        ref={formRef}
         className={classes.form}
         onSubmit={(event) => {
           event.preventDefault();
@@ -259,6 +271,7 @@ export default function PlanAddCopyDialog({
               return (
                 <Row
                   key={key(row)}
+                  data-pick={key(row)}
                   title={row.title}
                   subtitle={
                     row.inPlan

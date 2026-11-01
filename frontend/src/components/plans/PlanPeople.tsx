@@ -1,5 +1,5 @@
 // A plan's People view: people asking to join first (leaders
-// only), answered in the row's footer with their answers one press away; then
+// only), let in or turned down on their row; then
 // who's going, leaders first; then who's invited (leaders only). A leader's ⋯
 // on someone going changes their role or removes them.
 import { useState } from "react";
@@ -21,7 +21,6 @@ import {
   type PlanMemberVerbId,
   type TripPlanMemberView,
   type TripPlanView,
-  answeredForm,
 } from "@logjam/shared";
 import {
   Avatar,
@@ -49,15 +48,12 @@ export default function PlanPeople({
   myUserId,
   onChanged,
   onInvite,
-  onSeeAnswers,
 }: {
   plan: TripPlanView;
   myUserId: string | null;
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   onChanged: (options?: { quiet: boolean }) => void;
   onInvite: () => void;
-  /** Open a form a request answered (leaders see its answers). */
-  onSeeAnswers: (formId: string) => void;
 }) {
   const toast = useToast();
   const busy = useBusyIds();
@@ -155,55 +151,41 @@ export default function PlanPeople({
       {asked && (
         <>
           <SectionHeader title={copy.peopleAsking} count={asking.length} />
-          {asking.map((member) => {
-            const answered = answeredForm(plan, member.user.id);
-            return (
-              <Row
-                key={member.user.id}
-                title={member.user.username}
-                leading={<Avatar username={member.user.username} />}
-                footer={
-                  !archived && (
-                    <>
-                      <Button
-                        compact
-                        variant="filled"
-                        icon="accept"
-                        busy={busy.isBusy(member.user.id)}
-                        onClick={() =>
-                          void run(
-                            member.user.id,
-                            () => approveMember(plan.id, member.user.id),
-                            copy.letInFailed,
-                            tripPlanLetInMessage(member.user.username),
-                          )
-                        }
-                      >
-                        {copy.letIn}
-                      </Button>
-                      <Button
-                        compact
-                        variant="outline"
-                        icon="ignore"
-                        onClick={() => setTurningDown(member)}
-                      >
-                        {copy.turnDown}
-                      </Button>
-                      {answered && (
-                        <Button
-                          compact
-                          variant="outline"
-                          onClick={() => onSeeAnswers(answered)}
-                        >
-                          {copy.seeAnswers}
-                        </Button>
-                      )}
-                    </>
-                  )
-                }
-              />
-            );
-          })}
+          {asking.map((member) => (
+            <Row
+              key={member.user.id}
+              title={member.user.username}
+              leading={<Avatar username={member.user.username} />}
+              trailing={
+                !archived && (
+                  <>
+                    <IconButton
+                      icon="accept"
+                      tone="filled"
+                      label={copy.letIn}
+                      disabled={busy.isBusy(member.user.id)}
+                      disabledReason="Replying…"
+                      onClick={() =>
+                        void run(
+                          member.user.id,
+                          () => approveMember(plan.id, member.user.id),
+                          copy.letInFailed,
+                          tripPlanLetInMessage(member.user.username),
+                        )
+                      }
+                    />
+                    <IconButton
+                      icon="ignore"
+                      label={copy.turnDown}
+                      disabled={busy.isBusy(member.user.id)}
+                      disabledReason="Replying…"
+                      onClick={() => setTurningDown(member)}
+                    />
+                  </>
+                )
+              }
+            />
+          ))}
         </>
       )}
       {headed && (

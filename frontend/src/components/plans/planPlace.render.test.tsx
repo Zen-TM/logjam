@@ -69,7 +69,7 @@ describe("a plan's place on Logjam Web", () => {
     expect(screen.getByText("V grade")).toBeTruthy();
   });
 
-  // Mutation: send the place's other names or position whole, and an edit
+  // Mutation: send the position, or the notes, though unchanged, and an edit
   // of one 409s over another member's edit of the other.
   it("edits its details, each compared with what is stored", async () => {
     render(
