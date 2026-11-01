@@ -95,17 +95,13 @@ import {
   PlanDownload,
   usePlanFilesOnPhone,
 } from "./PlanDownload";
-import { openablePlanMedia, planFiles, planFileSource } from "./planFiles";
+import { openablePlanMedia, planFiles } from "./planFiles";
 import { PlanPlaceSheet } from "./PlanPlaceSheet";
 import { planBbox } from "./planMap";
 import { itemTitle, PlanItemSheet } from "./PlanItemSheet";
 import { PlanOptionsSheet } from "./PlanOptionsSheet";
 import { PlanTripLogSheet } from "./PlanTripLogSheet";
-import {
-  SAVE_A_COPY,
-  SaveCopySheet,
-  type SaveCopyTarget,
-} from "./SaveCopySheet";
+import { SaveCopySheet, type SaveCopyTarget } from "./SaveCopySheet";
 import { patchPlan } from "./plansApi";
 import { AddCopySheet } from "./AddCopySheet";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
@@ -1006,7 +1002,6 @@ function Forms({
   onOpen: (formId: string, mode: "read" | "verbs") => void;
 }) {
   const theme = useTheme();
-  const styles = useStyles();
   const { assetHue } = useHues();
   // The row offers the form's verbs as its sheet does (shared/DESIGN.md §9).
   const verbs = planVerbsFor(PLAN_FORM_VERBS, "gps", plan.myRole, {

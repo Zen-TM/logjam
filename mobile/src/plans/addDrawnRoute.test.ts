@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { addDrawnRouteToPlan } from "./addDrawnRoute";
 
 const sync = vi.hoisted(() => ({
   requestSync: vi.fn(),
@@ -10,8 +11,6 @@ vi.mock("../sync/syncEngine", () => ({ requestSync: sync.requestSync }));
 vi.mock("../sync/outbox", () => ({ pendingCreateIds: sync.pendingCreateIds }));
 vi.mock("./plansApi", () => ({ addPlanItem: sync.addPlanItem }));
 vi.mock("./plansCache", () => ({ afterPlanWrite: sync.afterPlanWrite }));
-
-import { addDrawnRouteToPlan } from "./addDrawnRoute";
 
 beforeEach(() => {
   vi.clearAllMocks();
