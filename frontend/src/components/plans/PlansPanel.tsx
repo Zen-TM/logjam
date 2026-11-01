@@ -10,7 +10,8 @@ import {
   todayDateKey,
   TRIP_PLANS_LIST,
   tripPlanBucket,
-  tripPlanBulkVerbConfirm,
+  listSelectionLabel,
+  tripPlanBulkConfirm,
   tripPlanBulkDone,
   tripPlanFormsToAnswerLine,
   tripPlanRowPill,
@@ -71,7 +72,10 @@ function confirmCopy({
       ? kind === "delete"
         ? planDeleteConfirm(plans[0].name, { places: 0, ways: 0 })
         : planLeaveConfirm(plans[0].name)
-      : tripPlanBulkVerbConfirm(kind, plans.length);
+      : tripPlanBulkConfirm({
+          lead: kind === "delete" ? plans.length : 0,
+          leave: kind === "leave" ? plans.length : 0,
+        });
   return {
     title: one.confirmTitle,
     message: one.confirmBody,
@@ -329,7 +333,7 @@ export default function PlansPanel({
       <div className={classes.rails}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${selected.length} selected`}
+            countLabel={listSelectionLabel(selected.length)}
             onClear={clear}
           >
             {bulkVerbs(selected).map((verb) => (

@@ -38,20 +38,20 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
-  adoptTheirs,
-  formPatch,
-  mintSlug,
-  same,
-  theirsChanged,
-  type FormValues,
-} from "./plansModel";
+  tripPlanAdoptTheirs,
+  tripPlanBlankQuestion,
+  tripPlanFormPatch,
+  tripPlanKindHasOptions,
+  tripPlanMintSlug,
+  tripPlanQuestionKindChanged,
+  tripPlanSame,
+  tripPlanTheirsChanged,
+  type TripPlanFormValues as FormValues,
+} from "@logjam/shared";
 import PlanFormChooser from "./PlanFormChooser";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
-
-const hasOptions = (kind: TripPlanQuestionKind) =>
-  kind === "choice" || kind === "multiChoice";
 
 function valuesOf(form: TripPlanFormView): FormValues {
   return {
@@ -100,8 +100,8 @@ function Builder({
   const titleRef = useRef<HTMLInputElement>(null);
 
   const current = form ? valuesOf(form) : null;
-  if (current && seen && values && !same(current, seen)) {
-    const next = adoptTheirs(seen, values, current);
+  if (current && seen && values && !tripPlanSame(current, seen)) {
+    const next = tripPlanAdoptTheirs(seen, values, current);
     setSeen(next.seen);
     setValues(next.values);
   }
@@ -112,7 +112,7 @@ function Builder({
     current &&
     opened &&
     values &&
-    theirsChanged(opened, current, values, [field]);
+    tripPlanTheirsChanged([field], values, current, opened);
 
   // The Dialog focuses only on open; a preset picked swaps the step in place.
   const picked = values != null;
@@ -121,7 +121,7 @@ function Builder({
   }, [picked, form]);
 
   // Against what a Save would compare: a new form against nothing at all.
-  const dirty = values != null && (!seen || !same(values, seen));
+  const dirty = values != null && (!seen || !tripPlanSame(values, seen));
   const guard = useUnsavedChangesGuard(dirty, onClose);
   // The API refuses widening a form others answered for leaders only.
   const widenLocked =
@@ -155,7 +155,7 @@ function Builder({
       setError("sentence" in parsed ? parsed.sentence : copy.formSaveFailed);
       return;
     }
-    const patch = seen ? formPatch(seen, parsed.value) : {};
+    const patch = seen ? tripPlanFormPatch(seen, parsed.value) : {};
     if (form && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
@@ -297,13 +297,8 @@ function Builder({
                     const kind = event.target.value as TripPlanQuestionKind;
                     setQuestion(index, {
                       kind,
-                      // A choice starts with two options to fill in.
-                      options: hasOptions(kind)
-                        ? (question.options ?? [
-                            { id: mintSlug("o"), label: "" },
-                            { id: mintSlug("o"), label: "" },
-                          ])
-                        : undefined,
+                      options: tripPlanQuestionKindChanged(question, kind)
+                        .options,
                     });
                   }}
                 >
@@ -321,7 +316,7 @@ function Builder({
                     setQuestion(index, { help: event.target.value })
                   }
                 />
-                {hasOptions(question.kind) && (
+                {tripPlanKindHasOptions(question.kind) && (
                   <div className={classes.question}>
                     <span className={classes.questionLabel} aria-hidden>
                       {copy.options}
@@ -371,7 +366,7 @@ function Builder({
                           setQuestion(index, {
                             options: [
                               ...(question.options ?? []),
-                              { id: mintSlug("o"), label: "" },
+                              { id: tripPlanMintSlug("o"), label: "" },
                             ],
                           })
                         }
@@ -396,15 +391,7 @@ function Builder({
                 disabledReason={`${TRIP_PLAN_MAX_QUESTIONS} questions at most`}
                 onClick={() =>
                   set({
-                    questions: [
-                      ...values.questions,
-                      {
-                        id: mintSlug("q"),
-                        kind: "text",
-                        label: "",
-                        required: false,
-                      },
-                    ],
+                    questions: [...values.questions, tripPlanBlankQuestion()],
                   })
                 }
               >

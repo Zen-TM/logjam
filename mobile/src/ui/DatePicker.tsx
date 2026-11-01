@@ -61,7 +61,7 @@ export function DatePicker({
   value: string | null;
   onChange: (key: string) => void;
   /** Highlights start..end (end null = one day). Taps still arrive in
-   *  `onChange`; `tapRange` turns them into the next range. */
+   *  `onChange`; `pickDay` turns them into the next range. */
   range?: DateRange;
   /** A trip log records what happened; a plan looks ahead. */
   allowFuture?: boolean;

@@ -9,6 +9,8 @@ import {
 import {
   planCountsLabel,
   tripPlanBulkConfirm,
+  tripPlanBulkDone,
+  tripPlanBulkOffers,
   planDeleteConfirm,
   planFormDeleteConfirm,
   planVerbs,
@@ -631,7 +633,7 @@ describe("a plan's items", () => {
   });
 });
 
-describe("what Add a copy offers", () => {
+describe("what Add a place or way offers", () => {
   const own = {
     places: [{ id: "p1" }, { id: "p2" }],
     routes: [
@@ -658,7 +660,7 @@ describe("what Add a copy offers", () => {
     expect(ids(tripPlanAddable(own, ticked).files)).toEqual(["f1"]);
   });
 
-  // Mutation: count the zero, and Add a copy opens on "Add 0 copies"; size
+  // Mutation: count the zero, and Add a place or way opens on "Add 0 copies"; size
   // a places-only pick, and the one number beside a charge is "0 KB".
   it("leaves out a zero, in the submit and the price", () => {
     expect(tripPlanAddCopiesLabel(0)).toBe("Add a place or way");
@@ -936,7 +938,7 @@ describe("Start a trip log's places line", () => {
   });
 });
 
-describe("Add a copy's footer and outcome", () => {
+describe("Add a place or way's footer and outcome", () => {
   const MB = 1024 * 1024;
   const room = { quotaBytes: MB, usedBytes: 0 };
   // Mutation: drop `args.placesPicked &&`, and "Photos count too." is said
@@ -1096,5 +1098,45 @@ describe("tripPlanBulkConfirm", () => {
       confirmTitle: "Leave 3 plans?",
       confirmLabel: "Leave",
     });
+  });
+
+  // Mutation: mark a leave-only confirm destructive.
+  it("is destructive only when something is deleted", () => {
+    expect(tripPlanBulkConfirm({ lead: 0, leave: 3 }).destructive).toBe(false);
+    expect(tripPlanBulkConfirm({ lead: 1, leave: 2 }).destructive).toBe(true);
+  });
+});
+
+describe("what a bulk selection offers", () => {
+  const plan = (role: "leader" | "editor" | "member") => ({ role });
+  // Mutation: offer Archive when one plan isn't led, or let a mixed selection
+  // offer nothing.
+  it("splits by role and archives only when every plan is led", () => {
+    const mixed = tripPlanBulkOffers([plan("leader"), plan("member")]);
+    expect(mixed.lead).toHaveLength(1);
+    expect(mixed.leave).toHaveLength(1);
+    expect(mixed.archive).toBe(false);
+    expect(mixed.destructive).toBe(true);
+    const led = tripPlanBulkOffers([plan("leader"), plan("leader")]);
+    expect(led.archive).toBe(true);
+    const left = tripPlanBulkOffers([plan("editor"), plan("member")]);
+    expect(left).toMatchObject({
+      archive: false,
+      destructive: false,
+      deleteLabel: "Leave the selected plans",
+    });
+    expect(tripPlanBulkOffers([]).archive).toBe(false);
+  });
+});
+
+describe("tripPlanBulkDone", () => {
+  // Mutation: say "all" when some failed.
+  it("says how many went through", () => {
+    expect(tripPlanBulkDone("delete", 3, 3)).toBe("Deleted 3 plans.");
+    expect(tripPlanBulkDone("leave", 1, 1)).toBe("Left 1 plan.");
+    expect(tripPlanBulkDone("archive", 2, 3)).toBe(
+      "Archived 2 of 3 plans. The rest didn't go through.",
+    );
+    expect(tripPlanBulkDone("unarchive", 3, 3)).toBe("Brought back 3 plans.");
   });
 });

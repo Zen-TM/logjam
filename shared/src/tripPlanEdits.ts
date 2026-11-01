@@ -10,6 +10,7 @@ import type {
   TripPlanPatch,
   TripPlanSectionPatch,
 } from "./tripPlans.js";
+import { sameValue } from "./planItemEdit.js";
 
 export type TripPlanValues = Required<TripPlanCreate>;
 export type TripPlanSectionValues = { title: string; body: string };
@@ -43,8 +44,9 @@ export function tripPlanSectionPatch(
   return patch;
 }
 
-export const tripPlanSame = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
+/** Key order aside (`sameValue`): JSONB hands a question list back in
+ *  Postgres's key order, which is not the order it was sent in. */
+export const tripPlanSame = sameValue;
 
 /** A plan's dates are one compare-and-set pair (`tripPlanPatch`), so they
  *  are adopted together: one edited date keeps both of the user's. */

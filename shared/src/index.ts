@@ -30,6 +30,7 @@ export * from "./fieldValues.js";
 export * from "./placeCopy.js";
 export * from "./placeValidation.js";
 export * from "./placeMatch.js";
+export * from "./dayRange.js";
 export * from "./mergePlace.js";
 export * from "./monthlyQuota.js";
 export * from "./leaderboard.js";

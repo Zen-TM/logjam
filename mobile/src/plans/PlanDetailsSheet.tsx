@@ -14,6 +14,7 @@ import {
   tripPlanDatesLabel,
   tripPlanInPlanNow,
   tripPlanPatch,
+  pickDay,
   tripPlanSame,
   tripPlanTheirsChanged,
   TRIP_PLAN_FIELD_GROUPS,
@@ -26,7 +27,6 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
-import { tapRange } from "../ui/monthGrid";
 import { tripTypeLabel, tripTypeMeta } from "../logs/tripTypeMeta";
 import { makeStyles, muted, useTheme } from "../theme";
 import {
@@ -198,7 +198,7 @@ export function PlanDetailsSheet({
             allowFuture
             range={{ start: values.startDate, end: values.endDate }}
             onChange={(tapped) => {
-              const next = tapRange(
+              const next = pickDay(
                 { start: values.startDate, end: values.endDate },
                 tapped,
               );

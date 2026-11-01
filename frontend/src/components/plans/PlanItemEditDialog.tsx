@@ -34,15 +34,15 @@ import { ApiError } from "../../errors/ApiError";
 import { patchPlanItem } from "../../plansApi";
 import { wayNameError } from "../sidebar/panels/waysModel";
 import {
-  adoptTheirs,
-  ATTR,
+  ITEM_ATTR,
+  itemFieldDefs,
   itemPatch,
   itemWords,
-  placeFieldDefs,
-  same,
-  theirsChanged,
+  sameValue,
+  tripPlanAdoptTheirs,
+  tripPlanTheirsChanged,
   type ItemWords,
-} from "./plansModel";
+} from "@logjam/shared";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -83,19 +83,19 @@ export default function PlanItemEditDialog({
   const nameError =
     openedItem.kind === "route" ? wayNameError(values.name, asked) : null;
   const place = openedItem.kind === "place" ? openedItem : null;
-  const defs = place ? placeFieldDefs(place) : [];
+  const defs = place ? itemFieldDefs(place) : [];
 
   const current = item ? itemWords(item) : null;
-  if (item && current && !same(item, seen)) {
-    setValues(adoptTheirs(itemWords(seen), values, current).values);
+  if (item && current && !sameValue(item, seen)) {
+    setValues(tripPlanAdoptTheirs(itemWords(seen), values, current).values);
     setSeen(item);
     setMoved(true);
   }
 
-  const dirty = !same(values, itemWords(seen));
+  const dirty = !sameValue(values, itemWords(seen));
   /** The plan's words under a field the user edited and the plan changed. */
   const theirs = (field: string) =>
-    moved && current && theirsChanged(opened, current, values, [field])
+    moved && current && tripPlanTheirsChanged([field], values, current, opened)
       ? current[field]
       : null;
   const theirsHint = (field: string) =>
@@ -115,7 +115,8 @@ export default function PlanItemEditDialog({
       numericFieldError(values.longitude, LONGITUDE) != null ||
       numericFieldError(values.elevation, {}) != null ||
       defs.some(
-        (def) => customFieldValueError(def, values[ATTR + def.key]) != null,
+        (def) =>
+          customFieldValueError(def, values[ITEM_ATTR + def.key]) != null,
       ));
 
   async function submit() {
@@ -182,14 +183,14 @@ export default function PlanItemEditDialog({
           {place && (
             <>
               <TextField
-                label={"Other names"}
+                label={copy.itemOtherNames}
                 value={values.altNames}
                 onChange={(event) => set({ altNames: event.target.value })}
-                hint={theirsHint("altNames") ?? "Separate them with commas."}
+                hint={theirsHint("altNames") ?? copy.itemOtherNamesHint}
               />
               <div className={classes.pair}>
                 <NumberField
-                  label={"Latitude"}
+                  label={copy.itemLatitude}
                   required
                   value={values.latitude}
                   onChange={(latitude) => set({ latitude })}
@@ -198,7 +199,7 @@ export default function PlanItemEditDialog({
                   hint={theirsHint("latitude")}
                 />
                 <NumberField
-                  label={"Longitude"}
+                  label={copy.itemLongitude}
                   required
                   value={values.longitude}
                   onChange={(longitude) => set({ longitude })}
@@ -208,7 +209,7 @@ export default function PlanItemEditDialog({
                 />
               </div>
               <NumberField
-                label={"Elevation (m)"}
+                label={copy.itemElevation}
                 value={values.elevation}
                 onChange={(elevation) => set({ elevation })}
                 constraints={{}}
@@ -223,19 +224,21 @@ export default function PlanItemEditDialog({
               />
               {defs.length > 0 && (
                 <section className={classes.form}>
-                  <SectionHeader title={"Attributes"} />
+                  <SectionHeader title={copy.itemAttributes} />
                   {defs.map((def) => (
                     <div key={def.key}>
                       <CustomFieldInput
                         def={def}
-                        value={values[ATTR + def.key]}
-                        onChange={(value) => set({ [ATTR + def.key]: value })}
+                        value={values[ITEM_ATTR + def.key]}
+                        onChange={(value) =>
+                          set({ [ITEM_ATTR + def.key]: value })
+                        }
                         showError={asked}
                       />
-                      {theirsHint(ATTR + def.key) && (
+                      {theirsHint(ITEM_ATTR + def.key) && (
                         <p className={classes.note}>
                           {customFieldDisplayLabel(def)}:{" "}
-                          {theirsHint(ATTR + def.key)}
+                          {theirsHint(ITEM_ATTR + def.key)}
                         </p>
                       )}
                     </div>

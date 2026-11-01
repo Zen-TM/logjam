@@ -7,6 +7,8 @@ import {
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_FORMS,
   pluralCount,
+  tripPlanBlankForm,
+  type TripPlanFormValues,
   type TripPlanLeaderForm,
 } from "@logjam/shared";
 import {
@@ -18,7 +20,6 @@ import {
 } from "../../ui";
 import { getLeaderForms } from "../../plansApi";
 import { messageFromError } from "../../errors/messageFromError";
-import { mintSlug, type FormValues } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
@@ -29,7 +30,7 @@ export default function PlanFormChooser({
 }: {
   /** The plan the form is for: its own forms are not offered back. */
   planId: string;
-  onPick: (values: FormValues) => void;
+  onPick: (values: TripPlanFormValues) => void;
 }) {
   const [mine, setMine] = useState<TripPlanLeaderForm[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,16 +58,7 @@ export default function PlanFormChooser({
         title={copy.blank}
         subtitle={copy.chooseBlankHint}
         leading={<IconTile icon="add" hue="var(--hue-plan)" />}
-        onOpen={() =>
-          onPick({
-            title: "",
-            preset: null,
-            visibleTo: "leaders",
-            questions: [
-              { id: mintSlug("q"), kind: "text", label: "", required: false },
-            ],
-          })
-        }
+        onOpen={() => onPick(tripPlanBlankForm())}
       />
       <SectionHeader title={copy.chooseTemplates} />
       {TRIP_PLAN_FORM_PRESET_IDS.map((id) => (

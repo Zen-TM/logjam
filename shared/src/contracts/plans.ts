@@ -77,8 +77,6 @@ export const TRIP_PLANS_LIST = {
     editTitle: "Edit name and dates",
     name: "Name",
     nameRequired: "Give the plan a name.",
-    startDate: "First day",
-    endDate: "Last day",
     tripTypes: "Trip types",
     addTripType: "Add a type",
     make: "Make plan",
@@ -463,6 +461,12 @@ export const TRIP_PLAN_PAGE = {
     leaveFailed: "Couldn't leave the plan.",
   },
 } as const satisfies ScreenContract;
+
+/** The place dialog's copy-the-coordinates button, named for its place
+ *  (`TRIP_PLAN_PAGE.copy.placeCopyFailed` is its failure). */
+export function tripPlanCopyCoordinatesLabel(name: string): string {
+  return `Copy the coordinates of ${name}`;
+}
 
 export type TripPlanPageView = "writeUp" | "items" | "forms" | "people";
 
@@ -988,10 +992,6 @@ export const TRIP_PLAN_FORMS_URGENT_DAYS = 7;
 
 /** "1 form to answer", "3 forms to answer": the plan page's card and the
  *  plans list's card say it the same way. Empty for none. */
-export function tripPlanCopyCoordinatesLabel(name: string): string {
-  return `Copy the coordinates of ${name}`;
-}
-
 export function tripPlanFormsToAnswerLine(count: number): string {
   if (count <= 0) return "";
   return count === 1 ? "1 form to answer" : `${count} forms to answer`;
@@ -1067,8 +1067,33 @@ export function tripPlanFormTallyLines(tally: {
   ];
 }
 
+/**
+ * What a selection on the plans list offers. A selection mixes roles, and
+ * one button acts on each plan as its role allows: the plans you lead are
+ * deleted, the rest are left. Archive is offered only when every plan is led,
+ * so it never skips one. Guard: plans.test.ts ("what a bulk selection offers").
+ */
+export function tripPlanBulkOffers<P extends { role: TripPlanRole }>(
+  plans: readonly P[],
+) {
+  const lead = plans.filter((plan) => plan.role === "leader");
+  const leave = plans.filter((plan) => plan.role !== "leader");
+  return {
+    lead,
+    leave,
+    /** Delete-or-leave is offered for any selection. */
+    destructive: lead.length > 0,
+    archive: plans.length > 0 && leave.length === 0,
+    deleteLabel:
+      lead.length > 0
+        ? "Delete or leave the selected plans"
+        : "Leave the selected plans",
+  };
+}
+
 /** The one confirm for a bulk Delete and leave on the plans list, naming each
- *  count. Guard: plans.test.ts ("bulk confirm"). */
+ *  count. Leaving alone is not destructive (`destructive`: no danger tone or
+ *  trash icon). Guard: plans.test.ts ("tripPlanBulkConfirm"). */
 export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
   const { lead, leave } = counts;
   const plans = (count: number) => `${count} ${count === 1 ? "plan" : "plans"}`;
@@ -1091,6 +1116,7 @@ export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
     confirmTitle: title,
     confirmBody: parts.join(" "),
     confirmLabel: lead > 0 ? "Delete" : "Leave",
+    destructive: lead > 0,
   };
 }
 
@@ -1294,28 +1320,8 @@ export function tripPlanSavedMessage(kind: TripPlanItemKind): string {
 
 // ── Plans list: bulk actions ────────────────────────────────────────
 
-/** A confirm for deleting or leaving several plans, counted. */
-export function tripPlanBulkVerbConfirm(
-  kind: "delete" | "leave",
-  count: number,
-): { confirmTitle: string; confirmBody: string; confirmLabel: string } {
-  const plans = count === 1 ? "1 plan" : `${count} plans`;
-  return kind === "delete"
-    ? {
-        confirmTitle: `Delete ${plans}?`,
-        confirmBody:
-          "Their write-ups, places, ways, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
-        confirmLabel: `Delete ${plans}`,
-      }
-    : {
-        confirmTitle: `Leave ${plans}?`,
-        confirmBody:
-          "You lose access at once. Your answers to their forms go. What you added stays in each plan.",
-        confirmLabel: `Leave ${plans}`,
-      };
-}
-
-/** The toast after a bulk run: all done, or how many of them. */
+/** The toast after a bulk run: all done, or how many of them. Guard:
+ *  plans.test.ts ("tripPlanBulkDone"). */
 export function tripPlanBulkDone(
   kind: "delete" | "leave" | "archive" | "unarchive",
   done: number,

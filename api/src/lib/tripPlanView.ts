@@ -7,6 +7,7 @@ import {
   isTripPlanFormVisibility,
   isTripPlanMemberStatus,
   isTripPlanRole,
+  SYDNEY_TZ,
   type TripPlanAnswerView,
   type TripPlanFormView,
   type TripPlanMemberStatus,
@@ -16,6 +17,7 @@ import {
   type TripPlanSectionView,
   type TripPlanSummary,
   type TripPlanView,
+  tripPlanIsOver,
   tripPlanSeesAnswers,
 } from "@logjam/shared";
 import prisma from "../services/prisma";
@@ -64,18 +66,31 @@ export function planSummary(
   waitingFor: { id: string; username: string } | null = null,
   /** Forms the caller has not answered (`unansweredBy`). */
   unansweredForms = 0,
+  now = new Date(),
 ): TripPlanSummary {
+  const startDate = dateOnly(plan.startDate);
+  const endDate = dateOnly(plan.endDate);
+  // Nothing to answer once the plan is archived or the trip is over, as
+  // `tripPlanFormsToAnswer` says on the plan's page. NSW's calendar day, as
+  // the server doesn't know the caller's.
+  const owing =
+    membership.status === "active" &&
+    !plan.archivedAt &&
+    !tripPlanIsOver(
+      { startDate, endDate },
+      now.toLocaleDateString("en-CA", { timeZone: SYDNEY_TZ }),
+    );
   const summary: TripPlanSummary = {
     id: plan.id,
     name: plan.name,
-    startDate: dateOnly(plan.startDate),
-    endDate: dateOnly(plan.endDate),
+    startDate,
+    endDate,
     tripTypes: plan.tripTypes,
     archivedAt: plan.archivedAt?.toISOString() ?? null,
     updatedAt: plan.updatedAt.toISOString(),
     status: status(membership.status),
     role: role(membership.role),
-    unansweredForms: membership.status === "active" ? unansweredForms : 0,
+    unansweredForms: owing ? unansweredForms : 0,
   };
   if (summary.status === "invited" && membership.invitedBy)
     summary.invitedBy = membership.invitedBy;

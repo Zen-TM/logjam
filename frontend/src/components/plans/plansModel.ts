@@ -1,12 +1,8 @@
-// The pure decisions of Plans' forms, out of the components so a test can
-// hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
-// the value last seen and the new one (shared/DESIGN.md §10).
+// The pure decisions of Plans' pages that only Logjam Web has (the print
+// summary, what a press on the map asks), out of the components so a test can
+// hold them (frontend/DESIGN.md §4). The edit forms' own are in shared.
 import {
-  coerceFieldValue,
   currentTripPlanAnswers,
-  fieldValue,
-  SYSTEM_FIELD_DEFS,
-  SYSTEM_PLACE_TYPES,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
@@ -14,140 +10,11 @@ import {
   tripPlanRoleWord,
 } from "@logjam/shared";
 import type {
-  TripLogCustomFieldDef,
-  TripPlanCreate,
-  TripPlanFormCreate,
-  TripPlanFormPatch,
   TripPlanFormPresetId,
-  TripPlanFilePatch,
   TripPlanFormView,
-  TripPlanItem,
   TripPlanItemKind,
-  TripPlanPlace,
-  TripPlanPlacePatch,
-  TripPlanRoutePatch,
-  TripPlanPatch,
-  TripPlanSectionPatch,
   TripPlanView,
 } from "@logjam/shared";
-
-export type PlanValues = Required<TripPlanCreate>;
-export type SectionValues = { title: string; body: string };
-export type FormValues = Required<TripPlanFormCreate>;
-
-/** Only the fields that changed, each as a compare-and-set pair. */
-export function planPatch(was: PlanValues, now: PlanValues): TripPlanPatch {
-  const patch: TripPlanPatch = {};
-  if (now.name !== was.name) patch.name = { from: was.name, to: now.name };
-  if (now.startDate !== was.startDate || now.endDate !== was.endDate)
-    patch.dates = {
-      from: { startDate: was.startDate, endDate: was.endDate },
-      to: { startDate: now.startDate, endDate: now.endDate },
-    };
-  if (now.tripTypes.join("\n") !== was.tripTypes.join("\n"))
-    patch.tripTypes = { from: was.tripTypes, to: now.tripTypes };
-  return patch;
-}
-
-/** Only what changed, against what the form last saw of the plan. */
-export function sectionPatch(
-  seen: SectionValues,
-  now: SectionValues,
-): TripPlanSectionPatch {
-  const patch: TripPlanSectionPatch = {};
-  if (now.title !== seen.title)
-    patch.title = { from: seen.title, to: now.title };
-  if (now.body !== seen.body) patch.body = { from: seen.body, to: now.body };
-  return patch;
-}
-
-/** Key order aside: a form's questions come back from a JSONB column in
- *  Postgres's key order, not the order the shared parser builds them in. */
-const sorted = (value: unknown): unknown =>
-  Array.isArray(value)
-    ? value.map(sorted)
-    : value !== null && typeof value === "object"
-      ? Object.fromEntries(
-          Object.entries(value)
-            .sort(([a], [b]) => (a < b ? -1 : 1))
-            .map(([key, each]) => [key, sorted(each)]),
-        )
-      : value;
-
-export const same = (a: unknown, b: unknown) =>
-  JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
-
-/**
- * Whether "In the plan now" shows under `fields`: the user's value differs
- * from what the plan now holds, and the plan changed it since the form
- * opened. A field only one of them changed has nothing to show.
- */
-export function theirsChanged<T extends Record<string, unknown>>(
-  opened: T,
-  current: T,
-  values: T,
-  fields: readonly (keyof T)[],
-): boolean {
-  return fields.some(
-    (field) =>
-      !same(values[field], current[field]) &&
-      !same(current[field], opened[field]),
-  );
-}
-
-/** A plan's dates are one compare-and-set pair (`planPatch`), so they are
- *  adopted together: one edited date keeps both of the user's. */
-export const PLAN_FIELD_GROUPS = [["startDate", "endDate"]] as const;
-
-/**
- * A form's fields after the plan was fetched again (a 409, or a failed save
- * followed by someone else's change): every field the user has not touched
- * takes the plan's current value, and the new baseline is the plan's. A
- * field they did edit keeps their words, and a save compares it with what
- * the plan now holds, so nothing of anyone else's is sent back unseen.
- * Fields in one of `groups` go together, as the API compares them.
- */
-export function adoptTheirs<T extends Record<string, unknown>>(
-  seen: T,
-  values: T,
-  current: T,
-  groups: readonly (readonly (keyof T)[])[] = [],
-): { seen: T; values: T } {
-  const merged = { ...values };
-  const grouped = new Set(groups.flat());
-  const units = [
-    ...groups,
-    ...(Object.keys(current) as (keyof T)[])
-      .filter((key) => !grouped.has(key))
-      .map((key) => [key]),
-  ];
-  for (const unit of units)
-    if (unit.every((key) => same(values[key], seen[key])))
-      for (const key of unit) merged[key] = current[key];
-  return { seen: current, values: merged };
-}
-
-/** A form's changed parts; the questions compare as one list, as the API
- *  compares them. */
-export function formPatch(
-  seen: FormValues,
-  now: FormValues,
-): TripPlanFormPatch {
-  const patch: TripPlanFormPatch = {};
-  if (now.title !== seen.title)
-    patch.title = { from: seen.title, to: now.title };
-  if (!same(now.questions, seen.questions))
-    patch.questions = { from: seen.questions, to: now.questions };
-  if (now.visibleTo !== seen.visibleTo)
-    patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };
-  return patch;
-}
-
-/** A new question's or option's id: stable across edits, unique in its form,
- *  a slug no plain object already has as a key (`q3f9a…`). */
-export function mintSlug(prefix: "q" | "o"): string {
-  return `${prefix}${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-}
 
 export type SummaryParts = {
   writeUp: boolean;
@@ -268,107 +135,8 @@ export function addedBy(plan: TripPlanView, userId: string) {
   };
 }
 
-/** The words an item's edit form holds, every one a string as typed. A file
- *  with no name of its own is blank here, so saving untouched never writes its
- *  filename as its name. A place also holds its other names (comma
- *  separated), position, elevation and one `attr:<key>` per attribute. */
-export type ItemWords = {
-  name: string;
-  notes: string;
-  [field: string]: string;
-};
-
-export const ATTR = "attr:";
-
-/** The attributes a plan place records: its system type's definitions. */
-export function placeFieldDefs(
-  place: Pick<TripPlanPlace, "placeTypeId">,
-): TripLogCustomFieldDef[] {
-  const type = SYSTEM_PLACE_TYPES.find((each) => each.id === place.placeTypeId);
-  return SYSTEM_FIELD_DEFS.filter(
-    (def) => type != null && def.placeTypes.includes(type.key),
-  ).map(({ key, label, type, min, max }) => ({
-    key,
-    label,
-    type,
-    min: min ?? undefined,
-    max: max ?? undefined,
-  }));
-}
-
-export function itemWords(item: TripPlanItem): ItemWords {
-  switch (item.kind) {
-    case "place": {
-      const words: ItemWords = {
-        name: item.name,
-        notes: item.notes ?? "",
-        altNames: item.altNames.join(", "),
-        latitude: String(item.latitude),
-        longitude: String(item.longitude),
-        elevation: item.elevation == null ? "" : String(item.elevation),
-      };
-      for (const def of placeFieldDefs(item)) {
-        const raw = fieldValue(item.fieldValues, def.key);
-        words[ATTR + def.key] = raw == null ? "" : String(raw);
-      }
-      return words;
-    }
-    case "route":
-      return { name: item.name, notes: "" };
-    case "media":
-      return { name: item.item.displayName ?? "", notes: "" };
-  }
-}
-
 /**
- * An item edit's compare-and-set body, or null when nothing changed. Each
- * `from` is the stored value of `seen`, never the form's blanked words: the
- * API compares it exactly, and a stored "" is not null. A place's fields are
- * assumed valid (the form checks them first).
- */
-export function itemPatch(
-  seen: TripPlanItem,
-  now: ItemWords,
-): TripPlanPlacePatch | TripPlanRoutePatch | TripPlanFilePatch | null {
-  const was = itemWords(seen);
-  const name = now.name.trim();
-  if (seen.kind === "media")
-    return name === was.name
-      ? null
-      : { displayName: { from: seen.item.displayName, to: name || null } };
-  const patch: TripPlanPlacePatch = {};
-  if (name !== was.name) patch.name = { from: seen.name, to: name };
-  if (seen.kind === "place") {
-    if (now.notes !== was.notes)
-      patch.notes = { from: seen.notes, to: now.notes.trim() || null };
-    const altNames = now.altNames
-      .split(",")
-      .map((each) => each.trim())
-      .filter(Boolean);
-    if (!same(altNames, seen.altNames))
-      patch.altNames = { from: seen.altNames, to: altNames };
-    const latitude = Number(now.latitude);
-    const longitude = Number(now.longitude);
-    if (latitude !== seen.latitude || longitude !== seen.longitude)
-      patch.position = {
-        from: { latitude: seen.latitude, longitude: seen.longitude },
-        to: { latitude, longitude },
-      };
-    const elevation =
-      now.elevation.trim() === "" ? null : Number(now.elevation);
-    if (elevation !== seen.elevation)
-      patch.elevation = { from: seen.elevation, to: elevation };
-    for (const def of placeFieldDefs(seen)) {
-      const to = coerceFieldValue(now[ATTR + def.key], def.type);
-      const from = fieldValue(seen.fieldValues, def.key) ?? null;
-      if (!same(to, from)) (patch.fieldValues ??= {})[def.key] = { from, to };
-    }
-  }
-  return Object.keys(patch).length > 0 ? patch : null;
-}
-
-/**
- * What a press on the map asks while a plan is open: Add a copy of one of
+ * What a press on the map asks while a plan is open: Add a place or way of one of
  * the user's own things, or nothing (the plan's own, or someone else's). A
  * file of theirs asks for itself, even on a place: its place brings it only
  * with its photos. Any other track on their place asks for the place.

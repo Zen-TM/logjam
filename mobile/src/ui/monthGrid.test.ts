@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   addMonths,
-  tapRange,
   fromDateKey,
   monthGrid,
   monthOf,
@@ -123,34 +122,5 @@ describe("yearBlockStart", () => {
     for (let year = block; year < block + 20; year += 1) {
       expect(yearBlockStart(year, 20)).toBe(block);
     }
-  });
-});
-
-describe("tapRange", () => {
-  const none = { start: null, end: null };
-  it("first tap sets the start, second the end", () => {
-    const first = tapRange(none, "2026-11-07");
-    expect(first).toEqual({ start: "2026-11-07", end: null });
-    expect(tapRange(first, "2026-11-09")).toEqual({
-      start: "2026-11-07",
-      end: "2026-11-09",
-    });
-  });
-  it("orders an earlier second tap", () => {
-    expect(tapRange({ start: "2026-11-07", end: null }, "2026-11-05")).toEqual({
-      start: "2026-11-05",
-      end: "2026-11-07",
-    });
-  });
-  it("taps the start again for a one-day trip", () => {
-    expect(tapRange({ start: "2026-11-07", end: null }, "2026-11-07")).toEqual({
-      start: "2026-11-07",
-      end: null,
-    });
-  });
-  it("starts over after a finished range", () => {
-    expect(
-      tapRange({ start: "2026-11-07", end: "2026-11-09" }, "2026-11-20"),
-    ).toEqual({ start: "2026-11-20", end: null });
   });
 });

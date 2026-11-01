@@ -7,6 +7,7 @@ import {
   tripPlanMintSlug,
   tripPlanQuestionKindChanged,
   tripPlanPatch,
+  tripPlanSame,
   tripPlanSectionPatch,
   tripPlanTheirsChanged,
 } from "./tripPlanEdits.js";
@@ -140,6 +141,59 @@ describe("a form's edits", () => {
       questions: { from: form.questions, to: questions },
     });
     expect(tripPlanFormPatch(form, { ...form, visibleTo: "members" })).toEqual({
+      visibleTo: { from: "leaders", to: "members" },
+    });
+  });
+
+  // Mutation: compare the questions with a raw `JSON.stringify`, and Save
+  // with nothing changed writes them, so everyone's answer dialog gets a 409.
+  it("reads a question list Postgres returned with its keys in another order", () => {
+    const served = [
+      {
+        required: true,
+        label: "How?",
+        kind: "choice" as const,
+        id: "how",
+        options: [{ label: "Driving", id: "drive" }],
+      },
+    ];
+    const sent = [
+      {
+        id: "how",
+        kind: "choice" as const,
+        label: "How?",
+        required: true,
+        options: [{ id: "drive", label: "Driving" }],
+      },
+    ];
+    expect(tripPlanSame(served, sent)).toBe(true);
+    expect(
+      tripPlanFormPatch(
+        { ...form, questions: served },
+        { ...form, questions: sent },
+      ),
+    ).toEqual({});
+  });
+
+  // Mutation: re-base `seen` on theirs but keep every value as it was, and
+  // the save sends the old title and questions back over the other leader's.
+  it("takes another leader's rename and question when the leader changed only who sees answers", () => {
+    const theirs = {
+      ...form,
+      title: "Lifts",
+      questions: [
+        ...form.questions,
+        {
+          id: "seats",
+          kind: "number" as const,
+          label: "Spare seats",
+          required: false,
+        },
+      ],
+    };
+    const mine = { ...form, visibleTo: "members" as const };
+    const { seen, values } = tripPlanAdoptTheirs(form, mine, theirs);
+    expect(tripPlanFormPatch(seen, values)).toEqual({
       visibleTo: { from: "leaders", to: "members" },
     });
   });

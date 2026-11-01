@@ -26,7 +26,9 @@ import {
   messageFromError,
   sortTripPlans,
   tripPlanBucket,
+  listSelectionLabel,
   tripPlanBulkConfirm,
+  tripPlanBulkOffers,
   tripPlanFormsToAnswerLine,
   tripPlanRowPill,
   tripPlanRowSubtitle,
@@ -69,7 +71,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { planBulkSplit, planSelectable } from "./planBulk";
+import { planSelectable } from "./planBulk";
 import { startPlanDownload } from "./planDownloads";
 import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
 import {
@@ -330,7 +332,7 @@ export function PlansScreen({
   };
 
   const selectedPlans = selectedItems;
-  const bulk = planBulkSplit(selectedPlans);
+  const bulk = tripPlanBulkOffers(selectedPlans);
   const archivedBucket = bucket === "archived";
   const runBulk = () => {
     const { lead, leave: leaving } = bulk;
@@ -566,7 +568,7 @@ export function PlansScreen({
       <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
-            countLabel={`${selectedPlans.length} selected`}
+            countLabel={listSelectionLabel(selectedPlans.length)}
             showSelectAll={selectedPlans.length < selectableItems.length}
             extra={
               bulk.lead.length > 0 ? (

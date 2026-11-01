@@ -1,31 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { inRange, monthGrid, pickDay } from "./dateRange";
+import { inRange, monthGrid } from "./dateRange";
 
-describe("picking a date range", () => {
-  // Mutation: let a later click replace the start, and the second click can
-  // never end a range.
-  it("the first click starts, a later one ends", () => {
-    const started = pickDay({ start: null, end: null }, "2026-11-07");
-    expect(started).toEqual({ start: "2026-11-07", end: null });
-    expect(pickDay(started, "2026-11-09")).toEqual({
-      start: "2026-11-07",
-      end: "2026-11-09",
-    });
-  });
-
-  // Mutation: end on an earlier day, and the range runs backwards.
-  it("an earlier day, the same day or a finished range starts over", () => {
-    const started = { start: "2026-11-07", end: null };
-    expect(pickDay(started, "2026-11-05")).toEqual({
-      start: "2026-11-05",
-      end: null,
-    });
-    expect(pickDay(started, "2026-11-07")).toEqual(started);
-    expect(
-      pickDay({ start: "2026-11-07", end: "2026-11-09" }, "2026-11-12"),
-    ).toEqual({ start: "2026-11-12", end: null });
-  });
-
+describe("the calendar", () => {
   it("highlights the days from start to end, one for a one-day trip", () => {
     const range = { start: "2026-11-07", end: "2026-11-09" };
     expect(inRange(range, "2026-11-08")).toBe(true);

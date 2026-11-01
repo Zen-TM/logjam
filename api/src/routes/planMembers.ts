@@ -87,7 +87,7 @@ async function viewOfMember(planId: string, userId: string) {
 
 // ── POST /plans/:planId/members ───────────────────────────────
 // Body { username, role? }. They are invited, not in: they join when they
-// answer the forms required to join. A block, either way, is the answer an
+// accept. A block, either way, is the answer an
 // unknown username gets, as in routes/friendInvites.ts.
 router.post(
   "/members",

@@ -5,7 +5,8 @@ import {
   tripPlanDatesLabel,
 } from "@logjam/shared";
 import { Button, IconButton } from "./Button";
-import { inRange, monthGrid, pickDay } from "./dateRange";
+import { pickDay } from "@logjam/shared";
+import { inRange, monthGrid } from "./dateRange";
 import classes from "./DateRangeField.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;

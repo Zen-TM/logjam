@@ -21,8 +21,6 @@ const file = {
   item: { displayName: null, filename: "day1.gpx" },
 } as TripPlanItem;
 
-// The same cases Logjam Web's plansModel.test.ts holds for its copy, so the
-// two stay one behaviour until web points here.
 describe("itemPatch", () => {
   // Mutation: send every attribute, or write the form's "" as the stored
   // value, and an untouched field 409s on another member's edit of it.
