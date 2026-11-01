@@ -23,6 +23,11 @@ import {
 const SRC = dirname(fileURLToPath(import.meta.url));
 const ALLOWED: { file: string; text: string; reason: string }[] = [
   {
+    file: "components/TermsTick.tsx",
+    text: "Privacy Policy",
+    reason: "the document's title, as it reads on the page it links to",
+  },
+  {
     file: "components/dialogs/TopoDialog.tsx",
     text: "Order Data",
     reason:

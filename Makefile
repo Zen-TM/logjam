@@ -62,7 +62,7 @@ dev-snapshot:
 	@echo ""
 	@echo "  Snapshot loaded. Start app servers:"
 	@echo "    Terminal 1: AUTH_MODE=oidc cd api  && npm run dev"
-	@echo "    Terminal 2: cd frontend && VITE_AUTH_MODE=cognito npm run dev"
+	@echo "    Terminal 2: cd frontend && VITE_AUTH_MODE=oidc npm run dev"
 
 ## Reset: wipe DB + MiniStack volumes, restart, re-seed
 reset: shared build-workers

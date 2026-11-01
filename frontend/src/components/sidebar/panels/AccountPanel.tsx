@@ -13,7 +13,8 @@ import {
   exportUserData,
   type TUser,
 } from "../../../placeUtils";
-import { useAuth } from "../../../useAuth";
+import { signOut, signOutEverywhere } from "../../../useAuth";
+import { hasCognitoAccount } from "../../../auth/oidc";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import { useToast } from "../../feedback/ToastProvider";
@@ -73,7 +74,6 @@ function AccountPanel({
   error: string | null;
   onRetry: () => void;
 }) {
-  const { signOut, signOutEverywhere } = useAuth();
   const toast = useToast();
   const [username, setUsername] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -212,11 +212,15 @@ function AccountPanel({
             title={copy.email}
             subtitle={email ?? undefined}
             trailing={
-              <IconButton
-                icon="edit"
-                label={copy.changeEmail}
-                onClick={() => setChangeEmailOpen(true)}
-              />
+              // Cognito's own call; other providers manage the address on
+              // their own page.
+              hasCognitoAccount() ? (
+                <IconButton
+                  icon="edit"
+                  label={copy.changeEmail}
+                  onClick={() => setChangeEmailOpen(true)}
+                />
+              ) : undefined
             }
           />
         </>
@@ -242,13 +246,15 @@ function AccountPanel({
           <Button variant="outline" icon="signOut" onClick={signOut}>
             {copy.signOut}
           </Button>
-          <Button
-            variant="outline"
-            icon="signOut"
-            onClick={() => setSignOutEverywhereOpen(true)}
-          >
-            {copy.signOutEverywhere}
-          </Button>
+          {hasCognitoAccount() && (
+            <Button
+              variant="outline"
+              icon="signOut"
+              onClick={() => setSignOutEverywhereOpen(true)}
+            >
+              {copy.signOutEverywhere}
+            </Button>
+          )}
           <Row
             leading={<IconTile icon="delete" hue="var(--color-warning)" />}
             title={copy.deleteAccount}

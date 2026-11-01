@@ -17,6 +17,8 @@ describe("pressing a submit with something missing says what", () => {
     render(
       <ConsentGate
         consentVersion="2026-09-28"
+        newAccount={false}
+        currentUsername="alice"
         onAccepted={vi.fn()}
         onSignOut={vi.fn()}
       />,
@@ -35,6 +37,8 @@ describe("pressing a submit with something missing says what", () => {
     render(
       <ConsentGate
         consentVersion="2999-01-01"
+        newAccount={false}
+        currentUsername="alice"
         onAccepted={vi.fn()}
         onSignOut={vi.fn()}
       />,

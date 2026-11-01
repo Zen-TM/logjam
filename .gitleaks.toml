@@ -9,7 +9,7 @@ useDefault = true
 description = "Public, non-secret identifiers safe to commit"
 
 # Cognito App Client ID and User Pool ID are PUBLIC identifiers. The browser SPA
-# needs both for its Amplify auth config, so they ship in the public JS bundle
+# needs both to sign in, so they ship in the public JS bundle
 # regardless. They are not credentials — a Cognito public client has no secret,
 # and the user pool's sign-in endpoints are public by design. Security comes from
 # the pool's own policy, not from keeping these IDs hidden.
