@@ -95,6 +95,9 @@ function Builder({
   );
   const [seen, setSeen] = useState(values);
   const [opened] = useState(values);
+  // A new form's baseline is what the chooser handed over, so a form nobody
+  // has typed in closes without asking.
+  const [picked0, setPicked0] = useState<FormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -121,7 +124,8 @@ function Builder({
   }, [picked, form]);
 
   // Against what a Save would compare: a new form against nothing at all.
-  const dirty = values != null && (!seen || !tripPlanSame(values, seen));
+  const base = seen ?? picked0;
+  const dirty = values != null && base != null && !tripPlanSame(values, base);
   const guard = useUnsavedChangesGuard(dirty, onClose);
   // The API refuses widening a form others answered for leaders only.
   const widenLocked =
@@ -169,6 +173,7 @@ function Builder({
     }
   }
 
+  const [leaving, setLeaving] = useState(false);
   const footer = (
     <>
       <Button
@@ -178,6 +183,16 @@ function Builder({
       >
         Cancel
       </Button>
+      {!form && values && (
+        <Button
+          onClick={() => (dirty ? setLeaving(true) : setValues(null))}
+          disabled={busy}
+          disabledReason="Saving…"
+          icon="back"
+        >
+          {copy.chooseBack}
+        </Button>
+      )}
       {values && (
         <Button type="submit" form={formId} variant="filled" busy={busy}>
           {form ? copy.saveForm : copy.add}
@@ -197,7 +212,13 @@ function Builder({
         footer={footer}
       >
         {!values ? (
-          <PlanFormChooser planId={planId} onPick={setValues} />
+          <PlanFormChooser
+            planId={planId}
+            onPick={(picked) => {
+              setPicked0(picked);
+              setValues(picked);
+            }}
+          />
         ) : (
           <form
             id={formId}
@@ -213,6 +234,7 @@ function Builder({
               required
               ref={titleRef}
               value={values.title}
+              placeholder={copy.titlePlaceholder}
               maxLength={TRIP_PLAN_FORM_TITLE_MAX_LENGTH}
               data-autofocus
               hint={
@@ -258,6 +280,7 @@ function Builder({
                     className={classes.grow}
                     label={`${copy.questionLabel} ${index + 1}`}
                     value={question.label}
+                    placeholder={copy.questionPlaceholder}
                     maxLength={TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH}
                     onChange={(event) =>
                       setQuestion(index, { label: event.target.value })
@@ -411,6 +434,17 @@ function Builder({
         confirmLabel="Discard"
         onConfirm={guard.confirmDiscard}
         onClose={guard.cancelDiscard}
+      />
+      <ConfirmDialog
+        open={leaving}
+        title={copy.discardTitle}
+        message={copy.discardBody}
+        confirmLabel={copy.discardConfirm}
+        onConfirm={() => {
+          setLeaving(false);
+          setValues(null);
+        }}
+        onClose={() => setLeaving(false)}
       />
     </>
   );

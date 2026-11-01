@@ -15,7 +15,7 @@ import { patchPlanItem } from "../../plansApi";
 import PlanAddCopyDialog from "./PlanAddCopyDialog";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import PlanItemEditDialog from "./PlanItemEditDialog";
-import PlanPlaceDialog from "./PlanPlaceDialog";
+import PlanPlacePage from "./PlanPlacePage";
 import type { TPlace } from "../../placeUtils";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -60,10 +60,10 @@ const place = {
 } as unknown as TripPlanPlace;
 
 describe("a plan's place on Logjam Web", () => {
-  // Mutation: leave notes out of PlanPlaceDialog, and what a member typed in
+  // Mutation: leave notes out of PlanPlacePage, and what a member typed in
   // a plan's place is saved but visible nowhere.
   it("shows its notes, other names, position and attributes", () => {
-    render(<PlanPlaceDialog place={place} onClose={() => {}} />);
+    render(<PlanPlacePage place={place} onBack={() => {}} />);
     expect(screen.getByText("Exit left at the pool.")).toBeTruthy();
     expect(screen.getByText(/The Claustral/)).toBeTruthy();
     expect(screen.getByText("V grade")).toBeTruthy();
@@ -133,6 +133,7 @@ describe("adding places and ways", () => {
     render(
       <PlanAddCopyDialog
         planId="p1"
+        plan={{ places: [], routes: [], files: [] }}
         places={[mine("a", "Claustral"), mine("b", "Ranon")]}
         routes={[]}
         files={[]}

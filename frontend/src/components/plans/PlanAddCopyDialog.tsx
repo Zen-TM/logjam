@@ -14,19 +14,23 @@ import {
   TRIP_PLAN_PAGE,
   tripPlanAddCopiesLabel,
   tripPlanAddable,
+  tripPlanInPlanIds,
   TRIP_PLAN_ITEM_GROUP,
   TRIP_PLAN_ITEM_GROUPS,
   type TripPlanItemGroup,
   type StandaloneFile,
   type TripPlanItemKind,
+  type TripPlanView,
 } from "@logjam/shared";
 import {
   Button,
-  Checkbox,
   ChipRail,
   Dialog,
   ErrorBanner,
+  IconTile,
+  Row,
   SearchField,
+  TileCheckbox,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
@@ -36,12 +40,18 @@ import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
 
-type Pick = { kind: TripPlanItemKind; id: string };
-type Row = Pick & { title: string; bytes: number; altNames?: string[] };
+type Ticked = { kind: TripPlanItemKind; id: string };
+type PickRow = Ticked & {
+  title: string;
+  bytes: number;
+  altNames?: string[];
+  inPlan: boolean;
+};
 const key = tripPlanAddKey;
 
 export default function PlanAddCopyDialog({
   planId,
+  plan,
   places,
   routes,
   files,
@@ -51,13 +61,15 @@ export default function PlanAddCopyDialog({
   onClose,
 }: {
   planId: string;
+  /** What the plan holds now: a thing already in it is marked, not offered. */
+  plan: Pick<TripPlanView, "places" | "routes" | "files">;
   /** The caller's own lists; `tripPlanAddable` decides what is offered. */
   places: TPlace[];
   routes: TRoute[];
   files: StandaloneFile[];
   user: TUser | null;
   /** Ticked on arrival: the thing pressed on the map. */
-  initial: Pick | null;
+  initial: Ticked | null;
   onAdded: () => void;
   onClose: () => void;
 }) {
@@ -66,7 +78,7 @@ export default function PlanAddCopyDialog({
   const [tab, setTab] = useState<TripPlanItemGroup>(
     initial ? TRIP_PLAN_ITEM_GROUP[initial.kind] : "places",
   );
-  const [picked, setPicked] = useState<Pick[]>(initial ? [initial] : []);
+  const [picked, setPicked] = useState<Ticked[]>(initial ? [initial] : []);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,32 +92,37 @@ export default function PlanAddCopyDialog({
         .map((pick) => pick.id),
     },
   );
+  const inPlan = tripPlanInPlanIds(plan, { places, routes, files });
   const ways = [
     ...offered.routes.map((route) => ({
       kind: "route" as const,
       id: route.id,
       title: route.name,
       bytes: 0,
+      inPlan: inPlan.has(route.id),
     })),
     ...offered.files.map((file) => ({
       kind: "media" as const,
       id: file.id,
       title: file.displayName ?? file.filename,
       bytes: file.fileSizeBytes,
+      inPlan: inPlan.has(file.id),
     })),
   ];
-  const lists: Record<TripPlanItemGroup, Row[]> = {
+  const lists: Record<TripPlanItemGroup, PickRow[]> = {
     places: offered.places.map((place) => ({
       kind: "place" as const,
       id: place.id,
       title: place.name,
       altNames: place.altNames,
       bytes: 0,
+      inPlan: inPlan.has(place.id),
     })),
     ways,
   };
-  // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
-  const all = [...lists.places, ...lists.ways];
+  // What is sent: ticks still offered and not already in the plan, in list
+  // order (`tripPlanAddPicks`).
+  const all = [...lists.places, ...lists.ways].filter((row) => !row.inPlan);
   const chosen = tripPlanAddPicks(all, picked.map(key));
   const bytes = chosen.reduce((sum, row) => sum + row.bytes, 0);
   const placesChosen = chosen.some((row) => row.kind === "place");
@@ -121,7 +138,7 @@ export default function PlanAddCopyDialog({
     placeMatchesSearch({ name: row.title, altNames: row.altNames }, query),
   );
 
-  const toggle = (pick: Pick) =>
+  const toggle = (pick: Ticked) =>
     setPicked((was) =>
       was.some((p) => key(p) === key(pick))
         ? was.filter((p) => key(p) !== key(pick))
@@ -218,19 +235,63 @@ export default function PlanAddCopyDialog({
         ) : listed.length === 0 ? (
           <p className={classes.note}>{copy.searchNoMatch}</p>
         ) : (
-          <div className={classes.question}>
-            {listed.map((row) => (
-              <Checkbox
-                key={key(row)}
-                label={row.title}
-                description={row.bytes > 0 ? formatBytes(row.bytes) : undefined}
-                checked={picked.some((p) => key(p) === key(row))}
-                onChange={() => toggle(row)}
-              />
-            ))}
+          <div className={classes.block}>
+            {listed.map((row) => {
+              const ticked = picked.some((p) => key(p) === key(row));
+              const tile = (
+                <IconTile
+                  icon={
+                    row.kind === "place"
+                      ? "place"
+                      : row.kind === "route"
+                        ? "route"
+                        : "importedFile"
+                  }
+                  hue={
+                    row.kind === "place"
+                      ? "var(--color-accent)"
+                      : row.kind === "route"
+                        ? "var(--hue-route)"
+                        : "var(--hue-import)"
+                  }
+                />
+              );
+              return (
+                <Row
+                  key={key(row)}
+                  title={row.title}
+                  subtitle={
+                    row.inPlan
+                      ? copy.inPlan
+                      : row.bytes > 0
+                        ? formatBytes(row.bytes)
+                        : undefined
+                  }
+                  selected={ticked && !row.inPlan}
+                  disabled={row.inPlan}
+                  leading={
+                    row.inPlan ? (
+                      tile
+                    ) : (
+                      <TileCheckbox
+                        tile={tile}
+                        label={row.title}
+                        checked={ticked}
+                        selecting
+                        onToggle={() => toggle(row)}
+                      />
+                    )
+                  }
+                  onOpen={row.inPlan ? undefined : () => toggle(row)}
+                />
+              );
+            })}
           </div>
         )}
-        {priceLine && <p className={classes.body}>{priceLine}</p>}
+        {/* Always there, so ticking never moves the list. */}
+        <p className={classes.body} aria-live="polite">
+          {priceLine ?? "\u00a0"}
+        </p>
         {error && <ErrorBanner message={error} />}
       </form>
     </Dialog>

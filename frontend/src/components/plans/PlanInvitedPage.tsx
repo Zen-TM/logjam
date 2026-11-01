@@ -23,6 +23,7 @@ import {
   Row,
   SectionHeader,
 } from "../../ui";
+import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { getInvitedPreview, joinPlan, leavePlan } from "../../plansApi";
@@ -44,6 +45,7 @@ export default function PlanInvitedPage({
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [declining, setDeclining] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +65,7 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await joinPlan(planId);
+      toast.success(TRIP_PLAN_JOIN.copy.joined);
       onJoined();
     } catch (err) {
       console.error(err);
@@ -139,7 +142,7 @@ export default function PlanInvitedPage({
               >
                 {copy.join}
               </Button>
-              <Button compact busy={busy} onClick={() => void decline()}>
+              <Button compact busy={busy} onClick={() => setDeclining(true)}>
                 {copy.decline}
               </Button>
             </>
@@ -174,6 +177,15 @@ export default function PlanInvitedPage({
 
   return (
     <div className={classes.root}>
+      <ConfirmDialog
+        open={declining}
+        title={TRIP_PLAN_JOIN.copy.declineTitle}
+        message={TRIP_PLAN_JOIN.copy.declineBody}
+        confirmLabel={copy.decline}
+        busy={busy}
+        onClose={() => setDeclining(false)}
+        onConfirm={() => void decline().then(() => setDeclining(false))}
+      />
       {keys
         .filter((key) => above.has(key))
         .map((key) => (

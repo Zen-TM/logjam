@@ -18,6 +18,7 @@ export function DateRangeField({
   end,
   onChange,
   hint,
+  tapHint,
   labels,
 }: {
   label: string;
@@ -25,6 +26,8 @@ export function DateRangeField({
   end: string | null;
   onChange: (start: string | null, end: string | null) => void;
   hint?: string;
+  /** How to get a one-day trip back: shown under the calendar. */
+  tapHint?: string;
   labels: { none: string; clear: string; prevMonth: string; nextMonth: string };
 }) {
   const first = start ?? todayDateKey();
@@ -110,6 +113,7 @@ export function DateRangeField({
           <Button onClick={() => onChange(null, null)}>{labels.clear}</Button>
         )}
       </div>
+      {tapHint && <p className={classes.summary}>{tapHint}</p>}
       {hint && <p className={classes.summary}>{hint}</p>}
     </fieldset>
   );

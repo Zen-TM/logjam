@@ -8,7 +8,7 @@ import {
   FRIENDS,
   planInviteUrl,
   TRIP_PLAN_INVITE,
-  TRIP_PLAN_ROLES,
+  TRIP_PLAN_ROLES_PICK_ORDER,
   tripPlanInviteLinkLine,
   tripPlanInviteePill,
   tripPlanInviteMessage,
@@ -166,7 +166,7 @@ export default function PlanInvitePage({
             label={copy.role}
             value={role}
             onChange={setRole}
-            options={[...TRIP_PLAN_ROLES].reverse().map((value) => ({
+            options={TRIP_PLAN_ROLES_PICK_ORDER.map((value) => ({
               value,
               label: tripPlanRoleWord(value),
             }))}

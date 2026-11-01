@@ -37,7 +37,6 @@ import { deletePlanItem, savePlanItem } from "../../plansApi";
 import { downloadFile } from "../sidebar/panels/mapsModel";
 import { menuEntries } from "./planMenu";
 import PlanItemEditDialog from "./PlanItemEditDialog";
-import PlanPlaceDialog from "./PlanPlaceDialog";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -77,6 +76,7 @@ export default function PlanItems({
   onSaved,
   onAddCopy,
   onOpen,
+  onView,
 }: {
   plan: TripPlanView;
   myUserId: string | null;
@@ -88,11 +88,12 @@ export default function PlanItems({
   onAddCopy: () => void;
   /** Fit the map to it. */
   onOpen: (item: TripPlanItem) => void;
+  /** A place's page, one step inside the plan. */
+  onView: (place: TripPlanPlace) => void;
 }) {
   const toast = useToast();
   const [saving, setSaving] = useState<TripPlanItem | null>(null);
   const [deleting, setDeleting] = useState<TripPlanItem | null>(null);
-  const [viewing, setViewing] = useState<TripPlanPlace | null>(null);
   const [editing, setEditing] = useState<TripPlanItem | null>(null);
   const [busy, setBusy] = useState(false);
   const archived = plan.archivedAt != null;
@@ -132,7 +133,7 @@ export default function PlanItems({
   });
 
   const addCopy = !archived && (
-    <Button variant="filled" icon="copy" onClick={onAddCopy}>
+    <Button variant="filled" icon="add" onClick={onAddCopy}>
       {planAddVerbLabel("copy")}
     </Button>
   );
@@ -169,7 +170,10 @@ export default function PlanItems({
                 key={`${item.kind}:${item.id}`}
                 title={title}
                 subtitle={[
-                  tripPlanAddedByLine(item.addedBy),
+                  // On everything you added yourself it would only repeat.
+                  item.addedBy?.id === myUserId
+                    ? null
+                    : tripPlanAddedByLine(item.addedBy),
                   url && copy.itemDownloadHint,
                 ]
                   .filter(Boolean)
@@ -180,22 +184,24 @@ export default function PlanItems({
                 onOpen={() => {
                   if (url) return downloadFile(url);
                   onOpen(item);
-                  if (item.kind === "place") setViewing(item);
+                  if (item.kind === "place") onView(item);
                 }}
                 trailing={
-                  <Menu
-                    label={`Actions for ${title}`}
-                    title={title}
-                    placement="right-start"
-                    entries={menuEntries(verbs, (id) => run[id]())}
-                    trigger={(props) => (
-                      <IconButton
-                        {...props}
-                        icon="overflow"
-                        label={`Actions for ${title}`}
-                      />
-                    )}
-                  />
+                  verbs.length > 0 ? (
+                    <Menu
+                      label={`Actions for ${title}`}
+                      title={title}
+                      placement="right-start"
+                      entries={menuEntries(verbs, (id) => run[id]())}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon="overflow"
+                          label={`Actions for ${title}`}
+                        />
+                      )}
+                    />
+                  ) : undefined
                 }
               />
             );
@@ -257,13 +263,6 @@ export default function PlanItems({
           });
         }}
       />
-      {viewing && (
-        <PlanPlaceDialog
-          // Follows the refetched plan, so edits show at once.
-          place={plan.places.find((each) => each.id === viewing.id) ?? viewing}
-          onClose={() => setViewing(null)}
-        />
-      )}
       {editing && (
         <PlanItemEditDialog
           planId={plan.id}

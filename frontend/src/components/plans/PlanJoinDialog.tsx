@@ -73,8 +73,12 @@ export default function PlanJoinDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Joining…">
-            Cancel
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={copy.joining}
+          >
+            {copy.cancel}
           </Button>
           <Button variant="filled" busy={busy} onClick={() => void submit()}>
             {copy.askToJoin}

@@ -1640,6 +1640,8 @@ function App() {
                   key={selectedPlanId}
                   view={planFetch.view}
                   error={planFetch.error}
+                  gone={planFetch.gone}
+                  name={plans.find((plan) => plan.id === selectedPlanId)?.name}
                   refetch={planFetch.refetch}
                   own={{
                     places,

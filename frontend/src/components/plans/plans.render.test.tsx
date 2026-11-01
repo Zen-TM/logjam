@@ -719,6 +719,7 @@ describe("Add a place or way stopped halfway", () => {
     render(
       <PlanAddCopyDialog
         planId="p1"
+        plan={{ places: [], routes: [], files: [] }}
         places={[mine("a", "Claustral"), mine("b", "Ranon")]}
         routes={[]}
         files={[]}
@@ -832,5 +833,63 @@ describe("Start a trip log with many places", () => {
       ).disabled,
     ).toBe(true);
     expect(screen.getByText(TRIP_PLACES_CAP_SENTENCE)).toBeTruthy();
+  });
+});
+
+describe("a new form's first step", () => {
+  // Mutation: compare a new form against nothing, and Cancel on a form
+  // nobody touched asks "Discard this form?".
+  it("closes without asking when nothing was typed, and goes back to the chooser", async () => {
+    const onClose = vi.fn();
+    render(
+      <PlanFormBuilderDialog
+        open
+        planId="p1"
+        onSubmit={async () => {}}
+        onStale={() => {}}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.click(await screen.findByText(TRIP_PLAN_FORMS.copy.blank));
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_FORMS.copy.chooseBack }),
+    );
+    expect(screen.getByText(TRIP_PLAN_FORMS.copy.blank)).toBeTruthy();
+    fireEvent.click(screen.getByText(TRIP_PLAN_FORMS.copy.blank));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).toHaveBeenCalled();
+  });
+});
+
+describe("adding what is already in the plan", () => {
+  // Mutation: drop the in-plan check, and the same place can be added twice.
+  it("marks it and does not offer a tick", () => {
+    const mine = {
+      id: "a",
+      name: "Claustral",
+      latitude: -33.5,
+      longitude: 150.2,
+    } as TPlace;
+    render(
+      <PlanAddCopyDialog
+        planId="p1"
+        plan={{
+          places: [
+            { name: "Claustral", latitude: -33.5, longitude: 150.2 },
+          ] as never,
+          routes: [],
+          files: [],
+        }}
+        places={[mine]}
+        routes={[]}
+        files={[]}
+        user={null}
+        initial={null}
+        onAdded={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("In the plan")).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Claustral" })).toBeNull();
   });
 });

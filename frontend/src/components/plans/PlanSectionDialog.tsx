@@ -128,7 +128,7 @@ function SectionForm({
       <Dialog
         open
         size="large"
-        title={copy.sectionTitle}
+        title={editing ? copy.sectionTitle : copy.sectionNewTitle}
         onClose={guard.requestClose}
         dismissible={!busy}
         footer={
