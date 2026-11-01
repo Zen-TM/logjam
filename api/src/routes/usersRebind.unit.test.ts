@@ -38,6 +38,7 @@ vi.mock("../middleware/auth", () => ({
 }));
 vi.mock("../middleware/rateLimit", () => ({
   userPatchLimiter: (_q: unknown, _s: unknown, next: () => void) => next(),
+  usernameCheckLimiter: (_q: unknown, _s: unknown, next: () => void) => next(),
 }));
 vi.mock("../lib/identityProvider", () => ({
   identityProvider: () => ({ userExists }),
