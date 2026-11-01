@@ -86,7 +86,10 @@ export function shownOverlays(
   if (!terrainFollowsMap) return new Set(chosen);
   return new Set([
     ...[...chosen].filter((name) => !TERRAIN.includes(name)),
-    ...TERRAIN_LAYER_KEYS.filter((key) => terrain[key] || jobInArea),
+    // No job has a Land layer of its own.
+    ...TERRAIN_LAYER_KEYS.filter(
+      (key) => terrain[key] || (jobInArea && key !== "land"),
+    ),
   ]);
 }
 

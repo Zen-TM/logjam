@@ -35,24 +35,27 @@ export default function GaugePopover({
       marker.remove();
     };
   }, [map, gauge.lon, gauge.lat, anchorEl, close]);
+  const dismiss = () => {
+    close();
+    map.getCanvas().focus();
+  };
   return (
     <Popover
       open
-      onClose={() => {
-        close();
-        map.getCanvas().focus();
-      }}
+      onClose={dismiss}
       anchorRef={anchorRef}
       label={GAUGES.title}
       placement={narrow ? "top-start" : "bottom-start"}
       fit
       dismissOnOutsidePress
+      closeButton={false}
     >
       <GaugeView
         gauge={gauge}
         attribution={attribution}
         generatedAt={generatedAt}
         now={now}
+        onClose={dismiss}
       />
     </Popover>
   );

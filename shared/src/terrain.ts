@@ -1,5 +1,6 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
-// from the 5 m DEM, with no LiDAR job. Each client only draws these.
+// from the 5 m DEM, with no LiDAR job, and Land (nswLand.ts), from the land
+// tenure layer. Each client only draws these.
 //
 // Slope is baked once as a fake DEM: a terrarium archive whose "height" is the
 // slope in degrees (ADR 0030 encoding), built by `topo/build_nsw_dem.py slope`.
@@ -38,10 +39,15 @@ export const NSW_HILLSHADE = {
 
 /**
  * The group's layers, top of the map first: contour lines over the slope
- * colours over the shading. Both clients list them in this order and stack
- * them in it.
+ * colours over the tint of who holds the land over the shading. Both clients
+ * list them in this order and stack them in it.
  */
-export const TERRAIN_LAYER_KEYS = ["contours", "slope", "hillshade"] as const;
+export const TERRAIN_LAYER_KEYS = [
+  "contours",
+  "slope",
+  "land",
+  "hillshade",
+] as const;
 
 export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 
@@ -49,8 +55,8 @@ export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
  * Where each Terrain layer goes in the vector basemap, as a printed topo map
  * has it: directly under this layer of the Protomaps style (its
  * `@protomaps/basemaps` id, before a client's prefix). The shading lies over
- * the land fills and under the water; the slope and then the contours lie over
- * the water's fill and under its lines, the roads, the boundaries and every
+ * the land fills and under the water, with Land's tint on it, so a lake stays a
+ * lake; the slope and then the contours lie over the water's fill and under its lines, the roads, the boundaries and every
  * label. Over a raster basemap there is nothing to interleave, and the group
  * sits on top of it. Guards: `terrain.test.ts`, and each client's test that
  * the ids are in the style it draws (frontend `components/map/layerOrder.test.ts`,
@@ -61,6 +67,7 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
 > = {
   contours: "water_stream",
   slope: "water_stream",
+  land: "water",
   hillshade: "water",
 };
 
@@ -106,9 +113,10 @@ export function terrainBeforeIds(
 }
 
 /**
- * Every switch of the Terrain tab: the layers above, and the sharpened areas'
- * optional vegetation layer, which is drawn from their own archives rather
- * than stacked into the basemap, so it is not a `TerrainLayerKey`.
+ * Every stored Terrain switch: the layers above, Land tenure among them though
+ * its row is listed under Overlays, and the sharpened areas' optional vegetation
+ * layer, which is drawn from their own archives rather than stacked into the
+ * basemap, so it is not a `TerrainLayerKey`.
  */
 export const TERRAIN_SWITCH_KEYS = [
   ...TERRAIN_LAYER_KEYS,
@@ -118,14 +126,15 @@ export const TERRAIN_SWITCH_KEYS = [
 export type TerrainSwitchKey = (typeof TERRAIN_SWITCH_KEYS)[number];
 
 /**
- * What a map shows before the user touches a switch: contours and slope, and any vegetation layer, which the owner asked for when they made the
- * area.
+ * What a map shows before the user touches a switch: contours and slope, and
+ * any vegetation layer, which the owner asked for when they made the area.
  */
 export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainSwitchKey, boolean>
 > = {
   contours: true,
   slope: true,
+  land: false,
   hillshade: false,
   vegetation: true,
 };
@@ -209,7 +218,10 @@ export function terrainCredit(
   credit: string = NSW_5M.credit,
 ): string | null {
   const keys = new Set(drawn);
-  const names = TERRAIN_LAYER_KEYS.filter((key) => keys.has(key));
+  const names = TERRAIN_LAYER_KEYS.filter(
+    // Land has a credit of its own: `GEOPDF_OVERLAY_ATTRIBUTION`.
+    (key) => key !== "land" && keys.has(key),
+  );
   if (names.length === 0) return null;
   const list =
     names.length === 1
