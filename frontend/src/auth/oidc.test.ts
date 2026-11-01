@@ -241,8 +241,9 @@ describe("signInWithPassword", () => {
       vi.fn(async () => ({ ok: true, json: async () => body })),
     );
 
-  // Mutation: store the password, or leave profile empty, and the refresh that
-  // compares the subject fails on the next expired token.
+  // Mutations: leave profile empty, and the refresh that compares the subject
+  // fails on the next expired token; put the password in any field `User`
+  // keeps, and it sits in localStorage.
   it("stores the session the redirect would, and no password", async () => {
     answer({
       AuthenticationResult: {

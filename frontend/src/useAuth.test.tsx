@@ -267,8 +267,9 @@ describe("signOutEverywhere", () => {
 
 // Mutations that turn these red: let an unknown error reach the form, so a
 // client Cognito no longer signs in from here strands the user; send a refused
-// password to the provider's page; or flip to authenticated before the consent
-// is recorded, so a new account meets the gate it has just answered.
+// password to the provider's page; redirect while offline, onto the browser's
+// error page; or flip to authenticated before the consent is recorded, so a new
+// account meets the gate it has just answered.
 describe("useAuth password sign-in", () => {
   const signedOut = async () => {
     oidc.loadSession.mockResolvedValue(null);
@@ -317,13 +318,37 @@ describe("useAuth password sign-in", () => {
     expect(oidc.signInRedirect).not.toHaveBeenCalled();
   });
 
+  it("leaves a failure to the form when offline", async () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    oidc.signInWithPassword.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = await signedOut();
+    await expect(
+      result.current.signInWithPassword("a@b.co", "pw"),
+    ).rejects.toThrow("Failed to fetch");
+    expect(oidc.signInRedirect).not.toHaveBeenCalled();
+    onLine.mockRestore();
+  });
+
+  it("hands over to the provider's page on a blocked request online", async () => {
+    oidc.signInWithPassword.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { result } = await signedOut();
+    await act(() => result.current.signInWithPassword("a@b.co", "pw"));
+    expect(oidc.signInRedirect).toHaveBeenCalledOnce();
+  });
+
   it("records a new account's consent before it is signed in", async () => {
     oidc.signInWithPassword.mockResolvedValue(true);
     const { result } = await signedOut();
+    let stateWhenRecorded = "";
+    recordConsent.mockImplementationOnce(async () => {
+      stateWhenRecorded = result.current.state;
+      return {};
+    });
     await act(() =>
       result.current.signInWithPassword("a@b.co", "pw", "canyoneer"),
     );
     expect(recordConsent).toHaveBeenCalledWith(expect.any(String), "canyoneer");
+    expect(stateWhenRecorded).toBe("signIn");
     expect(result.current.state).toBe("authenticated");
   });
 

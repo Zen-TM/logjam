@@ -148,6 +148,9 @@ function CognitoForms({
   ) => Promise<void>;
 }) {
   const [screen, setScreen] = useState<Screen>("signIn");
+  // Set only once the sign-up form, ticks and all, has been accepted: it is what
+  // records consent at first sign-in, so whatever is typed in the field isn't.
+  const [signedUpUsername, setSignedUpUsername] = useState<string>();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -195,6 +198,7 @@ function CognitoForms({
 
   function goTo(next: Screen) {
     setLocalError(null);
+    setCode("");
     setScreen(next);
   }
 
@@ -206,14 +210,29 @@ function CognitoForms({
       return;
     }
     setEmailError(null);
+    // Unchecked by `noValidate`, and Cognito's refusal of a blank would hand
+    // over to the provider's page.
+    if (!password) {
+      setLocalError("Enter your password.");
+      return;
+    }
     setSubmitting(true);
     try {
       await onPasswordSignIn(email, password);
     } catch (err) {
       // Signed up, never entered the code: send one and ask for it here.
       if (err instanceof Error && err.name === "UserNotConfirmedException") {
-        await resendSignUpCode(email).catch(console.error);
-        setScreen("confirmSignUp");
+        setSignedUpUsername(undefined);
+        goTo("confirmSignUp");
+        await resendSignUpCode(email).catch((resendErr) => {
+          console.error(resendErr);
+          setLocalError(
+            messageFromError(
+              resendErr,
+              "Couldn't resend code. Please try again.",
+            ),
+          );
+        });
       } else {
         console.error(err);
         setLocalError(
@@ -258,6 +277,7 @@ function CognitoForms({
     setSubmitting(true);
     try {
       await signUp(email, password, name);
+      setSignedUpUsername(username);
       goTo("confirmSignUp");
     } catch (err) {
       console.error(err);
@@ -285,11 +305,11 @@ function CognitoForms({
     // signs in without ever flashing the sign-in screen. After a reload it
     // isn't, and the sign-in screen asks for it.
     try {
-      await onPasswordSignIn(email, password, username || undefined);
+      await onPasswordSignIn(email, password, signedUpUsername);
     } catch (err) {
       console.error(err);
+      goTo("signIn");
       setLocalError(messageFromError(err, "Sign in failed. Please try again."));
-      setScreen("signIn");
     }
     setSubmitting(false);
   }
@@ -332,7 +352,6 @@ function CognitoForms({
     try {
       await confirmForgotPassword(email, code, newPassword);
       setResetSuccess(true);
-      setCode("");
       goTo("signIn");
     } catch (err) {
       console.error(err);
