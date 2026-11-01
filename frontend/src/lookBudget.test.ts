@@ -11,7 +11,9 @@ import { describe, expect, it } from "vitest";
  * BUDGET of the `border-radius`, `box-shadow` and `background` declarations it
  * still writes, and the budget only goes down — the `pxBudget.test.ts` pattern.
  * A stylesheet over its budget fails; one under it fails too, until its line
- * here is lowered (or deleted at 0), so a conversion is banked.
+ * here is lowered (or deleted at 0), so a conversion is banked. Moving rules to
+ * a new stylesheet moves their count with them: a new line is fine when another
+ * falls by the same amount.
  *
  * Mutation that turns it red: add `border-radius: 4px;` to any screen
  * stylesheet.
@@ -34,7 +36,8 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/UnifiedImportDialog.module.css": 6,
   "components/dialogs/topoSettings/topoSettings.module.css": 7,
   "components/feedback/RootErrorBoundary.module.css": 4,
-  "components/map/LayersPopover.module.css": 12,
+  "components/map/BasemapGallery.module.css": 4,
+  "components/map/LayersPopover.module.css": 8,
   "components/map/Map.module.css": 14,
   "components/map/MapChrome.module.css": 4,
   "components/map/MapSearchBox.module.css": 10,

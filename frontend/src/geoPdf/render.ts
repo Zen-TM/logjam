@@ -52,7 +52,12 @@ import {
   type TerrainTileRead,
 } from "./terrain";
 import type { TileCache } from "./cache";
-import { planTerrainBlocks, printGeometry, vectorBasemap } from "./plan";
+import {
+  planTerrainBlocks,
+  printGeometry,
+  rasterBaseTiles,
+  vectorBasemap,
+} from "./plan";
 import { bandRows } from "./terrainJobs";
 import { TerrainPool } from "./terrainPool";
 import { openArchive, TileFetcher, type TileBytes } from "./tiles";
@@ -284,7 +289,7 @@ async function renderInner(
   const { north, south, east, west } = config.extent;
   const extent = config.extent;
   const geometry = printGeometry(config);
-  const { centreLat, zoom, nativeW, nativeH, overlayZoom } = geometry;
+  const { centreLat, nativeW, nativeH, overlayZoom } = geometry;
   const baseLayerCfg = GEOPDF_BASE_LAYER_CONFIG[config.baseLayer];
   const styleZoom = displayZoomForScale(config.scale, centreLat);
   timings.mapPx = [nativeW, nativeH];
@@ -322,15 +327,7 @@ async function renderInner(
 
   const elementDpi = (nativeW / mapWidthMm) * MM_PER_INCH;
   const vectorPxScale = elementDpi / STYLE_DPI;
-  const transform = computeTileToMapTransform(
-    zoom,
-    north,
-    south,
-    east,
-    west,
-    nativeW,
-    nativeH,
-  );
+  const baseTiles = rasterBaseTiles(config, geometry);
   const overlayTransform = computeTileToMapTransform(
     overlayZoom,
     north,
@@ -480,8 +477,8 @@ async function renderInner(
   // Base tiles.
   const baseEntries: TileEntry[] = [];
   if (baseLayerCfg) {
-    for (const tile of transform.tiles) {
-      const rect = tileRect(tile, transform);
+    for (const tile of baseTiles.tiles) {
+      const rect = tileRect(tile, baseTiles);
       const [first, last] = stripsReaching(rect.y, rect.y + rect.h);
       if (first < 0) continue;
       const url = baseLayerCfg.urlTemplate

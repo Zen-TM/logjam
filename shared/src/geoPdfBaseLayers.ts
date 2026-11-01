@@ -20,6 +20,12 @@ const SIX_ATTRIBUTION =
 const SIX_ATTRIBUTION_HTML =
   '&copy; State of New South Wales (Spatial Services, a business unit of the Department of Customer Service NSW). For current information go to <a href="https://spatial.nsw.gov.au">spatial.nsw.gov.au</a>.';
 
+// A tile's labels are a fixed size in pixels, so the deeper a print reads for
+// resolution, the smaller they land on paper. Reading for 85 DPI lands a tile
+// between 85 and 170 DPI, a 10 px label between 4 and 8 pt, against 1 to 2.5 pt
+// at 300 DPI. Guard: geoPdfTileMath.test.ts.
+const LABELLED_TILE_DPI = 85;
+
 export type BasemapCatalogEntry = {
   id: string;
   /** Picker label (web layer switcher / mobile basemap picker). */
@@ -63,6 +69,12 @@ export type BasemapCatalogEntry = {
    * printed sheet with the credit it carries.
    */
   printable: boolean;
+  /**
+   * The DPI a print reads this provider's tiles for, where not `TARGET_DPI`.
+   * Left out where deeper tiles lose nothing: imagery has no labels, and SIX
+   * Topo's grow with the zoom, as they are drawn on the sheet.
+   */
+  printTileDpi?: number;
   /**
    * NSW Spatial Services layers additionally need the dated extraction credit
    * (see SIX_EXTRACTION_CREDIT_PREFIX above) appended at draw time.
@@ -129,6 +141,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     // overload the server, and offers a script to stitch its tiles for print.
     // A print's tiles are read at 2 at a time (geoPdf/tiles.ts), never prefetched.
     printable: true,
+    printTileDpi: LABELLED_TILE_DPI,
   },
   {
     id: "osm-cycle",
@@ -172,6 +185,7 @@ export const BASEMAP_CATALOG: BasemapCatalogEntry[] = [
     attributionHtml: SIX_ATTRIBUTION_HTML,
     offlineCapable: true,
     printable: true,
+    printTileDpi: LABELLED_TILE_DPI,
     requiresExtractionDate: true,
   },
   {
@@ -199,6 +213,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
     urlTemplate: string;
     maxNativeZoom: number;
     attribution: string;
+    printTileDpi?: number;
     requiresExtractionDate?: boolean;
   }
 > = Object.fromEntries(
@@ -208,6 +223,7 @@ export const GEOPDF_BASE_LAYER_CONFIG: Record<
       urlTemplate: entry.urlTemplate,
       maxNativeZoom: entry.maxNativeZoom,
       attribution: entry.attribution,
+      printTileDpi: entry.printTileDpi,
       requiresExtractionDate: entry.requiresExtractionDate,
     },
   ]),

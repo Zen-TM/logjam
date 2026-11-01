@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
  * budget only goes down — the `KNOWN_FAILURES` pattern of
  * `scripts/wcag-contrast.mjs`. A stylesheet over its budget fails; one under
  * it fails too, until its line here is lowered (or deleted at 0), so a
- * conversion is banked and cannot quietly be spent again.
+ * conversion is banked and cannot quietly be spent again. Moving rules to a
+ * new stylesheet moves their count with them: a new line is fine when another
+ * falls by the same amount.
  *
  * Not counted (the rule's exemptions): a 1–2px border or offset, the 768px
  * breakpoint (a media query cannot read a custom property), a comment, and a
@@ -46,7 +48,8 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/topoSettings/topoSettings.module.css": 10,
   "components/feedback/RootErrorBoundary.module.css": 10,
   "components/feedback/ToastProvider.module.css": 4,
-  "components/map/LayersPopover.module.css": 28,
+  "components/map/BasemapGallery.module.css": 3,
+  "components/map/LayersPopover.module.css": 25,
   "components/map/Map.module.css": 17,
   "components/map/MapChrome.module.css": 32,
   "components/map/MapSearchBox.module.css": 15,

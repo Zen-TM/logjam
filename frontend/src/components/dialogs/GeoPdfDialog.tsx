@@ -1320,6 +1320,7 @@ function GeoPdfDialog({
                       markDirty();
                     }}
                     mapView={mapCenter ?? null}
+                    oneRow
                   />
                 </div>
                 <ChipPicker

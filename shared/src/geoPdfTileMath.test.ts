@@ -3,6 +3,7 @@ import {
   computeTileToMapTransform,
   computeZoom,
   geoPdfNativeMegapixels,
+  geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
   geoPdfTooLarge,
   GEOPDF_MAX_CANVAS_BYTES,
@@ -203,6 +204,30 @@ describe("geoPdfTooLarge", () => {
     expect(bytes(town, 5000, 16)).toBeLessThan(GEOPDF_MAX_CANVAS_BYTES);
     expect(geoPdfTooLarge(town, 5000, "six-topo")).toBe(false);
     expect(geoPdfTooLarge(town, 5000, "six-imagery")).toBe(true);
+  });
+});
+
+describe("geoPdfBaseTileZoom", () => {
+  // Mutation: drop `printTileDpi` from either catalog entry and its labels
+  // print at about 2 pt; set it on SIX Topo and a print loses detail for labels
+  // that didn't need it.
+  it("reads a tile with fixed-size labels shallower than one without", () => {
+    expect(geoPdfBaseTileZoom("osm-topo", 25000, -33.7)).toBe(15);
+    expect(geoPdfBaseTileZoom("six-base", 25000, -33.7)).toBe(15);
+    expect(geoPdfBaseTileZoom("six-base", 10000, -33.7)).toBe(16);
+    expect(geoPdfBaseTileZoom("six-topo", 25000, -33.7)).toBe(16);
+    expect(geoPdfBaseTileZoom("six-imagery", 25000, -33.7)).toBe(16);
+  });
+
+  // Mutation: a DPI of 80 tips the state's south to z14, where OSM Topo has no
+  // street names; of 155, its north to z16.
+  it("gives a scale one zoom across NSW", () => {
+    for (const lat of [-28.2, -33.7, -37.5])
+      expect(geoPdfBaseTileZoom("osm-topo", 25000, lat)).toBe(15);
+  });
+
+  it("never reads past the provider's deepest tiles", () => {
+    expect(geoPdfBaseTileZoom("osm-topo", 500, -33.7)).toBe(17);
   });
 });
 

@@ -6,6 +6,7 @@ import {
   BASEMAP_CATALOG,
   computeTileToMapTransform,
   computeZoom,
+  geoPdfBaseTileZoom,
   geoPdfMaxNativeZoom,
   NSW_CONTOURS,
   NSW_LAND,
@@ -52,6 +53,23 @@ export function printGeometry(config: GeoPdfRenderInput["config"]) {
   };
 }
 export type PrintGeometry = ReturnType<typeof printGeometry>;
+
+/** The tiles a raster base is read from, placed on the print's map image. */
+export function rasterBaseTiles(
+  config: GeoPdfRenderInput["config"],
+  g: PrintGeometry,
+) {
+  const { north, south, east, west } = config.extent;
+  return computeTileToMapTransform(
+    geoPdfBaseTileZoom(config.baseLayer, config.scale, g.centreLat),
+    north,
+    south,
+    east,
+    west,
+    g.nativeW,
+    g.nativeH,
+  );
+}
 
 /**
  * The archive and tiles a vector base is read from, or null for a raster base.

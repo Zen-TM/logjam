@@ -53,7 +53,7 @@ const ARCHIVE_PATHS: Record<string, Buffer> = {
   [PROTOMAPS_ARCHIVE]: archives.basemap,
 };
 
-type Seen = { tiles: number; archives: number };
+type Seen = { tiles: number; archives: number; zooms: Set<number> };
 
 /** Answer every read the renderer makes from the fixtures, counting them. */
 async function stubNetwork(
@@ -61,7 +61,7 @@ async function stubNetwork(
   opts: { delayMs?: number; unreadableHeights?: boolean } = {},
 ) {
   const broken = opts.unreadableHeights ? unreadableHeights() : null;
-  const seen: Seen = { tiles: 0, archives: 0 };
+  const seen: Seen = { tiles: 0, archives: 0, zooms: new Set() };
   const delay = () =>
     opts.delayMs ? new Promise((r) => setTimeout(r, opts.delayMs)) : null;
   await page.route("https://maps.six.nsw.gov.au/**", async (route: Route) => {
@@ -72,6 +72,7 @@ async function stubNetwork(
       .split("/")
       .slice(-3)
       .map(Number) as [number, number, number];
+    seen.zooms.add(z);
     await route.fulfill({
       status: 200,
       contentType: "image/png",
@@ -223,7 +224,7 @@ test.describe("the in-browser GeoPDF renderer", () => {
       }),
     );
     expect(r).toMatchObject({ ok: false, reason: "too-large" });
-    expect(seen).toEqual({ tiles: 0, archives: 0 });
+    expect(seen).toMatchObject({ tiles: 0, archives: 0 });
   });
 
   test("a strip that does not read back is a refusal, never a PDF", async ({
@@ -311,6 +312,25 @@ test.describe("the in-browser GeoPDF renderer", () => {
     );
     expect(r).toMatchObject({ ok: false, reason: "failed" });
     expect(r.pdfBase64).toBeUndefined();
+  });
+
+  // Mutation: draw the base from the map image's zoom in render.ts instead of
+  // `rasterBaseTiles`, and the base's labels shrink to half with its tiles' reads
+  // up fourfold, with every planning test still green.
+  test("a base with fixed-size labels is read shallower than imagery", async ({
+    page,
+  }) => {
+    const seen = await stubNetwork(page);
+    await openBench(page);
+    expect(
+      (await page.evaluate(() => window.geoPdfBench.run("plain"))).ok,
+    ).toBe(true);
+    expect([...seen.zooms]).toEqual([15]);
+    seen.zooms.clear();
+    expect(
+      (await page.evaluate(() => window.geoPdfBench.run("contours"))).ok,
+    ).toBe(true);
+    expect([...seen.zooms]).toEqual([16]);
   });
 
   test("progress never goes back and ends at 1", async ({ page }) => {

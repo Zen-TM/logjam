@@ -12,7 +12,12 @@ import {
   type SharpenedOverlay,
 } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
-import { printGeometry, statewideReads, vectorBasemap } from "./plan";
+import {
+  printGeometry,
+  rasterBaseTiles,
+  statewideReads,
+  vectorBasemap,
+} from "./plan";
 import type { GeoPdfRenderInput } from "./types";
 
 // A made-up point inside the NSW coverage.
@@ -138,6 +143,24 @@ describe("statewideReads", () => {
     };
     expect(statewideReads(input({}, [area]))).toEqual([]);
     expect(statewideReads(plain).length).toBeGreaterThan(0);
+  });
+});
+
+describe("rasterBaseTiles", () => {
+  // Mutation: read at `geometry.zoom`, and a 1:25 000 print's labels land at
+  // half the size, off a base with four times the tiles.
+  it("reads a base with fixed-size labels shallower than the map image", () => {
+    const { config } = input({ baseLayer: "six-base", overlays: [] });
+    const geometry = printGeometry(config);
+    const tiles = rasterBaseTiles(config, geometry);
+    expect(geometry.zoom).toBe(16);
+    expect(tiles.tiles[0]!.z).toBe(15);
+    expect(tiles.scaleX).toBeCloseTo(2, 2);
+  });
+
+  it("reads SIX Topo at the map image's own zoom", () => {
+    const { config } = input({ baseLayer: "six-topo", overlays: [] });
+    expect(rasterBaseTiles(config, printGeometry(config)).tiles[0]!.z).toBe(16);
   });
 });
 

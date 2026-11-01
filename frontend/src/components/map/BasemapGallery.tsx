@@ -2,7 +2,7 @@ import { useRef, type KeyboardEvent } from "react";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
-import classes from "./LayersPopover.module.css";
+import classes from "./BasemapGallery.module.css";
 
 export type BaseLayer = TileLayer & { id: string; name: string };
 
@@ -43,12 +43,14 @@ export default function BasemapGallery({
   activeLayerId,
   onChange,
   mapView,
+  oneRow = false,
 }: {
   label: string;
   layers: readonly BaseLayer[];
   activeLayerId: string;
   onChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  oneRow?: boolean;
 }) {
   const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
@@ -73,7 +75,7 @@ export default function BasemapGallery({
       role="radiogroup"
       aria-label={label}
       tabIndex={-1}
-      className={classes.gallery}
+      className={`${classes.gallery} ${oneRow ? classes.oneRow : ""}`}
       onKeyDown={onKeyDown}
     >
       {layers.map((layer, index) => {
