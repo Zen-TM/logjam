@@ -19,48 +19,21 @@ import { placeIdOfMedia } from "../lib/mediaLink";
 import { AppError, malformed } from "../middleware/errorHandler";
 import { resolveUser } from "../lib/resolveUser";
 import { userPatchLimiter } from "../middleware/rateLimit";
-import { cognitoIdp } from "../services/awsClients";
+import { identityProvider } from "../lib/identityProvider";
 import { getMonthlyCreditUsage } from "../lib/computeCredits";
 import { getEgressUsage } from "../lib/egressQuota";
 import { CURRENT_CONSENT_VERSION } from "../constants/consent";
 import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
-import { logger, safeErrorForLog } from "../lib/logger";
+import { logger } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
-import {
-  AdminGetUserCommand,
-  UserNotFoundException,
-} from "@aws-sdk/client-cognito-identity-provider";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
-}
-
-async function cognitoUserExists(sub: string): Promise<boolean> {
-  // env.ts makes COGNITO_USER_POOL_ID required whenever AUTH_MODE=cognito, so an
-  // unset pool id only ever happens in fake-auth dev, where there is no Cognito
-  // directory to ask and no takeover to guard against. Deliberate fail-safe.
-  const poolId = getEnv().COGNITO_USER_POOL_ID;
-  if (!poolId) return true;
-  try {
-    await cognitoIdp.send(
-      new AdminGetUserCommand({ UserPoolId: poolId, Username: sub }),
-    );
-    return true;
-  } catch (err) {
-    if (err instanceof UserNotFoundException) return false;
-    // IAM not granted or network error — fail safe: treat as existing, but say
-    // so, or a missing AdminGetUser permission silently disables the guard.
-    logger.warn(
-      { err: safeErrorForLog(err) },
-      "cognito_user_exists_check_failed",
-    );
-    return true;
-  }
 }
 
 // Create the first-login User row for a sub that has no row yet AND whose email
@@ -260,13 +233,14 @@ router.get(
       });
 
       if (emailOwner && emailOwner.cognitoId !== sub) {
-        // A row exists for this email under a different Cognito sub. Rebind it
+        // A row exists for this email under a different sub. Rebind it
         // to the new sub only when the inbound JWT is email-verified AND the
-        // previous Cognito user no longer exists (account deleted + recreated).
+        // previous identity no longer exists at the provider (account deleted + recreated).
         // Any other case returns 409 to prevent account takeover.
         const oldSub = emailOwner.cognitoId;
         const canRebind =
-          req.user!.emailVerified && !(await cognitoUserExists(oldSub));
+          req.user!.emailVerified &&
+          !(await identityProvider().userExists(oldSub));
 
         if (!canRebind) {
           throw new AppError(
@@ -277,7 +251,7 @@ router.get(
 
         logger.warn(
           { oldSubHash: shortHash(oldSub), newSubHash: shortHash(sub) },
-          "cognito_rebind",
+          "identity_rebind",
         );
         user = await prisma.user.update({
           where: { id: emailOwner.id },

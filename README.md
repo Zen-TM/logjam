@@ -162,7 +162,7 @@ cd api && FAKE_USER_SUB=fake-bob-sub npm run dev   # switch to bob
 
 **Real Cognito (`make dev-snapshot`)**
 
-Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapshot and then **prints** the commands to start the servers — you run the API and frontend yourself with the override (`AUTH_MODE=cognito` for the API, `VITE_AUTH_MODE=cognito` for the frontend). The Cognito pool/client IDs are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
+Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapshot and then **prints** the commands to start the servers — you run the API and frontend yourself with the override (`AUTH_MODE=oidc` for the API, `VITE_AUTH_MODE=cognito` for the frontend). The Cognito issuer URL and client ID (`OIDC_ISSUER`, `OIDC_AUDIENCE`) are already populated in the generated `.env.local` (they're public identifiers baked into the Terraform template). Requires a real test account in the Cognito dev pool. See the `make dev-snapshot` row above.
 
 ### Seeded test data
 
