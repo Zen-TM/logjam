@@ -8,3 +8,17 @@ export function parseCognitoIssuer(
   const m = COGNITO_ISSUER.exec(issuer);
   return m ? { region: m[1], poolId: m[2] } : null;
 }
+
+/**
+ * Change email, delete and sign out everywhere call Cognito directly, so a
+ * client offers them only when its issuer is Cognito. Fake auth counts, so
+ * the rows can be exercised in local dev.
+ */
+export function hasCognitoAccount(
+  authMode: string | undefined,
+  issuer: string | undefined,
+): boolean {
+  return (
+    authMode === "fake" || (!!issuer && parseCognitoIssuer(issuer) !== null)
+  );
+}

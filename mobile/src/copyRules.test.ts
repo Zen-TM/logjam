@@ -36,11 +36,6 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     reason: "the wordmark on the sign-in screen",
   },
   {
-    file: "screens/AuthFlow.tsx",
-    text: "Logjam",
-    reason: "the wordmark on the sign-in screen",
-  },
-  {
     file: "screens/ConsentGate.tsx",
     text: "Logjam",
     reason: "the terms and the agreement are the service's, on both clients",

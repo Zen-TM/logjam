@@ -1,6 +1,6 @@
 // Marks an error as "the request got no answer": a timeout, a reset
 // connection, a reply cut off mid-body, a token refresh that could not reach
-// Cognito. It says something about the link and nothing about what was sent,
+// the sign-in provider. It says something about the link and nothing about what was sent,
 // which is the one fact the sync engine needs before it counts a failure
 // against an op (flush.ts) and the one an error's class cannot give it: fetch
 // rejects with a bare TypeError, the abort with an AbortError, and the native

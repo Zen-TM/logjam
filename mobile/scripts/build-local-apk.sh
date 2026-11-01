@@ -33,10 +33,10 @@
 #
 # A prod-pointed field APK is the same script with the EXPO_PUBLIC_* values
 # overridden in the shell, which Expo prefers to `.env`:
-#   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=cognito \
+#   LOGJAM_SENSOR_LOG=1 EXPO_PUBLIC_AUTH_MODE=oidc \
 #   EXPO_PUBLIC_API_URL=https://api.logjamnsw.com \
 #   EXPO_PUBLIC_WEB_URL=https://logjamnsw.com ./scripts/build-local-apk.sh
-# The Cognito ids still come from `.env`.
+# The OIDC issuer and client id still come from `.env`.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

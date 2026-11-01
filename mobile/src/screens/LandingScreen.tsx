@@ -1,6 +1,6 @@
 // First thing a fresh install shows, and the sign-in screen for the rest of the
-// app's life. One screen, two states: the sign-in form, and the explainer that
-// stands between "continue without an account" and actually doing it.
+// app's life. One screen, two states: the sign-in button, and the explainer
+// that stands between "continue without an account" and actually doing it.
 //
 // It renders for both `chooser` and `signIn`. The only difference is which way
 // out is offered: a fresh install can go on without an account, while a guest
@@ -14,25 +14,18 @@
 //     phone is total loss. It is a STATE here, not a card below the fold: by
 //     the time someone has a season of trips recorded it is too late to
 //     mention, so "continue without an account" shows it and asks again.
-//  2. Cognito errors arrive pre-mapped through `messageFromError`/
-//     `mapAuthError` — never raw text in the banner.
+//  2. Sign-in errors arrive pre-mapped through `messageFromError` — never raw
+//     text in the banner. A closed browser sheet is no error at all.
 //
 // Crash-report consent is asked once the user is inside Logjam GPS
 // (`CrashReportConsent`, mounted from App.tsx), for a guest and a signed-in
 // user alike.
 import { useState } from "react";
-import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Image, ScrollView, Text, View } from "react-native";
 
 import type { useAuth } from "../auth/useAuth";
 import { radius, spacing, makeStyles, muted } from "../theme";
-import { Button, ErrorBanner, FormStack, TextField, TextLink } from "../ui";
+import { Button, ErrorBanner, FormStack } from "../ui";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -48,14 +41,8 @@ export function LandingScreen({ auth }: { auth: Auth }) {
   const [mode, setMode] = useState<"signIn" | "guestExplainer">("signIn");
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-      >
+    <View style={styles.root}>
+      <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.mark}>
           <Image
             source={require("../../assets/logo.png")}
@@ -78,12 +65,11 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           <GuestExplainer
             auth={auth}
             onBack={() => setMode("signIn")}
-            onCreateAccount={auth.goToSignUp}
             onContinue={auth.chooseGuest}
           />
         )}
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -98,50 +84,27 @@ function SignInPanel({
 }) {
   const styles = useStyles();
 
-  const [email, setEmail] = useState(auth.pendingUsername);
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     setSubmitting(true);
-    await auth.signIn(email.trim(), password);
+    await auth.signIn();
     setSubmitting(false);
   };
 
   return (
     <FormStack>
-      <TextField
-        label="Email"
-        value={email}
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        textContentType="emailAddress"
-      />
-      <TextField
-        label="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-        textContentType="password"
-        returnKeyType="go"
-        onSubmitEditing={submit}
-      />
       {/* Directly above the submit it belongs to, not at the top of the
           screen — never at the top of the form (shared/DESIGN.md §11). */}
       {auth.error ? <ErrorBanner message={auth.error} /> : null}
-      <Button label="Sign in" onPress={submit} loading={submitting} />
-      <TextLink label="Forgot password?" onPress={auth.goToForgotPassword} />
+      <Button
+        label="Sign in or create an account"
+        onPress={submit}
+        loading={submitting}
+      />
 
       {/* Everything below the rule is deliberately quieter than Sign in. */}
       <View style={styles.secondary}>
-        <Button
-          label="Create an account"
-          variant="outlineAccent"
-          onPress={auth.goToSignUp}
-        />
         {offersGuest ? (
           <Button
             label="Continue without an account"
@@ -159,12 +122,10 @@ function SignInPanel({
 function GuestExplainer({
   auth,
   onBack,
-  onCreateAccount,
   onContinue,
 }: {
   auth: Auth;
   onBack: () => void;
-  onCreateAccount: () => void;
   /** Returns false when the choice could not be stored (auth.error says why). */
   onContinue: () => boolean;
 }) {
@@ -191,12 +152,7 @@ function GuestExplainer({
           variant="outlineAccent"
           onPress={onContinue}
         />
-        <Button
-          label="Create an account"
-          variant="ghost"
-          onPress={onCreateAccount}
-        />
-        <Button label="Back to login" variant="ghost" onPress={onBack} />
+        <Button label="Back to sign in" variant="ghost" onPress={onBack} />
       </View>
     </FormStack>
   );

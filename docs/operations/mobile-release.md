@@ -46,7 +46,7 @@ Needed before the first release tag.
    `eas credentials --platform android` → Google Service Account. EAS uses it
    for `--auto-submit`.
 5. **EAS environments `preview` and `production`** carry the same variables
-   (`EXPO_PUBLIC_COGNITO_CLIENT_ID`, `EXPO_PUBLIC_COGNITO_USER_POOL_ID`,
+   (`EXPO_PUBLIC_OIDC_ISSUER`, `EXPO_PUBLIC_OIDC_CLIENT_ID`,
    `EXPO_PUBLIC_SENTRY_DSN`, `GOOGLE_SERVICES_JSON`), and should carry the
    same values: both profiles talk to the production stack
    (`mobile/eas.json`).
@@ -110,8 +110,8 @@ needs: [`mobile/e2e/README.md`](../../mobile/e2e/README.md).
 |---|---|---|
 | `browse.yaml` | `fake` | the signed-in shell: tabs, place list from the API, place detail, inbox, account |
 | `map.yaml` | `fake` | map tab, layers picker, the vector basemap and its attribution, locate-me |
-| `guest.yaml` | `cognito`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
-| `signin.yaml` | `cognito`, with the test Cognito user | real sign-in to the shell |
+| `guest.yaml` | `oidc`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
+| `signin.yaml` | `oidc`, with the test Cognito user | real sign-in through the provider's browser sheet to the shell |
 
 A flow that fails is not retried until it passes: find out why. A flow broken
 by an intended UI change is fixed in a PR to `main`, and the release waits

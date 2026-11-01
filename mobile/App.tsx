@@ -16,7 +16,11 @@ import { ACCOUNT, SIGN_OUT_EVERYWHERE_FAILED } from "@logjam/shared";
 import { CLIENT_VERSION } from "./src/config";
 import { useMinVersionGate } from "./src/useMinVersionGate";
 import { storeListingUrl } from "./src/version";
-import { assertCanSignOutEverywhere } from "./src/auth/cognitoSignOut";
+import {
+  assertCanSignOutEverywhere,
+  signOutEverywhereAtProvider,
+} from "./src/auth/oidcSession";
+import { runSignOut } from "./src/auth/signOutSequence";
 import { mountsAppShell, useAuth } from "./src/auth/useAuth";
 import { requestSync } from "./src/sync/syncEngine";
 import { isReachableNow } from "./src/map/connectivity";
@@ -28,7 +32,6 @@ import {
 } from "./src/offline/signOutConfirm";
 import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
-import { AuthFlow } from "./src/screens/AuthFlow";
 import { LandingScreen } from "./src/screens/LandingScreen";
 import { CrashReportConsent } from "./src/screens/CrashReportConsent";
 import { AppShell } from "./src/AppShell";
@@ -214,56 +217,48 @@ export default function App() {
             <AppShell
               accountState={auth.accountState}
               onLinkAccount={auth.linkAccount}
-              onSignOut={async (options) => {
+              onSignOut={(options) =>
                 // Sign-out wipes this phone's data, and what the account does
                 // not have goes with it: ask once, saying what goes and what
                 // stays (offline/wipedStores.ts declares what that can be).
-                if (options?.everywhere) {
-                  // Before anything is wiped: a phone that can't reach Logjam
-                  // can't end the other sessions, and must stay signed in.
-                  try {
-                    await assertCanSignOutEverywhere();
-                  } catch (err) {
+                runSignOut({
+                  everywhere: options?.everywhere === true,
+                  accountDeleted: options?.accountDeleted === true,
+                  assertCanSignOutEverywhere,
+                  confirm: () => confirmSignOut(options?.everywhere === true),
+                  signOutEverywhereAtProvider,
+                  // A phone that can't reach the provider can't end the other
+                  // sessions, and must stay signed in with its data.
+                  reportEverywhereFailed: (err) => {
                     console.error(err);
                     Alert.alert(
                       ACCOUNT.copy.signOutEverywhere,
                       SIGN_OUT_EVERYWHERE_FAILED,
                     );
-                    return;
-                  }
-                }
-                if (
-                  !options?.accountDeleted &&
-                  !(await confirmSignOut(options?.everywhere === true))
-                ) {
-                  return;
-                }
-                // Unregister the push token BEFORE tokens are cleared (the DELETE
-                // needs an authenticated request); best-effort inside.
-                await unregisterPushNotifications();
-                const wiped = await wipeAllLocalData();
-                if (wiped.failed.length > 0) {
-                  // The privacy line held only partly. Say so — the next person to
-                  // use this phone would otherwise inherit the remains silently.
-                  Alert.alert(
-                    "Some data couldn't be removed",
-                    `This phone kept your ${wiped.failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
-                  );
-                }
-                await auth.signOut(options?.everywhere === true);
-              }}
+                  },
+                  // Unregister the push token BEFORE tokens are cleared (the
+                  // DELETE needs an authenticated request); best-effort inside.
+                  unregisterPush: unregisterPushNotifications,
+                  wipe: wipeAllLocalData,
+                  // The privacy line held only partly. Say so — the next person
+                  // to use this phone would otherwise inherit the remains
+                  // silently.
+                  reportWipeIncomplete: (failed) =>
+                    Alert.alert(
+                      "Some data couldn't be removed",
+                      `This phone kept your ${failed.join(" and ")}. Signing out anyway; clear Logjam GPS's storage in Android settings to be sure.`,
+                    ),
+                  finish: () => auth.signOut(),
+                })
+              }
             />
           </>
-        ) : auth.state === "chooser" || auth.state === "signIn" ? (
-          // One screen for both: the landing screen IS the sign-in screen, and
-          // the only thing the two states change is whether "continue without an
-          // account" is on offer.
+        ) : (
+          // One screen for chooser and signIn: the landing screen IS the
+          // sign-in screen, and the only thing the two states change is whether
+          // "continue without an account" is on offer.
           <SafeAreaView style={styles.authSafeArea}>
             <LandingScreen auth={auth} />
-          </SafeAreaView>
-        ) : (
-          <SafeAreaView style={styles.authSafeArea}>
-            <AuthFlow auth={auth} />
           </SafeAreaView>
         )}
       </AppLockGate>

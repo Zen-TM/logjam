@@ -77,7 +77,7 @@ flowchart LR
 ```
 
 **Clients.** Logjam Web is a React SPA in `frontend/`; Logjam GPS is an
-Expo/React Native app in `mobile/`. Both sign in with Cognito and send its
+Expo/React Native app in `mobile/`. Both sign in through OIDC (Cognito in prod) and send its
 JWT to the API. They share logic through `shared/`, not through generated
 UI ([0020](decisions/0020-share-the-decision-not-the-drawing.md)).
 
