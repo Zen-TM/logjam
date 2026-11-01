@@ -119,7 +119,11 @@ router.post(
           where: { id, planId: access.plan.id },
         });
         if (!place) throw itemNotFound();
-        res.status(201).json(await copyPlaceFor(user, place, req.body));
+        res
+          .status(201)
+          .json(
+            await copyPlaceFor(user, place, { ...req.body, copyMedia: true }),
+          );
         return;
       }
       case "route": {

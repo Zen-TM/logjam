@@ -1039,6 +1039,22 @@ export function tripPlanFormsUrgent(
 }
 
 /**
+ * Whether one form wears "Not answered" for the caller: they haven't answered
+ * it, and the plan is neither archived nor over. Any role, a leader included;
+ * only the nudge card and the list count leave leaders out.
+ * Guard: plans.test.ts ("form unanswered").
+ */
+export function tripPlanFormUnanswered(
+  plan: Pick<TripPlanView, "startDate" | "endDate" | "archivedAt">,
+  form: Pick<TripPlanFormView, "myAnswer">,
+  today: DateOnly,
+): boolean {
+  return (
+    form.myAnswer == null && !plan.archivedAt && !tripPlanIsOver(plan, today)
+  );
+}
+
+/**
  * The forms the caller hasn't answered, in the plan's order, and whether the
  * nudge is urgent: the trip's first day is within 7 days (or has come), by
  * date key. Nothing to answer once the trip is over or the plan archived,
@@ -1053,10 +1069,10 @@ export function tripPlanFormsToAnswer(
   today: DateOnly,
 ): { forms: Pick<TripPlanFormView, "id" | "title">[]; urgent: boolean } {
   const forms =
-    plan.myRole === "leader" || plan.archivedAt || tripPlanIsOver(plan, today)
+    plan.myRole === "leader"
       ? []
       : plan.forms
-          .filter((form) => form.myAnswer == null)
+          .filter((form) => tripPlanFormUnanswered(plan, form, today))
           .map(({ id, title }) => ({ id, title }));
   const urgent = tripPlanFormsUrgent(forms.length, plan, today);
   return { forms, urgent };

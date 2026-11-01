@@ -3,9 +3,8 @@ import {
   answersFromDraft,
   draftFromAnswers,
   fitAnswerDraft,
-  joinAnswers,
 } from "./tripPlanAnswerDraft.js";
-import { TRIP_PLAN_FORM_PRESETS, type TripPlanQuestion } from "./tripPlans.js";
+import { type TripPlanQuestion } from "./tripPlans.js";
 
 const questions: TripPlanQuestion[] = [
   { id: "seats", kind: "number", label: "Seats", required: false },

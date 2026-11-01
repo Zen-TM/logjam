@@ -68,6 +68,7 @@ import {
   tripPlanAddOutcome,
   tripPlanAddKey,
   tripPlanAddPicks,
+  tripPlanFormUnanswered,
   tripPlanFormsToAnswer,
   tripPlanFormsToAnswerLine,
   tripPlanFormTally,
@@ -1070,6 +1071,34 @@ describe("forms to answer", () => {
         .forms,
     ).toEqual([]);
     expect(tripPlanFormsToAnswer(plan(), "2026-11-11").forms).toEqual([]);
+  });
+});
+
+describe("form unanswered", () => {
+  const plan = {
+    startDate: "2026-11-10" as const,
+    endDate: null,
+    archivedAt: null,
+  };
+  const open = { myAnswer: null };
+
+  // Mutation: fold the leader check in, and a leader's forms lose their pill.
+  it("marks an unanswered form for any role, and only that", () => {
+    expect(tripPlanFormUnanswered(plan, open, "2026-10-01")).toBe(true);
+    expect(
+      tripPlanFormUnanswered(plan, { myAnswer: {} } as never, "2026-10-01"),
+    ).toBe(false);
+  });
+
+  it("marks none once the plan is archived or the trip is over", () => {
+    expect(
+      tripPlanFormUnanswered(
+        { ...plan, archivedAt: "2026-10-01" },
+        open,
+        "2026-10-01",
+      ),
+    ).toBe(false);
+    expect(tripPlanFormUnanswered(plan, open, "2026-11-11")).toBe(false);
   });
 });
 

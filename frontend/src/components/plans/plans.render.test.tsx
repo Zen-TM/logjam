@@ -602,6 +602,15 @@ describe("the forms to answer", () => {
     ).toBe("false");
   });
 
+  // Mutation: derive the pill from tripPlanFormsToAnswer, which is empty for a
+  // leader, and the author of an unanswered form loses its pill.
+  it("keeps the pill on a leader's unanswered form, with no card and no count", () => {
+    renderPanel({ view: { ...unanswered, myRole: "leader" }, myUserId: "u1" });
+    expect(screen.queryByText("1 form to answer")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(screen.getByText("Not answered")).toBeTruthy();
+  });
+
   // Mutation: pass `tally={[]}` from the panel, and a leader never sees who
   // is missing.
   it("tells a leader how many answered, on the form's page", () => {

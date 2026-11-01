@@ -33,7 +33,7 @@ import {
 import prisma from "../services/prisma";
 import { AppError, fault } from "../middleware/errorHandler";
 import { getEnv } from "./env";
-import { requireStillMember, touchPlan } from "./planAccess";
+import { touchPlan, touchPlanAsMember } from "./planAccess";
 import { dropMembership, endPlanForOthers } from "./planMembership";
 import { reconcileCopiedPlace } from "./placeCopy";
 import {
@@ -219,8 +219,7 @@ async function chargeAndWrite<T>(
   try {
     return await prisma.$transaction(async (tx) => {
       if ("planId" in owner) {
-        await touchPlan(tx, owner.planId);
-        await requireStillMember(tx, owner.planId, recipientId);
+        await touchPlanAsMember(tx, owner.planId, recipientId);
       }
       await incrementStorageUsed(recipientId, bytes, tx);
       const { used, quota } = await getStorageUsage(recipientId, tx);
@@ -294,7 +293,7 @@ export async function addPlanItem(
       });
       if (!source) throw itemNotFound();
       const row = await prisma.$transaction(async (tx) => {
-        await touchPlan(tx, planId);
+        await touchPlanAsMember(tx, planId, user.id);
         // Unlinked: its place, if any, is the owner's, not the plan's.
         return tx.route.create({
           data: {
@@ -351,7 +350,7 @@ async function addPlace(
   const route = await prisma.route.findUnique({ where: { placeId: place.id } });
 
   const planPlace = await prisma.$transaction(async (tx) => {
-    await touchPlan(tx, planId);
+    await touchPlanAsMember(tx, planId, user.id);
     const row = await tx.place.create({
       data: {
         planId,

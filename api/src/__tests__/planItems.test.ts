@@ -4,7 +4,12 @@ import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { randomUUID } from "crypto";
-import { copyStandaloneFile, handOverPlans } from "../lib/planItems";
+import {
+  addPlanItem,
+  copyStandaloneFile,
+  handOverPlans,
+} from "../lib/planItems";
+import { copyPlaceMedia } from "../lib/copyPlaceMedia";
 import {
   API_URL,
   ALICE_ID,
@@ -291,6 +296,43 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     // The type goes after its place, an order the sweep doesn't know.
     await prisma.place.delete({ where: { id: placeId } });
     await prisma.placeType.delete({ where: { id: type.id } });
+  });
+
+  // Mutation: pass req.body through unchanged in the plan's save route, which
+  // lets bob's remembered preference drop the photos.
+  it("saves a copy with its photos even when the saver's preference is off", async () => {
+    const placeId = await ownPlace(ALICE_SUB);
+    await ownPhoto(ALICE_SUB, placeId);
+    const added = await add(ALICE_SUB, { kind: "place", id: placeId });
+    expect(added.body.mediaCopied).toBe(1);
+    const bob = await prisma.user.findUniqueOrThrow({ where: { id: BOB_ID } });
+    await prisma.user.update({
+      where: { id: BOB_ID },
+      data: {
+        uiPreferences: {
+          ...(bob.uiPreferences as object),
+          copyPlaceMedia: false,
+        },
+      },
+    });
+    let savedId: string | undefined;
+    try {
+      const saved = await request(API_URL)
+        .post(`/plans/${planId}/items/place/${added.body.item.id}/save`)
+        .set(as(BOB_SUB))
+        .send({});
+      expect(saved.status, JSON.stringify(saved.body)).toBe(201);
+      savedId = saved.body.id;
+      expect(saved.body.mediaCopied).toBe(1);
+    } finally {
+      await prisma.user.update({
+        where: { id: BOB_ID },
+        data: { uiPreferences: bob.uiPreferences as object },
+      });
+      if (savedId)
+        await request(API_URL).delete(`/places/${savedId}`).set(as(BOB_SUB));
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
   });
 
   // Mutation: read the source with requirePlaceAccess instead of ownerId.
@@ -1127,6 +1169,87 @@ describe("storage when someone goes", () => {
       expect(await used(CAROL_ID)).toBe(before);
     } finally {
       await request(API_URL).delete(`/media/${fileId}`).set(as(CAROL_SUB));
+    }
+  });
+
+  // Called straight for carol, who isn't in the plan: an add that passed its
+  // route check, then lost its membership before the write transaction.
+  // Mutation: swap touchPlanAsMember for touchPlan in addPlace or the route arm.
+  it("adds no place or way for one who left before the write", async () => {
+    const placeId = await ownPlace(CAROL_SUB);
+    const routeId = await ownRoute(CAROL_SUB);
+    try {
+      for (const input of [
+        { kind: "place" as const, id: placeId },
+        { kind: "route" as const, id: routeId },
+      ])
+        await expect(
+          addPlanItem({ id: CAROL_ID }, planId, input),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      expect(await prisma.place.count({ where: { planId } })).toBe(0);
+      expect(await prisma.route.count({ where: { planId } })).toBe(0);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(CAROL_SUB));
+      await request(API_URL).delete(`/routes/${routeId}`).set(as(CAROL_SUB));
+    }
+  });
+
+  it("adds nothing to a plan archived during the add", async () => {
+    const placeId = await ownPlace(ALICE_SUB);
+    await prisma.tripPlan.update({
+      where: { id: planId },
+      data: { archivedAt: new Date() },
+    });
+    try {
+      await expect(
+        addPlanItem({ id: ALICE_ID }, planId, { kind: "place", id: placeId }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+      expect(await prisma.place.count({ where: { planId } })).toBe(0);
+    } finally {
+      await request(API_URL).delete(`/places/${placeId}`).set(as(ALICE_SUB));
+    }
+  });
+
+  // Mutation: swap touchPlanAsMember for touchPlan, or drop the place count,
+  // in copyPlaceMedia's planId branch.
+  it("copies no photos for one who left, or onto a place that is gone", async () => {
+    const carolPlace = await ownPlace(CAROL_SUB);
+    await ownPhoto(CAROL_SUB, carolPlace);
+    const bobPlace = await ownPlace(BOB_SUB);
+    await ownPhoto(BOB_SUB, bobPlace);
+    const planPlace = await prisma.place.create({
+      data: {
+        planId,
+        addedById: ALICE_ID,
+        name: "Test plan place",
+        latitude: -33.6,
+        longitude: 150.3,
+        placeTypeId: MARKER_TYPE_ID,
+      },
+    });
+    const before = await used(CAROL_ID);
+    try {
+      await expect(
+        copyPlaceMedia({
+          sourcePlaceId: carolPlace,
+          targetPlaceId: planPlace.id,
+          recipientId: CAROL_ID,
+          planId,
+        }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      await expect(
+        copyPlaceMedia({
+          sourcePlaceId: bobPlace,
+          targetPlaceId: randomUUID(),
+          recipientId: BOB_ID,
+          planId,
+        }),
+      ).rejects.toMatchObject({ statusCode: 404 });
+      expect(await prisma.media.count({ where: { planId } })).toBe(0);
+      expect(await used(CAROL_ID)).toBe(before);
+    } finally {
+      await request(API_URL).delete(`/places/${carolPlace}`).set(as(CAROL_SUB));
+      await request(API_URL).delete(`/places/${bobPlace}`).set(as(BOB_SUB));
     }
   });
 

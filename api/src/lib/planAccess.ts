@@ -176,3 +176,23 @@ export async function touchPlan(
   });
   if (count === 0) throw planNotFound();
 }
+
+/**
+ * A plan write by `userId` who was checked before the lock: touchPlan, then
+ * the caller is still an active member (404) of a plan not archived since (409).
+ * Guards: __tests__/planItems.test.ts ("charges no one who left during the
+ * copy", "adds nothing for one who left", "copies no photos for one who left").
+ */
+export async function touchPlanAsMember(
+  tx: Prisma.TransactionClient,
+  planId: string,
+  userId: string,
+): Promise<void> {
+  await touchPlan(tx, planId);
+  await requireStillMember(tx, planId, userId);
+  const plan = await tx.tripPlan.findUnique({
+    where: { id: planId },
+    select: { archivedAt: true },
+  });
+  if (plan?.archivedAt) throw planArchived();
+}

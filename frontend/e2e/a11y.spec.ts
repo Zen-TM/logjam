@@ -205,13 +205,17 @@ test.describe("desktop", () => {
     await expect(newPlan).toHaveCount(0);
 
     // The seeded plan alice leads: hero verbs by role, then four views.
-    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside
+      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .click();
     await expect(aside.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
     await expectNoViolations(page, "aside");
 
     // A section's form: its title takes focus; seen, never sent.
     await aside.getByRole("button", { name: "Add", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Add a section" }).click();
+    await page
+      .getByRole("menuitem", { name: "Add a write-up section" })
+      .click();
     const section = page.locator("dialog[open]");
     await expect(section.getByRole("textbox", { name: "Title" })).toBeFocused();
     await expectNoViolations(page, "dialog");
@@ -254,16 +258,13 @@ test.describe("desktop", () => {
     await page.emulateMedia({ media: "screen" });
 
     // A plan carol invited alice to: its preview, before Join or Decline.
+    // Join joins at once, so the test stops at the preview.
     await aside.getByRole("button", { name: "Back to plans" }).click();
-    await aside.getByRole("button", { name: "Kanangra Walls loop" }).click();
+    await aside
+      .getByRole("button", { name: "Kanangra Walls loop", exact: true })
+      .click();
     await expect(aside.getByRole("button", { name: "Decline" })).toBeVisible();
     await expectNoViolations(page, "aside");
-    // Its Join dialog, seen and never sent.
-    await aside.getByRole("button", { name: "Join", exact: true }).click();
-    await expect(page.locator("dialog[open]")).toBeVisible();
-    await expectNoViolations(page, "dialog");
-    await page.keyboard.press("Escape");
-    await expect(page.locator("dialog[open]")).toHaveCount(0);
   });
 
   test("Plans forms: a form's page, answering it, and the builder", async ({
@@ -272,7 +273,9 @@ test.describe("desktop", () => {
     await openApp(page);
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
-    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside
+      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .click();
     await aside.getByRole("radio", { name: /^Forms/ }).click();
     // The seeded Safety contacts form: who sees answers first, then the table.
     await aside
@@ -305,10 +308,23 @@ test.describe("desktop", () => {
   test("Plans items: the plan's things, their ⋯ and Add a copy", async ({
     page,
   }) => {
+    // Save a copy is offered only on what someone else added, and the seed's
+    // places are alice's own: the first loses its adder (an account gone).
+    await page.route(/\/plans\/[0-9a-f-]{36}$/, async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const plan = await response.json();
+      plan.places = plan.places.map((each: object, at: number) =>
+        at === 0 ? { ...each, addedBy: null } : each,
+      );
+      await route.fulfill({ response, json: plan });
+    });
     await openApp(page);
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
-    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside
+      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .click();
     await aside.getByRole("radio", { name: /^Map/ }).click();
     const place = "Wollangambe meeting point";
     await expect(
@@ -325,7 +341,9 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='menu']");
     await page.getByRole("menuitem", { name: "Edit" }).click();
     const dialog = page.locator("dialog[open]");
-    await expect(dialog.getByRole("textbox", { name: "Name" })).toBeFocused();
+    await expect(
+      dialog.getByRole("textbox", { name: "Name", exact: true }),
+    ).toBeFocused();
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
@@ -337,7 +355,7 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
 
     // Add a copy: alice's own places and ways, ticked and priced.
-    await aside.getByRole("button", { name: "Add a copy" }).click();
+    await aside.getByRole("button", { name: "Add a place or way" }).click();
     await expect(dialog.getByRole("radio", { name: /^Places/ })).toBeVisible();
     await dialog.getByRole("checkbox").first().check();
     await expectNoViolations(page, "dialog");
@@ -362,14 +380,13 @@ test.describe("desktop", () => {
     await openApp(page);
     const aside = page.locator("aside");
     await page.getByRole("button", { name: /^Plans/ }).click();
-    await aside.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await aside
+      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .click();
 
     // While a plan is open the map shows it, and says so.
-    const showMine = page.getByRole("button", {
-      name: "Show my things",
-      pressed: false,
-    });
-    await expect(showMine).toBeVisible({ timeout: 15_000 });
+    const backToMap = page.getByRole("button", { name: "Back to my map" });
+    await expect(backToMap).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("main")).toContainText(
       "Plan: Wollangambe weekend",
     );
@@ -389,8 +406,8 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
 
     // Back to my map: the plan closes and the user's own map returns.
-    await page.getByRole("button", { name: "Back to my map" }).click();
-    await expect(showMine).toHaveCount(0);
+    await backToMap.click();
+    await expect(backToMap).toHaveCount(0);
   });
 
   test("the leaderboard button on Friends, and the Leaderboard page", async ({
@@ -1334,7 +1351,9 @@ test.describe("narrow web", () => {
     await expect(page.getByRole("radio", { name: /^Upcoming/ })).toBeVisible({
       timeout: 15_000,
     });
-    await page.getByRole("button", { name: "Wollangambe weekend" }).click();
+    await page
+      .getByRole("button", { name: "Wollangambe weekend", exact: true })
+      .click();
     await expect(page.getByRole("radio", { name: /^Write-up/ })).toBeVisible();
     await expectNoViolations(page);
 
@@ -1360,7 +1379,9 @@ test.describe("narrow web", () => {
     // A plan carol invited alice to: its preview, with Join and Decline.
     await page.getByRole("button", { name: "Back to people" }).click();
     await page.getByRole("button", { name: "Back to plans" }).click();
-    await page.getByRole("button", { name: "Kanangra Walls loop" }).click();
+    await page
+      .getByRole("button", { name: "Kanangra Walls loop", exact: true })
+      .click();
     await expect(page.getByRole("button", { name: "Decline" })).toBeVisible();
     await expectNoViolations(page);
   });

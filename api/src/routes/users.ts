@@ -35,12 +35,12 @@ import { getEnv } from "../lib/env";
 import { deleteS3Keys, deleteS3Prefix } from "../lib/s3Cleanup";
 import { deleteTopoJobObjects } from "../lib/topoUpload";
 import { handOverPlans } from "../lib/planItems";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 import { logger, safeErrorForLog } from "../lib/logger";
 import { accountDeleteTombstones } from "../lib/syncTombstones";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 const TOPO_BUCKET = getEnv().S3_BUCKET_TOPO ?? "";
-import { PLAN_PERSON_KEY } from "../lib/planMembership";
 
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 12);
