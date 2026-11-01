@@ -14,12 +14,17 @@ const CLIENT = "EXPO_PUBLIC_OIDC_CLIENT_ID=abc";
 let dir = "";
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-function check(easOutput: string[], easExit = 0) {
+function check(easOutput: string[], easExit = 0, cwd = process.cwd()) {
   dir = mkdtempSync(join(tmpdir(), "eas-stub-"));
   const lines = easOutput.map((l) => `echo '${l}'`).join("\n");
-  writeFileSync(join(dir, "eas"), `#!/bin/sh\n${lines}\nexit ${easExit}\n`);
+  // Only mobile/ has an eas.json, and eas refuses without one.
+  writeFileSync(
+    join(dir, "eas"),
+    `#!/bin/sh\n[ -f eas.json ] || exit 2\n${lines}\nexit ${easExit}\n`,
+  );
   chmodSync(join(dir, "eas"), 0o755);
   return spawnSync(SCRIPT, ["production"], {
+    cwd,
     encoding: "utf8",
     env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
   });
@@ -42,6 +47,12 @@ describe("check-eas-env.sh", () => {
     const run = check(vars);
     expect(run.status).toBe(1);
     expect(run.stderr).toContain(`${name} is not set`);
+  });
+
+  // Mutation: drop the script's `cd`, and eas, run outside mobile/, finds no
+  // project and writes an app.json where it stands.
+  it("runs eas from mobile/, wherever it is called from", () => {
+    expect(check([CLIENT, ISSUER], 0, "/").status).toBe(0);
   });
 
   it("fails when eas cannot answer", () => {
