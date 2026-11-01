@@ -109,16 +109,6 @@ export const friendsSearchLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
-// Inviting to a plan answers 201, 404 or 409 for an exact username, so an
-// account with a free plan could use it to test a list of names. Per user.
-export const planMemberInviteLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: userOrIpKey,
-});
-
 // Minting a friend invite link. A person hands out a few; this bounds how many
 // rows one account can leave in friend_invites (they expire in days).
 export const friendInviteCreateLimiter = rateLimit({

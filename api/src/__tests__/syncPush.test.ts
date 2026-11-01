@@ -795,6 +795,7 @@ describe("sync push — a definition keeps a one-sided bound", () => {
 // The sync twin of POST /trips' cap (tripLogsGlobal.test.ts): both call
 // parseTripTypes, so an over-cap list is the same 413, per op.
 describe("sync push — a trip log's types are capped", () => {
+  // Mutation: return the list unparsed from parseTripTypes (no cap).
   it("rejects more than the cap with a 413 on that op", async () => {
     const pushed = await push(ALICE_SUB, [
       {

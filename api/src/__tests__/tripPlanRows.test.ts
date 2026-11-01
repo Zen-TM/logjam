@@ -57,7 +57,7 @@ function expectNoPlanRows(body: unknown) {
 }
 
 describe("the one-owner CHECK", () => {
-  // Mutation: drop any of the four *_one_owner constraints in
+  // Mutation: drop any of the three *_one_owner constraints in
   // 20261101120000_trip_plans.
   const point = {
     placeTypeId: MARKER_TYPE_ID,

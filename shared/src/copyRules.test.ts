@@ -60,7 +60,7 @@ describe("contract copy", () => {
   });
 
   // One word, then a name: the name's own capital makes it read as Title
-  // Case ("Join Ranon").
+  // Case ("Join Ranon"). Mutation: empty this set, and the title is flagged.
   const verbThenName = new Set(["tripPlanJoinTitle(Ranon)"]);
 
   it("breaks no copy rule", () => {
