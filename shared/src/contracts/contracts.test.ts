@@ -629,11 +629,10 @@ describe("the map's layers", () => {
   // Mutation: reorder the contract's rows or TERRAIN_SWITCH_KEYS alone, and a
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
-    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(
-      TERRAIN_SWITCH_KEYS,
-    );
+    const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(rows);
     expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
-      ...TERRAIN_SWITCH_KEYS,
+      ...rows,
       "sharpenedAreas",
       "slopeBands",
     ]);
@@ -755,6 +754,7 @@ describe("the map's overlays list", () => {
     expect(contractSectionKeys(MAP_OVERLAYS, "web")).toEqual([
       "places",
       "ways",
+      "land",
       "gauges",
       "importFile",
     ]);
@@ -762,6 +762,7 @@ describe("the map's overlays list", () => {
       "places",
       "ways",
       "geoPdfs",
+      "land",
       "gauges",
       "importFile",
     ]);
@@ -888,6 +889,20 @@ describe("the map point panel", () => {
     ]);
   });
 
+  // Mutation: push the land fact whatever `land` is, and with the overlay off
+  // the panel has a Land figure with nothing in it.
+  it("has no land figure with the overlay off or nothing drawn there", () => {
+    const facts = (land?: string | null) =>
+      mapPointFacts({
+        point,
+        elevation: { state: "unavailable" },
+        from: null,
+        land,
+      }).map((fact) => fact.key);
+    expect(facts()).not.toContain("land");
+    expect(facts(null)).not.toContain("land");
+  });
+
   it("keeps its sections and facts in step", () => {
     const keys = MAP_POINT.sections.map((section) => section.key);
     const facts = mapPointFacts({
@@ -895,6 +910,7 @@ describe("the map point panel", () => {
       elevation: { state: "unavailable" },
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
+      land: "Private land",
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");

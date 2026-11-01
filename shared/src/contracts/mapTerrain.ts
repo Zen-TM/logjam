@@ -29,6 +29,7 @@ export const MAP_TERRAIN = {
   copy: {
     contours: "Contours",
     slope: "Slope",
+    land: "Land tenure",
     hillshade: "Hillshade",
     vegetation: "Vegetation",
     sharpenedAreas: "Sharpened areas",
@@ -37,6 +38,15 @@ export const MAP_TERRAIN = {
     vegetationAbout: "About vegetation",
     vegetationLegend:
       "Scrub density for bushbashing: denser reads darker. Orange stripes mark ground burnt since the survey, so the scrub there may have changed.",
+    // Land tenure stacks with this group, but its row is in `MAP_OVERLAYS`:
+    // who holds the land is no part of the shape of the ground.
+    // Behind that row's help button, titled with its label.
+    landAbout: "About land tenure",
+    landLegend:
+      "Each colour shows who holds the land, not whether you may enter it. Crossing private land is up to its owner.",
+    // The source's two known gaps, said beside the legend they qualify.
+    landCaveat:
+      "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
     slopeBands: "Slope bands",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",

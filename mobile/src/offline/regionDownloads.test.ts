@@ -337,6 +337,7 @@ describe("runRegionClip", () => {
     expect(await run(dem)).toEqual({ status: "cancelled" });
     expect(await run({ contours: true })).toEqual({ status: "cancelled" });
     expect(await run({ slope: true })).toEqual({ status: "cancelled" });
+    expect(await run({ land: true })).toEqual({ status: "cancelled" });
     expect(await run()).toEqual({
       status: "failed",
       code: "source-unavailable",

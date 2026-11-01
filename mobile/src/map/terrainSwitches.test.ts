@@ -15,6 +15,7 @@ const clip = (
 const saved = [
   clip("contours-region", "nsw-contours"),
   clip("slope-region", "nsw-5m-slope"),
+  clip("land-region", "nsw-land"),
   clip("dem-region", "nsw-5m"),
 ];
 

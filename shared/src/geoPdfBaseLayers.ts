@@ -1,3 +1,4 @@
+import { NSW_LAND } from "./nswLand.js";
 import type { TopoLayerName } from "./topoSettings.js";
 
 // Data from NSW Spatial Services' web services is licensed CC BY, subject to one
@@ -217,7 +218,7 @@ export function extractionCreditLine(
 //   - features                     → OpenStreetMap, ODbL
 // Single source of truth so the frontend AttributionControl and the PDF agree.
 
-export type OverlaySource = "elevation" | "vegetation" | "features";
+export type OverlaySource = "elevation" | "vegetation" | "features" | "land";
 
 export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   elevation:
@@ -225,6 +226,7 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
   vegetation:
     "Vegetation © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2020 — State Vegetation Type Map (CC BY 4.0). Fire history © State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010 — NPWS Fire History - Wildfires and Prescribed Burns (CC BY 4.0)",
   features: "Features © OpenStreetMap contributors",
+  land: NSW_LAND.credit,
 };
 
 // Maps each selectable overlay layer name to its underlying data source(s).
@@ -234,12 +236,16 @@ export const GEOPDF_OVERLAY_ATTRIBUTION: Record<OverlaySource, string> = {
 // Keyed by the canonical TopoLayerName (topoSettings.ts TOPO_LAYERS): the
 // values are per-layer data and stay hand-maintained, but a missing or extra
 // key is a compile error.
-export const TOPO_OVERLAY_SOURCE: Record<TopoLayerName, OverlaySource[]> = {
+export const TOPO_OVERLAY_SOURCE: Record<
+  TopoLayerName | "land",
+  OverlaySource[]
+> = {
   hillshade: ["elevation"],
   slope: ["elevation"],
   contours: ["elevation"],
   vegetation: ["elevation", "vegetation"],
   features: ["features"],
+  land: ["land"],
 };
 
 // Stable display order for credit lines.
@@ -247,6 +253,7 @@ const OVERLAY_SOURCE_ORDER: OverlaySource[] = [
   "elevation",
   "vegetation",
   "features",
+  "land",
 ];
 
 /**

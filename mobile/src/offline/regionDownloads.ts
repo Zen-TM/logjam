@@ -22,6 +22,7 @@ import {
   BASEMAP_CATALOG,
   DEM_SOURCES,
   NSW_CONTOURS,
+  NSW_LAND,
   NSW_SLOPE,
   SHARPENED_SOURCE_PREFIX,
   TERRAIN_ROUTED_FROM,
@@ -59,6 +60,8 @@ export type RegionClipSpec = {
   contours?: boolean;
   /** Set when the clip is of the statewide slope: shared terrain.ts. */
   slope?: boolean;
+  /** Set when the clip is of the Land overlay: shared nswLand.ts. */
+  land?: boolean;
   /** Set when the clip is of a sharpened area's archive (sharpenedClips.ts). */
   area?: AreaClip;
   label: string;
@@ -116,6 +119,7 @@ function clipArchiveFor(spec: RegionClipSpec): {
   }
   if (spec.contours) return cdn(NSW_CONTOURS);
   if (spec.slope) return cdn(NSW_SLOPE);
+  if (spec.land) return cdn(NSW_LAND);
   const entry = BASEMAP_CATALOG.find((e) => e.id === "protomaps");
   if (!entry) throw new Error("protomaps missing from BASEMAP_CATALOG");
   return cdn({ archivePath: entry.urlTemplate });
@@ -312,11 +316,14 @@ export async function runRegionClip(
   onProgress: (progress: RegionJobProgress) => void,
   token: RegionCancelToken,
 ): Promise<RegionRunOutcome> {
-  // A DEM, contour or slope archive that is not on the CDN (not built yet) is
+  // A DEM, contour, slope or land archive that is not on the CDN (not built yet) is
   // not this run's failure: the area keeps its worldwide heights and its
   // basemap, and the job leaves the queue as if it had never been planned.
   const optional =
-    spec.demSourceId != null || spec.contours === true || spec.slope === true;
+    spec.demSourceId != null ||
+    spec.contours === true ||
+    spec.slope === true ||
+    spec.land === true;
   let handle: FileHandle | null = null;
   const settle = async (stop: {
     stop: RegionRunOutcome;
@@ -471,7 +478,9 @@ export async function runRegionClip(
             ? NSW_CONTOURS.id
             : spec.slope
               ? NSW_SLOPE.id
-              : "protomaps")),
+              : spec.land
+                ? NSW_LAND.id
+                : "protomaps")),
       format: "pmtiles",
       sourceType:
         spec.demSourceId || spec.area?.layer === "heights"

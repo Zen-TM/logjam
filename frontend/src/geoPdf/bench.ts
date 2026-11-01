@@ -76,6 +76,7 @@ export const SCENARIOS: Record<string, GeoPdfConfig> = {
     baseLayer: "six-imagery",
     overlays: ["slope", "contours"],
   }),
+  land: config({ baseLayer: "six-base", overlays: ["hillshade", "land"] }),
   plain: config({ baseLayer: "six-base", overlays: [] }),
   // Several megapixels more than the others, for timings.
   big: config(

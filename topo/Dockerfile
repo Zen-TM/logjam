@@ -118,6 +118,7 @@ COPY email_send.py /app/email_send.py
 COPY push_send.py /app/push_send.py
 COPY worker_common.py /app/worker_common.py
 COPY build_nsw_dem.py /app/build_nsw_dem.py
+COPY build_land_tenure.py /app/build_land_tenure.py
 COPY build_place_registry.py /app/build_place_registry.py
 COPY build_gauges.py /app/build_gauges.py
 COPY gauges.json /app/gauges.json
