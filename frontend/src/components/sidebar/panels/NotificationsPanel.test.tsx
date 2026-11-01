@@ -92,7 +92,7 @@ function Harness({ rows }: { rows: TNotification[] }) {
         onRefetchFriends={noop}
         setSelectedPlaceID={noop}
         setActivePanel={noop}
-        onMapsViewChange={noop}
+        onShowSharpened={noop}
         onTopoFlyTarget={noop}
         onOpenPlan={noop}
       />

@@ -5,8 +5,7 @@
 // The two email switches for topo jobs and topo exports are kept even though
 // mobile cannot start either — they are account-wide EMAIL settings, and telling
 // someone holding their phone to find a laptop to stop an email is not an
-// answer. `geoPdfEmail` is directly mobile-relevant (this app imports and
-// auto-downloads them) and both in-app kinds are live here.
+// answer. both in-app kinds are live here.
 //
 // The OS row is not a preference and is deliberately last: no in-app switch can
 // do anything if Android is dropping the notification, and that is a fact about
@@ -44,10 +43,6 @@ import {
   type ToastMessage,
 } from "../../ui";
 import { PreferenceRow } from "./settingsKit";
-
-// One row per switch, so the list is data and a new preference is one entry:
-// `NOTIFICATION_PREFERENCES`, which Logjam Web reads too.
-const sentence = (what: string) => what.charAt(0).toUpperCase() + what.slice(1);
 
 export function NotificationSettingsScreen() {
   const { accountState } = useAccountState();
@@ -157,7 +152,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}
@@ -171,7 +166,7 @@ export function NotificationSettingsScreen() {
           (row) => (
             <PreferenceRow
               key={row.key}
-              title={sentence(row.what)}
+              title={row.label}
               subtitle={blocked}
               value={notifications?.[row.key] ?? false}
               ready={ready}

@@ -76,21 +76,6 @@
   padding: 6px 0;
 }
 
-/* The two short answers about this topo: what it is called, and what it is
-   drawn from. Side by side while there is room for two. */
-.nameRow {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: start;
-  gap: 12px;
-}
-
-@media (max-width: 480px) {
-  .nameRow {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* What the ZIP holds: a definition list, label and value per line. */
 .summary {
   display: flex;
@@ -205,17 +190,4 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-/* Naming a template, in the pinned toolbar above the settings it saves. */
-.saveAsLine {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.saveAsField {
-  flex: 1;
-  min-width: 0;
 }

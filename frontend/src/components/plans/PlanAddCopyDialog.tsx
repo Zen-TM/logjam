@@ -1,4 +1,4 @@
-// Add a copy: the caller's own places, ways and maps, ticked, priced before
+// Add a copy: the caller's own places, and ways, ticked, priced before
 // they commit, then added one request each, in order, as POST /plans/:id/items
 // takes one thing. A stop halfway says what landed and why it stopped, in the
 // API's words.
@@ -16,8 +16,6 @@ import {
   TRIP_PLAN_ITEM_GROUP,
   TRIP_PLAN_ITEM_GROUPS,
   type TripPlanItemGroup,
-  untitledJobTitle,
-  type GeoPdfJobView,
   type StandaloneFile,
   type TripPlanItemKind,
 } from "@logjam/shared";
@@ -46,7 +44,6 @@ export default function PlanAddCopyDialog({
   places,
   routes,
   files,
-  geoPdfs,
   user,
   initial,
   onAdded,
@@ -57,7 +54,6 @@ export default function PlanAddCopyDialog({
   places: TPlace[];
   routes: TRoute[];
   files: StandaloneFile[];
-  geoPdfs: GeoPdfJobView[];
   user: TUser | null;
   /** Ticked on arrival: the thing pressed on the map. */
   initial: Pick | null;
@@ -77,7 +73,7 @@ export default function PlanAddCopyDialog({
   const [error, setError] = useState<string | null>(null);
 
   const offered = tripPlanAddable(
-    { places, routes, files, geoPdfs },
+    { places, routes, files },
     {
       me: user?.id ?? null,
       tickedPlaceIds: picked
@@ -108,15 +104,9 @@ export default function PlanAddCopyDialog({
       bytes: 0,
     })),
     ways,
-    maps: offered.geoPdfs.map((pdf) => ({
-      kind: "geoPdf" as const,
-      id: pdf.id,
-      title: pdf.title ?? untitledJobTitle("geoPdfJob"),
-      bytes: pdf.resultBytes ?? 0,
-    })),
   };
   // What is sent: ticks still offered, in list order (`tripPlanAddPicks`).
-  const all = [...lists.places, ...lists.ways, ...lists.maps];
+  const all = [...lists.places, ...lists.ways];
   const chosen = tripPlanAddPicks(all, picked.map(key));
   const bytes = chosen.reduce((sum, row) => sum + row.bytes, 0);
   const placesChosen = chosen.some((row) => row.kind === "place");

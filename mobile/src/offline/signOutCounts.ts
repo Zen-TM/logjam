@@ -3,7 +3,12 @@
 // `wipedStores.ts`'s; this reads each from its own store.
 //
 // Reads only. Nothing here is sent anywhere, logged, or kept.
-import { groupArtifacts, overlayJobId, regionGroupKey } from "./artifactGroups";
+import {
+  groupArtifacts,
+  isRegionArtifact,
+  overlayJobId,
+  regionGroupKey,
+} from "./artifactGroups";
 import { listArtifacts } from "./registryDb";
 import { listGeoPdfImports } from "../geopdf/geoPdfImportsDb";
 import { readRouteDraft } from "../map/routeDraftStore";
@@ -30,10 +35,7 @@ export async function countSignOutLosses(): Promise<SignOutCounts> {
       listTracks(),
       readRouteDraft(),
     ]);
-  const regionFiles = artifacts.filter(
-    (artifact) =>
-      artifact.kind === "basemap-region" || artifact.kind === "dem-region",
-  );
+  const regionFiles = artifacts.filter(isRegionArtifact);
   return {
     unsynced,
     unresolved,

@@ -214,6 +214,11 @@ export function Menu({
               )}
               <span className={classes.label}>{entry.label}</span>
               {reason && <span className={classes.hint}>{reason}</span>}
+              {/* Load-bearing: without it the badge glues "Inbox10" together,
+                  and axe's label-content-name-mismatch finds that the
+                  accessible label ("Inbox, 10 unread") does not contain it
+                  (e2e/a11y.spec.ts). It renders no gap: .item is a flex row,
+                  which drops whitespace. */}{" "}
               {entry.hint && <kbd className={classes.hint}>{entry.hint}</kbd>}
               {entry.badge != null && entry.badge > 0 && (
                 <span className={classes.badge} aria-hidden>

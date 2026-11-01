@@ -1,4 +1,4 @@
-// A plan's "On the map" view: its places, ways and maps in the rows and hues
+// A plan's "On the map" view: its places and ways in the rows and hues
 // their own pages use, each saying who added it. Opening a place or a route
 // fits the map to it; a file's row downloads it, which is also first in its ⋯
 // (`planItemVerbs`).
@@ -15,7 +15,6 @@ import {
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
   tripPlanSavedMessage,
-  untitledJobTitle,
   type PlanItemVerbId,
   type TripPlanItem,
   type TripPlanView,
@@ -59,19 +58,12 @@ function look(item: TripPlanItem): { icon: Glyph; hue: string; title: string } {
             : "var(--hue-import)",
         title: item.item.displayName ?? item.item.filename,
       };
-    case "geoPdf":
-      return {
-        icon: "geoPdf",
-        hue: "var(--hue-geo-pdf)",
-        title: item.title ?? untitledJobTitle("geoPdfJob"),
-      };
   }
 }
 
 /** A file's stored bytes, presigned in the full fetch: the row downloads it. */
 function fileUrl(item: TripPlanItem): string | null {
   if (item.kind === "media") return item.item.displayUrl;
-  if (item.kind === "geoPdf") return item.downloadUrl;
   return null;
 }
 
@@ -108,12 +100,7 @@ export default function PlanItems({
   const [busy, setBusy] = useState(false);
   const archived = plan.archivedAt != null;
 
-  const all: TripPlanItem[] = [
-    ...plan.places,
-    ...plan.routes,
-    ...plan.files,
-    ...plan.geoPdfs,
-  ];
+  const all: TripPlanItem[] = [...plan.places, ...plan.routes, ...plan.files];
   const groups = TRIP_PLAN_ITEM_GROUPS.map(
     ({ group, title }) =>
       [

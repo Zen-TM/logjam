@@ -23,7 +23,7 @@ check() {
   [ "${closing:-0}" -gt 0 ] && return 0
   printf '%s' "$body" | perl -0pe 's/<!--.*?-->//gs' \
     | grep -qiE '^[[:space:]]*No issue:[[:space:]]*[^[:space:]]' && return 0
-  echo "::error::Add \`Closes #<issue>\` to the PR body, or a line \`No issue: <why>\`. \`Part of #<issue>\` leaves the issue open." >&2
+  echo "::error::Add \`Closes #<issue>\` to the PR body, or a line \`No issue: <why>\`. \`Part of #<issue>\` alone is not enough: for one part of an issue, say so in the \`No issue:\` line." >&2
   return 1
 }
 

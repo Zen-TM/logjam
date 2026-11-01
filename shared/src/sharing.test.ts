@@ -4,6 +4,7 @@ import {
   BULK_SHARE_ITEM_TYPES,
   copyAndRemoveConfirm,
   isCopyableSharedRow,
+  isSharableEntityType,
   removeShareConfirm,
   sharedRowVisibility,
 } from "./sharing";
@@ -71,12 +72,11 @@ describe("isCopyableSharedRow", () => {
     expect(isCopyableSharedRow({ entityType: "route" })).toBe(true);
   });
 
-  it("leaves the two MAP ARTEFACT kinds to the device download", () => {
+  it("leaves the MAP ARTEFACT kind to the device download", () => {
     expect(isCopyableSharedRow({ entityType: "topoJob" })).toBe(false);
-    expect(isCopyableSharedRow({ entityType: "geoPdfJob" })).toBe(false);
   });
 
-  // Every sharable kind has to be answered for, so a fifth one cannot join the
+  // Every sharable kind has to be answered for, so a new one cannot join the
   // union and quietly inherit "not copyable" without someone deciding.
   it("answers for every kind a bulk share can name", () => {
     for (const entityType of BULK_SHARE_ITEM_TYPES) {
@@ -151,5 +151,15 @@ describe("copyAndRemoveConfirm", () => {
     }).body;
     expect(body).toContain("whether or not bob keeps sharing");
     expect(body).toContain("bob keeps the original");
+  });
+});
+
+// GeoPDFs render in the browser and are never a server row (ADR 0043), so a
+// stale client asking to share one must be refused at /shares' type check.
+// Mutation: add "geoPdfJob" back to SHARABLE_ENTITY_TYPES.
+describe("isSharableEntityType", () => {
+  it("refuses the retired GeoPDF job kind", () => {
+    expect(isSharableEntityType("geoPdfJob")).toBe(false);
+    expect(isSharableEntityType("topoJob")).toBe(true);
   });
 });

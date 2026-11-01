@@ -18,11 +18,22 @@
 // send writes the recipient a notification and both verbs resolve it,
 // avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
+// The leaderboard button is drawn only for someone who has joined it: for anyone
+// else nothing here mentions it, and the way in is the switch in Settings
+// (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
+//
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (api/src/__tests__/friends.test.ts), and nothing here
 // would have somewhere to put one.
 import { useUserSearch } from "../../../useUserSearch";
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   contractSectionKeys,
   FRIENDS,
@@ -39,10 +50,16 @@ import {
   type FriendsBucket,
   type SectionKeysOn,
   friendSearchHint,
+  LEADERBOARD,
+  leaderboardBadge,
+  leaderboardButtonLabel,
+  selfStanding,
+  type LeaderboardResponse,
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import FriendSharingSection from "./FriendSharingSection";
+import LeaderboardPage from "./LeaderboardPage";
 import { useRowSelection } from "./useRowSelection";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -72,6 +89,7 @@ import {
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
+  getLeaderboard,
 } from "../../../placeUtils";
 
 type Bucket = FriendsBucket;
@@ -79,12 +97,14 @@ type Bucket = FriendsBucket;
 const copy = FRIENDS.copy;
 
 function FriendsPanel({
+  leaderboardOptIn,
   friends,
   friendRequests,
   onRefetchFriends,
   onRefetchShared,
   onRefetchNotifications,
 }: {
+  leaderboardOptIn: boolean;
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
@@ -100,6 +120,33 @@ function FriendsPanel({
   // Non-null = the sharing audit for that friend replaces the list: at 380px
   // there is no room for both, and the audit is a page you go and read.
   const [openFriend, setOpenFriend] = useState<TFriend | null>(null);
+  // The same, for the leaderboard. Its board is fetched here, so the row's
+  // subtitle and the page read one answer.
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
+  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const [boardError, setBoardError] = useState<string | null>(null);
+
+  const fetchBoard = useCallback(() => {
+    getLeaderboard()
+      .then((next) => {
+        setBoard(next);
+        setBoardError(null);
+      })
+      .catch((err) => {
+        console.error(err);
+        setBoardError(messageFromError(err, LEADERBOARD.copy.loadFailed));
+      });
+  }, []);
+
+  useEffect(() => {
+    if (leaderboardOptIn) fetchBoard();
+  }, [leaderboardOptIn, fetchBoard]);
+
+  /** A reload the user asked for: Try again, or opening the page. */
+  const loadBoard = () => {
+    setBoardError(null);
+    fetchBoard();
+  };
 
   // Refetch on every panel open — friends and requests are otherwise fetched
   // once at app boot, so a request that arrives mid-session stays
@@ -175,6 +222,17 @@ function FriendsPanel({
     onRefetchShared();
   }
 
+  if (leaderboardOpen && leaderboardOptIn) {
+    return (
+      <LeaderboardPage
+        board={board}
+        error={boardError}
+        onRetry={loadBoard}
+        onBack={() => setLeaderboardOpen(false)}
+      />
+    );
+  }
+
   if (openFriend) {
     return (
       <FriendSharingSection
@@ -223,6 +281,24 @@ function FriendsPanel({
     bucket,
   });
 
+  function leaderboardButton() {
+    // `false` from the server outranks the cached preference: the user left
+    // on another device since this session fetched it.
+    if (!leaderboardOptIn || board?.joined === false) return null;
+    const standing = board?.joined ? selfStanding(board) : null;
+    return (
+      <IconButton
+        icon="leaderboard"
+        label={leaderboardButtonLabel(standing)}
+        badge={standing && leaderboardBadge(standing.rank, standing.size)}
+        onClick={() => {
+          loadBoard();
+          setLeaderboardOpen(true);
+        }}
+      />
+    );
+  }
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "web">, () => ReactNode> = {
@@ -230,14 +306,17 @@ function FriendsPanel({
       <Hero
         title={FRIENDS.title}
         actions={
-          <Button
-            compact
-            variant="outline"
-            icon="addFriend"
-            onClick={() => setAddOpen(true)}
-          >
-            {copy.add}
-          </Button>
+          <>
+            {leaderboardButton()}
+            <Button
+              compact
+              variant="outline"
+              icon="addFriend"
+              onClick={() => setAddOpen(true)}
+            >
+              {copy.add}
+            </Button>
+          </>
         }
       />
     ),

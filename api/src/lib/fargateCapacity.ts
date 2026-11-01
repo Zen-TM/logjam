@@ -14,8 +14,8 @@ import type { DbClient } from "./storageQuota";
  * so "many accounts" is not hypothetical.
  *
  * Measured in vCPUs rather than tasks because the workers are not
- * interchangeable — three topo tasks (8 vCPU each) cost as much as
- * twenty-four GeoPDF tasks, and a task-count cap would treat them the same.
+ * interchangeable — two topo tasks (8 vCPU each) cost as much as
+ * four export tasks (4 each), and a task-count cap would treat them the same.
  *
  * The AWS Fargate On-Demand vCPU service quota (30 in ap-southeast-2) is the
  * real backstop, but it is the WRONG tool to tune: exceeding it makes RunTask
@@ -31,26 +31,20 @@ import type { DbClient } from "./storageQuota";
 const IN_FLIGHT_STATUSES = {
   topo: ["pending", "processing"],
   topoExport: ["queued", "running"],
-  geoPdf: ["queued", "running"],
 } as const;
 
 export async function getInFlightVcpus(db: DbClient = prisma): Promise<number> {
-  const [topo, topoExport, geoPdf] = await Promise.all([
+  const [topo, topoExport] = await Promise.all([
     db.topoJob.count({
       where: { status: { in: [...IN_FLIGHT_STATUSES.topo] } },
     }),
     db.topoExportJob.count({
       where: { status: { in: [...IN_FLIGHT_STATUSES.topoExport] } },
     }),
-    db.geoPdfJob.count({
-      where: { status: { in: [...IN_FLIGHT_STATUSES.geoPdf] } },
-    }),
   ]);
 
   return (
-    topo * WORKER_SPECS.topo.vcpus +
-    topoExport * WORKER_SPECS.topoExport.vcpus +
-    geoPdf * WORKER_SPECS.geoPdf.vcpus
+    topo * WORKER_SPECS.topo.vcpus + topoExport * WORKER_SPECS.topoExport.vcpus
   );
 }
 

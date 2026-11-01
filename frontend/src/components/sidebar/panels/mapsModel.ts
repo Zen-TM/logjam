@@ -1,54 +1,40 @@
-// What the Maps page says about each map, out of the component so it is checked
-// (DESIGN.md).
+// What the Sharpened areas view says about each map, out of the component so it
+// is checked (DESIGN.md).
 //
-// The page answers "what maps have I made, and what is still being made?"
+// The view answers "what maps have I made, and what is still being made?"
 // (shared/DESIGN.md §2). The second half of that question is `beingMade`: every job the
-// user is still waiting on — a GeoPDF, a topo, an export of a topo — as one kind
+// user is still waiting on, as one kind
 // of row, newest first, with the words for where it has got to. The tile's glyph
 // and hue already say which kind a row is, and a list that scrolls has no
 // reason to hide its fourth item.
-import {
-  EXPORT_FORMAT_RULES,
-  formatBytes,
-  formatMinutes,
-  type GeoPdfJobView,
-  type TopoExportJobView,
-} from "@logjam/shared";
-import type { CompletedTopoJob } from "../../../topoLayerTypes";
+import { formatBytes, formatMinutes, LIDAR_JOB_COPY } from "@logjam/shared";
 import type { TopoJob } from "../../dialogs/TopoDialog";
 import { type Glyph } from "../../../ui";
 
 /**
- * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a GeoPDF
- * is a page of paper, a LiDAR topo is terrain in the eucalypt `overlay` hue.
- * What is made FROM a thing wears that thing's hue with its own glyph — an
- * export is a file out of a topo, a template is the settings a map is made
- * with — so a row says both what it is and what it belongs to.
+ * A kind's glyph and hue (shared/DESIGN.md §8), from Logjam GPS's Saved tab: a
+ * LiDAR topo is terrain in the eucalypt `overlay` hue.
+ * What is made FROM a thing wears that thing's hue with its own glyph, so a
+ * row says both what it is and what it belongs to.
  */
 export const MAP_IDENTITY: Record<
-  "geoPdf" | "topo" | "export" | "geoPdfTemplate" | "topoTemplate",
+  "topo" | "sharpened",
   {
     icon: Glyph;
     hue: string;
     label: string;
   }
 > = {
-  geoPdf: { icon: "geoPdf", hue: "var(--hue-geo-pdf)", label: "GeoPDF" },
-  topo: { icon: "lidar", hue: "var(--hue-overlay)", label: "LiDAR topo" },
-  export: {
-    icon: "export",
+  topo: {
+    icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: "Export of a LiDAR topo",
+    label: "LiDAR topo",
   },
-  geoPdfTemplate: {
-    icon: "template",
-    hue: "var(--hue-geo-pdf)",
-    label: "GeoPDF template",
-  },
-  topoTemplate: {
-    icon: "template",
+  // A finished LiDAR job: the Terrain layers made sharper over its area.
+  sharpened: {
+    icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: "LiDAR topo template",
+    label: LIDAR_JOB_COPY.noun,
   },
 };
 
@@ -69,7 +55,7 @@ export function downloadFile(url: string): void {
 /** One job still on its way, whichever kind it is. */
 export type MakingItem = {
   key: string;
-  kind: "geoPdf" | "topo" | "export";
+  kind: "topo";
   id: string;
   title: string;
   /** Where it has got to, in words ("Queued", "Processing · about 21 min"). */
@@ -87,51 +73,12 @@ export function formatDay(iso: string): string {
   });
 }
 
-/** "8 Sept 2026, 3:41 pm" — for a name made from a date, where two made the
- *  same day would otherwise read identically. */
-function formatDayAndTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-/** A GeoPDF's name: its map title, or when it was made. */
-export function geoPdfLabel(
-  job: Pick<GeoPdfJobView, "title" | "createdAt">,
-): string {
-  return job.title ?? `GeoPDF · ${formatDayAndTime(job.createdAt)}`;
-}
-
 /** A topo's name: what the user called it, or the day it was made. */
 export function topoLabel(job: {
   name: string | null;
   createdAt: string;
 }): string {
   return job.name ?? formatDay(job.createdAt);
-}
-
-/** "GeoTIFF", from the one declaration of what the formats are called. */
-export function exportFormatLabel(format: TopoExportJobView["format"]): string {
-  return EXPORT_FORMAT_RULES[format].label;
-}
-
-/** An export is named after the topo it was made from — which may be gone. */
-export function exportLabel(
-  exportJob: Pick<TopoExportJobView, "sourceJobIds">,
-  topoNames: ReadonlyMap<string, string>,
-): string {
-  return topoNames.get(exportJob.sourceJobIds[0]) ?? "Deleted topo";
-}
-
-/** Every completed topo's name, by id, for naming the exports made from them. */
-export function topoNamesById(
-  jobs: readonly CompletedTopoJob[],
-): Map<string, string> {
-  return new Map(jobs.map((job) => [job.jobId, topoLabel(job)]));
 }
 
 /** A finished file's line under its title: size, then the day it was made. */
@@ -159,33 +106,8 @@ function withEstimate(verb: string, estimatedSeconds: number | null): string {
     : verb;
 }
 
-export function geoPdfsBeingMade(jobs: readonly GeoPdfJobView[]): MakingItem[] {
-  return newestFirst(
-    jobs
-      .filter((job) => job.status !== "completed")
-      .map((job) => ({
-        key: `geoPdf-${job.id}`,
-        kind: "geoPdf" as const,
-        id: job.id,
-        title: geoPdfLabel(job),
-        detail:
-          job.status === "queued"
-            ? "Queued"
-            : job.status === "running"
-              ? withEstimate("Making", job.estimatedSeconds)
-              : (job.errorMessage ?? FAILED),
-        failed: job.status === "failed",
-        createdAt: job.createdAt,
-      })),
-  );
-}
-
-/** Topos still on their way AND exports of finished topos still on theirs: one
- *  list, because to the person waiting they are the same kind of wait. */
-export function topoWorkBeingMade(
+export function toposBeingMade(
   activeTopoJobs: readonly TopoJob[],
-  exports: readonly TopoExportJobView[],
-  topoNames: ReadonlyMap<string, string>,
 ): MakingItem[] {
   const topos = activeTopoJobs.map((job) => ({
     key: `topo-${job.id}`,
@@ -203,29 +125,7 @@ export function topoWorkBeingMade(
     failed: job.status === "failed",
     createdAt: job.createdAt,
   }));
-  const exporting = exports
-    .filter((exportJob) => exportJob.status !== "completed")
-    .map((exportJob) => {
-      const format = exportFormatLabel(exportJob.format);
-      return {
-        key: `export-${exportJob.id}`,
-        kind: "export" as const,
-        id: exportJob.id,
-        title: exportLabel(exportJob, topoNames),
-        detail:
-          exportJob.status === "queued"
-            ? `Export as ${format} · Queued`
-            : exportJob.status === "running"
-              ? withEstimate(
-                  `Exporting as ${format}`,
-                  exportJob.estimatedSeconds,
-                )
-              : (exportJob.errorMessage ?? FAILED),
-        failed: exportJob.status === "failed",
-        createdAt: exportJob.createdAt,
-      };
-    });
-  return newestFirst([...topos, ...exporting]);
+  return newestFirst(topos);
 }
 
 /** Newest first, and stable: two made in the same second keep their order. */

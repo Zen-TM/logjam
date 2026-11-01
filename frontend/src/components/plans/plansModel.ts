@@ -258,13 +258,11 @@ export function addedBy(plan: TripPlanView, userId: string) {
   const places = mine(plan.places);
   const files = [
     ...mine(plan.files),
-    ...mine(plan.geoPdfs),
     ...places.flatMap((place) => place.media),
   ];
   return {
     places: places.length,
     ways: mine(plan.routes).length + mine(plan.files).length,
-    maps: mine(plan.geoPdfs).length,
     bytes: files.reduce((sum, file) => sum + Number(file.sizeBytes), 0),
   };
 }
@@ -281,8 +279,6 @@ export function itemWords(item: TripPlanItem): ItemWords {
       return { name: item.name, notes: "" };
     case "media":
       return { name: item.item.displayName ?? "", notes: "" };
-    case "geoPdf":
-      return { name: item.title ?? "", notes: "" };
   }
 }
 
@@ -301,7 +297,6 @@ export function itemPatch(
     return name === was.name
       ? null
       : { displayName: { from: seen.item.displayName, to: name || null } };
-  if (seen.kind === "geoPdf") return null;
   const patch: TripPlanPlacePatch = {};
   if (name !== was.name) patch.name = { from: seen.name, to: name };
   if (seen.kind === "place" && now.notes !== was.notes)

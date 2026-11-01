@@ -244,7 +244,7 @@ router.post(
               data: { updatedAt: now },
             });
           }
-          // Topo and GeoPDF jobs are fetched through their own list endpoints and
+          // Topo jobs are fetched through their own list endpoints and
           // reconcile on the next fetch — they are not delta-synced at all.
         }
 

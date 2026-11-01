@@ -7,7 +7,6 @@ import {
   isDraftPanel,
   PANEL_TITLES,
   type LogsView,
-  type MapsView,
   type PanelId,
 } from "./panels";
 import type {
@@ -25,20 +24,14 @@ import type {
 import type {
   RegionBbox,
   StandaloneFile,
-  VectorStyleSettings,
-  TopoExportJobView,
   ScopedCustomFieldDef,
 } from "@logjam/shared";
-import type { TopoJob, GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import type { CompletedTopoJob } from "../../topoLayerTypes";
+import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import type { NotificationPlanTarget } from "@logjam/shared";
-import type { GeoPdfTemplate } from "../dialogs/GeoPdfDialog";
 import { ChipRail } from "../../ui";
 import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
-import GeoPdfsPanel from "./panels/GeoPdfsPanel";
-import LidarPanel from "./panels/LidarPanel";
 import FriendsPanel from "./panels/FriendsPanel";
 import NotificationsPanel from "./panels/NotificationsPanel";
 import PlaceDetailPanel from "./panels/PlaceDetailPanel";
@@ -58,19 +51,13 @@ const LOGS_VIEWS = [
   { value: "stats", label: "Stats" },
 ] as const;
 
-const MAPS_VIEWS = [
-  { value: "geopdfs", label: "GeoPDFs" },
-  { value: "lidar", label: "LiDAR topos" },
-] as const;
-
 function SidebarPanel({
   activePanel,
   onClose,
   onTopoFlyTarget,
+  onShowSharpened,
   logsView,
   onLogsViewChange,
-  mapsView,
-  onMapsViewChange,
   onStartDrawingRoute,
   waysLoaded,
   // Places
@@ -91,31 +78,12 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
-  // GeoPDFs
-  onOpenGeoPdf,
-  onOpenGeoPdfWithTemplate,
-  onEditGeoPdfTemplate,
-  onCreateGeoPdfTemplate,
-  geoPdfTemplateRefetch,
-  topoTemplateRefetch,
-  geoPdfJobsRefetch,
   // LiDAR
-  activeTopoJobs,
-  completedTopoJobs,
-  topoJobsLoaded,
-  topoExports,
-  topoExportsTotal,
-  onRefetchTopoExports,
-  setLidarJobToggles,
-  onOpenTopo,
-  onRefetchCompletedTopoJobs,
-  onDismissActiveJob,
   onQuotaChanged,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
-  onOpenTopoWithTemplate,
-  loadsUserData,
+  onCurrentUserChange,
   // Friends
   friends,
   friendRequests,
@@ -163,18 +131,16 @@ function SidebarPanel({
   placeTypes,
   onPlaceTypesChange,
   // Vector styles
-  vectorStyle,
-  onVectorStyleChange,
   // Mobile: collapse the bottom sheet to peek during map-pick flows
   collapseToPeek,
 }: {
   activePanel: PanelId | null;
   onClose: () => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  /** Opens the Layers popover on Terrain → Sharpened areas. */
+  onShowSharpened: () => void;
   logsView: LogsView;
   onLogsViewChange: (view: LogsView) => void;
-  mapsView: MapsView;
-  onMapsViewChange: (view: MapsView) => void;
   onStartDrawingRoute: () => void;
   /** False until all three of Ways' fetches settle. */
   waysLoaded: boolean;
@@ -199,40 +165,13 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
-  // GeoPDFs
-  onOpenGeoPdf: () => void;
-  onOpenGeoPdfWithTemplate: (id: string) => void;
-  onEditGeoPdfTemplate: (t: GeoPdfTemplate) => void;
-  onCreateGeoPdfTemplate: () => void;
-  geoPdfTemplateRefetch: number;
-  topoTemplateRefetch: number;
-  geoPdfJobsRefetch: number;
-  // LiDAR
-  activeTopoJobs: TopoJob[];
-  completedTopoJobs: CompletedTopoJob[];
-  /** False until the first fetch of completed topos settles. */
-  topoJobsLoaded: boolean;
-  topoExports: TopoExportJobView[];
-  topoExportsTotal: number | null;
-  onRefetchTopoExports: () => void;
-  setLidarJobToggles: (
-    v:
-      | Record<string, boolean>
-      | ((prev: Record<string, boolean>) => Record<string, boolean>),
-  ) => void;
-  onOpenTopo: () => void;
-  onRefetchCompletedTopoJobs: () => void;
-  onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
   currentUserError: string | null;
   onRetryCurrentUser: () => void;
-  onOpenTopoWithTemplate: (templateId: string) => void;
-  /** App's consent-gate decision, handed to the two Maps views so their own
-   *  fetches wait for it (`loadsUserData` there). */
-  loadsUserData: boolean;
+  onCurrentUserChange: (user: TUser) => void;
   // Friends
   friends: TFriend[];
   friendRequests: TFriendRequest[];
@@ -293,8 +232,6 @@ function SidebarPanel({
   onPlaceTypesChange: (types: TPlaceType[]) => void;
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   // Vector styles
-  vectorStyle: VectorStyleSettings | null;
-  onVectorStyleChange: (next: VectorStyleSettings) => void;
   // Mobile
   collapseToPeek: boolean;
 }) {
@@ -388,14 +325,6 @@ function SidebarPanel({
       onChange={onLogsViewChange}
     />
   );
-  const mapsViewRail = (
-    <ChipRail
-      label="Maps view"
-      options={MAPS_VIEWS}
-      value={mapsView}
-      onChange={onMapsViewChange}
-    />
-  );
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
@@ -429,46 +358,11 @@ function SidebarPanel({
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "maps" && mapsView === "geopdfs" && (
-          <GeoPdfsPanel
-            views={mapsViewRail}
-            friends={friends}
-            onOpenGeoPdf={onOpenGeoPdf}
-            onOpenGeoPdfWithTemplate={onOpenGeoPdfWithTemplate}
-            onEditGeoPdfTemplate={onEditGeoPdfTemplate}
-            onCreateGeoPdfTemplate={onCreateGeoPdfTemplate}
-            refetchTrigger={geoPdfTemplateRefetch}
-            geoPdfJobsRefetch={geoPdfJobsRefetch}
-            loadsUserData={loadsUserData}
-          />
-        )}
-        {activePanel === "maps" && mapsView === "lidar" && (
-          <LidarPanel
-            views={mapsViewRail}
-            topoJobsLoaded={topoJobsLoaded}
-            onSheetOpenChange={onFiltersOpenChange}
-            onExpandSheet={expandSheetToFull}
-            friends={friends}
-            activeTopoJobs={activeTopoJobs}
-            completedTopoJobs={completedTopoJobs}
-            topoExports={topoExports}
-            topoExportsTotal={topoExportsTotal}
-            onRefetchTopoExports={onRefetchTopoExports}
-            setLidarJobToggles={setLidarJobToggles}
-            onOpenTopo={onOpenTopo}
-            onTopoFlyTarget={onTopoFlyTarget}
-            onRefetchCompletedTopoJobs={onRefetchCompletedTopoJobs}
-            onDismissActiveJob={onDismissActiveJob}
-            onOpenTopoWithTemplate={onOpenTopoWithTemplate}
-            onQuotaChanged={onQuotaChanged}
-            vectorStyle={vectorStyle}
-            onVectorStyleChange={onVectorStyleChange}
-            templateRefetchTrigger={topoTemplateRefetch}
-            loadsUserData={loadsUserData}
-          />
-        )}
         {activePanel === "friends" && (
           <FriendsPanel
+            leaderboardOptIn={
+              currentUser?.uiPreferences?.leaderboardOptIn ?? false
+            }
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={onRefetchFriends}
@@ -487,9 +381,9 @@ function SidebarPanel({
             onRefetchFriends={onRefetchFriends}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
-            onMapsViewChange={onMapsViewChange}
             onTopoFlyTarget={onTopoFlyTarget}
             onOpenPlan={onOpenPlan}
+            onShowSharpened={onShowSharpened}
           />
         )}
         {activePanel === "logs" && logsView === "stats" && (
@@ -540,6 +434,7 @@ function SidebarPanel({
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             placeTypes={placeTypes}
             onPlaceTypesChange={onPlaceTypesChange}
+            onCurrentUserChange={onCurrentUserChange}
           />
         )}
         {activePanel === "place-detail" && (

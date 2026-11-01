@@ -23,6 +23,11 @@ import {
 const SRC = dirname(fileURLToPath(import.meta.url));
 const ALLOWED: { file: string; text: string; reason: string }[] = [
   {
+    file: "components/TermsTick.tsx",
+    text: "Privacy Policy",
+    reason: "the document's title, as it reads on the page it links to",
+  },
+  {
     file: "components/dialogs/TopoDialog.tsx",
     text: "Order Data",
     reason:
@@ -37,6 +42,12 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   {
     file: "components/dialogs/TopoDialog.tsx",
     text: "Point Clouds",
+    reason:
+      "the name of ELVIS's own menu entry, which the step tells the user to open",
+  },
+  {
+    file: "components/dialogs/TopoDialog.tsx",
+    text: "Digital Elevation Model",
     reason:
       "the name of ELVIS's own menu entry, which the step tells the user to open",
   },

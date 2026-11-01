@@ -15,14 +15,20 @@
 // so the two agree: `sampleDem` in shared/src/demSources.ts. This file is only
 // the tile I/O it is handed.
 //
+// A sharpened area the caller may read (`visibleSharpenedAreas`) is one more
+// source, finest of all, read from the job's private archive in S3 by range on
+// the API's own role (ADR 0040).
+//
 // PRIVACY: positions passed in are precise wilderness coordinates. Nothing
-// here logs a coordinate, a tile URL, or a tile index — an upstream failure is
-// reported by status alone.
+// here logs a coordinate, a tile URL, a tile index or an archive key — an
+// upstream failure is reported by status alone.
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { loadImage, createCanvas } from "canvas";
 import { FetchSource, type PMTiles, type Source } from "pmtiles";
 import {
   clearDemArchives,
   demArchive,
+  demSourcesFor,
   forgetDemArchive,
   demMetresFromRgb,
   demSlopeReading,
@@ -30,6 +36,7 @@ import {
   demTileUrl,
   readDemArchive,
   sampleDem,
+  say,
   type DemSamples,
   type DemSlopeReading,
   type DemSource,
@@ -37,7 +44,11 @@ import {
   type SamplePosition,
 } from "@logjam/shared";
 import { getEnv } from "../lib/env";
+import { isMissingObjectError } from "../lib/fileSendAccess";
+import { AppError } from "../middleware/errorHandler";
 import { logger } from "../lib/logger";
+import { s3 } from "./awsClients";
+import type { VisibleSharpenedArea } from "./sharpenedAreas";
 
 const TILE_FETCH_TIMEOUT_MS = 8_000;
 
@@ -162,11 +173,63 @@ export async function demArchiveFor(source: {
   return archive;
 }
 
+/**
+ * A job's archive in the topo bucket, read by range on the API's role, with
+ * the same timeout as a CDN read. Its failures throw; `tileBytes` decides
+ * what a missing archive means.
+ */
+function s3Source(key: string): Source {
+  return {
+    getKey: () => `s3:${key}`,
+    getBytes: async (offset, length, _signal, etag) => {
+      const object = await s3.send(
+        new GetObjectCommand({
+          Bucket: getEnv().S3_BUCKET_TOPO,
+          Key: key,
+          Range: `bytes=${offset}-${offset + length - 1}`,
+          IfMatch: etag,
+        }),
+        { abortSignal: AbortSignal.timeout(TILE_FETCH_TIMEOUT_MS) },
+      );
+      const bytes = await object.Body!.transformToByteArray();
+      return {
+        data: bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ) as ArrayBuffer,
+        etag: object.ETag,
+      };
+    },
+  };
+}
+
 /** The PNG bytes a source has for these tiles, however it is served. */
 async function tileBytes(
   source: DemSource,
   wanted: readonly DemTileAddress[],
+  areas: readonly VisibleSharpenedArea[],
 ): Promise<Map<string, Uint8Array>> {
+  if (source.areaId != null) {
+    const area = areas.find((a) => a.id === source.areaId);
+    if (!area) return new Map();
+    // ponytail: one open archive per area ever read (`s3:` keys in shared's
+    // archive map), each with its header and up to 100 directory entries,
+    // held for the life of the process; cap those entries oldest-first, as
+    // `cacheTile` does, when the number of areas makes it matter.
+    try {
+      return await readDemArchive(
+        demArchive(s3Source(area.keys.heights)),
+        source,
+        wanted,
+      );
+    } catch (error) {
+      // DELETE /topo-jobs/:id removes a job's archives before its row, so a
+      // job being deleted can still be listed with no archive: its positions
+      // fall through to the public sources. Any other failure is ours.
+      if (isMissingObjectError(error)) return new Map();
+      throw new AppError(503, say`Couldn't read the terrain here. Try again.`);
+    }
+  }
   if (source.archivePath != null) {
     const archive = await demArchiveFor({
       ...source,
@@ -186,10 +249,14 @@ async function tileBytes(
   return found;
 }
 
-/** Each tile is fetched at most once per call, and held for the next. */
+/**
+ * Each tile is fetched at most once per call, and held for the next. Tiles
+ * are held under the source id, which names the job for an area.
+ */
 async function readTiles(
   source: DemSource,
   wanted: readonly DemTileAddress[],
+  areas: readonly VisibleSharpenedArea[],
 ): Promise<Map<string, Float32Array>> {
   const tiles = new Map<string, Float32Array>();
   const missing: DemTileAddress[] = [];
@@ -200,7 +267,7 @@ async function readTiles(
   }
   // Absent tiles are not cached: they are rare, and caching a null would need
   // a second map to distinguish "known absent" from "not yet fetched".
-  for (const [key, png] of await tileBytes(source, missing)) {
+  for (const [key, png] of await tileBytes(source, missing, areas)) {
     const tile = await decodeTile(png);
     cacheTile(`${source.id}/${key}`, tile);
     tiles.set(key, tile);
@@ -208,19 +275,33 @@ async function readTiles(
   return tiles;
 }
 
-/** Read the DEM at each position, in order. Null where no source has it. */
+/**
+ * Read the DEM at each position, in order, from the public sources and the
+ * areas the caller may read. Null where no source has it.
+ */
 export function sampleElevations(
   positions: readonly SamplePosition[],
+  areas: readonly VisibleSharpenedArea[] = [],
 ): Promise<DemSamples> {
-  return sampleDem(positions, readTiles);
+  return sampleDem(
+    positions,
+    (source, wanted) => readTiles(source, wanted, areas),
+    demSourcesFor(areas),
+  );
 }
 
 /** The slope at a position and where it came from; null where none can tell. */
 export function sampleSlope(
   lon: number,
   lat: number,
+  areas: readonly VisibleSharpenedArea[] = [],
 ): Promise<DemSlopeReading | null> {
-  return demSlopeReading(lon, lat, readTiles);
+  return demSlopeReading(
+    lon,
+    lat,
+    (source, wanted) => readTiles(source, wanted, areas),
+    demSourcesFor(areas),
+  );
 }
 
 /** Test seam — the cache is process-wide and would otherwise leak between tests. */

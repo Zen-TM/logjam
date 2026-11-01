@@ -73,7 +73,7 @@ export function CrashReportConsent() {
 const useStyles = makeStyles((theme, textRole) => ({
   body: {
     ...muted(theme, textRole.paragraph),
-    marginBottom: spacing(1.5),
+    marginBottom: spacing(0.5),
   },
   actions: { gap: spacing(0.5) },
 }));

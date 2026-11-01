@@ -113,6 +113,7 @@
 }
 
 .iconButton {
+  position: relative;
   width: var(--control-md);
   height: var(--control-md);
   flex: none;
@@ -176,4 +177,24 @@
 /* Ring flush with the circle, so it stays inside the pill's end cap. */
 .iconButton.round:focus-visible {
   outline-offset: 0;
+}
+
+/* An IconButton's count, on the glyph's top-right corner. The accent, not the
+   rail's warning: it is news (a rank), not something to fix. */
+.badge {
+  composes: caption from "../textRoles.generated.module.css";
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: var(--color-on-fill);
+  pointer-events: none;
 }

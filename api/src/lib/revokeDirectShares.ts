@@ -22,7 +22,7 @@
 // the recipient to forget a row the next delta pull re-delivers — and the row
 // would flicker out and back on every sweep.
 //
-// Jobs (topo, GeoPDF) are not delta-synced at all: their lists refetch, so they
+// Jobs (topo) are not delta-synced at all: their lists refetch, so they
 // get steps 1-2 and nothing else.
 //
 // AUTHORIZATION IS THE CALLER'S. Nothing here decides who may revoke what:

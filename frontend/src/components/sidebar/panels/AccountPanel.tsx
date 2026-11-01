@@ -3,6 +3,8 @@ import {
   ACCOUNT,
   contractSectionKeys,
   formatCredits,
+  SIGN_OUT_EVERYWHERE_BODY,
+  SIGN_OUT_EVERYWHERE_FAILED,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -11,7 +13,8 @@ import {
   exportUserData,
   type TUser,
 } from "../../../placeUtils";
-import { useAuth } from "../../../useAuth";
+import { signOut, signOutEverywhere } from "../../../useAuth";
+import { hasCognitoAccount } from "../../../auth/oidc";
 import DeleteAccountDialog from "../../dialogs/DeleteAccountDialog";
 import ChangeEmailDialog from "../../dialogs/ChangeEmailDialog";
 import { useToast } from "../../feedback/ToastProvider";
@@ -71,7 +74,6 @@ function AccountPanel({
   error: string | null;
   onRetry: () => void;
 }) {
-  const { signOut } = useAuth();
   const toast = useToast();
   const [username, setUsername] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -79,6 +81,8 @@ function AccountPanel({
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [changeEmailOpen, setChangeEmailOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [signOutEverywhereOpen, setSignOutEverywhereOpen] = useState(false);
+  const [signingOutEverywhere, setSigningOutEverywhere] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -89,6 +93,18 @@ function AccountPanel({
     if (currentUser) {
       setUsername(currentUser.username);
       setEmail(currentUser.email);
+    }
+  }
+
+  async function handleSignOutEverywhere() {
+    setSigningOutEverywhere(true);
+    try {
+      await signOutEverywhere();
+    } catch (err) {
+      console.error(err);
+      toast.error(SIGN_OUT_EVERYWHERE_FAILED);
+      setSigningOutEverywhere(false);
+      setSignOutEverywhereOpen(false);
     }
   }
 
@@ -196,11 +212,15 @@ function AccountPanel({
             title={copy.email}
             subtitle={email ?? undefined}
             trailing={
-              <IconButton
-                icon="edit"
-                label={copy.changeEmail}
-                onClick={() => setChangeEmailOpen(true)}
-              />
+              // Cognito's own call; other providers manage the address on
+              // their own page.
+              hasCognitoAccount() ? (
+                <IconButton
+                  icon="edit"
+                  label={copy.changeEmail}
+                  onClick={() => setChangeEmailOpen(true)}
+                />
+              ) : undefined
             }
           />
         </>
@@ -226,6 +246,15 @@ function AccountPanel({
           <Button variant="outline" icon="signOut" onClick={signOut}>
             {copy.signOut}
           </Button>
+          {hasCognitoAccount() && (
+            <Button
+              variant="outline"
+              icon="signOut"
+              onClick={() => setSignOutEverywhereOpen(true)}
+            >
+              {copy.signOutEverywhere}
+            </Button>
+          )}
           <Row
             leading={<IconTile icon="delete" hue="var(--color-warning)" />}
             title={copy.deleteAccount}
@@ -275,6 +304,32 @@ function AccountPanel({
           />
         </>
       )}
+      <Dialog
+        open={signOutEverywhereOpen}
+        title={copy.signOutEverywhere}
+        onClose={() => setSignOutEverywhereOpen(false)}
+        dismissible={!signingOutEverywhere}
+        footer={
+          <>
+            <Button
+              onClick={() => setSignOutEverywhereOpen(false)}
+              disabled={signingOutEverywhere}
+              disabledReason="Signing out…"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="filled"
+              busy={signingOutEverywhere}
+              onClick={handleSignOutEverywhere}
+            >
+              {copy.signOutEverywhere}
+            </Button>
+          </>
+        }
+      >
+        {SIGN_OUT_EVERYWHERE_BODY}
+      </Dialog>
       <ChangeEmailDialog
         open={changeEmailOpen}
         onClose={() => setChangeEmailOpen(false)}

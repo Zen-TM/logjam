@@ -55,9 +55,8 @@
           people&rsquo;s details, such as the name and phone number of a
           safety contact who is not on Logjam, and health information, such
           as medical conditions, allergies or medication.</li>
-      <li><strong>Topo and GeoPDF jobs:</strong> the area each job covers, the
-          LiDAR inputs you upload, and the map tiles and PDFs produced from
-          them.</li>
+      <li><strong>Topo jobs:</strong> the area each job covers, the
+          LiDAR inputs you upload, and the map tiles produced from them.</li>
       <li><strong>Devices:</strong> for each Logjam GPS install that allows
           notifications, a push token (an address for sending notifications to
           that phone) and its platform.</li>
@@ -110,8 +109,8 @@
       When you share a place with a friend, they can see the place record
       including its name, coordinates, place-level notes and place-level media,
       and the route linked to it. Per-trip notes, per-trip media, and your
-      trip-log history remain private to you. You can also share a route, a
-      topo map or a GeoPDF on its own.
+      trip-log history remain private to you. You can also share a route or a
+      topo map on its own.
     </p>
     <p>
       While something is shared with someone, they can copy it into their own
@@ -165,8 +164,8 @@
         your email address and a single time-limited code.
       </li>
       <li>
-        <strong>Notification emails:</strong> telling you a topo job, export, or
-        GeoPDF you started has finished. Each contains your email address and a
+        <strong>Notification emails:</strong> telling you a topo job or export you
+        started has finished. Each contains your email address and a
         job reference.
       </li>
     </ul>
@@ -316,16 +315,28 @@
           sends the square of about 11 km around the spot, never the spot
           itself, and the spot&rsquo;s height to the nearest 10 m, along with
           your IP address. Nothing else about you or your places is sent.</li>
-      <li><strong>Server-side GeoPDF rendering:</strong> when you generate a
-          GeoPDF, our servers fetch the same providers&rsquo; tiles for the
-          export area. The providers see our server&rsquo;s requests &mdash;
-          your IP address and account are not sent.</li>
-      <li><strong>Topo jobs:</strong> our rendering worker requests
-          OpenStreetMap data for the job&rsquo;s footprint bounding box from
-          public Overpass API mirrors (<code>overpass-api.de</code>,
-          <code>overpass.kumi.systems</code>,
-          <code>overpass.private.coffee</code>). No account identifiers are
-          sent.</li>
+      <li><strong>River gauges:</strong> when you switch on &ldquo;River
+          gauges&rdquo; in Logjam Web&rsquo;s map layers, your browser asks
+          Logjam for one public file of gauge readings, the same file for
+          everyone, again every five minutes while the tab is open. The
+          request says nothing about your places or where you are looking on
+          the map. Logjam GPS asks for the same file, only while the layer is
+          on and the app is open, and keeps the last copy on the phone so the
+          gauges still show offline; signing out deletes that copy. When a
+          place has a river gauge, its page and your trips&rsquo; pages ask
+          Logjam for that gauge&rsquo;s public history file, once when the page
+          opens, to show its reading on your trip&rsquo;s date. Logjam GPS keeps
+          those files for the gauges on your places, refreshing them when
+          Logjam GPS opens, and signing out deletes them. The request names the
+          gauge and nothing else: Logjam&rsquo;s logs hold which gauge was asked for,
+          not who by name. The dates of your trips are never sent; the date is
+          looked up on your device.</li>
+      <li><strong>GeoPDFs:</strong> Logjam Web draws a GeoPDF in your browser.
+          It fetches the basemap&rsquo;s tiles for the export area from the
+          same providers, in the same way, as the live map does (see Basemap
+          tiles above), and the terrain and sharpened-area tiles from Logjam,
+          as the map does. The title and place markers of a GeoPDF are
+          not sent to us, and we keep no record or copy of it.</li>
     </ul>
     <p>
       These providers operate under their own privacy policies and are not
@@ -338,7 +349,7 @@
     </p>
     <ul>
       <li>Account verification, password reset and email-change codes.</li>
-      <li>Notification when a topo job, export or GeoPDF you started has
+      <li>Notification when a topo job or export you started has
           finished.</li>
     </ul>
     <p>No marketing email is ever sent.</p>
@@ -350,13 +361,13 @@
           JSON copy of the account data we hold about you &mdash; your
           account details, places, place types, custom fields, links, routes,
           trip logs, media metadata, friends, shares, sent and received files,
-          topo and GeoPDF jobs and templates (including their map footprints),
+          topo jobs and topo templates (including their map footprints),
           notifications, registered devices, the trip plans you are in,
           invited to or asked to join, your answers to their forms, and the plan invite links
           you made. No request to us is required;
           the export is generated on demand. (Media file contents are not
           included in the JSON; the metadata identifies each item. Topo tiles
-          and PDFs are not included; the job records identify them. Access and
+          are not included; the job records identify them. Access and
           audit logs are not included; ask us if you want what they hold about
           you.)</li>
       <li><strong>Delete:</strong> "Delete account" (the Account panel in
@@ -398,8 +409,8 @@
     </p>
     <ul>
       <li>Files sent to friends as a copy: 7 days.</li>
-      <li>Topo export and GeoPDF files: 7 days after they are produced (the
-          job records stay until you delete them).</li>
+      <li>Exports of an area: 7 days after they are produced, record
+          included.</li>
     </ul>
     <p>
       Logs are kept after the record they relate to is removed, including after

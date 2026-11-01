@@ -1,6 +1,6 @@
 // Location search as you type, from the place registry (ADR 0034).
 //
-// Auth but no user row, like /elevation: nothing here is stored, and a lookup
+// Auth but no user row: nothing here is stored, and a lookup
 // per keystroke would cost a query for nothing. The registry is public, so
 // auth is not guarding the answers; it keeps this from being an open search
 // service, and the per-user limiter needs a user to count.

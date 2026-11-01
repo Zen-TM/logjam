@@ -20,6 +20,7 @@ import {
   canPause,
   isRetryableFailure,
   regionRejectedLine,
+  sourceUnavailableLine,
 } from "./regionJobStatus";
 
 export function RegionDownloadRow({ job }: { job: RegionJob }) {
@@ -42,10 +43,8 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
         case "region-rejected":
           return regionRejectedLine(state.detail);
         case "source-unavailable":
-          // Not the phone's fault and not fixable by retrying, so it doesn't
-          // say "try again": the clip's archive is missing or not served by
-          // range.
-          return "Logjam couldn't prepare this map right now. Other maps still work.";
+          // Not fixable by retrying, so it doesn't say "try again".
+          return sourceUnavailableLine(state.detail);
         default:
           // The detail is the message from the exception that ended the run,
           // scrubbed (see failureDetail).

@@ -24,8 +24,6 @@ export const WORKER_SPECS = {
   topo: { vcpus: 8, memoryGiB: 16, label: "Topo generation" },
   /** logjam-topo-export-worker — on-demand export rendering. */
   topoExport: { vcpus: 4, memoryGiB: 8, label: "Topo export" },
-  /** logjam-geo-pdf-worker — GeoPDF render. */
-  geoPdf: { vcpus: 1, memoryGiB: 4, label: "GeoPDF" },
 } as const;
 
 export type WorkerKind = keyof typeof WORKER_SPECS;
@@ -59,7 +57,7 @@ export const QUOTA_WARNING_FRACTION = 0.8;
 /**
  * Credits consumed by `seconds` of wall time on `kind`.
  *
- * Rounded UP so a run can never be free: a flood of sub-minute GeoPDF jobs
+ * Rounded UP so a run can never be free: a flood of sub-minute jobs
  * still draws down the allowance, which is precisely the abuse shape a
  * per-job-count limit would miss.
  */

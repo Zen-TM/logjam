@@ -76,6 +76,16 @@ describe("validatePlaceTextFields", () => {
     ).toMatch(/up to/);
   });
 
+  it("bounds gaugeId to letters and digits, and allows null", () => {
+    expect(validatePlaceTextFields({ gaugeId: "210001" })).toBeNull();
+    expect(validatePlaceTextFields({ gaugeId: null })).toBeNull();
+    for (const bad of ["", "a b", "x".repeat(21), 5]) {
+      expect(validatePlaceTextFields({ gaugeId: bad })?.devDetail).toMatch(
+        /gaugeId/,
+      );
+    }
+  });
+
   it("allows null notes/altNames/attributes but rejects wrong types", () => {
     expect(
       validatePlaceTextFields({
@@ -125,6 +135,7 @@ describe("PLACE_FIELDS (the push allowlist)", () => {
       "altNames",
       "elevation",
       "fieldValues",
+      "gaugeId",
       "latitude",
       "longitude",
       "name",

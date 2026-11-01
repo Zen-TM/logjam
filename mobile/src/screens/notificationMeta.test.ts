@@ -35,9 +35,6 @@ describe("notificationMeta", () => {
     expect(notificationMeta(notification("topo_complete")).hue).toBe(
       notificationHue.topo,
     );
-    expect(notificationMeta(notification("geo_pdf_complete")).hue).toBe(
-      notificationHue.geoPdf,
-    );
     expect(notificationMeta(notification("friend_request")).kind).toBe(
       "people",
     );
@@ -51,22 +48,10 @@ describe("notificationMeta", () => {
         notification("topo_export_complete", { status: "failed" }),
       ).kind,
     ).toBe("problem");
-    expect(
-      notificationMeta(notification("geo_pdf_complete", { status: "failed" }))
-        .kind,
-    ).toBe("problem");
     expect(notificationMeta(notification("topo_export_skipped")).kind).toBe(
       "problem",
     );
     expect(notificationMeta(notification("topo_failed")).icon).toBe("warning");
-  });
-
-  it("keeps a completion with a warning as a completion", () => {
-    // A finished topo job whose OSM fetch failed still produced a map.
-    const meta = notificationMeta(
-      notification("topo_complete", { osmFailed: true }),
-    );
-    expect(meta.kind).toBe("topo");
   });
 
   it("gives an unknown type a glyph rather than nothing", () => {

@@ -1,10 +1,11 @@
-// "Map layers" — everything that decides what the map draws, in one sheet with
-// three tabs.
+// "Map layers" — everything that decides what the map draws, in one sheet of
+// tabs.
 //
-// The three tabs answer three distinct questions without scrolling through a
+// The tabs answer distinct questions without scrolling through a
 // stack of unrelated sections:
 //
 //   Basemap  — what is the map made of?
+//   Terrain  — what shape is the ground?
 //   Layers   — what is drawn on top of it?
 //   Offline  — what works with no signal?
 //
@@ -37,9 +38,13 @@ import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   contractSectionKeys,
+  LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
+  MAP_TERRAIN,
+  TERRAIN_LAYER_KEYS,
   type SectionKeysOn,
+  type TerrainSwitchKey,
 } from "@logjam/shared";
 
 import {
@@ -63,11 +68,8 @@ import {
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import type { Connectivity } from "./connectivity";
-import {
-  hasSavedImageryContours,
-  type BasemapId,
-  type MapArtifact,
-} from "./sourceResolver";
+import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
+import type { BasemapId, MapArtifact } from "./sourceResolver";
 
 type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
@@ -75,6 +77,7 @@ const copy = MAP_LAYERS.copy;
 
 const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
+  terrain: copy.tabTerrain,
   overlays: copy.tabOverlays,
   offline: copy.tabOffline,
 };
@@ -91,8 +94,9 @@ export type LayerToggleEntry = {
   icon: Glyph;
   hue: string;
   title: string;
-  /** How many of this kind exist — NOT how many are visible. */
-  count: number;
+  /** How many of this kind exist — NOT how many are visible. Left out where
+   *  the number is no one's: the same 279 river gauges for everybody. */
+  count?: number;
   /**
    * Live state worth a second line, and ONLY that: "2 not downloaded yet" on a
    * layer that is drawing less than its count. Never a description of what the
@@ -122,34 +126,17 @@ export type LayerToggleEntry = {
   }[];
 };
 
-export type OverlayEntry = {
-  /** "<jobId>/<layerName>" — the enabled-set key. */
-  key: string;
-  /** The LiDAR job this layer was rendered from. */
-  areaId: string;
-  areaLabel: string;
-  /** TopoLayerName + its display label ("hillshade" / "Hillshade"). */
-  layer: string;
-  layerLabel: string;
-};
-
 export function MapLayersSheet({
   visible,
   onClose,
   connectivity,
   basemapId,
   onBasemapChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
+  terrainLayers,
+  onTerrainLayerChange,
   artifacts,
   layers,
-  overlays,
-  enabledOverlays,
-  onToggleOverlay,
-  mutedAreas,
-  onSetAreasMuted,
-  showOverlays,
-  onShowOverlaysChange,
+  hasVegetation,
   offlineOnly,
   onOfflineOnlyChange,
   onSaveArea,
@@ -161,21 +148,13 @@ export function MapLayersSheet({
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
+  terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
+  onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
   artifacts: MapArtifact[];
   /** Every kind drawn over the basemap, in the order they are listed. */
   layers: LayerToggleEntry[];
-  overlays: OverlayEntry[];
-  enabledOverlays: ReadonlySet<string>;
-  onToggleOverlay: (key: string) => void;
-  /** Areas hidden wholesale — the "where" axis (see TopoOverlayList). */
-  mutedAreas: ReadonlySet<string>;
-  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
-  /** Master switch for the topo band, so the row toggles with zero overlays
-   *  and the layer/area picks underneath survive being switched off. */
-  showOverlays: boolean;
-  onShowOverlaysChange: (next: boolean) => void;
+  /** Whether a sharpened area has a vegetation layer to switch. */
+  hasVegetation: boolean;
   offlineOnly: boolean;
   onOfflineOnlyChange: (next: boolean) => void;
   onSaveArea: () => void;
@@ -186,6 +165,14 @@ export function MapLayersSheet({
   const styles = useStyles();
 
   const [tab, setTab] = useState<Tab>("basemap");
+  // A layer's legend: a sub-mode of this sheet, never a second one
+  // (DESIGN.md), reset whenever the sheet opens or closes.
+  const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    setLegend(null);
+  }
   const online = connectivity === "online";
 
   // Exhaustive by type: a tab the contract names and this sheet does not
@@ -195,25 +182,33 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={onContoursOverImageryChange}
-        // Offline they come only from saved clips, so the switch is offered
-        // only when some saved area has them with imagery.
-        offersContours={online || hasSavedImageryContours(artifacts)}
         online={online}
+      />
+    ),
+    terrain: () => (
+      <TerrainTab
+        layers={terrainLayers}
+        onChange={onTerrainLayerChange}
+        basemapId={basemapId}
+        online={online}
+        artifacts={artifacts}
+        hasVegetation={hasVegetation}
+        onOpenLegend={() => setLegend("vegetation")}
       />
     ),
     overlays: () => (
       <LayersTab
         layers={layers}
-        overlays={overlays}
-        enabledOverlays={enabledOverlays}
-        onToggleOverlay={onToggleOverlay}
-        mutedAreas={mutedAreas}
-        onSetAreasMuted={onSetAreasMuted}
-        showOverlays={showOverlays}
-        onShowOverlaysChange={onShowOverlaysChange}
         onImportFile={onImportFile}
+        land={terrainSwitch(
+          "land",
+          terrainLayers.land,
+          basemapId,
+          online,
+          artifacts,
+        )}
+        onLandChange={(on) => onTerrainLayerChange("land", on)}
+        onOpenLandLegend={() => setLegend("land")}
       />
     ),
     offline: () => (
@@ -230,7 +225,21 @@ export function MapLayersSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={MAP_LAYERS.title}>
+    <BottomSheet
+      visible={visible}
+      // The legend backs out to its tab, not out of the sheet.
+      onClose={legend ? () => setLegend(null) : onClose}
+      onBack={legend ? () => setLegend(null) : undefined}
+      title={legend ? MAP_TERRAIN.copy[legend] : MAP_LAYERS.title}
+      // Over the tab rather than in place of it, so the sheet keeps its height.
+      overlay={
+        legend === "land" ? (
+          <LandLegend />
+        ) : legend === "vegetation" ? (
+          <Text style={styles.legend}>{MAP_TERRAIN.copy.vegetationLegend}</Text>
+        ) : null
+      }
+    >
       <View style={styles.rail}>
         <ChipRail
           options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
@@ -250,16 +259,10 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
-  contoursOverImagery,
-  onContoursOverImageryChange,
-  offersContours,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
-  contoursOverImagery: boolean;
-  onContoursOverImageryChange: (on: boolean) => void;
-  offersContours: boolean;
   online: boolean;
 }) {
   const theme = useTheme();
@@ -302,23 +305,97 @@ function BasemapTab({
               }
               selected={active}
             />
-            {/* Imagery has no contours of its own; the vector basemap always
-              draws them (shared nswContours.ts). */}
-            {active && id === "six-imagery" && offersContours ? (
-              <SwitchRow
-                title="Contours"
-                description={
-                  online ? undefined : "Only in saved areas that include them"
-                }
-                style={styles.itemRow}
-                checked={contoursOverImagery}
-                onChange={onContoursOverImageryChange}
-              />
-            ) : null}
           </Fragment>
         );
       })}
     </View>
+  );
+}
+
+/**
+ * The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. The
+ * slope's bands are the account's, chosen on Logjam Web.
+ */
+function TerrainTab({
+  layers,
+  onChange,
+  basemapId,
+  online,
+  artifacts,
+  hasVegetation,
+  onOpenLegend,
+}: {
+  layers: Readonly<Record<TerrainSwitchKey, boolean>>;
+  onChange: (key: TerrainSwitchKey, on: boolean) => void;
+  basemapId: BasemapId;
+  online: boolean;
+  /** What is saved on this phone: offline, a layer needs a clip of itself. */
+  artifacts: readonly MapArtifact[];
+  /** A sharpened area has a vegetation layer to switch. */
+  hasVegetation: boolean;
+  onOpenLegend: () => void;
+}) {
+  const styles = useStyles();
+  const rows = {
+    ...Object.fromEntries(
+      TERRAIN_LAYER_KEYS.map((key) => {
+        const state = terrainSwitch(
+          key,
+          layers[key],
+          basemapId,
+          online,
+          artifacts,
+        );
+        return [
+          key,
+          <SwitchRow
+            key={key}
+            title={MAP_TERRAIN.copy[key]}
+            description={state.reason}
+            disabled={state.disabled}
+            style={styles.itemRow}
+            checked={state.checked}
+            onChange={(on) => onChange(key, on)}
+          />,
+        ];
+      }),
+    ),
+    vegetation: hasVegetation ? (
+      <SwitchRow
+        key="vegetation"
+        title={MAP_TERRAIN.copy.vegetation}
+        description={MAP_TERRAIN.copy.vegetationHint}
+        style={styles.itemRow}
+        checked={layers.vegetation}
+        onChange={(on) => onChange("vegetation", on)}
+        help={{
+          label: MAP_TERRAIN.copy.vegetationAbout,
+          onPress: onOpenLegend,
+        }}
+      />
+    ) : null,
+  } as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
+  return (
+    <View style={styles.body}>
+      {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
+    </View>
+  );
+}
+
+/** What the Land overlay's colours mean, and what they don't. */
+function LandLegend() {
+  const styles = useStyles();
+  return (
+    <>
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.landLegend}</Text>
+      {LAND_CLASSES.map(({ name, colour }) => (
+        <View key={name} style={styles.landRow}>
+          <View style={[styles.landSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{name}</Text>
+        </View>
+      ))}
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.landCaveat}</Text>
+    </>
   );
 }
 
@@ -399,7 +476,11 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
         hue={entry.hue}
         title={entry.title}
         description={entry.note}
-        badge={<Text style={styles.count}>{entry.count}</Text>}
+        badge={
+          entry.count === undefined ? undefined : (
+            <Text style={styles.count}>{entry.count}</Text>
+          )
+        }
         checked={entry.value}
         onChange={entry.onChange}
       />
@@ -409,31 +490,20 @@ function LayerRow({ entry }: { entry: LayerToggleEntry }) {
 
 function LayersTab({
   layers,
-  overlays,
-  enabledOverlays,
-  onToggleOverlay,
-  mutedAreas,
-  onSetAreasMuted,
-  showOverlays,
-  onShowOverlaysChange,
   onImportFile,
+  land,
+  onLandChange,
+  onOpenLandLegend,
 }: {
   layers: LayerToggleEntry[];
-  overlays: OverlayEntry[];
-  enabledOverlays: ReadonlySet<string>;
-  onToggleOverlay: (key: string) => void;
-  mutedAreas: ReadonlySet<string>;
-  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
-  showOverlays: boolean;
-  onShowOverlaysChange: (next: boolean) => void;
   onImportFile: () => void;
+  land: TerrainSwitchState;
+  onLandChange: (on: boolean) => void;
+  onOpenLandLegend: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
   const styles = useStyles();
-
-  const [expanded, setExpanded] = useState(false);
-  const expandable = overlays.length > 0;
 
   const entryRow = (key: string) => {
     const entry = layers.find((candidate) => candidate.key === key);
@@ -448,50 +518,20 @@ function LayersTab({
   > = {
     places: () => entryRow("places"),
     ways: () => entryRow("ways"),
-    geoPdfs: () => entryRow("geoPdfs"),
-    lidarTopos: () => (
-      <View style={styles.group}>
-        <Row
-          icon="lidar"
-          hue={assetHue.overlay}
-          title={copy.lidarTopos}
-          onPress={
-            expandable
-              ? () => setExpanded((current) => !current)
-              : () => onShowOverlaysChange(!showOverlays)
-          }
-          accessibilityLabel={`${copy.lidarTopos} — ${expanded ? "hide" : "show"} the list`}
-          right={
-            <View style={styles.trailing}>
-              <Text style={styles.count}>{overlays.length}</Text>
-              <Toggle
-                checked={showOverlays}
-                onChange={onShowOverlaysChange}
-                accessibilityLabel={`Show ${copy.lidarTopos}`}
-              />
-              {expandable ? (
-                <Icon
-                  idea={expanded ? "collapse" : "expand"}
-                  size={20}
-                  color={theme.textMuted}
-                />
-              ) : null}
-            </View>
-          }
-        />
-        {expanded ? (
-          <View style={styles.groupItems}>
-            <TopoOverlayList
-              overlays={overlays}
-              enabledOverlays={enabledOverlays}
-              onToggleOverlay={onToggleOverlay}
-              mutedAreas={mutedAreas}
-              onSetAreasMuted={onSetAreasMuted}
-            />
-          </View>
-        ) : null}
-      </View>
+    land: () => (
+      <SwitchRow
+        icon="layers"
+        hue={LAND_CLASSES[0].colour}
+        title={MAP_OVERLAYS.copy.land}
+        description={land.reason}
+        disabled={land.disabled}
+        checked={land.checked}
+        onChange={onLandChange}
+        help={{ label: MAP_TERRAIN.copy.landAbout, onPress: onOpenLandLegend }}
+      />
     ),
+    gauges: () => entryRow("gauges"),
+    geoPdfs: () => entryRow("geoPdfs"),
     importFile: () => (
       <Row
         icon="upload"
@@ -511,106 +551,7 @@ function LayersTab({
   );
 }
 
-/**
- * The topo overlays, as two questions rather than a grid.
- *
- * A LiDAR job covers ONE area and renders the same handful of layers inside it
- * (hillshade, contours, features…), so the honest shape of this data is a
- * matrix — and a row per cell grows by five with every area saved. Nobody asks
- * it a per-cell question. They ask "contours, everywhere" or "not this area at
- * all", so those are the two sections:
- *
- *   LAYERS — what to draw. One switch per layer kind, across every area.
- *   AREAS  — where to draw it. One switch per area.
- *
- * The two are INDEPENDENT, not two views of one set: an overlay renders when
- * its layer is on AND its area is not muted. That is what makes each switch
- * mean one thing — muting an area hides it without destroying the layer picks
- * underneath, so unmuting brings back exactly what was showing. Deriving the
- * area switch from the cells instead would make it read "off" the moment any
- * single layer was off, which is the state the map is in almost all the time.
- *
- * Storage follows the same split: cells in `overlay_enabled` (registryDb),
- * muting in `topoAreaMuting.ts`.
- */
-function TopoOverlayList({
-  overlays,
-  enabledOverlays,
-  onToggleOverlay,
-  mutedAreas,
-  onSetAreasMuted,
-}: {
-  overlays: OverlayEntry[];
-  enabledOverlays: ReadonlySet<string>;
-  onToggleOverlay: (key: string) => void;
-  mutedAreas: ReadonlySet<string>;
-  onSetAreasMuted: (areaIds: string[], muted: boolean) => void;
-}) {
-  const { assetHue } = useHues();
-
-  // Both groupings keep first-seen order, which is the order MapScreen composed
-  // the jobs in (newest area first, TOPO_LAYERS order within one).
-  const byLayer = useMemo(() => {
-    const groups = new Map<string, { label: string; keys: string[] }>();
-    for (const overlay of overlays) {
-      const group = groups.get(overlay.layer) ?? {
-        label: overlay.layerLabel,
-        keys: [],
-      };
-      group.keys.push(overlay.key);
-      groups.set(overlay.layer, group);
-    }
-    return [...groups];
-  }, [overlays]);
-
-  // Areas keep first-seen order too, and are deduped by id — one row per area,
-  // however many layers it rendered.
-  const areas = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const overlay of overlays) {
-      if (!seen.has(overlay.areaId))
-        seen.set(overlay.areaId, overlay.areaLabel);
-    }
-    return [...seen];
-  }, [overlays]);
-
-  return (
-    <>
-      <SectionHeader title="Layers" />
-      {byLayer.map(([layer, group]) => {
-        const allOn = group.keys.every((key) => enabledOverlays.has(key));
-        return (
-          <ItemRow
-            key={layer}
-            hue={assetHue.overlay}
-            title={group.label}
-            visible={allOn}
-            onVisibility={() => {
-              for (const key of group.keys) {
-                if (enabledOverlays.has(key) !== !allOn) onToggleOverlay(key);
-              }
-            }}
-          />
-        );
-      })}
-
-      <SectionHeader title="Areas" />
-      {areas.map(([areaId, label]) => (
-        <ItemRow
-          key={areaId}
-          hue={assetHue.overlay}
-          title={label}
-          visible={!mutedAreas.has(areaId)}
-          onVisibility={() =>
-            onSetAreasMuted([areaId], !mutedAreas.has(areaId))
-          }
-        />
-      ))}
-    </>
-  );
-}
-
-/** One line inside the topo group: a colour dot, its name, its switch. */
+/** One line inside a layer group: a colour dot, its name, its switch. */
 function ItemRow({
   hue,
   title,
@@ -683,7 +624,7 @@ function OfflineTab({
         icon="offline"
         hue={assetHue.region}
         title="Offline maps only"
-        description="Use only saved maps, even with signal"
+        description="Even when you have signal"
         descriptionNumberOfLines={2}
         checked={offlineOnly}
         onChange={onOfflineOnlyChange}
@@ -715,7 +656,7 @@ function OfflineTab({
 const useStyles = makeStyles((theme, textRole) => ({
   // The gap the list scrolls against, exactly as a screen's pinned rail owns
   // (DESIGN.md).
-  rail: { paddingBottom: spacing(1.5) },
+  rail: { paddingBottom: spacing(0.5) },
   body: { gap: spacing(1) },
   group: { gap: spacing(0.5) },
   // A row something above it has already decided for.
@@ -726,6 +667,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   itemRow: { minHeight: controlSize.lg, paddingVertical: spacing(1) },
   dot: { width: 12, height: 12, borderRadius: 6 },
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  grow: { flex: 1 },
+  legend: { ...textRole.body, color: theme.text },
+  landRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  landSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {

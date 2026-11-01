@@ -7,11 +7,17 @@
 // 200 carrying an error page being written into the archive as a tile.
 import {
   NSW_CONTOURS,
+  NSW_LAND,
+  NSW_SLOPE,
   type RegionBbox,
   type RegionTilePlan,
 } from "@logjam/shared";
 
-import { hashKey } from "../map/sourceResolver";
+import {
+  AREA_CLIP_KIND,
+  hashKey,
+  type MapArtifact,
+} from "../map/sourceResolver";
 import type { RegionClipSpec } from "./regionDownloads";
 
 /** Plan order: zoom ascending, then row-major within a level. */
@@ -66,8 +72,8 @@ export function tileUrlFrom(
 
 /**
  * The clips every saved area carries, whoever saves it: one of each DEM
- * archive the area touches, the statewide contours, and the vector map. They
- * cost a few to a few tens of megabytes, and without them the Vector map is blank out
+ * archive the area touches, the statewide contours, slope and land, and the
+ * vector map. They cost a few to a few tens of megabytes, and without them the Vector map is blank out
  * there, the route and measure tools stop snapping to tracks and a height
  * comes from the coarse worldwide tiles. A guest has them too: each is cut on
  * the phone from a public archive, with no call to Logjam's API
@@ -92,8 +98,27 @@ export function regionClipSpecs(
   return [
     ...demSourceIds.map((id) => clip(id, { demSourceId: id })),
     clip(NSW_CONTOURS.id, { contours: true }),
+    clip(NSW_SLOPE.id, { slope: true }),
+    clip(NSW_LAND.id, { land: true }),
     clip("protomaps"),
   ];
+}
+
+/** What a saved clip is filed as in the registry. */
+export function regionClipKind(
+  spec: Pick<
+    RegionClipSpec,
+    "demSourceId" | "contours" | "slope" | "land" | "area"
+  >,
+): MapArtifact["kind"] {
+  // `dem-region` is the kind the sampler filters saved files on
+  // (offline/demLookup.ts).
+  if (spec.area) return AREA_CLIP_KIND[spec.area.layer];
+  if (spec.demSourceId) return "dem-region";
+  if (spec.contours) return "contours-region";
+  if (spec.slope) return "slope-region";
+  if (spec.land) return "land-region";
+  return "basemap-region";
 }
 
 /**

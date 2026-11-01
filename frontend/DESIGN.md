@@ -105,9 +105,9 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   or an accordion.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
-  current answer as the subtitle; or, inside a `Dialog`, a native `<details>`
-  under the setting it refines, when the two change each other and both must
-  stay in view (the GeoPDF dialog's Exact edges).
+  current answer as the subtitle. Inside a `Dialog`, two ways of setting one
+  thing are a `ChipRail` that swaps the view under it (Export an area's On the
+  map · Type the edges), never a disclosure.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
   field) or `useToast().error` (background).
@@ -133,15 +133,18 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 | Job | Component |
 |---|---|
 | One choice from a few | `ChipRail` |
-| Several from a vocabulary the user extends | `ChipPicker` |
-| An item in a set / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card` |
-| A colour | `ColourField`: `palette` for an identity hue, free only for a topo style |
-| A bounded multiplier | `RangeField` |
+| Several from a vocabulary the user extends, or from a short parallel set with no field of its own (Terrain, Overlays) | `ChipPicker` |
+| An item in a set that carries a field or needs a sentence of its own / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card` |
+| A colour | `ColourField`: `palette` for an identity hue, free only for the slope scale |
 | A field that points at a place | `PlacePicker`, never a `<select>` or the network |
 | A dense settings line | `SettingsRow`, with `InfoTip` for what the words cannot say |
 | A state as a word | `StatusPill`, never a `Chip` |
 | A list's closing add button | `ListEnd`, fed the empty state's button |
 | Loading / failed load | `LoadingState` / `ErrorState` |
+
+- **A chip has no note of its own**: what a set needs said goes in the group's
+  `hint`, and why a chip is off is that hint too (`disabled` chip, reason in
+  the hint). An item that needs a sentence beside it is a `Checkbox`.
 
 - **A label the control above already says is hidden with `hideLabel`**,
   not removed.

@@ -1,0 +1,40 @@
+name: Dev APK
+
+# The debug build of Logjam GPS under the dev application id, built from the
+# dispatched branch for a phone or emulator running a local stack:
+#
+#   gh workflow run dev-apk.yml --ref <branch>
+#
+# Run it after a native change: JS reaches an installed dev build through Metro.
+# The build embeds no secrets, since a dev build goes without Firebase and its
+# JS and .env values stay with Metro; the artifact is public like the repo.
+on:
+  workflow_dispatch:
+    inputs:
+      legacy_root:
+        description: Trust the root Android before 13 lacks, which SIX Maps chains to
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The recipe is shared with mobile-emulator.yml, and so is its APK cache.
+      - id: build
+        uses: ./.github/actions/build-dev-apk
+        with:
+          legacy_root: ${{ inputs.legacy_root }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: logjam-dev-apk
+          path: ${{ steps.build.outputs.apk }}
+          if-no-files-found: error
+          retention-days: 7

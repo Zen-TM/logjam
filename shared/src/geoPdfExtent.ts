@@ -3,20 +3,8 @@ import proj4 from "proj4";
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type CoordMode = "latlon" | "enNorthing";
-export type LockMode = "scale" | "position";
 export type PaperSize = "A2" | "A3" | "A4" | "A5" | "custom";
 export type Orientation = "portrait" | "landscape";
-export type PivotPoint =
-  | "tl"
-  | "tc"
-  | "tr"
-  | "ml"
-  | "mc"
-  | "mr"
-  | "bl"
-  | "bc"
-  | "br";
-
 export interface ExtentState {
   paperSize: PaperSize;
   orientation: Orientation;
@@ -27,8 +15,6 @@ export interface ExtentState {
   west: number; // WGS84 longitude (degrees)
   scale: number; // denominator, e.g. 25000 for 1:25000
   coordMode: CoordMode;
-  lockMode: LockMode;
-  pivot: PivotPoint;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -144,13 +130,10 @@ export function extentFromCentreAndSize(
 }
 
 /**
- * Compute new extents from scale + paper, distributed around the pivot.
+ * Compute new extents from scale + paper, grown or shrunk around the centre.
  * This is the core layout function used by multiple apply* functions.
  */
-function extentsFromScaleAndPivot(
-  state: ExtentState,
-  scale: number,
-): ExtentState {
+function extentsFromScale(state: ExtentState, scale: number): ExtentState {
   const map = getMapDimensions(state);
   const targetWidthM = scale * (map.w / 1000);
   const targetHeightM = scale * (map.h / 1000);
@@ -165,68 +148,19 @@ function extentsFromScaleAndPivot(
   const dw = targetWidthDeg - currentWidthDeg;
   const dh = targetHeightDeg - currentHeightDeg;
 
-  // Pivot determines how dw and dh are distributed
-  const { fracLeft, fracRight, fracTop, fracBottom } = pivotFractions(
-    state.pivot,
-  );
-
   return {
     ...state,
     scale,
-    north: state.north + dh * fracTop,
-    south: state.south - dh * fracBottom,
-    east: state.east + dw * fracRight,
-    west: state.west - dw * fracLeft,
+    north: state.north + dh / 2,
+    south: state.south - dh / 2,
+    east: state.east + dw / 2,
+    west: state.west - dw / 2,
   };
 }
 
 /**
- * Fractions of expansion allocated to each direction based on pivot.
- * fracLeft + fracRight = 1, fracTop + fracBottom = 1.
- *
- * "tl" pivot means top-left is fixed:
- *   - top fixed → fracTop = 0, fracBottom = 1
- *   - left fixed → fracLeft = 0, fracRight = 1
- */
-function pivotFractions(pivot: PivotPoint): {
-  fracLeft: number;
-  fracRight: number;
-  fracTop: number;
-  fracBottom: number;
-} {
-  const col = pivot[1] as "l" | "c" | "r"; // second char
-  const row = pivot[0] as "t" | "m" | "b"; // first char
-
-  let fracLeft: number, fracRight: number;
-  if (col === "l") {
-    fracLeft = 0;
-    fracRight = 1;
-  } else if (col === "r") {
-    fracLeft = 1;
-    fracRight = 0;
-  } else {
-    fracLeft = 0.5;
-    fracRight = 0.5;
-  }
-
-  let fracTop: number, fracBottom: number;
-  if (row === "t") {
-    fracTop = 0;
-    fracBottom = 1;
-  } else if (row === "b") {
-    fracTop = 1;
-    fracBottom = 0;
-  } else {
-    fracTop = 0.5;
-    fracBottom = 0.5;
-  }
-
-  return { fracLeft, fracRight, fracTop, fracBottom };
-}
-
-/**
  * After changing the N/S span, adjust E/W to restore the paper aspect ratio.
- * Distributes the E/W change according to the pivot.
+ * Splits the E/W change between both sides.
  */
 function fixEWForRatio(state: ExtentState): ExtentState {
   const ratio = mapAreaAspectRatio(state);
@@ -237,17 +171,16 @@ function fixEWForRatio(state: ExtentState): ExtentState {
   const currentWidthDeg = state.east - state.west;
   const dw = targetWidthDeg - currentWidthDeg;
 
-  const { fracLeft, fracRight } = pivotFractions(state.pivot);
   return {
     ...state,
-    east: state.east + dw * fracRight,
-    west: state.west - dw * fracLeft,
+    east: state.east + dw / 2,
+    west: state.west - dw / 2,
   };
 }
 
 /**
  * After changing the E/W span, adjust N/S to restore the paper aspect ratio.
- * Distributes the N/S change according to the pivot.
+ * Splits the N/S change between both sides.
  */
 function fixNSForRatio(state: ExtentState): ExtentState {
   const ratio = mapAreaAspectRatio(state);
@@ -257,34 +190,27 @@ function fixNSForRatio(state: ExtentState): ExtentState {
   const currentHeightDeg = state.north - state.south;
   const dh = targetHeightDeg - currentHeightDeg;
 
-  const { fracTop, fracBottom } = pivotFractions(state.pivot);
   return {
     ...state,
-    north: state.north + dh * fracTop,
-    south: state.south - dh * fracBottom,
+    north: state.north + dh / 2,
+    south: state.south - dh / 2,
   };
 }
 
 // ── Apply Functions ──────────────────────────────────────────────────────────
+
+// Typing an edge pans the box: it keeps its size and scale, the opposite edge
+// follows, and the other axis refits the paper's ratio.
 
 export function applyNorthChange(
   state: ExtentState,
   newNorth: number,
 ): ExtentState {
   if (newNorth <= state.south) return state;
-
-  if (state.lockMode === "scale") {
-    // Pan: move south by the same delta to preserve height, then fix E/W for ratio
-    const delta = newNorth - state.north;
-    const panned = { ...state, north: newNorth, south: state.south + delta };
-    const fixed = fixEWForRatio(panned);
-    return { ...fixed, scale: calcScale(fixed) };
-  } else {
-    // Lock position: north changes, scale and E/W adjust
-    const changed = { ...state, north: newNorth };
-    const fixed = fixEWForRatio(changed);
-    return { ...fixed, scale: calcScale(fixed) };
-  }
+  const delta = newNorth - state.north;
+  const panned = { ...state, north: newNorth, south: state.south + delta };
+  const fixed = fixEWForRatio(panned);
+  return { ...fixed, scale: calcScale(fixed) };
 }
 
 export function applySouthChange(
@@ -292,17 +218,10 @@ export function applySouthChange(
   newSouth: number,
 ): ExtentState {
   if (newSouth >= state.north) return state;
-
-  if (state.lockMode === "scale") {
-    const delta = newSouth - state.south;
-    const panned = { ...state, south: newSouth, north: state.north + delta };
-    const fixed = fixEWForRatio(panned);
-    return { ...fixed, scale: calcScale(fixed) };
-  } else {
-    const changed = { ...state, south: newSouth };
-    const fixed = fixEWForRatio(changed);
-    return { ...fixed, scale: calcScale(fixed) };
-  }
+  const delta = newSouth - state.south;
+  const panned = { ...state, south: newSouth, north: state.north + delta };
+  const fixed = fixEWForRatio(panned);
+  return { ...fixed, scale: calcScale(fixed) };
 }
 
 export function applyEastChange(
@@ -310,17 +229,10 @@ export function applyEastChange(
   newEast: number,
 ): ExtentState {
   if (newEast <= state.west) return state;
-
-  if (state.lockMode === "scale") {
-    const delta = newEast - state.east;
-    const panned = { ...state, east: newEast, west: state.west + delta };
-    const fixed = fixNSForRatio(panned);
-    return { ...fixed, scale: calcScale(fixed) };
-  } else {
-    const changed = { ...state, east: newEast };
-    const fixed = fixNSForRatio(changed);
-    return { ...fixed, scale: calcScale(fixed) };
-  }
+  const delta = newEast - state.east;
+  const panned = { ...state, east: newEast, west: state.west + delta };
+  const fixed = fixNSForRatio(panned);
+  return { ...fixed, scale: calcScale(fixed) };
 }
 
 export function applyWestChange(
@@ -328,17 +240,10 @@ export function applyWestChange(
   newWest: number,
 ): ExtentState {
   if (newWest >= state.east) return state;
-
-  if (state.lockMode === "scale") {
-    const delta = newWest - state.west;
-    const panned = { ...state, west: newWest, east: state.east + delta };
-    const fixed = fixNSForRatio(panned);
-    return { ...fixed, scale: calcScale(fixed) };
-  } else {
-    const changed = { ...state, west: newWest };
-    const fixed = fixNSForRatio(changed);
-    return { ...fixed, scale: calcScale(fixed) };
-  }
+  const delta = newWest - state.west;
+  const panned = { ...state, west: newWest, east: state.east + delta };
+  const fixed = fixNSForRatio(panned);
+  return { ...fixed, scale: calcScale(fixed) };
 }
 
 export function applyScaleChange(
@@ -346,7 +251,7 @@ export function applyScaleChange(
   newScale: number,
 ): ExtentState {
   if (newScale <= 0) return state;
-  return extentsFromScaleAndPivot(state, newScale);
+  return extentsFromScale(state, newScale);
 }
 
 export function applyPaperChange(
@@ -360,7 +265,7 @@ export function applyPaperChange(
     ...(newPaperSize === "custom" && customRatio ? { customRatio } : {}),
   };
   // Recalculate extents at current scale with new aspect ratio
-  return extentsFromScaleAndPivot(updated, state.scale);
+  return extentsFromScale(updated, state.scale);
 }
 
 export function applyOrientationChange(
@@ -370,14 +275,7 @@ export function applyOrientationChange(
   if (newOrientation === state.orientation) return state;
   const updated = { ...state, orientation: newOrientation };
   // Recalculate extents at current scale with swapped aspect ratio
-  return extentsFromScaleAndPivot(updated, state.scale);
-}
-
-export function applyPivotChange(
-  state: ExtentState,
-  newPivot: PivotPoint,
-): ExtentState {
-  return { ...state, pivot: newPivot };
+  return extentsFromScale(updated, state.scale);
 }
 
 export function applyCoordModeChange(

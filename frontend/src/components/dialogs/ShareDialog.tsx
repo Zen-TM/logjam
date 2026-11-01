@@ -1,8 +1,8 @@
 // The friend-picker for SHARING — a live, read-only view of something the
 // owner keeps and can revoke at any time.
 //
-// One dialog for places and for the four direct-share types (waypoint, route,
-// topoJob, geoPdfJob), because "who can see this, and take it back" is one
+// One dialog for places and for the direct-share types (waypoint, route,
+// topoJob), because "who can see this, and take it back" is one
 // interaction. The endpoints differ — places keep /places/:id/share, the rest
 // use /shares — so the three calls arrive as props rather than being switched
 // on a type here.
@@ -24,7 +24,7 @@ import {
   noFriendsMessage,
   SHARE_SHEET,
   sharePromise,
-  type BulkShareItemType,
+  type SharePromiseKind,
   type SectionKeysOn,
 } from "@logjam/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -70,7 +70,7 @@ function ShareDialog({
   title: string;
   /** What is being shared: the promise to the recipient is the contract's, and a
    *  place share and a route share do not grant the same things. */
-  kind: BulkShareItemType;
+  kind: SharePromiseKind;
   friends: TFriend[];
   open: boolean;
   onClose: () => void;

@@ -195,36 +195,6 @@ export async function renameArtifactGroup(
   notifyChanged();
 }
 
-// Persisted topo-overlay visibility set. Survives cold launch so a downloaded
-// overlay renders offline without the online completed-overlays list (which has
-// no persistence). Keys are "<jobId>/<layer>" — opaque id + generic layer name,
-// same app-private, backup-excluded, app-lock-gated store; never logged.
-export async function listEnabledOverlayKeys(): Promise<string[]> {
-  const db = await getDb();
-  const rows = await db.getAllAsync<{ overlayKey: string }>(
-    "SELECT overlayKey FROM overlay_enabled",
-  );
-  return rows.map((row) => row.overlayKey);
-}
-
-export async function setOverlayEnabled(
-  overlayKey: string,
-  enabled: boolean,
-): Promise<void> {
-  const db = await getDb();
-  if (enabled) {
-    await db.runAsync(
-      "INSERT OR IGNORE INTO overlay_enabled (overlayKey) VALUES (?)",
-      overlayKey,
-    );
-  } else {
-    await db.runAsync(
-      "DELETE FROM overlay_enabled WHERE overlayKey = ?",
-      overlayKey,
-    );
-  }
-}
-
 /**
  * Delete every file in `dir` ending in `extension` whose id (the filename
  * minus that extension) has no row in the registry and is not in `liveIds`

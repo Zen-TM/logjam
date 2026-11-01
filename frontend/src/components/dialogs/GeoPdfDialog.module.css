@@ -31,29 +31,20 @@
   }
 }
 
-/* Which template this came from, and the button that turns the form into one:
-   pinned above the body, because both act on all four sections. */
-.templateLine {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.templateField {
-  flex: 1;
-  min-width: 0;
-}
-
 /* A rail in a line's right-hand column. It scrolls itself, so it may shrink
    below its chips rather than pushing the label off the row. */
 .railCell {
   min-width: 0;
 }
 
-/* A sub-heading inside a section: what the checkboxes under it are. */
-.groupLabel {
+.baseLayer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.baseLayerLabel {
   composes: detail from "../../textRoles.generated.module.css";
-  margin: 4px 0 0;
   color: var(--color-text-muted);
 }
 
@@ -84,7 +75,7 @@
 
 /* ── The extent ───────────────────────────────────────────────────────────── */
 
-/* The four edges where they sit on the map, around the point they move about. */
+/* The four edges where they sit on the map. */
 .extentGrid {
   display: grid;
   /* minmax(0, 1fr), not 1fr: a field's min-content is its own minimum width, so
@@ -108,15 +99,6 @@
   grid-row: 2;
 }
 
-.extentCenter {
-  grid-column: 2;
-  grid-row: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
 .extentEast {
   grid-column: 3;
   grid-row: 2;
@@ -131,8 +113,7 @@
    and west fields 56px wide for a 95px longitude, so "150.371376" reads as
    "150.3" and the user cannot see the boundary they are about to export. The
    shape is worth less than the number, so it becomes one column, still walked
-   round the compass — north, west, east, south — with the pivot beneath the
-   edges it moves them about. */
+   round the compass — north, west, east, south. */
 @media (max-width: 768px) {
   .extentGrid {
     grid-template-columns: minmax(0, 1fr);
@@ -141,14 +122,12 @@
   .extentNorth,
   .extentWest,
   .extentEast,
-  .extentSouth,
-  .extentCenter {
+  .extentSouth {
     grid-column: 1;
     grid-row: auto;
   }
 
-  /* The four edges stay together and keep their compass order; the pivot, which
-     is about all four, follows them rather than splitting west from east. */
+  /* The four edges keep their compass order. */
   .extentNorth {
     order: 1;
   }
@@ -162,51 +141,9 @@
     order: 4;
   }
 
-  .extentCenter {
-    order: 5;
-    align-items: start;
-  }
-
   .extentField > input {
     text-align: left;
   }
-}
-
-.pivotLabel {
-  composes: detail from "../../textRoles.generated.module.css";
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--color-text-muted);
-}
-
-/* Nine points in the shape of the sheet they anchor. */
-.pivotGrid {
-  display: grid;
-  grid-template-columns: repeat(3, var(--control-sm));
-  grid-template-rows: repeat(3, var(--control-sm));
-  gap: 3px;
-}
-
-.pivotButton {
-  width: var(--control-sm);
-  height: var(--control-sm);
-  padding: 0;
-  border: 2px solid color-mix(in srgb, var(--color-text) 30%, transparent);
-  border-radius: var(--radius-full);
-  background: none;
-  cursor: pointer;
-  transition: border-color var(--motion-fast);
-}
-
-.pivotButton:hover {
-  border-color: color-mix(in srgb, var(--color-text) 60%, transparent);
-}
-
-.pivotButtonActive {
-  composes: pivotButton;
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }
 
 /* "1 :" and the number after it read as one value, so they sit on one line and
@@ -239,6 +176,13 @@
   width: 7ch;
 }
 
+/* What a GIS format holds, and where the file turns up. */
+.note {
+  composes: detail from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
 /* The area's size, and the button that leaves the form to place it. */
 .areaCell {
   display: flex;
@@ -252,17 +196,9 @@
   white-space: nowrap;
 }
 
-/* Coordinates and the lock only mean something to someone typing edges, so
-   they wait, closed, under the area they refine. */
-.edges[open] > summary {
-  margin-bottom: var(--space-1);
-}
-
-/* The browser's own disclosure triangle stays: it is the open-or-closed
-   signal. The padding takes the line past a mouse target's 24px. */
-.edgesSummary {
-  composes: detail from "../../textRoles.generated.module.css";
-  padding: var(--space-0-5) 0;
-  color: var(--color-text);
-  cursor: pointer;
+/* Under the error banner while a GeoPDF renders in this tab. */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }

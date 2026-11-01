@@ -170,7 +170,7 @@ describe("media upload lifecycle (fake auth)", () => {
       headers: { "Content-Type": "image/png" },
       body: oversized,
     });
-    const isLocalEmulator = uploadUrl.port === "4566";
+    const isLocalEmulator = uploadUrl.hostname === "localhost";
     if (!isLocalEmulator) {
       expect(res.ok).toBe(false);
     }

@@ -35,9 +35,15 @@ export const MAP_INK = {
   casing: "#4E4944",
   /** The ring round a point mark, which separates it from any basemap. */
   ring: "#FFFFFF",
+  /** A river gauge's drop: one colour for every gauge, never scaled by reading. */
+  gauge: "#3B82C4",
   /** The light halo behind a LiDAR topo's own label colour. */
   labelHalo: "rgba(255,255,255,0.8)",
 } as const;
+
+/** Names on the map, a place's and a gauge's, appear from this zoom on both
+ *  clients: further out they would only collide. */
+export const MAP_LABEL_MIN_ZOOM = 9;
 
 /**
  * The location marker's colour options.
@@ -149,6 +155,16 @@ export const PLACE_STATUS_HUES = {
   todo: "#C7B39A",
   /** Shared with you by a friend — the one hue reserved for "shared". */
   shared: SHARED_PLACE_COLOR,
+} as const;
+
+/**
+ * The leaderboard's podium medals. Muted like every other hue here: old gold,
+ * creek-stone grey, burnt copper. Not a status: a rank 4+ row wears none.
+ */
+export const MEDAL_HUES = {
+  gold: "#D4B04C",
+  silver: "#B4BCC4",
+  bronze: "#C98A5B",
 } as const;
 
 /** Corner radii. `pill` is the fully rounded end (chips, meters, badges). */

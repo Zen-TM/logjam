@@ -18,16 +18,7 @@
  * api/src/lib/logger.unit.test.ts, mobile/src/sentry/scrubEvent.test.ts).
  */
 import type { RecordedTrackPoint } from "./trackStats.js";
-
-/** XML text escaping. Track names are user text and can contain & or <. */
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
+import { escapeXml } from "./escapeXml.js";
 
 /** Six decimal places ≈ 0.1 m — past GPS precision, and keeps files small. */
 function coord(value: number): string {

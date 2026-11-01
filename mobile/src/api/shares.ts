@@ -1,7 +1,7 @@
 // Direct per-item sharing — typed port of api/src/routes/shares.ts.
 //
 // A share here is a LIVE, REVOCABLE view of a record the user still owns
-// (waypoint, route, LiDAR topo, GeoPDF). It is NOT the same promise as sending
+// (waypoint, route, LiDAR topo). It is NOT the same promise as sending
 // a copy of a file, which cannot be taken back — see shared/src/sharing.ts.
 //
 // Online-only, like the place sharing calls in ./friends.ts and for the same

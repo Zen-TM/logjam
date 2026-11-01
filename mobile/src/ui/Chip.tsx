@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from "react-native";
+import { chipFill } from "@logjam/shared";
 
 import {
   hitSlop,
@@ -66,7 +67,9 @@ export function Chip({
   const theme = useTheme();
   const styles = useStyles();
 
-  const tint = hue ?? theme.accent;
+  // Selected is the fill alone: moved off the unselected card until it stands
+  // 3:1 apart (`chipFill`).
+  const tint = chipFill(hue ?? theme.accent, theme);
   return (
     <Pressable
       accessibilityRole="button"
@@ -89,10 +92,6 @@ export function Chip({
           size={14}
           color={active ? theme.onFill : theme.textMuted}
         />
-      ) : active ? (
-        // A SELECTED chip says so with a check as well as a fill, so it is never
-        // mistaken for the primary button, which is filled too.
-        <Icon idea="done" size={14} color={theme.onFill} />
       ) : null}
       <Text
         style={[

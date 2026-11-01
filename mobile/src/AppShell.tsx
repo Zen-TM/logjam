@@ -19,10 +19,16 @@ import {
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
+import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { isThemeSchemeId, needsReconsent, type IconIdea } from "@logjam/shared";
+import {
+  currentConsentVersionOf,
+  isThemeSchemeId,
+  needsReconsent,
+  type IconIdea,
+} from "@logjam/shared";
 
 import {
   fetchCurrentUser,
@@ -45,8 +51,8 @@ import {
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
-import { registerGeoPdfAutoDownload } from "./geopdf/autoDownload";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
+import { registerSavedGaugeHistoryRefresh } from "./gauges/savedPlaceHistories";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
@@ -63,6 +69,7 @@ import { setPickedPoint } from "./map/pickedPoint";
 import { ConsentGate } from "./screens/ConsentGate";
 import { FriendsScreen } from "./screens/FriendsScreen";
 import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
+import { LeaderboardScreen } from "./screens/LeaderboardScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
@@ -240,6 +247,7 @@ type MoreStackParams = {
   // rather than a fetch: the friendship id and the username are all the screen
   // needs, and both are already in the row that opened it.
   FriendShares: { friendshipId: string; username: string };
+  Leaderboard: undefined;
   SyncIssues: undefined;
   Settings: undefined;
   // Settings sub-pages. One route each rather than one parameterised route: a
@@ -820,8 +828,8 @@ export function AppShell({
   // everything else lands on the inbox. Payloads carry opaque IDs only — the
   // screen fetches details over the authed API.
   // Sync triggers: initial cycle, app foreground, connectivity regained, and
-  // the same three moments for the GeoPDF and topo auto-downloads (Settings →
-  // Offline and storage; autoDownload.ts says why not a timer) and the place
+  // the same three moments for the topo auto-download (Settings →
+  // Offline and storage; topoAutoDownload.ts says why not a timer) and the place
   // names for search. Torn down on sign-out (shell unmount).
   //
   // A guest registers none of the account-backed ones. This is the
@@ -831,16 +839,15 @@ export function AppShell({
   // could only ever 401 would also mean a failing sync every foreground, and a
   // permanently red sync health line on the More tab. Guard:
   // `shellTriggers.test.ts`. The place names go to a guest too
-  // (shellTriggers.ts). The two auto-downloads keep their own
-  // registrations: separate switches and connection policies, and a combined
-  // runner would make one's failure the other's.
+  // (shellTriggers.ts). The topo auto-download keeps its own
+  // registration, apart from sync's.
   useEffect(
     () =>
       registerShellTriggers(accountState, {
         sync: registerSyncTriggers,
-        geoPdfAutoDownload: registerGeoPdfAutoDownload,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
+        gaugeHistoryRefresh: registerSavedGaugeHistoryRefresh,
       }),
     [accountState],
   );
@@ -853,6 +860,11 @@ export function AppShell({
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
     if (isThemeSchemeId(accountScheme)) setThemeSchemeId(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
+
+  // The account's slope bands, kept on the phone so the map has them offline.
+  useEffect(() => {
+    keepAccountSlopeBands(userQuery.data?.uiPreferences?.slopeBands);
+  }, [userQuery.data?.uiPreferences?.slopeBands]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
@@ -957,6 +969,9 @@ export function AppShell({
   if (user && !consented && needsReconsent(user)) {
     return (
       <ConsentGate
+        consentVersion={currentConsentVersionOf(user)}
+        newAccount={user.consentVersion === null}
+        currentUsername={user.username}
         onConsented={() => {
           setConsented(true);
           userQuery.refetch();
@@ -1206,7 +1221,18 @@ export function AppShell({
                         onOpenShares={(friend) =>
                           navigation.navigate("FriendShares", friend)
                         }
+                        onOpenLeaderboard={() =>
+                          navigation.navigate("Leaderboard")
+                        }
                       />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Leaderboard"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation }) => (
+                      <LeaderboardScreen onBack={() => navigation.goBack()} />
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen

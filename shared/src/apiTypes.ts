@@ -11,6 +11,7 @@ import type { MediaItem } from "./media.js";
 import type { NotificationPreferences, ThemeSchemeId } from "./themeSchemes.js";
 import type { ForeignFieldValue } from "./fieldValues.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
+import type { SlopeBand } from "./topoSettings.js";
 
 export type TPlace = {
   id: string;
@@ -21,6 +22,8 @@ export type TPlace = {
   longitude: number;
   placeTypeId: string;
   notes: string | null;
+  /** The river gauge the owner picked; absent from an older server. */
+  gaugeId?: string | null;
   /** Metres. A canyon does not carry one; a marker usually does. */
   elevation: number | null;
   /** Type-specific values, keyed by CustomFieldDef.key. Internal `_`-prefixed
@@ -50,7 +53,7 @@ export type TPlace = {
   // Optional because on a place shared WITH you these counts are absent by
   // design, not zero: the trip tally is the owner's private trip-list
   // cardinality and `shares` is their fan-out to other people, so the API
-  // withholds both (see placeListInclude in api/src/routes/places.ts). Absent
+  // withholds both (see withPlaceListCounts in api/src/routes/places.ts). Absent
   // means "not yours to know" — so never coalesce it to 0 and present that as an
   // answer about a shared place. Gate every read on ownership.
   _count?: { tripLogLinks: number; shares: number };
@@ -73,14 +76,19 @@ export type TUser = {
   monthlyEgressUsedBytes: string;
   consentedAt: string | null;
   consentVersion: string | null;
+  /** The version PATCH /users/me accepts now; `consentVersion` is stale when
+   * it is null or older (see needsReconsent). Absent from a server that
+   * predates the field. */
+  currentConsentVersion?: string;
   uiPreferences?: {
     themeSchemeId?: ThemeSchemeId;
     tripLogCustomFields?: TripLogCustomFieldDef[];
     placeCustomFields?: TripLogCustomFieldDef[];
     notifications?: NotificationPreferences;
-    autoDownloadGeoPdfs?: boolean;
     importMergePolicy?: PlaceMergePolicy;
     copyPlaceMedia?: boolean;
+    leaderboardOptIn?: boolean;
+    slopeBands?: SlopeBand[];
   } | null;
 };
 

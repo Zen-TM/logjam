@@ -20,8 +20,9 @@ locals {
   # rollback-compat's "Live release on this schema", terraform-ci's,
   # setup-smoke) skip, and so pass, on a PR that touches nothing they test
   # (infra/scripts/ci-scope.sh); dependency-review passes when no manifest
-  # changed. Each workflow starts on every PR: a required check whose
-  # workflow never starts leaves the PR waiting.
+  # changed, and expo-doctor when the PR is not a Logjam GPS release. Each
+  # workflow starts on every PR: a required check whose workflow never starts
+  # leaves the PR waiting.
   required_checks = [
     "shared",
     "api",
@@ -50,6 +51,7 @@ locals {
     "topo-image",
     "gitleaks",
     "pr-closes",
+    "expo-doctor",
   ]
 }
 
@@ -210,6 +212,39 @@ resource "github_repository_ruleset" "mobile_release_branches" {
 
   rules {
     creation = true
+    update   = true
+    deletion = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# A maplibre-android-v* tag holds the patched MapLibre Android the Logjam GPS
+# build downloads (mobile/plugins/withPatchedMapLibre.js). Anyone may cut a new
+# one; only admins may move or delete one, so the release a build pins never
+# changes under it. Guard: tests/guards.tftest.hcl.
+resource "github_repository_ruleset" "maplibre_android_tags" {
+  name        = "maplibre-android-tags"
+  repository  = github_repository.logjam.name
+  target      = "tag"
+  enforcement = "active"
+
+  conditions {
+    ref_name {
+      include = ["refs/tags/maplibre-android-v*"]
+      exclude = []
+    }
+  }
+
+  bypass_actors {
+    actor_id    = local.admin_bypass.actor_id
+    actor_type  = local.admin_bypass.actor_type
+    bypass_mode = local.admin_bypass.bypass_mode
+  }
+
+  rules {
     update   = true
     deletion = true
   }

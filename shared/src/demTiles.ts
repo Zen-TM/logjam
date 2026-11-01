@@ -99,6 +99,12 @@ export function demMetresFromRgb(
 }
 
 /**
+ * At or below this, a decoded terrarium value is "no data": the encoding
+ * marks it with the extreme low of its range, −32768.
+ */
+export const DEM_NO_DATA_BELOW = -32000;
+
+/**
  * One height out of a decoded tile, or null where there is none.
  *
  * Terrarium encodes "no data" as the extreme low of the range; a genuine
@@ -111,7 +117,7 @@ export function demSampleValue(
 ): number | null {
   if (!tile) return null;
   const value = tile[index];
-  return value == null || value <= -32000 ? null : value;
+  return value == null || value <= DEM_NO_DATA_BELOW ? null : value;
 }
 
 /**

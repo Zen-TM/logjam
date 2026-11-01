@@ -36,7 +36,6 @@ import {
   type PlanVerbId,
   type SectionKeysOn,
   type TripPlanPageView,
-  type GeoPdfJobView,
   type StandaloneFile,
   type TripPlanFormView,
   type TripPlanItem,
@@ -125,7 +124,6 @@ export default function PlanDetailPanel({
     places: TPlace[];
     routes: TRoute[];
     files: StandaloneFile[];
-    geoPdfs: GeoPdfJobView[];
   };
   currentUser: TUser | null;
   /** A copy saved out of the plan landed in the caller's own lists. */
@@ -334,7 +332,7 @@ export default function PlanDetailPanel({
       value: "items" as const,
       label: copy.viewItems,
       // A zero is left out (shared/DESIGN.md §11).
-      count: counts.places + counts.ways + counts.maps || undefined,
+      count: counts.places + counts.ways || undefined,
     },
     {
       value: "forms" as const,
@@ -602,7 +600,7 @@ export default function PlanDetailPanel({
   const leaveCopy = planLeaveConfirm(plan.name);
   const mineCount = myUserId
     ? addedBy(plan, myUserId)
-    : { places: 0, ways: 0, maps: 0, bytes: 0 };
+    : { places: 0, ways: 0, bytes: 0 };
   const sectionCopy =
     confirm?.kind === "section"
       ? planSectionDeleteConfirm(confirm.section.title)
@@ -788,7 +786,7 @@ export default function PlanDetailPanel({
         message={
           <>
             <p>{leaveCopy.confirmBody}</p>
-            {mineCount.places + mineCount.ways + mineCount.maps > 0 && (
+            {mineCount.places + mineCount.ways > 0 && (
               <Checkbox
                 label={planLeaveDeleteAddedLabel(
                   mineCount,

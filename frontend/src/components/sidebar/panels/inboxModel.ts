@@ -5,7 +5,7 @@ import {
   type NotificationPlanTarget,
   type TNotification,
 } from "@logjam/shared";
-import type { MapsView, PanelId } from "../panels";
+import type { PanelId } from "../panels";
 
 /**
  * Where a notification's SUBJECT lives on Logjam Web, for its ⋯ menu: the web
@@ -19,20 +19,11 @@ import type { MapsView, PanelId } from "../panels";
 export type InboxDestination =
   | { kind: "place"; label: string; placeId: string }
   | { kind: "plan"; label: string; target: NotificationPlanTarget }
-  | { kind: "page"; label: string; panel: PanelId; mapsView?: MapsView };
+  | { kind: "page"; label: string; panel: PanelId }
+  /** Layers → Terrain → Sharpened areas, over the map. */
+  | { kind: "sharpened"; label: string };
 
-const LIDAR: InboxDestination = {
-  kind: "page",
-  label: "View in Maps",
-  panel: "maps",
-  mapsView: "lidar",
-};
-const GEOPDFS: InboxDestination = {
-  kind: "page",
-  label: "View in Maps",
-  panel: "maps",
-  mapsView: "geopdfs",
-};
+const SHARPENED: InboxDestination = { kind: "sharpened", label: "Show" };
 
 export function inboxDestination(n: TNotification): InboxDestination | null {
   const placeId = notificationPlaceId(n);
@@ -51,18 +42,16 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
     case "friend_request_accepted":
       return { kind: "page", label: "View in Friends", panel: "friends" };
     case "topo_complete":
+      return failed ? null : SHARPENED;
     case "topo_export_complete":
-      return failed ? null : LIDAR;
-    case "geo_pdf_complete":
-      return failed ? null : GEOPDFS;
+      // A file, not a place in Logjam Web: the row's Download is the answer.
+      return null;
     case "item_shared":
       switch (n.payload.entityType) {
         case "route":
           return { kind: "page", label: "View in Ways", panel: "ways" };
         case "topoJob":
-          return LIDAR;
-        case "geoPdfJob":
-          return GEOPDFS;
+          return SHARPENED;
         default:
           return null;
       }

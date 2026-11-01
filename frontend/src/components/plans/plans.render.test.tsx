@@ -77,7 +77,6 @@ const plan: TripPlanView = {
   places: [],
   routes: [],
   files: [],
-  geoPdfs: [],
   forms: [],
 };
 
@@ -223,7 +222,7 @@ function renderPanel(
       view={plan}
       error={null}
       refetch={() => {}}
-      own={{ places: [], routes: [], files: [], geoPdfs: [] }}
+      own={{ places: [], routes: [], files: [] }}
       currentUser={null}
       onOwnChanged={() => {}}
       onOpenItem={() => {}}
@@ -604,7 +603,6 @@ describe("Add a copy stopped halfway", () => {
         places={[mine("a", "Claustral"), mine("b", "Ranon")]}
         routes={[]}
         files={[]}
-        geoPdfs={[]}
         user={null}
         initial={null}
         onAdded={onAdded}

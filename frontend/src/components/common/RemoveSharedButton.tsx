@@ -1,6 +1,6 @@
 // "Get this out of my account" for something a friend shared WITH you — the
 // one control behind it on every web surface that lists shared things: places,
-// waypoints, routes, LiDAR topos and GeoPDFs.
+// waypoints, routes and LiDAR topos.
 //
 // It is NOT a delete and must never be styled or worded as one (shared/src/sharing.test.ts). The owner keeps
 // their row; this drops the caller's own share (`DELETE .../me`, which both

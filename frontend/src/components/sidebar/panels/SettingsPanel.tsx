@@ -2,12 +2,14 @@ import { Fragment, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  LEADERBOARD_SETTING,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
   ownAttributeCountLabel,
   ownTypeCountLabel,
   SETTINGS,
   type SectionKeysOn,
+  type NotificationPreferenceGroup,
   type NotificationPreferences,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
@@ -59,8 +61,12 @@ function SettingsPanel({
   onPlaceCustomFieldDefsChange,
   placeTypes,
   onPlaceTypesChange,
+  onCurrentUserChange,
 }: {
   currentUser: TUser | null;
+  /** The saved user, so what reads it elsewhere (Friends' leaderboard button)
+   *  follows a switch here without a reload. */
+  onCurrentUserChange: (user: TUser) => void;
   // Custom trip-log field definitions (App-level state, shared with the trip
   // dialogs so a create/rename/delete here is immediately visible there).
   customFieldDefs: ScopedCustomFieldDef[];
@@ -79,15 +85,15 @@ function SettingsPanel({
     null,
   );
   // WHICH switch is in flight, not THAT one is: a single boolean would disable
-  // all five for the length of the request, and five switches greying and
+  // all four for the length of the request, and four switches greying and
   // un-greying together reads as the whole list flickering.
   const [notifSavingKey, setNotifSavingKey] = useState<
     keyof NotificationPreferences | null
   >(null);
-  const [autoDownloadGeoPdfs, setAutoDownloadGeoPdfs] = useState<
-    boolean | null
-  >(null);
-  const [autoDownloadSaving, setAutoDownloadSaving] = useState(false);
+  const [leaderboardOptIn, setLeaderboardOptIn] = useState<boolean | null>(
+    null,
+  );
+  const [leaderboardSaving, setLeaderboardSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -100,9 +106,7 @@ function SettingsPanel({
         ...DEFAULT_NOTIFICATION_PREFERENCES,
         ...(currentUser.uiPreferences?.notifications ?? {}),
       });
-      setAutoDownloadGeoPdfs(
-        currentUser.uiPreferences?.autoDownloadGeoPdfs ?? true,
-      );
+      setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
     }
   }
 
@@ -132,22 +136,25 @@ function SettingsPanel({
     }
   }
 
-  async function handleToggleAutoDownload() {
-    if (autoDownloadGeoPdfs === null) return;
-    const previous = autoDownloadGeoPdfs;
-    const next = !autoDownloadGeoPdfs;
-    setAutoDownloadGeoPdfs(next);
-    setAutoDownloadSaving(true);
+  async function handleToggleLeaderboard() {
+    if (leaderboardOptIn === null) return;
+    const previous = leaderboardOptIn;
+    const next = !leaderboardOptIn;
+    setLeaderboardOptIn(next);
+    setLeaderboardSaving(true);
     try {
-      await updateUserPreferences({ autoDownloadGeoPdfs: next });
+      onCurrentUserChange(
+        await updateUserPreferences({ leaderboardOptIn: next }),
+      );
+      toast.success(
+        next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left,
+      );
     } catch (err) {
       console.error(err);
-      setAutoDownloadGeoPdfs(previous);
-      toast.error(
-        messageFromError(err, "Couldn't save that download setting."),
-      );
+      setLeaderboardOptIn(previous);
+      toast.error(messageFromError(err, LEADERBOARD_SETTING.saveFailed));
     } finally {
-      setAutoDownloadSaving(false);
+      setLeaderboardSaving(false);
     }
   }
 
@@ -192,32 +199,43 @@ function SettingsPanel({
       <>
         <ThemeChooser />
 
-        <SectionHeader title="Notifications" />
+        {/* A heading per group, as Logjam GPS draws them: the heading is the
+            sentence's start, so each switch's label stays short. */}
         {notifPrefs === null ? (
           <LoadingState />
         ) : (
-          NOTIFICATION_PREFERENCES.map(({ key, group, what }) => (
-            <SwitchRow
-              key={key}
-              title={`${notificationGroupLead(group, "Logjam Web")} ${what}`}
-              checked={notifPrefs[key]}
-              disabled={notifSavingKey === key}
-              disabledReason="Saving…"
-              onChange={() => handleToggleNotif(key)}
-            />
+          NOTIFICATION_GROUPS.map((group) => (
+            <Fragment key={group}>
+              <SectionHeader
+                title={notificationGroupLead(group, "Logjam Web")}
+              />
+              {NOTIFICATION_PREFERENCES.filter(
+                (row) => row.group === group,
+              ).map(({ key, label }) => (
+                <SwitchRow
+                  key={key}
+                  title={label}
+                  checked={notifPrefs[key]}
+                  disabled={notifSavingKey === key}
+                  disabledReason="Saving…"
+                  onChange={() => handleToggleNotif(key)}
+                />
+              ))}
+            </Fragment>
           ))
         )}
 
-        <SectionHeader title="Downloads" />
-        {autoDownloadGeoPdfs === null ? (
+        <SectionHeader title="Friends" />
+        {leaderboardOptIn === null ? (
           <LoadingState />
         ) : (
           <SwitchRow
-            title="Download GeoPDFs automatically when they finish generating"
-            checked={autoDownloadGeoPdfs}
-            disabled={autoDownloadSaving}
+            title={LEADERBOARD_SETTING.label}
+            description={LEADERBOARD_SETTING.hint}
+            checked={leaderboardOptIn}
+            disabled={leaderboardSaving}
             disabledReason="Saving…"
-            onChange={handleToggleAutoDownload}
+            onChange={handleToggleLeaderboard}
           />
         )}
       </>
@@ -274,6 +292,11 @@ function SettingsPanel({
 }
 
 const copy = SETTINGS.copy;
+
+const NOTIFICATION_GROUPS = [
+  "email",
+  "inApp",
+] as const satisfies readonly NotificationPreferenceGroup[];
 
 /** The user's own attributes: a system one has no owner. */
 const ownCount = (defs: ScopedCustomFieldDef[]) =>

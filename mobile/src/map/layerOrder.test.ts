@@ -2,7 +2,25 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
+import {
+  DEFAULT_THEME_SCHEME_ID,
+  drawsOverTerrain,
+  terrainBeforeIds,
+  THEME_SCHEMES,
+} from "@logjam/shared";
+
+import {
+  PROTOMAPS_FLAVOR,
+  protomapsBandMarkers,
+  protomapsLayerDefs,
+} from "./basemap/protomapsLayers";
+import { buildShellStyle } from "./basemap/shellStyle";
+import {
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+  terrainBandMarker,
+} from "./layerOrder";
 
 const SRC = join(__dirname, "..");
 
@@ -22,6 +40,68 @@ describe("chainBeforeIds", () => {
       c: "top",
     });
     expect(chainBeforeIds([], "top")).toEqual({});
+  });
+});
+
+// Mutation: put a band's marker out of order in the shell, or send a stack's
+// water to the top band, and the roads of one saved area end up under the
+// contours or the water of another over them.
+describe("two saved areas and the Terrain group", () => {
+  /** MLRN's `beforeId`: directly under the anchor, whatever is already there. */
+  const under = (style: string[], id: string, beforeId: string) =>
+    style.splice(style.indexOf(beforeId), 0, id);
+  const mountStack = (style: string[], area: string) => {
+    const markers = protomapsBandMarkers(PROTOMAPS_FLAVOR);
+    protomapsLayerDefs(PROTOMAPS_FLAVOR).forEach((layer, i) =>
+      under(style, `${area}/${layer.id}`, markers[i]),
+    );
+  };
+  const mountTerrain = (style: string[]) => {
+    const pairs = terrainBeforeIds(
+      {
+        hillshade: ["hillshade"],
+        land: ["land"],
+        slope: ["slope"],
+        contours: ["contours"],
+      },
+      terrainBandMarker,
+    );
+    for (const [id, beforeId] of pairs) under(style, id, beforeId);
+  };
+  const shell = () =>
+    buildShellStyle(
+      null,
+      PROTOMAPS_FLAVOR,
+      THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID].tokens,
+    ).layers.map((l) => l.id);
+
+  it.each([
+    ["a saved area joins after the Terrain group", ["older", "t", "newer"]],
+    ["the map mounts them in one go", ["older", "newer", "t"]],
+  ])("every road and label draws over all of it: %s", (_, order) => {
+    const style = shell();
+    for (const step of order) {
+      if (step === "t") mountTerrain(style);
+      else mountStack(style, step);
+    }
+    const at = (id: string) => style.indexOf(id);
+    const layers = protomapsLayerDefs(PROTOMAPS_FLAVOR);
+    const over = layers.filter(drawsOverTerrain);
+    expect(over.length).toBeGreaterThan(0);
+    for (const area of ["older", "newer"]) {
+      expect(at(`${area}/earth`)).toBeLessThan(at("hillshade"));
+      expect(at("hillshade")).toBeLessThan(at(`${area}/water`));
+      expect(at(`${area}/water`)).toBeLessThan(at("slope"));
+      for (const layer of over) {
+        expect(at(`${area}/${layer.id}`)).toBeGreaterThan(at("contours"));
+      }
+    }
+    expect(at("slope")).toBeLessThan(at("contours"));
+    // Where saves overlap, the newest draws on top.
+    expect(at("older/earth")).toBeLessThan(at("newer/earth"));
+    expect(at("older/places_locality")).toBeLessThan(
+      at("newer/places_locality"),
+    );
   });
 });
 

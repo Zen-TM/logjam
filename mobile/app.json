@@ -78,11 +78,11 @@
         "@maplibre/maplibre-react-native",
         {
           "android": {
-            "nativeVariant": "vulkan",
-            "nativeVersion": "13.5.0"
+            "nativeVariant": "vulkan"
           }
         }
       ],
+      "./plugins/withPatchedMapLibre.js",
       [
         "expo-notifications",
         {

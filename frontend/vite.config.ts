@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { createHash } from "node:crypto";
 import fs from "fs";
@@ -96,34 +96,114 @@ export function maplibreWorkerPlugin(
   };
 }
 
-export default defineConfig({
-  // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
-  // (e.g. an orphaned server from a prior session) instead of silently
-  // falling back to 5174 — which the API's CORS_ORIGIN (localhost:5173)
-  // would then reject, surfacing as a confusing "CORS request did not
-  // succeed" rather than the real cause.
-  server: {
-    port: 5173,
-    strictPort: true,
-    proxy: {
-      // The Protomaps PMTiles archive lives behind the web distribution's
-      // ordered /master/* behaviour, so in PROD it is same-origin and needs
-      // nothing. In dev the app is on localhost, and the CDN sends no
-      // Access-Control-Allow-Origin — CloudFront custom response-headers
-      // policies are gated behind the AWS Business plan, so CORS can't simply
-      // be switched on. Proxying keeps the archive same-origin in dev too,
-      // which also means the app never needs a CDN base URL: it always
-      // fetches /master/* from its own origin.
-      "/master": {
-        target: "https://logjamnsw.com",
-        changeOrigin: true,
+// browser-check.js in public/ would be served `immutable` under a fixed name
+// (deploy-frontend.yml), so a later edit would never reach a cached browser.
+// It stays a classic script, outside the bundle, so an engine too old to
+// parse the bundle still runs it (ADR 0042); the build names it by its hash.
+// Test: src/browserCheck.test.ts.
+export function browserCheckPlugin(
+  file = path.resolve(import.meta.dirname, "browser-check.js"),
+): Plugin {
+  const fileName = () => {
+    const hash = createHash("sha256").update(fs.readFileSync(file));
+    return `assets/browser-check-${hash.digest("hex").slice(0, 10)}.js`;
+  };
+  return {
+    name: "browser-check",
+    apply: "build",
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html) =>
+        html.replace('src="/browser-check.js"', `src="/${fileName()}"`),
+    },
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: fileName(),
+        source: fs.readFileSync(file),
+      });
+    },
+  };
+}
+
+/**
+ * The pages a build bundles. `--mode bench` adds the GeoPDF timing page
+ * (geopdf-bench.html, src/geoPdf/bench.ts), so it can be timed from a built
+ * bundle; every other build, the deploy's included, has index.html alone.
+ * Guard: src/viteBuildInputs.test.ts.
+ */
+export function buildInputs(mode: string): Record<string, string> {
+  const page = (name: string) => path.resolve(import.meta.dirname, name);
+  return mode === "bench"
+    ? { main: page("index.html"), bench: page("geopdf-bench.html") }
+    : { main: page("index.html") };
+}
+
+export default defineConfig(({ mode }) => {
+  // DEV_MASTER_URL (frontend/.env) points the /master proxy at MiniStack's
+  // topo bucket, so dev maps read local archives. Unset, it stays the prod CDN:
+  // a fresh MiniStack has no archives to serve.
+  const master = new URL(
+    loadEnv(mode, import.meta.dirname, "").DEV_MASTER_URL ||
+      "https://logjamnsw.com",
+  );
+  const masterPrefix = master.pathname.replace(/\/$/, "");
+  return {
+    // Pin the dev port. strictPort makes Vite fail loudly if 5173 is taken
+    // (e.g. an orphaned server from a prior session) instead of silently
+    // falling back to 5174 — which the API's CORS_ORIGIN (localhost:5173)
+    // would then reject, surfacing as a confusing "CORS request did not
+    // succeed" rather than the real cause.
+    server: {
+      port: 5173,
+      strictPort: true,
+      proxy: {
+        // The Protomaps PMTiles archive lives behind the web distribution's
+        // ordered /master/* behaviour, so in PROD it is same-origin and needs
+        // nothing. In dev the app is on localhost, and the CDN sends no
+        // Access-Control-Allow-Origin — CloudFront custom response-headers
+        // policies are gated behind the AWS Business plan, so CORS can't simply
+        // be switched on. Proxying keeps the archive same-origin in dev too,
+        // which also means the app never needs a CDN base URL: it always
+        // fetches /master/* from its own origin.
+        "/master": {
+          target: master.origin,
+          changeOrigin: true,
+          rewrite: (p: string) => masterPrefix + p,
+        },
       },
     },
-  },
-  plugins: [react(), cspMetaPlugin(), maplibreWorkerPlugin()],
-  resolve: {
-    alias: {
-      "@styles": path.resolve(import.meta.dirname, "src/styles"),
+    plugins: [
+      react(),
+      cspMetaPlugin(),
+      maplibreWorkerPlugin(),
+      browserCheckPlugin(),
+    ],
+    build: {
+      // The browser floor: docs/decisions/0042-logjam-web-needs-the-popover-api.md.
+      target: ["safari17", "chrome114", "firefox125"],
+      rolldownOptions: { input: buildInputs(mode) },
     },
-  },
+    // The GeoPDF render worker (src/geoPdf/worker.ts) imports these only from a
+    // worker, which the dependency scan does not follow. Found at run time,
+    // each makes the dev server re-optimise and reload the page mid-render.
+    optimizeDeps: {
+      // Both pages: with `build.rolldownOptions.input` set the scan crawls
+      // only the build's inputs, and a dependency only the bench page
+      // imports, found at run time, would re-optimise mid-render.
+      entries: ["index.html", "geopdf-bench.html"],
+      include: [
+        "@cantoo/pdf-lib",
+        "@mapbox/vector-tile",
+        "geomagnetism",
+        "pbf",
+        "pmtiles",
+      ],
+    },
+    resolve: {
+      alias: {
+        "@styles": path.resolve(import.meta.dirname, "src/styles"),
+      },
+    },
+  };
 });

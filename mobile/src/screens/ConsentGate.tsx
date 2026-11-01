@@ -1,10 +1,19 @@
 // Blocking re-consent screen — Agree or Sign out only (mirrors Logjam Web
 // ConsentGate). Shown when needsReconsent() is true for the fetched current
-// user; the server rejects any consentVersion other than CURRENT_CONSENT_VERSION.
+// user; the server rejects any consentVersion other than the one it named.
+//
+// A brand-new account (no consent recorded) lands here too: the provider's
+// sign-up page cannot ask for a username, the terms or an age, so it is
+// welcomed rather than told the terms changed, and answers all three here, in
+// the one request that records its consent.
 import { useState } from "react";
 import { ScrollView, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CURRENT_CONSENT_VERSION, messageFromError } from "@logjam/shared";
+import {
+  consentFormProblem,
+  consentSubmitFailure,
+  USERNAME_HINT,
+} from "@logjam/shared";
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
@@ -14,36 +23,68 @@ import {
   openLegalDocument,
 } from "../legalLinks";
 import { spacing, makeStyles } from "../theme";
-import { Button, ErrorBanner, TextLink } from "../ui";
+import { Button, ErrorBanner, SwitchRow, TextField, TextLink } from "../ui";
 
 export function ConsentGate({
+  consentVersion,
+  newAccount,
+  currentUsername,
   onConsented,
   onSignOut,
 }: {
+  /** The version the server named, which is the only one it will record. */
+  consentVersion: string;
+  /** No consent is recorded yet: the first sign-in of an account. */
+  newAccount: boolean;
+  /** The neutral name the API gave the account, offered as the default. */
+  currentUsername: string;
   onConsented: () => void;
   onSignOut: SignOutHandler;
 }) {
   const styles = useStyles();
 
+  const [agreed, setAgreed] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [username, setUsername] = useState(currentUsername);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Retry is offered only for a failed request; a missing tick is fixed by
+  // ticking it.
+  const [banner, setBanner] = useState<{
+    message: string;
+    retry: boolean;
+  } | null>(null);
   // No nav header on the gates, so the status-bar/camera inset is ours to clear.
   const insets = useSafeAreaInsets();
 
   const agree = async () => {
+    const problem = consentFormProblem({
+      newAccount,
+      username,
+      agreed,
+      ageConfirmed,
+    });
+    if (problem?.field === "username") {
+      setUsernameError(problem.message);
+      return;
+    }
+    if (problem) {
+      setBanner(problem);
+      return;
+    }
     setSubmitting(true);
-    setError(null);
+    setBanner(null);
+    setUsernameError(null);
     try {
-      await updateConsent(CURRENT_CONSENT_VERSION);
+      await (newAccount
+        ? updateConsent(consentVersion, username.trim())
+        : updateConsent(consentVersion));
       onConsented();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(
-          err,
-          "Couldn't record your consent. Please try again.",
-        ),
-      );
+      const failure = consentSubmitFailure(err, newAccount);
+      if (failure.field === "username") setUsernameError(failure.message);
+      else setBanner(failure);
     } finally {
       setSubmitting(false);
     }
@@ -60,12 +101,30 @@ export function ConsentGate({
         },
       ]}
     >
-      <Text style={styles.title}>Terms & privacy</Text>
-      <Text style={styles.body}>
-        Logjam&apos;s Terms of Use and Privacy Policy have changed (last updated{" "}
-        {CURRENT_CONSENT_VERSION}). Please review them and confirm your
-        agreement to keep using Logjam.
+      <Text style={styles.title}>
+        {newAccount ? "Welcome to Logjam" : "Terms & privacy"}
       </Text>
+      <Text style={styles.body}>
+        {newAccount
+          ? "Choose your public display name and review the terms to finish creating your account."
+          : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Please review them and confirm your agreement to keep using Logjam.`}
+      </Text>
+      {newAccount ? (
+        <TextField
+          label="Username"
+          value={username}
+          onChangeText={(text) => {
+            setUsername(text);
+            setUsernameError(null);
+            setBanner(null);
+          }}
+          error={usernameError}
+          hint={USERNAME_HINT}
+          autoCapitalize="none"
+          autoComplete="username"
+          editable={!submitting}
+        />
+      ) : null}
       <TextLink
         label="Read the Terms of Use"
         onPress={() => openLegalDocument(TERMS_URL)}
@@ -74,7 +133,31 @@ export function ConsentGate({
         label="Read the Privacy Policy"
         onPress={() => openLegalDocument(PRIVACY_POLICY_URL)}
       />
-      {error ? <ErrorBanner message={error} onRetry={agree} /> : null}
+      <SwitchRow
+        title="I agree to the terms"
+        description="Terms and Privacy Policy"
+        checked={agreed}
+        onChange={(next) => {
+          setAgreed(next);
+          setBanner(null);
+        }}
+      />
+      {newAccount ? (
+        <SwitchRow
+          title="I am 18 or older"
+          checked={ageConfirmed}
+          onChange={(next) => {
+            setAgeConfirmed(next);
+            setBanner(null);
+          }}
+        />
+      ) : null}
+      {banner ? (
+        <ErrorBanner
+          message={banner.message}
+          onRetry={banner.retry ? agree : undefined}
+        />
+      ) : null}
       <Button label="Agree and continue" onPress={agree} loading={submitting} />
       <Button label="Sign out" variant="ghost" onPress={() => onSignOut()} />
     </ScrollView>

@@ -4,6 +4,11 @@
 # users out. prevent_destroy guards that; ignore_changes on schema stops a
 # subtle attribute drift from forcing pool replacement. The pool already
 # carries deletion_protection = ACTIVE server-side too.
+#
+# Logjam Web and Logjam GPS sign in through Managed Login (the user pool domain
+# and branding below) with OIDC code + PKCE (#437). Logjam Web's deployed build
+# still signs in with Amplify's SRP flow until its PR lands, so
+# explicit_auth_flows keeps ALLOW_USER_SRP_AUTH until then.
 
 resource "aws_cognito_user_pool" "main" {
   auto_verified_attributes = ["email"]
@@ -99,22 +104,31 @@ resource "aws_cognito_user_pool" "main" {
   }
 }
 
+# 10 years: Logjam GPS must never sign a user out mid-trip, and a trip with no
+# signal must not cost access to local data. A session ends by "Sign out
+# everywhere" (GlobalSignOut), an explicit sign-out (enable_token_revocation)
+# or an admin's AdminUserGlobalSignOut; a password change does not end one.
 resource "aws_cognito_user_pool_client" "main" {
-  access_token_validity                         = 60
-  allowed_oauth_flows                           = ["code"]
-  allowed_oauth_flows_user_pool_client          = true
-  allowed_oauth_scopes                          = ["email", "openid", "phone"]
-  auth_session_validity                         = 3
-  callback_urls                                 = ["https://logjamnsw.com"]
+  access_token_validity                = 60
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  # profile: the code flow's ID token carries no profile claims without it.
+  # aws.cognito.signin.user.admin: what change-email and GlobalSignOut call
+  # Cognito with. Guard: guards.tftest.hcl (cognito_client_scopes_and_api_grant).
+  allowed_oauth_scopes  = ["aws.cognito.signin.user.admin", "email", "openid", "phone", "profile"]
+  auth_session_validity = 3
+  # Logjam Web redirects to location.origin + "/" and the site answers on both
+  # hosts; logjam://auth is Logjam GPS. The no-slash URL is what old builds use.
+  callback_urls                                 = ["https://logjamnsw.com", "https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
   enable_propagate_additional_user_context_data = false
   enable_token_revocation                       = true
   explicit_auth_flows                           = ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_AUTH", "ALLOW_USER_SRP_AUTH"]
   id_token_validity                             = 60
-  logout_urls                                   = ["https://logjamnsw.com"]
+  logout_urls                                   = ["https://logjamnsw.com", "https://logjamnsw.com/", "https://www.logjamnsw.com/", "logjam://auth"]
   name                                          = "logjam"
   prevent_user_existence_errors                 = "ENABLED"
   read_attributes                               = []
-  refresh_token_validity                        = 5
+  refresh_token_validity                        = 3650
   supported_identity_providers                  = ["COGNITO"]
   user_pool_id                                  = aws_cognito_user_pool.main.id
   write_attributes                              = []
@@ -128,4 +142,90 @@ resource "aws_cognito_user_pool_client" "main" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+# Managed Login's hosted pages live on this domain. A prefix domain, not a
+# custom one: that needs an ACM certificate and DNS outside Terraform. The CSP
+# already allows https://*.auth.ap-southeast-2.amazoncognito.com. Never
+# destroyed live: it is the issuer of every sign-in. A pool holds one domain,
+# and it replaced the default prefix the pool was created with, which no client
+# used.
+resource "aws_cognito_user_pool_domain" "main" {
+  domain                = "logjamnsw"
+  managed_login_version = 2
+  user_pool_id          = aws_cognito_user_pool.main.id
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# Created with the pool, with Cognito's look; the settings below replace it.
+import {
+  to = aws_cognito_managed_login_branding.main
+  id = "ap-southeast-2_x5zPhJXMk,fba8005a-00cb-4218-9871-ae4b0e62716c"
+}
+
+# Logjam's look on the hosted pages: the Sandstone scheme (the default in
+# shared/src/themeSchemes.ts) and the email logo lockup. Colours are
+# RRGGBBAA hex without "#". Only the page, form and primary button are set;
+# the rest keeps Cognito's dark-mode defaults. It references the client and
+# the pool, so changing it never replaces either.
+resource "aws_cognito_managed_login_branding" "main" {
+  client_id    = aws_cognito_user_pool_client.main.id
+  user_pool_id = aws_cognito_user_pool.main.id
+
+  settings = jsonencode({
+    categories = {
+      global = { colorSchemeMode = "DARK" }
+    }
+    componentClasses = {
+      input = {
+        darkMode = {
+          defaults = { backgroundColor = "1E1B18ff", borderColor = "6B5F4Bff" }
+        }
+      }
+      link = {
+        darkMode = {
+          defaults = { textColor = "DEB188ff" }
+          hover    = { textColor = "DEB188ff" }
+        }
+      }
+    }
+    components = {
+      pageBackground = {
+        image    = { enabled = false }
+        darkMode = { color = "1E1B18ff" }
+      }
+      # The form matches the logo file's own background.
+      form = {
+        logo = {
+          enabled       = true
+          location      = "CENTER"
+          position      = "TOP"
+          formInclusion = "IN"
+        }
+        darkMode = {
+          backgroundColor = "4E4944ff"
+          borderColor     = "6B5F4Bff"
+        }
+      }
+      primaryButton = {
+        darkMode = {
+          defaults = { backgroundColor = "DEB188ff", textColor = "1E1B18ff" }
+        }
+      }
+    }
+  })
+
+  # A copy, not frontend/public's file: a change outside envs/prod would skip the
+  # plan and apply (ADR 0024) and surface as drift.
+  asset {
+    bytes      = filebase64("${path.module}/assets/email-logo-lockup.png")
+    category   = "FORM_LOGO"
+    color_mode = "DYNAMIC"
+    extension  = "PNG"
+  }
+
+  depends_on = [aws_cognito_user_pool_domain.main]
 }

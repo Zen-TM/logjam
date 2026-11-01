@@ -22,6 +22,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
 | A shared screen's sections, order, words, verbs and empty states | `contracts/` |
 | Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
+| How long a switch's label and hint may be: about two lines on a phone | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
@@ -63,6 +64,9 @@ renumber.
   with no question (Settings) has no hero; the map is its own answer.
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
+- **Between the hero and the list, only what narrows the list** (the rail, a
+  selection bar). A way elsewhere is a hero action; a number it carries is its
+  badge.
 - **One pinned filter axis per screen.** Finer filters are one press away and
   say so while active ("3 filters active").
 - **A list that grows without limit never shares a scroller with one that
@@ -81,8 +85,10 @@ renumber.
   comes from the few steps and from weight and colour, not from a size of its
   own.
 - **A title does not repeat a count the screen already shows.**
-- **A pair is drawn on one line** (ascent and descent, highest and lowest);
-  a figure with no partner takes the whole line. Pairs: `statPairs.ts`.
+- **A pair is drawn on one line** (ascent and descent, highest and lowest,
+  level and flow); among more figures, the ones that match up still share a
+  line, and a figure with no partner takes the whole line. Pairs:
+  `statPairs.ts`.
 
 ## 3. Getting around and getting out
 
@@ -114,7 +120,8 @@ renumber.
   Exempt: text fields, switches, the surfaces themselves and the map's chrome.
 - **Small things follow it.** A button wears the card fill; a surface's one
   primary action wears the accent. A status pill is read, so it has no fill:
-  words with a dot or a glyph. A selected chip looks like neither. A badge on
+  words with a dot or a glyph. A selected chip looks like neither: its fill
+  shows it, with no check, so selecting never changes its width. A badge on
   something pressable (an unread count, a chip's tally) keeps its fill.
 - **A pill is never narrower than it is tall.**
 - **Things that look alike behave alike**; a thing that behaves differently
@@ -161,8 +168,13 @@ renumber.
 - **Anything drawn on a fill uses `onFill`.**
 - **A kind's hue is a fill**: a tile, a chip, a swatch, a map mark. Never a
   glyph or a word on a surface.
+- **A selected chip's fill is `chipFill(hue, scheme)`, not the hue**: the hue
+  moved just far enough to stand 3:1 off the unselected chip beside it and off
+  the page behind a lone chip, since the fill is all that shows it is
+  selected. Tiles, avatars and map marks keep the hue as declared. Guard: `shared/src/chipFill.test.ts` walks every scheme
+  and hue.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
-  a shape. Selected is an accent edge and a check, not a tint.
+  a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
 - **Controls over a photo are black and white on a scrim**, not theme
@@ -232,6 +244,8 @@ renumber.
 - **A dialog (a sheet on Logjam GPS) is for making and changing; a page is
   for looking.** Never the only way to read something, except a maintainer
   message, which has no page.
+- **A sheet spaces what it stacks**: `BottomSheet` sets the gap between its
+  children, so a list in a sheet needs no wrapper to keep its rows apart.
 - **One modal at a time.** A confirm may stand over the form it acts for;
   otherwise a second view replaces the body in place and backs out to it.
 - **One form per thing, for creating and editing**, differing only in title
@@ -289,6 +303,10 @@ renumber.
   ("315° is what most maps use"). A label that says it gets no hint.
 - **A screen used daily spends no prose.** A screen visited once when
   confused may explain itself, if every line changes what the user does next.
+- **An explanation opens on request, never as a section of the page.** A
+  control's is its hint. How a screen or feature works is behind a `help`
+  button in the hero, or beside what it explains where there is no hero. An
+  empty state may explain.
 - **Offer "Try again" only where trying again can help.**
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
@@ -327,7 +345,7 @@ renumber.
   it. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now.
-- **Overlays divide by what a thing is** (Places, Ways, LiDAR topos). Whose
+- **Overlays divide by what a thing is** (Places, Ways). Whose
   it is lives on the thing: the shared ring, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.

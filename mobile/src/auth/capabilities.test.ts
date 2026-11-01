@@ -18,7 +18,6 @@ const ALL_CAPABILITIES: Capability[] = [
   "friends",
   "inbox",
   "lidarOverlays",
-  "accountGeoPdf",
   "placeSearch",
   "serverPrefs",
   "pushNotifications",
@@ -196,7 +195,7 @@ describe("fieldDefsBlockedReason", () => {
   });
 });
 
-// Guard: fake auth never configures Amplify, so change-email (an Amplify call)
+// Guard: fake auth has no Cognito session, so change-email (a Cognito call)
 // is dimmed there with a reason. Drop the fake branch in changeEmailRowProps
 // and the first test goes red; widen it to Cognito and the second does.
 describe("changeEmailRowProps", () => {
@@ -209,9 +208,9 @@ describe("changeEmailRowProps", () => {
     }
   });
 
-  it("leaves a Cognito build to the ordinary connection gate", () => {
-    expect(changeEmailRowProps(true, "cognito")).toEqual({ disabled: false });
-    expect(changeEmailRowProps(false, "cognito")).toEqual({
+  it("leaves a real-auth build to the ordinary connection gate", () => {
+    expect(changeEmailRowProps(true, "oidc")).toEqual({ disabled: false });
+    expect(changeEmailRowProps(false, "oidc")).toEqual({
       disabled: true,
       subtitle: "Needs a connection",
     });

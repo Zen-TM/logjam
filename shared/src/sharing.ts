@@ -6,7 +6,7 @@
 //   SHARE ("Share")        — a live, revocable view of a row the sender still
 //                            owns. The recipient sees the sender's copy; the
 //                            sender can take it back; the recipient can never
-//                            edit it. Routes, LiDAR topos, GeoPDFs.
+//                            edit it. Routes, LiDAR topos.
 //
 //   SEND A COPY ("Send a   — a file handed over. Once accepted it is the
 //   copy")                   recipient's own, editable, permanent, and NOT
@@ -30,7 +30,6 @@ export const SHARABLE_ENTITY_TYPES = [
   // is admitted and the only caller that fans a mixed list across both tables.
   "route",
   "topoJob",
-  "geoPdfJob",
 ] as const;
 
 export type SharableEntityType = (typeof SHARABLE_ENTITY_TYPES)[number];
@@ -185,7 +184,7 @@ export type BulkShareResult = {
 // directions, and DELETE /friends/:id/shares is the bulk revoke of the forward
 // one.
 //
-// A ROW IS NOT A PLACE: routes, LiDAR topos and GeoPDFs live in the `Share`
+// A ROW IS NOT A PLACE: routes and LiDAR topos live in the `Share`
 // table, and an audit screen that only looked at places would show "nothing
 // shared" for them. The row carries the same (entityType, entityId) pair the
 // bulk share speaks, so the two halves of the feature cannot disagree about
@@ -202,8 +201,7 @@ export type BulkShareResult = {
 /**
  * One thing one friend can see, in either direction.
  *
- * `name` is nullable because a job may be untitled (a LiDAR topo with no name,
- * a GeoPDF whose config carried no title) — `shareRowTitle` is the one place
+ * `name` is nullable because a job may be untitled (a LiDAR topo with no name) — `shareRowTitle` is the one place
  * that decides what an untitled row is called.
  */
 export type FriendShareRow = {
@@ -232,28 +230,22 @@ export type FriendShares = {
 };
 
 /**
- * The kind, lower-case, as it reads mid-sentence — "place", "topo", "GeoPDF".
+ * The kind, lower-case, as it reads mid-sentence — "place", "route", "topo".
  *
  * Feeds `removeShareConfirm`'s `kindLabel` and the row subtitles on both
  * clients, so a kind cannot be worded two ways on two screens. A
- * `Record<BulkShareItemType, …>` on purpose: a sixth shareable kind cannot be
+ * `Record<BulkShareItemType, …>` on purpose: a new shareable kind cannot be
  * added without naming it here.
  */
 export const SHARE_KIND_LABEL: Record<BulkShareItemType, string> = {
   place: "place",
   route: "route",
   topoJob: "topo",
-  geoPdfJob: "GeoPDF",
 };
 
 /** What an audit row is called, untitled jobs included. */
 export function shareRowTitle(row: FriendShareRow): string {
-  return row.name ?? untitledJobTitle(row.entityType);
-}
-
-/** What a job with no title is called, in a share row or a plan's list. */
-export function untitledJobTitle(kind: BulkShareItemType): string {
-  return `Untitled ${SHARE_KIND_LABEL[kind]}`;
+  return row.name ?? `Untitled ${SHARE_KIND_LABEL[row.entityType]}`;
 }
 
 /**
@@ -265,13 +257,12 @@ export function untitledJobTitle(kind: BulkShareItemType): string {
  *   ROWS — a place (`POST /places/:id/copy`) and a route
  *          (`POST /routes/:id/copy`) are copied INTO THE ACCOUNT. They sync,
  *          they are the copier's to edit, and they outlive the share.
- *   MAP  — a LiDAR topo and a GeoPDF are downloaded ONTO THE DEVICE, which is
- *   ARTEFACTS  what "things you made sync, maps you downloaded stay on this
- *          device" already says (`mobile/src/saved/savedKeys.ts`). The download
- *          is the copy and it ALREADY outlives the share: the phone's Saved
- *          cards for both kinds are built from its local registry, not from the
- *          server's job list, and `removeSharedEntity` deliberately drops
- *          nothing local for them.
+ *   MAP  — a LiDAR topo is downloaded ONTO THE DEVICE, which is what "things
+ *   ARTEFACT  you made sync, maps you downloaded stay on this device" already
+ *          says (`mobile/src/saved/savedKeys.ts`). The download is the copy
+ *          and it ALREADY outlives the share: the phone's Saved card is built
+ *          from its local registry, not from the server's job list, and
+ *          `removeSharedEntity` deliberately drops nothing local for it.
  *
  * So jobs are absent here not because a sharee cannot keep one, but because
  * keeping one is not an account copy. Making it one would duplicate multi-GB
@@ -373,7 +364,7 @@ export function sharedRowVisibility(row: {
   syncRole: string | null | undefined;
   /**
    * Places THE CALLER CAN SEE that this row is linked to. Empty — or omitted,
-   * for the kinds with no place link at all (topo and GeoPDF jobs) — means no
+   * for the kinds with no place link at all (topo jobs) — means no
    * inherited arm exists, so a direct share is the whole reason it is here.
    *
    * Both clients already hold this: a route's single `placeId` counts only

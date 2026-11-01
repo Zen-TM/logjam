@@ -17,6 +17,7 @@ import { AppError, malformed } from "../middleware/errorHandler";
 import {
   assertValidPlaceType,
   createPlaceType,
+  defsForForeignPlaceTypes,
   defsForPlaceType,
   deletePlaceType,
   placeTypeInUse,
@@ -93,6 +94,7 @@ import {
   deleteSharesFor,
   directlySharedIds,
   directShareeIds,
+  sharedPlaceIdsFor,
   shareCountsFor,
 } from "../lib/shareAccess";
 
@@ -247,11 +249,7 @@ router.get(
 
     // Visibility sets, computed ONCE per request. Never an id from the
     // request.
-    const sharedPlaceRows = await prisma.placeShare.findMany({
-      where: { sharedWithId: user.id },
-      select: { placeId: true },
-    });
-    const sharedPlaceIds = sharedPlaceRows.map((row) => row.placeId);
+    const sharedPlaceIds = await sharedPlaceIdsFor(user.id);
     // Direct per-item shares — the second, independent source of visibility
     // (lib/shareAccess.ts). Share.entityId is polymorphic so there is no
     // relation filter to express this with; the ids come back as a set.
@@ -393,18 +391,12 @@ router.get(
       (row) => row.updatedAt,
     );
 
-    for (const place of places) {
-      if (place.ownerId === user.id) continue;
-      if (sharedDefsByType.has(place.placeTypeId)) continue;
-      const type = await prisma.placeType.findUnique({
-        where: { id: place.placeTypeId },
-        select: { ownerId: true },
-      });
-      if (!type || type.ownerId === null) continue; // system type: already held
-      sharedDefsByType.set(
-        place.placeTypeId,
-        await defsForPlaceType(type.ownerId, place.placeTypeId),
-      );
+    for (const [id, defs] of await defsForForeignPlaceTypes([
+      ...new Set(
+        places.filter((p) => p.ownerId !== user.id).map((p) => p.placeTypeId),
+      ),
+    ])) {
+      sharedDefsByType.set(id, defs);
     }
 
     // A link is OWNER-PRIVATE: both its endpoints belong to `ownerId` (asserted
@@ -769,6 +761,7 @@ export const PLACE_FIELDS = new Set([
   "longitude",
   "placeTypeId",
   "notes",
+  "gaugeId",
   "fieldValues",
   // Folded in from WAYPOINT_FIELDS: every waypoint is a place now, and the two
   // columns it carried that a canyon did not came with it. `symbol` did NOT —
@@ -1010,6 +1003,7 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
         latitude: fields.latitude as number,
         longitude: fields.longitude as number,
         notes: (fields.notes as string | null | undefined) ?? null,
+        gaugeId: (fields.gaugeId as string | null | undefined) ?? null,
         elevation: (fields.elevation as number | null | undefined) ?? null,
         fieldValues: asFieldValues(fields.fieldValues) as Prisma.InputJsonValue,
       },
@@ -1082,6 +1076,9 @@ async function applyPlaceOp(userId: string, op: PushOp): Promise<PushOpResult> {
       ...(fields.placeTypeId !== undefined && { placeTypeId: typeId }),
       ...(fields.notes !== undefined && {
         notes: fields.notes as string | null,
+      }),
+      ...(fields.gaugeId !== undefined && {
+        gaugeId: fields.gaugeId as string | null,
       }),
       ...(fields.elevation !== undefined && {
         elevation: fields.elevation as number | null,

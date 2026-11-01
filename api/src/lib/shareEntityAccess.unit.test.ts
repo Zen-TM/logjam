@@ -6,7 +6,6 @@ vi.mock("../services/prisma", () => ({
     placeShare: { findFirst: vi.fn() },
     route: { findUnique: vi.fn(), findFirst: vi.fn() },
     topoJob: { findUnique: vi.fn() },
-    geoPdfJob: { findUnique: vi.fn() },
   },
 }));
 
@@ -25,7 +24,6 @@ const mocked = prisma as unknown as {
   placeShare: { findFirst: Mock };
   route: { findUnique: Mock; findFirst: Mock };
   topoJob: { findUnique: Mock };
-  geoPdfJob: { findUnique: Mock };
 };
 
 const OWNER = "user-owner";
@@ -48,14 +46,11 @@ beforeEach(() => {
   mocked.topoJob.findUnique
     .mockReset()
     .mockResolvedValue({ id: "job-1", userId: OWNER });
-  mocked.geoPdfJob.findUnique
-    .mockReset()
-    .mockResolvedValue({ id: "pdf-1", userId: OWNER });
 });
 
-describe("loadEntityRole — one dispatcher, four tables", () => {
+describe("loadEntityRole — one dispatcher, two tables", () => {
   it("reads the owner column each type actually uses", async () => {
-    // TopoJob/GeoPdfJob name it `userId`, Route names it `ownerId`. Getting
+    // TopoJob names it `userId`, Route names it `ownerId`. Getting
     // this wrong would make every job look unowned.
     for (const entityType of ALL_TYPES) {
       const loaded = await loadEntityRole(OWNER, entityType, "id-1");
@@ -66,7 +61,6 @@ describe("loadEntityRole — one dispatcher, four tables", () => {
   it("returns null for a missing row, of every type", async () => {
     mocked.route.findUnique.mockResolvedValue(null);
     mocked.topoJob.findUnique.mockResolvedValue(null);
-    mocked.geoPdfJob.findUnique.mockResolvedValue(null);
     for (const entityType of ALL_TYPES) {
       expect(await loadEntityRole(OWNER, entityType, "id-1")).toBeNull();
     }

@@ -26,12 +26,6 @@
   color: var(--color-text-muted);
 }
 
-/* A group that another setting switches on and off wholesale. */
-.dependent[data-disabled] {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 /* The slope bands: a row per band, columns headed once (DESIGN.md). Tight
    rows, because the table is mostly two-digit numbers and a swatch — the
    full-height control rows it started with spent a screen on eight bands
@@ -96,7 +90,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 16px;
+  /* The pointer's target floor. Guard: frontend/e2e/a11y.spec.ts ("the
+     Layers popover's Terrain tab, and its slope bands"). */
+  min-height: var(--control-sm);
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -143,45 +139,4 @@
 
 .scaleReset {
   margin-left: auto;
-}
-
-/* Twelve vegetation formations, each with a multiplier: a table, one column of
-   names and one of numbers, headed by the group's own title. */
-.formationTable {
-  display: grid;
-  grid-template-columns: 1fr 8ch;
-  align-items: center;
-  column-gap: 12px;
-  row-gap: 6px;
-}
-
-.formationName {
-  composes: body from "../../../textRoles.generated.module.css";
-  color: var(--color-text);
-}
-
-/* The layers a format can carry. */
-.checkList {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-/* Why the format the user just picked refuses what they had chosen. */
-.exportNote {
-  composes: detail from "../../../textRoles.generated.module.css";
-  margin: 0;
-  color: var(--color-text-muted);
-}
-
-/* A group's header and its sentence, with the control that resets the group
-   beside them rather than under. */
-.resetLine {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.resetButton {
-  flex: none;
 }

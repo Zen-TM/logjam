@@ -1,0 +1,242 @@
+import { describe, it, expect } from "vitest";
+import {
+  computeTileToMapTransform,
+  computeZoom,
+  geoPdfNativeMegapixels,
+  geoPdfBaseTileZoom,
+  geoPdfMaxNativeZoom,
+  geoPdfTooLarge,
+  GEOPDF_MAX_CANVAS_BYTES,
+  lon2tileX,
+  lat2tileY,
+  tileX2lon,
+  tileY2lat,
+  latToMercY,
+} from "./geoPdfTileMath.js";
+
+// Edge-case coverage for the GeoPDF projection math. These are the
+// calculations most prone to silent errors at high zoom / extreme latitude.
+
+describe("tile index round-trips", () => {
+  it.each([8, 12, 16, 20])(
+    "a point falls inside the tile it maps to (z=%i)",
+    (z) => {
+      const lon = 150.3123;
+      const x = lon2tileX(lon, z);
+      expect(tileX2lon(x, z)).toBeLessThanOrEqual(lon); // west edge <= lon
+      expect(tileX2lon(x + 1, z)).toBeGreaterThan(lon); // next tile's west edge > lon
+
+      const lat = -33.6392;
+      const y = lat2tileY(lat, z);
+      expect(tileY2lat(y, z)).toBeGreaterThanOrEqual(lat); // north edge >= lat
+      expect(tileY2lat(y + 1, z)).toBeLessThan(lat); // next tile's north edge < lat
+    },
+  );
+});
+
+describe("latToMercY", () => {
+  it("is monotonically decreasing as latitude decreases (north > south)", () => {
+    expect(latToMercY(-33.6)).toBeGreaterThan(latToMercY(-33.7));
+    expect(latToMercY(0)).toBe(0);
+  });
+});
+
+describe("computeTileToMapTransform", () => {
+  it("covers the full tile grid and is internally consistent for a normal extent", () => {
+    const north = -33.6,
+      south = -33.68,
+      east = 150.34,
+      west = 150.26,
+      z = 14;
+    const widthPx = 1000,
+      heightPx = 1000;
+    const t = computeTileToMapTransform(
+      z,
+      north,
+      south,
+      east,
+      west,
+      widthPx,
+      heightPx,
+    );
+
+    const minTileX = lon2tileX(west, z);
+    const maxTileX = lon2tileX(east, z);
+    const minTileY = lat2tileY(north, z);
+    const maxTileY = lat2tileY(south, z);
+
+    expect(t.minTileX).toBe(minTileX);
+    expect(t.minTileY).toBe(minTileY);
+    expect(t.tiles).toHaveLength(
+      (maxTileX - minTileX + 1) * (maxTileY - minTileY + 1),
+    );
+    expect(t.tiles.every((tile) => tile.z === z)).toBe(true);
+
+    // Source spans are positive and the extent sits within the tile grid.
+    expect(t.srcW).toBeGreaterThan(0);
+    expect(t.srcH).toBeGreaterThan(0);
+    expect(t.offsetX).toBeGreaterThanOrEqual(0);
+    expect(t.offsetY).toBeGreaterThanOrEqual(0);
+
+    // scale factors are exactly output/source.
+    expect(t.scaleX).toBeCloseTo(widthPx / t.srcW, 10);
+    expect(t.scaleY).toBeCloseTo(heightPx / t.srcH, 10);
+
+    for (const v of [
+      t.offsetX,
+      t.offsetY,
+      t.srcW,
+      t.srcH,
+      t.scaleX,
+      t.scaleY,
+    ]) {
+      expect(Number.isFinite(v)).toBe(true);
+    }
+  });
+
+  it("stays finite and positive at very high zoom (tiny extent)", () => {
+    const t = computeTileToMapTransform(
+      20,
+      -33.6,
+      -33.601,
+      150.301,
+      150.3,
+      500,
+      500,
+    );
+    expect(t.tiles.length).toBeGreaterThanOrEqual(1);
+    expect(t.srcW).toBeGreaterThan(0);
+    expect(t.srcH).toBeGreaterThan(0);
+    expect(Number.isFinite(t.scaleX)).toBe(true);
+    expect(Number.isFinite(t.scaleY)).toBe(true);
+  });
+
+  it("stays finite at extreme (high-magnitude) latitude", () => {
+    const t = computeTileToMapTransform(
+      6,
+      -79.0,
+      -80.0,
+      150.5,
+      149.5,
+      800,
+      600,
+    );
+    expect(t.srcH).toBeGreaterThan(0);
+    expect(Number.isFinite(t.srcH)).toBe(true);
+    expect(Number.isFinite(t.offsetY)).toBe(true);
+  });
+});
+
+describe("computeZoom", () => {
+  it("floors at MIN_ZOOM (8) for a very small print scale", () => {
+    // A huge denominator (small-scale, wide-area map) drives the raw zoom
+    // calculation deeply negative — the result must still floor at 8.
+    expect(computeZoom(10_000_000, -33.7, 300, 18)).toBe(8);
+  });
+
+  it("caps at maxNativeZoom for a very large print scale", () => {
+    // A tiny denominator (large-scale, zoomed-in map) drives the raw zoom
+    // calculation well past any realistic maxNativeZoom.
+    expect(computeZoom(100, -33.7, 300, 18)).toBe(18);
+    expect(computeZoom(100, -33.7, 300, 16)).toBe(16);
+  });
+
+  it("stays within [MIN_ZOOM, maxNativeZoom] for a mid-range scale", () => {
+    const z = computeZoom(25000, -33.7, 300, 18);
+    expect(z).toBeGreaterThanOrEqual(8);
+    expect(z).toBeLessThanOrEqual(18);
+  });
+});
+
+describe("geoPdfNativeMegapixels", () => {
+  const baseExtent = { north: -33.65, south: -33.7, east: 150.3, west: 150.25 };
+
+  it("is monotonically increasing in extent area at fixed scale/zoom", () => {
+    const small = geoPdfNativeMegapixels(baseExtent, 25000, 18);
+    const doubledLon = geoPdfNativeMegapixels(
+      {
+        ...baseExtent,
+        east: baseExtent.west + (baseExtent.east - baseExtent.west) * 2,
+      },
+      25000,
+      18,
+    );
+    expect(doubledLon).toBeGreaterThan(small);
+  });
+
+  it("returns fewer megapixels for a larger scale denominator (zoomed-out print)", () => {
+    const fine = geoPdfNativeMegapixels(baseExtent, 10000, 18);
+    const coarse = geoPdfNativeMegapixels(baseExtent, 100000, 18);
+    expect(coarse).toBeLessThan(fine);
+  });
+
+  it("returns a sane finite positive value for a realistic extent", () => {
+    const mp = geoPdfNativeMegapixels(baseExtent, 25000, 18);
+    expect(Number.isFinite(mp)).toBe(true);
+    expect(mp).toBeGreaterThan(0);
+    // Sanity bound — a ~0.05° square at scale 25000/z18 shouldn't blow out to
+    // an absurd canvas size.
+    expect(mp).toBeLessThan(10000);
+  });
+});
+
+describe("geoPdfTooLarge", () => {
+  // An A4 sheet's ground at 1:25 000 around Katoomba: 4.8 km × 6.9 km.
+  const sheet = { north: -33.68, south: -33.742, east: 150.337, west: 150.285 };
+  const bytes = (extent: typeof sheet, scale: number, zoom: number) =>
+    geoPdfNativeMegapixels(extent, scale, zoom) * 1e6 * 4;
+
+  it("lets an ordinary sheet through", () => {
+    expect(geoPdfTooLarge(sheet, 25000, "six-topo")).toBe(false);
+  });
+
+  // Mutation: compare against the canvas cap with `<=` turned around, or size
+  // every base layer at one zoom: either way one of these flips.
+  it("refuses what the renderer could not allocate, at the base layer's own zoom", () => {
+    const wide = { ...sheet, east: sheet.west + 0.6, south: sheet.north - 0.6 };
+    expect(geoPdfTooLarge(wide, 25000, "six-topo")).toBe(true);
+    // At 1:5 000 SIX Topo is fetched at its z16 ceiling and imagery at z19.
+    const town = {
+      ...sheet,
+      east: sheet.west + 0.07,
+      south: sheet.north - 0.07,
+    };
+    expect(bytes(town, 5000, 16)).toBeLessThan(GEOPDF_MAX_CANVAS_BYTES);
+    expect(geoPdfTooLarge(town, 5000, "six-topo")).toBe(false);
+    expect(geoPdfTooLarge(town, 5000, "six-imagery")).toBe(true);
+  });
+});
+
+describe("geoPdfBaseTileZoom", () => {
+  // Mutation: drop `printTileDpi` from either catalog entry and its labels
+  // print at about 2 pt; set it on SIX Topo and a print loses detail for labels
+  // that didn't need it.
+  it("reads a tile with fixed-size labels shallower than one without", () => {
+    expect(geoPdfBaseTileZoom("osm-topo", 25000, -33.7)).toBe(15);
+    expect(geoPdfBaseTileZoom("six-base", 25000, -33.7)).toBe(15);
+    expect(geoPdfBaseTileZoom("six-base", 10000, -33.7)).toBe(16);
+    expect(geoPdfBaseTileZoom("six-topo", 25000, -33.7)).toBe(16);
+    expect(geoPdfBaseTileZoom("six-imagery", 25000, -33.7)).toBe(16);
+  });
+
+  // Mutation: a DPI of 80 tips the state's south to z14, where OSM Topo has no
+  // street names; of 155, its north to z16.
+  it("gives a scale one zoom across NSW", () => {
+    for (const lat of [-28.2, -33.7, -37.5])
+      expect(geoPdfBaseTileZoom("osm-topo", 25000, lat)).toBe(15);
+  });
+
+  it("never reads past the provider's deepest tiles", () => {
+    expect(geoPdfBaseTileZoom("osm-topo", 500, -33.7)).toBe(17);
+  });
+});
+
+describe("geoPdfMaxNativeZoom", () => {
+  // The one answer the dialog, the route, the renderer and the runtime
+  // estimate share. Mutation: change the fallback, or read another field.
+  it("is the base layer's own deepest zoom, or z18", () => {
+    expect(geoPdfMaxNativeZoom("six-topo")).toBe(16);
+    expect(geoPdfMaxNativeZoom("six-imagery")).toBe(20);
+    expect(geoPdfMaxNativeZoom("no-such-layer")).toBe(18);
+  });
+});

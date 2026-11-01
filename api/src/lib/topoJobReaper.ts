@@ -5,28 +5,15 @@ import prisma from "../services/prisma";
 import { sendPushToUser, type PushData } from "../services/push";
 import { sendEmail } from "../services/email";
 import { ecs, s3 } from "../services/awsClients";
-import { decrementStorageUsed } from "./storageQuota";
 import { deleteTopoJobObjects } from "./topoUpload";
 import { sweepOrphanedMediaUploads } from "./mediaOrphanSweeper";
 import { sweepExpiredFileSends } from "./fileSendReaper";
 import { sweepExpiredImportSnapshots } from "./importSnapshot";
 import { sweepEgress } from "./egressMeter";
-import { createAndLaunchTopoExport } from "./topoExportLauncher";
-import { AppError } from "../middleware/errorHandler";
-import {
-  TOPO_LAYERS,
-  VECTOR_STYLE_DEFAULTS,
-  normalizeUserUiPreferences,
-  reconcileExportSelection,
-  validateAutoExportSettings,
-  validateExportRequest,
-  type TopoLayerKey,
-  say,
-} from "@logjam/shared";
+import { normalizeUserUiPreferences, say } from "@logjam/shared";
 import { getEnv } from "./env";
 import { logger, safeErrorForLog } from "./logger";
 import { TOPO_EXPORT_STOPPED_MESSAGE } from "./failureCopy";
-import { deleteSharesFor } from "./shareAccess";
 
 // Stuck-job reaper for both topo pipelines.
 //
@@ -70,7 +57,6 @@ import { deleteSharesFor } from "./shareAccess";
 // anything (see the attempt_count comment in schema.prisma).
 const REAPER_JOB_MESSAGE = say`This LiDAR map was stopped because it took too long. Make it again to try again.`;
 const REAPER_EXPORT_MESSAGE = TOPO_EXPORT_STOPPED_MESSAGE;
-const REAPER_GEO_PDF_MESSAGE = say`This GeoPDF was stopped because it took too long. Make it again to try again.`;
 
 // Headroom multiplier on the API's own duration estimate. A code constant,
 // not an env knob: if real runtimes drift from the estimate, fix the estimate
@@ -183,13 +169,13 @@ type ReapEntry = {
   payload: Prisma.InputJsonValue;
   push: PushData;
   /**
-   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` /
-   * `exportEmail` / `geoPdfEmail` mean "finishes or fails", so a reaped job
+   * Failure email, gated on the pipeline's EXISTING preference — `topoEmail` and
+   * `exportEmail` mean "finishes or fails", so a reaped job
    * mails the same users a worker-detected failure would (no new pref key).
    * `reason` is the generic REAPER_* message: the reaper never knows more.
    */
   email: {
-    pref: "topoEmail" | "exportEmail" | "geoPdfEmail";
+    pref: "topoEmail" | "exportEmail";
     subject: string;
     headline: string;
     reason: string;
@@ -200,7 +186,7 @@ type ReapEntry = {
 
 /**
  * Best-effort failure email per reaped row. Same shape as the workers' own
- * failure mail (geoPdfWorker.ts / export_worker.py): logo header, one-line
+ * failure mail (export_worker.py): logo header, one-line
  * reason, FRONTEND_URL deep link — a reaped-job email must not read as a
  * different species from a worker-sent one.
  *
@@ -274,24 +260,12 @@ async function notifyReaped(entries: ReapEntry[]): Promise<void> {
 }
 
 /**
- * The stuck-job sweeps skip a plan's GeoPDF (null userId): there is no owner
- * to tell. A plan's GeoPDF is a copy of a finished one, made completed
- * (lib/planItems.ts), so it is never queued or running.
- */
-function ownedJob<T extends { userId: string | null }>(
-  row: T,
-): row is T & { userId: string } {
-  return row.userId !== null;
-}
-
-/**
  * Flip overdue rows to failed ONE AT A TIME and notify only the rows this pass
  * actually claimed.
  *
- * The status-guarded claim is the house dedup rule (root AGENTS.md; same shape
- * as `queueAutoExports`'s `autoExportedAt` marker): two API instances sweeping
- * concurrently both read the same overdue ids, but only one `updateMany` per id
- * reports `count === 1`. Notifying on the READ set instead would send the user
+ * The status-guarded claim is the house dedup rule (root AGENTS.md): two API
+ * instances sweeping concurrently both read the same overdue ids, but only one
+ * `updateMany` per id reports `count === 1`. Notifying on the READ set instead would send the user
  * two notifications, two pushes and two emails per reaped job — prod runs the
  * API on Elastic Beanstalk, so >1 instance is a real configuration.
  *
@@ -437,28 +411,6 @@ function exportJobEntry(row: {
   };
 }
 
-/** Mirrors worker/geoPdfWorker.ts's failure notification + push type. */
-function geoPdfJobEntry(row: { id: string; userId: string }): ReapEntry {
-  return {
-    userId: row.userId,
-    type: "geo_pdf_complete",
-    payload: {
-      geoPdfJobId: row.id,
-      status: "failed",
-      errorMessage: REAPER_GEO_PDF_MESSAGE,
-    },
-    push: { type: "geo_pdf_failed", geoPdfJobId: row.id },
-    email: {
-      pref: "geoPdfEmail",
-      // Same subject geoPdfWorker.ts's failure mail uses.
-      subject: "GeoPDF failed — Logjam",
-      headline: "Your GeoPDF could not be generated.",
-      reason: REAPER_GEO_PDF_MESSAGE,
-      deepLink: `geoPdfJob=${row.id}`,
-    },
-  };
-}
-
 /**
  * One reaper pass over both job tables. Returns the number of rows THIS pass
  * claimed (see claimAndNotify — an overlapping instance's rows don't count).
@@ -572,58 +524,6 @@ export async function reapStuckTopoJobs(
     );
   }
 
-  // geo_pdf_jobs · queued: anchored on createdAt (mirrors topo_export_jobs).
-  const geoPdfQueuedCutoff = new Date(
-    now.getTime() - env.GEO_PDF_QUEUED_TIMEOUT_MS,
-  );
-  const queuedGeoPdfJobs = (
-    await prisma.geoPdfJob.findMany({
-      where: { status: "queued", createdAt: { lt: geoPdfQueuedCutoff } },
-      select: { id: true, userId: true },
-    })
-  ).filter(ownedJob);
-  reaped += await claimAndNotify(
-    queuedGeoPdfJobs,
-    (id) =>
-      prisma.geoPdfJob.updateMany({
-        where: { id, status: "queued" },
-        data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
-      }),
-    geoPdfJobEntry,
-  );
-
-  // geo_pdf_jobs · running: anchored on startedAt (createdAt fallback).
-  const geoPdfRunningCutoff = new Date(
-    now.getTime() - env.GEO_PDF_RUNNING_TIMEOUT_MS,
-  );
-  const overdueGeoPdfJobs = (
-    await prisma.geoPdfJob.findMany({
-      where: {
-        status: "running",
-        OR: [
-          { startedAt: { lt: geoPdfRunningCutoff } },
-          { startedAt: null, createdAt: { lt: geoPdfRunningCutoff } },
-        ],
-      },
-      select: { id: true, userId: true, ecsTaskArn: true },
-    })
-  ).filter(ownedJob);
-  if (overdueGeoPdfJobs.length > 0) {
-    reaped += await claimAndNotify(
-      overdueGeoPdfJobs,
-      (id) =>
-        prisma.geoPdfJob.updateMany({
-          where: { id, status: "running" },
-          data: { status: "failed", errorMessage: REAPER_GEO_PDF_MESSAGE },
-        }),
-      geoPdfJobEntry,
-    );
-    await stopTasksBestEffort(
-      overdueGeoPdfJobs,
-      "geo_pdf_reaper_stop_task_failed",
-    );
-  }
-
   return reaped;
 }
 
@@ -631,11 +531,9 @@ export async function reapStuckTopoJobs(
  * Export-expiry sweep: completed exports older than
  * TOPO_EXPORT_TTL_MS (default 7 days, 0 disables) are removed — S3 object
  * first (idempotent: the bucket's `expire-exports` lifecycle rule, verified
- * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then one
- * transaction decrementing the storage charge and deleting the row. This
- * makes the in-app accounting authoritative: rows stop presigning dead keys
- * and the quota is reclaimed when the bytes actually disappear, with the S3
- * rule kept as backstop. Returns the number of exports expired.
+ * 2026-06-11 as 7-day expiry on `exports/`, may have beaten us), then the row.
+ * Rows stop presigning dead keys, with the S3 rule kept as backstop. An
+ * export is not charged to storage, so nothing is given back. Returns the number of exports expired.
  *
  * Per-row failures are logged and skipped (the row simply survives to the
  * next sweep) so one bad row can't wedge the others.
@@ -650,7 +548,7 @@ export async function expireCompletedExports(
   const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
   const expiredRows = await prisma.topoExportJob.findMany({
     where: { status: "completed", completedAt: { lt: cutoff } },
-    select: { id: true, userId: true, resultKey: true, resultBytes: true },
+    select: { id: true, resultKey: true },
   });
 
   let expired = 0;
@@ -664,10 +562,7 @@ export async function expireCompletedExports(
           new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
         );
       }
-      await prisma.$transaction(async (tx) => {
-        await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
-        await tx.topoExportJob.delete({ where: { id: row.id } });
-      });
+      await prisma.topoExportJob.delete({ where: { id: row.id } });
       expired += 1;
     } catch (err) {
       logger.error(
@@ -677,225 +572,6 @@ export async function expireCompletedExports(
     }
   }
   return expired;
-}
-
-/**
- * GeoPdfJob expiry sweep — same shape as expireCompletedExports, reusing
- * TOPO_EXPORT_TTL_MS (0 disables). Completed jobs older than the cutoff are
- * removed: S3 object deleted, storage charge decremented, row removed in one
- * transaction. Per-row failures are logged and skipped so one bad row can't
- * wedge the others.
- *
- * A plan's GeoPDF never expires: nothing in a plan is deleted on a timer, and
- * the adder's storage pays for it. Guard: topoJobReaper.unit.test.ts ("leaves
- * a plan's GeoPDF").
- */
-export async function expireCompletedGeoPdfJobs(
-  now: Date = new Date(),
-): Promise<number> {
-  const env = getEnv();
-  if (env.TOPO_EXPORT_TTL_MS === 0) return 0;
-  const bucket = env.S3_BUCKET_TOPO ?? "";
-
-  const cutoff = new Date(now.getTime() - env.TOPO_EXPORT_TTL_MS);
-  const expiredRows = await prisma.geoPdfJob.findMany({
-    where: { status: "completed", completedAt: { lt: cutoff }, planId: null },
-    select: {
-      id: true,
-      userId: true,
-      resultKey: true,
-      resultBytes: true,
-    },
-  });
-
-  let expired = 0;
-  for (const row of expiredRows) {
-    try {
-      if (row.resultKey) {
-        await s3.send(
-          new DeleteObjectCommand({ Bucket: bucket, Key: row.resultKey }),
-        );
-      }
-      await prisma.$transaction(async (tx) => {
-        if (row.userId)
-          await decrementStorageUsed(row.userId, row.resultBytes ?? 0n, tx);
-        // Same transaction as the row delete: Share.entityId is polymorphic, so
-        // Postgres cannot cascade — without this the rows outlive the job and
-        // keep the recipient's notification resolvable to a dead id.
-        await deleteSharesFor(tx, "geoPdfJob", [row.id]);
-        await tx.geoPdfJob.delete({ where: { id: row.id } });
-      });
-      expired += 1;
-    } catch (err) {
-      // Scrub before logging: an S3/Prisma error can embed the result key, and
-      // the result key can name a place (root privacy rule).
-      logger.error(
-        { ...safeErrorForLog(err), id: row.id },
-        "geo_pdf_expiry_failed",
-      );
-    }
-  }
-  return expired;
-}
-
-type S3OutputKey = {
-  name: string;
-  cogKey: string | null;
-  pmtilesKey: string | null;
-};
-
-/**
- * The layers a completed job can actually export, from its s3OutputKeys. A
- * raster layer needs a COG to export (the manual route rejects otherwise); a
- * vector layer exports from its stored GeoJSON, so presence is enough. Mirrors
- * the gate in routes/topoExports.ts so auto-export and manual export agree.
- */
-export function exportableLayers(outputs: unknown): Set<TopoLayerKey> {
-  const set = new Set<TopoLayerKey>();
-  if (!Array.isArray(outputs)) return set;
-  for (const raw of outputs as S3OutputKey[]) {
-    const meta = TOPO_LAYERS.find((m) => m.name === raw?.name);
-    if (!meta) continue;
-    if (meta.format === "raster" && !raw.cogKey) continue;
-    set.add(meta.name);
-  }
-  return set;
-}
-
-async function notifyAutoExportSkipped(
-  userId: string,
-  topoJobId: string,
-  reason: string,
-): Promise<void> {
-  await prisma.notification.create({
-    data: {
-      userId,
-      type: "topo_export_skipped",
-      payload: { topoJobId, reason },
-    },
-  });
-  // Best-effort push — generic title + opaque IDs only (the skip reason
-  // stays in the in-app notification, never in the push).
-  await sendPushToUser(userId, {
-    type: "topo_export_skipped",
-    jobId: topoJobId,
-  });
-}
-
-/**
- * Auto-export pass: for every completed topo job whose persisted auto-export
- * config is enabled and not yet handled, queue a TopoExportJob. The trigger for
- * the auto-export feature — the API owns ECS launching, so this runs here rather
- * than in the Python worker.
- *
- * Dedup is a status-guarded claim: `autoExportedAt` is flipped from null to now
- * in one updateMany, and only the sweep that flips exactly one row proceeds, so
- * overlapping sweeps / multiple API instances can never double-queue (same
- * idempotency rationale as the stuck-job sweeps above). A job that can't be
- * exported (config disabled/invalid, no exportable layers produced, cap hit, or
- * launch failure) is still claimed — we never retry — and the user is told via a
- * `topo_export_skipped` notification rather than failing silently.
- *
- * Returns the number of exports queued.
- */
-export async function queueAutoExports(
-  now: Date = new Date(),
-): Promise<number> {
-  const candidates = await prisma.topoJob.findMany({
-    where: {
-      status: "complete",
-      autoExportedAt: null,
-      autoExport: { path: ["enabled"], equals: true },
-    },
-    select: {
-      id: true,
-      userId: true,
-      autoExport: true,
-      s3OutputKeys: true,
-      vectorStyleSnapshot: true,
-      footprint: true,
-      tileCount: true,
-      // The auto-export path spends the owner's monthly allowance just as a
-      // manual export does — an auto-export must not be a way around the cap.
-      user: { select: { monthlyComputeCredits: true } },
-    },
-  });
-
-  let queued = 0;
-  for (const job of candidates) {
-    try {
-      // Claim first so a concurrent sweep can't also act on this job.
-      const claim = await prisma.topoJob.updateMany({
-        where: { id: job.id, autoExportedAt: null },
-        data: { autoExportedAt: now },
-      });
-      if (claim.count !== 1) continue;
-
-      // A footprint-less job (legacy / failed-but-marked-complete) crashes the
-      // export worker at render_composite_*. Skip with a notification; the claim
-      // above keeps it from being retried each sweep.
-      if (job.footprint === null) {
-        await notifyAutoExportSkipped(
-          job.userId,
-          job.id,
-          "the source job is missing its footprint — re-run it",
-        );
-        continue;
-      }
-
-      const parsed = validateAutoExportSettings(job.autoExport);
-      if (!parsed.ok || !parsed.value.enabled) continue; // claimed; nothing to do
-      const cfg = parsed.value;
-
-      const selection = reconcileExportSelection(
-        { format: cfg.format, bundling: cfg.bundling, layers: cfg.layers },
-        exportableLayers(job.s3OutputKeys),
-      );
-      const valid = validateExportRequest(selection);
-      if (selection.layers.length === 0 || !valid.ok) {
-        await notifyAutoExportSkipped(
-          job.userId,
-          job.id,
-          valid.ok
-            ? "none of the chosen layers were produced by this job"
-            : valid.error,
-        );
-        continue;
-      }
-
-      try {
-        await createAndLaunchTopoExport({
-          userId: job.userId,
-          sourceJobIds: [job.id],
-          layers: selection.layers,
-          format: selection.format,
-          bundling: selection.bundling,
-          vectorStyleSnapshot:
-            (job.vectorStyleSnapshot as object | null) ?? VECTOR_STYLE_DEFAULTS,
-          sourceTileCount: job.tileCount ?? null,
-          monthlyComputeCredits: job.user.monthlyComputeCredits,
-        });
-        queued += 1;
-      } catch (err) {
-        const reason =
-          err instanceof AppError && err.statusCode === 429
-            ? "too many exports are already in progress"
-            : "the export could not be started";
-        logger.error(
-          { err: safeErrorForLog(err), jobId: job.id },
-          "auto_export_launch_failed",
-        );
-        await notifyAutoExportSkipped(job.userId, job.id, reason);
-      }
-    } catch (err) {
-      // One bad job can't wedge the pass (matches expireCompletedExports).
-      logger.error(
-        { err: safeErrorForLog(err), jobId: job.id },
-        "auto_export_pass_failed",
-      );
-    }
-  }
-  return queued;
 }
 
 /**
@@ -946,16 +622,6 @@ export function startTopoJobReaper(): () => void {
         "topo_abandoned_upload_sweep_failed",
       );
     });
-    queueAutoExports()
-      .then((count) => {
-        if (count > 0) logger.info({ count }, "topo_auto_exports_queued");
-      })
-      .catch((err) => {
-        logger.error(
-          { err: safeErrorForLog(err) },
-          "topo_auto_export_sweep_failed",
-        );
-      });
     expireCompletedExports()
       .then((count) => {
         if (count > 0) logger.info({ count }, "topo_exports_expired");
@@ -964,16 +630,6 @@ export function startTopoJobReaper(): () => void {
         logger.error(
           { err: safeErrorForLog(err) },
           "topo_export_expiry_sweep_failed",
-        );
-      });
-    expireCompletedGeoPdfJobs()
-      .then((count) => {
-        if (count > 0) logger.info({ count }, "geo_pdf_jobs_expired");
-      })
-      .catch((err) => {
-        logger.error(
-          { err: safeErrorForLog(err) },
-          "geo_pdf_expiry_sweep_failed",
         );
       });
     sweepOrphanedMediaUploads().catch((err) => {
@@ -1028,8 +684,6 @@ export function startTopoJobReaper(): () => void {
       exportQueuedTimeoutMs: env.TOPO_REAPER_EXPORT_QUEUED_TIMEOUT_MS,
       exportRunningTimeoutMs: env.TOPO_REAPER_EXPORT_RUNNING_TIMEOUT_MS,
       exportTtlMs: env.TOPO_EXPORT_TTL_MS,
-      geoPdfQueuedTimeoutMs: env.GEO_PDF_QUEUED_TIMEOUT_MS,
-      geoPdfRunningTimeoutMs: env.GEO_PDF_RUNNING_TIMEOUT_MS,
     },
     "topo_job_reaper_started",
   );
