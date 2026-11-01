@@ -116,18 +116,63 @@ describe("SignIn under Cognito", () => {
     type("Email", EMAIL);
     type("Password", PASSWORD);
     press("Sign in");
-    await screen.findByLabelText("Verification code", { exact: false });
+    await screen.findByLabelText(/^Verification code/);
     expect(oidc.resendSignUpCode).toHaveBeenCalledWith(EMAIL);
   });
 
-  // Mutation: drop the tick check in handleSignUp, and an account exists that
+  // Mutation: drop the check, and a bare Enter leaves the page for the
+  // provider's.
+  it("asks for a blank password instead of sending it", async () => {
+    draw();
+    type("Email", EMAIL);
+    press("Sign in");
+    await screen.findByText("Enter your password.");
+    expect(onPasswordSignIn).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop either tick check in handleSignUp, and an account exists that
   // never agreed to the terms or confirmed its age on this form.
-  it("will not sign up without both ticks", async () => {
+  it("will not sign up without the terms", async () => {
     draw();
     fillSignUp();
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
     press("Sign up");
     await screen.findByText(/Agree to the Terms of Use/);
     expect(oidc.signUp).not.toHaveBeenCalled();
+  });
+
+  it("will not sign up without the age", async () => {
+    draw();
+    fillSignUp();
+    fireEvent.click(screen.getByRole("checkbox", { name: /agree to the/ }));
+    press("Sign up");
+    await screen.findByText(/18 or older/);
+    expect(oidc.signUp).not.toHaveBeenCalled();
+  });
+
+  // Mutation: pass the username field instead of signedUpUsername, and consent
+  // is recorded for ticks nobody made, on an account the form never signed up.
+  it("records no consent for an account it did not sign up", async () => {
+    const unconfirmed = new Error("User is not confirmed.");
+    unconfirmed.name = "UserNotConfirmedException";
+    onPasswordSignIn.mockRejectedValueOnce(unconfirmed);
+    draw();
+    press("Sign up");
+    type("Username", "typed_not_sent");
+    fireEvent.click(screen.getAllByRole("button", { name: "Sign in" })[0]);
+    type("Email", EMAIL);
+    type("Password", PASSWORD);
+    press("Sign in");
+    await screen.findByLabelText(/^Verification code/);
+    type("Verification code", "123456");
+    press("Verify");
+    await waitFor(() =>
+      expect(onPasswordSignIn).toHaveBeenLastCalledWith(
+        EMAIL,
+        PASSWORD,
+        undefined,
+      ),
+    );
   });
 
   it("signs a verified account in with the username it chose", async () => {
