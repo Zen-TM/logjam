@@ -421,7 +421,6 @@ export function TerrainPane({
       <Row
         key="land"
         title={terrainCopy.land}
-        subtitle={terrainCopy.landHint}
         trailing={
           <>
             <IconButton
@@ -432,7 +431,7 @@ export function TerrainPane({
             <Toggle
               checked={layers.land}
               onChange={(on) => onChange("land", on)}
-              label="Show land"
+              label={`Show ${terrainCopy.land.toLowerCase()}`}
             />
           </>
         }

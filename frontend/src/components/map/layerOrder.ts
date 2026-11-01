@@ -37,6 +37,7 @@ export const PRESSABLE_LAYERS = [
 
 /** The Land overlay's fill, by the id `topo-<entry id>-<suffix>` every topo layer has. */
 export const LAND_FILL_LAYER = "topo-nswland-fill";
+export const LAND_EDGE_LAYER = "topo-nswland-edge";
 
 /**
  * The name of the land class drawn at `point`, or null: the overlay is off, or

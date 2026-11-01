@@ -68,6 +68,7 @@ import {
   lidarJobSharePromise,
   type TopoLayerFormat,
   type TopoLayerName,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -214,7 +215,7 @@ function regionMemberName(artifact: MapArtifact): string {
     return artifact.label ?? "Sharpened area";
   if (artifact.kind === "contours-region") return "Contours";
   if (artifact.kind === "slope-region") return "Slope";
-  if (artifact.kind === "land-region") return "Land";
+  if (artifact.kind === "land-region") return MAP_TERRAIN.copy.land;
   if (artifact.kind !== "dem-region") return basemapName(artifact.logicalKey);
   return artifact.logicalKey === NSW_5M.id
     ? "Elevation data, NSW 5 m"

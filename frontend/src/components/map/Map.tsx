@@ -21,7 +21,11 @@ import {
   contourLabelHalo,
   gaugeDisplayName,
   latestGaugeReading,
-  landFillColor,
+  LAND_EDGE_LINES,
+  LAND_EDGE_MINZOOM,
+  landColor,
+  landEdgeOpacity,
+  landFillOpacity,
   nswContourStyle,
   NSW_LAND,
   TERRAIN_LAYER_KEYS,
@@ -39,6 +43,7 @@ import {
   GAUGE_BELOW,
   GAUGE_LABELS,
   GAUGE_LAYER,
+  LAND_EDGE_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
   pressClosedGauge,
@@ -2675,14 +2680,34 @@ function Map({
             source: srcId,
             "source-layer": NSW_LAND.sourceLayer,
             paint: {
-              "fill-color":
-                landFillColor() as maplibregl.ExpressionSpecification,
+              "fill-color": landColor() as maplibregl.ExpressionSpecification,
+              "fill-opacity":
+                landFillOpacity() as maplibregl.ExpressionSpecification,
               // Tiles join in the middle of a holding, and an antialiased edge
               // there would draw the tile grid across the tint.
               "fill-antialias": false,
             },
           });
         }
+        LAND_EDGE_LINES.forEach(({ width, offset, blur, opacity }, i) => {
+          if (map.getLayer(`${LAND_EDGE_LAYER}-${i}`)) return;
+          map.addLayer({
+            id: `${LAND_EDGE_LAYER}-${i}`,
+            type: "line",
+            source: srcId,
+            "source-layer": NSW_LAND.sourceLayer,
+            minzoom: LAND_EDGE_MINZOOM,
+            paint: {
+              "line-color": landColor() as maplibregl.ExpressionSpecification,
+              "line-width": width,
+              "line-offset": offset,
+              "line-blur": blur,
+              "line-opacity": landEdgeOpacity(
+                opacity,
+              ) as maplibregl.ExpressionSpecification,
+            },
+          });
+        });
         return;
       }
 

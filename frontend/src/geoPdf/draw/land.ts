@@ -1,5 +1,7 @@
-// The Land overlay's tint on a print: the same classes and colours as the map.
+// The Land overlay on a print: the same classes, tint and borders as a map
+// close in.
 import {
+  LAND_EDGE_LINES,
   landClass,
   landTint,
   NSW_LAND,
@@ -19,6 +21,10 @@ export type LandTileInput = {
 /** One feature of one tile on the map image: its rings as x,y pairs. */
 export type LandShape = {
   color: string;
+  /** The class's solid colour, for its border. */
+  edge: string;
+  /** Map-image pixels to one pixel of a map tile drawn at its own zoom. */
+  pixel: number;
   rings: Float64Array[];
   /** The tile's square on the map image, in whole pixels. */
   clip: { left: number; top: number; right: number; bottom: number };
@@ -62,6 +68,9 @@ export function buildLand(
       const scaleY = (size / feature.extent) * transform.scaleY;
       shapes.push({
         color: landTint(kind),
+        edge: kind.colour,
+        // A map draws a 256-unit tile 512 pixels across.
+        pixel: transform.scaleX / 2,
         clip,
         rings: feature.loadGeometry().map((ring) => {
           const pts = new Float64Array(ring.length * 2);
@@ -77,14 +86,19 @@ export function buildLand(
   return shapes;
 }
 
-/** Tint the shapes whose tile reaches rows `top` to `bottom` of the map image. */
+/**
+ * Tint the shapes whose tile reaches rows `top` to `bottom` of the map image,
+ * and draw their borders. A canvas can't push a line inwards, so each is
+ * stroked twice as wide with the polygon as its clip, and it has no blur a
+ * print can trust in every browser, so the soft lines end in a hard edge.
+ */
 export function drawLand(
   ctx: Ctx,
   shapes: readonly LandShape[],
   top: number,
   bottom: number,
 ) {
-  for (const { color, rings, clip } of shapes) {
+  for (const { color, edge, pixel, rings, clip } of shapes) {
     if (clip.bottom < top || clip.top > bottom) continue;
     ctx.save();
     ctx.beginPath();
@@ -95,14 +109,25 @@ export function drawLand(
       clip.bottom - clip.top,
     );
     ctx.clip();
+    const outline = () => {
+      ctx.beginPath();
+      for (const pts of rings) {
+        ctx.moveTo(pts[0]!, pts[1]!);
+        for (let j = 2; j < pts.length; j += 2)
+          ctx.lineTo(pts[j]!, pts[j + 1]!);
+        ctx.closePath();
+      }
+    };
     ctx.fillStyle = color;
-    ctx.beginPath();
-    for (const pts of rings) {
-      ctx.moveTo(pts[0]!, pts[1]!);
-      for (let j = 2; j < pts.length; j += 2) ctx.lineTo(pts[j]!, pts[j + 1]!);
-      ctx.closePath();
-    }
+    outline();
     ctx.fill("evenodd");
+    ctx.clip("evenodd");
+    ctx.strokeStyle = edge;
+    for (const { width, offset, opacity } of LAND_EDGE_LINES) {
+      ctx.globalAlpha = opacity;
+      ctx.lineWidth = (offset * 2 + width) * pixel;
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }

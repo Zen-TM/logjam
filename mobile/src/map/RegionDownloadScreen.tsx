@@ -53,6 +53,7 @@ import {
   planRegionForBasemaps,
   type OfflineBasemapId,
   type RegionBbox,
+  MAP_TERRAIN,
 } from "@logjam/shared";
 
 import { config } from "../config";
@@ -169,7 +170,7 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_5M.id) return "Elevation data, NSW 5 m";
   if (basemapId === NSW_CONTOURS.id) return "Contours";
   if (basemapId === NSW_SLOPE.id) return "Slope";
-  if (basemapId === NSW_LAND.id) return "Land";
+  if (basemapId === NSW_LAND.id) return MAP_TERRAIN.copy.land;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
   return `${name ?? "Map"} region`;
 }

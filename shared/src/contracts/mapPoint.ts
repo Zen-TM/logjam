@@ -49,7 +49,7 @@ export const MAP_POINT = {
     distance: "Distance",
     bearing: "Bearing",
     slope: "Slope",
-    land: "Land",
+    land: "Land tenure",
     elevationChecking: "Checking…",
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.

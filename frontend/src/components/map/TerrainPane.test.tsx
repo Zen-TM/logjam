@@ -129,12 +129,11 @@ describe("the Terrain group on Logjam Web", () => {
     ).toBe(false);
   });
 
-  // Mutation: drop the subtitle, and a tint can be read as permission to enter.
-  it("offers Land off by default, and says what it does not show", () => {
+  // Mutation: start it on, and every map opens under a layer nobody asked for.
+  it("offers Land tenure off by default", () => {
     draw("protomaps");
-    const land = screen.getByRole("switch", { name: "Show land" });
+    const land = screen.getByRole("switch", { name: "Show land tenure" });
     expect(land.getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByText(copy.landHint)).toBeTruthy();
   });
 
   // Mutation: read `layers[key]` alone as `checked`, and a stored-on switch

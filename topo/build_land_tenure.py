@@ -30,6 +30,9 @@ SOURCE_LAYER = "land"
 ATTRIBUTE = "TenureClass"
 ZMIN = 8
 ZMAX = 13
+# `LAND_TILE_MARGIN_PX` in shared/src/nswLand.ts, at 256 units to a tile
+# (test_land_tenure.py).
+BUFFER = 5
 CREDIT = (
     "NSW Land Tenure, December 2024 v2 © State of New South Wales (Department of"
     " Primary Industries and Regional Development), CC BY 4.0"
@@ -73,6 +76,9 @@ def tippecanoe_command(fgb: Path, out: Path, tmp: Path) -> List[str]:
         *["-n", "NSW Land Tenure", "-N", CREDIT],
         # One polygon per run of a class, with shared edges kept shared.
         *["--coalesce", "--reorder", "--detect-shared-borders"],
+        # tippecanoe's default, said because a client's borders rely on it: past
+        # this a line pushed in from a tile's clipped edge shows in the tile.
+        f"--buffer={BUFFER}",
         # Every lot stays at z13, where the lines are about a metre.
         "--simplify-only-low-zooms",
         # A dropped polygon is land with no answer, not a thinner map.

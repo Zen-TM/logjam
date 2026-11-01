@@ -348,40 +348,34 @@ function TerrainTab({
         ];
       }),
     ),
-    // The help button sits beside the row, not inside it: the whole row is
-    // one switch to a screen reader, which would swallow a button within.
     land: (
-      <View key="land" style={styles.trailing}>
-        <SwitchRow
-          title={MAP_TERRAIN.copy.land}
-          description={land.reason ?? MAP_TERRAIN.copy.landHint}
-          disabled={land.disabled}
-          style={[styles.itemRow, styles.grow]}
-          checked={land.checked}
-          onChange={(on) => onChange("land", on)}
-        />
-        <IconButton
-          icon="help"
-          accessibilityLabel={MAP_TERRAIN.copy.landAbout}
-          onPress={() => onOpenLegend("land")}
-        />
-      </View>
+      <SwitchRow
+        key="land"
+        title={MAP_TERRAIN.copy.land}
+        description={land.reason}
+        disabled={land.disabled}
+        style={styles.itemRow}
+        checked={land.checked}
+        onChange={(on) => onChange("land", on)}
+        help={{
+          label: MAP_TERRAIN.copy.landAbout,
+          onPress: () => onOpenLegend("land"),
+        }}
+      />
     ),
     vegetation: hasVegetation ? (
-      <View key="vegetation" style={styles.trailing}>
-        <SwitchRow
-          title={MAP_TERRAIN.copy.vegetation}
-          description={MAP_TERRAIN.copy.vegetationHint}
-          style={[styles.itemRow, styles.grow]}
-          checked={layers.vegetation}
-          onChange={(on) => onChange("vegetation", on)}
-        />
-        <IconButton
-          icon="help"
-          accessibilityLabel={MAP_TERRAIN.copy.vegetationAbout}
-          onPress={() => onOpenLegend("vegetation")}
-        />
-      </View>
+      <SwitchRow
+        key="vegetation"
+        title={MAP_TERRAIN.copy.vegetation}
+        description={MAP_TERRAIN.copy.vegetationHint}
+        style={styles.itemRow}
+        checked={layers.vegetation}
+        onChange={(on) => onChange("vegetation", on)}
+        help={{
+          label: MAP_TERRAIN.copy.vegetationAbout,
+          onPress: () => onOpenLegend("vegetation"),
+        }}
+      />
     ) : null,
   } as Record<SectionKeysOn<typeof MAP_TERRAIN, "gps">, ReactNode>;
   return (

@@ -4,6 +4,7 @@ import { PbfWriter } from "pbf";
 import {
   computeTileToMapTransform,
   LAND_CLASSES,
+  LAND_EDGE_LINES,
   landTint,
   NSW_LAND,
   TILE_SIZE,
@@ -94,6 +95,7 @@ describe("drawLand", () => {
       lineTo: vi.fn(),
       closePath: vi.fn(),
       fill: vi.fn(),
+      stroke: vi.fn(),
       fillStyle: "",
     };
     const { top, bottom } = shapes[0]!.clip;
@@ -101,6 +103,33 @@ describe("drawLand", () => {
     expect(ctx.fill).not.toHaveBeenCalled();
     drawLand(ctx as unknown as Ctx, shapes, top, bottom);
     expect(ctx.fill).toHaveBeenCalledWith("evenodd");
-    expect(ctx.clip).toHaveBeenCalledOnce();
+    expect(ctx.clip).toHaveBeenCalledTimes(2);
+  });
+
+  // Mutation: stroke before clipping to the holding, and each border's colour
+  // spills into its neighbour's side, which a map's never does.
+  it("strokes every border line inside its own holding", () => {
+    const calls: string[] = [];
+    const log = (name: string) => () => calls.push(name);
+    const ctx = {
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      closePath: vi.fn(),
+      fill: vi.fn(),
+      clip: (rule?: string) => calls.push(`clip ${rule ?? "tile"}`),
+      stroke: log("stroke"),
+      fillStyle: "",
+    };
+    const shapes = buildLand([at(0, "Private")], t);
+    drawLand(ctx as unknown as Ctx, shapes, 0, 800);
+    expect(calls).toEqual([
+      "clip tile",
+      "clip evenodd",
+      ...LAND_EDGE_LINES.map(() => "stroke"),
+    ]);
   });
 });

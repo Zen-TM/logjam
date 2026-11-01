@@ -15,6 +15,7 @@ from build_land_tenure import (  # noqa: E402
     TENURE_CLASSES,
     ZMAX,
     ZMIN,
+    BUFFER,
     classes_in,
     flatgeobuf_command,
     tippecanoe_command,
@@ -55,6 +56,8 @@ class TestArchive(unittest.TestCase):
         self.assertIn(f'sourceLayer: "{SOURCE_LAYER}"', SHARED)
         self.assertIn(f'classProperty: "{ATTRIBUTE}"', SHARED)
         self.assertIn(f"minzoom: {ZMIN},", SHARED)
+        # A map draws a 256-unit tile 512 pixels across.
+        self.assertIn(f"LAND_TILE_MARGIN_PX = {BUFFER * 2};", SHARED)
         self.assertIn(f"maxzoom: {ZMAX},", SHARED)
         self.assertIn(f'"Land: {CREDIT}"', SHARED)
 

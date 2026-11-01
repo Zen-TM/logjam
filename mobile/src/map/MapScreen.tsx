@@ -50,6 +50,7 @@ import {
   type ViewStateChangeEvent,
   type ColorReliefLayerSpecification,
   type FillLayerSpecification,
+  type LineLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -86,7 +87,11 @@ import {
   type TrackPass,
   drawsNswContours,
   drawsNswHillshade,
-  landFillColor,
+  LAND_EDGE_LINES,
+  LAND_EDGE_MINZOOM,
+  landColor,
+  landEdgeOpacity,
+  landFillOpacity,
   landNameOf,
   NSW_LAND,
   slopeReliefColor,
@@ -373,6 +378,15 @@ import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
 /** The shared expression builder's untyped result, as MLRN types the paint. */
 type FillColor = NonNullable<
   NonNullable<FillLayerSpecification["paint"]>["fill-color"]
+>;
+type FillOpacity = NonNullable<
+  NonNullable<FillLayerSpecification["paint"]>["fill-opacity"]
+>;
+type LineColor = NonNullable<
+  NonNullable<LineLayerSpecification["paint"]>["line-color"]
+>;
+type LineOpacity = NonNullable<
+  NonNullable<LineLayerSpecification["paint"]>["line-opacity"]
 >;
 type ColorReliefColor = NonNullable<
   NonNullable<ColorReliefLayerSpecification["paint"]>["color-relief-color"]
@@ -4470,7 +4484,10 @@ export function MapScreen({
       topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
     ),
     slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
-    land: landLayerIds,
+    land: landResolved.flatMap((r) => [
+      `nsw-land-${r.key}`,
+      ...LAND_EDGE_LINES.map((_, i) => `nsw-land-edge-${i}-${r.key}`),
+    ]),
     hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
   };
   // The Terrain group goes in the basemap's bands: under the vector map's roads
@@ -4676,12 +4693,31 @@ export function MapScreen({
               minzoom={r.layerMinZoom ?? 0}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               paint={{
-                "fill-color": landFillColor() as FillColor,
+                "fill-color": landColor() as FillColor,
+                "fill-opacity": landFillOpacity() as FillOpacity,
                 // Tiles join in the middle of a holding, and an antialiased
                 // edge there would draw the tile grid across the tint.
                 "fill-antialias": false,
               }}
             />
+            {LAND_EDGE_LINES.map(({ width, offset, blur, opacity }, i) => (
+              <Layer
+                key={`nsw-land-edge-${i}-${r.key}`}
+                type="line"
+                id={`nsw-land-edge-${i}-${r.key}`}
+                source-layer={NSW_LAND.sourceLayer}
+                beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
+                minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
+                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                paint={{
+                  "line-color": landColor() as LineColor,
+                  "line-width": width,
+                  "line-offset": offset,
+                  "line-blur": blur,
+                  "line-opacity": landEdgeOpacity(opacity) as LineOpacity,
+                }}
+              />
+            ))}
           </ResolvedSource>
         ))}
         {slopeResolved.map((r) => (
