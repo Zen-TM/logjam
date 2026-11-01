@@ -214,6 +214,7 @@ export function PlanScreen({
   initialView,
   joined,
   onBack,
+  backLabel,
   onShowOnMap,
   onDownloadMap,
   onDrawRoute,
@@ -227,6 +228,7 @@ export function PlanScreen({
   /** Arrived by joining from an invite: say so once. */
   joined?: boolean;
   onBack: () => void;
+  backLabel: string;
   /** The map in plan mode, framed on the plan's items when it has any. */
   onShowOnMap: (
     planId: string,
@@ -263,7 +265,7 @@ export function PlanScreen({
   if (block)
     return (
       <View style={styles.screen}>
-        <Hero title={block.title} onBack={onBack} />
+        <Hero title={block.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={block.title} hint={block.hint} icon="plan" />
       </View>
     );
@@ -277,7 +279,7 @@ export function PlanScreen({
   if (shown.kind !== "page" || !cached || myId === undefined)
     return (
       <View style={styles.screen}>
-        <Hero eyebrow={TRIP_PLANS_LIST.title} title={name} onBack={onBack} />
+        <Hero title={name} onBack={onBack} backLabel={backLabel} />
         {shown.kind === "gone" ? (
           <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
         ) : shown.kind === "failed" ? (
@@ -302,6 +304,7 @@ export function PlanScreen({
       onView={setView}
       onRefresh={() => void refresh()}
       onBack={onBack}
+      backLabel={backLabel}
       onShowOnMap={() => onShowOnMap(planId, planBbox(cached.plan))}
       onDownloadMap={onDownloadMap}
       onDrawRoute={onDrawRoute}
@@ -323,6 +326,7 @@ function PlanPage({
   onView,
   onRefresh,
   onBack,
+  backLabel,
   onShowOnMap,
   onDownloadMap,
   onDrawRoute,
@@ -340,6 +344,7 @@ function PlanPage({
   onView: (view: TripPlanPageView) => void;
   onRefresh: () => void;
   onBack: () => void;
+  backLabel: string;
   onShowOnMap: () => void;
   onDownloadMap: (bbox: [number, number, number, number]) => void;
   onDrawRoute: (planId: string) => void;
@@ -414,10 +419,10 @@ function PlanPage({
   > = {
     hero: (
       <Hero
-        eyebrow={TRIP_PLANS_LIST.title}
         title={plan.name}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="overflow"
@@ -426,30 +431,18 @@ function PlanPage({
           />
         }
       >
-        <Text style={styles.age}>
-          {updatedAgo(Date.parse(cached.fetchedAt), now)}
-        </Text>
-        {changed || !online ? (
-          <View style={styles.pills}>
+        <View style={styles.pills}>
+          <Text style={styles.age}>
+            {updatedAgo(Date.parse(cached.fetchedAt), now)}
+          </Text>
+          <PlanDownload cached={cached} />
+          {changed || !online ? (
             <SyncStatusPills online={online} pendingCount={0} />
-            {changed ? (
-              <StatusPill label={TRIP_PLAN_OFFLINE.changed} tone="warning" />
-            ) : null}
-            {changed ? (
-              <Button
-                label={TRIP_PLAN_OFFLINE.refresh}
-                icon="refresh"
-                compact
-                variant="outlineAccent"
-                disabled={!online}
-                disabledReason={unavailableReasonText("needs-connection")}
-                loading={refreshing}
-                onPress={onRefresh}
-              />
-            ) : null}
-          </View>
-        ) : null}
-        <PlanDownload cached={cached} now={now} />
+          ) : null}
+          {changed ? (
+            <StatusPill label={TRIP_PLAN_OFFLINE.changed} tone="warning" />
+          ) : null}
+        </View>
       </Hero>
     ),
     notices:
@@ -500,11 +493,6 @@ function PlanPage({
           )}
         </View>
       ) : null,
-    dates: (
-      <Text style={styles.dates}>
-        {tripPlanDatesLine(plan, plan.myRole, tripTypeLabel)}
-      </Text>
-    ),
     views: (
       <View style={styles.rail}>
         <ChipRail scroll options={views} value={view} onChange={onView} />
@@ -514,6 +502,7 @@ function PlanPage({
       view === "writeUp" ? (
         <WriteUp
           plan={plan}
+          myRole={plan.myRole}
           canWrite={adds.has("section")}
           online={online}
           onSection={setSectionSheet}
@@ -572,7 +561,6 @@ function PlanPage({
         <PeopleView
           plan={plan}
           myId={myId}
-          onSeeAnswers={(formId) => setFormSheet({ formId, mode: "read" })}
           canInvite={adds.has("invite")}
           online={online}
           onInfo={notify}
@@ -701,11 +689,13 @@ const PINNED: readonly SectionKeysOn<typeof TRIP_PLAN_PAGE, "gps">[] = ["hero"];
 
 function WriteUp({
   plan,
+  myRole,
   canWrite,
   online,
   onSection,
 }: {
   plan: TripPlanView;
+  myRole: TripPlanView["myRole"];
   /** The caller may add, edit, move and delete sections (and it's live). */
   canWrite: boolean;
   online: boolean;
@@ -730,15 +720,24 @@ function WriteUp({
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
     </ListEnd>
   ) : null;
+  // Dates, trip types and the caller's role: out of the header, so the body
+  // has the screen.
+  const dates = (
+    <Text style={styles.dates}>
+      {tripPlanDatesLine(plan, myRole, tripTypeLabel)}
+    </Text>
+  );
   if (plan.sections.length === 0)
     return (
       <>
+        {dates}
         <EmptyState icon="notes" title={copy.writeUpEmpty} />
         {add}
       </>
     );
   return (
     <>
+      {dates}
       {plan.sections.map((section) => (
         <View key={section.id} style={styles.section}>
           <View style={styles.sectionHead}>
@@ -802,7 +801,7 @@ function Items({
         onPress={() => setAdding(true)}
       />
       <Button
-        label={copy.drawRoute}
+        label={planAddVerbLabel("route")}
         icon="route"
         variant="outlineAccent"
         disabled={!online}
@@ -847,6 +846,9 @@ function Items({
   const onPhone = usePlanFilesOnPhone(plan.id, files);
   const failed = (err: unknown) =>
     onInfo(messageFromError(err, TRIP_PLAN_PAGE.copy.loadFailed));
+  // Your own items need no byline.
+  const addedBy = (item: TripPlanItem) =>
+    item.addedBy?.id === me ? undefined : tripPlanAddedByLine(item.addedBy);
   // Offline, what can't open says why under its name.
   const subtitle = (addedBy: string | undefined, opens: boolean) =>
     opens || online ? addedBy : [addedBy, OFFLINE].filter(Boolean).join(" · ");
@@ -871,7 +873,7 @@ function Items({
           icon="place"
           hue={theme.accent}
           title={each.name}
-          subtitle={tripPlanAddedByLine(each.addedBy)}
+          subtitle={addedBy(each)}
           right={menu(each)}
           onPress={() => setPlaceId(each.id)}
         />
@@ -893,7 +895,7 @@ function Items({
           hue={assetHue.route}
           title={route.name}
           // Its actions all need a connection.
-          subtitle={subtitle(tripPlanAddedByLine(route.addedBy), false)}
+          subtitle={subtitle(addedBy(route), false)}
           right={menu(route)}
         />
       ))}
@@ -913,7 +915,7 @@ function Items({
             title={mediaDisplayName(file.item)}
             right={menu(file)}
             subtitle={subtitle(
-              tripPlanAddedByLine(file.addedBy),
+              addedBy(file),
               // Opens only as a photo or video; a GPX/KML row's one action
               // is Save a copy, which needs a connection.
               !!shown?.length,
@@ -1093,13 +1095,10 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(1),
   },
-  notice: { paddingHorizontal: spacing(2), paddingTop: spacing(1) },
-  dates: {
-    ...muted(theme, textRole.detail),
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(1),
-  },
-  rail: { paddingHorizontal: spacing(2), paddingVertical: spacing(1) },
+  // The scroll content already pads the sides; padding here doubled them.
+  notice: { paddingTop: spacing(1) },
+  dates: { ...muted(theme, textRole.detail), paddingTop: spacing(1) },
+  rail: { paddingVertical: spacing(1) },
   body: { flex: 1 },
   bodyContent: {
     paddingHorizontal: spacing(2),

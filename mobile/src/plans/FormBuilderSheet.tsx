@@ -74,6 +74,7 @@ import {
 } from "../ui";
 import { createForm, getLeaderForms, patchForm } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
+import { formWidenLocked } from "./planViews";
 
 const copy = TRIP_PLAN_FORMS.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
@@ -180,8 +181,7 @@ export function FormBuilderSheet({
   };
 
   // The API refuses widening a form others answered for leaders only.
-  const widenLocked =
-    form != null && form.visibleTo === "leaders" && form.answers.length > 0;
+  const widenLocked = formWidenLocked(form);
 
   const set = (next: Partial<TripPlanFormValues>) => {
     setValues((was) => (was ? { ...was, ...next } : was));

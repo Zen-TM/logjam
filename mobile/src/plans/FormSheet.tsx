@@ -23,7 +23,7 @@ import {
   planFormDeleteConfirm,
   planVerbsFor,
   PLAN_FORM_VERBS,
-  tripPlanAnswerRows,
+  tripPlanAnswerTable,
   tripPlanAnswerText,
   tripPlanFormTally,
   tripPlanFormTallyLines,
@@ -50,6 +50,7 @@ import {
   Row,
   SectionHeader,
 } from "../ui";
+import { AnswersTable } from "./AnswersTable";
 import { PlanFormFields } from "./PlanFormFields";
 import { deleteForm, putAnswer } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
@@ -226,13 +227,13 @@ export function FormSheet({
   }
 
   const sees = form ? tripPlanSeesAnswers(plan.myRole, form.visibleTo) : false;
-  const rows = form ? tripPlanAnswerRows(form, plan.members) : null;
+  const table = form ? tripPlanAnswerTable(form, plan.members) : null;
   const tally = form && me ? tripPlanFormTally(plan, form, me) : null;
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_FORMS, "gps">,
     ReactNode
   > | null =
-    form && rows
+    form && table
       ? {
           // The title is the sheet's; its ⋯ sits beside the visibility line.
           hero: null,
@@ -289,30 +290,17 @@ export function FormSheet({
           // a leader those asking to join, marked so (`tripPlanAnswerRows`).
           list: sees ? (
             <View style={styles.block}>
-              <SectionHeader title={copy.answers} count={rows.going.length} />
-              {rows.going.map(({ user, answer }) => (
-                <View key={user.id} style={styles.person}>
-                  <Text style={styles.username}>{user.username}</Text>
-                  {answer ? (
-                    <AttributeTable
-                      rows={answerRows(form.questions, answer.answers)}
-                    />
-                  ) : (
-                    <Text style={styles.muted}>{copy.noAnswerYet}</Text>
-                  )}
-                </View>
-              ))}
-              {rows.asking.length > 0 ? (
-                <SectionHeader title={copy.asking} count={rows.asking.length} />
-              ) : null}
-              {rows.asking.map(({ user, answer }) => (
-                <View key={user.id} style={styles.person}>
-                  <Text style={styles.username}>{user.username}</Text>
-                  <AttributeTable
-                    rows={answerRows(form.questions, answer.answers)}
+              <SectionHeader title={copy.answers} count={table.going.length} />
+              <AnswersTable columns={table.columns} rows={table.going} />
+              {table.asking.length > 0 ? (
+                <>
+                  <SectionHeader
+                    title={copy.asking}
+                    count={table.asking.length}
                   />
-                </View>
-              ))}
+                  <AnswersTable columns={table.columns} rows={table.asking} />
+                </>
+              ) : null}
             </View>
           ) : null,
         }
@@ -396,8 +384,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   block: { gap: spacing(1) },
   visibility: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
-  person: { gap: spacing(0.5), paddingTop: spacing(1) },
-  username: { ...textRole.rowTitle, color: theme.text },
   muted: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   footer: { gap: spacing(1) },

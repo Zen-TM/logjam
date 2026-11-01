@@ -1,6 +1,6 @@
 // Download for the trip, in a plan's hero: priced before it runs ("14 files,
 // 230 MB"), a progress row while it runs (mobile/DESIGN.md §4: long work is a
-// progress card), and Downloaded, with when, once every file the plan points
+// progress card), and Downloaded, beside "Updated …", once every file the plan points
 // at is on the phone. A plan that gained files since keeps its stamp but
 // offers the rest. The run is `planDownloads.ts`'s, so it outlives this row.
 // Once downloaded, the map for the plan's area is offered: the region
@@ -14,8 +14,6 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { relativeTime } from "../screens/syncHealth";
-import { spacing } from "../theme";
 import { Row, StatusPill } from "../ui";
 import { startPlanDownload, usePlanDownload } from "./planDownloads";
 import {
@@ -48,14 +46,7 @@ function useMissingFiles(plan: CachedPlan["plan"], running: boolean) {
 /** The state of the download, in the plan's hero: the progress row while it
  *  runs, and Downloaded with when. Starting one is `PlanDownloadRows`, on the
  *  plan's ⋯. */
-export function PlanDownload({
-  cached,
-  now,
-}: {
-  cached: CachedPlan;
-  /** For "Downloaded 3 days ago". */
-  now: number;
-}) {
+export function PlanDownload({ cached }: { cached: CachedPlan }) {
   const { plan } = cached;
   const progress = usePlanDownload(plan.id);
   const missing = useMissingFiles(plan, progress !== null);
@@ -63,20 +54,25 @@ export function PlanDownload({
 
   if (progress)
     return (
-      <Row
-        icon="saveOffline"
-        title={TRIP_PLAN_OFFLINE.downloading}
-        subtitle={`${formatBytes(progress.done)} of ${formatBytes(progress.total)}. ${TRIP_PLAN_OFFLINE.downloadKeepOpen}`}
-        progress={progress.total > 0 ? progress.done / progress.total : 0}
-      />
+      // Its own line in the hero's wrapping row, beside nothing.
+      <View style={{ width: "100%" }}>
+        <Row
+          icon="saveOffline"
+          title={TRIP_PLAN_OFFLINE.downloading}
+          subtitle={`${formatBytes(progress.done)} of ${formatBytes(progress.total)}. ${TRIP_PLAN_OFFLINE.downloadKeepOpen}`}
+          progress={progress.total > 0 ? progress.done / progress.total : 0}
+        />
+      </View>
     );
   if (!missing || !cached.downloadedAt || missing.length > 0) return null;
   const bbox = planBbox(plan);
   const mapSaved = bbox !== null && planMapSaved(bbox, artifacts);
   return (
-    <View style={{ flexDirection: "row", gap: spacing(1) }}>
+    // Beside "Updated …" in the hero (a downloaded plan keeps itself current,
+    // so the stamp's own age says nothing more).
+    <>
       <StatusPill
-        label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
+        label={TRIP_PLAN_OFFLINE.downloaded}
         tone="muted"
         icon="saveOffline"
       />
@@ -87,7 +83,7 @@ export function PlanDownload({
           icon="map"
         />
       ) : null}
-    </View>
+    </>
   );
 }
 

@@ -133,6 +133,7 @@ function routeBbox(
 export function PlaceDetailScreen({
   placeId,
   onBack,
+  backLabel,
   onOpenTrip,
   onShowOnMap,
   onFocusOnMap,
@@ -142,6 +143,7 @@ export function PlaceDetailScreen({
 }: {
   placeId: string;
   onBack: () => void;
+  backLabel: string;
   /** Opens one of the viewer's own logged trips at this place. */
   onOpenTrip: (trip: MirrorTrip) => void;
   onShowOnMap: (place: MirrorPlace) => void;
@@ -676,10 +678,10 @@ export function PlaceDetailScreen({
   return (
     <View style={styles.screen}>
       <Hero
-        eyebrow="Place"
         title={place.name}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="overflow"

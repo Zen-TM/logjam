@@ -131,11 +131,13 @@ export function FriendSharesScreen({
   friendshipId,
   username,
   onBack,
+  backLabel,
   onOpenPlace,
 }: {
   friendshipId: string;
   username: string;
   onBack: () => void;
+  backLabel: string;
   /** Open a place's detail page. Pushed in the caller's stack, so Back returns here. */
   onOpenPlace: (placeId: string) => void;
 }) {
@@ -439,7 +441,7 @@ export function FriendSharesScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow="Sharing" title={username} onBack={onBack} />
+        <Hero title={username} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -469,9 +471,9 @@ export function FriendSharesScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow="Sharing"
         title={username}
         onBack={onBack}
+        backLabel={backLabel}
         value={String(theirCount)}
         valueSuffix={
           theirCount === 1 ? "item they can see" : "items they can see"

@@ -30,7 +30,9 @@ describe("registerShellTriggers", () => {
     }
   });
 
-  // Red if a guest arms a trigger that could only 401 (ADR 0007).
+  // Red if a guest arms a trigger that could only 401 (ADR 0007). Mutation:
+  // drop `plansPoll` from the linked list, and plans never refresh in the
+  // foreground (or move it outside the guest check, and a guest polls /plans).
   it("arms sync and the auto-download only once linked", () => {
     const guest = registrars();
     registerShellTriggers("guest", guest.fns);

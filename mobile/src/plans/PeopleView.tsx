@@ -27,7 +27,6 @@ import {
   type PlanMemberVerbId,
   type TripPlanMemberView,
   type TripPlanView,
-  answeredForm,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -53,7 +52,6 @@ export function PeopleView({
   myId,
   canInvite,
   online,
-  onSeeAnswers,
   onInfo,
   onError,
 }: {
@@ -63,8 +61,6 @@ export function PeopleView({
   /** Invite people is the caller's to run (a leader, the plan not archived). */
   canInvite: boolean;
   online: boolean;
-  /** A request's answers: the form sheet opens on the form they answered. */
-  onSeeAnswers: (formId: string) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -212,17 +208,16 @@ export function PeopleView({
           icon="account"
           title={member.user.username}
           subtitle={online ? undefined : OFFLINE}
-          footer={
-            <View style={styles.actions}>
+          right={
+            <View style={styles.right}>
               {/* An archived plan takes no one in; turning down still works. */}
               {archived ? null : (
-                <Button
-                  label={copy.letIn}
+                <IconButton
                   icon="accept"
-                  compact
-                  loading={busyId === member.user.id}
+                  filled
+                  color={theme.accent}
+                  accessibilityLabel={copy.letIn}
                   disabled={!online || busyId === member.user.id}
-                  disabledReason={OFFLINE}
                   onPress={() =>
                     write(
                       member,
@@ -233,25 +228,12 @@ export function PeopleView({
                   }
                 />
               )}
-              <Button
-                label={copy.turnDown}
+              <IconButton
                 icon="ignore"
-                compact
-                variant="ghost"
+                accessibilityLabel={copy.turnDown}
                 disabled={!online || busyId === member.user.id}
-                disabledReason={OFFLINE}
                 onPress={() => turnDown(member)}
               />
-              {answeredForm(plan, member.user.id) ? (
-                <Button
-                  label={copy.seeAnswers}
-                  compact
-                  variant="ghost"
-                  onPress={() =>
-                    onSeeAnswers(answeredForm(plan, member.user.id)!)
-                  }
-                />
-              ) : null}
             </View>
           }
         />
@@ -380,7 +362,6 @@ export function PeopleView({
 
 const useStyles = makeStyles((theme, textRole) => ({
   right: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  actions: { flexDirection: "row", gap: spacing(1) },
   verbs: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
   note: { ...muted(theme, textRole.detail), textAlign: "center" },

@@ -359,6 +359,75 @@ describe("Download for the trip", () => {
   });
 });
 
+describe("a downloaded plan keeps itself current", () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const downloaded = async () => {
+    api.getPlan.mockResolvedValue(view("a"));
+    await downloadPlan("a", () => {});
+    files.downloadPlanFiles.mockClear();
+    api.getPlan.mockClear();
+  };
+
+  // Mutation: drop the planChanged loop in pollPlans. A downloaded plan would
+  // wait for the user to open it.
+  it("refetches the plan and its files when the poll says it moved", async () => {
+    await downloaded();
+    api.getPlan.mockResolvedValue(view("a", "2026-10-05T00:00:00.000Z"));
+    api.getPlans.mockResolvedValue({
+      plans: [summary("a", "active", "2026-10-05T00:00:00.000Z")],
+    });
+    await pollPlans();
+    await settle();
+    expect(api.getPlan).toHaveBeenCalledTimes(1);
+    expect(files.downloadPlanFiles).toHaveBeenCalledTimes(1);
+    expect((await readCachedPlan("a"))?.plan.updatedAt).toBe(
+      "2026-10-05T00:00:00.000Z",
+    );
+  });
+
+  // Mutation: drop the downloadedAt test. Every plan opened once would pull
+  // its photos onto the phone.
+  it("leaves a plan that was never downloaded alone", async () => {
+    api.getPlan.mockResolvedValue(view("b"));
+    await fetchPlan("b");
+    api.getPlan.mockClear();
+    api.getPlans.mockResolvedValue({
+      plans: [summary("b", "active", "2026-10-05T00:00:00.000Z")],
+    });
+    await pollPlans();
+    await settle();
+    expect(api.getPlan).not.toHaveBeenCalled();
+    expect(files.downloadPlanFiles).not.toHaveBeenCalled();
+  });
+
+  // Mutation: delete the cached row before the GET. A failed background
+  // refresh would lose the copy the user can read in a canyon.
+  it("keeps the old copy, silently, when the fetch fails", async () => {
+    await downloaded();
+    const before = await readCachedPlan("a");
+    api.getPlan.mockRejectedValue(new Error("no signal"));
+    api.getPlans.mockResolvedValue({
+      plans: [summary("a", "active", "2026-10-05T00:00:00.000Z")],
+    });
+    await expect(pollPlans()).resolves.toBeDefined();
+    await settle();
+    expect(await readCachedPlan("a")).toEqual(before);
+  });
+
+  // Mutation: stamp before the files land. A refresh that dies on a photo
+  // would say Downloaded with the photo missing.
+  it("keeps the old stamp when the files fail", async () => {
+    await downloaded();
+    const stamp = (await readCachedPlan("a"))?.downloadedAt;
+    files.downloadPlanFiles.mockRejectedValueOnce(new Error("signal"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    api.getPlan.mockResolvedValue(view("a", "2026-10-05T00:00:00.000Z"));
+    await fetchPlan("a");
+    await settle();
+    expect((await readCachedPlan("a"))?.downloadedAt).toBe(stamp);
+  });
+});
+
 describe("planMovedOn", () => {
   const stamps = new Map([
     ["a", { updatedAt: "2026-10-01T00:00:00.000Z", downloadedAt: null }],

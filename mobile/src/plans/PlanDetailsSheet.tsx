@@ -222,6 +222,7 @@ export function PlanDetailsSheet({
         <FormStack>
           <TextField
             label={copy.name}
+            placeholder={copy.namePlaceholder}
             value={values.name}
             maxLength={TRIP_PLAN_NAME_MAX_LENGTH}
             autoCapitalize="sentences"

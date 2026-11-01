@@ -185,8 +185,18 @@ export async function pollPlans(): Promise<PlansList> {
     }
   });
   // A dropped plan's files go with it.
-  await sweepPlanFolders(new Set((await readCachedPlanStamps()).keys()));
+  const stamps = await readCachedPlanStamps();
+  await sweepPlanFolders(new Set(stamps.keys()));
   notifyMirrorChanged();
+  // The poll is how Logjam GPS learns a downloaded plan changed.
+  if (began === epoch)
+    for (const summary of plans) {
+      const stamp = stamps.get(summary.id);
+      if (stamp?.downloadedAt && planChanged(summary, stamp))
+        void fetchPlan(summary.id).catch(() => {
+          // Offline wording is for the user who opens it; the old copy stays.
+        });
+    }
   return { plans, fetchedAt };
 }
 
@@ -228,7 +238,10 @@ export async function planForUrls(planId: string): Promise<TripPlanView> {
  * GET /plans/:id into the cache, keeping when it was downloaded. A 404 means
  * the caller can no longer see it, so the cached copy goes too.
  */
-export async function fetchPlan(planId: string): Promise<CachedPlan> {
+export async function fetchPlan(
+  planId: string,
+  keepDownloaded = true,
+): Promise<CachedPlan> {
   const began = epoch;
   let plan: TripPlanView;
   try {
@@ -268,7 +281,33 @@ export async function fetchPlan(planId: string): Promise<CachedPlan> {
   // An item gone from the plan takes its downloaded file with it.
   if (began === epoch)
     void prunePlanFiles(planId, planFiles(plan)).catch(console.error);
+  // A downloaded plan keeps itself current: whatever fetched it (the poll
+  // saying it moved, a push, opening it), its new files follow. Quiet; the
+  // map area is the user's choice and is never re-fetched.
+  if (keepDownloaded && downloadedAt && began === epoch)
+    void keepDownloadCurrent(planId, plan, began);
   return { plan, fetchedAt, downloadedAt };
+}
+
+const keeping = new Set<string>();
+
+/** The files a downloaded plan gained, fetched without a word. A failure
+ *  leaves the stamp and the files as they were: the page then offers the rest
+ *  from its ⋯, and says why only if the user opens one. Guard: plansCache.test.ts. */
+async function keepDownloadCurrent(
+  planId: string,
+  plan: TripPlanView,
+  began: number,
+): Promise<void> {
+  if (keeping.has(planId)) return;
+  keeping.add(planId);
+  try {
+    await downloadFiles(planId, plan, began, () => {});
+  } catch (err) {
+    console.error(err);
+  } finally {
+    keeping.delete(planId);
+  }
 }
 
 /** Refetch a plan only if this phone already holds it: a push about it. */
@@ -339,8 +378,18 @@ async function runDownload(
 ): Promise<boolean> {
   const began = epoch;
   const alive = () => began === epoch;
-  const { plan } = await fetchPlan(planId);
+  const { plan } = await fetchPlan(planId, false);
   if (!alive()) return false;
+  return downloadFiles(planId, plan, began, onProgress);
+}
+
+async function downloadFiles(
+  planId: string,
+  plan: TripPlanView,
+  began: number,
+  onProgress: (doneBytes: number, totalBytes: number) => void,
+): Promise<boolean> {
+  const alive = () => began === epoch;
   const missing = await missingPlanFiles(planId, planFiles(plan));
   const total = missing.reduce((sum, file) => sum + file.sizeBytes, 0);
   // ADR 0005: nothing large is written without asking whether it fits.

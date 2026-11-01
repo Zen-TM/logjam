@@ -237,6 +237,7 @@ const EMPTY_BATCH_KEYS: ReadonlySet<string> = new Set<string>();
 
 export function NotificationsScreen({
   onBack,
+  backLabel,
   onUnreadChanged,
   onOpenPlace,
   onOpenPlan,
@@ -245,6 +246,7 @@ export function NotificationsScreen({
   openAnnouncement,
 }: {
   onBack: () => void;
+  backLabel: string;
   onUnreadChanged?: () => void;
   onOpenPlace: (placeId: string) => void;
   /** A plan notification: its plan, as Logjam Web's inbox opens it. */
@@ -996,7 +998,7 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow={INBOX.title} title={INBOX.title} onBack={onBack} />
+        <Hero title={INBOX.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -1012,7 +1014,6 @@ export function NotificationsScreen({
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
     hero: () => (
       <Hero
-        eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
         // that did (shared/DESIGN.md §2), rather than a boolean marketing line
         // that says the same words for one notification and for forty. The
@@ -1020,6 +1021,7 @@ export function NotificationsScreen({
         // each other.
         title={inboxHeroTitle(unreadCount, notifications.length)}
         onBack={onBack}
+        backLabel={backLabel}
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={

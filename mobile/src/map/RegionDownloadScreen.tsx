@@ -204,6 +204,7 @@ const PANEL_HEIGHT = 250;
 
 export function RegionDownloadScreen({
   onBack,
+  backLabel,
   onStarted,
   initialBasemapId,
   initialCenter,
@@ -211,6 +212,7 @@ export function RegionDownloadScreen({
   initialBounds,
 }: {
   onBack: () => void;
+  backLabel: string;
   /**
    * The downloads are already enqueued and running by the time this fires: it
    * is called once the user has named the area (or dismissed the prompt), and
@@ -595,7 +597,7 @@ export function RegionDownloadScreen({
       <View style={styles.hero}>
         <Hero
           onBack={onBack}
-          eyebrow="Offline maps"
+          backLabel={backLabel}
           title="Save maps offline"
           // TWO stats, equal weight, one line — the two things the decision is
           // actually made on. Showing additional stats would overflow the

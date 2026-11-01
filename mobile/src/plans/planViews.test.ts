@@ -1,7 +1,7 @@
 import type { TripPlanSummary } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
-import { planPageView, plansListView } from "./planViews";
+import { formWidenLocked, planPageView, plansListView } from "./planViews";
 
 const list = [{ id: "a" }] as TripPlanSummary[];
 
@@ -40,7 +40,9 @@ describe("plansListView", () => {
     ).toEqual({ kind: "list", plans: [] });
   });
 
-  // Mutation: drop the `online` check. Try again can't help offline.
+  // Mutation: drop the `settled` check, and a first poll still in flight reads
+  // "open Plans with signal"; or drop the `failure` branch, and a failed one
+  // never offers Try again.
   it("fails with Try again only online", () => {
     expect(
       plansListView({
@@ -99,5 +101,18 @@ describe("planPageView", () => {
       kind: "failed",
       message: "Couldn't load",
     });
+  });
+});
+
+describe("formWidenLocked", () => {
+  // Mutation: drop the answers check, and a leaders-only form nobody answered
+  // can no longer be widened; drop the leaders check, and a members form locks.
+  it("locks only a leaders-only form that has answers", () => {
+    expect(formWidenLocked({ visibleTo: "leaders", answers: [{}] })).toBe(true);
+    expect(formWidenLocked({ visibleTo: "leaders", answers: [] })).toBe(false);
+    expect(formWidenLocked({ visibleTo: "members", answers: [{}] })).toBe(
+      false,
+    );
+    expect(formWidenLocked(null)).toBe(false);
   });
 });

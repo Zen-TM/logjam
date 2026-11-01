@@ -14,5 +14,5 @@ export function ListEnd({ children }: { children: ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  end: { alignItems: "center", paddingVertical: spacing(2) },
+  end: { alignItems: "center", gap: spacing(1), paddingVertical: spacing(2) },
 });

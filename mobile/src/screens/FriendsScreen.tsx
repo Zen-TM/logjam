@@ -121,10 +121,12 @@ type FriendItem =
 
 export function FriendsScreen({
   onBack,
+  backLabel,
   onOpenShares,
   onOpenLeaderboard,
 }: {
   onBack: () => void;
+  backLabel: string;
   /** Push the leaderboard, for someone who has joined it. */
   onOpenLeaderboard: () => void;
   /**
@@ -316,7 +318,7 @@ export function FriendsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow={FRIENDS.title} title={FRIENDS.title} onBack={onBack} />
+        <Hero title={FRIENDS.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -352,9 +354,9 @@ export function FriendsScreen({
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
       <Hero
-        eyebrow={FRIENDS.title}
         title={friendsHeroTitle(requests.length, friends.length)}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <View style={styles.heroActions}>
             {/* Nothing at all until the user joins: Settings is the only way in. */}

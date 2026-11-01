@@ -76,7 +76,8 @@ describe("capabilityStatus", () => {
   });
 
   // Plans read from the plans cache (src/plans/plansCache.ts), so a plan
-  // opened before still reads in a canyon. Red if `plans` needs a connection.
+  // opened before still reads in a canyon. Mutation: set `plans: true` in
+  // NEEDS_CONNECTION.
   it("keeps plans available for a linked user offline", () => {
     expect(capabilityStatus("plans", "linked", false)).toEqual({
       status: "available",

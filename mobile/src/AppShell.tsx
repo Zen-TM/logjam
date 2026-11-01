@@ -96,7 +96,7 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { Icon, LoadingState } from "./ui";
+import { backLabelOf, Icon, LoadingState } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -181,7 +181,7 @@ type MapStackParams = {
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
-  // A plan's Download the map for this area too passes its items' bounds.
+  // A plan's Download the map for this area passes its items' bounds.
   MapRegionDownload:
     | {
         basemapId: BasemapId;
@@ -438,6 +438,7 @@ function MapStackNav() {
         {({ navigation, route }) => (
           <RegionDownloadScreen
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             // The download is already running by now: it reports as a card in
             // the Saved tab's Regions filter, which is also where it lives
             // once it lands.
@@ -467,6 +468,7 @@ function MapStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) =>
               navigation.navigate("MapTripDetail", { trip })
             }
@@ -501,6 +503,7 @@ function MapStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("MapPlaceDetail", { placeId, name })
             }
@@ -700,6 +703,7 @@ function PlacesStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) =>
               navigation.navigate("PlaceTripDetail", { trip })
             }
@@ -741,6 +745,7 @@ function PlacesStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("PlaceDetail", { placeId, name })
             }
@@ -776,6 +781,7 @@ function TripsStackNav() {
           <StatsScreen
             activity={route.params?.activity ?? null}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             // Pushed rather than swapped in place, so Back returns to the whole
             // picture the user drilled down from.
             onOpenActivity={(activity) =>
@@ -789,6 +795,7 @@ function TripsStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("TripPlaceDetail", { placeId, name })
             }
@@ -809,6 +816,7 @@ function TripsStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })}
             onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
@@ -1200,6 +1208,10 @@ export function AppShell({
                       <NotificationsScreen
                         openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is
                         // about; the name is unknown here, so the detail screen
@@ -1243,6 +1255,10 @@ export function AppShell({
                       <PlaceDetailScreen
                         placeId={route.params.placeId}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenTrip={(trip) =>
                           navigation.navigate("MoreTripDetail", { trip })
                         }
@@ -1287,6 +1303,10 @@ export function AppShell({
                       <TripDetailScreen
                         trip={route.params.trip}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenPlace={(placeId) =>
                           navigation.navigate("MorePlaceDetail", { placeId })
                         }
@@ -1307,6 +1327,10 @@ export function AppShell({
                       <PlansScreen
                         message={route.params?.message}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenPlan={(plan) =>
                           navigation.navigate("Plan", {
                             planId: plan.id,
@@ -1331,6 +1355,10 @@ export function AppShell({
                           planId={route.params.planId}
                           name={route.params.name}
                           onBack={() => navigation.goBack()}
+                          backLabel={backLabelOf(
+                            navigation.getState(),
+                            route.key,
+                          )}
                           onJoined={() =>
                             navigation.setParams({
                               invited: false,
@@ -1350,6 +1378,10 @@ export function AppShell({
                           initialView={route.params.view}
                           joined={route.params.joined}
                           onBack={() => navigation.goBack()}
+                          backLabel={backLabelOf(
+                            navigation.getState(),
+                            route.key,
+                          )}
                           onShowOnMap={(planId, bbox) =>
                             navigation.getParent()?.navigate("Map", {
                               screen: "MapView",
@@ -1392,9 +1424,13 @@ export function AppShell({
                     name="Account"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <AccountScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onSignOut={onSignOut}
                         onOpenFriends={() => navigation.navigate("Friends")}
                       />
@@ -1404,9 +1440,13 @@ export function AppShell({
                     name="Friends"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <FriendsScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenShares={(friend) =>
                           navigation.navigate("FriendShares", friend)
                         }
@@ -1420,8 +1460,14 @@ export function AppShell({
                     name="Leaderboard"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <LeaderboardScreen onBack={() => navigation.goBack()} />
+                    {({ navigation, route }) => (
+                      <LeaderboardScreen
+                        onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
+                      />
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
@@ -1433,6 +1479,10 @@ export function AppShell({
                         friendshipId={route.params.friendshipId}
                         username={route.params.username}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         // Inside the More stack, like the inbox's own place route,
                         // so Back returns to the sharing list.
                         onOpenPlace={(placeId) =>
@@ -1445,9 +1495,13 @@ export function AppShell({
                     name="SyncIssues"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <SyncIssuesScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         // A stuck change is a way IN to the thing it failed on: the
                         // permanent-failure sheet offers "open it and change it a
                         // way that works". Pushed inside the More stack, like the

@@ -107,10 +107,12 @@ const issueKey = (item: Issue) => item.key;
 
 export function SyncIssuesScreen({
   onBack,
+  backLabel,
   onOpenPlace,
   onOpenTrip,
 }: {
   onBack: () => void;
+  backLabel: string;
   /** The "open it and make the change a way that works" a permanent rejection
    *  needs — pushed inside the More stack, so Back comes back here. */
   onOpenPlace: (placeId: string) => void;
@@ -528,9 +530,9 @@ export function SyncIssuesScreen({
   return (
     <View style={styles.root}>
       <Hero
-        eyebrow="Account sync issues"
         title={syncIssuesTitle(total)}
         onBack={onBack}
+        backLabel={backLabel}
         value={total === 1 ? "1 change" : `${total} changes`}
       />
 

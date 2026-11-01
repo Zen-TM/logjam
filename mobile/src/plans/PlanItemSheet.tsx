@@ -38,6 +38,7 @@ import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
+  DatePicker,
   ErrorBanner,
   FormStack,
   Row,
@@ -88,6 +89,9 @@ export function PlanItemSheet({
   const [values, setValues] = useState<ItemWords>({ name: "", notes: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The attribute whose date the picker is choosing, drawn in this sheet in
+  // place of the form, as the place edit does.
+  const [dateKey, setDateKey] = useState<string | null>(null);
   // Reset for each item the sheet opens on.
   const [shownFor, setShownFor] = useState<string | null>(null);
   // What a Save compares against: the item as opened, then as the plan was
@@ -99,6 +103,7 @@ export function PlanItemSheet({
   if (key !== shownFor) {
     setShownFor(key);
     setEditing(false);
+    setDateKey(null);
     setError(null);
     setSeen(item);
     setMoved(false);
@@ -219,7 +224,13 @@ export function PlanItemSheet({
     setError(null);
   };
   // Inside Edit, every way out is back to the ⋯, not away with what was typed.
-  const back = editing ? () => setEditing(false) : undefined;
+  const back = dateKey
+    ? () => setDateKey(null)
+    : editing
+      ? () => setEditing(false)
+      : undefined;
+  const dateDef = attrDefs.find((def) => def.key === dateKey);
+  const dateValue = dateKey ? (values[ITEM_ATTR + dateKey] ?? "") : "";
   return (
     <BottomSheet
       visible={item !== null}
@@ -232,16 +243,18 @@ export function PlanItemSheet({
         open?.();
       }}
       title={
-        editing
-          ? item?.kind === "place"
-            ? copy.itemEditPlace
-            : copy.itemEditWay
-          : item
-            ? itemTitle(item)
-            : ""
+        dateKey
+          ? (dateDef?.label ?? "Date")
+          : editing
+            ? item?.kind === "place"
+              ? copy.itemEditPlace
+              : copy.itemEditWay
+            : item
+              ? itemTitle(item)
+              : ""
       }
       footer={
-        editing && item ? (
+        editing && !dateKey && item ? (
           <FormStack>
             {error ? <ErrorBanner message={error} /> : null}
             <Button
@@ -277,7 +290,28 @@ export function PlanItemSheet({
           ))}
         </View>
       ) : null}
-      {item && editing ? (
+      {item && editing && dateKey ? (
+        <FormStack>
+          <DatePicker
+            value={dateValue || null}
+            onChange={(day) => set({ [ITEM_ATTR + dateKey]: day })}
+          />
+          {/* An attribute date may be unknown: a picker with no way back to
+              blank turns that into a wrong answer. */}
+          {dateValue ? (
+            <Button
+              label="Clear date"
+              icon="close"
+              variant="ghost"
+              onPress={() => {
+                set({ [ITEM_ATTR + dateKey]: "" });
+                setDateKey(null);
+              }}
+            />
+          ) : null}
+        </FormStack>
+      ) : null}
+      {item && editing && !dateKey ? (
         <FormStack>
           <TextField
             label={copy.itemName}
@@ -342,9 +376,7 @@ export function PlanItemSheet({
                       ]),
                     )}
                     onChange={(key, next) => set({ [ITEM_ATTR + key]: next })}
-                    // The system attributes of a plan place are numbers and
-                    // yes/no: none is a date.
-                    onPickDate={() => {}}
+                    onPickDate={setDateKey}
                   />
                 </>
               ) : null}

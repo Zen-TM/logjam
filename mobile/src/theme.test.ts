@@ -46,8 +46,8 @@ describe("clampTextScale", () => {
 });
 
 describe("placeholderColor", () => {
-  // Turns red if a placeholder goes back to the raw `textMuted`, which sits
-  // next to `text` in the dark schemes.
+  // Mutation: return `theme.textMuted` unchanged from placeholderColor, which
+  // sits next to `text` in the dark schemes.
   it("is dimmer than textMuted in every scheme", () => {
     for (const scheme of Object.values(THEME_SCHEMES))
       expect(placeholderColor(scheme.tokens)).not.toBe(scheme.tokens.textMuted);

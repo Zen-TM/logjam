@@ -53,3 +53,13 @@ export function planPageView(state: {
     return { kind: "failed", message: state.failure };
   return { kind: "notDownloaded" };
 }
+
+/** The API refuses widening a form others answered for leaders only, so the
+ *  visibility choice locks. Guard: planViews.test.ts. */
+export function formWidenLocked(
+  form: { visibleTo: string; answers: readonly unknown[] } | null | undefined,
+): boolean {
+  return (
+    form != null && form.visibleTo === "leaders" && form.answers.length > 0
+  );
+}

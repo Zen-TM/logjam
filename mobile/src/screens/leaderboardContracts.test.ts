@@ -56,6 +56,7 @@ const props = {
   board,
   podiumShown: true,
   onBack: () => {},
+  backLabel: "More",
   onDismissPodium: () => {},
   onOpenRules: () => {},
 };

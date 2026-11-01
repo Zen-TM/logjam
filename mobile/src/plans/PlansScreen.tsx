@@ -152,12 +152,14 @@ export function usePlansList(blocked: boolean) {
 export function PlansScreen({
   message,
   onBack,
+  backLabel,
   onOpenPlan,
 }: {
   /** What just happened elsewhere (a plan left or deleted), as a toast;
    *  `at` tells one from the next with the same words. */
   message?: { text: string; at: number };
   onBack: () => void;
+  backLabel: string;
   onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
@@ -433,7 +435,12 @@ export function PlansScreen({
           disabled={selecting && !planSelectable(item)}
           right={
             <View style={styles.trailing}>
-              {pill ? <StatusPill label={pill} tone="outline" /> : null}
+              {pill ? (
+                <StatusPill
+                  label={pill}
+                  tone={item.status === "active" ? "outline" : "accent"}
+                />
+              ) : null}
               {selecting && planSelectable(item) ? (
                 // The ⋯'s box, so the card keeps its size when selecting starts.
                 <SelectionMark selected={picked} />
@@ -543,11 +550,7 @@ export function PlansScreen({
   if (block) {
     return (
       <View style={styles.screen}>
-        <Hero
-          eyebrow={TRIP_PLANS_LIST.title}
-          title={block.title}
-          onBack={onBack}
-        />
+        <Hero title={block.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={block.title} hint={block.hint} icon="plan" />
       </View>
     );
@@ -568,7 +571,6 @@ export function PlansScreen({
   > = {
     hero: (
       <Hero
-        eyebrow={TRIP_PLANS_LIST.title}
         title={
           shown.kind === "list"
             ? tripPlansHeroTitle(shown.plans, today)
@@ -578,6 +580,7 @@ export function PlansScreen({
         }
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="overflow"

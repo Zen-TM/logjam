@@ -52,6 +52,7 @@ export function PlanPreview({
   planId,
   name,
   onBack,
+  backLabel,
   onJoined,
   onDeclined,
 }: {
@@ -59,6 +60,7 @@ export function PlanPreview({
   /** The row's name, for the hero before the preview is read. */
   name: string;
   onBack: () => void;
+  backLabel: string;
   /** In the plan now: open the member's page. */
   onJoined: () => void;
   onDeclined: (message: string) => void;
@@ -177,7 +179,7 @@ export function PlanPreview({
   if (block)
     return (
       <View style={styles.screen}>
-        <Hero title={block.title} onBack={onBack} />
+        <Hero title={block.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={block.title} hint={block.hint} icon="plan" />
       </View>
     );
@@ -255,7 +257,11 @@ export function PlanPreview({
 
   return (
     <View style={styles.screen}>
-      <Hero title={preview?.name ?? name} onBack={onBack} />
+      <Hero
+        title={preview?.name ?? name}
+        onBack={onBack}
+        backLabel={backLabel}
+      />
       {!checked ? (
         <LoadingState label={copy.loading} />
       ) : !online && !preview ? (
