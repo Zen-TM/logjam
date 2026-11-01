@@ -7,15 +7,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import {
   parseTripPlanFormCreate,
-  pluralCount,
   TRIP_PLAN_FORM_TITLE_MAX_LENGTH,
   TRIP_PLAN_MAX_OPTIONS,
   TRIP_PLAN_MAX_QUESTIONS,
   TRIP_PLAN_OPTION_LABEL_MAX_LENGTH,
   TRIP_PLAN_QUESTION_HELP_MAX_LENGTH,
   TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH,
-  TRIP_PLAN_FORM_PRESETS,
-  TRIP_PLAN_FORM_PRESET_IDS,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_QUESTION_KINDS,
   TRIP_PLAN_QUESTION_KIND_LABELS,
@@ -32,10 +29,8 @@ import {
   Dialog,
   ErrorBanner,
   IconButton,
-  Row,
   SectionHeader,
   Select,
-  SwitchRow,
   TextField,
 } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
@@ -50,6 +45,7 @@ import {
   theirsChanged,
   type FormValues,
 } from "./plansModel";
+import PlanFormChooser from "./PlanFormChooser";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
@@ -63,12 +59,13 @@ function valuesOf(form: TripPlanFormView): FormValues {
     preset: form.preset,
     questions: form.questions,
     visibleTo: form.visibleTo,
-    requiredToJoin: form.requiredToJoin,
   };
 }
 
 export default function PlanFormBuilderDialog(props: {
   open: boolean;
+  /** The plan the form belongs to. */
+  planId: string;
   /** Absent: a new form. Updated in place after a refetch. */
   form?: TripPlanFormView;
   onSubmit: (values: FormValues, patch: TripPlanFormPatch) => Promise<void>;
@@ -79,11 +76,13 @@ export default function PlanFormBuilderDialog(props: {
 }
 
 function Builder({
+  planId,
   form,
   onSubmit,
   onStale,
   onClose,
 }: {
+  planId: string;
   form?: TripPlanFormView;
   onSubmit: (values: FormValues, patch: TripPlanFormPatch) => Promise<void>;
   onStale: () => void;
@@ -198,41 +197,7 @@ function Builder({
         footer={footer}
       >
         {!values ? (
-          <div className={classes.form}>
-            <SectionHeader title={copy.startFrom} />
-            {TRIP_PLAN_FORM_PRESET_IDS.map((id) => (
-              <Row
-                key={id}
-                title={TRIP_PLAN_FORM_PRESETS[id].title}
-                subtitle={pluralCount(
-                  TRIP_PLAN_FORM_PRESETS[id].questions.length,
-                  "question",
-                )}
-                onOpen={() =>
-                  setValues({ ...TRIP_PLAN_FORM_PRESETS[id], preset: id })
-                }
-              />
-            ))}
-            <Row
-              title={copy.blank}
-              onOpen={() =>
-                setValues({
-                  title: "",
-                  preset: null,
-                  visibleTo: "leaders",
-                  requiredToJoin: false,
-                  questions: [
-                    {
-                      id: mintSlug("q"),
-                      kind: "text",
-                      label: "",
-                      required: false,
-                    },
-                  ],
-                })
-              }
-            />
-          </div>
+          <PlanFormChooser planId={planId} onPick={setValues} />
         ) : (
           <form
             id={formId}
@@ -276,12 +241,6 @@ function Builder({
                 <p className={classes.note}>{copy.visibleToLocked}</p>
               )}
             </div>
-            <SwitchRow
-              title={copy.requiredToJoin}
-              description={copy.requiredToJoinHint}
-              checked={values.requiredToJoin}
-              onChange={(requiredToJoin) => set({ requiredToJoin })}
-            />
             <SectionHeader
               title={copy.questions}
               count={values.questions.length}
