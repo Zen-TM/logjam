@@ -18,7 +18,7 @@ import {
 } from "./_actors";
 
 // Plans: invite links (routes/planInvites.ts). alice leads a plan of her
-// own with bob in it and one form required to join; carol holds the link.
+// own with bob in it; carol holds the link.
 // Links are written straight to the table except where minting is the test:
 // the mint limiter allows 20 an hour per user, across reruns. carol's
 // previews and redeems stay under the redeem limiter's 20 a minute. Answers
@@ -52,29 +52,16 @@ async function link(expiresInMs = 86_400_000): Promise<string> {
   return value;
 }
 
-async function joinAnswers() {
-  const form = await prisma.tripPlanForm.findUniqueOrThrow({
-    where: { id: formId },
-  });
-  return {
-    [formId]: {
-      answers: { agree: true },
-      visibleTo: form.visibleTo,
-      formUpdatedAt: form.updatedAt.toISOString(),
-    },
-  };
-}
-
 const preview = (sub: string, value: unknown) =>
   request(API_URL)
     .post("/plan-invites/preview")
     .set(as(sub))
     .send({ token: value });
-const redeem = async (sub: string, value: unknown, answers?: object) =>
+const redeem = (sub: string, value: unknown) =>
   request(API_URL)
     .post("/plan-invites/redeem")
     .set(as(sub))
-    .send({ token: value, answers: answers ?? (await joinAnswers()) });
+    .send({ token: value });
 
 beforeEach(async () => {
   const res = await request(API_URL)
@@ -100,7 +87,6 @@ beforeEach(async () => {
           { id: "agree", kind: "agree", label: "I agree", required: true },
         ],
         visibleTo: "members",
-        requiredToJoin: true,
         position: 0,
       },
     })
@@ -147,7 +133,7 @@ describe("a leader's links", () => {
 });
 
 describe("holding a link", () => {
-  it("previews the name, dates, leader and required forms, never who or what", async () => {
+  it("previews the name, dates and leader, never who or what", async () => {
     await prisma.tripPlanAnswer.create({
       data: { formId, userId: BOB_ID, answers: { agree: true } },
     });
@@ -159,15 +145,6 @@ describe("holding a link", () => {
       startDate: "2026-11-08",
       endDate: null,
       leader: { id: ALICE_ID, username: "alice" },
-      requiredForms: [
-        // The preset, so the joiner is told when members may print it.
-        // Mutation: drop it from joinForms' select.
-        expect.objectContaining({
-          id: formId,
-          preset: "rules",
-          visibleTo: "members",
-        }),
-      ],
       membership: null,
     });
     const body = JSON.stringify(res.body);
@@ -225,7 +202,7 @@ describe("holding a link", () => {
     expect(row.userId).toBe(ALICE_ID);
     expect(row.payload).toEqual({ planId, requesterId: CAROL_ID });
 
-    // Again, as a dialog sent twice would: answers replaced, nobody told twice.
+    // Again, as a dialog sent twice would: nobody told twice.
     expect((await redeem(CAROL_SUB, token)).status).toBe(201);
     expect(await requests()).toHaveLength(1);
     // The link is multi-use.
@@ -239,17 +216,7 @@ describe("holding a link", () => {
       .get(`/plans/${planId}`)
       .set(as(CAROL_SUB));
     expect(plan.status).toBe(200);
-    expect(plan.body.forms[0].myAnswer.answers).toEqual({ agree: true });
-  });
-
-  it("refuses a request without the forms required to join", async () => {
-    const res = await redeem(CAROL_SUB, token, {});
-    expect(res.status).toBe(409);
-    expect(
-      await prisma.tripPlanMember.count({
-        where: { planId, userId: CAROL_ID },
-      }),
-    ).toBe(0);
+    expect(plan.body.forms[0].myAnswer).toBeNull();
   });
 
   it("joins someone already invited by username at once, and leaves a member as is", async () => {
@@ -265,7 +232,7 @@ describe("holding a link", () => {
     const joined = await redeem(CAROL_SUB, token);
     expect(joined.status).toBe(200);
     expect(joined.body).toEqual({ planId, status: "active" });
-    const member = await redeem(BOB_SUB, token, {});
+    const member = await redeem(BOB_SUB, token);
     expect(member.status).toBe(200);
     expect(member.body).toEqual({ planId, status: "active" });
   });
@@ -348,7 +315,6 @@ describe("redeeming while the plan changes", () => {
   async function racing(
     during: (tx: Prisma.TransactionClient) => Promise<unknown>,
   ) {
-    const answers = await joinAnswers();
     let pending!: Promise<{ status: number; body: Record<string, unknown> }>;
     await prisma.$transaction(
       async (tx) => {
@@ -357,7 +323,7 @@ describe("redeeming while the plan changes", () => {
           data: { updatedAt: new Date() },
         });
         pending = new Promise((resolve, reject) => {
-          redeem(CAROL_SUB, token, answers).then(resolve, reject);
+          redeem(CAROL_SUB, token).then(resolve, reject);
         });
         // Long enough for the redeem to read the link and reach touchPlan.
         await new Promise((resolve) => setTimeout(resolve, 1000));

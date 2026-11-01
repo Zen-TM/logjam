@@ -62,6 +62,10 @@ import {
   tripPlanAddOutcome,
   tripPlanAddKey,
   tripPlanAddPicks,
+  tripPlanFormsToAnswer,
+  tripPlanFormsToAnswerLine,
+  tripPlanFormTally,
+  tripPlanFormTallyLines,
 } from "./index.js";
 
 const TODAY = "2026-10-19";
@@ -77,6 +81,7 @@ function summary(over: Partial<TripPlanSummary>): TripPlanSummary {
     updatedAt: "2026-10-01T00:00:00.000Z",
     status: "active",
     role: "member",
+    unansweredForms: 0,
     ...over,
   };
 }
@@ -227,30 +232,16 @@ describe("Logjam GPS's plans hero", () => {
 });
 
 describe("a plan's page", () => {
-  it("shows one notice, archived first, then a form owed, then the trip being over", () => {
-    const form = { id: "f", title: "Safety contacts" };
-    expect(
-      tripPlanNotice({ archived: true, unansweredRequired: form, over: true })
-        ?.kind,
-    ).toBe("archived");
-    expect(
-      tripPlanNotice({ archived: false, unansweredRequired: form, over: true }),
-    ).toEqual({
-      kind: "answer",
-      icon: "form",
-      text: 'Answer "Safety contacts".',
-      formId: "f",
+  it("shows one notice, archived first, then the trip being over", () => {
+    expect(tripPlanNotice({ archived: true, over: true })?.kind).toBe(
+      "archived",
+    );
+    expect(tripPlanNotice({ archived: false, over: true })).toEqual({
+      kind: "over",
+      icon: "trip",
+      text: "This trip is over.",
     });
-    expect(
-      tripPlanNotice({ archived: false, unansweredRequired: null, over: true }),
-    ).toEqual({ kind: "over", icon: "trip", text: "This trip is over." });
-    expect(
-      tripPlanNotice({
-        archived: false,
-        unansweredRequired: null,
-        over: false,
-      }),
-    ).toBeNull();
+    expect(tripPlanNotice({ archived: false, over: false })).toBeNull();
   });
 
   it("names a leader's and an editor's role on the dates line, and a member's not", () => {
@@ -653,32 +644,29 @@ describe("what Add a copy offers", () => {
   const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 
   // Mutation: offer a ticked place's route or file again, and the plan gets
-  // the same line twice; hide a place's file whatever Bring its photos says,
-  // and with photos off it is lost and can't be added any other way.
+  // the same line twice; stop offering them while the place is unticked, and
+  // they can't be added alone.
   it("offers a place's route and file only while they would not come with it", () => {
-    const none = { me: "me", tickedPlaceIds: [], copyMedia: true };
+    const none = { me: "me", tickedPlaceIds: [] };
     expect(ids(tripPlanAddable(own, none).routes)).toEqual(["r1", "r2"]);
     expect(ids(tripPlanAddable(own, none).files)).toEqual(["f1", "f2"]);
-    const withPhotos = { me: "me", tickedPlaceIds: ["p1"], copyMedia: true };
-    expect(ids(tripPlanAddable(own, withPhotos).routes)).toEqual(["r1"]);
-    expect(ids(tripPlanAddable(own, withPhotos).files)).toEqual(["f1"]);
-    const noPhotos = { ...withPhotos, copyMedia: false };
-    expect(ids(tripPlanAddable(own, noPhotos).routes)).toEqual(["r1"]);
-    expect(ids(tripPlanAddable(own, noPhotos).files)).toEqual(["f1", "f2"]);
+    const ticked = { me: "me", tickedPlaceIds: ["p1"] };
+    expect(ids(tripPlanAddable(own, ticked).routes)).toEqual(["r1"]);
+    expect(ids(tripPlanAddable(own, ticked).files)).toEqual(["f1"]);
   });
 
   // Mutation: count the zero, and Add a copy opens on "Add 0 copies"; size
   // a places-only pick, and the one number beside a charge is "0 KB".
   it("leaves out a zero, in the submit and the price", () => {
-    expect(tripPlanAddCopiesLabel(0)).toBe("Add a copy");
-    expect(tripPlanAddCopiesLabel(2)).toBe("Add 2 copies");
+    expect(tripPlanAddCopiesLabel(0)).toBe("Add a place or way");
+    expect(tripPlanAddCopiesLabel(2)).toBe("Add 2 places or ways");
     expect(tripPlanAddCopyPrice(null, "5.0 GB")).toBe("You have 5.0 GB left.");
   });
 
   // Mutation: drop the owner check, and the API's refusal of someone
   // else's route is the user's to read.
   it("offers only the caller's own routes", () => {
-    const state = { me: "me", tickedPlaceIds: [], copyMedia: true };
+    const state = { me: "me", tickedPlaceIds: [] };
     expect(ids(tripPlanAddable(own, state).routes)).not.toContain("r3");
   });
 });
@@ -923,12 +911,8 @@ describe("an invite's preview", () => {
   // Mutation: always head the people, and a preview of people alone gets a
   // lone heading.
   it("heads its groups only beside a second one", () => {
-    expect(tripPlanPreviewHeaded({ sections: [], requiredForms: [] })).toBe(
-      false,
-    );
-    expect(
-      tripPlanPreviewHeaded({ sections: [], requiredForms: [{}] as never }),
-    ).toBe(true);
+    expect(tripPlanPreviewHeaded({ sections: [] })).toBe(false);
+    expect(tripPlanPreviewHeaded({ sections: [{}] as never })).toBe(true);
   });
 });
 
@@ -952,14 +936,13 @@ describe("Start a trip log's places line", () => {
 describe("Add a copy's footer and outcome", () => {
   const MB = 1024 * 1024;
   const room = { quotaBytes: MB, usedBytes: 0 };
-  // Mutation: drop `&& copyMedia`, and "Photos count too." promises a cost
-  // the POST (copyMedia: false) never takes.
-  it("prices what is ticked, photos only when they come", () => {
+  // Mutation: drop `args.placesPicked &&`, and "Photos count too." is said
+  // with no place picked.
+  it("prices what is ticked, photos only when a place is picked", () => {
     expect(
       tripPlanAddCopyPriceLine({
         bytes: 0,
         placesPicked: false,
-        copyMedia: true,
         ...room,
       }),
     ).toBeNull();
@@ -967,15 +950,13 @@ describe("Add a copy's footer and outcome", () => {
       tripPlanAddCopyPriceLine({
         bytes: 0,
         placesPicked: true,
-        copyMedia: true,
         ...room,
       }),
     ).toMatch(/Photos count too\.$/);
     expect(
       tripPlanAddCopyPriceLine({
         bytes: MB,
-        placesPicked: true,
-        copyMedia: false,
+        placesPicked: false,
         ...room,
       }),
     ).not.toMatch(/Photos/);
@@ -1003,12 +984,98 @@ describe("Add a copy's footer and outcome", () => {
     const base = { asked: 2, skipped: 0, outOfSpace: false, why: null };
     expect(tripPlanAddOutcome({ ...base, added: 0, why: "No." })).toBeNull();
     expect(tripPlanAddOutcome({ ...base, added: 2 })).toEqual({
-      message: "Added 2 copies.",
+      message: "Added 2 places or ways.",
       tone: "info",
     });
     expect(tripPlanAddOutcome({ ...base, added: 1, why: "No." })).toEqual({
       message: "Added 1 of 2. No.",
       tone: "error",
     });
+  });
+});
+
+describe("forms to answer", () => {
+  const form = (id: string, answered: boolean) =>
+    ({ id, title: `Form ${id}`, myAnswer: answered ? {} : null }) as never;
+  const plan = (over: object = {}) => ({
+    forms: [form("a", false), form("b", true), form("c", false)],
+    startDate: "2026-11-10" as const,
+    endDate: null,
+    archivedAt: null,
+    ...over,
+  });
+
+  it("lists the unanswered forms, and says how many", () => {
+    expect(tripPlanFormsToAnswer(plan(), "2026-10-01").forms).toEqual([
+      { id: "a", title: "Form a" },
+      { id: "c", title: "Form c" },
+    ]);
+    expect(tripPlanFormsToAnswerLine(0)).toBe("");
+    expect(tripPlanFormsToAnswerLine(1)).toBe("1 form to answer");
+    expect(tripPlanFormsToAnswerLine(2)).toBe("2 forms to answer");
+  });
+
+  // Mutation: `< 7` for `<= 7`, and the nudge turns on a day late; drop the
+  // forms check, and a plan with nothing owed is urgent.
+  it("turns urgent 7 days before the first day, by date key", () => {
+    expect(tripPlanFormsToAnswer(plan(), "2026-11-02").urgent).toBe(false);
+    expect(tripPlanFormsToAnswer(plan(), "2026-11-03").urgent).toBe(true);
+    expect(tripPlanFormsToAnswer(plan(), "2026-11-10").urgent).toBe(true);
+    expect(
+      tripPlanFormsToAnswer(plan({ startDate: null }), "2026-11-10").urgent,
+    ).toBe(false);
+    const done = plan({ forms: [form("b", true)] });
+    expect(tripPlanFormsToAnswer(done, "2026-11-10").urgent).toBe(false);
+  });
+
+  it("asks nothing of an archived plan or a trip that is over", () => {
+    expect(
+      tripPlanFormsToAnswer(plan({ archivedAt: "2026-10-01" }), "2026-10-01")
+        .forms,
+    ).toEqual([]);
+    expect(tripPlanFormsToAnswer(plan(), "2026-11-11").forms).toEqual([]);
+  });
+});
+
+describe("form tally", () => {
+  const user = (id: string) => ({ id, username: id });
+  const member = (id: string, status = "active") =>
+    ({ user: user(id), status }) as never;
+  const answer = (id: string) => ({ user: user(id) }) as never;
+  const members = [
+    member("me"),
+    member("bob"),
+    member("cat"),
+    member("ask", "requested"),
+  ];
+
+  // Mutation: count a requester as a member, or drop myAnswer, and the
+  // tally disagrees with the people list.
+  it("counts active members who answered, and names those who haven't", () => {
+    const tally = tripPlanFormTally(
+      { members, myRole: "leader" },
+      { myAnswer: {} as never, answers: [answer("bob"), answer("ask")] },
+      "me",
+    );
+    expect(tally).toEqual({ answered: 2, total: 3, missing: [user("cat")] });
+    expect(tripPlanFormTallyLines(tally!)).toEqual([
+      "2 of 3 answered",
+      "Not answered yet: cat",
+    ]);
+    expect(
+      tripPlanFormTallyLines({ answered: 3, total: 3, missing: [] }),
+    ).toEqual(["3 of 3 answered"]);
+  });
+
+  // Mutation: drop the role check, and a member of a members-visible form
+  // sees a tally that is theirs alone to know.
+  it("is for leaders only", () => {
+    expect(
+      tripPlanFormTally(
+        { members, myRole: "editor" },
+        { myAnswer: null, answers: [] },
+        "me",
+      ),
+    ).toBeNull();
   });
 });

@@ -17,6 +17,7 @@ import {
   tripPlanSavedMessage,
   type PlanItemVerbId,
   type TripPlanItem,
+  type TripPlanPlace,
   type TripPlanView,
 } from "@logjam/shared";
 import {
@@ -38,6 +39,7 @@ import { deletePlanItem, savePlanItem } from "../../plansApi";
 import { downloadFile } from "../sidebar/panels/mapsModel";
 import { menuEntries } from "./planMenu";
 import PlanItemEditDialog from "./PlanItemEditDialog";
+import PlanPlaceDialog from "./PlanPlaceDialog";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -96,6 +98,7 @@ export default function PlanItems({
   const [saving, setSaving] = useState<TripPlanItem | null>(null);
   const [bringPhotos, setBringPhotos] = useState(copyPlaceMedia);
   const [deleting, setDeleting] = useState<TripPlanItem | null>(null);
+  const [viewing, setViewing] = useState<TripPlanPlace | null>(null);
   const [editing, setEditing] = useState<TripPlanItem | null>(null);
   const [busy, setBusy] = useState(false);
   const archived = plan.archivedAt != null;
@@ -187,7 +190,11 @@ export default function PlanItems({
                 leading={<IconTile icon={icon} hue={hue} />}
                 // A presigned link is another origin, so the row's own
                 // `download` would be ignored: it goes through downloadFile.
-                onOpen={() => (url ? downloadFile(url) : onOpen(item))}
+                onOpen={() => {
+                  if (url) return downloadFile(url);
+                  onOpen(item);
+                  if (item.kind === "place") setViewing(item);
+                }}
                 trailing={
                   <Menu
                     label={`Actions for ${title}`}
@@ -281,6 +288,13 @@ export default function PlanItems({
           });
         }}
       />
+      {viewing && (
+        <PlanPlaceDialog
+          // Follows the refetched plan, so edits show at once.
+          place={plan.places.find((each) => each.id === viewing.id) ?? viewing}
+          onClose={() => setViewing(null)}
+        />
+      )}
       {editing && (
         <PlanItemEditDialog
           planId={plan.id}

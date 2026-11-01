@@ -2,10 +2,18 @@
 // itself; its sections, forms, members and items have their own route files
 // under /plans/:planId. Access is lib/planAccess.ts's alone.
 import { Router, Response } from "express";
-import { parseTripPlanCreate, parseTripPlanPatch, say } from "@logjam/shared";
+import {
+  isTripPlanFormPresetId,
+  isTripPlanFormVisibility,
+  parseTripPlanCreate,
+  parseTripPlanPatch,
+  say,
+  type TripPlanLeaderForm,
+  type TripPlanQuestion,
+} from "@logjam/shared";
 import { requireAuth, AuthenticatedRequest } from "../middleware/auth";
 import prisma from "../services/prisma";
-import { accepted, malformed } from "../middleware/errorHandler";
+import { accepted, fault, malformed } from "../middleware/errorHandler";
 import { getParam } from "../lib/getParam";
 import { resolveUser } from "../lib/resolveUser";
 import {
@@ -17,7 +25,13 @@ import {
 } from "../lib/planAccess";
 import { endPlanForOthers, waitingFor } from "../lib/planMembership";
 import { deletePlanWithFiles } from "../lib/planItems";
-import { dateColumn, loadPlanView, planSummary } from "../lib/tripPlanView";
+import {
+  dateColumn,
+  loadPlanView,
+  planSummary,
+  formsAnsweredBy,
+  unanswered,
+} from "../lib/tripPlanView";
 
 const router = Router();
 
@@ -38,6 +52,7 @@ router.get(
           where: { userId: user.id },
           select: { role: true, status: true, invitedBy },
         },
+        forms: formsAnsweredBy(user.id),
       },
       orderBy: [
         { startDate: { sort: "asc", nulls: "last" } },
@@ -58,6 +73,7 @@ router.get(
                   membership.invitedBy?.id ?? null,
                 )
               : null,
+            unanswered(plan.forms),
           );
         }),
       ),
@@ -65,8 +81,70 @@ router.get(
   },
 );
 
+// ── GET /plans/leader-forms ───────────────────────────────────
+// The forms of the plans the caller actively leads, for "copy from my
+// plans". Registered before /:id. Another role never sees a plan's forms
+// here. Guard: __tests__/planForms.test.ts ("copy from my plans").
+router.get(
+  "/leader-forms",
+  requireAuth,
+  async (req: AuthenticatedRequest, res: Response) => {
+    const user = await resolveUser(req.user!.sub);
+    const except = typeof req.query.except === "string" ? req.query.except : "";
+    const led = await prisma.tripPlanMember.findMany({
+      where: {
+        userId: user.id,
+        role: "leader",
+        status: "active",
+        planId: { not: except },
+      },
+      select: { plan: { select: { id: true, name: true, updatedAt: true } } },
+    });
+    const plans = led
+      .map((row) => row.plan)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    const found = await prisma.tripPlanForm.findMany({
+      where: { planId: { in: plans.map((plan) => plan.id) } },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        planId: true,
+        title: true,
+        preset: true,
+        questions: true,
+        visibleTo: true,
+      },
+    });
+    // ponytail: no paging; add it if leaders come to lead many plans.
+    const rows = plans
+      .flatMap((plan) =>
+        found
+          .filter((form) => form.planId === plan.id)
+          .map((form) => ({ ...form, plan })),
+      )
+      .slice(0, 200);
+    const forms: TripPlanLeaderForm[] = rows.map((row) => {
+      if (!isTripPlanFormVisibility(row.visibleTo))
+        throw fault("a form row has no known visibility");
+      return {
+        planId: row.plan.id,
+        planName: row.plan.name,
+        formId: row.id,
+        title: row.title,
+        preset:
+          row.preset && isTripPlanFormPresetId(row.preset) ? row.preset : null,
+        questions: (Array.isArray(row.questions)
+          ? row.questions
+          : []) as TripPlanQuestion[],
+        visibleTo: row.visibleTo,
+      };
+    });
+    res.json({ forms });
+  },
+);
+
 // ── POST /plans ───────────────────────────────────────────────
-// The caller leads it. It starts with one empty section, Overview.
+// The caller leads it. It starts with no section; the leader adds what they want.
 router.post(
   "/",
   requireAuth,
@@ -83,7 +161,6 @@ router.post(
         members: {
           create: { userId: user.id, role: "leader", status: "active" },
         },
-        sections: { create: { title: "Overview", position: 0 } },
       },
       select: { id: true },
     });
@@ -175,10 +252,11 @@ router.post(
           where: { userId: user.id },
           select: { role: true, status: true, invitedBy },
         },
+        forms: formsAnsweredBy(user.id),
       },
     });
     if (!plan) throw planNotFound();
-    res.json(planSummary(plan, plan.members[0]));
+    res.json(planSummary(plan, plan.members[0], null, unanswered(plan.forms)));
   },
 );
 

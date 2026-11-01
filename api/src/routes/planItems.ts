@@ -72,7 +72,7 @@ async function planRow(planId: string, kind: TripPlanItemKind, id: string) {
 }
 
 // ── POST /plans/:planId/items ─────────────────────────────────
-// Body { kind, id, copyMedia? }: a copy of one of the caller's own things,
+// Body { kind, id }: a copy of one of the caller's own things,
 // charged to them. The response is the new item as GET /plans/:id shows it.
 router.post(
   "/",

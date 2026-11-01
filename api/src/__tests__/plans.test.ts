@@ -71,7 +71,7 @@ afterEach(async () => {
 });
 
 describe("POST /plans", () => {
-  it("makes the caller its leader, with an empty Overview", async () => {
+  it("makes the caller its leader, with no section", async () => {
     const res = await request(API_URL)
       .get(`/plans/${planId}`)
       .set(as(ALICE_SUB));
@@ -89,7 +89,7 @@ describe("POST /plans", () => {
       files: [],
       forms: [],
     });
-    expect(res.body.sections).toMatchObject([{ title: "Overview", body: "" }]);
+    expect(res.body.sections).toEqual([]);
   });
 
   it("refuses a nameless plan and one that ends before it starts", async () => {
@@ -116,6 +116,33 @@ describe("POST /plans", () => {
 });
 
 describe("GET /plans", () => {
+  // Mutation: count every form rather than those the caller hasn't answered,
+  // or count for a plan the caller only has an invite to.
+  it("counts the forms the caller hasn't answered", async () => {
+    const [a, b] = await Promise.all(
+      ["A", "B"].map((title, position) =>
+        prisma.tripPlanForm.create({
+          data: { planId, title, visibleTo: "leaders", position },
+        }),
+      ),
+    );
+    await prisma.tripPlanAnswer.create({
+      data: { formId: a.id, userId: BOB_ID, answers: {} },
+    });
+    const count = async (sub: string) =>
+      (await request(API_URL).get("/plans").set(as(sub))).body.plans.find(
+        (plan: { id: string }) => plan.id === planId,
+      )?.unansweredForms;
+    expect(await count(BOB_SUB)).toBe(1);
+    expect(await count(ALICE_SUB)).toBe(2);
+    await prisma.tripPlanAnswer.create({
+      data: { formId: b.id, userId: BOB_ID, answers: {} },
+    });
+    expect(await count(BOB_SUB)).toBe(0);
+    await membership(CAROL_ID, "invited");
+    expect(await count(CAROL_SUB)).toBe(0);
+  });
+
   it("lists every plan the caller is in, invited to or asking to join", async () => {
     const mine = await request(API_URL).get("/plans").set(as(BOB_SUB));
     expect(mine.body.plans).toContainEqual(
@@ -331,7 +358,7 @@ describe("sections", () => {
     expect(res.body).toMatchObject({
       title: "Gear",
       body: "Helmet\nHarness",
-      position: 1,
+      position: 0,
     });
   });
 
@@ -347,10 +374,7 @@ describe("sections", () => {
   });
 
   it("reorders only the whole current set", async () => {
-    const view = await request(API_URL)
-      .get(`/plans/${planId}`)
-      .set(as(ALICE_SUB));
-    const overview = view.body.sections[0].id;
+    const overview = (await section(ALICE_SUB, { title: "Overview" })).body.id;
     const exit = (await section(ALICE_SUB, { title: "Exit" })).body.id;
     const order = (ids: string[]) =>
       request(API_URL)
@@ -401,7 +425,12 @@ describe("sections", () => {
       .post("/plans")
       .set(as(BOB_SUB))
       .send({ name: "Bob's own" });
-    const foreign = other.body.sections[0].id;
+    const foreign = (
+      await request(API_URL)
+        .post(`/plans/${other.body.id}/sections`)
+        .set(as(BOB_SUB))
+        .send({ title: "Overview" })
+    ).body.id;
     const res = await request(API_URL)
       .delete(`/plans/${planId}/sections/${foreign}`)
       .set(as(ALICE_SUB));

@@ -110,9 +110,10 @@
    carries its own whitespace. A switch has none, so it stands off the edge
    itself — and neither does a plain MARK (the + at the end of a row whose
    whole card is the button), which otherwise sits hard against the card's
-   edge. */
+   edge. A status pill ("Leader") is the same. */
 .trailing > [role="switch"]:last-child,
-.trailing > [data-mark]:last-child {
+.trailing > [data-mark]:last-child,
+.trailing > [data-tone]:last-child {
   margin-right: var(--space-1);
 }
 

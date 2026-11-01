@@ -14,7 +14,7 @@ import {
 
 // Plans: who is in a plan (routes/planMembers.ts). alice makes a plan and
 // leads it; bob is an active member; carol's place in it is set per test.
-// The plan has one form required to join, answered for leaders only. Answers
+// The plan has one form, answered for leaders only. Answers
 // and contacts are made up.
 //
 // Requires `make dev`. Every plan here is the test's own; the sweep removes
@@ -36,20 +36,6 @@ async function membership(
     create: { planId, userId, status, role, invitedById: ALICE_ID },
     update: { status, role },
   });
-}
-
-/** The required form as shown, answered. */
-async function joinAnswers(visibleTo = "leaders") {
-  const form = await prisma.tripPlanForm.findUniqueOrThrow({
-    where: { id: formId },
-  });
-  return {
-    [formId]: {
-      answers: { agree: true, notes: SECRET },
-      visibleTo,
-      formUpdatedAt: form.updatedAt.toISOString(),
-    },
-  };
 }
 
 async function planUpdatedAt(): Promise<number> {
@@ -114,7 +100,6 @@ beforeEach(async () => {
           },
         ],
         visibleTo: "leaders",
-        requiredToJoin: true,
         position: 0,
       },
     })
@@ -183,8 +168,11 @@ describe("inviting by username", () => {
 describe("the invited preview and joining", () => {
   // Mutations: let the preview through for status "requested"; add
   // `email: true` to the preview's members or invitedBy select.
-  it("shows someone invited the write-up, members and required forms, never answers", async () => {
+  it("shows someone invited the write-up and members, never answers", async () => {
     await invite(ALICE_SUB, { username: "carol" });
+    await prisma.tripPlanSection.create({
+      data: { planId, title: "Overview", position: 0 },
+    });
     await prisma.tripPlanAnswer.create({
       data: { formId, userId: BOB_ID, answers: { agree: true, notes: SECRET } },
     });
@@ -202,9 +190,7 @@ describe("the invited preview and joining", () => {
       ],
     });
     expect(res.body.sections[0].title).toBe("Overview");
-    expect(res.body.requiredForms).toMatchObject([
-      { id: formId, title: "Trip rules", preset: null, visibleTo: "leaders" },
-    ]);
+    expect(res.body).not.toHaveProperty("requiredForms");
     expect(JSON.stringify(res.body)).not.toContain(SECRET);
     expect(JSON.stringify(res.body)).not.toMatch(/@/);
 
@@ -218,41 +204,17 @@ describe("the invited preview and joining", () => {
     ).toBe(404);
   });
 
-  it("joins with the required answers, and tells the members", async () => {
+  it("joins at once, and tells the members", async () => {
     await invite(ALICE_SUB, { username: "carol" });
-    const join = (answers: object) =>
-      request(API_URL)
-        .post(`/plans/${planId}/join`)
-        .set(as(CAROL_SUB))
-        .send({ answers });
-
-    // Mutation: back to 400, and a joiner shown the forms before one was
-    // made required is never told to read them again.
-    const none = await join({});
-    expect(none.status).toBe(409);
-    expect(none.body.error).toBe(
-      "This form changed since you opened it. Check it, then answer again.",
+    await touches(() =>
+      request(API_URL).post(`/plans/${planId}/join`).set(as(CAROL_SUB)),
     );
-    // Mutation: skip the visibleTo check in saveJoinAnswers.
-    const widened = await join(await joinAnswers("members"));
-    expect(widened.status).toBe(409);
-    expect(widened.body.error).toBe(
-      "Who sees the answers to this form has changed. Check it, then answer again.",
-    );
-    const stale = await joinAnswers();
-    stale[formId].formUpdatedAt = "2020-01-01T00:00:00.000Z";
-    expect((await join(stale)).status).toBe(409);
-
-    await touches(async () => join(await joinAnswers()));
     const plan = await request(API_URL)
       .get(`/plans/${planId}`)
       .set(as(CAROL_SUB));
     expect(plan.status).toBe(200);
     expect(plan.body.myRole).toBe("member");
-    expect(plan.body.forms[0].myAnswer.answers).toEqual({
-      agree: true,
-      notes: SECRET,
-    });
+    expect(plan.body.forms[0].myAnswer).toBeNull();
 
     expect(await notices(CAROL_ID, "plan_invited")).toEqual([]);
     for (const userId of [ALICE_ID, BOB_ID]) {
@@ -265,8 +227,7 @@ describe("the invited preview and joining", () => {
     await membership(CAROL_ID, "requested");
     const res = await request(API_URL)
       .post(`/plans/${planId}/join`)
-      .set(as(CAROL_SUB))
-      .send({ answers: await joinAnswers() });
+      .set(as(CAROL_SUB));
     expect(res.status).toBe(404);
   });
 });

@@ -90,8 +90,13 @@ export const PLAN_VERBS = [
 /** Add ▾ on the plan's page, in menu order. The same words are the buttons
  *  an empty view and a list's end offer. */
 export const PLAN_ADD_VERBS = [
-  { id: "section", icon: "notes", label: "Add a section", roles: WRITERS },
-  { id: "copy", icon: "copy", label: "Add a copy", roles: ANY },
+  {
+    id: "section",
+    icon: "notes",
+    label: "Add a write-up section",
+    roles: WRITERS,
+  },
+  { id: "copy", icon: "copy", label: "Add a place or way", roles: ANY },
   {
     id: "form",
     icon: "form",

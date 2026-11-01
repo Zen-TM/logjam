@@ -994,7 +994,6 @@ model TripPlanForm {
   // preset list lands with the form routes (#439).
   preset         String?
   visibleTo      String           @map("visible_to")
-  requiredToJoin Boolean          @default(false) @map("required_to_join")
   position       Int
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")

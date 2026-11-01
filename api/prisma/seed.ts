@@ -2458,7 +2458,6 @@ async function main() {
         },
       ],
       visibleTo: "members",
-      requiredToJoin: true,
       position: 0,
     },
   });

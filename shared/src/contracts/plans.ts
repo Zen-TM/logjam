@@ -370,7 +370,7 @@ export const TRIP_PLAN_PAGE = {
     sectionTitle: "Section",
     sectionTitleField: "Title",
     sectionBody: "Text",
-    sectionSuggestions: "Suggestions",
+    sectionTitlePlaceholder: "For example, Overview, Gear or Access",
     sectionSave: "Save",
     sectionSaveFailed: "Couldn't save the section.",
     sectionGone: "This section was deleted.",
@@ -384,12 +384,11 @@ export const TRIP_PLAN_PAGE = {
     // The things on the map.
     itemsPlaces: "Places",
     itemsWays: "Ways",
-    itemsEmpty: "Nothing here yet. Add a copy of a place or a way of yours.",
+    itemsEmpty: "Nothing here yet. Add a place or way of yours.",
     addCopyLine:
-      "Everyone in this plan, including people who join later, can keep a copy.",
-    bringPhotos: "Bring its photos",
+      "Everyone in this plan, including people who join later, can see and copy what you add to it.",
     photosCountToo: "Photos count too.",
-    addCopyFailed: "Couldn't add a copy.",
+    addCopyFailed: "Couldn't add that.",
     nothingToAdd: "Nothing of yours here yet.",
     nothingTicked: "Tick something to add.",
     saveCopyLine:
@@ -410,7 +409,6 @@ export const TRIP_PLAN_PAGE = {
     formsEmptyLeader:
       "No forms yet. Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
     formsEmpty: "No forms yet.",
-    pillRequired: "Required to join",
     pillNotAnswered: "Not answered",
     seenByLeaders: "Leaders see answers",
     seenByMembers: "Everyone sees answers",
@@ -480,24 +478,14 @@ export function tripPlanVisibilityLine(
 /** The plan page's one notice, by priority, or none. */
 export function tripPlanNotice(args: {
   archived: boolean;
-  unansweredRequired: Pick<TripPlanFormView, "id" | "title"> | null;
   over: boolean;
 }):
   | { kind: "archived"; icon: IconIdea; text: string }
-  | { kind: "answer"; icon: IconIdea; text: string; formId: string }
   | { kind: "over"; icon: IconIdea; text: string }
   | null {
   const copy = TRIP_PLAN_PAGE.copy;
   if (args.archived)
     return { kind: "archived", icon: "archive", text: copy.noticeArchived };
-  if (args.unansweredRequired)
-    return {
-      kind: "answer",
-      icon: "form",
-      // No audience: the form's visibility line says who sees answers.
-      text: `Answer "${args.unansweredRequired.title}".`,
-      formId: args.unansweredRequired.id,
-    };
   if (args.over) return { kind: "over", icon: "trip", text: copy.noticeOver };
   return null;
 }
@@ -568,15 +556,6 @@ export function tripPlanDatesLine(
     .join(" · ");
 }
 
-/** One press away in the write-up's add dialog: no section is required. */
-export const TRIP_PLAN_SECTION_SUGGESTIONS = [
-  "Access",
-  "Gear",
-  "Transport",
-  "Exit",
-  "Emergency",
-] as const;
-
 // ── Joining ─────────────────────────────────────────────────────────
 
 export const TRIP_PLAN_JOIN = {
@@ -585,14 +564,10 @@ export const TRIP_PLAN_JOIN = {
   sections: [
     // The name, the dates and who leads it.
     { key: "hero" },
-    // The forms a joiner answers first, each with its visibility line.
-    { key: "forms" },
   ],
   copy: {
     leader: "Leader:",
     invitedBy: "Invited by",
-    answerToAsk: "Answer these to ask to join.",
-    answerToJoin: "Answer these to join.",
     askToJoin: "Ask to join",
     join: "Join",
     decline: "Decline",
@@ -613,24 +588,20 @@ export const TRIP_PLAN_PREVIEW = {
   sections: [
     // The name, then "dates · Invited by …" (`tripPlanInvitedLine`).
     { key: "hero" },
-    // "Answer these to join." (or "Invited") with Join and Decline.
+    // "Invited", with Join and Decline.
     { key: "notice" },
     { key: "writeUp" },
-    // The forms required to join, each with who sees its answers.
-    { key: "forms" },
-    // Who's going. Forms and people are headed only beside a second group
+    // Who's going. People are headed only beside a write-up
     // (`tripPlanPreviewHeaded`, shared/DESIGN.md §2).
     { key: "people" },
   ],
   // The join dialog's and the plan page's words, not a second copy.
   copy: {
-    answerToJoin: TRIP_PLAN_JOIN.copy.answerToJoin,
     invited: TRIP_PLANS_LIST.copy.pillInvited,
     join: TRIP_PLAN_JOIN.copy.join,
     decline: TRIP_PLAN_JOIN.copy.decline,
     declined: TRIP_PLANS_LIST.copy.declined,
     declineFailed: TRIP_PLANS_LIST.copy.declineFailed,
-    forms: TRIP_PLAN_PAGE.copy.viewForms,
     people: TRIP_PLAN_PAGE.copy.peopleGoing,
     loading: TRIP_PLAN_PAGE.copy.loading,
     loadFailed: TRIP_PLAN_PAGE.copy.loadFailed,
@@ -651,12 +622,12 @@ export function tripPlanInvitedLine(
     .join(" · ");
 }
 
-/** Whether the preview's forms and people take headings: only beside a
- *  write-up or a form to divide them from. */
+/** Whether the preview's people take a heading: only beside a write-up to
+ *  divide them from. */
 export function tripPlanPreviewHeaded(
-  preview: Pick<TripPlanInvitedPreview, "sections" | "requiredForms">,
+  preview: Pick<TripPlanInvitedPreview, "sections">,
 ): boolean {
-  return preview.sections.length > 0 || preview.requiredForms.length > 0;
+  return preview.sections.length > 0;
 }
 
 /** The join dialog's title. */
@@ -768,7 +739,7 @@ export function tripPlanTripLogPrefill(plan: {
     date: firstDay(plan),
     displayName: plan.name,
     types: [...plan.tripTypes],
-    // An empty section (every plan starts with Overview) says nothing.
+    // An empty section says nothing.
     notes: plan.sections
       .filter((section) => section.body)
       .map((section) => `${section.title}\n\n${section.body}`)
@@ -831,9 +802,6 @@ export const TRIP_PLAN_FORMS = {
     visibleTo: "Who sees the answers",
     visibleToLeaders: "Leaders",
     visibleToMembers: "Everyone in the plan",
-    requiredToJoin: "Required to join",
-    // Joiners answer before they join; members, the next time they open the plan.
-    requiredToJoinHint: "Everyone answers it first.",
     // The API's refusal, said before Save.
     visibleToLocked: TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
     questions: "Questions",
@@ -973,6 +941,86 @@ export function tripPlanSeesAnswers(
   return role === "leader" || visibleTo === "members";
 }
 
+/** How many days before a trip's first day the forms nudge turns warning. */
+export const TRIP_PLAN_FORMS_URGENT_DAYS = 7;
+
+/** "1 form to answer", "3 forms to answer": the plan page's card and the
+ *  plans list's card say it the same way. Empty for none. */
+export function tripPlanFormsToAnswerLine(count: number): string {
+  if (count <= 0) return "";
+  return count === 1 ? "1 form to answer" : `${count} forms to answer`;
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The forms the caller hasn't answered, in the plan's order, and whether the
+ * nudge is urgent: the trip's first day is within 7 days (or has come), by
+ * date key. Nothing to answer once the trip is over or the plan archived.
+ * Guard: plans.test.ts ("forms to answer").
+ */
+export function tripPlanFormsToAnswer(
+  plan: Pick<TripPlanView, "forms" | "startDate" | "endDate" | "archivedAt">,
+  today: DateOnly,
+): { forms: Pick<TripPlanFormView, "id" | "title">[]; urgent: boolean } {
+  const forms =
+    plan.archivedAt || tripPlanIsOver(plan, today)
+      ? []
+      : plan.forms
+          .filter((form) => form.myAnswer == null)
+          .map(({ id, title }) => ({ id, title }));
+  const first = firstDay(plan);
+  const urgent =
+    forms.length > 0 &&
+    first != null &&
+    (Date.parse(`${first}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) /
+      DAY_MS <=
+      TRIP_PLAN_FORMS_URGENT_DAYS;
+  return { forms, urgent };
+}
+
+/**
+ * A leader's tally for one form: how many active members have answered and
+ * who hasn't. A leader's view carries every answer to every form (both
+ * visibilities) and every member, so this needs nothing more; null for
+ * anyone else, whose view does not.
+ * Guard: plans.test.ts ("form tally").
+ */
+export function tripPlanFormTally(
+  plan: Pick<TripPlanView, "members" | "myRole">,
+  form: Pick<TripPlanFormView, "myAnswer" | "answers">,
+  me: string,
+): { answered: number; total: number; missing: TripPlanUserRef[] } | null {
+  if (plan.myRole !== "leader") return null;
+  const answered = new Set(form.answers.map((answer) => answer.user.id));
+  if (form.myAnswer) answered.add(me);
+  const active = plan.members.filter((member) => member.status === "active");
+  const missing = active
+    .filter((member) => !answered.has(member.user.id))
+    .map((member) => member.user);
+  return {
+    answered: active.length - missing.length,
+    total: active.length,
+    missing,
+  };
+}
+
+/** "3 of 5 answered", and "Not answered yet: bob, carol" when anyone is left. */
+export function tripPlanFormTallyLines(tally: {
+  answered: number;
+  total: number;
+  missing: readonly TripPlanUserRef[];
+}): string[] {
+  return [
+    `${tally.answered} of ${tally.total} answered`,
+    ...(tally.missing.length > 0
+      ? [
+          `Not answered yet: ${tally.missing.map((user) => user.username).join(", ")}`,
+        ]
+      : []),
+  ];
+}
+
 export function tripPlanLetInMessage(username: string): string {
   return `${username} is in.`;
 }
@@ -1014,7 +1062,7 @@ export function tripPlanFilesChargedTo(
   };
 }
 
-/** Where each kind is listed: a plan's Map view and Add a copy group them
+/** Where each kind is listed: a plan's Map view and Add a place or way group them
  *  the same way. */
 export const TRIP_PLAN_ITEM_GROUP = {
   place: "places",
@@ -1034,12 +1082,12 @@ export const TRIP_PLAN_ITEM_GROUPS: readonly {
 ];
 
 /**
- * What of the caller's own Add a copy offers: their places, routes and
+ * What of the caller's own Add a place or way offers: their places, routes and
  * files. A place brings its linked route always,
  * and its files with its photos (api/src/lib/planItems.ts `addPlace`), so a
  * route or file of a place that is ticked is not offered again while it
  * would come with it, and is offered while it would not. Guard: plans.test.ts
- * ("what Add a copy offers").
+ * ("what Add a place or way offers").
  */
 export function tripPlanAddable<
   P extends { id: string },
@@ -1047,7 +1095,7 @@ export function tripPlanAddable<
   F extends { linkedPlaceId: string | null },
 >(
   own: { places: P[]; routes: R[]; files: F[] },
-  state: { me: string | null; tickedPlaceIds: string[]; copyMedia: boolean },
+  state: { me: string | null; tickedPlaceIds: string[] },
 ): { places: P[]; routes: R[]; files: F[] } {
   const ticked = (placeId: string | null) =>
     placeId != null && state.tickedPlaceIds.includes(placeId);
@@ -1056,27 +1104,27 @@ export function tripPlanAddable<
     routes: own.routes.filter(
       (route) => route.ownerId === state.me && !ticked(route.placeId),
     ),
-    files: own.files.filter(
-      (file) => !(state.copyMedia && ticked(file.linkedPlaceId)),
-    ),
+    files: own.files.filter((file) => !ticked(file.linkedPlaceId)),
   };
 }
 
-/** Add a copy's submit: "Add 3 copies", and the plain verb before a tick
+/** The add dialog's submit: "Add 3 places or ways", and the plain verb before a tick
  *  (a zero is left out, shared/DESIGN.md §11). */
 export function tripPlanAddCopiesLabel(count: number): string {
-  if (count === 0) return "Add a copy";
-  return count === 1 ? "Add 1 copy" : `Add ${count} copies`;
+  if (count === 0) return "Add a place or way";
+  return count === 1 ? "Add 1 place or way" : `Add ${count} places or ways`;
 }
 
 /** What landed, said once the loop ends: the API's sentence for a stop. */
 export function tripPlanAddedMessage(added: number, asked: number): string {
   if (added === asked)
-    return added === 1 ? "Added 1 copy." : `Added ${added} copies.`;
+    return added === 1
+      ? "Added 1 place or way."
+      : `Added ${added} places or ways.`;
   return `Added ${added} of ${asked}.`;
 }
 
-/** The price line above Add a copy's submit. `uses` is null when only
+/** The price line above Add a place or way's submit. `uses` is null when only
  *  places are ticked: their photos can't be sized from the list. */
 export function tripPlanAddCopyPrice(
   uses: string | null,
@@ -1087,7 +1135,7 @@ export function tripPlanAddCopyPrice(
 }
 
 /**
- * Add a copy's price line, or null while nothing ticked is priced: what the
+ * Add a place or way's price line, or null while nothing ticked is priced: what the
  * ticked files use of the storage left, and "Photos count too." when ticked
  * places bring their photos (their size isn't in the list). Null too until
  * the account's storage is known.
@@ -1097,12 +1145,10 @@ export function tripPlanAddCopyPriceLine(args: {
   bytes: number;
   /** A place is among what is sent. */
   placesPicked: boolean;
-  /** Bring its photos. */
-  copyMedia: boolean;
   quotaBytes: number | null;
   usedBytes: number | null;
 }): string | null {
-  const photosToo = args.placesPicked && args.copyMedia;
+  const photosToo = args.placesPicked;
   if (args.quotaBytes == null || args.usedBytes == null) return null;
   if (args.bytes === 0 && !photosToo) return null;
   const line = tripPlanAddCopyPrice(
@@ -1112,12 +1158,12 @@ export function tripPlanAddCopyPriceLine(args: {
   return photosToo ? `${line} ${TRIP_PLAN_PAGE.copy.photosCountToo}` : line;
 }
 
-/** An Add a copy row's tick: what both clients store and `tripPlanAddPicks` matches. */
+/** An Add a place or way row's tick: what both clients store and `tripPlanAddPicks` matches. */
 export const tripPlanAddKey = (row: { kind: string; id: string }) =>
   `${row.kind}:${row.id}`;
 
 /**
- * What Add a copy sends: the ticked rows still offered, in list order. A
+ * What Add a place or way sends: the ticked rows still offered, in list order. A
  * tick whose row a ticked place now brings is not sent (it would be copied
  * twice); it comes back ticked if that place is unticked.
  */
@@ -1129,7 +1175,7 @@ export function tripPlanAddPicks<T extends { kind: string; id: string }>(
 }
 
 /**
- * How an Add a copy run ended, as its toast says it: what landed, the photos
+ * How an Add a place or way run ended, as its toast says it: what landed, the photos
  * that didn't come, and why it stopped. Null when nothing landed: the dialog
  * stays open with the reason.
  */

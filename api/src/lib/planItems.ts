@@ -21,7 +21,6 @@ import {
   asFieldValues,
   asForeignFields,
   isSystemPlaceTypeId,
-  normalizeUserUiPreferences,
   say,
   SYSTEM_PLACE_TYPE_IDS,
   type TripPlanFile,
@@ -282,7 +281,7 @@ export type AddedItem = {
  * missing id) is the same 404.
  */
 export async function addPlanItem(
-  user: { id: string; uiPreferences: Prisma.JsonValue },
+  user: { id: string },
   planId: string,
   input: TripPlanItemAdd,
 ): Promise<AddedItem> {
@@ -322,7 +321,7 @@ export async function addPlanItem(
 }
 
 async function addPlace(
-  user: { id: string; uiPreferences: Prisma.JsonValue },
+  user: { id: string },
   planId: string,
   input: TripPlanItemAdd,
 ): Promise<AddedItem> {
@@ -330,13 +329,9 @@ async function addPlace(
     where: { id: input.id, ownerId: user.id },
   });
   if (!place) throw itemNotFound();
-  const copyMedia =
-    input.copyMedia ??
-    normalizeUserUiPreferences(user.uiPreferences).copyPlaceMedia;
-  // Preflight, as POST /places/:id/copy: over quota is a 507 with nothing made.
-  const { rows: photos, totalBytes } = copyMedia
-    ? await placeMediaToCopy(place.id)
-    : { rows: [], totalBytes: 0n };
+  // The photos always come. Preflight, as POST /places/:id/copy: over quota is
+  // a 507 with nothing made.
+  const { rows: photos, totalBytes } = await placeMediaToCopy(place.id);
   if (totalBytes > 0n) await assertHasStorageQuota(user.id, totalBytes);
 
   // A plan holds system types only: a user's own type would make that user's

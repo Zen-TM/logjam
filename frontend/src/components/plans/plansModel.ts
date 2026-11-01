@@ -2,7 +2,11 @@
 // hold them (frontend/DESIGN.md §4): an edit sends only what changed, each as
 // the value last seen and the new one (shared/DESIGN.md §10).
 import {
+  coerceFieldValue,
   currentTripPlanAnswers,
+  fieldValue,
+  SYSTEM_FIELD_DEFS,
+  SYSTEM_PLACE_TYPES,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
@@ -10,6 +14,7 @@ import {
   tripPlanRoleWord,
 } from "@logjam/shared";
 import type {
+  TripLogCustomFieldDef,
   TripPlanCreate,
   TripPlanFormCreate,
   TripPlanFormPatch,
@@ -18,6 +23,7 @@ import type {
   TripPlanFormView,
   TripPlanItem,
   TripPlanItemKind,
+  TripPlanPlace,
   TripPlanPlacePatch,
   TripPlanRoutePatch,
   TripPlanPatch,
@@ -267,14 +273,51 @@ export function addedBy(plan: TripPlanView, userId: string) {
   };
 }
 
-/** The words an item's edit form holds. A file with no name of its own is
- *  blank here, so saving untouched never writes its filename as its name. */
-export type ItemWords = { name: string; notes: string };
+/** The words an item's edit form holds, every one a string as typed. A file
+ *  with no name of its own is blank here, so saving untouched never writes its
+ *  filename as its name. A place also holds its other names (comma
+ *  separated), position, elevation and one `attr:<key>` per attribute. */
+export type ItemWords = {
+  name: string;
+  notes: string;
+  [field: string]: string;
+};
+
+export const ATTR = "attr:";
+
+/** The attributes a plan place records: its system type's definitions. */
+export function placeFieldDefs(
+  place: Pick<TripPlanPlace, "placeTypeId">,
+): TripLogCustomFieldDef[] {
+  const type = SYSTEM_PLACE_TYPES.find((each) => each.id === place.placeTypeId);
+  return SYSTEM_FIELD_DEFS.filter(
+    (def) => type != null && def.placeTypes.includes(type.key),
+  ).map(({ key, label, type, min, max }) => ({
+    key,
+    label,
+    type,
+    min: min ?? undefined,
+    max: max ?? undefined,
+  }));
+}
 
 export function itemWords(item: TripPlanItem): ItemWords {
   switch (item.kind) {
-    case "place":
-      return { name: item.name, notes: item.notes ?? "" };
+    case "place": {
+      const words: ItemWords = {
+        name: item.name,
+        notes: item.notes ?? "",
+        altNames: item.altNames.join(", "),
+        latitude: String(item.latitude),
+        longitude: String(item.longitude),
+        elevation: item.elevation == null ? "" : String(item.elevation),
+      };
+      for (const def of placeFieldDefs(item)) {
+        const raw = fieldValue(item.fieldValues, def.key);
+        words[ATTR + def.key] = raw == null ? "" : String(raw);
+      }
+      return words;
+    }
     case "route":
       return { name: item.name, notes: "" };
     case "media":
@@ -285,7 +328,8 @@ export function itemWords(item: TripPlanItem): ItemWords {
 /**
  * An item edit's compare-and-set body, or null when nothing changed. Each
  * `from` is the stored value of `seen`, never the form's blanked words: the
- * API compares it exactly, and a stored "" is not null.
+ * API compares it exactly, and a stored "" is not null. A place's fields are
+ * assumed valid (the form checks them first).
  */
 export function itemPatch(
   seen: TripPlanItem,
@@ -299,8 +343,32 @@ export function itemPatch(
       : { displayName: { from: seen.item.displayName, to: name || null } };
   const patch: TripPlanPlacePatch = {};
   if (name !== was.name) patch.name = { from: seen.name, to: name };
-  if (seen.kind === "place" && now.notes !== was.notes)
-    patch.notes = { from: seen.notes, to: now.notes.trim() || null };
+  if (seen.kind === "place") {
+    if (now.notes !== was.notes)
+      patch.notes = { from: seen.notes, to: now.notes.trim() || null };
+    const altNames = now.altNames
+      .split(",")
+      .map((each) => each.trim())
+      .filter(Boolean);
+    if (!same(altNames, seen.altNames))
+      patch.altNames = { from: seen.altNames, to: altNames };
+    const latitude = Number(now.latitude);
+    const longitude = Number(now.longitude);
+    if (latitude !== seen.latitude || longitude !== seen.longitude)
+      patch.position = {
+        from: { latitude: seen.latitude, longitude: seen.longitude },
+        to: { latitude, longitude },
+      };
+    const elevation =
+      now.elevation.trim() === "" ? null : Number(now.elevation);
+    if (elevation !== seen.elevation)
+      patch.elevation = { from: seen.elevation, to: elevation };
+    for (const def of placeFieldDefs(seen)) {
+      const to = coerceFieldValue(now[ATTR + def.key], def.type);
+      const from = fieldValue(seen.fieldValues, def.key) ?? null;
+      if (!same(to, from)) (patch.fieldValues ??= {})[def.key] = { from, to };
+    }
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 

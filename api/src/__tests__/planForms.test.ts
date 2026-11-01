@@ -129,12 +129,7 @@ describe("building forms", () => {
     const id = await makeForm(contacts);
     const res = await view(BOB_SUB);
     expect(res.body.forms).toMatchObject([
-      {
-        id,
-        preset: "safetyContacts",
-        visibleTo: "members",
-        requiredToJoin: true,
-      },
+      { id, preset: "safetyContacts", visibleTo: "members" },
     ]);
     const member = await request(API_URL)
       .post(`/plans/${planId}/forms`)
@@ -235,20 +230,13 @@ describe("answers", () => {
     expect(res.body.detail).toBe("an answer doesn't fit the form it was shown");
   });
 
-  it("can't be taken back on a form required to join", async () => {
-    const required = await makeForm(contacts);
-    await answer(BOB_SUB, required, { name: "Sam", phone: "0400" }, "members");
-    const res = await request(API_URL)
-      .delete(`/plans/${planId}/forms/${required}/answers/me`)
-      .set(as(BOB_SUB));
-    expect(res.status).toBe(409);
-
-    const optional = await makeForm(experience);
-    await answer(BOB_SUB, optional, BOB_EXPERIENCE, "leaders");
+  it("can be taken back", async () => {
+    const id = await makeForm(contacts);
+    await answer(BOB_SUB, id, { name: "Sam", phone: "0400" }, "members");
     expect(
       (
         await request(API_URL)
-          .delete(`/plans/${planId}/forms/${optional}/answers/me`)
+          .delete(`/plans/${planId}/forms/${id}/answers/me`)
           .set(as(BOB_SUB))
       ).status,
     ).toBe(204);
@@ -451,7 +439,7 @@ describe("touches the plan", () => {
       request(API_URL)
         .patch(`/plans/${planId}/forms/${id}`)
         .set(as(ALICE_SUB))
-        .send({ requiredToJoin: { from: false, to: true } }),
+        .send({ title: { from: experience.title, to: "Renamed" } }),
     );
     await touches(() =>
       request(API_URL)
@@ -460,10 +448,6 @@ describe("touches the plan", () => {
         .send({ ids: [id] }),
     );
     await touches(() => answer(BOB_SUB, id, BOB_EXPERIENCE, "leaders"));
-    await request(API_URL)
-      .patch(`/plans/${planId}/forms/${id}`)
-      .set(as(ALICE_SUB))
-      .send({ requiredToJoin: { from: true, to: false } });
     await touches(() =>
       request(API_URL)
         .delete(`/plans/${planId}/forms/${id}/answers/me`)
@@ -474,5 +458,72 @@ describe("touches the plan", () => {
         .delete(`/plans/${planId}/forms/${id}`)
         .set(as(ALICE_SUB)),
     );
+  });
+});
+
+// Mutation: drop the `role: "leader"` or `status: "active"` filter in GET
+// /plans/leader-forms, and a member (or someone only invited) reads the
+// forms of a plan they don't lead.
+describe("copy from my plans", () => {
+  let otherPlanId: string;
+  beforeEach(async () => {
+    await makeForm(experience);
+    const res = await request(API_URL)
+      .post("/plans")
+      .set(as(BOB_SUB))
+      .send({ name: "Bob's plan" });
+    otherPlanId = res.body.id;
+    await request(API_URL)
+      .post(`/plans/${otherPlanId}/forms`)
+      .set(as(BOB_SUB))
+      .send(contacts);
+  });
+  afterEach(async () => {
+    await prisma.tripPlan.deleteMany({ where: { id: otherPlanId } });
+  });
+
+  const list = (sub: string, except?: string) =>
+    request(API_URL)
+      .get(`/plans/leader-forms${except ? `?except=${except}` : ""}`)
+      .set(as(sub));
+
+  it("lists the forms of the plans the caller leads, enough to copy", async () => {
+    const res = await list(BOB_SUB);
+    expect(res.status).toBe(200);
+    expect(res.body.forms).toMatchObject([
+      {
+        planId: otherPlanId,
+        planName: "Bob's plan",
+        title: contacts.title,
+        preset: "safetyContacts",
+        visibleTo: "members",
+        questions: contacts.questions,
+      },
+    ]);
+    expect(res.body.forms[0].formId).toEqual(expect.any(String));
+    expect((await list(BOB_SUB, otherPlanId)).body.forms).toEqual([]);
+  });
+
+  it("never lists a plan's forms to a member who doesn't lead it", async () => {
+    // bob is a plain member of alice's plan, which has a form.
+    const forms = (await list(BOB_SUB)).body.forms;
+    expect(forms.map((f: { planId: string }) => f.planId)).not.toContain(
+      planId,
+    );
+    expect((await list(CAROL_SUB)).body.forms).toEqual([]);
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+      data: { role: "editor" },
+    });
+    expect(
+      (await list(BOB_SUB)).body.forms.map((f: { planId: string }) => f.planId),
+    ).not.toContain(planId);
+    await prisma.tripPlanMember.update({
+      where: { planId_userId: { planId, userId: BOB_ID } },
+      data: { role: "leader", status: "invited" },
+    });
+    expect(
+      (await list(BOB_SUB)).body.forms.map((f: { planId: string }) => f.planId),
+    ).not.toContain(planId);
   });
 });

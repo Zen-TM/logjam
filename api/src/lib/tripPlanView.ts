@@ -62,6 +62,8 @@ export function planSummary(
   },
   /** For a request: who it waits for (lib/planMembership.ts `waitingFor`). */
   waitingFor: { id: string; username: string } | null = null,
+  /** Forms the caller has not answered (`unansweredBy`). */
+  unansweredForms = 0,
 ): TripPlanSummary {
   const summary: TripPlanSummary = {
     id: plan.id,
@@ -73,6 +75,7 @@ export function planSummary(
     updatedAt: plan.updatedAt.toISOString(),
     status: status(membership.status),
     role: role(membership.role),
+    unansweredForms: membership.status === "active" ? unansweredForms : 0,
   };
   if (summary.status === "invited" && membership.invitedBy)
     summary.invitedBy = membership.invitedBy;
@@ -80,6 +83,20 @@ export function planSummary(
     summary.waitingFor = waitingFor;
   return summary;
 }
+
+/** A plan's forms with the caller's own answers, to count the unanswered:
+ *  two batched queries for a whole list, not one per plan, and no NOT EXISTS,
+ *  which the planner scans all forms for (__tests__/queryPlans.test.ts). */
+export const formsAnsweredBy = (userId: string) =>
+  ({
+    select: {
+      id: true,
+      answers: { where: { userId }, select: { id: true } },
+    },
+  }) as const;
+
+export const unanswered = (forms: { answers: unknown[] }[]) =>
+  forms.filter((form) => form.answers.length === 0).length;
 
 export const memberInclude = { user: userRef, invitedBy: userRef } as const;
 
@@ -128,7 +145,6 @@ type FormRow = {
   preset: string | null;
   questions: unknown;
   visibleTo: string;
-  requiredToJoin: boolean;
   position: number;
   updatedAt: Date;
   answers: {
@@ -190,7 +206,6 @@ export function formView(
       form.preset && isTripPlanFormPresetId(form.preset) ? form.preset : null,
     questions,
     visibleTo,
-    requiredToJoin: form.requiredToJoin,
     position: form.position,
     updatedAt: form.updatedAt.toISOString(),
     myAnswer: mine ? answerView(mine) : null,
