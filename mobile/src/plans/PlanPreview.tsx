@@ -43,7 +43,6 @@ import {
   ErrorState,
   Hero,
   LoadingState,
-  Notice,
   Row,
   SectionHeader,
 } from "../ui";
@@ -194,9 +193,15 @@ export function PlanPreview({
         hero: <Text style={styles.muted}>{tripPlanInvitedLine(preview)}</Text>,
         notice: (
           <>
-            <Notice
+            <Row
               icon="plan"
-              controls={
+              title={
+                preview.requiredForms.length > 0
+                  ? copy.answerToJoin
+                  : copy.invited
+              }
+              titleNumberOfLines={3}
+              footer={
                 <View style={styles.controls}>
                   <Button
                     label={copy.join}
@@ -221,11 +226,7 @@ export function PlanPreview({
                   />
                 </View>
               }
-            >
-              {preview.requiredForms.length > 0
-                ? copy.answerToJoin
-                : copy.invited}
-            </Notice>
+            />
             {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
             {!joining && error ? <ErrorBanner message={error} /> : null}
           </>

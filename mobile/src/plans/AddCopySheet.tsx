@@ -7,7 +7,7 @@
 // (`tripPlanAddCopyPriceLine`). Logjam Web's twin is
 // frontend/src/components/plans/PlanAddCopyDialog.tsx. Online only.
 import { useEffect, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import {
   formatBytes,
   mediaDisplayName,
@@ -34,13 +34,22 @@ import {
   useMirrorRoutes,
   usePendingCreateIds,
 } from "../sync/useSyncQueries";
-import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
+import {
+  controlSize,
+  makeStyles,
+  muted,
+  radius,
+  spacing,
+  useHues,
+  useTheme,
+} from "../theme";
 import {
   BottomSheet,
   Button,
   ChipRail,
   EmptyState,
   ErrorBanner,
+  Icon,
   ErrorState,
   LoadingState,
   Row,
@@ -88,6 +97,7 @@ export function AddCopySheet({
   const [files, setFiles] = useState<MirrorMedia[]>([]);
   const [group, setGroup] = useState<TripPlanItemGroup>("places");
   const [ticked, setTicked] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [withMedia, toggleMedia] = useRememberedCopyMedia(visible);
@@ -119,6 +129,7 @@ export function AddCopySheet({
     setOpenedFor(visible);
     if (visible) {
       setTicked([]);
+      setSearch("");
       setGroup("places");
       setError(null);
     }
@@ -224,7 +235,11 @@ export function AddCopySheet({
     onDone(outcome.message, outcome.tone);
   }
 
-  const list = rows[group];
+  // Ticks outlive a search: they are kept by key, not by what is shown.
+  const needle = search.trim().toLowerCase();
+  const list = rows[group].filter(
+    (each) => !needle || each.title.toLowerCase().includes(needle),
+  );
   return (
     <BottomSheet
       visible={visible}
@@ -268,8 +283,25 @@ export function AddCopySheet({
             onChange={toggleMedia}
           />
         ) : null}
+        <View style={styles.searchWrap}>
+          <Icon idea="search" size={16} color={theme.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search by name"
+            placeholderTextColor={theme.textMuted}
+            accessibilityLabel="Search by name"
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+        </View>
         {list.length === 0 ? (
-          <EmptyState icon="place" title={copy.nothingToAdd} />
+          <EmptyState
+            icon="place"
+            title={needle ? "Nothing matches that name." : copy.nothingToAdd}
+          />
         ) : (
           list.map((each) => (
             <Row
@@ -301,4 +333,17 @@ const useStyles = makeStyles((theme, textRole) => ({
   muted: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   footer: { gap: spacing(1) },
+  // As the trip log's place picker draws its search.
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: theme.lineStrong,
+    backgroundColor: theme.card,
+    paddingHorizontal: spacing(1.5),
+    minHeight: controlSize.lg,
+  },
+  searchInput: { ...textRole.body, flex: 1, color: theme.text },
 }));

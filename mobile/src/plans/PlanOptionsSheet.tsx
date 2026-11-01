@@ -26,14 +26,16 @@ import { unavailableReasonText } from "../auth/capabilities";
 import { makeStyles, spacing, useTheme } from "../theme";
 import { BottomSheet, Row, todayDateKey } from "../ui";
 import { archivePlan, deletePlan, leavePlan } from "./plansApi";
-import { afterPlanWrite } from "./plansCache";
+import { PlanDownloadRows } from "./PlanDownload";
+import { afterPlanWrite, type CachedPlan } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
 
 export function PlanOptionsSheet({
-  plan,
+  cached,
   online,
+  onDownloadMap,
   onClose,
   onEdit,
   onTripLog,
@@ -43,8 +45,10 @@ export function PlanOptionsSheet({
   onLeaving,
 }: {
   /** The plan whose verbs these are; null while the sheet is closed. */
-  plan: TripPlanView | null;
+  cached: CachedPlan | null;
   online: boolean;
+  /** The region download, framed on the plan's items. */
+  onDownloadMap: (bbox: [number, number, number, number]) => void;
   onClose: () => void;
   onEdit: () => void;
   onTripLog: () => void;
@@ -58,6 +62,7 @@ export function PlanOptionsSheet({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const plan = cached?.plan ?? null;
 
   const confirm = (
     words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
@@ -163,7 +168,7 @@ export function PlanOptionsSheet({
       }}
       title={plan?.name ?? ""}
     >
-      {plan ? (
+      {plan && cached ? (
         <View style={styles.body}>
           {verbs.map((verb, index, all) => (
             <Fragment key={verb.id}>
@@ -180,6 +185,13 @@ export function PlanOptionsSheet({
               />
             </Fragment>
           ))}
+          {/* Starting a download is here; its progress stays in the hero. */}
+          <PlanDownloadRows
+            cached={cached}
+            online={online}
+            onDownloadMap={onDownloadMap}
+            onStarted={onClose}
+          />
         </View>
       ) : null}
     </BottomSheet>

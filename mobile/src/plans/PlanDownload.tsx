@@ -28,24 +28,10 @@ import { useMapArtifacts } from "../offline/useMapArtifacts";
 import { planBbox, planMapSaved } from "./planMap";
 import { planForUrls, type CachedPlan } from "./plansCache";
 
-export function PlanDownload({
-  cached,
-  online,
-  now,
-  onDownloadMap,
-}: {
-  cached: CachedPlan;
-  online: boolean;
-  /** For "Downloaded 3 days ago". */
-  now: number;
-  onDownloadMap: (bbox: [number, number, number, number]) => void;
-}) {
-  const { plan } = cached;
+/** Which files of the plan are not on the phone, read again as a run ends;
+ *  null until read. */
+function useMissingFiles(plan: CachedPlan["plan"], running: boolean) {
   const [missing, setMissing] = useState<PlanFile[] | null>(null);
-  const progress = usePlanDownload(plan.id);
-  const { artifacts } = useMapArtifacts();
-  const running = progress !== null;
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -56,6 +42,24 @@ export function PlanDownload({
       cancelled = true;
     };
   }, [plan, running]);
+  return missing;
+}
+
+/** The state of the download, in the plan's hero: the progress row while it
+ *  runs, and Downloaded with when. Starting one is `PlanDownloadRows`, on the
+ *  plan's ⋯. */
+export function PlanDownload({
+  cached,
+  now,
+}: {
+  cached: CachedPlan;
+  /** For "Downloaded 3 days ago". */
+  now: number;
+}) {
+  const { plan } = cached;
+  const progress = usePlanDownload(plan.id);
+  const missing = useMissingFiles(plan, progress !== null);
+  const { artifacts } = useMapArtifacts();
 
   if (progress)
     return (
@@ -66,39 +70,64 @@ export function PlanDownload({
         progress={progress.total > 0 ? progress.done / progress.total : 0}
       />
     );
-  if (missing === null) return null;
+  if (!missing || !cached.downloadedAt || missing.length > 0) return null;
+  const bbox = planBbox(plan);
+  const mapSaved = bbox !== null && planMapSaved(bbox, artifacts);
+  return (
+    <View style={{ flexDirection: "row", gap: spacing(1) }}>
+      <StatusPill
+        label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
+        tone="muted"
+        icon="saveOffline"
+      />
+      {mapSaved ? (
+        <StatusPill
+          label={TRIP_PLAN_OFFLINE.mapDownloaded}
+          tone="muted"
+          icon="map"
+        />
+      ) : null}
+    </View>
+  );
+}
+
+/** The plan's ⋯ rows that start work: Download for this trip, priced before it
+ *  runs ("14 files, 230 MB"), or what a downloaded plan lacks (a plan that
+ *  gained files since offers the rest), and then the map for its area. Draws
+ *  nothing while a run is going: the hero shows that. */
+export function PlanDownloadRows({
+  cached,
+  online,
+  onDownloadMap,
+  onStarted,
+}: {
+  cached: CachedPlan;
+  online: boolean;
+  onDownloadMap: (bbox: [number, number, number, number]) => void;
+  /** A row was pressed: the sheet holding them closes. */
+  onStarted: () => void;
+}) {
+  const { plan } = cached;
+  const running = usePlanDownload(plan.id) !== null;
+  const missing = useMissingFiles(plan, running);
+  const { artifacts } = useMapArtifacts();
+  if (running || missing === null) return null;
+  const reason = online ? undefined : unavailableReasonText("needs-connection");
+
   if (cached.downloadedAt && missing.length === 0) {
     const bbox = planBbox(plan);
-    const mapSaved = bbox !== null && planMapSaved(bbox, artifacts);
+    if (!bbox || planMapSaved(bbox, artifacts)) return null;
     return (
-      <>
-        <View style={{ flexDirection: "row", gap: spacing(1) }}>
-          <StatusPill
-            label={`${TRIP_PLAN_OFFLINE.downloaded} ${relativeTime(cached.downloadedAt, now)}`}
-            tone="muted"
-            icon="saveOffline"
-          />
-          {mapSaved ? (
-            <StatusPill
-              label={TRIP_PLAN_OFFLINE.mapDownloaded}
-              tone="muted"
-              icon="map"
-            />
-          ) : null}
-        </View>
-        {bbox && !mapSaved ? (
-          <Row
-            icon="map"
-            title={TRIP_PLAN_OFFLINE.downloadMap}
-            subtitle={
-              online ? undefined : unavailableReasonText("needs-connection")
-            }
-            disabled={!online}
-            onPress={() => onDownloadMap(bbox)}
-            style={{ marginTop: spacing(1) }}
-          />
-        ) : null}
-      </>
+      <Row
+        icon="map"
+        title={TRIP_PLAN_OFFLINE.downloadMap}
+        subtitle={reason}
+        disabled={!online}
+        onPress={() => {
+          onStarted();
+          onDownloadMap(bbox);
+        }}
+      />
     );
   }
 
@@ -111,12 +140,12 @@ export function PlanDownload({
     <Row
       icon="saveOffline"
       title={TRIP_PLAN_OFFLINE.download}
-      subtitle={
-        online ? price || undefined : unavailableReasonText("needs-connection")
-      }
+      subtitle={reason ?? (price || undefined)}
       disabled={!online}
-      onPress={() => void startPlanDownload(plan.id)}
-      style={{ marginTop: spacing(1) }}
+      onPress={() => {
+        onStarted();
+        void startPlanDownload(plan.id);
+      }}
     />
   );
 }

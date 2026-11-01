@@ -150,7 +150,12 @@ type MapStackParams = {
         // `drawRouteFor` = "Draw one on the map": arm the pen. From a place
         // page it carries that place's id and saves into its route slot;
         // from Saved's add sheet the id is null and the route stands alone.
-        drawRouteFor?: { placeId: string | null; nonce: number };
+        drawRouteFor?: {
+          placeId: string | null;
+          /** From a plan's page: the finished route is added to it. */
+          planId?: string;
+          nonce: number;
+        };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
         // track back up. An id, never points.
         continueTrack?: { trackId: string; nonce: number };
@@ -365,6 +370,12 @@ function MapStackNav() {
             startRecording={route.params?.startRecording ?? null}
             navigatePlace={route.params?.navigatePlace ?? null}
             planMode={route.params?.planMode ?? null}
+            onRouteForPlan={(planId) =>
+              navigation.getParent()?.navigate("More", {
+                screen: "Plan",
+                params: { planId, name: TRIP_PLANS_LIST.title, view: "items" },
+              })
+            }
             onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "MapPickPoint",
@@ -1323,6 +1334,18 @@ export function AppShell({
                                 ...(bbox && {
                                   focus: { bbox, nonce: Date.now() },
                                 }),
+                              },
+                            })
+                          }
+                          onDrawRoute={(planId) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapView",
+                              params: {
+                                drawRouteFor: {
+                                  placeId: null,
+                                  planId,
+                                  nonce: Date.now(),
+                                },
                               },
                             })
                           }
