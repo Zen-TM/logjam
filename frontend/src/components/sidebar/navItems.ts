@@ -29,7 +29,6 @@ const PAGE_ITEMS: NavItem[] = [
   // The umbrella for routes, recorded tracks and imports. "Routes" would name
   // one of its own three kinds.
   { id: "ways", label: "Ways", icon: "route" },
-  { id: "maps", label: "Maps", icon: "map" },
   { id: "friends", label: "Friends", icon: "friends" },
 ];
 
@@ -49,13 +48,7 @@ const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
 
 /** The More menu, most- to least-reached. Inbox first: it is the badged item,
  *  and landing on it is what makes More's badge pay off in one glance. */
-const MORE_ITEM_IDS: NavItemId[] = [
-  "inbox",
-  "maps",
-  "friends",
-  "account",
-  "settings",
-];
+const MORE_ITEM_IDS: NavItemId[] = ["inbox", "friends", "account", "settings"];
 
 function itemById(id: NavItemId): NavItem {
   const item = ALL_ITEMS.find((candidate) => candidate.id === id);

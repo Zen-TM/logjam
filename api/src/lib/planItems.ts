@@ -1,5 +1,5 @@
-// What a plan holds besides its write-up and forms: places, routes, files and
-// GeoPDFs. Each is a copy that belongs to the plan (no owner, `planId` set),
+// What a plan holds besides its write-up and forms: places, routes and files.
+// Each is a copy that belongs to the plan (no owner, `planId` set),
 // made by Add a copy from something the adder owns, and copied back out by
 // Save a copy. One copy path per kind: a place goes through the place copy's
 // pieces (lib/placeCopy.ts, copyPlaceMedia.ts), a file through the same
@@ -17,7 +17,7 @@
 // place-linked media arm of /sync/delta).
 // Guard: __tests__/planItems.test.ts.
 import { CopyObjectCommand } from "@aws-sdk/client-s3";
-import { Prisma, type GeoPdfJob, type Media } from "@prisma/client";
+import { Prisma, type Media } from "@prisma/client";
 import {
   asFieldValues,
   asForeignFields,
@@ -26,7 +26,6 @@ import {
   say,
   SYSTEM_PLACE_TYPE_IDS,
   type TripPlanFile,
-  type TripPlanGeoPdf,
   type TripPlanItemAdd,
   type TripPlanItemKind,
   type TripPlanPlace,
@@ -57,14 +56,6 @@ import {
   storageFull,
 } from "./storageQuota";
 import { deleteS3Keys, deleteS3KeysBestEffort } from "./s3Cleanup";
-import { geoPdfTitle } from "./geoPdfTitle";
-import {
-  geoPdfDownloadFilename,
-  presignResult,
-  planResultKeyFor,
-  resultKeyFor,
-  TOPO_BUCKET,
-} from "./geoPdfResult";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -76,7 +67,7 @@ export function itemNotFound(): AppError {
 
 // ── Reading ────────────────────────────────────────────────────
 
-type PlanItems = Pick<TripPlanView, "places" | "routes" | "files" | "geoPdfs">;
+type PlanItems = Pick<TripPlanView, "places" | "routes" | "files">;
 
 function itemBase(row: {
   id: string;
@@ -111,7 +102,7 @@ export async function loadPlanItems(
   const where = only ? { planId, id: only.id } : { planId };
   const order = [{ createdAt: "asc" }, { id: "asc" }] as const;
   const fileInclude = { addedBy: userRef, chargedTo: userRef } as const;
-  const [places, routes, files, geoPdfs] = await Promise.all([
+  const [places, routes, files] = await Promise.all([
     want("place")
       ? prisma.place.findMany({
           where,
@@ -129,13 +120,6 @@ export async function loadPlanItems(
     want("media")
       ? prisma.media.findMany({
           where: { ...where, linkedType: "none" },
-          include: fileInclude,
-          orderBy: [...order],
-        })
-      : [],
-    want("geoPdf")
-      ? prisma.geoPdfJob.findMany({
-          where,
           include: fileInclude,
           orderBy: [...order],
         })
@@ -205,22 +189,6 @@ export async function loadPlanItems(
           item: await toMediaItem(row),
         }),
       ),
-    ),
-    geoPdfs: await Promise.all(
-      geoPdfs.map(async (row): Promise<TripPlanGeoPdf> => {
-        const download = await presignResult(
-          row.resultKey,
-          geoPdfDownloadFilename(row.config, row.createdAt),
-        );
-        return {
-          kind: "geoPdf",
-          ...itemBase({ ...row, updatedAt: row.completedAt ?? row.createdAt }),
-          ...charge({ bytes: row.resultBytes, chargedTo: row.chargedTo }),
-          title: geoPdfTitle(row.config),
-          downloadUrl: download?.url ?? null,
-          downloadExpiresAt: download?.expiresAt ?? null,
-        };
-      }),
     ),
   };
 }
@@ -305,58 +273,6 @@ export async function copyStandaloneFile(
   );
 }
 
-/** A completed GeoPDF copied for `owner`, with its own object. */
-export async function copyGeoPdf(
-  source: GeoPdfJob,
-  recipientId: string,
-  owner: FileOwner,
-): Promise<GeoPdfJob> {
-  if (!source.resultKey) throw fault("a completed GeoPDF has no result key");
-  const bytes = source.resultBytes ?? 0n;
-  await assertHasStorageQuota(recipientId, bytes);
-  const id = randomUUID();
-  const key = "planId" in owner ? planResultKeyFor(id) : resultKeyFor(id);
-  try {
-    await s3.send(
-      new CopyObjectCommand({
-        Bucket: TOPO_BUCKET,
-        CopySource: `${TOPO_BUCKET}/${source.resultKey}`,
-        Key: key,
-      }),
-    );
-  } catch (err) {
-    logger.warn(
-      { jobId: source.id, err: safeErrorForLog(err) },
-      "plan_geo_pdf_copy_failed",
-    );
-    await deleteS3KeysBestEffort(TOPO_BUCKET, [key]);
-    throw fault("a GeoPDF's object could not be copied", 502);
-  }
-  return chargeAndWrite(
-    owner,
-    recipientId,
-    bytes,
-    { bucket: TOPO_BUCKET, keys: [key] },
-    (tx) =>
-      tx.geoPdfJob.create({
-        data: {
-          id,
-          ...("planId" in owner
-            ? ownerColumns(owner, recipientId)
-            : { userId: recipientId }),
-          config: source.config as Prisma.InputJsonValue,
-          vectorStyleSnapshot:
-            source.vectorStyleSnapshot as Prisma.InputJsonValue,
-          estimatedSeconds: source.estimatedSeconds,
-          status: "completed",
-          resultKey: key,
-          resultBytes: source.resultBytes,
-          completedAt: new Date(),
-        },
-      }),
-  );
-}
-
 // ── Add a copy ─────────────────────────────────────────────────
 
 export type AddedItem = {
@@ -404,19 +320,6 @@ export async function addPlanItem(
       });
       if (!source) throw itemNotFound();
       const row = await copyStandaloneFile(source, user.id, { planId });
-      return { id: row.id };
-    }
-    case "geoPdf": {
-      const source = await prisma.geoPdfJob.findFirst({
-        where: { id: input.id, userId: user.id, status: { not: "failed" } },
-      });
-      if (!source) throw itemNotFound();
-      if (source.status !== "completed")
-        throw new AppError(
-          409,
-          say`A GeoPDF that is still being made can't be added.`,
-        );
-      const row = await copyGeoPdf(source, user.id, { planId });
       return { id: row.id };
     }
   }
@@ -542,16 +445,6 @@ function deleteMediaReturning(tx: Prisma.TransactionClient, where: Prisma.Sql) {
   `;
 }
 
-function deleteGeoPdfsReturning(
-  tx: Prisma.TransactionClient,
-  where: Prisma.Sql,
-) {
-  return tx.$queryRaw<(Refund & { id: string })[]>`
-    DELETE FROM geo_pdf_jobs WHERE ${where}
-    RETURNING id, charged_to_id, result_bytes AS bytes
-  `;
-}
-
 type MediaKeys = { s3KeyDisplay: string; s3KeyThumbnail: string | null };
 const mediaKeySelect = { s3KeyDisplay: true, s3KeyThumbnail: true } as const;
 
@@ -583,8 +476,6 @@ export async function deletePlanItem(
     });
     await deleteS3Keys(MEDIA_BUCKET, mediaKeysOf(files));
   }
-  if (kind === "geoPdf")
-    await deleteS3Keys(TOPO_BUCKET, [planResultKeyFor(id)]);
 
   await prisma.$transaction(async (tx) => {
     await touchPlan(tx, planId);
@@ -613,23 +504,13 @@ export async function deletePlanItem(
         count = rows.length;
         break;
       }
-      case "geoPdf": {
-        const rows = await deleteGeoPdfsReturning(
-          tx,
-          Prisma.sql`plan_id = ${planId} AND id = ${id}`,
-        );
-        await refund(tx, rows);
-        count = rows.length;
-        break;
-      }
     }
     if (count === 0) throw itemNotFound();
   });
 }
 
 /**
- * Which of a plan's files go: a WHERE over `media` or `geo_pdf_jobs`, which
- * share plan_id, added_by_id and charged_to_id. A place's photos carry its
+ * Which of a plan's files go: a WHERE over `media`. A place's photos carry its
  * adder, so `addedBy` takes them with the place.
  */
 type PlanFiles = Prisma.Sql;
@@ -641,56 +522,38 @@ const planFiles = {
     Prisma.sql`plan_id = ${planId} AND charged_to_id = ${userId}`,
 };
 
-type Objects = { keys: string[]; jobs: string[] };
-const NO_OBJECTS: Objects = { keys: [], jobs: [] };
-
 /**
  * Before the transaction: delete the objects of the files `which` names. S3
  * goes first, so a failure leaves the rows and their keys for a retry.
+ * Returns the keys it deleted.
  */
-async function deletePlanFileObjects(which: PlanFiles): Promise<Objects> {
-  const [media, jobs] = await Promise.all([
-    prisma.$queryRaw<MediaKeys[]>`
-      SELECT s3_key_display AS "s3KeyDisplay", s3_key_thumbnail AS "s3KeyThumbnail"
-      FROM media WHERE ${which}
-    `,
-    prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM geo_pdf_jobs WHERE ${which}
-    `,
-  ]);
-  const objects = { keys: mediaKeysOf(media), jobs: jobs.map((j) => j.id) };
-  await Promise.all([
-    deleteS3Keys(MEDIA_BUCKET, objects.keys),
-    deleteS3Keys(TOPO_BUCKET, objects.jobs.map(planResultKeyFor)),
-  ]);
-  return objects;
+async function deletePlanFileObjects(which: PlanFiles): Promise<string[]> {
+  const media = await prisma.$queryRaw<MediaKeys[]>`
+    SELECT s3_key_display AS "s3KeyDisplay", s3_key_thumbnail AS "s3KeyThumbnail"
+    FROM media WHERE ${which}
+  `;
+  const keys = mediaKeysOf(media);
+  await deleteS3Keys(MEDIA_BUCKET, keys);
+  return keys;
 }
 
 /**
  * In the plan's transaction, after touchPlan: delete the rows `which` names,
  * counting each payer's refund into `usage`. Returns what to run after
- * commit: it deletes the objects of the files that are not in `gone`, what
- * deletePlanFileObjects deleted before.
+ * commit: it deletes the objects of the files whose keys are not in `gone`,
+ * what deletePlanFileObjects deleted before.
  */
 async function dropPlanFiles(
   tx: Prisma.TransactionClient,
   which: PlanFiles,
-  gone: Objects,
+  gone: string[],
   usage: Usage,
 ): Promise<() => Promise<void>> {
   const files = await deleteMediaReturning(tx, which);
-  const pdfs = await deleteGeoPdfsReturning(tx, which);
-  refundInto(usage, [...files, ...pdfs]);
-  const keys = new Set(gone.keys);
-  const jobs = new Set(gone.jobs);
-  const lateKeys = mediaKeysOf(files).filter((key) => !keys.has(key));
-  const lateJobs = pdfs
-    .filter((pdf) => !jobs.has(pdf.id))
-    .map((pdf) => planResultKeyFor(pdf.id));
-  return async () => {
-    await deleteS3KeysBestEffort(MEDIA_BUCKET, lateKeys);
-    await deleteS3KeysBestEffort(TOPO_BUCKET, lateJobs);
-  };
+  refundInto(usage, files);
+  const done = new Set(gone);
+  const lateKeys = mediaKeysOf(files).filter((key) => !done.has(key));
+  return () => deleteS3KeysBestEffort(MEDIA_BUCKET, lateKeys);
 }
 
 /**
@@ -736,18 +599,11 @@ async function moveCharges(
   toId: string,
   usage: Usage,
 ): Promise<void> {
-  const moved = [
-    ...(await tx.$queryRaw<{ bytes: bigint | null }[]>`
-      UPDATE media SET charged_to_id = ${toId}
-      WHERE plan_id = ${planId} AND charged_to_id = ${fromId}
-      RETURNING file_size_bytes AS bytes
-    `),
-    ...(await tx.$queryRaw<{ bytes: bigint | null }[]>`
-      UPDATE geo_pdf_jobs SET charged_to_id = ${toId}
-      WHERE plan_id = ${planId} AND charged_to_id = ${fromId}
-      RETURNING result_bytes AS bytes
-    `),
-  ];
+  const moved = await tx.$queryRaw<{ bytes: bigint | null }[]>`
+    UPDATE media SET charged_to_id = ${toId}
+    WHERE plan_id = ${planId} AND charged_to_id = ${fromId}
+    RETURNING file_size_bytes AS bytes
+  `;
   const bytes = moved.reduce((sum, row) => sum + (row.bytes ?? 0n), 0n);
   change(usage, fromId, -bytes);
   change(usage, toId, bytes);
@@ -780,9 +636,8 @@ function goingFiles(going: MemberGoing): PlanFiles | null {
  * objects of the files that went. After, not before as everywhere else here:
  * the route's 409s run inside the transaction, and an S3 pass they abort
  * would leave rows whose files are gone.
- * ponytail: a failed S3 delete orphans the object. The media sweeper
- * (lib/mediaOrphanSweeper.ts) takes a file's; a GeoPDF's stays until a sweep
- * of `plans/geo-pdf/` exists.
+ * A failed S3 delete orphans the object, which the media sweeper
+ * (lib/mediaOrphanSweeper.ts) takes.
  * Guard: __tests__/planItems.test.ts ("storage when someone goes").
  */
 export async function memberGone(
@@ -793,7 +648,7 @@ export async function memberGone(
   const usage: Usage = new Map();
   const which = goingFiles(going);
   const late = which
-    ? await dropPlanFiles(tx, which, NO_OBJECTS, usage)
+    ? await dropPlanFiles(tx, which, [], usage)
     : async () => {};
   if (going.deleteAdded) {
     await tx.route.deleteMany({ where: { planId, addedById: memberId } });
@@ -810,8 +665,8 @@ export async function memberGone(
  * transaction here holds two plan rows and every decision is made under the
  * plan's lock:
  * - with no one else active, the plan is deleted, files and all, and anyone
- *   invited or asking is told; its objects go after commit (the ponytail on
- *   memberGone applies);
+ *   invited or asking is told; its objects go after commit, as in
+ *   memberGone;
  * - otherwise, with no other leader, the earliest member (by row) becomes
  *   one; the files charged to the user move to the plan's creator while they
  *   are in it, else to the earliest leader; and the user is out of the plan,
@@ -825,7 +680,6 @@ export async function handOverPlans(userId: string): Promise<void> {
       OR: [
         { members: { some: { userId, status: "active" } } },
         { media: { some: { chargedToId: userId } } },
-        { geoPdfJobs: { some: { chargedToId: userId } } },
       ],
     },
     select: { id: true, createdById: true },
@@ -844,7 +698,7 @@ export async function handOverPlans(userId: string): Promise<void> {
           const late = await dropPlanFiles(
             tx,
             planFiles.all(plan.id),
-            NO_OBJECTS,
+            [],
             usage,
           );
           await applyStorageChanges(usage, tx);

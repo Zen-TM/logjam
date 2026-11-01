@@ -29,9 +29,8 @@ const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
 const EVERYONE = [ALICE_SUB, BOB_SUB, CAROL_SUB];
 
 let planMediaId: string;
-let planGeoPdfId: string;
 
-/** A plan-owned file and GeoPDF on the seeded plan; the sweep removes them. */
+/** A plan-owned file on the seeded plan; the sweep removes it. */
 beforeAll(async () => {
   planMediaId = (
     await prisma.media.create({
@@ -48,22 +47,9 @@ beforeAll(async () => {
       },
     })
   ).id;
-  planGeoPdfId = (
-    await prisma.geoPdfJob.create({
-      data: {
-        planId: SEED_PLAN_ID,
-        addedById: ALICE_ID,
-        chargedToId: ALICE_ID,
-        config: {},
-        vectorStyleSnapshot: {},
-        status: "completed",
-        completedAt: new Date(),
-      },
-    })
-  ).id;
 });
 
-const planIds = () => [PLAN_PLACE_ID, PLAN_ROUTE_ID, planMediaId, planGeoPdfId];
+const planIds = () => [PLAN_PLACE_ID, PLAN_ROUTE_ID, planMediaId];
 
 function expectNoPlanRows(body: unknown) {
   const text = JSON.stringify(body);
@@ -72,7 +58,7 @@ function expectNoPlanRows(body: unknown) {
 
 describe("the one-owner CHECK", () => {
   // Mutation: drop any of the four *_one_owner constraints in
-  // 20261019120000_trip_plans.
+  // 20261101120000_trip_plans.
   const point = {
     placeTypeId: MARKER_TYPE_ID,
     name: "check-test",
@@ -94,7 +80,6 @@ describe("the one-owner CHECK", () => {
     filename: "check.gpx",
     fileSizeBytes: 1n,
   };
-  const job = { config: {}, vectorStyleSnapshot: {} };
 
   it.each([
     [
@@ -121,14 +106,6 @@ describe("the one-owner CHECK", () => {
         }),
     ],
     ["media", () => prisma.media.create({ data: file })],
-    [
-      "geoPdfJob",
-      () =>
-        prisma.geoPdfJob.create({
-          data: { ...job, userId: ALICE_ID, planId: SEED_PLAN_ID },
-        }),
-    ],
-    ["geoPdfJob", () => prisma.geoPdfJob.create({ data: job })],
   ])("refuses a %s with both owners or neither", async (_kind, insert) => {
     await expect(insert()).rejects.toThrow(/one_owner/);
   });
@@ -143,7 +120,6 @@ describe("plan rows stay out of every owner-scoped list", () => {
     "/places/tracks",
     "/routes",
     "/media/standalone",
-    "/geo-pdf",
   ])("GET %s", async (path) => {
     for (const sub of EVERYONE) {
       const res = await request(API_URL).get(path).set(as(sub));
@@ -211,20 +187,15 @@ describe("plan rows cannot be shared or sent", () => {
         .send({ sharedWithUserId: sub === ALICE_SUB ? BOB_ID : ALICE_ID });
       expect(placeShare.status).toBe(404);
 
-      for (const [entityType, entityId] of [
-        ["route", PLAN_ROUTE_ID],
-        ["geoPdfJob", planGeoPdfId],
-      ]) {
-        const share = await request(API_URL)
-          .post("/shares")
-          .set(as(sub))
-          .send({
-            entityType,
-            entityId,
-            sharedWithUserId: sub === ALICE_SUB ? BOB_ID : ALICE_ID,
-          });
-        expect(share.status).toBe(404);
-      }
+      const share = await request(API_URL)
+        .post("/shares")
+        .set(as(sub))
+        .send({
+          entityType: "route",
+          entityId: PLAN_ROUTE_ID,
+          sharedWithUserId: sub === ALICE_SUB ? BOB_ID : ALICE_ID,
+        });
+      expect(share.status).toBe(404);
 
       const send = await request(API_URL)
         .post("/file-sends/from-media")
@@ -249,24 +220,23 @@ describe("plan rows cannot be shared or sent", () => {
         items: [
           { entityType: "place", entityId: PLAN_PLACE_ID },
           { entityType: "route", entityId: PLAN_ROUTE_ID },
-          { entityType: "geoPdfJob", entityId: planGeoPdfId },
         ],
       });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ granted: 0, alreadyShared: 0, ineligible: 3 });
+    expect(res.body).toEqual({ granted: 0, alreadyShared: 0, ineligible: 2 });
     expect(
       await prisma.placeShare.count({ where: { placeId: PLAN_PLACE_ID } }),
     ).toBe(0);
     expect(
       await prisma.share.count({
-        where: { entityId: { in: [PLAN_ROUTE_ID, planGeoPdfId] } },
+        where: { entityId: PLAN_ROUTE_ID },
       }),
     ).toBe(0);
   });
 });
 
 describe("every by-id path 404s on a plan row", () => {
-  // Mutation: same as above, or drop a `!row?.ownerId` / `!row?.userId`
+  // Mutation: same as above, or drop a `!row?.ownerId`
   // check where a route loads a row by id.
   const paths = (): [string, string, object?][] => [
     ["get", `/places/${PLAN_PLACE_ID}`],
@@ -281,8 +251,6 @@ describe("every by-id path 404s on a plan row", () => {
     ["patch", `/media/${planMediaId}`, { displayName: "renamed" }],
     ["post", `/media/${planMediaId}/link`, { linkedType: "none" }],
     ["delete", `/media/${planMediaId}`],
-    ["get", `/geo-pdf/${planGeoPdfId}`],
-    ["delete", `/geo-pdf/${planGeoPdfId}`],
   ];
 
   it.each(EVERYONE)("as %s", async (sub) => {
@@ -304,9 +272,6 @@ describe("every by-id path 404s on a plan row", () => {
     expect(
       await prisma.media.findUnique({ where: { id: planMediaId } }),
     ).toMatchObject({ planId: SEED_PLAN_ID, displayName: null });
-    expect(
-      await prisma.geoPdfJob.findUnique({ where: { id: planGeoPdfId } }),
-    ).toMatchObject({ planId: SEED_PLAN_ID });
   });
 
   it("a /sync/push update or delete changes nothing", async () => {
@@ -408,9 +373,6 @@ describe("deleting a plan", () => {
         fileSizeBytes: 1n,
       },
     });
-    await prisma.geoPdfJob.create({
-      data: { planId, config: {}, vectorStyleSnapshot: {} },
-    });
 
     await prisma.tripPlan.delete({ where: { id: planId } });
 
@@ -423,8 +385,7 @@ describe("deleting a plan", () => {
       prisma.place.count({ where: { planId } }),
       prisma.route.count({ where: { planId } }),
       prisma.media.count({ where: { planId } }),
-      prisma.geoPdfJob.count({ where: { planId } }),
     ]);
-    expect(counts).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(counts).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
   });
 });

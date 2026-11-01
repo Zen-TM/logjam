@@ -9,13 +9,18 @@ import { createCanvas } from "canvas";
 import {
   clearDemTileCache,
   sampleElevations as sampleDemElevations,
+  sampleSlope,
 } from "./elevation";
 import { NSW_5M, TERRARIUM, type SamplePosition } from "@logjam/shared";
 
 // The archive source is read from the CDN base, which the unit env leaves
 // unset: these tests then see the worldwide source alone. The
 // parity case for the archive sets it.
-const envOverride = vi.hoisted(() => ({}) as { TOPO_CDN_BASE_URL?: string });
+const envOverride = vi.hoisted(
+  () => ({}) as { TOPO_CDN_BASE_URL?: string; S3_BUCKET_TOPO?: string },
+);
+const s3Send = vi.hoisted(() => vi.fn());
+vi.mock("./awsClients", () => ({ s3: { send: s3Send } }));
 vi.mock("../lib/env", async (original) => {
   const real = await original<typeof import("../lib/env")>();
   return { ...real, getEnv: () => ({ ...real.getEnv(), ...envOverride }) };
@@ -62,6 +67,8 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   delete envOverride.TOPO_CDN_BASE_URL;
+  delete envOverride.S3_BUCKET_TOPO;
+  s3Send.mockReset();
   clearDemTileCache();
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
@@ -215,6 +222,102 @@ describe("sampleElevations", () => {
     dem.levelled.forEach((height, i) =>
       expect(height).toBeCloseTo(parity.levelled[i]!, 1),
     );
+  });
+
+  // Published 5 m tiles stand in for an area's archive: the reader only
+  // cares that it is terrarium PMTiles at the area's zoom.
+  const AREA = {
+    id: "job-1",
+    zmax: 15 as 16,
+    tiles15: [0, 0, 32767, 32767] as const,
+    coverage: [140.9, -37.6, 153.7, -28.0] as const,
+    contours: false,
+    credit: "Elevation: a survey.",
+    createdAt: "2026-10-24T00:00:00.000Z",
+    keys: {
+      heights: "outputs/job-1/heights.pmtiles",
+      slope: "outputs/job-1/slope.pmtiles",
+      contours: null,
+    },
+  };
+  const fixtures = join(__dirname, "../../../shared/src/__fixtures__");
+  const parity = () =>
+    JSON.parse(readFileSync(join(fixtures, "dem-parity-nsw.json"), "utf8")) as {
+      positions: SamplePosition[];
+      heights: number[];
+      sourceIds: string[];
+    };
+  /** The area's archive behind the S3 fake, and worldwide tiles behind fetch. */
+  function serveArea() {
+    const archive = readFileSync(join(fixtures, "nsw-5m-z15-katoomba.pmtiles"));
+    envOverride.S3_BUCKET_TOPO = "topo-test";
+    s3Send.mockImplementation(
+      async (command: { input: Record<string, string> }) => {
+        const { Bucket, Key, Range } = command.input;
+        expect([Bucket, Key]).toEqual([
+          "topo-test",
+          "outputs/job-1/heights.pmtiles",
+        ]);
+        const [from, to] = Range!.replace("bytes=", "").split("-").map(Number);
+        const bytes = new Uint8Array(archive.subarray(from, to! + 1));
+        return {
+          Body: { transformToByteArray: async () => bytes },
+          ETag: '"e"',
+        };
+      },
+    );
+    fetchMock.mockResolvedValue(
+      pngResponse(readFileSync(join(fixtures, "terrarium-z13-7516-4911.png"))),
+    );
+  }
+
+  // Mutations: an area's source read like a public one (no archive, so the
+  // caller's area never answers), or its archive read from another key.
+  it("reads a visible area's archive from S3 by range, before the public sources", async () => {
+    serveArea();
+    const { positions, heights, sourceIds } = parity();
+    const dem = await sampleDemElevations(positions, [AREA]);
+    sourceIds.forEach((id, i) => {
+      expect(dem.sourceIds[i]).toBe(id === NSW_5M.id ? "lidar-job-1" : id);
+      expect(dem.heights[i]).toBeCloseTo(heights[i]!, 1);
+    });
+    expect(s3Send).toHaveBeenCalled();
+  });
+
+  // Mutation: sample the slope without the caller's areas, and it falls back
+  // to the public sources.
+  it("reads the slope at a point from a visible area too", async () => {
+    serveArea();
+    const [{ lon, lat }] = parity().positions;
+    const slope = await sampleSlope(lon!, lat!, [AREA]);
+    expect(slope?.sourceId).toBe("lidar-job-1");
+    expect(s3Send).toHaveBeenCalled();
+  });
+
+  // Mutation: let a missing archive throw, and every height inside an area
+  // being deleted fails until its row is gone.
+  it("falls through to the public sources when an area's archive is gone", async () => {
+    serveArea();
+    s3Send.mockRejectedValue(
+      Object.assign(new Error("gone"), { name: "NoSuchKey" }),
+    );
+    const { positions } = parity();
+    const dem = await sampleDemElevations(positions.slice(0, 1), [AREA]);
+    expect(dem.sourceIds).toEqual(["terrarium"]);
+  });
+
+  // Mutation: rethrow the S3 error, or treat every S3 failure as a missing
+  // archive, and a throttle reaches the user as a 500 or as silent statewide
+  // heights.
+  it("is a 503, not the S3 error, when an area's archive cannot be read", async () => {
+    serveArea();
+    s3Send.mockRejectedValue(
+      Object.assign(new Error("slow down"), { name: "SlowDown" }),
+    );
+    const { positions } = parity();
+    await expect(
+      sampleDemElevations(positions.slice(0, 1), [AREA]),
+    ).rejects.toMatchObject({ statusCode: 503 });
   });
 
   // Mutation: open the archive from its bare URL and this test times out: a

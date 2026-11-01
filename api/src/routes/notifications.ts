@@ -103,7 +103,7 @@ router.get(
         if (entityType && entityId) sharedItems.push({ entityType, entityId });
         // No name is resolved for a directly-shared item: the client already
         // has the row through delta sync (waypoint/route) or its own list
-        // endpoint (topo/GeoPDF job), and resolving one here would mean
+        // endpoint (topo job), and resolving one here would mean
         // reading a waypoint name into a notification payload for no gain.
         const sharedById = payloadString(n.payload, "sharedById");
         if (sharedById) sharerIds.add(sharedById);

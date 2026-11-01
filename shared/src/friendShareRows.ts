@@ -2,8 +2,8 @@
 // gets.
 //
 // Shared, because both clients draw this screen and the asymmetry below is the
-// part that must not be re-derived: the payload carries routes, topos and
-// GeoPDFs alongside places. Free of React Native imports so both clients can
+// part that must not be re-derived: the payload carries routes and topos
+// alongside places. Free of React Native imports so both clients can
 // use it.
 //
 // THE TWO DIRECTIONS ARE NOT MIRROR IMAGES, and the asymmetry is the whole

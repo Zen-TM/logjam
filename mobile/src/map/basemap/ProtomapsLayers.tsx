@@ -1,31 +1,33 @@
 // Mounts the generated Protomaps basemap layer set as MLRN components:
 // the shell style stays empty, the resolver supplies the source, and these
 // layers bind to it declaratively.
-//
-// The generated set's `background` layer mounts at the bottom of the band
-// (land colour under the tiles), above the shell's own background at index 0,
-// and unmounts cleanly with the rest on basemap swap.
 import { memo } from "react";
 import { Layer, type LayerProps } from "@maplibre/maplibre-react-native";
 
 import {
+  protomapsBandMarkers,
   protomapsLayerDefs,
   type ProtomapsFlavor,
   type ProtomapsLayerDef,
 } from "./protomapsLayers";
 
-/** Number of style layers mounted for a flavor — callers stack above this. */
-export function protomapsLayerCount(flavor: ProtomapsFlavor): number {
-  return protomapsLayerDefs(flavor).length;
+/**
+ * A basemap layer's id on the map: its style id under its source's. Layer ids
+ * must be unique across the whole map, and offline the stack mounts ONCE PER
+ * DOWNLOADED REGION: every stack emitting the same fixed `pm-earth`,
+ * `pm-water`, … would mean the second saved vector region collides with the
+ * first and never draws. The source id is already unique per region.
+ */
+export function protomapsLayerId(sourceID: string, styleId: string): string {
+  return `pm-${sourceID}-${styleId}`;
 }
 
 function layerComponent(
   def: ProtomapsLayerDef,
   sourceID: string,
-  layerIndex: number,
-  idPrefix: string,
+  beforeId: string,
 ) {
-  const id = `${idPrefix}-${def.id}`;
+  const id = protomapsLayerId(sourceID, def.id);
   // One cast for the whole prop bag. The generated defs carry a merged
   // camelCase style object rather than the spec's paint/layout split, so they
   // go in through MLRN's legacy `style` prop — a different arm of LayerProps
@@ -36,14 +38,11 @@ function layerComponent(
   // express, and the values come straight from @protomaps/basemaps.
   const props = {
     id,
-    layerIndex,
+    beforeId,
     type: def.type,
     style: def.style,
-    // A background layer has no source; everything else binds to the one the
-    // resolver mounted.
-    ...(def.type === "background"
-      ? {}
-      : { source: sourceID, "source-layer": def.sourceLayer }),
+    source: sourceID,
+    "source-layer": def.sourceLayer,
     ...(def.filter && { filter: def.filter }),
     ...(def.minzoom !== undefined && { minzoom: def.minzoom }),
     ...(def.maxzoom !== undefined && { maxzoom: def.maxzoom }),
@@ -52,9 +51,8 @@ function layerComponent(
 }
 
 /**
- * The full basemap layer stack for one flavor, bound to `sourceID` and pinned
- * at layerIndex `startIndex..startIndex+count-1` (keeps the basemap band
- * below topo overlays and place layers across source remounts).
+ * The full basemap layer stack for one flavor, bound to `sourceID`, each layer
+ * under its band's marker (`BAND_MARKERS`).
  */
 // MEMOISED, and it matters more here than anywhere else on the map: MLRN
 // memoises none of its layer components, and each one re-runs `transformStyle`
@@ -65,22 +63,15 @@ function layerComponent(
 export const ProtomapsLayers = memo(function ProtomapsLayers({
   flavor,
   sourceID,
-  startIndex,
 }: {
   flavor: ProtomapsFlavor;
   sourceID: string;
-  startIndex: number;
 }) {
-  // Layer ids must be unique across the whole map, and offline this component
-  // mounts ONCE PER DOWNLOADED REGION — every stack emitting the same fixed
-  // `pm-background`, `pm-water`, … would mean the second saved vector region
-  // collides with the first and never draws. The source id is already unique
-  // per region, so it seeds the prefix.
-  const idPrefix = `pm-${sourceID}`;
+  const markers = protomapsBandMarkers(flavor);
   return (
     <>
       {protomapsLayerDefs(flavor).map((def, i) =>
-        layerComponent(def, sourceID, startIndex + i, idPrefix),
+        layerComponent(def, sourceID, markers[i]),
       )}
     </>
   );

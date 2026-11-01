@@ -95,16 +95,21 @@ describe("notificationLabel", () => {
     ).toBe("bob shared an item with you");
   });
 
-  it("labels topo completion, with OSM warning when flagged", () => {
+  it("labels topo completion", () => {
     expect(
       notificationLabel(notification("topo_complete", { jobName: "Kanangra" })),
     ).toEqual({
       text: "Kanangra map ready",
     });
-    const withWarning = notificationLabel(
-      notification("topo_complete", { jobName: "Kanangra", osmFailed: true }),
-    );
-    expect(withWarning.detail).toMatch(/Roads and labels/);
+  });
+
+  // Mutation: uppercase the format again, and it reads "GPKG export ready".
+  it("names an export's format as the app does", () => {
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { format: "gpkg" }),
+      ).text,
+    ).toBe("GeoPackage export ready");
   });
 
   it("labels export completion and failure", () => {
@@ -127,18 +132,16 @@ describe("notificationLabel", () => {
     ).toEqual({ text: "PDF export failed", detail: "boom" });
   });
 
-  it("labels geo_pdf completion and failure", () => {
-    expect(notificationLabel(notification("geo_pdf_complete", {})).text).toBe(
-      "GeoPDF ready",
-    );
+  // Mutation: drop the size branch and the detail line vanishes.
+  it("gives a finished export its size when it has one", () => {
     expect(
       notificationLabel(
-        notification("geo_pdf_complete", {
-          status: "failed",
-          errorMessage: "no extent",
+        notification("topo_export_complete", {
+          format: "geotiff",
+          resultBytes: 5 * 1024 ** 2,
         }),
       ),
-    ).toEqual({ text: "Couldn't create GeoPDF", detail: "no extent" });
+    ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
   });
 
   it("degrades gracefully on missing payload fields", () => {

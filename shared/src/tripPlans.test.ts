@@ -164,8 +164,8 @@ describe("order", () => {
 
 describe("item add", () => {
   it("takes a kind and an id, and copyMedia only as a boolean", () => {
-    expect(value(parseTripPlanItemAdd({ kind: "geoPdf", id: "a" }))).toEqual({
-      kind: "geoPdf",
+    expect(value(parseTripPlanItemAdd({ kind: "media", id: "a" }))).toEqual({
+      kind: "media",
       id: "a",
     });
     expect(

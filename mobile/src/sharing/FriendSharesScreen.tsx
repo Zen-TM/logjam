@@ -101,14 +101,13 @@ import { removeSharedPlace, removeSharedEntity } from "./removeShare";
 const copy = FRIEND_SHARES.copy;
 
 /**
- * The idea per kind: a place, a route, a LiDAR topo, a GeoPDF — the same four
+ * The idea per kind: a place, a route, a LiDAR topo — the same three
  * the rest of Logjam GPS draws for them.
  */
 const SHARE_KIND_ICON = {
   place: "place",
   route: "route",
   topoJob: "lidar",
-  geoPdfJob: "geoPdf",
 } as const satisfies Record<FriendShareRow["entityType"], IconIdea>;
 
 const cardKey = (card: FriendShareCard) => card.key;

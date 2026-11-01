@@ -1,4 +1,4 @@
-// Makes a LiDAR topo: the question is "what do I want covered, and what am I
+// Sharpens an area: the question is "what do I want covered, and what am I
 // giving it to work from?".
 //
 // The data itself comes from ELVIS, the federal elevation portal — Logjam never
@@ -6,15 +6,13 @@
 // ZIP that arrives. That errand is several steps long and is needed once, so it
 // lives in a sub-view of this dialog rather than above the thing it explains
 // (DESIGN.md: a picker inside a dialog swaps the body and backs out to the
-// form). The raster settings are the other sub-view.
-import { useState, useRef, Fragment, useEffect, useCallback } from "react";
+// form).
+import { useState, useRef, Fragment, useEffect } from "react";
 import {
   apiFetch,
   fetchComputeEstimate,
   fetchCurrentUser,
-  putToPresignedUrl,
 } from "../../placeUtils";
-import { messageFromError } from "../../errors/messageFromError";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
@@ -22,62 +20,38 @@ import {
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
-  RASTER_TEMPLATE_DEFAULTS,
-  AUTO_EXPORT_DEFAULTS,
-  cloneRasterTemplateSettings,
-  slopeBandsError,
-  hillshadeSettingsError,
   estimateElvisTileCount,
   formatCredits,
   regionNameFromSurvey,
+  LIDAR_JOB_COPY,
   type ElvisStats,
-  type RasterTemplateSettings,
-  type AutoExportSettings,
 } from "@logjam/shared";
 import {
   Button,
-  ChipRail,
   Dialog,
   ProgressBar,
   SectionHeader,
-  Select,
   StatusPill,
   TextField,
   Icon,
   ErrorBanner,
   FieldError,
+  Checkbox,
 } from "../../ui";
-import AdvancedSettings from "./topoSettings/AdvancedSettings";
-import { SETTINGS_TABS, type SettingsTab } from "./topoSettings/settingsTabs";
 import { nextTopoName } from "./jobName";
-import { fetchTopoTemplates } from "./topoTemplatesFetch";
 import { formatAreaKm2 } from "./formatArea";
 import { bboxAreaKm2, downloadBboxShapefile } from "./bboxShapefile";
+import { submitFailureMessage, useTopoUpload } from "./topoUpload";
+import { sharpenJobRequest } from "./sharpenJob";
 import classes from "./TopoDialog.module.css";
 
-export type TopoTemplate = {
-  id: string;
-  name: string;
-  isSystem: boolean;
-  config: RasterTemplateSettings;
-  autoExport: AutoExportSettings | null;
-  createdAt: string | null;
-  updatedAt: string | null;
-};
-
 type Phase = "form" | "uploading" | "finalizing" | "done";
-/** The form, or one of the two things it sends you off to do. */
-type Mode = "form" | "instructions" | "settings";
+/** The form, or the errand it sends you off to do. */
+type Mode = "form" | "instructions";
 
-const DEFAULT_TEMPLATE_ID = "default";
-
-// Deep-copy a template's auto-export slice (or fall back to defaults for older
-// templates saved before the feature existed) so edits don't mutate the cached
-// template list.
-function cloneAutoExport(value: AutoExportSettings | null): AutoExportSettings {
-  if (!value) return { ...AUTO_EXPORT_DEFAULTS };
-  return { ...value, layers: [...value.layers] };
-}
+const HELD_REASON_ID = "topo-held-reason";
+const KEPT_FOR_RESUME =
+  "Kept as first sent, so Make it carries on the upload; to change it, choose the ZIP again.";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -133,9 +107,7 @@ export default function TopoDialog({
   awaitingBbox,
   pendingBbox,
   onJobCreated,
-  initialTemplateId,
   existingTopoNames,
-  onTemplateSaved,
 }: {
   open: boolean;
   onClose: () => void;
@@ -145,11 +117,7 @@ export default function TopoDialog({
   awaitingBbox: boolean;
   pendingBbox: TBbox | null;
   onJobCreated: (job: TopoJob) => void;
-  initialTemplateId?: string | null;
   existingTopoNames: string[];
-  /** Notifies the owner that the inline "Save as template" created a template,
-   *  so panel-side template lists can refetch. */
-  onTemplateSaved?: () => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   // Submission lifecycle: form → uploading (determinate PUT) → finalizing
@@ -168,7 +136,6 @@ export default function TopoDialog({
   const [topoName, setTopoName] = useState("");
   const [topoNameTouched, setTopoNameTouched] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [saveAsError, setSaveAsError] = useState<string | null>(null);
   const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
   const [creditsQuota, setCreditsQuota] = useState<number | null>(null);
   const [creditsResetAt, setCreditsResetAt] = useState<string | null>(null);
@@ -183,26 +150,16 @@ export default function TopoDialog({
   const [storageUsed, setStorageUsed] = useState<number | null>(null);
   const [storageQuota, setStorageQuota] = useState<number | null>(null);
 
-  // Advanced settings + templates
-  const [settings, setSettings] = useState<RasterTemplateSettings>(() =>
-    cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS),
-  );
-  const [autoExport, setAutoExport] = useState<AutoExportSettings>(() => ({
-    ...AUTO_EXPORT_DEFAULTS,
-  }));
-  const [templates, setTemplates] = useState<TopoTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] =
-    useState<string>(DEFAULT_TEMPLATE_ID);
-  const [saveAsName, setSaveAsName] = useState("");
-  const [showSaveAs, setShowSaveAs] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("hillshade");
+  // The one styled layer a job can make, off unless asked.
+  const [vegetation, setVegetation] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const upload = useTopoUpload();
 
   // Closing empties the form — but going off to draw the area CLOSES this
   // dialog too, and comes back to it (App reopens on `onBboxSelected`). Emptying
   // it in that case would throw away the ZIP the user had already chosen,
-  // their name and their settings, silently and without the unsaved-changes
+  // their name and their tick, silently and without the unsaved-changes
   // confirm, because App's own close never goes through the guard. `awaitingBbox`
   // is the difference between the two, and it is App's to tell us: it is false
   // again whether the box was drawn or the pick was abandoned, so a genuinely
@@ -215,6 +172,14 @@ export default function TopoDialog({
     setWasClosedForGood(closedForGood);
     if (closedForGood) resetForm();
   }
+  // A job whose upload failed and was given up on is deleted, not left
+  // "uploading" in the list. (Here, not in resetForm: that runs during
+  // render.)
+  const { discard } = upload;
+  useEffect(() => {
+    if (!closedForGood) return;
+    discard();
+  }, [closedForGood, discard]);
 
   function resetForm() {
     setFile(null);
@@ -230,81 +195,7 @@ export default function TopoDialog({
     setTopoName("");
     setTopoNameTouched(false);
     setValidationError(null);
-    setSettings(cloneRasterTemplateSettings(RASTER_TEMPLATE_DEFAULTS));
-    setAutoExport({ ...AUTO_EXPORT_DEFAULTS });
-    setSelectedTemplateId(DEFAULT_TEMPLATE_ID);
-    setSaveAsName("");
-    setShowSaveAs(false);
-    setSettingsTab("hillshade");
-  }
-
-  const refreshTemplates = useCallback(async () => {
-    try {
-      const list = await fetchTopoTemplates();
-      setTemplates(list);
-      return list;
-    } catch (e) {
-      console.error(e);
-      return [] as TopoTemplate[];
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    fetchTopoTemplates()
-      .then((list) => {
-        setTemplates(list);
-        if (initialTemplateId) {
-          const t = list.find((x) => x.id === initialTemplateId);
-          if (t) {
-            setSelectedTemplateId(t.id);
-            setSettings(cloneRasterTemplateSettings(t.config));
-            setAutoExport(cloneAutoExport(t.autoExport));
-          }
-        }
-      })
-      .catch((e) => console.error(e));
-  }, [open, initialTemplateId]);
-
-  function selectTemplate(id: string) {
-    setSelectedTemplateId(id);
-    const t = templates.find((x) => x.id === id);
-    if (t) {
-      setSettings(cloneRasterTemplateSettings(t.config));
-      setAutoExport(cloneAutoExport(t.autoExport));
-    }
-  }
-
-  const settingsInvalid =
-    slopeBandsError(settings.slope.bands) != null ||
-    hillshadeSettingsError(settings.hillshade) != null;
-
-  async function handleSaveAsTemplate() {
-    const name = saveAsName.trim();
-    if (!name) {
-      setSaveAsError("Name this template first.");
-      return;
-    }
-    if (settingsInvalid) {
-      setSaveAsError("A setting needs fixing before this can be saved.");
-      return;
-    }
-    try {
-      const created = await apiFetch<TopoTemplate>("/topo-templates", {
-        method: "POST",
-        body: { name, config: settings, autoExport },
-      });
-      setSaveAsName("");
-      setShowSaveAs(false);
-      await refreshTemplates();
-      setSelectedTemplateId(created.id);
-      // Panel-side template lists render from their own state — tell the owner
-      // so they refresh without a page reload.
-      onTemplateSaved?.();
-    } catch (e) {
-      console.error(e);
-      setError(messageFromError(e, "Couldn't save template."));
-    }
+    setVegetation(false);
   }
 
   // Tile count driving the cost projection: the ZIP's verified count once one
@@ -428,6 +319,9 @@ export default function TopoDialog({
       setValidationError("Please select a .zip file.");
       return;
     }
+    // A new ZIP is a new job: the stopped one is let go, and with it the lock
+    // on its name and settings.
+    upload.discard();
     setFile(picked);
     setError(null);
   }
@@ -439,12 +333,6 @@ export default function TopoDialog({
     }
     // validationError is already in the banner above the form.
     if (validationError) return;
-    if (settingsInvalid) {
-      setError(
-        "A setting needs fixing. Open “How this topo is drawn” to see which.",
-      );
-      return;
-    }
     setError(null);
 
     if (
@@ -474,33 +362,29 @@ export default function TopoDialog({
     setUploadedBytes(0);
     setTotalBytes(file.size);
     setPhase("uploading");
+    let uploaded = false;
     try {
-      const { jobId, uploadUrl } = await apiFetch<{
-        jobId: string;
-        uploadUrl: string;
-      }>("/topo-jobs", {
-        method: "POST",
-        body: {
+      // On a resubmit after a failure this carries on with the same job, so
+      // the name and tick are the ones it was first sent with.
+      const jobId = await upload.submit(
+        file,
+        {
           tileCount: stats.tileCount || null,
           jobName: topoName.trim() || stats.surveyNames[0] || null,
           filename: file.name,
-          settings,
-          autoExport,
+          ...sharpenJobRequest(vegetation, stats.lazCount),
         },
-      });
-
-      await putToPresignedUrl(
-        uploadUrl,
-        file,
-        "application/zip",
-        (loaded, total) => {
-          setUploadedBytes(loaded);
-          setTotalBytes(total);
+        {
+          progress: (sent, total) => {
+            setUploadedBytes(sent);
+            setTotalBytes(total);
+          },
+          uploaded: () => {
+            uploaded = true;
+            setPhase("finalizing");
+          },
         },
       );
-
-      setPhase("finalizing");
-      await apiFetch(`/topo-jobs/${jobId}/start`, { method: "POST" });
 
       const newJob = await apiFetch<TopoJob>(`/topo-jobs/${jobId}`);
       onJobCreated(newJob);
@@ -508,24 +392,21 @@ export default function TopoDialog({
       setPhase("done");
     } catch (e: unknown) {
       console.error(e);
-      setError(messageFromError(e, "Submission failed. Please try again."));
-      // File preserved so the ErrorBanner's Retry can resubmit.
+      setError(submitFailureMessage(e, uploaded));
+      // File preserved so Make it can resubmit.
       setPhase("form");
     }
   }
 
   function performClose() {
-    // Block closing mid-upload — there's no resumable state to return to.
+    // Block closing mid-upload: closing gives up on the upload.
     if (phase === "uploading" || phase === "finalizing") return;
     onClose();
   }
 
   // Dirty once a ZIP has been picked and not yet submitted — losing a queued
-  // multi-GB upload to a stray Esc is real lost work. Deliberately keyed to the
-  // file only: settings/name have an async baseline (a template can apply after
-  // open via initialTemplateId, and picking a template mutates settings), so a
-  // settings snapshot would false-positive; the confirm copy is narrowed to
-  // match exactly what this guards. Once submission starts (uploading/
+  // multi-GB upload to a stray Esc is real lost work. Keyed to the file only,
+  // and the confirm copy is narrowed to match. Once submission starts (uploading/
   // finalizing) close is already blocked above; once done there's nothing left
   // to lose.
   const isDirty = phase === "form" && file != null;
@@ -536,12 +417,9 @@ export default function TopoDialog({
     totalBytes > 0
       ? Math.min(100, Math.round((uploadedBytes / totalBytes) * 100))
       : 0;
-  const backToForm = () => {
-    setMode("form");
-    setShowSaveAs(false);
-    setSaveAsName("");
-  };
+  const backToForm = () => setMode("form");
 
+  const jobCopy = LIDAR_JOB_COPY;
   const title =
     phase === "uploading"
       ? "Uploading"
@@ -551,9 +429,7 @@ export default function TopoDialog({
           ? "On its way"
           : mode === "instructions"
             ? "Getting LiDAR from ELVIS"
-            : mode === "settings"
-              ? "How this topo is drawn"
-              : "Make a LiDAR topo";
+            : jobCopy.make;
 
   return (
     <>
@@ -565,63 +441,6 @@ export default function TopoDialog({
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
         onClose={mode === "form" ? guard.requestClose : backToForm}
-        toolbar={
-          mode === "settings" && !uploading && phase !== "done" ? (
-            <>
-              <div className={classes.saveAsLine}>
-                {showSaveAs ? (
-                  <>
-                    <TextField
-                      label="Template name"
-                      hideLabel
-                      className={classes.saveAsField}
-                      placeholder="Name this template"
-                      value={saveAsName}
-                      // eslint-disable-next-line no-restricted-syntax -- mounts after the dialog is open, where autoFocus works
-                      autoFocus
-                      error={saveAsError}
-                      onChange={(event) => {
-                        setSaveAsName(event.target.value);
-                        setSaveAsError(null);
-                      }}
-                    />
-                    <Button
-                      variant="filled"
-                      compact
-                      onClick={handleSaveAsTemplate}
-                    >
-                      Save
-                    </Button>
-                    <Button
-                      compact
-                      onClick={() => {
-                        setShowSaveAs(false);
-                        setSaveAsName("");
-                        setSaveAsError(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    compact
-                    variant="outline"
-                    onClick={() => setShowSaveAs(true)}
-                  >
-                    Save as a template
-                  </Button>
-                )}
-              </div>
-              <ChipRail
-                label="Settings group"
-                options={SETTINGS_TABS}
-                value={settingsTab}
-                onChange={setSettingsTab}
-              />
-            </>
-          ) : undefined
-        }
         footer={
           uploading ? undefined : phase === "done" ? (
             <Button variant="filled" onClick={onClose}>
@@ -646,11 +465,11 @@ export default function TopoDialog({
             <p className={classes.workingLine}>
               {phase === "uploading"
                 ? "Uploading your LiDAR. Keep this window open until it finishes."
-                : "Uploaded. Checking it over and starting your topo…"}
+                : jobCopy.startingLine}
             </p>
             <ProgressBar
               label={
-                phase === "uploading" ? "Upload progress" : "Starting your topo"
+                phase === "uploading" ? "Upload progress" : jobCopy.starting
               }
               value={phase === "uploading" ? uploadPct : undefined}
             />
@@ -671,7 +490,7 @@ export default function TopoDialog({
               className={classes.doneGlyph}
             />
             <p className={classes.doneName}>
-              {submittedJob?.name ?? "Your topo"} is being made
+              {submittedJob?.name ?? jobCopy.unnamed} {jobCopy.beingMade}
             </p>
             <p className={classes.workingDetail}>
               {stats?.tileCount
@@ -686,14 +505,6 @@ export default function TopoDialog({
             area={area}
             onSelectBbox={onSelectBbox}
             warnCredits={jobWouldExceed && stats === null}
-          />
-        ) : mode === "settings" ? (
-          <AdvancedSettings
-            tab={settingsTab}
-            value={settings}
-            onChange={setSettings}
-            autoExport={autoExport}
-            onAutoExportChange={setAutoExport}
           />
         ) : (
           <>
@@ -788,52 +599,33 @@ export default function TopoDialog({
               />
             )}
 
-            {/* Two short answers about the same topo: one line holds both. */}
-            <div className={classes.nameRow}>
-              <TextField
-                label="Name"
-                placeholder="Name this topo"
-                value={topoName}
-                onChange={(e) => {
-                  setTopoName(e.target.value);
-                  setTopoNameTouched(true);
-                }}
+            <TextField
+              label="Name"
+              placeholder="Name this area"
+              disabled={upload.held}
+              aria-describedby={upload.held ? HELD_REASON_ID : undefined}
+              value={topoName}
+              onChange={(e) => {
+                setTopoName(e.target.value);
+                setTopoNameTouched(true);
+              }}
+            />
+            {upload.held && (
+              <p id={HELD_REASON_ID} className={classes.summaryNote}>
+                {KEPT_FOR_RESUME}
+              </p>
+            )}
+
+            {stats && stats.lazCount > 0 && (
+              <Checkbox
+                label="Vegetation (experimental)"
+                description="Also draws how thick the scrub is from the point clouds, which takes longer."
+                checked={vegetation}
+                disabled={upload.held}
+                describedBy={upload.held ? HELD_REASON_ID : undefined}
+                onChange={setVegetation}
               />
-
-              <Select
-                label="Template"
-                value={selectedTemplateId}
-                onChange={(e) => selectTemplate(e.target.value)}
-              >
-                {/* Until /topo-templates resolves, render the synthetic system
-                  Default entry (always first in the server list) so the initial
-                  value "default" is never out of range. */}
-                {templates.length === 0 ? (
-                  <option value={DEFAULT_TEMPLATE_ID}>Default (system)</option>
-                ) : (
-                  templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                      {t.isSystem ? " (system)" : ""}
-                    </option>
-                  ))
-                )}
-              </Select>
-            </div>
-
-            <div className={classes.errandLine}>
-              <Button
-                icon="settings"
-                compact
-                variant="outline"
-                onClick={() => setMode("settings")}
-              >
-                How this topo is drawn
-              </Button>
-              {settingsInvalid && (
-                <StatusPill label="A setting needs fixing" tone="warning" />
-              )}
-            </div>
+            )}
           </>
         )}
       </Dialog>
@@ -1003,15 +795,15 @@ function ElvisInstructions({
 
       <li className={classes.step}>
         <div className={classes.stepBody}>
-          <SectionHeader title="Take the point clouds" />
+          <SectionHeader title="Take the 1 m or 2 m DEM" />
           <p className={classes.stepLine}>
             Under <strong>NSW Government — Spatial Services</strong> →{" "}
-            <strong>Point Clouds</strong>, beside <strong>AHD</strong>, press{" "}
-            <strong>Select all</strong>, or select the specific tiles you want.
+            <strong>Digital Elevation Model</strong>, select the 1 m or 2 m DEM,
+            not the 5 m one: Logjam already has that for all of NSW.
           </p>
           <p className={classes.stepLine}>
-            Alternatively, select only DEM files for a faster but less precise
-            topo with no vegetation layer.
+            Take the <strong>Point Clouds</strong> too if you want the
+            vegetation layer, which is drawn from them.
           </p>
         </div>
       </li>

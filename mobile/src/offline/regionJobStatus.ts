@@ -57,6 +57,19 @@ export function regionRejectedLine(detail: string | undefined): string {
   return detail;
 }
 
+/**
+ * Why a clip's archive couldn't be read. A sharpened area's (`detail`
+ * "sharpened-area") was read through a presigned URL that lasts 24 h, or the
+ * area was deleted: saving the area again fetches it while the account still
+ * lists it. Any other is an archive missing from the CDN, which no retry
+ * fixes.
+ */
+export function sourceUnavailableLine(detail: string | undefined): string {
+  return detail === "sharpened-area"
+    ? "This sharpened area's link expired, or the area was deleted. Saving the area again fetches it if it's still there."
+    : "Logjam couldn't prepare this map right now. Other maps still work.";
+}
+
 /** Nothing more will happen unless the user asks — the "may I leave?" gate. */
 export function isJobSettled(job: RegionJob): boolean {
   return isJobFinished(job) || isJobStalled(job);

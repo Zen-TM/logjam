@@ -305,7 +305,7 @@ export function MapSettingsScreen() {
 
         <PreferenceRow
           icon="northUp"
-          title="Keep the map north-up"
+          title="Map always north-up"
           value={northUp}
           ready
           onToggle={() => {
@@ -332,7 +332,7 @@ export function MapSettingsScreen() {
         <PreferenceRow
           icon="compass"
           title="Compass"
-          subtitle="Uses more battery while on the map."
+          subtitle="Uses more battery on the map."
           value={compassEnabled}
           ready
           onToggle={() => void toggleCompass()}
@@ -342,7 +342,7 @@ export function MapSettingsScreen() {
         <PreferenceRow
           icon="elevation"
           title="Speed and elevation"
-          subtitle="Uses more battery while on the map."
+          subtitle="Uses more battery on the map."
           value={speedElevation}
           ready
           onToggle={() => void toggleSpeedElevation()}
@@ -456,7 +456,7 @@ export function MapSettingsScreen() {
         {sensorLoggingAvailable() && sensorCaps != null && (
           <PreferenceRow
             icon="sensors"
-            title="Log raw sensors while recording"
+            title="Log raw sensors"
             subtitle={sensorLoggingSubtitle(sensorCaps, sensorLogging)}
             subtitleNumberOfLines={4}
             value={sensorLogging}

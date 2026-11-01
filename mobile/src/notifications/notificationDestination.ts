@@ -61,7 +61,6 @@ export function notificationDestination(
   n: TNotification,
 ): NotificationDestination | null {
   const payload = n.payload;
-  const failed = payload.status === "failed";
 
   switch (n.type) {
     // Both sides of a friendship land on the same screen: the pending request
@@ -85,12 +84,6 @@ export function notificationDestination(
       return saved("overlay", jobId ? savedOverlayKey(jobId) : null);
     }
 
-    case "geo_pdf_complete": {
-      // A failed render produced no PDF — Saved has nothing to show.
-      if (failed) return null;
-      return saved("geoPdf", str(payload, "geoPdfJobId"));
-    }
-
     // Only once it has been KEPT. A send still waiting to be answered is not in
     // Saved, and pointing at the tab would be pointing at nothing; the row's own
     // Save a copy is the way in.
@@ -108,7 +101,7 @@ export function notificationDestination(
     }
 
     // place_shared already has "Open" in the same sheet.
-    // topo_failed / topo_export_* / a failed GeoPDF are about something that
+    // topo_failed / topo_export_* are about something that
     // does not exist to be looked at.
     default:
       return null;

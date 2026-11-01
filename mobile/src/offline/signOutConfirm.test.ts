@@ -42,12 +42,13 @@ describe("signOutConfirm", () => {
     );
     expect(confirm).toEqual({
       title: "Sign out of Logjam GPS?",
+      everywhere: false,
       intro: "This removes from this phone:",
       lines: [
         "3 changes not yet synced. These are lost for good.",
         "2 saved map regions (250 MB)",
         "1 imported GeoPDF. An imported file can only come back from the original file.",
-        "4 LiDAR topos",
+        "4 sharpened areas",
       ],
       keeps: "Your synced places and trips stay in your account.",
       canSyncFirst: false,
@@ -56,7 +57,7 @@ describe("signOutConfirm", () => {
 
   it("leaves out a kind with nothing in it", () => {
     const confirm = signOutConfirm({ ...none, topos: 1 }, true);
-    expect(confirm?.lines).toEqual(["1 LiDAR topo"]);
+    expect(confirm?.lines).toEqual(["1 sharpened area"]);
   });
 
   it("says a single change is lost in the singular", () => {
@@ -76,6 +77,28 @@ describe("signOutConfirm", () => {
     expect(signOutConfirm({ ...none, regions: 1 }, true)?.canSyncFirst).toBe(
       false,
     );
+  });
+
+  // Guard: drop the `everywhere` term from the null check in signOutConfirm and
+  // the first assertion goes red; drop the note from the body and the second does.
+  it("asks about the other sessions even with nothing on the phone to lose", () => {
+    const confirm = signOutConfirm(none, true, true)!;
+    expect(confirm.title).toBe("Sign out everywhere?");
+    expect(signOutConfirmBody(confirm)).toBe(
+      [
+        "Every other phone and browser signed in to your account is signed out too.",
+        "",
+        "Your synced places and trips stay in your account.",
+      ].join("\n"),
+    );
+  });
+
+  it("puts the other sessions first, then what this phone loses, in one confirm", () => {
+    const confirm = signOutConfirm({ ...none, topos: 1 }, true, true)!;
+    const body = signOutConfirmBody(confirm).split("\n");
+    expect(body[0]).toMatch(/^Every other phone and browser/);
+    expect(body).toContain("• 1 sharpened area");
+    expect(copyViolations(signOutConfirmBody(confirm))).toEqual([]);
   });
 
   it("keeps the copy rules and carries no name or coordinate", () => {

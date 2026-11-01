@@ -22,6 +22,7 @@ import {
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
+  MEDAL_HUES,
   normalizeThemeSchemeId,
   OPACITY,
   PLACE_STATUS_HUES,
@@ -409,8 +410,6 @@ const notificationHues = (
     topo: assetHue.overlay,
     /** Topo exports — the waterhole blue of the vector files they produce. */
     export: assetHue.import,
-    /** GeoPDFs — as in Saved. */
-    geoPdf: assetHue.geoPdf,
     /** Trip plans — the plan's own hue, as on the Plans list. */
     plan: assetHue.plan,
     /** A maintainer message: about Logjam itself, so the scheme accent. */
@@ -433,6 +432,8 @@ export const huesFor = perScheme((theme) => {
     assetHue,
     placeHue,
     notificationHue: notificationHues(theme, assetHue, placeHue),
+    /** The leaderboard's medals — `MEDAL_HUES` in `@logjam/shared`. */
+    medalHue: MEDAL_HUES,
   };
 });
 

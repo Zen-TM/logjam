@@ -64,7 +64,9 @@ BottomSheet     acquisition, per-item verbs, forms
   callbacks.
 - **A preference goes on the Settings page its storage lives on**: device
   (Display, Map, Offline and storage, Privacy and security) or account
-  (Notifications).
+  (Notifications). An account switch about a device page's subject goes on
+  that page, which says so in its header, and needs a connection there:
+  photos with copied places, the friends leaderboard.
 
 ## 3. The map
 
@@ -171,8 +173,8 @@ Reads come from the on-device mirror and writes queue in the outbox.
 - **Offline is one muted `StatusPill` in the hero**; a second counts what is
   waiting to sync (`SyncStatusPills`). Never a banner, never per row.
 - **A network-only action is disabled with "Needs a connection" as its
-  subtitle.** These need a connection: downloading regions, topos and
-  GeoPDFs; sharing and reading who a place is shared with; adopting or
+  subtitle.** These need a connection: downloading regions and topos;
+  sharing and reading who a place is shared with; adopting or
   discarding a value from a copy; full-resolution media not yet on the
   phone; notification preferences; username, email, deleting the account.
   Everything else works offline.

@@ -25,7 +25,8 @@
 # the legal documents it links to"; dropping frontend/ from api_integration
 # fails "api_integration: Logjam Web (Playwright smoke)"; dropping the stub
 # from api_integration fails "api_integration: the Expo push stub it starts";
-# removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
+# dropping mobile-emulator.yml from mobile fails "mobile: the emulator smoke
+# workflow"; removing the ci.yml rule fails "any area: ci.yml"; dropping --no-renames
 # fails "a rename out of an area"; dropping the worker image's paths from
 # topo_e2e fails "topo_e2e: worker source" and dropping the RunTask files fails
 # "topo_e2e: the start route"; dropping lockfiles from setup_smoke
@@ -46,7 +47,9 @@ paths_for() {
     # push stub the job starts.
     api_integration) echo '^(api/|shared/|frontend/|infra/scripts/expo-push-stub\.mjs$|topo/([^/]+\.py|requirements[^/]*\.txt|tests/(test_status_guard_db|_native_stub)\.py)$)' ;;
     # legalLinks.test.ts checks the documents the consent screen links to.
-    mobile) echo '^(mobile/|shared/|frontend/public/)' ;;
+    # The emulator smoke check (mobile-emulator.yml) and the action that builds
+    # its APK are part of the area they gate.
+    mobile) echo '^(mobile/|shared/|frontend/public/|\.github/actions/build-dev-apk/|\.github/workflows/mobile-emulator\.yml$)' ;;
     # Both migration jobs: migrations on an empty DB, and origin/main's seed
     # upgraded to this commit (the head's seed never runs there).
     migrations) echo '^(api/(prisma/|prisma\.config\.ts|package(-lock)?\.json)|scripts/migration-upgrade-test\.sh)' ;;
@@ -119,6 +122,8 @@ self_test() {
   check "mobile: shared source"                           mobile true  0 'shared/src/a.ts'
   check "mobile: api only"                                mobile false 0 'api/src/a.ts'
   check "mobile: the legal documents it links to"         mobile true  0 'frontend/public/tos.html'
+  check "mobile: the emulator smoke workflow"             mobile true  0 '.github/workflows/mobile-emulator.yml'
+  check "mobile: the action that builds its APK"          mobile true  0 '.github/actions/build-dev-apk/action.yml'
   check "migrations: a migration"                         migrations true  0 'api/prisma/migrations/2026/migration.sql'
   check "migrations: upgrade checks"                      migrations true  0 'api/prisma/upgrade-check/verify.sql'
   check "migrations: the Prisma version"                  migrations true  0 'api/package.json'

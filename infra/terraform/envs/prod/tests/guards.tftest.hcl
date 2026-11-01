@@ -275,6 +275,35 @@ run "place_registry_role_writes_only_master_places" {
   }
 }
 
+run "gauges_role_writes_only_master_gauges" {
+  command = plan
+  plan_options {
+    target = [aws_iam_role_policy.gauges]
+  }
+
+  # Mutation: widening a Resource (`/*`, `/master/*`) or the list prefix,
+  # dropping the prefix condition, or adding an action or a statement lets the
+  # gauges job see, write or delete more than the public gauge files.
+  assert {
+    condition = jsondecode(aws_iam_role_policy.gauges.policy).Statement == [
+      {
+        Sid      = "PublishGauges"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/gauges/*"
+      },
+      {
+        Sid       = "ListGauges"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/gauges/*" } }
+      },
+    ]
+    error_message = "The gauges role may only list, read and write objects under master/gauges/ in the topo bucket."
+  }
+}
+
 run "api_rate_limit_is_one_plain_ip_rule" {
   command = plan
   plan_options {
@@ -316,5 +345,32 @@ run "postgres_errors_log_no_row_values" {
       for p in aws_db_parameter_group.pgaudit.parameter : p.value if p.name == "log_error_verbosity"
     ], "terse")
     error_message = "The RDS parameter group must set log_error_verbosity = terse, so Postgres errors never log row values."
+  }
+}
+
+run "cognito_client_scopes_and_api_grant" {
+  command = plan
+  plan_options {
+    target = [aws_cognito_user_pool_client.main, aws_iam_role_policy.eb_cognito_admin_getuser]
+  }
+
+  # Mutation: dropping `aws.cognito.signin.user.admin` breaks change-email
+  # and sign-out everywhere; dropping `profile` leaves the code flow's ID
+  # token without profile claims. Neither fails a plan or a deploy.
+  assert {
+    condition     = length(setintersection(aws_cognito_user_pool_client.main.allowed_oauth_scopes, ["aws.cognito.signin.user.admin", "profile"])) == 2
+    error_message = "The app client must allow the aws.cognito.signin.user.admin and profile scopes (cognito.tf)."
+  }
+
+  # Mutation: adding any action (a revived AdminCreateUser, ListUsers) or a
+  # second statement widens what a compromised API can do to the user
+  # directory; dropping AdminDeleteUser makes account deletion fail at Cognito.
+  assert {
+    condition = (
+      length(jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement) == 1 &&
+      toset(flatten([jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement[0].Action])) == toset(["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]) &&
+      jsondecode(aws_iam_role_policy.eb_cognito_admin_getuser.policy).Statement[0].Resource == "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
+    )
+    error_message = "The API's Cognito grant must be exactly AdminGetUser and AdminDeleteUser on the one pool (iam.tf)."
   }
 }

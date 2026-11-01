@@ -8,6 +8,7 @@ import {
   DEM_SOURCES,
   GPS_CLIMB_SOURCE,
   NSW_5M,
+  SHARPENED_CLIMB_SOURCE,
   clearDemArchives,
   demArchive,
   readDemArchive,
@@ -21,6 +22,7 @@ import {
 } from "./demSources.js";
 import { DEM_TILE_SIZE } from "./demTiles.js";
 import { buildElevationProfile, densifyLineSegments } from "./elevation.js";
+import { sharpenedDemSource } from "./sharpen.js";
 
 describe("demTileUrl", () => {
   // The decode fixture is a REAL terrarium tile named for its address: z13,
@@ -44,14 +46,25 @@ describe("the declaration", () => {
     expect(DEM_SOURCES.at(-1)!.coverage).toBeNull();
   });
 
-  // Mutation: give a source both a tile set and an archive, or neither, and
-  // each reader has to guess which one to read.
-  it("serves each source one way: a public tile set or an archive", () => {
-    for (const source of DEM_SOURCES)
+  // Mutation: give a source two of a tile set, an archive and an area, or
+  // none, and each reader has to guess which one to read.
+  it("serves each source one way: a tile set, an archive or an area's", () => {
+    const area = sharpenedDemSource({
+      id: "a1",
+      zmax: 16,
+      tiles15: [0, 0, 1, 1],
+      coverage: [150, -34, 150.01, -33.99],
+      contours: true,
+      credit: "Elevation: a survey.",
+      createdAt: "2026-10-24T00:00:00.000Z",
+    });
+    for (const source of [...DEM_SOURCES, area])
       expect(
-        (source.urlTemplate == null) !== (source.archivePath == null),
+        [source.urlTemplate, source.archivePath, source.areaId].filter(
+          (way) => way != null,
+        ),
         source.id,
-      ).toBe(true);
+      ).toHaveLength(1);
   });
 
   it("credits only the sources a result was read from", () => {
@@ -86,9 +99,12 @@ describe("the declaration", () => {
 describe("climb sources", () => {
   it("rank every DEM source above GPS heights, finest first", () => {
     expect(CLIMB_SOURCES).toEqual([
+      SHARPENED_CLIMB_SOURCE,
       ...DEM_SOURCES.map((source) => source.id),
       GPS_CLIMB_SOURCE,
     ]);
+    expect(isFinerClimbSource("lidar", "nsw-5m")).toBe(true);
+    expect(isFinerClimbSource("nsw-5m", "lidar")).toBe(false);
     expect(isFinerClimbSource("nsw-5m", "terrarium")).toBe(true);
     expect(isFinerClimbSource("terrarium", "gps")).toBe(true);
     expect(isFinerClimbSource("terrarium", "nsw-5m")).toBe(false);

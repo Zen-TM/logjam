@@ -45,8 +45,9 @@ function parseFriendAvatarHues() {
   return colors;
 }
 
-// The scheme-independent tokens (`INK`, `ASSET_HUES`, `PLACE_STATUS_HUES`),
-// parsed the same way so a retuned hue is measured the moment it changes.
+// The scheme-independent tokens (`INK`, `ASSET_HUES`, `PLACE_STATUS_HUES`,
+// `MEDAL_HUES`), parsed the same way so a retuned hue is measured the moment
+// it changes.
 function parseDesignTokens() {
   const src = readFileSync(designTokensPath, "utf8");
   const ink = /export const INK = "(#[0-9A-Fa-f]{6})";/.exec(src);
@@ -68,6 +69,7 @@ function parseDesignTokens() {
     scrimHeavyAlpha: Number(scrimHeavy[1]),
     assetHues: hues("ASSET_HUES"),
     statusHues: hues("PLACE_STATUS_HUES"),
+    medalHues: hues("MEDAL_HUES"),
     tripTypeHues: hues("TRIP_TYPE_OPEN_HUES"),
   };
 }
@@ -134,7 +136,7 @@ const PLACE_TYPE_COLORS = parsePaletteColors();
 // never a type colour, and a copy here is the half that would drift.
 const SHARED_MARKER = parseSharedPlaceColor();
 const FRIEND_AVATAR_HUES = parseFriendAvatarHues();
-const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, assetHues: ASSET_HUES, statusHues: STATUS_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
+const { ink: INK, onScrim: ON_SCRIM, scrimHeavyAlpha: SCRIM_HEAVY_ALPHA, assetHues: ASSET_HUES, statusHues: STATUS_HUES, medalHues: MEDAL_HUES, tripTypeHues: TRIP_TYPE_HUES } = parseDesignTokens();
 // Every identity hue. An identity hue is only ever a FILL — a tile with an
 // `onFill` glyph, an active chip with an `onFill` label, a swatch, a mark on
 // the map — never a glyph, line or text on a theme surface, so the label on it
@@ -145,6 +147,8 @@ const IDENTITY_FILLS = [
   ["shared heath", SHARED_MARKER],
   ...ASSET_HUES.map(([name, color]) => [`asset hue ${name}`, color]),
   ...STATUS_HUES.map(([name, color]) => [`status hue ${name}`, color]),
+  // A leaderboard medal's tile (LeaderboardPage, LeaderboardScreen).
+  ...MEDAL_HUES.map(([name, color]) => [`medal hue ${name}`, color]),
   // A user-typed trip type's tile and its active chip (tripTypeIdentity).
   ...TRIP_TYPE_HUES.map(([name, color]) => [`trip type hue ${name}`, color]),
   ...FRIEND_AVATAR_HUES.map((color) => [`friend avatar ${color}`, color]),

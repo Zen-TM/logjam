@@ -51,6 +51,9 @@ const NAMED_AS_DELETED: Record<string, string[]> = {
   "0034-location-search-reads-a-public-osm-place-registry.md": [
     "master/places/v1/",
   ],
+  "0044-river-gauges-are-public-files-from-waternsw-and-bom.md": [
+    "master/gauges/v1/",
+  ],
 };
 
 // A backticked token with a slash that ends in an extension or a slash. Globs

@@ -1,10 +1,18 @@
-# Real-Cognito sign-in flow. Needs EXPO_PUBLIC_AUTH_MODE=cognito in
-# mobile/.env AND a confirmed test Cognito user (operator-provided — never a
-# real account, never committed creds; privacy rule mirrors
-# frontend/e2e/auth-lifecycle.spec.ts):
+# Real sign-in flow through the provider's page in the system browser sheet.
+# Needs EXPO_PUBLIC_AUTH_MODE=oidc plus EXPO_PUBLIC_OIDC_ISSUER and
+# EXPO_PUBLIC_OIDC_CLIENT_ID in mobile/.env, and a confirmed test user
+# (operator-provided — never a real account, never committed creds; privacy
+# rule mirrors frontend/e2e/auth-lifecycle.spec.ts):
 #
 #   MAESTRO_TEST_EMAIL=... MAESTRO_TEST_PASSWORD=... \
 #     maestro test e2e/signin.yaml
+#
+# NOT verified on a device. The sheet is Chrome's, and the provider's page is
+# not ours: the field names below are Cognito Managed Login's defaults, found
+# by hint text, and may need adjusting to the pool's branding. Run it once by
+# hand on a phone and fix the selectors before relying on it. A new account
+# also meets the welcome screen (username, terms, age), which this flow does
+# not drive: use a test user that has already consented.
 appId: com.logjamnsw.mobile
 env:
   TEST_EMAIL: ${MAESTRO_TEST_EMAIL}
@@ -12,17 +20,21 @@ env:
 ---
 - openLink: "exp+logjam-mobile://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081"
 - extendedWaitUntil:
-    visible: "Sign in"
+    visible: "Sign in or create an account"
     timeout: 30000
-- tapOn: "Email"
+- tapOn: "Sign in or create an account"
+# The browser sheet. Chrome may show a first-run screen on a fresh emulator.
+- extendedWaitUntil:
+    visible: "(?i).*(email|username).*"
+    timeout: 30000
+- tapOn: "(?i).*(email|username).*"
 - inputText: ${TEST_EMAIL}
-- tapOn: "Password"
+- tapOn: "(?i)password"
 - inputText: ${TEST_PASSWORD}
-- tapOn:
-    text: "Sign in"
-    index: 1 # the button, not the heading
+- pressKey: Enter
+# The redirect to logjam://auth closes the sheet and lands in the shell.
 - extendedWaitUntil:
     visible: "Places"
-    timeout: 30000
+    timeout: 60000
 - tapOn: "Account"
 - assertVisible: "Sign out"

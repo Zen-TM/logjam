@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
@@ -44,13 +45,14 @@ export function Row({
   selected = false,
   disabled = false,
   accessibilityLabel,
+  accessibilityActions,
+  onAccessibilityAction,
   // TWO lines for the title, and that is a text-size rule rather than a taste
   // one: at a large OS font setting (or a large in-app multiplier) a one-line
-  // cap turns "Auto-download finished GeoPDFs" into "Auto-download finis…"
-  // with no way to read the rest. A row that grows is legible; a row that
-  // truncates is a dead end. Two rather than unlimited, because a title is
-  // often a user-supplied NAME and a pasted paragraph should not become a
-  // screen-tall row. Pass 1 where a single line is load-bearing.
+  // cap cuts a long title off mid-word, with no way to read the rest. A row
+  // that grows is legible; a row that truncates is a dead end. Two rather
+  // than unlimited, because a title is often a user-supplied NAME and a
+  // pasted paragraph should not become a screen-tall row. Pass 1 where a single line is load-bearing.
   titleNumberOfLines = 2,
   // The subtitle is UNCAPPED by default: it is our own copy, not user data, and
   // it is where the explanations live ("Every layer of every finished job, once
@@ -97,6 +99,12 @@ export function Row({
    */
   disabled?: boolean;
   accessibilityLabel?: string;
+  accessibilityActions?: ComponentProps<
+    typeof Pressable
+  >["accessibilityActions"];
+  onAccessibilityAction?: ComponentProps<
+    typeof Pressable
+  >["onAccessibilityAction"];
   titleNumberOfLines?: number;
   /** Raise it when the subtitle is a short explanation rather than a status. */
   subtitleNumberOfLines?: number;
@@ -105,14 +113,9 @@ export function Row({
   const theme = useTheme();
   const styles = useStyles();
 
-  const tint = hue ?? theme.accent;
   const lead =
     leading ??
-    (icon ? (
-      <View style={[styles.iconTile, { backgroundColor: tint }]}>
-        <Icon idea={icon} size={20} color={theme.onFill} />
-      </View>
-    ) : null);
+    (icon ? <IconTile icon={icon} hue={hue ?? theme.accent} /> : null);
 
   // The card is a COLUMN so a footer can sit under the line; the line keeps the
   // horizontal layout every row has always had. `progress` stays a direct child
@@ -154,6 +157,10 @@ export function Row({
   if (!onPress && !onLongPress) {
     return (
       <View
+        // A read-only row is one stop for a screen reader only when the screen
+        // composed a label for it; otherwise its parts read separately.
+        accessible={accessibilityLabel != null}
+        accessibilityLabel={accessibilityLabel}
         style={[
           styles.row,
           styles.readOnly,
@@ -172,6 +179,8 @@ export function Row({
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityHint={disabled ? subtitle : undefined}
       accessibilityState={{ disabled, selected, checked }}
+      accessibilityActions={accessibilityActions}
+      onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
       onLongPress={onLongPress}
       disabled={disabled}
@@ -186,6 +195,35 @@ export function Row({
     >
       {body}
     </Pressable>
+  );
+}
+
+/**
+ * The identity tile: a square filled with the hue, the glyph in `onFill`. What
+ * Row draws from `icon` and `hue`, and what a row shows elsewhere (a medal on
+ * the right). `label` names it for a screen reader when the glyph carries
+ * meaning the row's text does not.
+ */
+export function IconTile({
+  icon,
+  hue,
+  label,
+}: {
+  icon: Glyph;
+  hue: string;
+  label?: string;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <View
+      style={[styles.iconTile, { backgroundColor: hue }]}
+      accessible={label != null}
+      accessibilityRole={label != null ? "image" : undefined}
+      accessibilityLabel={label}
+    >
+      <Icon idea={icon} size={20} color={theme.onFill} />
+    </View>
   );
 }
 

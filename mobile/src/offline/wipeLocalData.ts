@@ -31,12 +31,15 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
-import { wipeAllSyncData } from "../sync/syncDb";
+import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
+import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
+import { stopGaugesForWipe } from "../gauges/gaugeStorage";
 import { stopWeatherForWipe } from "../weather/weatherStorage";
 import { stopTrackRecordingForWipe } from "../tracks/trackRecorder";
 import { CACHE_ROOT, WIPED_DIRS } from "./localStores";
 import { clearOfflineDemCache } from "./demLookup";
 import { cancelAllRegionDownloads } from "./regionDownloadQueue";
+import { forgetSharpenedAreas } from "./sharpenedAreaStore";
 import { getOfflineDb, notifyRegistryChanged } from "./registryDb";
 import { OFFLINE_TABLES } from "./wipedStores";
 
@@ -75,11 +78,21 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // A live track recording is a producer too: its foreground service keeps
   // delivering fixes into a `track` row this wipe is about to delete, and its
   // in-memory point series is the departing user's location history.
+  //
+  // The sharpened areas the map still has on screen: MLRN's request
+  // transforms hold each one's presigned URL, and the map, mounted until the
+  // wipe ends, would write their tile ranges into TileJSONs and the area list
+  // again. Stopped first, so the area list's pending write sees it
+  // (wipeLocalData.test.ts, "moves the sharpened areas' epoch before it
+  // forgets the area list").
+  stopSharpenedAreasForWipe();
   const stopped = await Promise.all([
     stoppedInTime(cancelAllRegionDownloads()),
     stoppedInTime(stopGeoPdfImportRun()),
     stoppedInTime(stopTrackRecordingForWipe()),
     stoppedInTime(stopWeatherForWipe()),
+    stoppedInTime(stopGaugesForWipe()),
+    stoppedInTime(forgetSharpenedAreas()),
   ]);
   if (stopped.some((ok) => !ok)) failed.push("an active download");
 
@@ -120,7 +133,7 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
 
   try {
     const db = await getOfflineDb();
-    await db.withTransactionAsync(async () => {
+    await withSyncTransaction(db, async () => {
       for (const table of OFFLINE_TABLES) {
         await db.runAsync(`DELETE FROM ${table}`);
       }

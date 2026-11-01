@@ -40,7 +40,7 @@ import type { RegionClipSpec } from "./regionDownloads";
 /**
  * Two task kinds, one queue: the SIX rasters are fetched tile by tile straight
  * from the provider, while a clip of one of Logjam's own archives (the vector
- * basemap, a DEM, the contours) is cut by byte range from the CDN
+ * basemap, a DEM, the contours, the slope) is cut by byte range from the CDN
  * (`regionDownloads.ts`). The user is choosing between maps, not between
  * transports, so they share the screen, the queue and this progress shape.
  */

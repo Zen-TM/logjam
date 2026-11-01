@@ -87,7 +87,6 @@ describe("POST /plans", () => {
       places: [],
       routes: [],
       files: [],
-      geoPdfs: [],
       forms: [],
     });
     expect(res.body.sections).toMatchObject([{ title: "Overview", body: "" }]);

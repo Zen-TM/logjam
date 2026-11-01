@@ -118,42 +118,20 @@
   color: var(--color-text);
 }
 
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.galleryPane {
   padding: 0 12px 12px;
 }
 
-.tile {
+.landLegend {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.landLegend li {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-lg);
-  background: var(--color-card);
-  color: var(--color-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.tile[aria-checked="true"] {
-  border-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
-}
-
-.thumb {
-  display: block;
-  width: 100%;
-  /* Landscape, not square: six basemaps are two rows of three, and a map
-     preview reads fine at 3:2. */
-  aspect-ratio: 3 / 2;
-  border-radius: var(--radius-md);
-  object-fit: cover;
-}
-
-.tile .caption {
-  color: var(--color-text);
-  text-align: center;
+  align-items: center;
+  gap: var(--space-1);
 }

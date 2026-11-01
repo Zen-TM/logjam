@@ -1,7 +1,7 @@
 // Direct, per-item sharing — the non-place sibling of routes/sharing.ts.
 //
 // A Share row is a LIVE, REVOCABLE view of a record the sender still owns:
-// waypoints, routes, LiDAR topo jobs, GeoPDF jobs. Recipients read and export;
+// waypoints, routes, LiDAR topo jobs. Recipients read and export;
 // they never edit, and the owner can take it back. That is a different promise
 // from "send a copy" (FileSend), and the two must never be worded alike —
 // see the header of shared/src/sharing.ts.

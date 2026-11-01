@@ -318,7 +318,7 @@ export function placeLinkDeleteTombstones(args: {
  * through a place.
  *
  * Only routes appear here because only they ride delta sync among the directly
- * sharable entities — topo and GeoPDF jobs are fetched through their own list
+ * sharable entities — topo jobs are fetched through their own list
  * endpoints, so a revoked job simply stops appearing there and the client
  * reconciles its downloaded artifact on the next fetch. (A place is shared
  * through PlaceShare, not Share, and has its own path.) */

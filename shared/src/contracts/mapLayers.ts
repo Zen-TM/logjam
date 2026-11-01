@@ -5,6 +5,7 @@
 // What each client lists INSIDE its overlays pane is not declared here: Logjam
 // GPS draws every kind of line its phone holds (routes, imported ways, tracks)
 // and GeoPDFs as rows of their own, Logjam Web draws one "Ways" row.
+import { MAP_TERRAIN } from "./mapTerrain.js";
 import type { ScreenContract } from "./types.js";
 
 export const MAP_LAYERS = {
@@ -12,6 +13,7 @@ export const MAP_LAYERS = {
   title: "Map layers",
   sections: [
     { key: "basemap" },
+    { key: "terrain" },
     { key: "overlays" },
     {
       key: "offline",
@@ -22,11 +24,11 @@ export const MAP_LAYERS = {
   ],
   copy: {
     tabBasemap: "Map",
+    tabTerrain: MAP_TERRAIN.title,
     tabOverlays: "Overlays",
     tabOffline: "Offline",
     places: "Places",
     ways: "Ways",
-    lidarTopos: "LiDAR topos",
     // The overlays list ends with the way to add one (Logjam Web).
     importFile: "Import a file",
   },

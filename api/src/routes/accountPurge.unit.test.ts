@@ -111,7 +111,8 @@ describe("account-delete purge covers every model related to User", () => {
 // here, listing a type its file does not create, or a listed type sent to
 // another user missing from the purge in routes/users.ts (for the plan
 // types, the purge no longer reading PLAN_PERSON_KEY), or a type added to
-// NOTIFICATION_TYPES that no site lists (or listed but not declared).
+// NOTIFICATION_TYPES that no site lists and isn't retired (or listed but not
+// declared).
 describe("account-delete purge covers every notification type", () => {
   // Every file that creates a notification, and the types it creates.
   const CREATION_SITES: Record<string, string[]> = {
@@ -119,12 +120,7 @@ describe("account-delete purge covers every notification type", () => {
       "egress_quota_exceeded",
       "egress_quota_warning",
     ],
-    "api/src/lib/topoJobReaper.ts": [
-      "topo_failed",
-      "topo_export_complete",
-      "geo_pdf_complete",
-      "topo_export_skipped",
-    ],
+    "api/src/lib/topoJobReaper.ts": ["topo_failed", "topo_export_complete"],
     "api/src/routes/bulkShare.ts": ["place_shared"],
     "api/src/routes/fileSends.ts": ["file_sent"],
     "api/src/routes/friendInvites.ts": ["friend_request_accepted"],
@@ -139,10 +135,11 @@ describe("account-delete purge covers every notification type", () => {
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],
     "api/src/scripts/announce.ts": ["announcement"],
-    "api/src/worker/geoPdfWorker.ts": ["geo_pdf_complete"],
     "topo/worker.py": ["topo_complete", "topo_failed"],
     "topo/export_worker.py": ["topo_export_complete"],
   };
+  // Declared because older rows still hold them, but no file creates them now.
+  const RETIRED = ["topo_export_skipped"];
   // Only ever sent to the user the row is about, so the purge's
   // `notification.deleteMany({ userId })` already removes them; or, for
   // plan_access_ended, naming no user at all.
@@ -153,8 +150,6 @@ describe("account-delete purge covers every notification type", () => {
     "topo_complete",
     "topo_failed",
     "topo_export_complete",
-    "topo_export_skipped",
-    "geo_pdf_complete",
     // From no user: the maintainer's script, one row per recipient.
     "announcement",
   ];
@@ -192,9 +187,11 @@ describe("account-delete purge covers every notification type", () => {
   });
 
   it("lists exactly the declared notification types", () => {
-    expect([...new Set(Object.values(CREATION_SITES).flat())].sort()).toEqual(
-      [...NOTIFICATION_TYPES].sort(),
-    );
+    expect(
+      [
+        ...new Set([...Object.values(CREATION_SITES).flat(), ...RETIRED]),
+      ].sort(),
+    ).toEqual([...NOTIFICATION_TYPES].sort());
   });
 
   // The plan types are named through PLAN_PERSON_KEY, which also says which

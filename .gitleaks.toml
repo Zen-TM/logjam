@@ -9,7 +9,7 @@ useDefault = true
 description = "Public, non-secret identifiers safe to commit"
 
 # Cognito App Client ID and User Pool ID are PUBLIC identifiers. The browser SPA
-# needs both for its Amplify auth config, so they ship in the public JS bundle
+# needs both to sign in, so they ship in the public JS bundle
 # regardless. They are not credentials — a Cognito public client has no secret,
 # and the user pool's sign-in endpoints are public by design. Security comes from
 # the pool's own policy, not from keeping these IDs hidden.
@@ -23,6 +23,9 @@ paths = [
   '''.*\.example$''',
   '''mobile/src/tracks/recordingPreferences\.ts''',
   '''mobile/src/map/sourceResolver\.test\.ts''',
+  # Local Mailpit's self-signed key: public by design, and trusted only by a
+  # sender given it as SMTP_CA_CERT, which prod never is.
+  '''infra/mailpit/dev-tls-key\.pem''',
   # A syncthing in-flight copy of recordingPreferences.ts, committed once in
   # e41c1fb and removed by e96baed (which also gitignored the pattern). It lives
   # only in history; the finding is the same `recordingFixRateV2` key name.
@@ -35,4 +38,11 @@ regexes = [
   '''ap-southeast-2_x5zPhJXMk''',             # Cognito User Pool ID (public)
   '''\w+\.s3KeyThumbnail''',                   # a Prisma field read (copyPlaceMedia.ts, planItems.ts), not a key
   '''s3_key_thumbnail''',                     # the same column in raw SQL (planItems.ts)
+  # generic-api-key reads `<display column>, <thumbnail column>` in planItems.ts
+  # (its SQL select lists, and a key array in earlier, unmerged plans history)
+  # as `key = value` and takes the thumbnail column name as the secret. It sits
+  # here, not in a rule-scoped table, because the pre-commit hook may run
+  # gitleaks 8.16, which replaces a regex-less `[[rules]]` entry instead of
+  # extending the default rule.
+  '''s3_?[Kk]ey_?[Dd]isplay\b[^,\n]{0,40},\s*(?:f\.)?s3_?[Kk]ey_?[Tt]humbnail\s?$''',
 ]

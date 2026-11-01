@@ -48,6 +48,8 @@ import {
   type PressEvent,
   type PressEventWithFeatures,
   type ViewStateChangeEvent,
+  type ColorReliefLayerSpecification,
+  type LineLayerSpecification,
 } from "@maplibre/maplibre-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -62,9 +64,7 @@ import {
 import {
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
-  TOPO_LAYERS,
   TRACK_MIME_TYPES,
-  VECTOR_STYLE_DEFAULTS,
   compassPointFor,
   distinctTripTypes,
   draftAnchorIndices,
@@ -74,6 +74,7 @@ import {
   haversineMeters,
   initialBearingDegrees,
   MAP_OVERLAY_REFINEMENTS,
+  GAUGES,
   MAP_OVERLAYS,
   messageFromError,
   pickNextTrackColor,
@@ -84,12 +85,23 @@ import {
   type SnapMode,
   type TrackPass,
   drawsNswContours,
+  drawsNswHillshade,
+  LAND_EDGE_LINES,
+  LAND_EDGE_MINZOOM,
+  landColor,
+  landEdgeOpacity,
+  landNameOf,
+  NSW_LAND,
+  slopeReliefColor,
+  terrainBeforeIds,
+  type TerrainLayerKey,
+  type TerrainSwitchKey,
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  type SharpenedArea,
 } from "@logjam/shared";
 
-import { apiFetch } from "../api/apiFetch";
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import type { SavedItemReveal } from "../saved/SavedScreen";
 import { setRouteEditing } from "./routeEditLock";
@@ -101,7 +113,7 @@ import {
 } from "./routeDraftStore";
 import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
-import { getVectorStyle, useApiQuery } from "../api/queries";
+import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import {
   useMirrorPlaces,
@@ -213,13 +225,15 @@ import {
 } from "./gpsSignal";
 import {
   readBasemapPreference,
-  readContoursOverImagery,
+  readTerrainLayers,
   setBasemapPreference,
-  setContoursOverImagery,
+  setTerrainLayers,
+  readGaugesLayer,
+  setGaugesLayer,
 } from "./basemapPreference";
+import { useSlopeBands } from "./slopeBandsPreference";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
-import { readMutedTopoAreas, writeMutedTopoAreas } from "./topoAreaMuting";
-import { offlineCoverageMask } from "./offlineMask";
+import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
@@ -244,6 +258,9 @@ import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
+import { GaugeSheet } from "../gauges/GaugeSheet";
+import { GaugesLayer } from "../gauges/GaugesLayer";
+import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
 import { routeSlotOccupant } from "../places/routeSlot";
@@ -298,10 +315,6 @@ import {
 } from "../tracks/trackWriteQueue";
 import { useTracks } from "../tracks/useTracks";
 import { ensureForegroundLocationPermission } from "./locationPermission";
-import {
-  listEnabledOverlayKeys,
-  setOverlayEnabled,
-} from "../offline/registryDb";
 import { useRegionDownloads } from "../offline/regionDownloadQueue";
 import { groupRegionJobs } from "../offline/regionDownloadGroups";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
@@ -320,6 +333,14 @@ import { stopSourcePress } from "./sourcePress";
 import { useConnectivity } from "./connectivity";
 import { rememberMapCamera } from "./lastCamera";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
+import { getCompletedOverlays } from "./completedOverlays";
+import { serveSharpenedArchives, sharpenedAreasOf } from "./sharpenedArchives";
+import {
+  rememberSharpenedAreas,
+  savedSharpenedAreas,
+  subscribeSharpenedAreas,
+} from "../offline/sharpenedAreaStore";
+import { writeTileJsons } from "./tileJsonFile";
 import {
   basemapsCoveringViewport,
   resolveMapSource,
@@ -330,8 +351,6 @@ import {
   topoOverlayCredits,
   composeTopoOverlayRefs,
   mergeSavedOverlayJobs,
-  type CompletedOverlaysResponse,
-  type TopoOverlayRef,
 } from "./topoOverlays";
 import {
   MAX_PINCH_ZOOM,
@@ -344,12 +363,26 @@ import {
   zoomRampValue,
   type TapSample,
 } from "./doubleTap";
-import { chainBeforeIds, PIN_FLOOR, ROUTES_FLOOR } from "./layerOrder";
 import {
-  TopoIconImages,
-  TopoVectorOverlay,
-  topoVectorLayerIds,
-} from "./TopoVectorOverlay";
+  BAND_MARKERS,
+  chainBeforeIds,
+  PIN_FLOOR,
+  ROUTES_FLOOR,
+  terrainBandMarker,
+} from "./layerOrder";
+import { mapDataAttribution } from "./mapDataCredits";
+import { TopoVectorOverlay, topoVectorLayerIds } from "./TopoVectorOverlay";
+
+/** The shared expression builder's untyped result, as MLRN types the paint. */
+type LineColor = NonNullable<
+  NonNullable<LineLayerSpecification["paint"]>["line-color"]
+>;
+type LineOpacity = NonNullable<
+  NonNullable<LineLayerSpecification["paint"]>["line-opacity"]
+>;
+type ColorReliefColor = NonNullable<
+  NonNullable<ColorReliefLayerSpecification["paint"]>["color-relief-color"]
+>;
 
 // Shell style (glyphs/sprite) lives in basemap/shellStyle.ts — bundled
 // file:// assets once installed, remote host as the
@@ -404,6 +437,13 @@ const CAMERA_DEFAULTS = {
  * same button do two different things depending on where the map happened to be.
  */
 const FOLLOW_ZOOM = 15;
+
+/**
+ * MapLibre's deepest zoom, the `maxzoom` of a Terrain layer that draws at
+ * every zoom. Set rather than left out, so a layer whose limit is lifted
+ * (routing falling back to statewide) gets this one and not a stale value.
+ */
+const MAX_LAYER_ZOOM = 24;
 
 /** How near the drawn line a press-and-hold must land to insert a point, in DP. */
 const LINE_GRAB_DP = 24;
@@ -510,17 +550,7 @@ const LOCATE_LABEL: Record<FollowMode, string> = {
   "course-up": "Facing your direction — tap to stop",
 };
 
-function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
-  return apiFetch<CompletedOverlaysResponse>("/topo-jobs/completed-overlays");
-}
-
 const OFFLINE_MASK_LAYER = "offline-mask-fill";
-
-// Contour layers get contour styling; every other vector layer is the OSM
-// features set (web parity: `id.includes("contours")`).
-function overlayKind(ref: TopoOverlayRef): "contours" | "features" {
-  return ref.layer === "contours" ? "contours" : "features";
-}
 
 /**
  * The user's own position marker.
@@ -879,13 +909,18 @@ export function MapScreen({
     setBasemapId(next);
     setBasemapPreference(next);
   }, []);
-  const [contoursOverImagery, setContoursOverImageryState] = useState(
-    readContoursOverImagery,
+  const [terrainLayers, setTerrainLayersState] = useState(readTerrainLayers);
+  const chooseTerrainLayer = useCallback(
+    (key: TerrainSwitchKey, on: boolean) => {
+      setTerrainLayersState((prev) => {
+        const next = { ...prev, [key]: on };
+        setTerrainLayers(next);
+        return next;
+      });
+    },
+    [],
   );
-  const chooseContoursOverImagery = useCallback((on: boolean) => {
-    setContoursOverImageryState(on);
-    setContoursOverImagery(on);
-  }, []);
+  const slopeBands = useSlopeBands();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
@@ -893,6 +928,9 @@ export function MapScreen({
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
+  const [tappedLand, setTappedLand] = useState<string | null>(null);
+  /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
+  const landAskedFor = useRef<MapPoint | null>(null);
   const [addPlaceAt, setAddPlaceAt] = useState<MapPoint | null>(null);
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -1011,8 +1049,19 @@ export function MapScreen({
     ReadonlySet<string>
   >(() => new Set<string>());
   const [showGeoPdfs, setShowGeoPdfs] = useState(true);
+  const [showGauges, setShowGaugesState] = useState(readGaugesLayer);
+  const setShowGauges = useCallback((on: boolean) => {
+    setShowGaugesState(on);
+    setGaugesLayer(on);
+  }, []);
+  const {
+    file: gaugeFile,
+    settled: gaugesSettled,
+    now: gaugesNow,
+  } = useGauges(showGauges);
+  const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const [gaugeNow, setGaugeNow] = useState(0);
   const [showVectorImports, setShowVectorImports] = useState(true);
-  const [showOverlays, setShowOverlays] = useState(true);
   const [routesStatus, setRoutesStatus] = useState<PlaceRoutesStatus | null>(
     null,
   );
@@ -1075,19 +1124,8 @@ export function MapScreen({
     writeSnapMode(mode);
   }, []);
   const mapRef = useRef<MapRef>(null);
-  // Enabled topo overlays. Seeded from the persisted set (registryDb) so a
-  // downloaded overlay stays visible across a cold offline launch; toggles
-  // write through. Saved overlays are auto-enabled on download.
-  const [enabledOverlays, setEnabledOverlays] = useState<ReadonlySet<string>>(
-    new Set(),
-  );
-  // Re-read on focus (not just mount): the Saved screen's "Save offline"
-  // action auto-enables an overlay by writing overlay_enabled directly, and
-  // that table has no change listener (unlike the artifact registry) — a
-  // focus refresh is how a Map screen that stayed mounted in the background
-  // picks up an overlay saved while the user was on the Saved tab.
   // The compass switch lives in Settings, on another tab, so its value is
-  // re-read on focus alongside the overlays rather than only at mount.
+  // re-read on focus rather than only at mount.
   const [compassEnabled, setCompassEnabled] = useState(isCompassEnabled);
   // The Map settings page writes these five and lives on another tab, so they
   // are re-read on focus alongside the compass rather than only at mount. All
@@ -1131,38 +1169,8 @@ export function MapScreen({
       setNorthReference(readNorthReference());
       setScaleBarEnabled(isScaleBarEnabled());
       setSpeedElevationEnabled(isSpeedElevationEnabled());
-      listEnabledOverlayKeys()
-        .then((keys) => setEnabledOverlays(new Set(keys)))
-        .catch(console.error);
     }, []),
   );
-  // Which areas are hidden wholesale — the "where" axis of the overlay matrix
-  // (topoAreaMuting.ts). Independent of the per-cell enabled set above, so
-  // unmuting an area restores whatever layers were selected for it.
-  const [mutedAreas, setMutedAreas] =
-    useState<ReadonlySet<string>>(readMutedTopoAreas);
-  const setAreasMuted = useCallback((areaIds: string[], muted: boolean) => {
-    setMutedAreas((prev) => {
-      const next = new Set(prev);
-      for (const areaId of areaIds) {
-        if (muted) next.add(areaId);
-        else next.delete(areaId);
-      }
-      writeMutedTopoAreas(next);
-      return next;
-    });
-  }, []);
-  // Toggle one overlay on/off, persisting the change.
-  const toggleOverlay = useCallback((key: string) => {
-    setEnabledOverlays((prev) => {
-      const next = new Set(prev);
-      const enabled = !next.has(key);
-      if (enabled) next.add(key);
-      else next.delete(key);
-      setOverlayEnabled(key, enabled).catch(console.error);
-      return next;
-    });
-  }, []);
   // Follow modes: follow recenters on each fix (north-up); course-up
   // additionally rotates the map to the direction of travel. The locate
   // button cycles off → follow → course-up → off.
@@ -1334,25 +1342,54 @@ export function MapScreen({
   const isGuest = useAccountState().accountState === "guest";
   const overlays = useApiQuery(
     getCompletedOverlays,
-    "Couldn't load topo overlays.",
+    "Couldn't load your sharpened areas.",
     !isGuest,
   );
-  // Server-side vector style (same one the web map + exports use); defaults
-  // until it loads / when offline.
-  const vectorStyleQuery = useApiQuery(
-    getVectorStyle,
-    "Couldn't load map style.",
-    !isGuest,
+  // The sharpened areas the user can see: the Terrain group reads each one's
+  // own archive inside it (sourceResolver.ts `routeTerrain`), with the epoch
+  // the list was asked in, so a sign-out wipe running while the map is still
+  // mounted stops it (sharpenedArchives.ts `sharpenedAreasOf`).
+  const { sharpenedAreas, areasEpoch } = useMemo(
+    () => sharpenedAreasOf(overlays.data, !isGuest),
+    [isGuest, overlays.data],
   );
-  const vectorStyle = vectorStyleQuery.data ?? VECTOR_STYLE_DEFAULTS;
-
+  // Before the sources that read them mount (sharpenedArchives.ts).
+  useMemo(
+    () => serveSharpenedArchives(sharpenedAreas, areasEpoch),
+    [sharpenedAreas, areasEpoch],
+  );
+  // Each list that loads is kept, without its URLs, for the offline sampler,
+  // the climb upgrade and the offline map (offline/sharpenedAreaStore.ts).
+  useEffect(() => {
+    if (overlays.data && !isGuest)
+      void rememberSharpenedAreas(sharpenedAreas, areasEpoch);
+  }, [overlays.data, isGuest, sharpenedAreas, areasEpoch]);
+  // The map draws its saved area clips from the kept list, read again
+  // whenever it changes: the save screen keeps the list it cut from, which
+  // can be newer than this one.
+  const [keptAreas, setKeptAreas] = useState<readonly SharpenedArea[]>([]);
+  useEffect(() => {
+    let live = true;
+    const read = () =>
+      void savedSharpenedAreas().then((kept) => {
+        if (live) setKeptAreas(kept);
+      });
+    read();
+    const stop = subscribeSharpenedAreas(read);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
   const ctx: ResolveContext = useMemo(
     () => ({
       connectivity,
       artifacts,
       cdnBaseUrl: config.topoCdnBaseUrl,
+      sharpenedAreas,
+      keptSharpenedAreas: isGuest ? [] : keptAreas,
     }),
-    [connectivity, artifacts],
+    [connectivity, artifacts, sharpenedAreas, isGuest, keptAreas],
   );
 
   /**
@@ -1380,16 +1417,62 @@ export function MapScreen({
       resolveMapSource({ kind: "basemap", basemapId: renderedBasemapId }, ctx),
     [renderedBasemapId, ctx],
   );
-  // The statewide contours, where this basemap takes them (shared
-  // nswContours.ts). Offline they are whatever clips were saved with it.
+  // The Terrain group (shared terrain.ts). The contours only where this
+  // basemap takes them; offline, each is whatever clips were saved of it.
   const contoursResolved = useMemo(
     () =>
-      drawsNswContours(renderedBasemapId, contoursOverImagery)
-        ? resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
-            (r) => r.status === "ok",
+      drawsNswContours(renderedBasemapId, terrainLayers.contours)
+        ? writeTileJsons(
+            resolveMapSource({ kind: "nsw-contours" }, ctx).filter(
+              (r) => r.status === "ok",
+            ),
+            areasEpoch,
           )
         : [],
-    [renderedBasemapId, contoursOverImagery, ctx],
+    [renderedBasemapId, terrainLayers.contours, ctx, areasEpoch],
+  );
+  const landResolved = useMemo(
+    () =>
+      terrainLayers.land
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-land", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.land, viewportBbox, ctx, areasEpoch],
+  );
+  const landLayerIds = useMemo(
+    () => landResolved.map((r) => `nsw-land-${r.key}`),
+    [landResolved],
+  );
+  const slopeResolved = useMemo(
+    () =>
+      terrainLayers.slope
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-slope", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [terrainLayers.slope, viewportBbox, ctx, areasEpoch],
+  );
+  const hillshadeResolved = useMemo(
+    () =>
+      drawsNswHillshade(renderedBasemapId, terrainLayers.hillshade)
+        ? writeTileJsons(
+            resolveMapSource(
+              { kind: "nsw-hillshade", viewport: viewportBbox },
+              ctx,
+            ).filter((r) => r.status === "ok"),
+            areasEpoch,
+          )
+        : [],
+    [renderedBasemapId, terrainLayers.hillshade, viewportBbox, ctx, areasEpoch],
   );
 
   /**
@@ -1431,17 +1514,9 @@ export function MapScreen({
   // basemap is actually being drawn FROM those saved tiles. Online there is
   // nothing to hide behind (see offlineMask.ts).
   const offlineMask = useMemo(() => {
-    if (
-      !basemapResolved.some((r) => r.status === "ok" && r.origin === "local")
-    ) {
-      return null;
-    }
-    return offlineCoverageMask(
-      basemapResolved.flatMap((r) =>
-        r.status === "ok" && r.bounds ? [r.bounds] : [],
-      ),
-    );
-  }, [basemapResolved]);
+    const boxes = offlineMaskBoxes(basemapResolved, artifacts);
+    return boxes && offlineCoverageMask(boxes);
+  }, [basemapResolved, artifacts]);
 
   // Union the online overlay list with downloaded artifacts, so saved overlays
   // list + render even on a cold offline launch (the online fetch has no
@@ -1453,16 +1528,10 @@ export function MapScreen({
 
   const overlayRefs = useMemo(
     () =>
-      // A muted area draws nothing, whatever its cells say — the "where" gate
-      // applied after the "what" (topoAreaMuting.ts). The kind's own master is
-      // a third gate ON TOP of both, so switching the band off and on again
-      // brings back exactly the layer/area picks that were showing.
-      showOverlays
-        ? composeTopoOverlayRefs(mergedOverlays, enabledOverlays).filter(
-            (ref) => !mutedAreas.has(ref.jobId),
-          )
-        : [],
-    [mergedOverlays, enabledOverlays, mutedAreas, showOverlays],
+      // Only the vegetation layer is an overlay now; the rest of a sharpened
+      // area draws through the Terrain group.
+      terrainLayers.vegetation ? composeTopoOverlayRefs(mergedOverlays) : [],
+    [mergedOverlays, terrainLayers.vegetation],
   );
 
   // "Show only these on the map" — the Places screen's filter, opt-in, handed
@@ -2029,16 +2098,68 @@ export function MapScreen({
       }
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
-      setTappedPoint({ latitude: lat, longitude: lon });
+      const tapped = { latitude: lat, longitude: lon };
+      setTappedPoint(tapped);
+      setTappedLand(null);
+      landAskedFor.current = tapped;
+      // From the tiles on the phone, so this works offline and asks no one.
+      if (landLayerIds.length > 0) {
+        mapRef.current
+          ?.queryRenderedFeatures(event.nativeEvent.point, {
+            layers: landLayerIds,
+          })
+          .then((features) => {
+            if (landAskedFor.current === tapped)
+              setTappedLand(landNameOf(features));
+          })
+          // Never a failure to show: the sheet just has no land figure.
+          .catch(() => undefined);
+      }
     },
-    [addToolPoint, anchorDeleteSideFor, collectingPoints, pressedAnchorIndex],
+    [
+      addToolPoint,
+      anchorDeleteSideFor,
+      collectingPoints,
+      landLayerIds,
+      pressedAnchorIndex,
+    ],
   );
 
   /** One place's verbs, from its pin. */
   const [optionsPlaceId, setOptionsPlaceId] = useState<string | null>(null);
+  /** When a place pin last took a press: a gauge under it yields. */
+  const pinPressedAt = useRef(0);
+  const handleGaugePress = useCallback(
+    (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
+      stopSourcePress(event);
+      const [lon, lat] = event.nativeEvent.lngLat;
+      const id = event.nativeEvent.features[0]?.properties?.id;
+      // Both sources hear one press, in either order: after the pin has had
+      // its turn, a gauge acts only if no pin took the press.
+      setTimeout(() => {
+        if (Date.now() - pinPressedAt.current < 250) return;
+        if (collectingPoints) void addToolPoint(lon, lat);
+        else if (typeof id === "string") {
+          // Whichever press lands last wins: the gauge replaces what a
+          // pin or a point press had open.
+          setTappedPoint(null);
+          setOptionsPlaceId(null);
+          setGaugeNow(Date.now());
+          setGaugeId(id);
+        }
+      }, 0);
+    },
+    [addToolPoint, collectingPoints],
+  );
+  const openGauge = showGauges
+    ? gaugeFile?.gauges.find((g) => g.id === gaugeId)
+    : undefined;
+
   const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
+      pinPressedAt.current = Date.now();
+      setGaugeId(null);
       // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
       // while a point-collecting tool is armed this has to place the point
       // itself — otherwise tapping near a place does nothing and reads as
@@ -2634,22 +2755,8 @@ export function MapScreen({
           setVectorImportVisible(focus.reveal.key, true).catch(console.error);
           break;
         case "overlay": {
-          // Reveal the whole job: every layer enabled and the area unmuted.
-          // SavedScreen's item key for this category is `overlay:<jobId>`
-          // (SavedScreen.tsx's registry-row prefix) — strip it back to the raw
-          // jobId that mergedOverlays.jobs and setAreasMuted both key on.
-          const jobId = focus.reveal.key.replace(/^overlay:/, "");
-          for (const job of mergedOverlays.jobs) {
-            if (job.jobId !== jobId) continue;
-            for (const layer of job.layers) {
-              const key = `${job.jobId}/${layer.name}`;
-              setEnabledOverlays((prev) =>
-                prev.has(key) ? prev : new Set(prev).add(key),
-              );
-              setOverlayEnabled(key, true).catch(console.error);
-            }
-          }
-          setAreasMuted([jobId], false);
+          // The only overlay is the Terrain tab's vegetation switch.
+          chooseTerrainLayer("vegetation", true);
           break;
         }
         case "region":
@@ -2671,14 +2778,7 @@ export function MapScreen({
     if (focus.basemapId) {
       setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
     }
-  }, [
-    focus?.nonce,
-    focus,
-    chooseBasemap,
-    fitCameraToBbox,
-    mergedOverlays,
-    setAreasMuted,
-  ]);
+  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, chooseTerrainLayer]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Once per restored draft — the user's own panning owns the
@@ -4026,21 +4126,6 @@ export function MapScreen({
     [addToolPoint, collectingPoints],
   );
 
-  // The layer sheet groups these two ways at once — by layer across every area,
-  // and by area — so each entry carries both its area and its layer rather than
-  // one pre-joined label to be parsed back apart.
-  const overlayList = mergedOverlays.jobs.flatMap((job) =>
-    job.layers.map((layer) => ({
-      key: `${job.jobId}/${layer.name}`,
-      areaId: job.jobId,
-      areaLabel: job.name ?? job.jobId.slice(0, 8),
-      layer: layer.name,
-      layerLabel:
-        TOPO_LAYERS.find((meta) => meta.name === layer.name)?.label ??
-        layer.name,
-    })),
-  );
-
   /**
    * What the search box can find on this phone.
    *
@@ -4232,6 +4317,19 @@ export function MapScreen({
           : undefined,
     },
     {
+      key: "gauges",
+      icon: "gauge",
+      hue: MAP_INK.gauge,
+      title: MAP_OVERLAYS.copy.gauges,
+      // Live state only: a layer on with nothing to draw says so.
+      note:
+        showGauges && gaugesSettled && !gaugeFile
+          ? GAUGES.copy.failed
+          : undefined,
+      value: showGauges,
+      onChange: setShowGauges,
+    },
+    {
       key: "geoPdfs",
       icon: "geoPdf",
       hue: assetHue.geoPdf,
@@ -4295,10 +4393,9 @@ export function MapScreen({
    *
    * Changing this key unmounts and re-adds the two top layers, which puts them
    * back on top of whatever just arrived. It is a string of everything BELOW
-   * them that can mount or unmount; the layers under `layerIndex` (basemap,
-   * topo band, GeoPDFs, imports) are pinned by index and cannot climb, so they
-   * are deliberately not in it. Anything unpinned added to this map later
-   * belongs here too.
+   * them that can mount or unmount; the anchored layers (basemap, topo band,
+   * GeoPDFs, imports) cannot climb, so they are deliberately not in it.
+   * Anything unpinned added to this map later belongs here too.
    */
   const topStackKey = [
     showTracks ? tracks.map((track) => track.id).join(",") : "",
@@ -4347,22 +4444,19 @@ export function MapScreen({
     viewportBbox,
   );
 
-  // Once each: offline, every saved clip of a source carries the same credit.
-  const attributionText = [
-    ...new Set(
-      [...basemapResolved, ...contoursResolved]
-        .map((r) => (r.status === "ok" ? r.attribution : null))
-        .filter(Boolean),
-    ),
-  ].join(" · ");
+  const attributionText = mapDataAttribution(basemapResolved, {
+    contours: contoursResolved,
+    slope: slopeResolved,
+    land: landResolved,
+    hillshade: hillshadeResolved,
+  });
 
   const nswContoursStyle = useMemo(
     () => nswContourStyle(renderedBasemapId),
     [renderedBasemapId],
   );
 
-  // The ground band, bottom to top: the statewide contours, topo overlays,
-  // GeoPDFs, vector imports.
+  // The ground band, bottom to top: topo overlays, GeoPDFs, vector imports.
   // Listed by id and anchored layer-to-layer under the saved routes, NOT by
   // index: a layer switched on after the place pins mounted must still land
   // under them (layerOrder.ts).
@@ -4377,19 +4471,28 @@ export function MapScreen({
       ctx,
     ).filter((r) => r.status === "ok"),
   }));
-  const groundIds = [
-    ...contoursResolved.flatMap((r) =>
-      topoVectorLayerIds("contours", `nsw-contours-${r.key}`, nswContoursStyle),
+  const terrainLayerIds: Record<TerrainLayerKey, string[]> = {
+    contours: contoursResolved.flatMap((r) =>
+      topoVectorLayerIds(`nsw-contours-${r.key}`, nswContoursStyle),
     ),
+    slope: slopeResolved.map((r) => `nsw-slope-${r.key}`),
+    land: landResolved.flatMap((r) => [
+      `nsw-land-${r.key}`,
+      ...LAND_EDGE_LINES.map((_, i) => `nsw-land-edge-${i}-${r.key}`),
+    ]),
+    hillshade: hillshadeResolved.map((r) => `nsw-hillshade-${r.key}`),
+  };
+  // The Terrain group goes in the basemap's bands: under the vector map's roads
+  // and labels, and over a raster, which sits below them all.
+  const terrainBefore = Object.fromEntries(
+    terrainBeforeIds(terrainLayerIds, terrainBandMarker),
+  );
+  const groundIds = [
     // Above the statewide contours, which belong to the basemap: a saved
     // contour clip is whole tiles and runs past the edge of the saved area.
     ...(offlineMask ? [OFFLINE_MASK_LAYER] : []),
     ...overlayMounts.flatMap(({ ref, resolved }) =>
-      resolved.flatMap((r) =>
-        ref.format === "vector"
-          ? topoVectorLayerIds(overlayKind(ref), `topo-${r.key}`, vectorStyle)
-          : [`topo-layer-${r.key}`],
-      ),
+      resolved.flatMap((r) => [`topo-layer-${r.key}`]),
     ),
     ...geoPdfMounts.flatMap(({ geoPdf, resolved }) =>
       resolved.map(() => `geopdf-layer-${geoPdf.id}`),
@@ -4400,7 +4503,10 @@ export function MapScreen({
       `import-point-${i.id}`,
     ]),
   ];
-  const groundBefore = chainBeforeIds(groundIds, ROUTES_FLOOR);
+  const groundBefore = {
+    ...chainBeforeIds(groundIds, ROUTES_FLOOR),
+    ...terrainBefore,
+  };
 
   // Hold the map until the bundled glyph/sprite install settles (first launch:
   // one-time extraction, a second or two; after that: a marker check). Mounting
@@ -4503,8 +4609,6 @@ export function MapScreen({
         onLongPress={handleMapLongPress}
       >
         <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
-        {/* Bundled point-feature icons for vector overlays. */}
-        <TopoIconImages />
         {/* Locate-me sprite: one baked PNG per Settings → Map colour choice
             (see UserMarkerImages) — picked by iconImage, not recoloured at
             runtime. */}
@@ -4512,12 +4616,9 @@ export function MapScreen({
         {/* Direction arrowhead for saved routes and the draft line. */}
         <RouteArrowImage />
 
-        {/* layerIndex pins z-order across remounts: a swapped basemap source
-            re-adds its layer at the TOP of the stack, burying the place
-            layers — explicit indexes (background=0, basemap band from 1,
-            overlays above the band) keep the basemap underneath while place
-            layers stay on top. The Protomaps band is ~70 layers wide, so the
-            overlay base index depends on the active basemap. */}
+        {/* Each basemap layer goes under its band's marker (BAND_MARKERS): a
+            swapped basemap source would otherwise re-add its layers at the TOP
+            of the stack, burying the place layers. */}
         {basemapResolved.map((resolved) =>
           resolved.status === "ok" ? (
             <ResolvedSource key={resolved.key} resolved={resolved}>
@@ -4525,14 +4626,13 @@ export function MapScreen({
                 <ProtomapsLayers
                   flavor={PROTOMAPS_FLAVOR}
                   sourceID={sourceIdFor(resolved.key)}
-                  startIndex={1}
                 />
               ) : (
                 <Layer
                   key={`basemap-layer-${resolved.key}`}
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
-                  layerIndex={1}
+                  beforeId={BAND_MARKERS.land}
                   style={{ rasterOpacity: 1 }}
                 />
               )}
@@ -4555,43 +4655,102 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
+        {/* The Terrain group's shading and slope: MapLibre draws both from
+            a terrarium DEM. The bands are a paint expression, so changing
+            them on Logjam Web repaints this layer, no rebuild. */}
+        {hillshadeResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <Layer
+              key={`nsw-hillshade-${r.key}`}
+              type="hillshade"
+              id={`nsw-hillshade-${r.key}`}
+              beforeId={groundBefore[`nsw-hillshade-${r.key}`]}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              // Lit from the map, not the default viewport: MapLibre Native
+              // uploads a viewport light once (hillshade_layer_tweaker.cpp), so
+              // the shading would depend on the bearing the layer mounted at.
+              paint={{ "hillshade-illumination-anchor": "map" }}
+            />
+          </ResolvedSource>
+        ))}
+        {landResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <Layer
+              key={`nsw-land-${r.key}`}
+              type="fill"
+              id={`nsw-land-${r.key}`}
+              source-layer={NSW_LAND.sourceLayer}
+              beforeId={groundBefore[`nsw-land-${r.key}`]}
+              minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              // Unseen: it is what a tap reads, since a line has no inside.
+              paint={{ "fill-opacity": 0 }}
+            />
+            {LAND_EDGE_LINES.map(({ width, offset, blur, opacity }, i) => (
+              <Layer
+                key={`nsw-land-edge-${i}-${r.key}`}
+                type="line"
+                id={`nsw-land-edge-${i}-${r.key}`}
+                source-layer={NSW_LAND.sourceLayer}
+                beforeId={groundBefore[`nsw-land-edge-${i}-${r.key}`]}
+                minzoom={Math.max(r.layerMinZoom ?? 0, LAND_EDGE_MINZOOM)}
+                maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+                paint={{
+                  "line-color": landColor() as LineColor,
+                  "line-width": width,
+                  "line-offset": offset,
+                  "line-blur": blur,
+                  "line-opacity": landEdgeOpacity(opacity) as LineOpacity,
+                }}
+              />
+            ))}
+          </ResolvedSource>
+        ))}
+        {slopeResolved.map((r) => (
+          <ResolvedSource key={r.key} resolved={r}>
+            <Layer
+              key={`nsw-slope-${r.key}`}
+              type="color-relief"
+              id={`nsw-slope-${r.key}`}
+              beforeId={groundBefore[`nsw-slope-${r.key}`]}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
+              paint={{
+                "color-relief-color": slopeReliefColor(
+                  slopeBands,
+                ) as ColorReliefColor,
+              }}
+            />
+          </ResolvedSource>
+        ))}
+
         {/* The statewide contours: a topo area's contour layers, on the
             statewide archive (or the clips saved from it). */}
         {contoursResolved.map((r) => (
           <ResolvedSource key={r.key} resolved={r}>
             <TopoVectorOverlay
-              kind="contours"
               idPrefix={`nsw-contours-${r.key}`}
               sourceID={sourceIdFor(r.key)}
               beforeIds={groundBefore}
               vectorStyle={nswContoursStyle}
+              minzoom={r.layerMinZoom ?? 0}
+              maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
             />
           </ResolvedSource>
         ))}
 
-        {/* Topo overlays: raster = one translucent RasterLayer; vector =
-            the full contour/feature layer stack styled by the user's
-            server-side vectorStyle (web parity via buildTopoVectorLayerDefs). */}
+        {/* Topo overlays: one translucent RasterLayer each. */}
         {overlayMounts.flatMap(({ ref, resolved }) =>
           resolved.map((r) => (
             <ResolvedSource key={r.key} resolved={r}>
-              {ref.format === "vector" ? (
-                <TopoVectorOverlay
-                  kind={overlayKind(ref)}
-                  idPrefix={`topo-${r.key}`}
-                  sourceID={sourceIdFor(r.key)}
-                  beforeIds={groundBefore}
-                  vectorStyle={vectorStyle}
-                />
-              ) : (
-                <Layer
-                  key={`topo-layer-${r.key}`}
-                  type="raster"
-                  id={`topo-layer-${r.key}`}
-                  beforeId={groundBefore[`topo-layer-${r.key}`]}
-                  style={{ rasterOpacity: 0.8 }}
-                />
-              )}
+              <Layer
+                key={`topo-layer-${r.key}`}
+                type="raster"
+                id={`topo-layer-${r.key}`}
+                beforeId={groundBefore[`topo-layer-${r.key}`]}
+                style={{ rasterOpacity: 0.8 }}
+              />
             </ResolvedSource>
           )),
         )}
@@ -4722,6 +4881,14 @@ export function MapScreen({
               }}
             />
           </GeoJSONSource>
+        ) : null}
+
+        {showGauges && gaugeFile ? (
+          <GaugesLayer
+            file={gaugeFile}
+            now={gaugesNow}
+            onPress={handleGaugePress}
+          />
         ) : null}
 
         {/* Place overlays: authed API GeoJSON — never baked into tiles
@@ -4862,6 +5029,13 @@ export function MapScreen({
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
           onSelectSaved={(item) => {
+            if (item.gaugeId) {
+              setShowGauges(true);
+              setTappedPoint(null);
+              setOptionsPlaceId(null);
+              setGaugeNow(Date.now());
+              setGaugeId(item.gaugeId);
+            }
             item
               .resolveBbox()
               .then((bbox) => {
@@ -5238,11 +5412,20 @@ export function MapScreen({
         ))}
       </BottomSheet>
 
+      <GaugeSheet
+        gauge={openGauge ?? null}
+        attribution={gaugeFile?.attribution ?? ""}
+        generatedAt={gaugeFile?.generatedAt ?? ""}
+        now={gaugeNow}
+        onClose={() => setGaugeId(null)}
+      />
+
       {/* Tap: "what's there?" — the question that comes before the long
           press's "something goes here". */}
       <MapPointSheet
         allowNetwork={!offlineOnly}
         point={tappedPoint}
+        land={tappedLand}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}
@@ -5444,17 +5627,13 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
-        contoursOverImagery={contoursOverImagery}
-        onContoursOverImageryChange={chooseContoursOverImagery}
+        terrainLayers={terrainLayers}
+        onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}
-        overlays={overlayList}
-        enabledOverlays={enabledOverlays}
-        onToggleOverlay={toggleOverlay}
-        mutedAreas={mutedAreas}
-        onSetAreasMuted={setAreasMuted}
+        hasVegetation={mergedOverlays.jobs.some((job) =>
+          job.layers.some((layer) => layer.name === "vegetation"),
+        )}
         layers={layerToggles}
-        showOverlays={showOverlays}
-        onShowOverlaysChange={setShowOverlays}
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {

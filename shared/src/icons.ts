@@ -105,6 +105,7 @@ export const ICONS = {
   // — things: what a row or tile is —
   map: { web: "map", gps: "map" }, // a map, the Maps tab, show on map
   place: { web: "map-pin", gps: "map-pin" },
+  gauge: { web: "droplets", gps: "mci:water-outline" }, // a river gauge
   trip: { web: "book-open", gps: "book-open" },
   plan: { web: "clipboard-list", gps: "clipboard" }, // a trip plan, the Plans page
   form: { web: "text-cursor-input", gps: "mci:form-textbox" }, // a plan's form: a field to fill, not plan's clipboard or multiSelect's list
@@ -120,6 +121,7 @@ export const ICONS = {
   notes: { web: "align-left", gps: "align-left" },
   stats: { web: "chart-column", gps: "bar-chart-2" },
   friends: { web: "users", gps: "users" },
+  leaderboard: { web: "award", gps: "award" }, // the friends leaderboard, a medal
   account: { web: "circle-user", gps: "user" },
   notifications: { web: "bell", gps: "bell" },
   settings: { web: "settings", gps: "settings" },

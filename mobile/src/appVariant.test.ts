@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import appConfig from "../app.config";
+import patched from "../maplibre/patched.json";
 import packageJson from "../package.json";
 
 type Config = Parameters<typeof appConfig>[0]["config"];
@@ -26,10 +27,36 @@ afterEach(() => vi.unstubAllEnvs());
 // (the application id, a URL scheme) lets one replace or answer for the other.
 describe("app variant", () => {
   // Mutation: make any dev-only field unconditional in app.config.ts.
-  it("is exactly app.json plus the version when no variant is set", () => {
-    expect(JSON.stringify(resolve({}))).toBe(
-      JSON.stringify({ ...appJson.expo, version: packageJson.version }),
+  it("is exactly app.json plus the versions when no variant is set", () => {
+    const plugins = appJson.expo.plugins?.map((plugin) =>
+      Array.isArray(plugin) && plugin[0] === "@maplibre/maplibre-react-native"
+        ? [
+            plugin[0],
+            {
+              ...plugin[1],
+              android: { ...plugin[1].android, nativeVersion: patched.version },
+            },
+          ]
+        : plugin,
     );
+    expect(JSON.stringify(resolve({}))).toBe(
+      JSON.stringify({
+        ...appJson.expo,
+        version: packageJson.version,
+        plugins,
+      }),
+    );
+  });
+
+  // Mutation: stop dropping codeSigningCertificate in app.config.ts. Metro then
+  // fails every dev client request for want of the signing key (the emulator
+  // smoke check, mobile-emulator.yml, goes red).
+  it("dev is not code-signed, the real app is", () => {
+    expect(resolve({}).updates?.codeSigningCertificate).toBeDefined();
+    const dev = resolve({ LOGJAM_APP_VARIANT: "dev" });
+    expect(dev.updates?.codeSigningCertificate).toBeUndefined();
+    expect(dev.updates?.codeSigningMetadata).toBeUndefined();
+    expect(dev.updates?.url).toBe(appJson.expo.updates?.url);
   });
 
   // Mutation: drop any one of the dev overrides in app.config.ts.
@@ -54,8 +81,15 @@ describe("app variant", () => {
       ios,
       android,
       plugins,
+      updates,
       ...rest
     }: Config) => ({
+      // Code signing is the one update setting that differs, tested below.
+      updates: {
+        ...updates,
+        codeSigningCertificate: null,
+        codeSigningMetadata: null,
+      },
       ...rest,
       ios: { ...ios, bundleIdentifier: null },
       android: { ...android, package: null },

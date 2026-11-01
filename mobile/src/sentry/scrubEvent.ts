@@ -29,10 +29,17 @@
 const COORDINATE_PAIR = /-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}/g;
 
 export function redactTilePathPatterns(message: string): string {
-  return message
-    .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
-    .replace(COORDINATE_PAIR, "[redacted-coords]")
-    .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]");
+  return (
+    message
+      .replace(/\bhttps?:\/\/\S+/gi, "[redacted-url]")
+      // The sign-in redirect (`logjam://auth?code=...`) and any JWT: an ID,
+      // access or refresh token, or an authorization code, must not leave the
+      // phone in a crash report (Guard: scrubEvent.test.ts).
+      .replace(/\blogjam(?:dev)?:\/\/\S+/gi, "[redacted-url]")
+      .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]*/g, "[redacted-token]")
+      .replace(COORDINATE_PAIR, "[redacted-coords]")
+      .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]")
+  );
 }
 
 /** Drop a rendered argument/object block from an error message (Prisma-style
@@ -52,6 +59,9 @@ export function scrubMessage(message: string): string {
 // Keys whose values could carry place coordinates or names. Mirrors the
 // intent of logger.ts redactPaths; matched case-insensitively at any depth.
 const SENSITIVE_KEYS = new Set([
+  // The token revoke call sends an opaque `token` (a Cognito refresh token has
+  // no `eyJ` prefix for the JWT pattern to catch).
+  "token",
   "latitude",
   "longitude",
   "lat",
@@ -62,6 +72,7 @@ const SENSITIVE_KEYS = new Set([
   "name",
   "altnames",
   "notes",
+  "gaugeid",
   // Generic free-text keys: a place, trip or media caption can reach a payload
   // under any of these. Tracing is off, so no span `description` is lost.
   "description",
@@ -88,6 +99,16 @@ const SENSITIVE_KEYS = new Set([
   "query",
   "authorization",
   "cookie",
+  // Sign-in: tokens, the authorization code and its PKCE verifier.
+  "idtoken",
+  "accesstoken",
+  "refreshtoken",
+  "id_token",
+  "access_token",
+  "refresh_token",
+  "code",
+  "code_verifier",
+  "codeverifier",
 ]);
 
 const MAX_DEPTH = 8;

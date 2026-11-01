@@ -1,4 +1,4 @@
-// Expo push notifications — mirrors the Resend email pattern (services/
+// Expo push notifications — mirrors the email pattern (services/
 // email.ts): best-effort fan-out at Notification-creation sites; the
 // in-app Notification row stays the source of truth. No SDK — the Expo push
 // API is one HTTPS POST.
@@ -28,8 +28,6 @@ const PUSH_TITLES: Record<string, string> = {
   topo_failed: "Topo processing failed",
   topo_export_complete: "Topo export finished",
   topo_export_skipped: "Auto-export skipped",
-  geo_pdf_complete: "GeoPDF finished",
-  geo_pdf_failed: "GeoPDF failed",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",
   egress_quota_warning: "Approaching your monthly download limit",
@@ -60,7 +58,6 @@ export type PushData = {
   placeId?: string;
   jobId?: string;
   exportId?: string;
-  geoPdfJobId?: string;
   entityType?: string;
   entityId?: string;
   fileSendId?: string;
@@ -77,7 +74,6 @@ const ALLOWED_DATA_KEYS = new Set([
   "placeId",
   "jobId",
   "exportId",
-  "geoPdfJobId",
   "entityType",
   "entityId",
   "fileSendId",

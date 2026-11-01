@@ -1,4 +1,4 @@
-"""worker.py pure helpers: error mapping, settings merge, email-preference read.
+"""worker.py pure helpers: error mapping, job processing, email-preference read.
 
 worker.py reads required env vars and creates a boto3 client at import time, so
 we set placeholder env before importing. It does not import GDAL, so no osgeo
@@ -26,7 +26,6 @@ try:
     import worker  # noqa: E402
     from worker import (  # noqa: E402
         compose_database_url,
-        merge_settings,
         safe_error_message,
         send_failure_email,
     )
@@ -82,57 +81,15 @@ class TestSafeErrorMessage(unittest.TestCase):
             self.assertNotRegex(msg, r"subprocess|pipeline|tippecanoe|tiles")
 
     def test_memory_error(self):
-        self.assertIn("too big", safe_error_message(MemoryError()))
-        self.assertIn("too big", safe_error_message(RuntimeError("exit code -9")))
+        # One sentence, declared once, for an area too big for memory: an
+        # out-of-memory kill here, and sharpen.py's refusal in advance.
+        from worker_common import TOO_BIG
+
+        self.assertEqual(safe_error_message(MemoryError()), TOO_BIG)
+        self.assertEqual(safe_error_message(RuntimeError("exit code -9")), TOO_BIG)
 
     def test_os_error_points_at_input(self):
         self.assertIn("LiDAR data", safe_error_message(OSError("bad zip")))
-
-
-@unittest.skipUnless(
-    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
-)
-class TestMergeSettings(unittest.TestCase):
-    def test_none_inputs_fall_back_to_vector_defaults(self):
-        merged = merge_settings(None, None)
-        self.assertEqual(merged["contours"], worker.VECTOR_STYLE_DEFAULTS["contours"])
-        self.assertEqual(merged["features"]["enabled"], True)
-        self.assertEqual(
-            merged["features"]["features"], worker.VECTOR_STYLE_DEFAULTS["features"]
-        )
-
-    def test_raster_layers_pass_through_when_present(self):
-        merged = merge_settings({"hillshade": {"azimuth": 315}, "slope": {"x": 1}}, {})
-        self.assertEqual(merged["hillshade"], {"azimuth": 315})
-        self.assertEqual(merged["slope"], {"x": 1})
-        self.assertNotIn("vegetation", merged)  # None values dropped
-
-    def test_features_enabled_taken_from_raster_options(self):
-        merged = merge_settings({"features": {"enabled": False}}, None)
-        self.assertFalse(merged["features"]["enabled"])
-
-    def test_vector_style_contours_override(self):
-        vec = {
-            "contours": {
-                "majorColour": "#111111ff",
-                "minorColour": "#222222ff",
-                "majorWidthM": 5,
-                "minorWidthM": 2,
-            }
-        }
-        merged = merge_settings({"contours": {"zoomBands": [1, 2, 3]}}, vec)
-        self.assertEqual(merged["contours"]["majorColour"], "#111111ff")
-        # raster contour fields are preserved alongside vector style.
-        self.assertEqual(merged["contours"]["zoomBands"], [1, 2, 3])
-
-    def test_label_scale_passthrough(self):
-        merged = merge_settings(None, {"labelScale": 1.5})
-        self.assertEqual(merged["labelScale"], 1.5)
-
-    def test_label_scale_defaults_when_absent(self):
-        # Vector styles snapshotted before labelScale existed omit it → default 1.
-        merged = merge_settings(None, {"contours": {}})
-        self.assertEqual(merged["labelScale"], 1)
 
 
 @unittest.skipUnless(
@@ -159,8 +116,8 @@ class TestWantsEmail(unittest.TestCase):
         self.assertFalse(wants_email(_FakeConn(row), "u1", "exportEmail"))
 
     def test_explicit_true_is_respected(self):
-        row = {"ui_preferences": {"notifications": {"geoPdfEmail": True}}}
-        self.assertTrue(wants_email(_FakeConn(row), "u1", "geoPdfEmail"))
+        row = {"ui_preferences": {"notifications": {"topoEmail": True}}}
+        self.assertTrue(wants_email(_FakeConn(row), "u1", "topoEmail"))
 
     def test_non_bool_value_defaults_true(self):
         row = {"ui_preferences": {"notifications": {"topoEmail": "yes"}}}
@@ -259,6 +216,172 @@ class TestComposeDatabaseUrl(unittest.TestCase):
         self.assertIn("DB_HOST", msg)
         self.assertIn("DB_NAME", msg)
         self.assertNotIn("secret-value", msg)
+
+
+@unittest.skipUnless(
+    _IMPORT_OK, f"worker import failed: {globals().get('_IMPORT_ERR', '?')}"
+)
+class TestProcessSharpen(unittest.TestCase):
+    """A job the API marked to sharpen runs sharpen.py, and its mark becomes
+    the result.
+
+    Mutations that turn it red: an unmarked job run instead of refused, the
+    archives' keys left out of the result, the vegetation tick ignored, a
+    missing contour archive uploaded anyway (or failing the job), and exit 2
+    reported as the generic failure instead of sharpen.py's sentence.
+    """
+
+    def run_job(self, mark, write, veg_metrics=None):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+
+        job = {"id": "job-1", "s3_input_key": "inputs/job-1/a.zip", "sharpen": mark}
+
+        def fake_run(cmd, job_id, progress_path):
+            out = Path(cmd[3])
+            out.mkdir(parents=True, exist_ok=True)
+            return write(out)
+
+        vegetation = mock.Mock(return_value=([{"name": "vegetation"}], 7, veg_metrics))
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            mock.patch.object(worker, "s3") as s3,
+            mock.patch.object(worker, "run_with_heartbeat", side_effect=fake_run),
+            mock.patch.object(worker, "process_vegetation", vegetation),
+        ):
+            try:
+                result = worker.process_job(job, tmp)
+            finally:
+                self.downloads = s3.download_file.call_count
+            uploads = [c.args[2] for c in s3.upload_file.call_args_list]
+        return result, uploads, vegetation
+
+    @staticmethod
+    def finished(out):
+        import json
+
+        (out / "sharpen.json").write_text(json.dumps({"v": 1, "zmax": 16}))
+        for name in ("heights", "slope", "contours"):
+            (out / f"{name}.pmtiles").write_bytes(b"x" * 10)
+        return 0
+
+    def test_the_mark_becomes_the_result(self):
+        result, uploads, vegetation = self.run_job(
+            {"v": 1, "vegetation": False}, self.finished
+        )
+        output_keys, _, total, _, sharpen = result
+        vegetation.assert_not_called()
+        self.assertEqual(output_keys, [])
+        self.assertEqual(total, 30)
+        self.assertEqual(sharpen["zmax"], 16)
+        self.assertFalse(sharpen["vegetation"])
+        self.assertEqual(
+            sharpen["keys"],
+            {n: f"outputs/job-1/{n}.pmtiles" for n in ("heights", "slope", "contours")},
+        )
+        self.assertEqual(sorted(uploads), sorted(sharpen["keys"].values()))
+
+    def test_the_stored_result_is_the_example_the_api_reads(self):
+        # Mutation: a key or field the worker adds renamed, which the API's
+        # parser would read as no area (shared/src/__fixtures__/sharpen-result.json,
+        # read by api/src/services/sharpenedAreas.unit.test.ts too).
+        import json
+        import os
+
+        root = os.path.join(os.path.dirname(__file__), "..", "..")
+        path = os.path.join(root, "shared/src/__fixtures__/sharpen-result.json")
+        with open(path) as f:
+            example = json.load(f)
+        stored = example["stored"]
+        reported = {k: v for k, v in stored.items() if k not in ("keys", "vegetation")}
+
+        def finished(out):
+            (out / "sharpen.json").write_text(json.dumps(reported))
+            for name in stored["keys"]:
+                (out / f"{name}.pmtiles").write_bytes(b"x")
+            return 0
+
+        self.assertEqual(example["jobId"], "job-1")  # run_job's job id
+        result, _, _ = self.run_job({"v": 1, "vegetation": False}, finished)
+        self.assertEqual(result[-1], stored)
+
+    def test_the_vegetation_pass_is_charged_with_the_job(self):
+        # Mutation: leave the vegetation pass's seconds out, and a ticked
+        # job's vegetation runs free (credits are charged from wallSeconds,
+        # api/src/lib/computeCredits.ts) while its estimate learns too low.
+        import json
+
+        def finished(out):
+            (out.parent / "sharpen-metrics.json").write_text(
+                json.dumps({"wallSeconds": 13.0})
+            )
+            return self.finished(out)
+
+        result, _, _ = self.run_job(
+            {"v": 1, "vegetation": True},
+            finished,
+            {"wallSeconds": 40.0, "fireStaleFraction": 0.25},
+        )
+        metrics = result[3]
+        self.assertEqual(metrics["wallSeconds"], 53.0)
+        self.assertEqual(metrics["vegetationWallSeconds"], 40.0)
+        # Red if the pass's fire reading is dropped: CI reads it to know the
+        # worker read the fire raster.
+        self.assertEqual(metrics["fireStaleFraction"], 0.25)
+
+    def test_unread_sharpen_metrics_are_not_replaced_by_the_vegetation_pass(self):
+        # Mutation: store the vegetation seconds alone when sharpen.py's
+        # metrics couldn't be read, and the job is charged for that pass only
+        # instead of falling back to its elapsed time.
+        result, _, _ = self.run_job(
+            {"v": 1, "vegetation": True}, self.finished, {"wallSeconds": 40.0}
+        )
+        self.assertIsNone(result[3])
+
+    def test_a_ticked_job_gets_the_vegetation_layer(self):
+        result, _, vegetation = self.run_job(
+            {"v": 1, "vegetation": True}, self.finished
+        )
+        output_keys, _, total, _, sharpen = result
+        self.assertEqual(output_keys, [{"name": "vegetation"}])
+        self.assertEqual(total, 37)
+        self.assertTrue(sharpen["vegetation"])
+
+    def test_no_contour_archive_is_left_out(self):
+        import json
+
+        def no_contours(out):
+            (out / "sharpen.json").write_text(json.dumps({"v": 1, "zmax": 16}))
+            for name in ("heights", "slope"):
+                (out / f"{name}.pmtiles").write_bytes(b"x" * 10)
+            return 0
+
+        result, uploads, _ = self.run_job({"v": 1, "vegetation": False}, no_contours)
+        self.assertEqual(sorted(result[-1]["keys"]), ["heights", "slope"])
+        self.assertEqual(len(uploads), 2)
+
+    def test_a_zip_it_cannot_sharpen_says_why(self):
+        import json
+
+        def refused(out):
+            (out / "error.json").write_text(json.dumps({"sentence": "Add the DEM."}))
+            return 2
+
+        with self.assertRaises(worker.JobInputError) as ctx:
+            self.run_job({"v": 1, "vegetation": False}, refused)
+        self.assertEqual(safe_error_message(ctx.exception), "Add the DEM.")
+
+    def test_a_crash_is_the_generic_failure(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            self.run_job({"v": 1, "vegetation": False}, lambda out: 1)
+        self.assertEqual(safe_error_message(ctx.exception), worker.GENERIC_FAILURE)
+
+    def test_an_unmarked_job_is_refused_before_its_download(self):
+        with self.assertRaises(worker.JobInputError) as ctx:
+            self.run_job(None, self.finished)
+        self.assertEqual(safe_error_message(ctx.exception), worker.OLD_JOB)
+        self.assertEqual(self.downloads, 0)
 
 
 if __name__ == "__main__":

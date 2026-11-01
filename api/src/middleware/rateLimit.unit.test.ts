@@ -31,6 +31,7 @@ import {
   globalLimitMax,
   PLACE_SEARCHES_PER_MINUTE,
   userPatchLimitMax,
+  usernameCheckLimiter,
 } from "./rateLimit";
 import placesBulk from "../routes/placesBulk";
 import tripLogsBulk from "../routes/tripLogsBulk";
@@ -154,5 +155,31 @@ describe("placeSearchLimiter", () => {
     }
     expect((await search("fast-typist")).status).toBe(429);
     expect((await search("someone-else")).status).toBe(200);
+  });
+});
+
+describe("usernameCheckLimiter", () => {
+  // Mutation: raise `max`, or key it on anything but the address.
+  it("refuses an address's 31st check in a minute, and only that address", async () => {
+    const app = express();
+    app.set("trust proxy", true);
+    app.get("/", usernameCheckLimiter, (_req, res) => {
+      res.sendStatus(204);
+    });
+    const from = (ip: string) =>
+      request(app).get("/").set("X-Forwarded-For", ip);
+    for (let i = 0; i < 30; i++) {
+      expect((await from("203.0.113.1")).status).toBe(204);
+    }
+    expect((await from("203.0.113.1")).status).toBe(429);
+    expect((await from("203.0.113.2")).status).toBe(204);
+  });
+
+  it("is mounted on the username check", () => {
+    const source = readFileSync(
+      join(__dirname, "..", "routes", "users.ts"),
+      "utf8",
+    );
+    expect(source).toMatch(/"\/username-available",\s+usernameCheckLimiter,/);
   });
 });

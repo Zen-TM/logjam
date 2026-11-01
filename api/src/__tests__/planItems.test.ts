@@ -1,14 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
-import {
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  PutObjectCommand,
-} from "@aws-sdk/client-s3";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
 import prisma from "../services/prisma";
 import { s3 } from "../services/awsClients";
 import { randomUUID } from "crypto";
-import { planResultKeyFor, resultKeyFor } from "../lib/geoPdfResult";
 import { copyStandaloneFile, handOverPlans } from "../lib/planItems";
 import {
   API_URL,
@@ -24,14 +19,13 @@ import {
   as,
 } from "./_actors";
 
-// Plans: what a plan holds besides its write-up, its places, routes, files
-// and GeoPDFs. alice leads the plan; bob is an active member; carol is not
+// Plans: what a plan holds besides its write-up, its places, routes and
+// files. alice leads the plan; bob is an active member; carol is not
 // in it. Members are written straight to the table, as in plans.test.ts.
 //
 // Requires `make dev` (Postgres + MiniStack + API). Every plan, place and
 // file here is the test's own; the sweep removes them.
 
-const TOPO_BUCKET = process.env.S3_BUCKET_TOPO ?? "";
 const MEDIA_BUCKET = process.env.S3_BUCKET_MEDIA ?? "";
 const GPX = Buffer.from(
   `<?xml version="1.0"?><gpx version="1.1" creator="test"><trk><trkseg>
@@ -175,33 +169,6 @@ async function ownPhoto(sub: string, placeId: string): Promise<string> {
   return presign.body.mediaId as string;
 }
 
-/** A completed GeoPDF of alice's, with an object, uncharged (the worker would charge it). */
-async function ownGeoPdf(): Promise<string> {
-  const bytes = 1234n;
-  const job = await prisma.geoPdfJob.create({
-    data: {
-      userId: ALICE_ID,
-      config: { elements: { title: "Test map" } },
-      vectorStyleSnapshot: {},
-      status: "completed",
-      resultBytes: bytes,
-      completedAt: new Date(),
-    },
-  });
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: TOPO_BUCKET,
-      Key: resultKeyFor(job.id),
-      Body: Buffer.alloc(Number(bytes)),
-    }),
-  );
-  await prisma.geoPdfJob.update({
-    where: { id: job.id },
-    data: { resultKey: resultKeyFor(job.id) },
-  });
-  return job.id;
-}
-
 beforeEach(async () => {
   const res = await request(API_URL)
     .post("/plans")
@@ -342,26 +309,21 @@ describe("POST /plans/:id/items (Add a copy)", () => {
     expect(res.body.error).toBe("Couldn't find that plan.");
   });
 
-  // Mutation: drop ownerId (route, media) or userId (geoPdf) from that arm of
-  // addPlanItem.
-  it("404s a route, file or GeoPDF someone else owns", async () => {
+  // Mutation: drop ownerId from the route or media arm of addPlanItem.
+  it("404s a route or file someone else owns", async () => {
     const routeId = await ownRoute(ALICE_SUB);
     const fileId = await ownFile(ALICE_SUB);
-    const jobId = await ownGeoPdf();
     for (const [kind, id] of [
       ["route", routeId],
       ["media", fileId],
-      ["geoPdf", jobId],
     ]) {
       const res = await add(BOB_SUB, { kind, id });
       expect(res.status, kind).toBe(404);
     }
     expect(await prisma.route.count({ where: { planId } })).toBe(0);
     expect(await prisma.media.count({ where: { planId } })).toBe(0);
-    expect(await prisma.geoPdfJob.count({ where: { planId } })).toBe(0);
     await request(API_URL).delete(`/routes/${routeId}`).set(as(ALICE_SUB));
     await request(API_URL).delete(`/media/${fileId}`).set(as(ALICE_SUB));
-    await prisma.geoPdfJob.delete({ where: { id: jobId } });
   });
 
   it("refuses a write to an archived plan", async () => {
@@ -451,44 +413,15 @@ describe("plan files and storage", () => {
     await request(API_URL).delete(`/media/${photoId}`).set(as(ALICE_SUB));
   });
 
-  it("copies a GeoPDF with its own object, and refunds on plan delete", async () => {
-    const jobId = await ownGeoPdf();
+  it("refunds a file and deletes its object on plan delete", async () => {
+    const fileId = await ownFile(ALICE_SUB);
     const before = await used(ALICE_ID);
-    const res = await add(ALICE_SUB, { kind: "geoPdf", id: jobId });
+    const res = await add(ALICE_SUB, { kind: "media", id: fileId });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
-    expect(res.body.item).toMatchObject({
-      kind: "geoPdf",
-      title: "Test map",
-      sizeBytes: "1234",
-      chargedTo: { id: ALICE_ID },
-    });
-    expect(res.body.item.downloadUrl).toEqual(expect.any(String));
-    const copy = await prisma.geoPdfJob.findUniqueOrThrow({
+    const copy = await prisma.media.findUniqueOrThrow({
       where: { id: res.body.item.id },
     });
-    expect(copy).toMatchObject({ userId: null, planId, status: "completed" });
-    // Guard: outside the bucket's 7-day `exports/` expiry. Mutation: copy
-    // into a plan at resultKeyFor in copyGeoPdf.
-    expect(copy.resultKey).toBe(planResultKeyFor(copy.id));
-    await s3.send(
-      new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: copy.resultKey! }),
-    );
-    expect(await used(ALICE_ID)).toBe(before + 1234n);
-
-    // Saved out, it is an owned export again, under the export TTL.
-    const bobBefore = await used(BOB_ID);
-    const saved = await request(API_URL)
-      .post(`/plans/${planId}/items/geoPdf/${copy.id}/save`)
-      .set(as(BOB_SUB))
-      .send({});
-    expect(saved.status, JSON.stringify(saved.body)).toBe(201);
-    const own = await prisma.geoPdfJob.findUniqueOrThrow({
-      where: { id: saved.body.id },
-    });
-    expect(own).toMatchObject({ userId: BOB_ID, planId: null });
-    expect(own.resultKey).toBe(resultKeyFor(own.id));
-    expect(await used(BOB_ID)).toBe(bobBefore + 1234n);
-    await request(API_URL).delete(`/geo-pdf/${own.id}`).set(as(BOB_SUB));
+    expect(await used(ALICE_ID)).toBe(before + copy.fileSizeBytes);
 
     // Guard: deleting the plan refunds. Mutation: drop refund() in
     // deletePlanWithFiles, leaving the cascade to take the rows.
@@ -499,41 +432,10 @@ describe("plan files and storage", () => {
     expect(await used(ALICE_ID)).toBe(before);
     await expect(
       s3.send(
-        new HeadObjectCommand({ Bucket: TOPO_BUCKET, Key: copy.resultKey! }),
+        new HeadObjectCommand({ Bucket: MEDIA_BUCKET, Key: copy.s3KeyDisplay }),
       ),
     ).rejects.toThrow();
-    await prisma.geoPdfJob.delete({ where: { id: jobId } });
-  });
-
-  // Mutation: rethrow the CopyObject error in copyGeoPdf (a 500).
-  it("answers 502 when S3 won't copy a GeoPDF, leaving nothing behind", async () => {
-    const jobId = await ownGeoPdf();
-    await s3.send(
-      new DeleteObjectCommand({
-        Bucket: TOPO_BUCKET,
-        Key: resultKeyFor(jobId),
-      }),
-    );
-    const before = await used(ALICE_ID);
-    const res = await add(ALICE_SUB, { kind: "geoPdf", id: jobId });
-    expect(res.status, JSON.stringify(res.body)).toBe(502);
-    expect(await prisma.geoPdfJob.count({ where: { planId } })).toBe(0);
-    expect(await used(ALICE_ID)).toBe(before);
-    await prisma.geoPdfJob.delete({ where: { id: jobId } });
-  });
-
-  it("refuses a GeoPDF that is still being made", async () => {
-    const job = await prisma.geoPdfJob.create({
-      data: {
-        userId: ALICE_ID,
-        config: {},
-        vectorStyleSnapshot: {},
-        status: "running",
-      },
-    });
-    const res = await add(ALICE_SUB, { kind: "geoPdf", id: job.id });
-    expect(res.status).toBe(409);
-    await prisma.geoPdfJob.delete({ where: { id: job.id } });
+    await request(API_URL).delete(`/media/${fileId}`).set(as(ALICE_SUB));
   });
 
   // Mutation: drop assertHasStorageQuota from copyStandaloneFile and the
@@ -612,7 +514,6 @@ describe("Save a copy", () => {
       place: await ownPlace(ALICE_SUB),
       route: await ownRoute(ALICE_SUB),
       media: await ownFile(ALICE_SUB),
-      geoPdf: await ownGeoPdf(),
     };
     for (const [kind, id] of Object.entries(owned)) {
       const res = await request(API_URL)
@@ -645,7 +546,6 @@ describe("Save a copy", () => {
     await request(API_URL).delete(`/plans/${other.body.id}`).set(as(ALICE_SUB));
     await request(API_URL).delete(`/routes/${owned.route}`).set(as(ALICE_SUB));
     await request(API_URL).delete(`/media/${owned.media}`).set(as(ALICE_SUB));
-    await prisma.geoPdfJob.delete({ where: { id: owned.geoPdf } });
   });
 
   it("copies a route out unlinked", async () => {
@@ -710,13 +610,12 @@ describe("DELETE /plans/:id/items/:kind/:itemId", () => {
 });
 
 // Mutation: drop touchPlan from addPlace's or the route arm's transaction,
-// from chargeAndWrite (media, GeoPDF), or from deletePlanItem's.
+// from chargeAndWrite (media), or from deletePlanItem's.
 it("moves the plan's updatedAt on an add of each kind and a delete", async () => {
   const sources = {
     place: await ownPlace(ALICE_SUB),
     route: await ownRoute(ALICE_SUB),
     media: await ownFile(ALICE_SUB),
-    geoPdf: await ownGeoPdf(),
   };
   let before = 0;
   let added: request.Response | undefined;
@@ -730,7 +629,6 @@ it("moves the plan's updatedAt on an add of each kind and a delete", async () =>
   }
   await request(API_URL).delete(`/routes/${sources.route}`).set(as(ALICE_SUB));
   await request(API_URL).delete(`/media/${sources.media}`).set(as(ALICE_SUB));
-  await prisma.geoPdfJob.delete({ where: { id: sources.geoPdf } });
 
   before = await planUpdatedAt();
   await new Promise((resolve) => setTimeout(resolve, 5));
@@ -1036,7 +934,7 @@ describe("storage when someone goes", () => {
     const tag = randomUUID();
     return prisma.user.create({
       data: {
-        cognitoId: `plan-items-${tag}`,
+        subject: `plan-items-${tag}`,
         username: `pi-${tag.slice(0, 8)}`,
         email: `pi-${tag}@example.invalid`,
       },
@@ -1125,11 +1023,11 @@ describe("storage when someone goes", () => {
     const dave = await throwaway();
     try {
       await membership(dave.id);
-      const id = await planFile(dave.cognitoId);
+      const id = await planFile(dave.subject);
       const before = await used(ALICE_ID);
       const del = await request(API_URL)
         .delete("/users/me")
-        .set(as(dave.cognitoId));
+        .set(as(dave.subject));
       expect(del.status).toBe(204);
       // Mutation: drop handOverPlans from DELETE /users/me (the charge
       // falls to SetNull and no one pays).
@@ -1153,11 +1051,11 @@ describe("storage when someone goes", () => {
       await membership(dave.id);
       await membership(BOB_ID, "leader");
       await membership(ALICE_ID, "member");
-      const id = await planFile(dave.cognitoId);
+      const id = await planFile(dave.subject);
       const [alice, bob] = [await used(ALICE_ID), await used(BOB_ID)];
       const del = await request(API_URL)
         .delete("/users/me")
-        .set(as(dave.cognitoId));
+        .set(as(dave.subject));
       expect(del.status).toBe(204);
       const row = await prisma.media.findUniqueOrThrow({ where: { id } });
       expect(row.chargedToId).toBe(ALICE_ID);
@@ -1179,7 +1077,7 @@ describe("storage when someone goes", () => {
     try {
       const res = await request(API_URL)
         .post("/plans")
-        .set(as(dave.cognitoId))
+        .set(as(dave.subject))
         .send({ name: "Test two departures" });
       expect(res.status).toBe(201);
       plan = res.body.id as string;
@@ -1188,8 +1086,8 @@ describe("storage when someone goes", () => {
           data: { planId: plan, userId, status: "active", role: "member" },
         });
       const files = [
-        await planFile(dave.cognitoId, plan),
-        await planFile(erin.cognitoId, plan),
+        await planFile(dave.subject, plan),
+        await planFile(erin.subject, plan),
       ];
       const before = await used(BOB_ID);
       await handOverPlans(dave.id);
@@ -1240,7 +1138,7 @@ describe("storage when someone goes", () => {
       for (const name of ["Test kept plan", "Test empty plan"]) {
         const res = await request(API_URL)
           .post("/plans")
-          .set(as(dave.cognitoId))
+          .set(as(dave.subject))
           .send({ name });
         expect(res.status).toBe(201);
         plans.push(res.body.id);
@@ -1259,8 +1157,8 @@ describe("storage when someone goes", () => {
           invitedById: dave.id,
         },
       });
-      const keptFile = await planFile(dave.cognitoId, kept);
-      const emptyFile = await planFile(dave.cognitoId, empty);
+      const keptFile = await planFile(dave.subject, kept);
+      const emptyFile = await planFile(dave.subject, empty);
       const emptyKey = (
         await prisma.media.findUniqueOrThrow({ where: { id: emptyFile } })
       ).s3KeyDisplay;
@@ -1268,7 +1166,7 @@ describe("storage when someone goes", () => {
 
       const del = await request(API_URL)
         .delete("/users/me")
-        .set(as(dave.cognitoId));
+        .set(as(dave.subject));
       expect(del.status).toBe(204);
 
       // Mutation: drop the promotion in handOverPlans.

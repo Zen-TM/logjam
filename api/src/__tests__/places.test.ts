@@ -265,3 +265,53 @@ describe("DELETE /places/:id racing itself", () => {
     }
   });
 });
+
+// Mutation that turns it red: scope the place_shared purge to the owner
+// (lib/bulkDelete.ts), which leaves the sharee's notification behind.
+describe("DELETE /places/:id with a shared place", () => {
+  it("drops the sharee's place_shared notification", async () => {
+    const id = await createPlace("Shared then deleted");
+    await prisma.placeShare.create({
+      data: { placeId: id, sharedById: ALICE_ID, sharedWithId: BOB_ID },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: id, sharedById: ALICE_ID },
+      },
+    });
+    expect(
+      (await request(API_URL).delete(`/places/${id}`).set(AUTH)).status,
+    ).toBe(204);
+    expect(
+      await prisma.notification.count({
+        where: { payload: { path: ["placeId"], equals: id } },
+      }),
+    ).toBe(0);
+  });
+});
+
+// Mutation that turns it red: re-add a recipient scope to the place_shared
+// purge in lib/bulkDelete.ts. A row with no PlaceShare behind it (legacy, or
+// left by an unfriend race) is then no longer cleaned.
+describe("DELETE /places/:id with no share row", () => {
+  it("still drops a place_shared notification whose share is gone", async () => {
+    const id = await createPlace("Orphaned notification");
+    await prisma.notification.create({
+      data: {
+        userId: BOB_ID,
+        type: "place_shared",
+        payload: { placeId: id, sharedById: ALICE_ID },
+      },
+    });
+    expect(
+      (await request(API_URL).delete(`/places/${id}`).set(AUTH)).status,
+    ).toBe(204);
+    expect(
+      await prisma.notification.count({
+        where: { payload: { path: ["placeId"], equals: id } },
+      }),
+    ).toBe(0);
+  });
+});

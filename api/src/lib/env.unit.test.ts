@@ -133,19 +133,17 @@ describe("validateEnv — origin-verify", () => {
   });
 });
 
-// DATABASE_SSL / DATABASE_SSL_CA / GEO_PDF_JOB_ID are read outside getEnv() but
+// DATABASE_SSL / DATABASE_SSL_CA are read outside getEnv() but
 // declared in the schema so boot validates them. DATABASE_SSL is an exact
 // "disable" compare in services/prisma.ts — a near-miss value would leave
 // verified TLS on and surface as an opaque pg_hba error.
-describe("TLS + worker env vars are in the schema", () => {
+describe("TLS env vars are in the schema", () => {
   it("accepts DATABASE_SSL=disable and the CA path", () => {
     process.env.DATABASE_SSL = "disable";
     process.env.DATABASE_SSL_CA = "/app/rds-ca.pem";
-    process.env.GEO_PDF_JOB_ID = "job-1";
     const env = validateEnv();
     expect(env.DATABASE_SSL).toBe("disable");
     expect(env.DATABASE_SSL_CA).toBe("/app/rds-ca.pem");
-    expect(env.GEO_PDF_JOB_ID).toBe("job-1");
   });
 
   it("rejects a near-miss DATABASE_SSL value instead of silently ignoring it", () => {
@@ -160,9 +158,8 @@ describe("TLS + worker env vars are in the schema", () => {
     setEnv({
       NODE_ENV: "production",
       AUTH_MODE: "cognito",
-      COGNITO_REGION: "r",
-      COGNITO_USER_POOL_ID: "p",
-      COGNITO_CLIENT_ID: "c",
+      OIDC_ISSUER: "https://idp.example.com",
+      OIDC_AUDIENCE: "c",
       DB_HOST: "db",
       DB_NAME: "db",
       DB_USER: "u",
@@ -188,5 +185,71 @@ describe("TLS + worker env vars are in the schema", () => {
 
   it("leaves all three optional", () => {
     expect(validateEnv().DATABASE_SSL).toBeUndefined();
+  });
+});
+
+// Mutation: drop the OIDC_ISSUER / OIDC_AUDIENCE requirement or the https
+// check in validateEnv, and a real-auth process boots unable to verify (or
+// verifying over plain http in production).
+describe("OIDC token verification config", () => {
+  const base = {
+    NODE_ENV: "development",
+    DB_HOST: "localhost",
+    DB_NAME: "db",
+    DB_USER: "u",
+    DB_PASSWORD: "p",
+    OIDC_ISSUER: "http://localhost:9000",
+    OIDC_AUDIENCE: "a, b",
+  };
+
+  it.each(["oidc", "cognito"])(
+    "accepts AUTH_MODE=%s and parses the audience list",
+    (mode) => {
+      setEnv({ ...base, AUTH_MODE: mode });
+      expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual(["a", "b"]);
+    },
+  );
+
+  it.each(["oidc", "cognito"])("requires the issuer for %s", (mode) => {
+    setEnv({ ...base, AUTH_MODE: mode, OIDC_ISSUER: undefined });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it.each(["oidc", "cognito"])("requires the audience for %s", (mode) => {
+    setEnv({ ...base, AUTH_MODE: mode, OIDC_AUDIENCE: undefined });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("fails on an audience that is empty after parsing", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_AUDIENCE: " , ," });
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+  });
+
+  it("needs neither in fake mode", () => {
+    setEnv({
+      ...base,
+      AUTH_MODE: "fake",
+      OIDC_ISSUER: undefined,
+      OIDC_AUDIENCE: undefined,
+    });
+    expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual([]);
+  });
+
+  it("refuses an http issuer in production only", () => {
+    const prod = {
+      ...base,
+      AUTH_MODE: "oidc",
+      NODE_ENV: "production",
+      CORS_ORIGIN: "http://x",
+      S3_BUCKET_TOPO: "t",
+      S3_BUCKET_MEDIA: "m",
+      ECS_SUBNETS: "s",
+      ECS_SECURITY_GROUPS: "g",
+      TOPO_CDN_BASE_URL: "https://cdn.example.com",
+    };
+    setEnv(prod);
+    expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
+    setEnv({ ...prod, OIDC_ISSUER: "https://idp.example.com" });
+    expect(() => validateEnv()).not.toThrow();
   });
 });

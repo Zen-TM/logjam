@@ -1,9 +1,8 @@
 # Mobile Maestro flows
 
-UI flows run by hand on an Android emulator or a real Android phone, never in
-CI: GitHub-hosted runners have no reliable hardware acceleration for an
-emulator, so a CI gate would fail for reasons unrelated to Logjam GPS. Passing
-all of them is what qualifies a Logjam GPS release
+UI flows run by hand on an Android emulator or a real Android phone. (The
+emulator smoke check in CI is separate: `../maestro/smoke.yaml`.) Passing all
+of them is what qualifies a Logjam GPS release
 ([docs/operations/mobile-release.md](../../docs/operations/mobile-release.md#release-qualification)).
 
 Every flow opens Logjam GPS through the dev client
@@ -22,8 +21,8 @@ client and Metro, not a Play or preview build. Prereqs:
 |---|---|---|
 | `browse.yaml` | `fake` | seeded local API (alice) |
 | `map.yaml` | `fake` | seeded local API (alice) |
-| `signin.yaml` | `cognito` | `MAESTRO_TEST_EMAIL` / `MAESTRO_TEST_PASSWORD` — a confirmed **test** Cognito user (operator-provided; never a real account, never committed) |
-| `guest.yaml` | `cognito` | nothing — no credentials, no API. **Run `adb shell pm clear com.logjamnsw.mobile` first** |
+| `signin.yaml` | `oidc` | `MAESTRO_TEST_EMAIL` / `MAESTRO_TEST_PASSWORD` — a confirmed **test** Cognito user (operator-provided; never a real account, never committed) |
+| `guest.yaml` | `oidc` | nothing — no credentials, no API. **Run `adb shell pm clear com.logjamnsw.mobile` first** |
 
 `guest.yaml` needs the clear because the entry choice is persisted: once an
 install has chosen guest or account, the chooser never appears again, and the

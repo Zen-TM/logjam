@@ -132,6 +132,40 @@ class TestHeartbeatLoop(unittest.TestCase):
         # Two ticks, same done → only the first writes.
         self.assertEqual(len(calls), 1)
 
+    def test_a_new_phase_at_the_same_count_writes(self):
+        """sharpen.py's phases each count from 1, so a one-tile ZIP writes
+        ground 1/1, then tin 1/1. Mutation that turns it red: dedupe on the
+        count alone (the tin phase's first write is lost, and two intervals
+        run into one stall window)."""
+        payloads = iter(
+            [
+                {"done": 1, "total": 1, "phase": "ground", "ts": 1.0},
+                {"done": 1, "total": 1, "phase": "tin", "ts": 2.0},
+            ]
+        )
+        stop = threading.Event()
+        calls = []
+        tick = {"n": 0}
+
+        def fake_wait(timeout):
+            tick["n"] += 1
+            if tick["n"] <= 2:
+                self.progress.write_text(json.dumps(next(payloads)))
+            return tick["n"] > 2
+
+        def fake_update(conn, job_id, status, expected_status=None, **kwargs):
+            calls.append(kwargs)
+            return 1
+
+        with (
+            mock.patch.object(worker, "db_connect", return_value=_FakeConn()),
+            mock.patch.object(worker, "update_status", side_effect=fake_update),
+            mock.patch.object(stop, "wait", side_effect=fake_wait),
+        ):
+            worker._heartbeat_loop("job-1", self.progress, stop, interval=0.01)
+
+        self.assertEqual(len(calls), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

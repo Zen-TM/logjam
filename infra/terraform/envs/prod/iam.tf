@@ -125,6 +125,96 @@ resource "aws_iam_role_policy" "place_registry_scheduler" {
   })
 }
 
+# Task role for the gauges job (ecs.tf): it may list, read and replace what is
+# under master/gauges/ in the topo bucket, and nothing else.
+resource "aws_iam_role" "gauges" {
+  name = "logjam-gauges-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "gauges" {
+  name = "logjam-gauges-publish"
+  role = aws_iam_role.gauges.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "PublishGauges"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/gauges/*"
+      },
+      {
+        # read_json() and history_ids() in topo/build_gauges.py list before
+        # they read, as upload() does for the place registry.
+        Sid       = "ListGauges"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::logjam-topo-jobs"
+        Condition = { StringLike = { "s3:prefix" = "master/gauges/*" } }
+      },
+    ]
+  })
+}
+
+# What EventBridge Scheduler assumes to launch the job: RunTask on that one
+# family, in the one cluster, passing only its two roles.
+resource "aws_iam_role" "gauges_scheduler" {
+  name = "logjam-gauges-scheduler"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "scheduler.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "620853681701" }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "gauges_scheduler" {
+  name = "logjam-gauges-runtask"
+  role = aws_iam_role.gauges_scheduler.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RunGaugesTask"
+        Effect = "Allow"
+        Action = "ecs:RunTask"
+        Resource = [
+          aws_ecs_task_definition.gauges.arn_without_revision,
+          "${aws_ecs_task_definition.gauges.arn_without_revision}:*",
+        ]
+        Condition = {
+          ArnEquals = { "ecs:cluster" = aws_ecs_cluster.main.arn }
+        }
+      },
+      {
+        Sid    = "PassGaugesRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.ecs_task_execution.arn,
+          aws_iam_role.gauges.arn,
+        ]
+        Condition = {
+          StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
+        }
+      },
+    ]
+  })
+}
+
 # GitHub Actions OIDC roles (repo Zen-TM/logjam). The oidc-provider's ARN is
 # embedded as a literal, as before.
 #
@@ -199,9 +289,10 @@ resource "aws_iam_policy" "database_password_access" {
   })
 }
 
-# Lets the ECS execution role inject RESEND_API_KEY into the worker task defs at
-# launch (the three workers send transactional email via Resend; secret value
-# lives in Secrets Manager, never in Terraform/git).
+# Lets the ECS execution role inject the Resend API key as SMTP_PASSWORD into the
+# worker task defs at launch, and the EB API resolve it at boot (Resend's SMTP
+# relay takes the key as its password; secret value lives in Secrets Manager,
+# never in Terraform/git).
 resource "aws_iam_policy" "resend_api_key_access" {
   name = "ResendApiKeyAccess"
   policy = jsonencode({
@@ -210,6 +301,20 @@ resource "aws_iam_policy" "resend_api_key_access" {
       Effect   = "Allow"
       Action   = ["secretsmanager:GetSecretValue"]
       Resource = "arn:aws:secretsmanager:ap-southeast-2:620853681701:secret:logjam/resend-api-key-59egrs*"
+    }]
+  })
+}
+
+# Lets the ECS execution role inject WATERNSW_API_KEY into the gauges task at
+# launch. The value lives in Secrets Manager, set by hand.
+resource "aws_iam_policy" "waternsw_api_key_access" {
+  name = "WaternswApiKeyAccess"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_secretsmanager_secret.waternsw_api_key.arn
     }]
   })
 }
@@ -247,9 +352,19 @@ resource "aws_iam_role_policy_attachment" "ecs_exec_db_password" {
   policy_arn = aws_iam_policy.database_password_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "eb_instance_resend_api_key" {
+  role       = "logjam-eb-role"
+  policy_arn = aws_iam_policy.resend_api_key_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "ecs_exec_resend_api_key" {
   role       = aws_iam_role.ecs_task_execution.name
   policy_arn = aws_iam_policy.resend_api_key_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_exec_waternsw_api_key" {
+  role       = aws_iam_role.ecs_task_execution.name
+  policy_arn = aws_iam_policy.waternsw_api_key_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "topo_worker_aws_managed" {
@@ -604,12 +719,13 @@ resource "aws_iam_role_policy" "eb_instance_s3_scoped" {
   })
 }
 
-# Scoped Cognito grant. Already present live as inline policy
-# `LogjamCognitoAdminUser`; codified here (same name + document) so it is
-# repo-visible and survives the AmazonCognitoPowerUser detach. Because the name
-# and body match the live inline policy exactly, apply is a content-identical
-# PutRolePolicy upsert (no functional change), it only brings the grant into
-# Terraform state.
+# Scoped Cognito grant, inline policy `LogjamCognitoAdminUser` (the name is
+# historic: it also holds AdminDeleteUser now). Codified here so it is
+# repo-visible and survives the AmazonCognitoPowerUser detach. AdminGetUser is
+# live already; AdminDeleteUser is added for account deletion (#437), where
+# the API deletes the identity at Cognito after the user's Logjam data. Exactly
+# these two actions, on the one pool: guards.tftest.hcl
+# (cognito_client_scopes_and_api_grant).
 resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
   name = "LogjamCognitoAdminUser"
   role = "logjam-eb-role"
@@ -617,7 +733,7 @@ resource "aws_iam_role_policy" "eb_cognito_admin_getuser" {
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
-      Action   = "cognito-idp:AdminGetUser"
+      Action   = ["cognito-idp:AdminGetUser", "cognito-idp:AdminDeleteUser"]
       Resource = "arn:aws:cognito-idp:ap-southeast-2:620853681701:userpool/ap-southeast-2_x5zPhJXMk"
     }]
   })
@@ -683,6 +799,7 @@ resource "aws_iam_role_policy" "gha_pin_task_defs" {
           aws_iam_role.ecs_task_execution.arn,
           aws_iam_role.topo_worker.arn,
           aws_iam_role.place_registry.arn,
+          aws_iam_role.gauges.arn,
         ]
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }

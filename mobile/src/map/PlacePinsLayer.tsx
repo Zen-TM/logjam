@@ -24,6 +24,7 @@ import {
   SHARED_PLACE_COLOR,
   SYSTEM_PLACE_TYPES,
   MAP_INK,
+  MAP_LABEL_MIN_ZOOM,
 } from "@logjam/shared";
 
 import { PIN_LABEL_TEXT } from "./mapLabelText";
@@ -153,6 +154,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           key={`${idPrefix}shared-place-labels`}
           type="symbol"
           id={`${idPrefix}shared-place-labels`}
+          minzoom={MAP_LABEL_MIN_ZOOM}
           // Pushed clear of an owned label, and exempt from collision, for the
           // same reason the halo exists: stacked on one coordinate the two
           // labels collide, and MapLibre places symbol layers top-down — so
@@ -191,6 +193,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           key={`${idPrefix}place-labels`}
           type="symbol"
           id={`${idPrefix}place-labels`}
+          minzoom={MAP_LABEL_MIN_ZOOM}
           style={LABEL_STYLE}
         />
       </GeoJSONSource>

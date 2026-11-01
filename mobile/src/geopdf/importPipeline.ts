@@ -44,12 +44,11 @@ import {
 } from "@logjam/shared/dist/geoPdfImport/tilePlan.js";
 
 import LogjamPdfRenderer from "../../modules/logjam-pdf-renderer/src/LogjamPdfRendererModule";
-import { IMPORTS_DIR, scratchFileUri } from "../offline/localStores";
+import { IMPORTS_DIR } from "../offline/localStores";
 import { NotEnoughSpaceError, assertSpaceFor } from "../offline/freeSpace";
 import { insertArtifact, deleteArtifact } from "../offline/registryDb";
 import { randomId } from "../imports/vectorImports";
 import { stageIncomingFile } from "../imports/stagedFile";
-import { downloadFromPresignedUrl } from "../api/presignedTransfer";
 import {
   deleteGeoPdfImportRow,
   findGeoPdfImportBySha256,
@@ -134,7 +133,6 @@ export const GEOPDF_ERRORS: Record<string, string> = {
   UNSUPPORTED_CRS: "This PDF uses a map projection that isn't supported.",
   FILE_TOO_LARGE: `This PDF is too large to import (${Math.round(MAX_GEOPDF_FILE_BYTES / 1024 / 1024)} MB limit).`,
   RENDER_FAILED: "Rendering this PDF failed.",
-  DOWNLOAD_FAILED: "This PDF didn't download.",
   // The planner refused before rendering: a sheet this large at this scale is
   // tens of minutes of work. It steps the zoom down first, so reaching this
   // means the georeferencing is implausible rather than the map merely big.
@@ -376,34 +374,6 @@ async function importStagedFile(
   await step("copy", () => incoming.copy(sourceFile));
 
   return buildArtifact(record, onProgress, token);
-}
-
-/**
- * Import one of the user's own server-generated GeoPDFs from its presigned
- * download URL (from GET /geo-pdf/). Streams the bytes to a scratch cache file,
- * hands them to the shared byte importer, then discards the scratch file — the
- * durable artifact is the tiled MBTiles, same as the picker flow. The presigned
- * URL carries its own auth in the query string, so no Authorization header is
- * sent (S3 rejects two auth mechanisms).
- */
-export async function importGeoPdfFromUrl(
-  displayName: string,
-  downloadUrl: string,
-  onProgress: (progress: GeoPdfProgress) => void,
-  token: GeoPdfCancelToken,
-): Promise<GeoPdfImportOutcome> {
-  const scratchUri = await scratchFileUri(`geopdf-download-${randomId()}.pdf`);
-  try {
-    const result = await downloadFromPresignedUrl(downloadUrl, scratchUri);
-    if (result.status !== 200) {
-      throw new GeoPdfImportError("DOWNLOAD_FAILED");
-    }
-    return await importGeoPdfFile(displayName, scratchUri, onProgress, token);
-  } finally {
-    await FileSystem.deleteAsync(scratchUri, { idempotent: true }).catch(
-      () => {},
-    );
-  }
 }
 
 /** Resume an incomplete import (state ≠ ready/failed acceptable too — retry). */

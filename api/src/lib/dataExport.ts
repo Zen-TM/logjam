@@ -132,7 +132,7 @@ export const EXPORT_SECTIONS = {
         include: { sharedBy: otherUser },
       }),
   },
-  // Routes, topo maps and GeoPDFs shared one at a time.
+  // Routes and topo maps shared one at a time.
   itemSharesGiven: {
     models: ["Share"],
     load: (userId) =>
@@ -189,14 +189,6 @@ export const EXPORT_SECTIONS = {
   topoTemplates: {
     models: ["TopoTemplate"],
     load: (userId) => prisma.topoTemplate.findMany({ where: { userId } }),
-  },
-  geoPdfJobs: {
-    models: ["GeoPdfJob"],
-    load: (userId) => prisma.geoPdfJob.findMany({ where: { userId } }),
-  },
-  geoPdfTemplates: {
-    models: ["GeoPdfTemplate"],
-    load: (userId) => prisma.geoPdfTemplate.findMany({ where: { userId } }),
   },
   notifications: {
     models: ["Notification"],

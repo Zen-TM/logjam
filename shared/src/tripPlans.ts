@@ -49,12 +49,7 @@ export const isTripPlanFormVisibility = oneOf(TRIP_PLAN_FORM_VISIBILITIES);
 
 // ── Wire shapes ─────────────────────────────────────────────────────
 
-export const TRIP_PLAN_ITEM_KINDS = [
-  "place",
-  "route",
-  "media",
-  "geoPdf",
-] as const;
+export const TRIP_PLAN_ITEM_KINDS = ["place", "route", "media"] as const;
 export type TripPlanItemKind = (typeof TRIP_PLAN_ITEM_KINDS)[number];
 export const isTripPlanItemKind = oneOf(TRIP_PLAN_ITEM_KINDS);
 
@@ -109,7 +104,6 @@ export type TripPlanView = {
   routes: TripPlanRoute[];
   /** Standalone media. */
   files: TripPlanFile[];
-  geoPdfs: TripPlanGeoPdf[];
   /** By position; answers filtered per caller. */
   forms: TripPlanFormView[];
 };
@@ -181,20 +175,7 @@ export type TripPlanFile = TripPlanItemBase &
     item: MediaItem;
   };
 
-export type TripPlanGeoPdf = TripPlanItemBase &
-  TripPlanFileCharge & {
-    kind: "geoPdf";
-    /** The map title from its config; null when it had none. */
-    title: string | null;
-    downloadUrl: string | null;
-    downloadExpiresAt: string | null;
-  };
-
-export type TripPlanItem =
-  | TripPlanPlace
-  | TripPlanRoute
-  | TripPlanFile
-  | TripPlanGeoPdf;
+export type TripPlanItem = TripPlanPlace | TripPlanRoute | TripPlanFile;
 
 // ── Limits: one declaration; the API refuses past them, clients show them live
 

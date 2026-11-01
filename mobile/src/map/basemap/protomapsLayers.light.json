@@ -6,16 +6,9 @@
     "flavor": "light",
     "lang": "en",
     "fontStacks": ["Noto Sans Italic", "Noto Sans Medium", "Noto Sans Regular"],
-    "generatedAt": "2026-07-23"
+    "generatedAt": "2026-10-30"
   },
   "layers": [
-    {
-      "id": "background",
-      "type": "background",
-      "style": {
-        "backgroundColor": "#cccccc"
-      }
-    },
     {
       "id": "earth",
       "type": "fill",
@@ -225,6 +218,16 @@
       "filter": ["any", ["in", "kind", "runway", "taxiway"]],
       "style": {
         "fillColor": "#e9e9ed"
+      }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "sourceLayer": "buildings",
+      "filter": ["in", "kind", "building", "building_part"],
+      "style": {
+        "fillColor": "#cccccc",
+        "fillOpacity": 0.5
       }
     },
     {
@@ -549,16 +552,6 @@
           18,
           15
         ]
-      }
-    },
-    {
-      "id": "buildings",
-      "type": "fill",
-      "sourceLayer": "buildings",
-      "filter": ["in", "kind", "building", "building_part"],
-      "style": {
-        "fillColor": "#cccccc",
-        "fillOpacity": 0.5
       }
     },
     {
@@ -996,8 +989,7 @@
       "filter": ["==", "kind", "rail"],
       "style": {
         "lineDasharray": [0.3, 0.75],
-        "lineOpacity": 0.5,
-        "lineColor": "#a7b1b3",
+        "lineColor": "#c5c8c7",
         "lineWidth": [
           "interpolate",
           ["exponential", 1.6],

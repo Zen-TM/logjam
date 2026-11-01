@@ -76,3 +76,19 @@ describe("useCurrentUser load failure", () => {
     expect(result.current.error).toBeNull();
   });
 });
+
+// The App stays mounted across an expiry, so the hook must drop the last
+// user's row when sign-in comes back up. Mutation: drop the
+// `setCurrentUser(null)` reset in useCurrentUser.
+describe("useCurrentUser when signed out", () => {
+  it("forgets the user once disabled, so the next sign-in never sees it", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(user)));
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useCurrentUser(enabled),
+      { initialProps: { enabled: true } },
+    );
+    await waitFor(() => expect(result.current.currentUser).toEqual(user));
+    rerender({ enabled: false });
+    await waitFor(() => expect(result.current.currentUser).toBeNull());
+  });
+});

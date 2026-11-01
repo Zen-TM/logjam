@@ -20,7 +20,6 @@ import {
   type ReactNode,
 } from "react";
 import { Alert, Text, View } from "react-native";
-import { confirmUserAttribute, updateUserAttribute } from "aws-amplify/auth";
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
@@ -28,7 +27,10 @@ import {
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
   formatCredits,
+  confirmEmailChange,
   messageFromError,
+  requestEmailChange,
+  hasCognitoAccount,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -38,6 +40,7 @@ import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import type { TUser } from "../api/types";
 import { useAccountState } from "../auth/AccountStateContext";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
+import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION, config } from "../config";
 import { formatBytes } from "../format";
@@ -133,8 +136,8 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
         />
         <Row
           icon="lidar"
-          title="LiDAR maps"
-          subtitle="Import topos from Logjam Web"
+          title="Sharpened areas"
+          subtitle="Save the areas you sharpen on Logjam Web"
         />
 
         <SectionHeader title="Get an account" />
@@ -157,6 +160,10 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 function updateUsername(username: string): Promise<TUser> {
   return apiFetch<TUser>("/users/me", { method: "PATCH", body: { username } });
 }
+
+// Change email and sign out everywhere are Cognito's own calls: another
+// provider has neither, so its users don't see them.
+const COGNITO_ACCOUNT = hasCognitoAccount(config.authMode, config.oidcIssuer);
 
 type SheetMode = "closed" | "username" | "email" | "delete";
 
@@ -307,14 +314,16 @@ function LinkedAccountScreen({
     signIn: () => (
       <>
         <SectionHeader title={copy.signIn} />
-        <Row
-          icon="email"
-          title={copy.email}
-          subtitle={online ? user.email : undefined}
-          {...changeEmailRowProps(online, config.authMode)}
-          onPress={() => setSheet("email")}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-        />
+        {COGNITO_ACCOUNT ? (
+          <Row
+            icon="email"
+            title={copy.email}
+            subtitle={online ? user.email : undefined}
+            {...changeEmailRowProps(online, config.authMode)}
+            onPress={() => setSheet("email")}
+            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          />
+        ) : null}
         <Row
           icon="friends"
           title="Friends"
@@ -333,6 +342,16 @@ function LinkedAccountScreen({
           icon="signOut"
           onPress={() => onSignOut()}
         />
+        {COGNITO_ACCOUNT ? (
+          <Button
+            label={copy.signOutEverywhere}
+            variant="outlineAccent"
+            icon="signOut"
+            disabled={!online}
+            disabledReason="Needs a connection"
+            onPress={() => onSignOut({ everywhere: true })}
+          />
+        ) : null}
         <Row
           icon="delete"
           hue={theme.warning}
@@ -459,6 +478,14 @@ function UsernameForm({
   );
 }
 
+const issuer = (): string => config.oidcIssuer ?? "";
+
+async function accessToken(): Promise<string> {
+  const session = await getSession();
+  if (!session) throw new Error("No auth session");
+  return session.accessToken;
+}
+
 /**
  * Two steps, because Cognito owns the email and verifies it: request the change,
  * then confirm with the code sent to the NEW address. The step is state, not a
@@ -488,9 +515,7 @@ function EmailForm({
     setBusy(true);
     setError(null);
     try {
-      await updateUserAttribute({
-        userAttribute: { attributeKey: "email", value: trimmed },
-      });
+      await requestEmailChange(issuer(), await accessToken(), trimmed);
       setStep("confirm");
     } catch (err) {
       console.error(err);
@@ -509,10 +534,7 @@ function EmailForm({
     setBusy(true);
     setError(null);
     try {
-      await confirmUserAttribute({
-        userAttributeKey: "email",
-        confirmationCode: trimmed,
-      });
+      await confirmEmailChange(issuer(), await accessToken(), trimmed);
       onSaved();
     } catch (err) {
       console.error(err);

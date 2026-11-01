@@ -22,7 +22,7 @@ import { AppError, malformed } from "../middleware/errorHandler";
 /**
  * Extensions a send may carry — exactly what the mobile import paths accept.
  * `pdf` is here for GeoPDFs, which are a Saved category of their own on mobile
- * (a device-local GeoPdfImport, not a server-rendered geoPdfJob) and so reach
+ * (a device-local GeoPdfImport, not a server row) and so reach
  * a friend as a copy rather than through the revocable Share path.
  */
 const SENDABLE_EXTENSIONS = ["gpx", "kml", "geojson", "pdf"] as const;

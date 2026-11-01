@@ -3,11 +3,7 @@
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
 import { useCallback, useEffect, useState } from "react";
-import {
-  messageFromError,
-  type TripLogCustomFieldDef,
-  type VectorStyleSettings,
-} from "@logjam/shared";
+import { messageFromError, type TripLogCustomFieldDef } from "@logjam/shared";
 
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 import type { TNotification, TUser } from "./types";
@@ -16,10 +12,14 @@ export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
 
-export function updateConsent(consentVersion: string): Promise<TUser> {
+/** A new account sends its chosen username in the same PATCH as its consent. */
+export function updateConsent(
+  consentVersion: string,
+  username?: string,
+): Promise<TUser> {
   return apiFetch<TUser>("/users/me", {
     method: "PATCH",
-    body: { consentVersion },
+    body: { consentVersion, ...(username && { username }) },
   });
 }
 
@@ -47,10 +47,6 @@ export function markNotificationRead(id: string): Promise<void> {
 
 export function markAllNotificationsRead(): Promise<void> {
   return apiFetch<void>("/notifications/read-all", { method: "PATCH" });
-}
-
-export function getVectorStyle(): Promise<VectorStyleSettings> {
-  return apiFetch<VectorStyleSettings>("/vector-style");
 }
 
 // ── Custom fields (trip logs AND places) ────────────────────────────────────

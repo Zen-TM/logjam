@@ -22,7 +22,6 @@ describe("partitionNavItems", () => {
       "places",
       "logs",
       "ways",
-      "maps",
       "friends",
       "inbox",
       "account",
