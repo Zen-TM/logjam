@@ -206,7 +206,7 @@ describe("SignIn under Cognito", () => {
   // Mutation: drop the `usernameNow` comparison, and a late answer about the old
   // name lands under the new one.
   it("drops an answer about a name the field has moved on from", async () => {
-    let answer = (_free: boolean) => {};
+    let answer: (free: boolean) => void = () => {};
     usernameAvailable.mockImplementationOnce(
       () => new Promise((resolve) => (answer = resolve)),
     );
