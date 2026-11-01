@@ -315,6 +315,7 @@ describe("Edit form over another leader's save", () => {
     const view = (shown: TripPlanFormView) => (
       <PlanFormBuilderDialog
         open
+        planId="p1"
         form={shown}
         onSubmit={async () => {}}
         onStale={() => {}}

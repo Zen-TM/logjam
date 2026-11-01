@@ -23,7 +23,8 @@ describe("the new form chooser", () => {
     expect(screen.getByText("A blank form")).toBeTruthy();
     expect(screen.getByText("Trip rules")).toBeTruthy();
     expect(await screen.findByText("Claustral weekend")).toBeTruthy();
-    fireEvent.click(screen.getAllByText("Gear to borrow").at(-1)!);
+    const gear = screen.getAllByText("Gear to borrow");
+    fireEvent.click(gear[gear.length - 1]);
     expect(onPick).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Gear to borrow",
