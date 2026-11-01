@@ -30,6 +30,7 @@ import {
   tripPlanDatesLine,
   tripPlanIsDated,
   tripPlanIsOver,
+  tripPlanFormUnanswered,
   tripPlanFormsToAnswer,
   tripPlanFormsToAnswerLine,
   tripPlanFormTally,
@@ -621,11 +622,12 @@ export default function PlanDetailPanel({
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
               data-form-id={form.id}
               onOpen={() => openFormPage(form.id)}
-              // What the caller owes, by the same rule as the card above;
+              // What the caller hasn't answered, a leader too (the card above
+              // leaves leaders out);
               // then the form's own verbs, as on its page.
               trailing={
                 <>
-                  {toAnswer.forms.some((owed) => owed.id === form.id) && (
+                  {tripPlanFormUnanswered(plan, form, today) && (
                     <StatusPill label={copy.pillNotAnswered} tone="warning" />
                   )}
                   {formVerbs.length > 0 && (

@@ -31,6 +31,7 @@ import {
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
+  tripPlanFormUnanswered,
   tripPlanFormsToAnswer,
   tripPlanFormsToAnswerLine,
   tripPlanFormTally,
@@ -45,6 +46,7 @@ import {
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
+  type DateOnly,
   type SectionKeysOn,
   type TripPlanItem,
   type TripPlanPageView,
@@ -548,7 +550,7 @@ function PlanPage({
           <Forms
             plan={plan}
             me={myId}
-            toAnswer={new Set(toAnswer.forms.map((form) => form.id))}
+            today={today}
             onOpen={(formId, mode) => setFormSheet({ formId, mode })}
           />
           {adds.has("form") ? (
@@ -993,15 +995,14 @@ function liveItem(
 function Forms({
   plan,
   me,
-  toAnswer,
+  today,
   onOpen,
 }: {
   plan: TripPlanView;
   /** The caller's user id, for a leader's tally. */
   me: string | null;
-  /** The forms the page's nudge counts (`tripPlanFormsToAnswer`): only those
-   *  wear "Not answered", so an archived or finished plan marks none. */
-  toAnswer: ReadonlySet<string>;
+  /** For `tripPlanFormUnanswered`: an archived or finished plan marks none. */
+  today: DateOnly;
   /** The form's sheet, read or on its ⋯ (`verbs`). */
   onOpen: (formId: string, mode: "read" | "verbs") => void;
 }) {
@@ -1023,7 +1024,7 @@ function Forms({
     );
   return plan.forms.map((form) => {
     const tally = me ? tripPlanFormTally(plan, form, me) : null;
-    const pending = toAnswer.has(form.id);
+    const pending = tripPlanFormUnanswered(plan, form, today);
     return (
       <Row
         key={form.id}

@@ -22,7 +22,8 @@
   clears on the two explicit paths, `endSession` (`useAuth.ts`) and
   `RootErrorBoundary`'s sign-out, and records its writer's id: another user,
   or a record with no id, is removed unread, so a lapsed session keeps its
-  own user's draft. The GeoPDF tile cache (`geoPdf/cache.ts`) clears on those
+  own user's draft. The pending friend and plan invites (`pendingInvite.ts`)
+  clear on `endSession` too. The GeoPDF tile cache (`geoPdf/cache.ts`) clears on those
   too, whenever someone is known signed out (no tokens, an expired session)
   and at every sign-in; a session check that fails (offline) keeps it. A new
   store of the kind joins them. Guards: `tripDraft.test.ts`,

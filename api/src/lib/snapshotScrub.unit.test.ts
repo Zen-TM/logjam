@@ -11,7 +11,7 @@
 //  2. every user-authored column on the owner-data models is either scrubbed
 //     or exempted BY NAME here (a new column cannot join the schema and miss
 //     the scrub — root AGENTS.md's "two lists that must agree" rule).
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TRIP_TYPE_SUGGESTIONS } from "@logjam/shared";
@@ -173,6 +173,44 @@ describe("snapshot-scrub.sql", () => {
     expect(kept, "scrub_trip_types' kept-vocabulary array").not.toBeNull();
     const words = [...kept![1].matchAll(/'([^']*)'/g)].map(([, word]) => word);
     expect(words).toEqual([...TRIP_TYPE_SUGGESTIONS]);
+  });
+
+  // notifications.payload is Json, so the column walk above cannot see inside
+  // it. Any payload key a writer stamps whose name says text must be removed
+  // by the scrub. Mutation: drop 'planName' from the UPDATE and this fails.
+  it("removes every text key a notification payload is written with", () => {
+    const writers = ["lib", "routes"].flatMap((dir) =>
+      readdirSync(join(REPO_ROOT, "api", "src", dir))
+        .filter((f) => f.endsWith(".ts") && !/test/.test(f))
+        .map((f) => join(REPO_ROOT, "api", "src", dir, f)),
+    );
+    const textKeys = new Set<string>();
+    for (const file of writers) {
+      for (const [, body] of readFileSync(file, "utf8").matchAll(
+        /\bpayload:\s*\{([^}]*)\}/g,
+      )) {
+        for (const [, key] of body.matchAll(/(?:^|[\s{,])(\w+)\s*:/g)) {
+          if (/name|title|body|text|label/i.test(key)) textKeys.add(key);
+        }
+      }
+    }
+    // Read-time display only, never stored (notifications.ts resolves them
+    // from live rows), or not user text: maintainer copy, account usernames.
+    for (const exempt of [
+      "title",
+      "body",
+      "placeName",
+      "sentByUsername",
+      "sharedByUsername",
+    ])
+      textKeys.delete(exempt);
+    expect(textKeys.size).toBeGreaterThan(0);
+    const removed =
+      /UPDATE notifications\s+SET payload = payload((?: - '\w+')+);/.exec(
+        scrubSql,
+      );
+    expect(removed, "the notifications payload scrub").not.toBeNull();
+    for (const key of textKeys) expect(removed![1]).toContain(`'${key}'`);
   });
 
   it("has no stale exemptions", () => {

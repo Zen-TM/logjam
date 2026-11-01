@@ -35,7 +35,7 @@ import { logger, safeErrorForLog } from "./logger";
 import { mediaKeys } from "./mediaKeys";
 import { deleteS3KeysBestEffort } from "./s3Cleanup";
 import { getStorageUsage, incrementStorageUsed } from "./storageQuota";
-import { touchPlan } from "./planAccess";
+import { planNotFound, touchPlanAsMember } from "./planAccess";
 
 const MEDIA_BUCKET = getEnv().S3_BUCKET_MEDIA ?? "";
 
@@ -128,7 +128,15 @@ export async function copyPlaceMedia(args: {
     // uses, for the same reason: no crash window may leave the quota charged
     // with nothing to show for it.
     await prisma.$transaction(async (tx) => {
-      if (args.planId) await touchPlan(tx, args.planId);
+      if (args.planId) {
+        await touchPlanAsMember(tx, args.planId, args.recipientId);
+        // The place was made in an earlier transaction; a leader may have
+        // removed it during the copy.
+        const placeCount = await tx.place.count({
+          where: { id: args.targetPlaceId, planId: args.planId },
+        });
+        if (placeCount === 0) throw planNotFound();
+      }
       await incrementStorageUsed(args.recipientId, landedBytes, tx);
       const { used, quota } = await getStorageUsage(args.recipientId, tx);
       if (used > quota) throw new OutOfSpace();
