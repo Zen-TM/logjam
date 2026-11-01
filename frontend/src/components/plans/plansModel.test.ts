@@ -250,7 +250,6 @@ describe("the print summary", () => {
     ],
     routes: [],
     files: [],
-    geoPdfs: [],
     forms: [
       form("carpool", {
         tom: { mode: "lift", seats: 2, from: "Katoomba" },
@@ -368,7 +367,6 @@ describe("what someone going takes or leaves", () => {
     ],
     routes: [{ addedBy: ref("tom") }],
     files: [file("4000", "tom"), file("50", "mira")],
-    geoPdfs: [file("60000", "tom")],
     forms: [],
   } as unknown as TripPlanView;
 
@@ -377,8 +375,8 @@ describe("what someone going takes or leaves", () => {
   // the leader.
   it("prices a person's files, place photos included", () => {
     expect(tripPlanFilesChargedTo(plan, "tom")).toEqual({
-      count: 3,
-      bytes: 65000,
+      count: 2,
+      bytes: 5000,
     });
     expect(tripPlanFilesChargedTo(plan, "mira")).toEqual({
       count: 3,
@@ -392,13 +390,11 @@ describe("what someone going takes or leaves", () => {
     expect(addedBy(plan, "tom")).toEqual({
       places: 2,
       ways: 2,
-      maps: 1,
-      bytes: 65300,
+      bytes: 5300,
     });
     expect(addedBy(plan, "mira")).toEqual({
       places: 1,
       ways: 1,
-      maps: 0,
       bytes: 70,
     });
   });

@@ -33,6 +33,8 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
+  type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
@@ -154,6 +156,7 @@ function NotificationsPanel({
   setSelectedPlaceID,
   setActivePanel,
   onTopoFlyTarget,
+  onOpenPlan,
   onShowSharpened,
 }: {
   notifications: TNotification[];
@@ -168,6 +171,7 @@ function NotificationsPanel({
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
 }) {
@@ -370,6 +374,8 @@ function NotificationsPanel({
       setSelectedPlaceID(placeId);
       setActivePanel("place-detail");
     }
+    const plan = notificationPlanTarget(n);
+    if (plan) onOpenPlan(plan);
   };
 
   // In Unread, the read row leaves as the dialog closes and takes the focus
@@ -410,6 +416,7 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
+    if (destination.kind === "plan") return onOpenPlan(destination.target);
     if (destination.kind === "sharpened") {
       onShowSharpened();
     } else {

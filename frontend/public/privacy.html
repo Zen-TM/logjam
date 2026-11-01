@@ -49,6 +49,12 @@
           attached to your own trips.</li>
       <li><strong>Friends and sharing:</strong> your friends list, what you
           have shared with whom, and files you send to friends.</li>
+      <li><strong>Trip plans:</strong> the plans you are in, invited to or
+          asked to join, what you add to them, the invite links you make, and
+          your answers to their forms. A form&rsquo;s answers can hold other
+          people&rsquo;s details, such as the name and phone number of a
+          safety contact who is not on Logjam, and health information, such
+          as medical conditions, allergies or medication.</li>
       <li><strong>Topo jobs:</strong> the area each job covers, the
           LiDAR inputs you upload, and the map tiles produced from them.</li>
       <li><strong>Devices:</strong> for each Logjam GPS install that allows
@@ -87,16 +93,17 @@
           receive.</li>
       <li>No public or unauthenticated endpoints on user data — every API
           route that serves user data requires you to be signed in.</li>
-      <li>No default public sharing. Sharing is explicit, one item at a time,
-          between signed-in users you are friends with.</li>
+      <li>No default public sharing. Sharing is explicit and only between
+          signed-in users: one item at a time with a friend, or what you add
+          to a trip plan with the people in that plan.</li>
       <li>No selling, renting, or monetising your data.</li>
     </ul>
 
     <h2>How sharing works</h2>
     <p>
-      You can share only with Logjam users you are friends with (one of you
-      sends a friend request and the other accepts it), and only what you
-      choose, one item at a time.
+      You can share an item only with Logjam users you are friends with (one
+      of you sends a friend request and the other accepts it), and only what
+      you choose, one item at a time. Trip plans work differently; see below.
     </p>
     <p>
       When you share a place with a friend, they can see the place record
@@ -116,6 +123,20 @@
       GeoJSON file, or a recorded track) is different from sharing: a friend
       who accepts it gets their own copy, which you cannot take back. The file
       is held for them for 7 days and then deleted from our storage.
+    </p>
+    <p>
+      <strong>A trip plan</strong> is shared with everyone in it, and they need
+      not be your friends. Everything added to a plan (its write-up, places,
+      routes, files and forms) is visible to everyone in the plan. What you
+      add is a copy: your own place or route is not shared by adding it. A
+      plan&rsquo;s leaders invite people by username, or make an invite link.
+      Anyone signed in who has a link can ask to join; a leader decides
+      whether to let them in. A link works for 7 days, or until a leader turns
+      it off. Each form says, before you answer, who sees your answers:
+      everyone in the plan, or only its leaders. Anyone in a plan may print a
+      summary of it for someone not on the trip, such as a parent; the summary
+      can include the answers to its carpooling and safety-contacts forms
+      when everyone in the plan sees them.
     </p>
 
     <h2>Where data is hosted</h2>
@@ -341,7 +362,9 @@
           account details, places, place types, custom fields, links, routes,
           trip logs, media metadata, friends, shares, sent and received files,
           topo jobs and topo templates (including their map footprints),
-          notifications, and registered devices. No request to us is required;
+          notifications, registered devices, the trip plans you are in,
+          invited to or asked to join, your answers to their forms, and the plan invite links
+          you made. No request to us is required;
           the export is generated on demand. (Media file contents are not
           included in the JSON; the metadata identifies each item. Topo tiles
           are not included; the job records identify them. Access and
@@ -350,7 +373,12 @@
       <li><strong>Delete:</strong> "Delete account" (the Account panel in
           Logjam Web, or Account in Logjam GPS) permanently removes your sign-in
           and every account record we hold for you, including places, routes,
-          trip logs, media, friendships, shares, and notifications. Log records
+          trip logs, media, friendships, shares, notifications, your place in
+          trip plans and your answers to their forms. What you added to a
+          trip plan stays in that plan for the people still in it, no longer
+          linked to you, and a plan you made stays with them too. Invite links
+          you made keep working until they expire or a leader turns them off.
+          Log records
           are not removed by account deletion; they expire as described under
           &ldquo;Retention&rdquo;.</li>
       <li><strong>Correct:</strong> you can edit your username, email, place
