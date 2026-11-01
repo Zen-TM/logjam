@@ -18,8 +18,14 @@ import {
   type TripPlanPatch,
   type TripPlanView,
 } from "@logjam/shared";
-import { Button, ChipPicker, Dialog, ErrorBanner, TextField } from "../../ui";
-import { DateRangeField } from "../../ui/DateRangeField";
+import {
+  Button,
+  ChipPicker,
+  DateRangeField,
+  Dialog,
+  ErrorBanner,
+  TextField,
+} from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -180,6 +186,12 @@ function PlanDetailsForm({
           />
           <DateRangeField
             label={TRIP_PLAN_PAGE.copy.datesField}
+            labels={{
+              none: TRIP_PLAN_PAGE.copy.datesNone,
+              clear: TRIP_PLAN_PAGE.copy.datesClear,
+              prevMonth: TRIP_PLAN_PAGE.copy.datesPrevMonth,
+              nextMonth: TRIP_PLAN_PAGE.copy.datesNextMonth,
+            }}
             start={values.startDate}
             end={values.endDate}
             onChange={(startDate, endDate) => set({ startDate, endDate })}

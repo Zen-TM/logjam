@@ -56,7 +56,6 @@ export default function PlanTripLogPlacesDialog({
     const run = await saveTripPlanPlaces({
       picked: chosen,
       copies,
-      // The account's stored preference decides (the line reads it too).
       save: (placeId) => savePlanItem(planId, "place", placeId),
       why: (err) => messageFromError(err, copy.saveCopyFailed),
     });
@@ -119,11 +118,13 @@ export default function PlanTripLogPlacesDialog({
               key={place.id}
               label={place.name}
               checked={picked.includes(place.id)}
+              // At the cap the rest dim, and the line says why.
+              disabled={
+                !picked.includes(place.id) &&
+                picked.length >= MAX_PLACES_PER_TRIP
+              }
               onChange={(next) => {
                 setError(null);
-                // As the trip form's own place list refuses it.
-                if (next && picked.length >= MAX_PLACES_PER_TRIP)
-                  return setError(TRIP_PLACES_CAP_SENTENCE);
                 setPicked((was) =>
                   next
                     ? [...was, place.id]
@@ -133,6 +134,9 @@ export default function PlanTripLogPlacesDialog({
             />
           ))}
         </div>
+        {picked.length >= MAX_PLACES_PER_TRIP && (
+          <p className={classes.note}>{TRIP_PLACES_CAP_SENTENCE}</p>
+        )}
         {error && <ErrorBanner message={error} />}
       </form>
     </Dialog>

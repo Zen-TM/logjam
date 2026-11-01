@@ -359,7 +359,6 @@ export const TRIP_PLAN_PAGE = {
     datesNone: "No dates yet",
     datesPrevMonth: "Previous month",
     datesNextMonth: "Next month",
-    datesJustThisDay: "Just this day",
     datesClear: "Clear dates",
 
     views: "Plan view",

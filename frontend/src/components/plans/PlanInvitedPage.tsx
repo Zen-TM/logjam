@@ -1,10 +1,11 @@
 // A plan a leader invited the user to by username: what they
 // would join (the write-up and who's going) with
 // Join and Decline. Joining is theirs to choose, so nothing happens
-// until they press Join.
+// until they press Join, which joins at once.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
+  TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_PREVIEW,
   tripPlanInvitedLine,
@@ -25,7 +26,6 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { getInvitedPreview, joinPlan, leavePlan } from "../../plansApi";
-import PlanJoinDialog from "./PlanJoinDialog";
 import classes from "./plans.module.css";
 
 export default function PlanInvitedPage({
@@ -43,7 +43,6 @@ export default function PlanInvitedPage({
   const [preview, setPreview] = useState<TripPlanInvitedPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
-  const [joining, setJoining] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -59,6 +58,19 @@ export default function PlanInvitedPage({
       cancelled = true;
     };
   }, [planId, fetchCount]);
+
+  async function join() {
+    setBusy(true);
+    try {
+      await joinPlan(planId);
+      onJoined();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, TRIP_PLAN_JOIN.copy.joinFailed));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function decline() {
     setBusy(true);
@@ -119,7 +131,12 @@ export default function PlanInvitedPage({
           title={copy.invited}
           footer={
             <>
-              <Button compact variant="filled" onClick={() => setJoining(true)}>
+              <Button
+                compact
+                variant="filled"
+                busy={busy}
+                onClick={() => void join()}
+              >
                 {copy.join}
               </Button>
               <Button compact busy={busy} onClick={() => void decline()}>
@@ -169,21 +186,6 @@ export default function PlanInvitedPage({
             <Fragment key={key}>{sections[key]}</Fragment>
           ))}
       </div>
-      {joining && (
-        <PlanJoinDialog
-          via="username"
-          plan={{
-            ...preview,
-            person: preview.invitedBy?.username ?? null,
-          }}
-          onClose={() => setJoining(false)}
-          onJoin={async () => {
-            await joinPlan(planId);
-            setJoining(false);
-            onJoined();
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -95,7 +95,7 @@ export default function PlanFormChooser({
                     title: each.title,
                     preset: each.preset,
                     visibleTo: each.visibleTo,
-                    questions: each.questions,
+                    questions: structuredClone(each.questions),
                   })
                 }
               />

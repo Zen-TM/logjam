@@ -10,6 +10,7 @@ import {
   formatBytes,
   planLeaveConfirm,
   planAddVerbLabel,
+  TRIP_PLAN_MAX_FORMS,
   planLeaveDeleteAddedLabel,
   planFormDeleteConfirm,
   planSectionDeleteConfirm,
@@ -326,6 +327,8 @@ export default function PlanDetailPanel({
     ...tripPlanLeaveState(plan),
   });
   const canBuildForms = addVerbs.some((verb) => verb.id === "form");
+  const formsFull = plan.forms.length >= TRIP_PLAN_MAX_FORMS;
+  const formsFullReason = `${TRIP_PLAN_MAX_FORMS} forms at most`;
 
   const counts = tripPlanCounts(plan);
 
@@ -377,6 +380,10 @@ export default function PlanDetailPanel({
                   label: verb.label,
                   icon: verb.icon,
                   onSelect: addRunners[verb.id],
+                  disabledReason:
+                    verb.id === "form" && formsFull
+                      ? formsFullReason
+                      : undefined,
                 }))}
                 trigger={(props) => (
                   <Button
@@ -525,6 +532,17 @@ export default function PlanDetailPanel({
             </section>
           ))
         )}
+        {plan.sections.length > 0 && canAddSection && (
+          <ListEnd>
+            <Button
+              variant="filled"
+              icon="add"
+              onClick={() => setSectionOpen({ id: null })}
+            >
+              {planAddVerbLabel("section")}
+            </Button>
+          </ListEnd>
+        )}
       </div>
     ),
     items: tab === "items" && (
@@ -548,6 +566,8 @@ export default function PlanDetailPanel({
                 <Button
                   variant="filled"
                   icon="add"
+                  disabled={formsFull}
+                  disabledReason={formsFullReason}
                   onClick={() => setBuilding({ id: null })}
                 >
                   {planAddVerbLabel("form")}
@@ -605,6 +625,8 @@ export default function PlanDetailPanel({
             <Button
               variant="filled"
               icon="add"
+              disabled={formsFull}
+              disabledReason={formsFullReason}
               onClick={() => setBuilding({ id: null })}
             >
               {planAddVerbLabel("form")}
