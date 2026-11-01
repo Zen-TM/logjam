@@ -35,29 +35,10 @@
   padding: 0 var(--gutter) 15%;
 }
 
-/* The page's one notice: read, not pressed (its button aside), so it sits on
-   the page above a hairline. */
-.notice {
-  composes: body from "../../textRoles.generated.module.css";
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  margin: var(--space-1) var(--gutter) 0;
-  padding-bottom: var(--space-1);
-  border-bottom: 1px solid var(--color-line);
-  color: var(--color-text);
-}
-
 /* A notice that asks for a press: a card, its buttons inside it. */
 .noticeCard {
   flex-shrink: 0;
   margin: var(--space-1) var(--gutter) 0;
-}
-
-.noticeText {
-  flex: 1;
-  min-width: 0;
 }
 
 .datesLine {
@@ -129,7 +110,7 @@
   flex: 1 1 10rem;
 }
 
-.suggestions {
+.buttonRow {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
@@ -147,9 +128,10 @@
 }
 
 .questionLabel {
-  composes: control from "../../textRoles.generated.module.css";
+  /* The kit TextField's own label, so mixed questions look alike. */
+  composes: detail from "../../textRoles.generated.module.css";
   padding: 0;
-  color: var(--color-text);
+  color: var(--color-text-muted);
 }
 
 /* One question in the builder: its fields, set apart by a hairline. */

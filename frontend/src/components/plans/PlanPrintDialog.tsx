@@ -8,6 +8,7 @@ import { useEffect, useEffectEvent, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   TRIP_PLAN_FORM_PRESETS,
+  TRIP_PLAN_PAGE,
   tripPlanDatesLine,
   tripTypeLabel,
   type TripPlanFormPresetId,
@@ -94,6 +95,7 @@ export default function PlanPrintDialog({
               onChange={tick(form.preset)}
             />
           ))}
+          <p className={classes.line}>{TRIP_PLAN_PAGE.copy.printFormsNote}</p>
         </form>
       </Dialog>
       <PlanSummary plan={plan} parts={parts} />

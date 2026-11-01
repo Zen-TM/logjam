@@ -1,4 +1,4 @@
-// A plan's places, routes and files: Add a copy of something of
+// A plan's places, routes and files: Add a place or way of something of
 // yours, Save a copy of something in the plan, delete. Copy and storage
 // rules are lib/planItems.ts's; access is lib/planAccess.ts's.
 import { Router, Response } from "express";

@@ -61,7 +61,6 @@ export default function PlanInviteLinkDialog({
   const { token, preview } = invite;
   return (
     <PlanJoinDialog
-      via="link"
       plan={{ ...preview, person: preview.leader.username }}
       onClose={() => setInvite(null)}
       onJoin={async () => {

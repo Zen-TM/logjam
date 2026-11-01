@@ -18,20 +18,26 @@ import {
   type TripPlanPatch,
   type TripPlanView,
 } from "@logjam/shared";
-import { Button, ChipPicker, Dialog, ErrorBanner, TextField } from "../../ui";
-import { DateRangeField } from "../../ui/DateRangeField";
+import {
+  Button,
+  ChipPicker,
+  DateRangeField,
+  Dialog,
+  ErrorBanner,
+  TextField,
+} from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import {
-  adoptTheirs,
-  PLAN_FIELD_GROUPS,
-  planPatch,
-  same,
-  theirsChanged,
-  type PlanValues as Values,
-} from "./plansModel";
+  TRIP_PLAN_FIELD_GROUPS,
+  tripPlanAdoptTheirs,
+  tripPlanPatch,
+  tripPlanSame,
+  tripPlanTheirsChanged,
+  type TripPlanValues as Values,
+} from "@logjam/shared";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLANS_LIST.copy;
@@ -76,18 +82,23 @@ function PlanDetailsForm({
   const [busy, setBusy] = useState(false);
 
   if (JSON.stringify(current) !== JSON.stringify(seen)) {
-    const next = adoptTheirs(seen, values, current, PLAN_FIELD_GROUPS);
+    const next = tripPlanAdoptTheirs(
+      seen,
+      values,
+      current,
+      TRIP_PLAN_FIELD_GROUPS,
+    );
     setSeen(next.seen);
     setValues(next.values);
     setMoved(true);
   }
   const theirs = (fields: (keyof Values)[], words: string) =>
-    moved && theirsChanged(opened, current, values, fields)
+    moved && tripPlanTheirsChanged(fields, values, current, opened)
       ? tripPlanInPlanNow(words)
       : undefined;
 
   // Against what a Save would compare: after a refetch, the plan as it is.
-  const dirty = !same(values, seen);
+  const dirty = !tripPlanSame(values, seen);
   const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((current) => ({ ...current, ...next }));
@@ -116,7 +127,7 @@ function PlanDetailsForm({
     const parsed = parseTripPlanCreate(values);
     if (!("value" in parsed))
       return setError("sentence" in parsed ? parsed.sentence : failed);
-    const patch = planPatch(seen, parsed.value);
+    const patch = tripPlanPatch(seen, parsed.value);
     if (plan && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
@@ -175,6 +186,13 @@ function PlanDetailsForm({
           />
           <DateRangeField
             label={TRIP_PLAN_PAGE.copy.datesField}
+            labels={{
+              none: TRIP_PLAN_PAGE.copy.datesNone,
+              clear: TRIP_PLAN_PAGE.copy.datesClear,
+              prevMonth: TRIP_PLAN_PAGE.copy.datesPrevMonth,
+              nextMonth: TRIP_PLAN_PAGE.copy.datesNextMonth,
+            }}
+            tapHint={TRIP_PLAN_PAGE.copy.datesHintClick}
             start={values.startDate}
             end={values.endDate}
             onChange={(startDate, endDate) => set({ startDate, endDate })}

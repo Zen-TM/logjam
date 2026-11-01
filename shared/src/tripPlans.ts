@@ -21,6 +21,14 @@ import {
 export const TRIP_PLAN_ROLES = ["leader", "editor", "member"] as const;
 export type TripPlanRole = (typeof TRIP_PLAN_ROLES)[number];
 
+/** The order a role is picked in (the invite): the default first, the most
+ *  powerful last. Guard: contracts/plans.test.ts ("invite role order"). */
+export const TRIP_PLAN_ROLES_PICK_ORDER: readonly TripPlanRole[] = [
+  "member",
+  "editor",
+  "leader",
+];
+
 /**
  * Where a membership stands. "invited": a leader named them by username and
  * they have not joined yet. "requested": they used a link and wait for a

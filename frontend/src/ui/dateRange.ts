@@ -1,15 +1,8 @@
 // The calendar's pure rules. Days are "YYYY-MM-DD" keys read in UTC, as a
 // plan's dates are stored, so no time zone moves a day.
-export type DateRange = { start: string | null; end: string | null };
+import type { DayRange } from "@logjam/shared";
 
-/** The range after a click on `day`: the first click starts one, a later day
- *  ends it, and the same or an earlier day (or a click on a finished range)
- *  starts over. A finished one-day trip has `end` null. */
-export function pickDay(range: DateRange, day: string): DateRange {
-  const { start, end } = range;
-  if (start && !end && day > start) return { start, end: day };
-  return { start: day, end: null };
-}
+export type DateRange = DayRange;
 
 /** The first of a month, Monday-first, padded to six weeks of day keys (null
  *  outside the month) so paging never changes the calendar's height. */

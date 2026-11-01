@@ -183,7 +183,7 @@ afterEach(async () => {
   await request(API_URL).delete(`/plans/${planId}`).set(as(ALICE_SUB));
 });
 
-describe("POST /plans/:id/items (Add a copy)", () => {
+describe("POST /plans/:id/items (Add a place or way)", () => {
   it("copies an owned place and its route, linked to the plan's copy", async () => {
     const placeId = await ownPlace(ALICE_SUB);
     const route = await request(API_URL)

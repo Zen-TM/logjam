@@ -3,9 +3,14 @@
 // keeps when the plan is fetched again under it.
 import type {
   TripPlanCreate,
+  TripPlanFormCreate,
+  TripPlanFormPatch,
+  TripPlanQuestion,
+  TripPlanQuestionKind,
   TripPlanPatch,
   TripPlanSectionPatch,
 } from "./tripPlans.js";
+import { sameValue } from "./planItemEdit.js";
 
 export type TripPlanValues = Required<TripPlanCreate>;
 export type TripPlanSectionValues = { title: string; body: string };
@@ -39,8 +44,9 @@ export function tripPlanSectionPatch(
   return patch;
 }
 
-export const tripPlanSame = (a: unknown, b: unknown) =>
-  JSON.stringify(a) === JSON.stringify(b);
+/** Key order aside (`sameValue`): JSONB hands a question list back in
+ *  Postgres's key order, which is not the order it was sent in. */
+export const tripPlanSame = sameValue;
 
 /** A plan's dates are one compare-and-set pair (`tripPlanPatch`), so they
  *  are adopted together: one edited date keeps both of the user's. */
@@ -92,3 +98,67 @@ export function tripPlanTheirsChanged<T extends Record<string, unknown>>(
       !tripPlanSame(current[field], opened[field]),
   );
 }
+
+export type TripPlanFormValues = Required<TripPlanFormCreate>;
+
+/** A form's changed parts; the questions compare as one list, as the API
+ *  compares them. */
+export function tripPlanFormPatch(
+  seen: TripPlanFormValues,
+  now: TripPlanFormValues,
+): TripPlanFormPatch {
+  const patch: TripPlanFormPatch = {};
+  if (now.title !== seen.title)
+    patch.title = { from: seen.title, to: now.title };
+  if (!tripPlanSame(now.questions, seen.questions))
+    patch.questions = { from: seen.questions, to: now.questions };
+  if (now.visibleTo !== seen.visibleTo)
+    patch.visibleTo = { from: seen.visibleTo, to: now.visibleTo };
+  return patch;
+}
+
+/** A new question's or option's id: unique in its form, a slug no plain
+ *  object already has as a key. `random` is injectable for tests. */
+export function tripPlanMintSlug(
+  prefix: "q" | "o",
+  random: () => number = Math.random,
+): string {
+  return `${prefix}${random().toString(36).slice(2, 14).padEnd(8, "0")}`;
+}
+
+export const tripPlanKindHasOptions = (kind: TripPlanQuestionKind) =>
+  kind === "choice" || kind === "multiChoice";
+
+/** A question after its kind changed: a choice starts with two options to
+ *  fill in, any other kind has none. */
+export function tripPlanQuestionKindChanged(
+  question: TripPlanQuestion,
+  kind: TripPlanQuestionKind,
+): TripPlanQuestion {
+  const { options, ...rest } = question;
+  return tripPlanKindHasOptions(kind)
+    ? {
+        ...rest,
+        kind,
+        options: options ?? [
+          { id: tripPlanMintSlug("o"), label: "" },
+          { id: tripPlanMintSlug("o"), label: "" },
+        ],
+      }
+    : { ...rest, kind };
+}
+
+export const tripPlanBlankQuestion = (): TripPlanQuestion => ({
+  id: tripPlanMintSlug("q"),
+  kind: "text",
+  label: "",
+  required: false,
+});
+
+/** A blank form: one empty question, answers seen by leaders. */
+export const tripPlanBlankForm = (): TripPlanFormValues => ({
+  title: "",
+  preset: null,
+  visibleTo: "leaders",
+  questions: [tripPlanBlankQuestion()],
+});

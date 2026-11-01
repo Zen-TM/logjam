@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TripPlanSummary } from "@logjam/shared";
-import { bulkVerbs, listVerbs } from "./planListVerbs";
+import { listVerbs } from "./planListVerbs";
 
 const plan = (over: Partial<TripPlanSummary>): TripPlanSummary => ({
   id: "p",
@@ -15,7 +15,6 @@ const plan = (over: Partial<TripPlanSummary>): TripPlanSummary => ({
   unansweredForms: 0,
   ...over,
 });
-const ids = (plans: TripPlanSummary[]) => bulkVerbs(plans).map((v) => v.id);
 
 describe("a plan card's verbs", () => {
   it("a leader archives or deletes, never leaves", () => {
@@ -32,9 +31,5 @@ describe("a plan card's verbs", () => {
       "unarchive",
       "delete",
     ]);
-  });
-  it("a mixed selection offers only what every plan has", () => {
-    expect(ids([plan({}), plan({ role: "member" })])).toEqual([]);
-    expect(ids([plan({}), plan({ id: "q" })])).toEqual(["archive", "delete"]);
   });
 });

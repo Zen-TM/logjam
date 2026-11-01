@@ -7,6 +7,8 @@ import {
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_FORMS,
   pluralCount,
+  tripPlanBlankForm,
+  type TripPlanFormValues,
   type TripPlanLeaderForm,
 } from "@logjam/shared";
 import {
@@ -18,7 +20,6 @@ import {
 } from "../../ui";
 import { getLeaderForms } from "../../plansApi";
 import { messageFromError } from "../../errors/messageFromError";
-import { mintSlug, type FormValues } from "./plansModel";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
@@ -29,7 +30,7 @@ export default function PlanFormChooser({
 }: {
   /** The plan the form is for: its own forms are not offered back. */
   planId: string;
-  onPick: (values: FormValues) => void;
+  onPick: (values: TripPlanFormValues) => void;
 }) {
   const [mine, setMine] = useState<TripPlanLeaderForm[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +46,6 @@ export default function PlanFormChooser({
   }, [planId]);
   useEffect(load, [load]);
 
-  const plans = new Map<string, TripPlanLeaderForm[]>();
-  for (const each of mine ?? []) {
-    plans.set(each.planId, [...(plans.get(each.planId) ?? []), each]);
-  }
-
   return (
     <div className={classes.form}>
       <SectionHeader title={copy.startFrom} />
@@ -57,17 +53,33 @@ export default function PlanFormChooser({
         title={copy.blank}
         subtitle={copy.chooseBlankHint}
         leading={<IconTile icon="add" hue="var(--hue-plan)" />}
-        onOpen={() =>
-          onPick({
-            title: "",
-            preset: null,
-            visibleTo: "leaders",
-            questions: [
-              { id: mintSlug("q"), kind: "text", label: "", required: false },
-            ],
-          })
-        }
+        onOpen={() => onPick(tripPlanBlankForm())}
       />
+      {/* What the leader already built goes first; the rest wait their turn. */}
+      {mine != null && mine.length > 0 && (
+        <>
+          <SectionHeader title={copy.chooseMine} />
+          {mine.map((each) => (
+            <Row
+              key={each.formId}
+              title={each.title}
+              subtitle={`${copy.chooseFrom} ${each.planName} · ${pluralCount(
+                each.questions.length,
+                "question",
+              )}`}
+              leading={<IconTile icon="copy" hue="var(--hue-plan)" />}
+              onOpen={() =>
+                onPick({
+                  title: each.title,
+                  preset: each.preset,
+                  visibleTo: each.visibleTo,
+                  questions: structuredClone(each.questions),
+                })
+              }
+            />
+          ))}
+        </>
+      )}
       <SectionHeader title={copy.chooseTemplates} />
       {TRIP_PLAN_FORM_PRESET_IDS.map((id) => (
         <Row
@@ -81,36 +93,13 @@ export default function PlanFormChooser({
           onOpen={() => onPick({ ...TRIP_PLAN_FORM_PRESETS[id], preset: id })}
         />
       ))}
-      <SectionHeader title={copy.chooseMine} />
       {error ? (
         <ErrorState message={error} onRetry={load} />
       ) : mine == null ? (
         <LoadingState label={copy.chooseMineLoading} />
       ) : mine.length === 0 ? (
         <p className={classes.note}>{copy.chooseMineEmpty}</p>
-      ) : (
-        [...plans.values()].map((forms) => (
-          <div key={forms[0].planId} className={classes.form}>
-            <SectionHeader title={forms[0].planName} />
-            {forms.map((each) => (
-              <Row
-                key={each.formId}
-                title={each.title}
-                subtitle={pluralCount(each.questions.length, "question")}
-                leading={<IconTile icon="copy" hue="var(--hue-plan)" />}
-                onOpen={() =>
-                  onPick({
-                    title: each.title,
-                    preset: each.preset,
-                    visibleTo: each.visibleTo,
-                    questions: each.questions,
-                  })
-                }
-              />
-            ))}
-          </div>
-        ))
-      )}
+      ) : null}
     </div>
   );
 }

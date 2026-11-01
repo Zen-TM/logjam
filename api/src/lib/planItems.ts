@@ -1,6 +1,6 @@
 // What a plan holds besides its write-up and forms: places, routes and files.
 // Each is a copy that belongs to the plan (no owner, `planId` set),
-// made by Add a copy from something the adder owns, and copied back out by
+// made by Add a place or way from something the adder owns, and copied back out by
 // Save a copy. One copy path per kind: a place goes through the place copy's
 // pieces (lib/placeCopy.ts, copyPlaceMedia.ts), a file through the same
 // server-side object copy.
@@ -268,7 +268,7 @@ export async function copyStandaloneFile(
   );
 }
 
-// ── Add a copy ─────────────────────────────────────────────────
+// ── Add a place or way ─────────────────────────────────────────────────
 
 export type AddedItem = {
   id: string;
@@ -276,7 +276,7 @@ export type AddedItem = {
 };
 
 /**
- * Add a copy of one of the caller's own things to the plan, charged to them.
+ * Add a place or way of one of the caller's own things to the plan, charged to them.
  * Anything they don't own (a place shared with them, another plan's row, a
  * missing id) is the same 404.
  */
@@ -550,7 +550,7 @@ async function dropPlanFiles(
 /**
  * Delete a whole plan with its files: S3 first, then in one transaction the
  * file rows (refunding each payer) and the plan, whose cascade takes the
- * rest. The plan row is taken first, so an Add a copy either committed
+ * rest. The plan row is taken first, so an Add a place or way either committed
  * before (its row is deleted and refunded here) or finds the plan gone.
  * A file added between the S3 pass and the lock is removed after commit.
  * `beforeDelete` runs in the transaction just before the plan row goes.

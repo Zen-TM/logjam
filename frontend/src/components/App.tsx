@@ -55,7 +55,7 @@ import {
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
-import { Button, Chip, IconButton, MapButton, Notice } from "../ui";
+import { Button, IconButton, MapButton, Notice } from "../ui";
 import { consentGate, currentConsentVersionOf } from "../consent";
 import ConsentGate from "./ConsentGate";
 import { RouteDrawPanel } from "./routes/RouteDrawPanel";
@@ -111,7 +111,6 @@ import {
   LIDAR_JOB_COPY,
   opensPreview,
   PLAN_ADD_VERBS,
-  planShowsMine,
   planVerbsFor,
   TRIP_PLAN_PAGE,
   tripPlansBadgeCount,
@@ -589,9 +588,6 @@ function App() {
   // opens it, since the plans list may not know of an invite yet.
   const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
   const [planInvited, setPlanInvited] = useState(false);
-  // "Show my things" over a plan: off by default, and off again every time a
-  // plan opens.
-  const [planShowMine, setPlanShowMine] = useState(false);
   const [planAddCopy, setPlanAddCopy] = useState<{
     kind: TripPlanItemKind;
     id: string;
@@ -602,7 +598,6 @@ function App() {
       setSelectedPlanId(planId);
       setPlanView(view);
       setPlanInvited(invited);
-      setPlanShowMine(false);
       setActivePanel("plan-detail");
     },
     [],
@@ -670,7 +665,7 @@ function App() {
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
   } = useStandaloneFiles(
-    // A plan's page offers them to Add a copy, whatever the Ways layer says.
+    // A plan's page offers them to Add a place or way, whatever the Ways layer says.
     loadsUserData &&
       (activePanel === "ways" || activePanel === "plan-detail" || showWays),
   );
@@ -711,25 +706,25 @@ function App() {
         activePanel === "ways" ||
         activePanel === "plan-detail"),
   );
-  // With Show my things, which of the user's own the layer switches allow;
-  // all drawn dimmed beside the plan's.
-  const mine = planShowsMine(!!planOnMap, planShowMine);
+  // Beside a plan the user's own are drawn as the layer switches allow, all
+  // dimmed beside the plan's.
   const mineShown = {
-    places: mine && (!planOnMap || showPlaces),
-    ways: mine && (!planOnMap || showWays),
+    places: !planOnMap || showPlaces,
+    ways: !planOnMap || showWays,
   };
   const mutedIds = useMemo<ReadonlySet<string>>(
     () =>
-      planOnMap && planShowMine
+      planOnMap
         ? new Set([
             ...places.map((place) => place.id),
+            ...sharedPlaces.map((place) => place.id),
             ...routes.map((route) => route.id),
             ...standaloneFiles.map((file) => file.id),
           ])
         : new Set(),
-    [planOnMap, planShowMine, places, routes, standaloneFiles],
+    [planOnMap, places, sharedPlaces, routes, standaloneFiles],
   );
-  // One of the user's own things pressed on the map asks for Add a copy,
+  // One of the user's own things pressed on the map asks for Add a place or way,
   // only while the page itself offers it (not on an archived plan).
   const pressInPlan = (press: Parameters<typeof planMapPress>[0]) => {
     const pick = planMapPress(
@@ -1348,19 +1343,14 @@ function App() {
     <Notice
       icon="plan"
       twoLines
-      controls={
-        <>
-          {/* A pressed chip, as Logjam GPS's bar has. */}
-          <Chip
-            label={TRIP_PLAN_PAGE.copy.showMine}
-            active={planShowMine}
-            aria-pressed={planShowMine}
-            onClick={() => setPlanShowMine((was) => !was)}
-          />
-          <Button compact onClick={backToMyMap}>
-            {TRIP_PLAN_PAGE.copy.backToMap}
-          </Button>
-        </>
+      action={
+        <IconButton
+          icon="close"
+          label={TRIP_PLAN_PAGE.copy.backToMap}
+          size={14}
+          round
+          onClick={backToMyMap}
+        />
       }
     >
       {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
@@ -1650,6 +1640,8 @@ function App() {
                   key={selectedPlanId}
                   view={planFetch.view}
                   error={planFetch.error}
+                  gone={planFetch.gone}
+                  name={plans.find((plan) => plan.id === selectedPlanId)?.name}
                   refetch={planFetch.refetch}
                   own={{
                     places,
@@ -1663,9 +1655,6 @@ function App() {
                     refetchStandaloneFiles();
                     refetchCurrentUser();
                   }}
-                  copyPlaceMedia={
-                    currentUser?.uiPreferences?.copyPlaceMedia ?? true
-                  }
                   onOpenItem={(item) => {
                     if (item.kind === "place")
                       setFlyToPlace({
@@ -1803,7 +1792,7 @@ function App() {
             filters={planOnMap ? emptyFilters : filters}
             // An open plan's things are drawn whatever the layer switches say;
             // the switches go on deciding the user's own, shown beside them
-            // only with Show my things, and dimmed (`mutedIds`).
+            // dimmed (`mutedIds`).
             places={
               planOnMap
                 ? [...planMapPlaces, ...(mineShown.places ? places : [])]

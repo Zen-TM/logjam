@@ -23,12 +23,12 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
-  adoptTheirs,
-  same,
-  sectionPatch,
-  theirsChanged,
-  type SectionValues as Values,
-} from "./plansModel";
+  tripPlanAdoptTheirs,
+  tripPlanSame,
+  tripPlanSectionPatch,
+  tripPlanTheirsChanged,
+  type TripPlanSectionValues as Values,
+} from "@logjam/shared";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -80,17 +80,17 @@ function SectionForm({
     ? { title: section.title, body: section.body }
     : null;
   if (current && (current.title !== seen.title || current.body !== seen.body)) {
-    const next = adoptTheirs(seen, values, current);
+    const next = tripPlanAdoptTheirs(seen, values, current);
     setSeen(next.seen);
     setValues(next.values);
     setMoved(true);
   }
 
   // Against what a Save would compare: after a refetch, the section as it is.
-  const dirty = !same(values, seen);
+  const dirty = !tripPlanSame(values, seen);
   /** The plan's words under a field the user edited and the plan changed. */
   const theirs = (field: keyof Values) =>
-    moved && current && theirsChanged(opened, current, values, [field])
+    moved && current && tripPlanTheirsChanged([field], values, current, opened)
       ? current[field]
       : null;
   const guard = useUnsavedChangesGuard(dirty, onClose);
@@ -109,7 +109,7 @@ function SectionForm({
       else setError(sentence ?? copy.sectionSaveFailed);
       return;
     }
-    const patch = sectionPatch(seen, parsed.value);
+    const patch = tripPlanSectionPatch(seen, parsed.value);
     if (editing && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
@@ -128,7 +128,7 @@ function SectionForm({
       <Dialog
         open
         size="large"
-        title={copy.sectionTitle}
+        title={editing ? copy.sectionTitle : copy.sectionNewTitle}
         onClose={guard.requestClose}
         dismissible={!busy}
         footer={

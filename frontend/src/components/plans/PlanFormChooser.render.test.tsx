@@ -17,14 +17,14 @@ vi.mock("../../plansApi", () => ({
 }));
 
 describe("the new form chooser", () => {
-  it("offers a blank form, templates, and a copy under its plan's name", async () => {
+  it("offers a blank form, templates, and a copy, first, naming its plan", async () => {
     const onPick = vi.fn();
     render(<PlanFormChooser planId="p2" onPick={onPick} />);
     expect(screen.getByText("A blank form")).toBeTruthy();
     expect(screen.getByText("Trip rules")).toBeTruthy();
-    expect(await screen.findByText("Claustral weekend")).toBeTruthy();
+    expect(await screen.findByText(/From Claustral weekend/)).toBeTruthy();
     const gear = screen.getAllByText("Gear to borrow");
-    fireEvent.click(gear[gear.length - 1]);
+    fireEvent.click(gear[0]);
     expect(onPick).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Gear to borrow",

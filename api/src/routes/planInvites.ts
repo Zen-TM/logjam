@@ -8,7 +8,7 @@
 // request and not a membership: one link posted to the group is the point.
 //
 // WHAT A HELD LINK SHOWS, since links get forwarded: the plan's name, dates,
-// the leader a request waits for and the forms required to join. Never who
+// the leader a request waits for. Never who
 // is going or the write-up, until a leader approves.
 //
 // Every way a token can fail (malformed, unknown, expired, revoked, its plan

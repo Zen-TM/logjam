@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   TRIP_PLAN_FIELD_GROUPS,
   tripPlanAdoptTheirs,
+  tripPlanBlankForm,
+  tripPlanFormPatch,
+  tripPlanMintSlug,
+  tripPlanQuestionKindChanged,
   tripPlanPatch,
+  tripPlanSame,
   tripPlanSectionPatch,
   tripPlanTheirsChanged,
 } from "./tripPlanEdits.js";
@@ -112,5 +117,108 @@ describe("tripPlanTheirsChanged", () => {
     expect(tripPlanTheirsChanged(["body"], current, current, opened)).toBe(
       false,
     );
+  });
+});
+
+describe("a form's edits", () => {
+  const form = {
+    title: "Gear",
+    preset: null,
+    visibleTo: "leaders" as const,
+    questions: [
+      { id: "q1", kind: "text" as const, label: "Boots", required: false },
+    ],
+  };
+
+  // Mutation: compare questions by length and an edited label is never sent.
+  it("sends only the changed parts, the questions as one list", () => {
+    expect(tripPlanFormPatch(form, form)).toEqual({});
+    const questions = [{ ...form.questions[0], label: "Boot size" }];
+    expect(
+      tripPlanFormPatch(form, { ...form, title: "Kit", questions }),
+    ).toEqual({
+      title: { from: "Gear", to: "Kit" },
+      questions: { from: form.questions, to: questions },
+    });
+    expect(tripPlanFormPatch(form, { ...form, visibleTo: "members" })).toEqual({
+      visibleTo: { from: "leaders", to: "members" },
+    });
+  });
+
+  // Mutation: compare the questions with a raw `JSON.stringify`, and Save
+  // with nothing changed writes them, so everyone's answer dialog gets a 409.
+  it("reads a question list Postgres returned with its keys in another order", () => {
+    const served = [
+      {
+        required: true,
+        label: "How?",
+        kind: "choice" as const,
+        id: "how",
+        options: [{ label: "Driving", id: "drive" }],
+      },
+    ];
+    const sent = [
+      {
+        id: "how",
+        kind: "choice" as const,
+        label: "How?",
+        required: true,
+        options: [{ id: "drive", label: "Driving" }],
+      },
+    ];
+    expect(tripPlanSame(served, sent)).toBe(true);
+    expect(
+      tripPlanFormPatch(
+        { ...form, questions: served },
+        { ...form, questions: sent },
+      ),
+    ).toEqual({});
+  });
+
+  // Mutation: re-base `seen` on theirs but keep every value as it was, and
+  // the save sends the old title and questions back over the other leader's.
+  it("takes another leader's rename and question when the leader changed only who sees answers", () => {
+    const theirs = {
+      ...form,
+      title: "Lifts",
+      questions: [
+        ...form.questions,
+        {
+          id: "seats",
+          kind: "number" as const,
+          label: "Spare seats",
+          required: false,
+        },
+      ],
+    };
+    const mine = { ...form, visibleTo: "members" as const };
+    const { seen, values } = tripPlanAdoptTheirs(form, mine, theirs);
+    expect(tripPlanFormPatch(seen, values)).toEqual({
+      visibleTo: { from: "leaders", to: "members" },
+    });
+  });
+
+  it("mints slugs the API accepts", () => {
+    expect(tripPlanMintSlug("q")).toMatch(/^q[a-z0-9]{8,12}$/);
+    expect(tripPlanMintSlug("o", () => 0)).toMatch(/^o0+$/);
+  });
+
+  // Mutation: keep `options` on a kind without them.
+  it("gives a choice two options and any other kind none", () => {
+    const choice = tripPlanQuestionKindChanged(form.questions[0], "choice");
+    expect(choice.options).toHaveLength(2);
+    expect(new Set(choice.options!.map((o) => o.id)).size).toBe(2);
+    expect(tripPlanQuestionKindChanged(choice, "multiChoice").options).toBe(
+      choice.options,
+    );
+    expect("options" in tripPlanQuestionKindChanged(choice, "text")).toBe(
+      false,
+    );
+  });
+
+  it("starts a blank form the API accepts once titled", () => {
+    const blank = tripPlanBlankForm();
+    expect(blank.questions).toHaveLength(1);
+    expect(blank.visibleTo).toBe("leaders");
   });
 });

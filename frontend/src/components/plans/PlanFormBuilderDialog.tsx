@@ -1,4 +1,4 @@
-// A leader's form builder (Logjam Web only, `PLAN_FORM_VERBS`): a new form
+// A leader's form builder (`PLAN_FORM_VERBS`; Logjam GPS has its own sheet): a new form
 // starts from a preset or blank, then every part can change. One form for
 // making and editing (shared/DESIGN.md §10); an edit sends each changed part
 // as the value last seen and the new one. When the plan is fetched again
@@ -38,20 +38,20 @@ import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
-  adoptTheirs,
-  formPatch,
-  mintSlug,
-  same,
-  theirsChanged,
-  type FormValues,
-} from "./plansModel";
+  tripPlanAdoptTheirs,
+  tripPlanBlankQuestion,
+  tripPlanFormPatch,
+  tripPlanKindHasOptions,
+  tripPlanMintSlug,
+  tripPlanQuestionKindChanged,
+  tripPlanSame,
+  tripPlanTheirsChanged,
+  type TripPlanFormValues as FormValues,
+} from "@logjam/shared";
 import PlanFormChooser from "./PlanFormChooser";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_FORMS.copy;
-
-const hasOptions = (kind: TripPlanQuestionKind) =>
-  kind === "choice" || kind === "multiChoice";
 
 function valuesOf(form: TripPlanFormView): FormValues {
   return {
@@ -95,13 +95,16 @@ function Builder({
   );
   const [seen, setSeen] = useState(values);
   const [opened] = useState(values);
+  // A new form's baseline is what the chooser handed over, so a form nobody
+  // has typed in closes without asking.
+  const [picked0, setPicked0] = useState<FormValues | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
   const current = form ? valuesOf(form) : null;
-  if (current && seen && values && !same(current, seen)) {
-    const next = adoptTheirs(seen, values, current);
+  if (current && seen && values && !tripPlanSame(current, seen)) {
+    const next = tripPlanAdoptTheirs(seen, values, current);
     setSeen(next.seen);
     setValues(next.values);
   }
@@ -112,7 +115,7 @@ function Builder({
     current &&
     opened &&
     values &&
-    theirsChanged(opened, current, values, [field]);
+    tripPlanTheirsChanged([field], values, current, opened);
 
   // The Dialog focuses only on open; a preset picked swaps the step in place.
   const picked = values != null;
@@ -121,7 +124,8 @@ function Builder({
   }, [picked, form]);
 
   // Against what a Save would compare: a new form against nothing at all.
-  const dirty = values != null && (!seen || !same(values, seen));
+  const base = seen ?? picked0;
+  const dirty = values != null && base != null && !tripPlanSame(values, base);
   const guard = useUnsavedChangesGuard(dirty, onClose);
   // The API refuses widening a form others answered for leaders only.
   const widenLocked =
@@ -155,7 +159,7 @@ function Builder({
       setError("sentence" in parsed ? parsed.sentence : copy.formSaveFailed);
       return;
     }
-    const patch = seen ? formPatch(seen, parsed.value) : {};
+    const patch = seen ? tripPlanFormPatch(seen, parsed.value) : {};
     if (form && Object.keys(patch).length === 0) return onClose();
     setBusy(true);
     try {
@@ -169,6 +173,7 @@ function Builder({
     }
   }
 
+  const [leaving, setLeaving] = useState(false);
   const footer = (
     <>
       <Button
@@ -178,6 +183,16 @@ function Builder({
       >
         Cancel
       </Button>
+      {!form && values && (
+        <Button
+          onClick={() => (dirty ? setLeaving(true) : setValues(null))}
+          disabled={busy}
+          disabledReason="Saving…"
+          icon="back"
+        >
+          {copy.chooseBack}
+        </Button>
+      )}
       {values && (
         <Button type="submit" form={formId} variant="filled" busy={busy}>
           {form ? copy.saveForm : copy.add}
@@ -197,7 +212,13 @@ function Builder({
         footer={footer}
       >
         {!values ? (
-          <PlanFormChooser planId={planId} onPick={setValues} />
+          <PlanFormChooser
+            planId={planId}
+            onPick={(picked) => {
+              setPicked0(picked);
+              setValues(picked);
+            }}
+          />
         ) : (
           <form
             id={formId}
@@ -213,6 +234,7 @@ function Builder({
               required
               ref={titleRef}
               value={values.title}
+              placeholder={copy.titlePlaceholder}
               maxLength={TRIP_PLAN_FORM_TITLE_MAX_LENGTH}
               data-autofocus
               hint={
@@ -258,6 +280,7 @@ function Builder({
                     className={classes.grow}
                     label={`${copy.questionLabel} ${index + 1}`}
                     value={question.label}
+                    placeholder={copy.questionPlaceholder}
                     maxLength={TRIP_PLAN_QUESTION_LABEL_MAX_LENGTH}
                     onChange={(event) =>
                       setQuestion(index, { label: event.target.value })
@@ -297,13 +320,8 @@ function Builder({
                     const kind = event.target.value as TripPlanQuestionKind;
                     setQuestion(index, {
                       kind,
-                      // A choice starts with two options to fill in.
-                      options: hasOptions(kind)
-                        ? (question.options ?? [
-                            { id: mintSlug("o"), label: "" },
-                            { id: mintSlug("o"), label: "" },
-                          ])
-                        : undefined,
+                      options: tripPlanQuestionKindChanged(question, kind)
+                        .options,
                     });
                   }}
                 >
@@ -321,7 +339,7 @@ function Builder({
                     setQuestion(index, { help: event.target.value })
                   }
                 />
-                {hasOptions(question.kind) && (
+                {tripPlanKindHasOptions(question.kind) && (
                   <div className={classes.question}>
                     <span className={classes.questionLabel} aria-hidden>
                       {copy.options}
@@ -371,7 +389,7 @@ function Builder({
                           setQuestion(index, {
                             options: [
                               ...(question.options ?? []),
-                              { id: mintSlug("o"), label: "" },
+                              { id: tripPlanMintSlug("o"), label: "" },
                             ],
                           })
                         }
@@ -396,15 +414,7 @@ function Builder({
                 disabledReason={`${TRIP_PLAN_MAX_QUESTIONS} questions at most`}
                 onClick={() =>
                   set({
-                    questions: [
-                      ...values.questions,
-                      {
-                        id: mintSlug("q"),
-                        kind: "text",
-                        label: "",
-                        required: false,
-                      },
-                    ],
+                    questions: [...values.questions, tripPlanBlankQuestion()],
                   })
                 }
               >
@@ -424,6 +434,17 @@ function Builder({
         confirmLabel="Discard"
         onConfirm={guard.confirmDiscard}
         onClose={guard.cancelDiscard}
+      />
+      <ConfirmDialog
+        open={leaving}
+        title={copy.discardTitle}
+        message={copy.discardBody}
+        confirmLabel={copy.discardConfirm}
+        onConfirm={() => {
+          setLeaving(false);
+          setValues(null);
+        }}
+        onClose={() => setLeaving(false)}
       />
     </>
   );

@@ -1,5 +1,7 @@
 // A plan place, read: what it is, where, its notes, attributes and photos,
-// as Logjam GPS's plan place sheet shows it. Read-only: editing is the row's ⋯.
+// as Logjam GPS's plan place sheet shows it. One step inside the Map view, so
+// the map stays beside it (shared/DESIGN.md §10: a page is for looking).
+// Read-only: editing is the row's ⋯.
 import { useState } from "react";
 import {
   attributeRows,
@@ -16,14 +18,7 @@ import {
   userFieldValues,
   type TripPlanPlace,
 } from "@logjam/shared";
-import {
-  Button,
-  Dialog,
-  IconButton,
-  IconTile,
-  Row,
-  SectionHeader,
-} from "../../ui";
+import { Hero, IconButton, IconTile, Row, SectionHeader } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import PlaceSlideshow from "../media/PlaceSlideshow";
 import classes from "./plans.module.css";
@@ -31,12 +26,12 @@ import classes from "./plans.module.css";
 const copy = PLACE_PAGE.copy;
 const planCopy = TRIP_PLAN_PAGE.copy;
 
-export default function PlanPlaceDialog({
+export default function PlanPlacePage({
   place,
-  onClose,
+  onBack,
 }: {
   place: TripPlanPlace;
-  onClose: () => void;
+  onBack: () => void;
 }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
@@ -62,13 +57,9 @@ export default function PlanPlaceDialog({
   }
 
   return (
-    <Dialog
-      open
-      title={place.name}
-      onClose={onClose}
-      footer={<Button onClick={onClose}>Close</Button>}
-    >
-      <div className={classes.form}>
+    <div className={classes.root}>
+      <Hero title={place.name} onBack={onBack} backLabel={planCopy.back} />
+      <div className={classes.list}>
         <p className={classes.note}>
           {[
             type?.name ?? planCopy.placeTypeFallback,
@@ -112,6 +103,6 @@ export default function PlanPlaceDialog({
           </dl>
         )}
       </div>
-    </Dialog>
+    </div>
   );
 }

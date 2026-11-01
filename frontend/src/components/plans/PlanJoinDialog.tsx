@@ -1,6 +1,7 @@
-// Joining a plan, from a link or a leader's username invite: the name, the
-// dates and who leads it, then the one press. Joining is the user's choice,
-// so it still takes the press; no form stands in the way, since the plan's
+// Asking to join a plan from a link, which the person has not seen yet: the
+// name, the dates and who leads it, then the one press. A leader's username
+// invite has its own preview page and joins from there. Joining is the user's
+// choice, so it still takes the press; no form stands in the way, since the plan's
 // forms are answered from the plan itself. Drawn from `TRIP_PLAN_JOIN`.
 import { Fragment, useState, type ReactNode } from "react";
 import {
@@ -19,7 +20,6 @@ const copy = TRIP_PLAN_JOIN.copy;
 
 export default function PlanJoinDialog({
   plan,
-  via,
   onJoin,
   onClose,
 }: {
@@ -27,10 +27,9 @@ export default function PlanJoinDialog({
     name: string;
     startDate: DateOnly | null;
     endDate: DateOnly | null;
-    /** "Leader: mira" for a link; "Invited by mira" for a username invite. */
+    /** The leader who made the link: "Leader: mira". */
     person: string | null;
   };
-  via: "link" | "username";
   onJoin: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -59,11 +58,7 @@ export default function PlanJoinDialog({
           {tripPlanDatesLabel(plan.startDate, plan.endDate)}
         </p>
         {plan.person && (
-          <p className={classes.note}>
-            {via === "link"
-              ? `${copy.leader} ${plan.person}`
-              : `${copy.invitedBy} ${plan.person}`}
-          </p>
+          <p className={classes.note}>{`${copy.leader} ${plan.person}`}</p>
         )}
       </div>
     ),
@@ -78,11 +73,15 @@ export default function PlanJoinDialog({
       dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Joining…">
-            Cancel
+          <Button
+            onClick={onClose}
+            disabled={busy}
+            disabledReason={copy.joining}
+          >
+            {copy.cancel}
           </Button>
           <Button variant="filled" busy={busy} onClick={() => void submit()}>
-            {via === "link" ? copy.askToJoin : copy.join}
+            {copy.askToJoin}
           </Button>
         </>
       }
