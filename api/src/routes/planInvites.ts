@@ -45,9 +45,7 @@ import { dateOnly } from "../lib/tripPlanView";
 import {
   activeMemberIds,
   blockedWithAny,
-  joinForms,
   notifyPlan,
-  saveJoinAnswers,
   waitingFor,
 } from "../lib/planMembership";
 import { joinInvited } from "./planMembers";
@@ -222,7 +220,6 @@ router.post(
       startDate: dateOnly(link.plan.startDate),
       endDate: dateOnly(link.plan.endDate),
       leader: link.leader,
-      requiredForms: await joinForms(prisma, link.plan.id),
       membership: link.membership as TripPlanLinkPreview["membership"],
     };
     res.json(preview);
@@ -240,7 +237,6 @@ async function request(
   tokenHash: string,
   planId: string,
   userId: string,
-  answers: unknown,
 ): Promise<TripPlanRedeemResult> {
   let result!: TripPlanRedeemResult;
   const push = await prisma.$transaction(async (tx) => {
@@ -271,14 +267,12 @@ async function request(
     }
     if (existing?.status === "invited") throw new AppError(409, RACED);
     result = { planId, status: "requested", waitingFor: leader };
-    // Asked already: the new answers replace the old, and the leaders are
-    // not told twice.
+    // Asked already: the leaders are not told twice.
     if (existing) {
       await tx.tripPlanMember.update({
         where: { planId_userId: { planId, userId } },
         data: { invitedById: leader.id },
       });
-      await saveJoinAnswers(tx, planId, userId, answers);
       return () => {};
     }
     await tx.tripPlanMember.create({
@@ -290,9 +284,7 @@ async function request(
         invitedById: leader.id,
       },
     });
-    await saveJoinAnswers(tx, planId, userId, answers);
-    // One notification per leader, with ids only. The answers are read in
-    // the plan, where a leader sees a request's answers.
+    // One notification per leader, with ids only.
     return notifyPlan(tx, await activeMemberIds(tx, planId, [], "leader"), {
       type: "plan_join_request",
       payload: { planId, requesterId: userId },
@@ -303,7 +295,7 @@ async function request(
 }
 
 // ── POST /plan-invites/redeem ─────────────────────────────────
-// Body { token, answers: TripPlanJoinAnswers }. Asks to join (201, waiting
+// Body { token }. Asks to join (201, waiting
 // for a leader); someone a leader already invited by username joins at once,
 // and someone already in is told so (200).
 router.post(
@@ -314,15 +306,13 @@ router.post(
     const user = await resolveUser(req.user!.sub);
     const link = await resolveLink(req.body?.token, user.id);
     const planId = link.plan.id;
-    const answers = req.body?.answers;
-    if (link.membership === "invited")
-      await joinInvited(planId, user.id, answers);
+    if (link.membership === "invited") await joinInvited(planId, user.id);
     if (link.membership === "invited" || link.membership === "active") {
       const result: TripPlanRedeemResult = { planId, status: "active" };
       res.json(result);
       return;
     }
-    const result = await request(link.tokenHash, planId, user.id, answers);
+    const result = await request(link.tokenHash, planId, user.id);
     res.status(result.status === "requested" ? 201 : 200).json(result);
   },
 );

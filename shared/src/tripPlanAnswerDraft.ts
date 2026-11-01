@@ -6,8 +6,6 @@ import {
   currentTripPlanAnswers,
   parseTripPlanAnswers,
   type TripPlanAnswers,
-  type TripPlanJoinAnswers,
-  type TripPlanJoinForm,
   type TripPlanQuestion,
 } from "./tripPlans.js";
 
@@ -87,35 +85,4 @@ export function fitAnswerDraft(
     questions,
     currentTripPlanAnswers(questions, answersFromDraft(questions, kept)),
   );
-}
-
-/**
- * A joiner's answers to the forms required to join, each echoing the form as
- * shown (`TripPlanJoinAnswers`), or the first sentence the shared parser
- * refuses with. Both clients' Join sends this.
- */
-export function joinAnswers(
-  forms: readonly TripPlanJoinForm[],
-  drafts: Record<string, TripPlanAnswerDraft>,
-): { value: TripPlanJoinAnswers } | { sentence: string } {
-  const value: TripPlanJoinAnswers = {};
-  for (const form of forms) {
-    const parsed = parseTripPlanAnswers(
-      form.questions,
-      answersFromDraft(form.questions, drafts[form.id] ?? {}),
-    );
-    if (!("value" in parsed))
-      return {
-        sentence:
-          "sentence" in parsed
-            ? parsed.sentence
-            : "Answer the forms marked required to join.",
-      };
-    value[form.id] = {
-      answers: parsed.value,
-      visibleTo: form.visibleTo,
-      formUpdatedAt: form.updatedAt,
-    };
-  }
-  return { value };
 }

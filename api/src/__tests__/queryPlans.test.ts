@@ -63,6 +63,7 @@ const READ_PATHS: Record<string, [string, ...string[]]> = {
   "/friends/:id/shares": ["/friends/:friendship/shares"],
   "/friends/invites": ["/friends/invites"],
   "/plans": ["/plans"],
+  "/plans/leader-forms": ["/plans/leader-forms"],
   "/plans/:id": [`/plans/${SEED_PLAN_ID}`],
   "/plans/:planId/invites": [`/plans/${SEED_PLAN_ID}/invites`],
   "/plans/:planId/preview": [`/plans/${CAROL_PLAN_ID}/preview`],

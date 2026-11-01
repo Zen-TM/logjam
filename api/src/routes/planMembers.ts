@@ -5,7 +5,7 @@
 // gate. Someone invited by username was chosen by a leader, so before joining
 // they see the write-up and who is going; someone who used a link sees
 // neither until a leader lets them in (routes/planInvites.ts). Joining asks
-// for the forms required to join. Leaving takes a person's answers with them;
+// no questions asked. Leaving takes a person's answers with them;
 // what they added stays in the plan.
 //
 // Every write starts with touchPlan (lib/planAccess.ts), so writes in one
@@ -51,9 +51,7 @@ import {
   blockedWithAny,
   dropMembership,
   dropStalePlanNotifications,
-  joinForms,
   notifyPlan,
-  saveJoinAnswers,
 } from "../lib/planMembership";
 
 const router = Router({ mergeParams: true });
@@ -153,7 +151,7 @@ router.post(
 
 // ── GET /plans/:planId/preview ────────────────────────────────
 // For someone invited by username, before they join: the write-up, who is
-// going and the forms required to join. Anyone else gets 404; an active
+// going. Anyone else gets 404; an active
 // member reads GET /plans/:id.
 router.get(
   "/preview",
@@ -184,21 +182,19 @@ router.get(
       invitedBy: own.invitedBy,
       sections: plan.sections.map(sectionView),
       members: plan.members.map((m) => m.user),
-      requiredForms: await joinForms(prisma, planId),
     };
     res.json(preview);
   },
 );
 
 /**
- * An invited person joins: their answers are stored and they are in. The
+ * An invited person joins: they are in. The
  * other active members are told. Exported for /plan-invites/redeem, where
  * someone invited by username who opens a link joins the same way.
  */
 export async function joinInvited(
   planId: string,
   userId: string,
-  answers: unknown,
 ): Promise<void> {
   const push = await prisma.$transaction(async (tx) => {
     await touchPlan(tx, planId);
@@ -208,7 +204,6 @@ export async function joinInvited(
     });
     if (own?.status !== "invited") throw planNotFound();
     if (own.plan.archivedAt) throw planArchived();
-    await saveJoinAnswers(tx, planId, userId, answers);
     await tx.tripPlanMember.update({
       where: { planId_userId: { planId, userId } },
       data: { status: "active" },
@@ -223,14 +218,14 @@ export async function joinInvited(
 }
 
 // ── POST /plans/:planId/join ──────────────────────────────────
-// Body { answers: TripPlanJoinAnswers }. Only for someone invited by username.
+// Only for someone invited by username.
 router.post(
   "/join",
   requireAuth,
   async (req: AuthenticatedRequest, res: Response) => {
     const user = await resolveUser(req.user!.sub);
     const planId = getParam(req.params.planId);
-    await joinInvited(planId, user.id, req.body?.answers);
+    await joinInvited(planId, user.id);
     res.json(
       await loadPlanView(user.id, await requirePlanMember(user.id, planId)),
     );

@@ -14,7 +14,6 @@ import {
   TRIP_PLAN_FORM_CHANGED_SENTENCE,
   TRIP_PLAN_MAX_FORMS,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
-  type TripPlanJoinForm,
   type TripPlanQuestion,
   type TripPlanUserRef,
 } from "@logjam/shared";
@@ -235,110 +234,4 @@ export async function waitingFor(
     (leaders.find((row) => row.user.id === invitedById) ?? leaders[0])?.user ??
     null
   );
-}
-
-/** The forms required to join, as a joiner sees them: no answers. */
-export async function joinForms(
-  db: Db,
-  planId: string,
-): Promise<TripPlanJoinForm[]> {
-  const forms = await db.tripPlanForm.findMany({
-    where: { planId, requiredToJoin: true },
-    orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      title: true,
-      preset: true,
-      questions: true,
-      visibleTo: true,
-      updatedAt: true,
-    },
-  });
-  return forms.map((form) => {
-    if (!isTripPlanFormVisibility(form.visibleTo))
-      throw fault("a form row has no known visibility");
-    return {
-      id: form.id,
-      title: form.title,
-      preset:
-        form.preset && isTripPlanFormPresetId(form.preset) ? form.preset : null,
-      questions: (Array.isArray(form.questions)
-        ? form.questions
-        : []) as TripPlanQuestion[],
-      visibleTo: form.visibleTo,
-      updatedAt: form.updatedAt.toISOString(),
-    };
-  });
-}
-
-type LockedForm = {
-  id: string;
-  questions: unknown;
-  visible_to: string;
-  updated_at: Date;
-};
-
-/**
- * Store a joiner's answers (TripPlanJoinAnswers), each checked against the
- * form as they were shown it, as PUT …/answers/me checks one: who sees it
- * first, then whether the form changed, then the answers. Every form
- * required to join must be answered. Call after touchPlan; the forms are
- * then locked FOR SHARE, as the answer PUT locks one (routes/planForms.ts).
- */
-export async function saveJoinAnswers(
-  tx: Db,
-  planId: string,
-  userId: string,
-  value: unknown,
-): Promise<void> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw malformed("answers must map form ids to answers");
-  const given = value as Record<string, unknown>;
-  const ids = Object.keys(given).sort();
-  if (ids.length > TRIP_PLAN_MAX_FORMS)
-    throw malformed("more answered forms than a plan can have", 413);
-  const forms =
-    ids.length > 0
-      ? await tx.$queryRaw<LockedForm[]>`
-          SELECT id, questions, visible_to, updated_at FROM trip_plan_forms
-          WHERE plan_id = ${planId} AND id = ANY(${ids}) FOR SHARE`
-      : [];
-  // A form gone since it was shown: the person answered a form that changed.
-  if (forms.length !== ids.length)
-    throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
-  const missing = await tx.tripPlanForm.count({
-    where: { planId, requiredToJoin: true, id: { notIn: ids } },
-  });
-  // Clients send every form the preview marked required, so one missing was
-  // made required after they read it: a 409, and they read it again.
-  if (missing > 0) throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
-  const answers = forms.map((form) => {
-    const entry = given[form.id];
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry))
-      throw malformed("each form's entry must be an object");
-    const { visibleTo, formUpdatedAt } = entry as Record<string, unknown>;
-    if (!isTripPlanFormVisibility(visibleTo))
-      throw malformed("visibleTo must be the visibility the form showed");
-    if (typeof formUpdatedAt !== "string")
-      throw malformed("formUpdatedAt must be the form's updatedAt as served");
-    if (form.visible_to !== visibleTo)
-      throw new AppError(409, TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE);
-    if (form.updated_at.toISOString() !== formUpdatedAt)
-      throw new AppError(409, TRIP_PLAN_FORM_CHANGED_SENTENCE);
-    return {
-      formId: form.id,
-      answers: accepted(
-        parseTripPlanAnswers(
-          form.questions as TripPlanQuestion[],
-          (entry as Record<string, unknown>).answers,
-        ),
-      ),
-    };
-  });
-  for (const row of answers)
-    await tx.tripPlanAnswer.upsert({
-      where: { formId_userId: { formId: row.formId, userId } },
-      create: { formId: row.formId, userId, answers: row.answers },
-      update: { answers: row.answers },
-    });
 }

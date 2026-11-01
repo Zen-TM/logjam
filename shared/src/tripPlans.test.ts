@@ -163,18 +163,17 @@ describe("order", () => {
 });
 
 describe("item add", () => {
-  it("takes a kind and an id, and copyMedia only as a boolean", () => {
+  it("takes a kind and an id, and ignores the retired copyMedia", () => {
     expect(value(parseTripPlanItemAdd({ kind: "media", id: "a" }))).toEqual({
       kind: "media",
       id: "a",
     });
     expect(
       value(parseTripPlanItemAdd({ kind: "place", id: "a", copyMedia: false })),
-    ).toEqual({ kind: "place", id: "a", copyMedia: false });
+    ).toEqual({ kind: "place", id: "a" });
     for (const body of [
       { kind: "topo", id: "a" },
       { kind: "place", id: "" },
-      { kind: "place", id: "a", copyMedia: "yes" },
       null,
     ])
       expect(isMalformed(parseTripPlanItemAdd(body))).toBe(true);
@@ -292,7 +291,6 @@ describe("forms", () => {
       parseTripPlanFormCreate({
         title: "T",
         visibleTo: "leaders",
-        requiredToJoin: false,
         questions: [
           {
             id: "q",
@@ -315,7 +313,6 @@ describe("forms", () => {
         parseTripPlanFormCreate({
           title: "T",
           visibleTo: "leaders",
-          requiredToJoin: false,
           questions: [
             {
               id: "q",
@@ -331,7 +328,7 @@ describe("forms", () => {
   });
 
   it("caps questions at both ends", () => {
-    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    const base = { title: "T", visibleTo: "leaders" };
     expect(sentence(parseTripPlanFormCreate({ ...base, questions: [] }))).toBe(
       "A form needs at least one question.",
     );
@@ -355,7 +352,7 @@ describe("forms", () => {
   // `toString`) can't hold an answer. Mutation: drop the Object.prototype
   // check in questionId.
   it("refuses a question id a plain object already has", () => {
-    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    const base = { title: "T", visibleTo: "leaders" };
     for (const id of ["__proto__", "toString", "constructor"])
       expect(
         isMalformed(
@@ -368,7 +365,7 @@ describe("forms", () => {
   });
 
   it("caps the arrays it drops or only compares", () => {
-    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    const base = { title: "T", visibleTo: "leaders" };
     const options = Array.from({ length: 31 }, (_, i) => ({
       id: `o${i}`,
       label: "O",
@@ -404,7 +401,7 @@ describe("forms", () => {
 
   it("refuses a repeated question id or an unknown preset as malformed", () => {
     const q = { id: "q", kind: "yesNo", label: "Q", required: false };
-    const base = { title: "T", visibleTo: "leaders", requiredToJoin: false };
+    const base = { title: "T", visibleTo: "leaders" };
     expect(
       isMalformed(parseTripPlanFormCreate({ ...base, questions: [q, q] })),
     ).toBe(true);
@@ -542,7 +539,6 @@ describe("a refusal never echoes what the person wrote", () => {
   const form = (over: object) => ({
     title: secret,
     visibleTo: "leaders",
-    requiredToJoin: false,
     questions: [q({})],
     ...over,
   });
