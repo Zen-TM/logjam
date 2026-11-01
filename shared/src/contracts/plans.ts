@@ -832,8 +832,8 @@ export const TRIP_PLAN_FORMS = {
     visibleToLeaders: "Leaders",
     visibleToMembers: "Everyone in the plan",
     requiredToJoin: "Required to join",
-    requiredToJoinHint:
-      "Joiners answer it before they join, and members are asked the next time they open the plan.",
+    // Joiners answer before they join; members, the next time they open the plan.
+    requiredToJoinHint: "Everyone answers it first.",
     // The API's refusal, said before Save.
     visibleToLocked: TRIP_PLAN_VISIBILITY_LOCKED_SENTENCE,
     questions: "Questions",
