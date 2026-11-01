@@ -12,6 +12,7 @@ import {
   tripPlanBucket,
   listSelectionLabel,
   tripPlanBulkConfirm,
+  tripPlanBulkOffers,
   tripPlanBulkDone,
   tripPlanFormsToAnswerLine,
   tripPlanRowPill,
@@ -45,7 +46,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useRowSelection } from "../sidebar/panels/useRowSelection";
 import { archivePlan, createPlan, deletePlan, leavePlan } from "../../plansApi";
-import { bulkVerbs, listVerbs, type ListVerbId } from "./planListVerbs";
+import { listVerbs, type ListVerbId } from "./planListVerbs";
 import { menuEntries } from "./planMenu";
 import PlanDetailsDialog from "./PlanDetailsDialog";
 import classes from "./plans.module.css";
@@ -60,22 +61,14 @@ const RUN: Record<ListVerbId, (id: string) => Promise<unknown>> = {
   delete: (id) => deletePlan(id),
 };
 
-function confirmCopy({
-  kind,
-  plans,
-}: {
-  kind: "delete" | "leave";
-  plans: TripPlanSummary[];
-}) {
+function confirmCopy(plans: TripPlanSummary[]) {
+  const { lead, leave } = tripPlanBulkOffers(plans);
   const one =
     plans.length === 1
-      ? kind === "delete"
+      ? lead.length === 1
         ? planDeleteConfirm(plans[0].name, { places: 0, ways: 0 })
         : planLeaveConfirm(plans[0].name)
-      : tripPlanBulkConfirm({
-          lead: kind === "delete" ? plans.length : 0,
-          leave: kind === "leave" ? plans.length : 0,
-        });
+      : tripPlanBulkConfirm({ lead: lead.length, leave: leave.length });
   return {
     title: one.confirmTitle,
     message: one.confirmBody,
@@ -127,21 +120,25 @@ export default function PlansPanel({
     selectable.map((plan) => plan.id),
   );
   const selected = selectable.filter((plan) => selectedIds.includes(plan.id));
-  const [confirm, setConfirm] = useState<{
-    kind: "delete" | "leave";
-    plans: TripPlanSummary[];
-  } | null>(null);
+  const offers = tripPlanBulkOffers(selected);
+  const archiveVerb = selected[0] // one bucket, so all archived or none
+    ? listVerbs(selected[0]).find(
+        (verb) => verb.id === "archive" || verb.id === "unarchive",
+      )
+    : undefined;
+  // Delete-or-leave: the plans you lead are deleted, the rest left.
+  const [confirm, setConfirm] = useState<TripPlanSummary[] | null>(null);
 
-  // One verb on one or many plans; the toast counts what went through.
-  async function runVerb(verb: ListVerbId, plans: TripPlanSummary[]) {
+  // Each plan with the verb to run on it; the toast counts what went through.
+  async function run(jobs: { verb: ListVerbId; plan: TripPlanSummary }[]) {
     setBusyId("bulk");
     const results = await Promise.allSettled(
-      plans.map((plan) => RUN[verb](plan.id)),
+      jobs.map(({ verb, plan }) => RUN[verb](plan.id)),
     );
-    const done = results.filter((r) => r.status === "fulfilled").length;
     for (const r of results)
       if (r.status === "rejected") console.error(r.reason);
-    if (plans.length === 1) {
+    if (jobs.length === 1) {
+      const { verb } = jobs[0];
       const failed = {
         archive: pageCopy.archiveFailed,
         unarchive: pageCopy.archiveFailed,
@@ -159,20 +156,39 @@ export default function PlansPanel({
         toast.error(messageFromError(rejected.reason, failed));
       else toast.success(worked);
     } else {
-      (done === plans.length ? toast.success : toast.error)(
-        tripPlanBulkDone(verb, done, plans.length),
-      );
+      const lines = (["delete", "leave", "archive", "unarchive"] as const)
+        .map((kind) => {
+          const mine = results.filter((_, i) => jobs[i].verb === kind);
+          return mine.length === 0
+            ? null
+            : tripPlanBulkDone(
+                kind,
+                mine.filter((r) => r.status === "fulfilled").length,
+                mine.length,
+              );
+        })
+        .filter(Boolean);
+      (results.every((r) => r.status === "fulfilled")
+        ? toast.success
+        : toast.error)(lines.join(" "));
     }
     setBusyId(null);
     setConfirm(null);
-    clear();
+    // The ones that went through stop being rows and drop out of the
+    // selection; the ones that failed stay picked, to try again.
+    if (results.every((r) => r.status === "fulfilled")) clear();
     onRefetch();
   }
 
+  const byRole = (plans: TripPlanSummary[]) =>
+    plans.map((plan) => ({
+      plan,
+      verb: (plan.role === "leader" ? "delete" : "leave") as ListVerbId,
+    }));
   const runOrConfirm = (verb: ListVerbId, plans: TripPlanSummary[]) =>
     verb === "delete" || verb === "leave"
-      ? setConfirm({ kind: verb, plans })
-      : void runVerb(verb, plans);
+      ? setConfirm(plans)
+      : void run(plans.map((plan) => ({ plan, verb })));
 
   // Decline an invite, withdraw a request: the same call, by status.
   async function dropMembership(plan: TripPlanSummary) {
@@ -208,9 +224,6 @@ export default function PlansPanel({
         key={plan.id}
         title={plan.name}
         subtitle={tripPlanRowSubtitle(plan)}
-        description={
-          tripPlanFormsToAnswerLine(plan.unansweredForms) || undefined
-        }
         selected={selectedIds.includes(plan.id)}
         leading={
           plan.status === "active" ? (
@@ -233,6 +246,12 @@ export default function PlansPanel({
         }
         trailing={
           <>
+            {plan.status === "active" && plan.unansweredForms > 0 && (
+              <StatusPill
+                label={tripPlanFormsToAnswerLine(plan.unansweredForms)}
+                tone="outline"
+              />
+            )}
             {pill && (
               <StatusPill
                 label={pill}
@@ -336,17 +355,23 @@ export default function PlansPanel({
             countLabel={listSelectionLabel(selected.length)}
             onClear={clear}
           >
-            {bulkVerbs(selected).map((verb) => (
+            {offers.archive && archiveVerb && (
               <IconButton
-                key={verb.id}
-                icon={verb.icon}
-                label={verb.label}
-                tone={verb.danger ? "danger" : undefined}
+                icon={archiveVerb.icon}
+                label={archiveVerb.label}
                 disabled={busyId != null}
                 disabledReason="Working…"
-                onClick={() => runOrConfirm(verb.id, selected)}
+                onClick={() => runOrConfirm(archiveVerb.id, selected)}
               />
-            ))}
+            )}
+            <IconButton
+              icon={offers.destructive ? "delete" : "leave"}
+              label={offers.deleteLabel}
+              tone={offers.destructive ? "danger" : undefined}
+              disabled={busyId != null}
+              disabledReason="Working…"
+              onClick={() => setConfirm(selected)}
+            />
           </SelectionBar>
         ) : (
           <ChipRail
@@ -403,7 +428,7 @@ export default function PlansPanel({
           open
           {...confirmCopy(confirm)}
           busy={busyId != null}
-          onConfirm={() => void runVerb(confirm.kind, confirm.plans)}
+          onConfirm={() => void run(byRole(confirm))}
           onClose={() => setConfirm(null)}
         />
       )}

@@ -711,7 +711,7 @@ function Map({
    *  open plan's, which look different because they behave differently. */
   mutedIds?: ReadonlySet<string>;
   /** A search hit on a place selects it, as a press on its pin does; false
-   *  (an open plan, where a press means Add a copy) and it only flies. */
+   *  (an open plan, where a press means Add a place or way) and it only flies. */
   searchSelects?: boolean;
   onFlyToPlaceConsumed?: () => void;
   /**

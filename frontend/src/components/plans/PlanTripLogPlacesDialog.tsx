@@ -23,7 +23,6 @@ const copy = TRIP_PLAN_PAGE.copy;
 export default function PlanTripLogPlacesDialog({
   planId,
   places,
-  copyMedia,
   onCopied,
   onStale,
   onDone,
@@ -31,8 +30,6 @@ export default function PlanTripLogPlacesDialog({
 }: {
   planId: string;
   places: TripPlanPlace[];
-  /** The caller's remembered Bring its photos, which each copy follows. */
-  copyMedia: boolean;
   /** A copy landed in the caller's places. */
   onCopied: () => void;
   /** The API refused a save (the place may have left the plan): fetch the
@@ -113,7 +110,7 @@ export default function PlanTripLogPlacesDialog({
         <p className={classes.note}>
           {tripPlanTripLogPlacesLine(
             places.filter((place) => picked.includes(place.id)),
-            copyMedia,
+            true,
           )}
         </p>
         <div className={classes.question}>

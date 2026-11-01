@@ -96,7 +96,7 @@ import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
-/** Add a copy opened from the page rather than from a pin: nothing ticked. */
+/** Add a place or way opened from the page rather than from a pin: nothing ticked. */
 const NOTHING_TICKED = { kind: "place" as const, id: "" };
 const formsCopy = TRIP_PLAN_FORMS.copy;
 
@@ -108,7 +108,6 @@ export default function PlanDetailPanel({
   currentUser,
   onOwnChanged,
   onOpenItem,
-  copyPlaceMedia,
   addCopyRequest,
   onAddCopyRequestConsumed,
   onBack,
@@ -122,7 +121,7 @@ export default function PlanDetailPanel({
   error: string | null;
   /** Fetch the plan again; `quiet` after a write whose failure was just said. */
   refetch: (options?: { quiet: boolean }) => void;
-  /** The caller's own lists, for Add a copy. */
+  /** The caller's own lists, for Add a place or way. */
   own: {
     places: TPlace[];
     routes: TRoute[];
@@ -133,9 +132,7 @@ export default function PlanDetailPanel({
   onOwnChanged: () => void;
   /** Fit the map to a plan item. */
   onOpenItem: (item: TripPlanItem) => void;
-  /** The caller's remembered Bring its photos. */
-  copyPlaceMedia: boolean;
-  /** One of the caller's own things pressed on the map: Add a copy, ticked. */
+  /** One of the caller's own things pressed on the map: Add a place or way, ticked. */
   addCopyRequest: { kind: TripPlanItemKind; id: string } | null;
   onAddCopyRequestConsumed: () => void;
   onBack: () => void;
@@ -429,7 +426,7 @@ export default function PlanDetailPanel({
         {toAnswer.forms.length > 0 && (
           <div className={classes.noticeCard}>
             <Row
-              data-urgent={toAnswer.urgent}
+              accentEdge={toAnswer.urgent ? "warning" : false}
               leading={
                 <IconTile
                   icon="form"
@@ -567,16 +564,18 @@ export default function PlanDetailPanel({
                 form.visibleTo === "leaders"
                   ? copy.seenByLeaders
                   : copy.seenByMembers,
-                ...tallyLines(form),
+                // Who is missing is on the form's page; a long list would
+                // stretch the row.
+                ...tallyLines(form).slice(0, 1),
               ].join(" · ")}
               leading={<IconTile icon="form" hue="var(--hue-plan)" />}
               data-form-id={form.id}
               onOpen={() => openFormPage(form.id)}
-              // One status: what the caller owes, else what the form asks;
+              // What the caller owes, by the same rule as the card above;
               // then the form's own verbs, as on its page.
               trailing={
                 <>
-                  {!form.myAnswer && !archived && (
+                  {toAnswer.forms.some((owed) => owed.id === form.id) && (
                     <StatusPill label={copy.pillNotAnswered} tone="warning" />
                   )}
                   {formVerbs.length > 0 && (
@@ -676,7 +675,6 @@ export default function PlanDetailPanel({
         <PlanTripLogPlacesDialog
           planId={plan.id}
           places={plan.places}
-          copyMedia={copyPlaceMedia}
           onCopied={onOwnChanged}
           onStale={() => refetch({ quiet: true })}
           onClose={() => setPickingTripPlaces(false)}

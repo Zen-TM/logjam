@@ -1,10 +1,10 @@
-// Edit a plan item: a place's details, a way's or a file's name. As a section's form does, each changed field goes as the value last
-// seen and the new one; on a 409 the form stays open with the API's sentence,
-// keeps what was typed and shows what the plan now says, and a field the user
-// never touched follows the plan (`adoptTheirs`). Position, attributes and
-// geometry stay as they came in: those are edited where the thing was made.
-// A place's details (other names, position, elevation, its type's attributes)
-// are edited here as the place editor does, each its own pair.
+// Edit a plan item: a place's details (name, other names, position,
+// elevation, notes, its type's attributes), or a way's or a file's name. As a
+// section's form does, each changed field goes as the value last seen and the
+// new one; on a 409 the form stays open with the API's sentence, keeps what
+// was typed and shows what the plan now says, and a field the user never
+// touched follows the plan (`adoptTheirs`). A way's geometry stays as it came
+// in: that is edited where the way was made.
 import { useId, useState } from "react";
 import {
   customFieldDisplayLabel,

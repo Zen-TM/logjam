@@ -1,4 +1,4 @@
-// Add a copy: the caller's own places, and ways, ticked, priced before
+// Add a place or way: the caller's own places, and ways, ticked, priced before
 // they commit, then added one request each, in order, as POST /plans/:id/items
 // takes one thing. A stop halfway says what landed and why it stopped, in the
 // API's words.

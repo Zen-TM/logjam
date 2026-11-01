@@ -226,7 +226,6 @@ function renderPanel(
       currentUser={null}
       onOwnChanged={() => {}}
       onOpenItem={() => {}}
-      copyPlaceMedia
       addCopyRequest={null}
       onAddCopyRequestConsumed={() => {}}
       onBack={() => {}}
@@ -503,10 +502,24 @@ describe("the forms to answer", () => {
   // told a form is waiting.
   it("shows a member the card, warning in the last week, and opens the form", () => {
     renderPanel({ view: unanswered, myUserId: "u2" });
-    const card = screen.getByText("1 form to answer").closest("[data-urgent]");
-    expect(card?.getAttribute("data-urgent")).toBe("true");
+    const card = screen
+      .getByText("1 form to answer")
+      .closest("[data-accent-edge]");
+    expect(card?.getAttribute("data-accent-edge")).toBe("warning");
     fireEvent.click(screen.getByRole("button", { name: contacts.title }));
     expect(screen.getByRole("dialog", { name: contacts.title })).toBeTruthy();
+  });
+
+  // Mutation: derive the pill from `!form.myAnswer` alone, and a finished trip
+  // keeps warning on every form while the card is gone.
+  it("owes nothing once the trip is over: no card, no pill", () => {
+    renderPanel({
+      view: { ...unanswered, startDate: "2000-01-01", endDate: "2000-01-02" },
+      myUserId: "u2",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
+    expect(screen.queryByText("1 form to answer")).toBeNull();
+    expect(screen.queryByText("Not answered")).toBeNull();
   });
 
   it("is calm far ahead", () => {
@@ -517,8 +530,8 @@ describe("the forms to answer", () => {
     expect(
       screen
         .getByText("1 form to answer")
-        .closest("[data-urgent]")
-        ?.getAttribute("data-urgent"),
+        .closest("[data-accent-edge]")
+        ?.getAttribute("data-accent-edge"),
     ).toBe("false");
   });
 
@@ -528,7 +541,8 @@ describe("the forms to answer", () => {
     renderPanel({ view: { ...unanswered, myRole: "leader" }, myUserId: "u1" });
     fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
     expect(screen.getByText(/0 of 2 answered/)).toBeTruthy();
-    expect(screen.getByText(/Not answered yet: alice, bob/)).toBeTruthy();
+    // The row stays a row; the missing names are on the form's page.
+    expect(screen.queryByText(/Not answered yet/)).toBeNull();
   });
 });
 
@@ -625,7 +639,7 @@ describe("an item's edit refused", () => {
   });
 });
 
-describe("Add a copy stopped halfway", () => {
+describe("Add a place or way stopped halfway", () => {
   // Mutation: drop `onAdded` from the partial failure, and the copy that
   // landed is missing from the plan until something else refetches it.
   it("says what landed and why it stopped, and shows what landed", async () => {
@@ -687,7 +701,6 @@ describe("Start a trip log after a copy failed", () => {
       <PlanTripLogPlacesDialog
         planId="p1"
         places={[place("a", "Claustral"), place("b", "Ranon")]}
-        copyMedia
         onCopied={onCopied}
         onStale={onStale}
         onDone={onDone}
