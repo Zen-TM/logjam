@@ -401,6 +401,18 @@ export const TRIP_PLAN_PAGE = {
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
+    itemOtherNames: "Other names",
+    itemOtherNamesHint: "Separate them with commas.",
+    itemLatitude: "Latitude",
+    itemLongitude: "Longitude",
+    itemElevation: "Elevation (m)",
+    itemAttributes: "Attributes",
+    saveCopyPhotos: "Bring its photos",
+    drawRoute: "Draw a route",
+    searchByName: "Search by name",
+    searchNoMatch: "Nothing matches that name.",
+    datesLabel: "Dates",
+    clearDates: "Clear dates",
     itemDownloadHint: "Click to download",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
@@ -1019,6 +1031,33 @@ export function tripPlanFormTallyLines(tally: {
         ]
       : []),
   ];
+}
+
+/** The one confirm for a bulk Delete and leave on the plans list, naming each
+ *  count. Guard: plans.test.ts ("bulk confirm"). */
+export function tripPlanBulkConfirm(counts: { lead: number; leave: number }) {
+  const { lead, leave } = counts;
+  const plans = (count: number) => `${count} ${count === 1 ? "plan" : "plans"}`;
+  const parts: string[] = [];
+  if (lead > 0)
+    parts.push(
+      `Deleting ${plans(lead)} removes ${lead === 1 ? "its" : "their"} write-up${lead === 1 ? "" : "s"}, forms and everyone's answers, for everyone. Copies people saved to their own accounts stay.`,
+    );
+  if (leave > 0)
+    parts.push(
+      `Leaving ${plans(leave)} loses you access at once and removes your answers. What you added stays.`,
+    );
+  const title =
+    lead > 0 && leave > 0
+      ? `Delete ${plans(lead)} and leave ${plans(leave)}?`
+      : lead > 0
+        ? `Delete ${plans(lead)}?`
+        : `Leave ${plans(leave)}?`;
+  return {
+    confirmTitle: title,
+    confirmBody: parts.join(" "),
+    confirmLabel: lead > 0 ? "Delete" : "Leave",
+  };
 }
 
 export function tripPlanLetInMessage(username: string): string {

@@ -27,6 +27,10 @@ import {
   tripPlanAddedByLine,
   tripPlanCounts,
   tripPlanDatesLine,
+  tripPlanFormsToAnswer,
+  tripPlanFormsToAnswerLine,
+  tripPlanFormTally,
+  tripPlanFormTallyLines,
   tripPlanGoing,
   tripPlanIsOver,
   tripPlanNotice,
@@ -326,6 +330,10 @@ function PlanPage({
   const styles = useStyles();
   const { plan } = cached;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [myId, setMyId] = useState<string | null>(null);
+  useEffect(() => {
+    void getSyncStateValue("userId").then(setMyId).catch(console.error);
+  }, []);
   const [editOpen, setEditOpen] = useState(false);
   const [tripLogOpen, setTripLogOpen] = useState(false);
   const [sectionSheet, setSectionSheet] = useState<SectionSheetState>(null);
@@ -355,10 +363,9 @@ function PlanPage({
   const today = todayDateKey();
   const notice = tripPlanNotice({
     archived: plan.archivedAt != null,
-    unansweredRequired:
-      plan.forms.find((form) => form.requiredToJoin && !form.myAnswer) ?? null,
     over: tripPlanIsOver(plan, today),
   });
+  const toAnswer = tripPlanFormsToAnswer(plan, today);
   const going = tripPlanGoing(plan.members);
   const counts = tripPlanCounts(plan);
   const itemCount = counts.places + counts.ways;
@@ -391,8 +398,6 @@ function PlanPage({
           <IconButton
             icon="overflow"
             accessibilityLabel={copy.actions}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }
@@ -423,35 +428,50 @@ function PlanPage({
         <PlanDownload cached={cached} now={now} />
       </Hero>
     ),
-    notices: notice ? (
-      <View style={styles.notice}>
-        {notice.kind === "answer" || notice.kind === "over" ? (
-          // A prompt that opens a form is a pressable row, as every other
-          // thing here that opens something.
-          <Row
-            icon={notice.icon}
-            title={notice.text}
-            titleNumberOfLines={3}
-            subtitle={
-              online || notice.kind === "over"
-                ? notice.kind === "answer"
-                  ? TRIP_PLAN_FORMS.copy.answer
-                  : planVerbLabel("tripLog")
-                : OFFLINE
-            }
-            // Live offline: a trip log is the caller's own and queues.
-            disabled={!online && notice.kind === "answer"}
-            onPress={() =>
-              notice.kind === "answer"
-                ? setFormSheet({ formId: notice.formId, mode: "answer" })
-                : setTripLogOpen(true)
-            }
-          />
-        ) : (
-          <Notice icon={notice.icon}>{notice.text}</Notice>
-        )}
-      </View>
-    ) : null,
+    notices:
+      notice || toAnswer.forms.length > 0 ? (
+        <View style={styles.notice}>
+          {notice?.kind === "over" ? (
+            // A prompt that opens something is a pressable row, as every
+            // other thing here that opens something.
+            <Row
+              icon={notice.icon}
+              title={notice.text}
+              titleNumberOfLines={3}
+              subtitle={planVerbLabel("tripLog")}
+              onPress={() => setTripLogOpen(true)}
+            />
+          ) : notice ? (
+            <Notice icon={notice.icon}>{notice.text}</Notice>
+          ) : (
+            // Nothing gates on a form: this only nudges, in the warning tone
+            // from a week before the trip.
+            <Row
+              icon="form"
+              hue={toAnswer.urgent ? theme.warning : undefined}
+              title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
+              subtitle={online ? undefined : OFFLINE}
+              footer={
+                <View style={styles.pills}>
+                  {toAnswer.forms.map((form) => (
+                    <Button
+                      key={form.id}
+                      label={form.title}
+                      compact
+                      variant="outlineAccent"
+                      disabled={!online}
+                      disabledReason={OFFLINE}
+                      onPress={() =>
+                        setFormSheet({ formId: form.id, mode: "answer" })
+                      }
+                    />
+                  ))}
+                </View>
+              }
+            />
+          )}
+        </View>
+      ) : null,
     dates: (
       <Text style={styles.dates}>
         {tripPlanDatesLine(plan, plan.myRole, tripTypeLabel)}
@@ -495,6 +515,7 @@ function PlanPage({
       view === "forms" ? (
         <Forms
           plan={plan}
+          me={myId}
           onOpen={(formId, mode) => setFormSheet({ formId, mode })}
         />
       ) : null,
@@ -722,7 +743,7 @@ function Items({
         onPress={() => setAdding(true)}
       />
       <Button
-        label="Draw a route"
+        label={copy.drawRoute}
         icon="route"
         variant="outlineAccent"
         disabled={!online}
@@ -892,9 +913,12 @@ function Items({
 
 function Forms({
   plan,
+  me,
   onOpen,
 }: {
   plan: TripPlanView;
+  /** The caller's user id, for a leader's tally. */
+  me: string | null;
   /** The form's sheet, read or on its ⋯ (`verbs`). */
   onOpen: (formId: string, mode: "read" | "verbs") => void;
 }) {
@@ -926,14 +950,10 @@ function Forms({
       onPress={() => onOpen(form.id, "read")}
       // The pills sit under the line: beside the ⋯ they squeezed the title.
       footer={
-        form.requiredToJoin ? (
-          <View style={styles.pills}>
-            <StatusPill label={copy.pillRequired} tone="outline" />
-            {form.myAnswer ? null : (
-              <StatusPill label={copy.pillNotAnswered} tone="warning" />
-            )}
-          </View>
-        ) : undefined
+        form.myAnswer &&
+        !(me && tripPlanFormTally(plan, form, me)) ? undefined : (
+          <FormFooter plan={plan} form={form} me={me} />
+        )
       }
       right={
         verbs.length > 0 ? (
@@ -949,8 +969,41 @@ function Forms({
   ));
 }
 
+/** Under a form's line: whether the caller has answered, and a leader's
+ *  tally with who hasn't. The pills sit under the line: beside the ⋯ they
+ *  squeezed the title. */
+function FormFooter({
+  plan,
+  form,
+  me,
+}: {
+  plan: TripPlanView;
+  form: TripPlanView["forms"][number];
+  me: string | null;
+}) {
+  const styles = useStyles();
+  const tally = me ? tripPlanFormTally(plan, form, me) : null;
+  return (
+    <View style={styles.formFooter}>
+      {form.myAnswer ? null : (
+        <View style={styles.pills}>
+          <StatusPill label={copy.pillNotAnswered} tone="warning" />
+        </View>
+      )}
+      {tally
+        ? tripPlanFormTallyLines(tally).map((line) => (
+            <Text key={line} style={styles.age}>
+              {line}
+            </Text>
+          ))
+        : null}
+    </View>
+  );
+}
+
 const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
+  formFooter: { gap: spacing(0.5) },
   age: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   pills: {

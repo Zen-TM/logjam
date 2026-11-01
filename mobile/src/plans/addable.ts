@@ -22,7 +22,6 @@ export function addableFromMirror(
     /** Made on this phone and not pushed yet (`usePendingCreateIds`). */
     pendingCreates: ReadonlySet<string>;
     tickedPlaceIds: string[];
-    copyMedia: boolean;
   },
 ) {
   const onServer = (id: string) => !state.pendingCreates.has(id);
@@ -56,7 +55,6 @@ export function addableFromMirror(
     {
       me: state.me,
       tickedPlaceIds: state.tickedPlaceIds,
-      copyMedia: state.copyMedia,
     },
   );
 }

@@ -20,6 +20,7 @@ export * from "./weather.js";
 export * from "./placeRegistry.js";
 export * from "./gauges.js";
 export * from "./placeTypes.js";
+export * from "./planItemEdit.js";
 export * from "./placeStatus.js";
 export * from "./copyRules.js";
 export * from "./switchCopy.js";

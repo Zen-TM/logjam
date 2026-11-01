@@ -8,6 +8,7 @@ import {
 } from "../tripPlans.js";
 import {
   planCountsLabel,
+  tripPlanBulkConfirm,
   planDeleteConfirm,
   planFormDeleteConfirm,
   planVerbs,
@@ -1077,5 +1078,21 @@ describe("form tally", () => {
         "me",
       ),
     ).toBeNull();
+  });
+});
+
+describe("tripPlanBulkConfirm", () => {
+  // Mutation: drop a count, and the dialog hides half of what happens.
+  it("names each count", () => {
+    expect(tripPlanBulkConfirm({ lead: 2, leave: 1 }).confirmTitle).toBe(
+      "Delete 2 plans and leave 1 plan?",
+    );
+    expect(tripPlanBulkConfirm({ lead: 1, leave: 0 }).confirmTitle).toBe(
+      "Delete 1 plan?",
+    );
+    expect(tripPlanBulkConfirm({ lead: 0, leave: 3 })).toMatchObject({
+      confirmTitle: "Leave 3 plans?",
+      confirmLabel: "Leave",
+    });
   });
 });

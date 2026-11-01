@@ -24,7 +24,6 @@ const state = {
   me: "me",
   pendingCreates: new Set(["pending"]),
   tickedPlaceIds: [],
-  copyMedia: true,
 };
 const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 

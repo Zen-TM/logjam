@@ -24,7 +24,6 @@ import {
   tripPlanTheirsChanged,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
-  TRIP_PLAN_SECTION_SUGGESTIONS,
   TRIP_PLAN_SECTION_TITLE_MAX_LENGTH,
   type PlanSectionVerbId,
   type TripPlanRole,
@@ -36,7 +35,6 @@ import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
-  ChipRail,
   ErrorBanner,
   FormStack,
   Row,
@@ -283,22 +281,9 @@ export function SectionSheet({
       ) : null}
       {editing ? (
         <FormStack>
-          {formKey === "add" ? (
-            <ChipRail
-              scroll
-              options={TRIP_PLAN_SECTION_SUGGESTIONS.map((title) => ({
-                value: title,
-                label: title,
-              }))}
-              value={values.title}
-              onChange={(title) => {
-                set({ title });
-                setTitleError(null);
-              }}
-            />
-          ) : null}
           <TextField
             label={copy.sectionTitleField}
+            placeholder={copy.sectionTitlePlaceholder}
             value={values.title}
             maxLength={TRIP_PLAN_SECTION_TITLE_MAX_LENGTH}
             autoCapitalize="sentences"

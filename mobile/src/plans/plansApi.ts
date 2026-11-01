@@ -9,7 +9,6 @@ import type {
   TripPlanItemAdd,
   TripPlanItemKind,
   TripPlanInvitedPreview,
-  TripPlanJoinAnswers,
   TripPlanMemberView,
   TripPlanRole,
   TripPlanInviteView,
@@ -86,12 +85,9 @@ export const addPlanItem = (planId: string, body: TripPlanItemAdd) =>
 /** What someone invited by username sees before joining; 404 otherwise. */
 export const getInvitedPreview = (id: string) =>
   apiFetch<TripPlanInvitedPreview>(`${plan(id)}/preview`);
-/** Join as someone invited, with the answers to the forms required to join. */
-export const joinPlan = (id: string, answers: TripPlanJoinAnswers) =>
-  apiFetch<TripPlanView>(`${plan(id)}/join`, {
-    method: "POST",
-    body: { answers },
-  });
+/** Join as someone invited. */
+export const joinPlan = (id: string) =>
+  apiFetch<TripPlanView>(`${plan(id)}/join`, { method: "POST" });
 
 /** A member's answer to a form; 409 if the form or who sees it changed. */
 export const putAnswer = (

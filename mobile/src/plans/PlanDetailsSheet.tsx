@@ -18,6 +18,7 @@ import {
   tripPlanTheirsChanged,
   TRIP_PLAN_FIELD_GROUPS,
   TRIP_PLAN_NAME_MAX_LENGTH,
+  TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
   TRIP_TYPE_SUGGESTIONS,
   type TripPlanPatch,
@@ -153,7 +154,7 @@ export function PlanDetailsSheet({
     <Row
       icon="date"
       title={tripPlanDatesLabel(values.startDate, values.endDate)}
-      subtitle="Dates"
+      subtitle={TRIP_PLAN_PAGE.copy.datesLabel}
       right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
       onPress={() => setMode("dates")}
     />
@@ -167,7 +168,11 @@ export function PlanDetailsSheet({
       onClose={mode === "form" ? onClose : toForm}
       onBack={mode === "form" ? undefined : toForm}
       title={
-        mode === "form" ? (plan ? copy.editTitle : copy.newTitle) : "Dates"
+        mode === "form"
+          ? plan
+            ? copy.editTitle
+            : copy.newTitle
+          : TRIP_PLAN_PAGE.copy.datesLabel
       }
       // Pinned: with the keyboard up the form outgrows the sheet.
       footer={
@@ -202,7 +207,7 @@ export function PlanDetailsSheet({
           />
           {values.startDate ? (
             <Button
-              label="Clear dates"
+              label={TRIP_PLAN_PAGE.copy.clearDates}
               icon="close"
               variant="ghost"
               onPress={() => {

@@ -122,7 +122,7 @@ export function useSaveCopyPanel({
         </Text>
         {asksPhotos ? (
           <SwitchRow
-            title={copy.bringPhotos}
+            title={copy.saveCopyPhotos}
             checked={withMedia}
             disabled={busy}
             onChange={toggleMedia}

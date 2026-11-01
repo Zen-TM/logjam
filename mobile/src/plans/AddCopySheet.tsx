@@ -26,7 +26,6 @@ import {
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { unavailableReasonText } from "../auth/capabilities";
-import { useRememberedCopyMedia } from "../sharing/rememberedCopyMedia";
 import { listStandaloneMedia, type MirrorMedia } from "../sync/mirrorStore";
 import { getSyncStateValue } from "../sync/syncDb";
 import {
@@ -54,7 +53,6 @@ import {
   LoadingState,
   Row,
   SelectionMark,
-  SwitchRow,
 } from "../ui";
 import type { Glyph } from "../ui";
 import { addableFromMirror } from "./addable";
@@ -100,7 +98,6 @@ export function AddCopySheet({
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [withMedia, toggleMedia] = useRememberedCopyMedia(visible);
   // Only the caller's own routes are theirs to add.
   const [me, setMe] = useState<string | null>(null);
   useEffect(() => {
@@ -146,17 +143,9 @@ export function AddCopySheet({
           routes: routes.data ?? [],
           files,
         },
-        { me, pendingCreates, tickedPlaceIds, copyMedia: withMedia },
+        { me, pendingCreates, tickedPlaceIds },
       ),
-    [
-      places.data,
-      routes.data,
-      files,
-      me,
-      pendingCreates,
-      tickedPlaceIds,
-      withMedia,
-    ],
+    [places.data, routes.data, files, me, pendingCreates, tickedPlaceIds],
   );
   const rows: Record<TripPlanItemGroup, Pick[]> = {
     // Places keep the accent, as the plan's own list does.
@@ -194,7 +183,6 @@ export function AddCopySheet({
   const priceLine = tripPlanAddCopyPriceLine({
     bytes: picks.reduce((sum, each) => sum + each.bytes, 0),
     placesPicked: picks.some((each) => each.kind === "place"),
-    copyMedia: withMedia,
     quotaBytes: user.data?.storageQuotaBytes ?? null,
     usedBytes: user.data?.storageUsedBytes ?? null,
   });
@@ -212,7 +200,6 @@ export function AddCopySheet({
         const result = await addPlanItem(planId, {
           kind: pick.kind,
           id: pick.id,
-          ...(pick.kind === "place" ? { copyMedia: withMedia } : {}),
         });
         added += 1;
         skipped += result.mediaSkipped ?? 0;
@@ -275,23 +262,15 @@ export function AddCopySheet({
             count: rows[value].length || undefined,
           }))}
         />
-        {group === "places" && tickedPlaceIds.length > 0 ? (
-          <SwitchRow
-            title={copy.bringPhotos}
-            checked={withMedia}
-            disabled={busy}
-            onChange={toggleMedia}
-          />
-        ) : null}
         <View style={styles.searchWrap}>
           <Icon idea="search" size={16} color={theme.textMuted} />
           <TextInput
             style={styles.searchInput}
             value={search}
             onChangeText={setSearch}
-            placeholder="Search by name"
+            placeholder={copy.searchByName}
             placeholderTextColor={theme.textMuted}
-            accessibilityLabel="Search by name"
+            accessibilityLabel={copy.searchByName}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
@@ -300,7 +279,7 @@ export function AddCopySheet({
         {list.length === 0 ? (
           <EmptyState
             icon="place"
-            title={needle ? "Nothing matches that name." : copy.nothingToAdd}
+            title={needle ? copy.searchNoMatch : copy.nothingToAdd}
           />
         ) : (
           list.map((each) => (

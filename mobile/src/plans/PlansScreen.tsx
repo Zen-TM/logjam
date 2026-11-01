@@ -26,6 +26,8 @@ import {
   messageFromError,
   sortTripPlans,
   tripPlanBucket,
+  tripPlanBulkConfirm,
+  tripPlanFormsToAnswerLine,
   tripPlanRowPill,
   tripPlanRowSubtitle,
   tripPlansEmpty,
@@ -67,7 +69,7 @@ import {
   type ToastMessage,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
-import { planBulkConfirm, planBulkSplit, planSelectable } from "./planBulk";
+import { planBulkSplit, planSelectable } from "./planBulk";
 import { startPlanDownload } from "./planDownloads";
 import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
 import {
@@ -216,7 +218,6 @@ export function PlansScreen({
     },
     [clearSelection],
   );
-  const [actionsOpen, setActionsOpen] = useState(false);
 
   // Decline and Withdraw request: one call, by status (`leavePlan`); no
   // confirm, as on Logjam Web.
@@ -334,7 +335,7 @@ export function PlansScreen({
   const runBulk = () => {
     const { lead, leave: leaving } = bulk;
     confirm(
-      planBulkConfirm({ lead: lead.length, leave: leaving.length }),
+      tripPlanBulkConfirm({ lead: lead.length, leave: leaving.length }),
       true,
       () => {
         void (async () => {
@@ -429,20 +430,28 @@ export function PlansScreen({
           // can't squeeze the name and dates.
           footer={
             item.status === "active" &&
-            (planChanged(item, stamp) || stamp?.downloadedAt) ? (
+            (planChanged(item, stamp) ||
+              stamp?.downloadedAt ||
+              item.unansweredForms > 0) ? (
               <View style={styles.pills}>
+                {item.unansweredForms > 0 ? (
+                  <StatusPill
+                    label={tripPlanFormsToAnswerLine(item.unansweredForms)}
+                    tone="outline"
+                  />
+                ) : null}
                 {planChanged(item, stamp) ? (
                   <StatusPill
                     label={TRIP_PLAN_OFFLINE.changed}
                     tone="warning"
                   />
-                ) : (
+                ) : stamp?.downloadedAt ? (
                   <StatusPill
                     label={TRIP_PLAN_OFFLINE.downloaded}
                     tone="muted"
                     icon="saveOffline"
                   />
-                )}
+                ) : null}
               </View>
             ) : item.status === "invited" ? (
               // Its own taps: a dimmed Decline doesn't fall through to the
@@ -532,9 +541,10 @@ export function PlansScreen({
         onBack={onBack}
         actions={
           <IconButton
-            icon="overflow"
-            accessibilityLabel="Plans actions"
-            onPress={() => setActionsOpen(true)}
+            icon="multiSelect"
+            accessibilityLabel="Select all"
+            disabled={selectableItems.length === 0}
+            onPress={selectAll}
           />
         }
       >
@@ -654,24 +664,6 @@ export function PlansScreen({
           onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
-      <BottomSheet
-        visible={actionsOpen}
-        onClose={() => setActionsOpen(false)}
-        title="Plans actions"
-      >
-        <Row
-          icon="multiSelect"
-          title="Select all"
-          subtitle={
-            selectableItems.length === 0 ? "No plans to select here" : undefined
-          }
-          disabled={selectableItems.length === 0}
-          onPress={() => {
-            setActionsOpen(false);
-            selectAll();
-          }}
-        />
-      </BottomSheet>
       <BottomSheet
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}

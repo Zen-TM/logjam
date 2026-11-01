@@ -8,17 +8,26 @@ import { Fragment, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
+  itemFieldDefs,
+  itemPatch,
+  itemWords,
+  ITEM_ATTR,
   mediaDisplayName,
   messageFromError,
   planItemDeleteConfirm,
   planItemVerbs,
+  SYSTEM_FIELD_DEFS,
   TRIP_PLAN_PAGE,
+  validatePlacePayload,
+  type ItemWords,
   type PlanItemVerbId,
   type TripPlanItem,
   type TripPlanRole,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
+import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
+import { coerceCustomFields } from "../customFields/fieldValueCoercion";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
@@ -26,9 +35,9 @@ import {
   ErrorBanner,
   FormStack,
   Row,
+  SectionHeader,
   TextField,
 } from "../ui";
-import { itemPatch, itemWords, type ItemWords } from "./planItemEdit";
 import { deletePlanItem, patchPlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
 
@@ -122,6 +131,31 @@ export function PlanItemSheet({
   };
 
   async function submit(target: TripPlanItem) {
+    if (target.kind === "place") {
+      const defs = itemFieldDefs(target);
+      const attrs = Object.fromEntries(
+        defs.map((def) => [def.key, values[ITEM_ATTR + def.key] ?? ""]),
+      );
+      const blank = (text: string) => text.trim() === "";
+      const problem = validatePlacePayload(
+        {
+          latitude: blank(values.latitude)
+            ? undefined
+            : Number(values.latitude),
+          longitude: blank(values.longitude)
+            ? undefined
+            : Number(values.longitude),
+          elevation: blank(values.elevation) ? null : Number(values.elevation),
+          fieldValues: Object.fromEntries(
+            Object.entries(coerceCustomFields(attrs, defs)).filter(
+              ([, value]) => value != null,
+            ),
+          ),
+        },
+        { requireCoords: true, defs: [...SYSTEM_FIELD_DEFS, ...defs] },
+      );
+      if (problem) return setError(problem);
+    }
     const patch = itemPatch(target, values);
     if (!patch) return onClose();
     setBusy(true);
@@ -141,6 +175,11 @@ export function PlanItemSheet({
     }
   }
 
+  const attrDefs = item?.kind === "place" ? itemFieldDefs(item) : [];
+  const set = (next: Record<string, string>) => {
+    setValues((was) => ({ ...was, ...next }));
+    setError(null);
+  };
   // Inside Edit, every way out is back to the ⋯, not away with what was typed.
   const back = editing ? () => setEditing(false) : undefined;
   return (
@@ -198,22 +237,67 @@ export function PlanItemSheet({
             label={copy.itemName}
             value={values.name}
             autoCapitalize="sentences"
-            onChangeText={(name) => {
-              setValues((was) => ({ ...was, name }));
-              setError(null);
-            }}
+            onChangeText={(name) => set({ name })}
           />
           {item.kind === "place" ? (
-            <TextField
-              label={copy.itemNotes}
-              value={values.notes}
-              multiline
-              autoCapitalize="sentences"
-              onChangeText={(notes) => {
-                setValues((was) => ({ ...was, notes }));
-                setError(null);
-              }}
-            />
+            <>
+              <TextField
+                label={copy.itemOtherNames}
+                value={values.altNames}
+                hint={copy.itemOtherNamesHint}
+                autoCapitalize="words"
+                onChangeText={(altNames) => set({ altNames })}
+              />
+              <View style={styles.coordRow}>
+                <View style={styles.coordField}>
+                  <TextField
+                    label={copy.itemLatitude}
+                    value={values.latitude}
+                    keyboardType="numbers-and-punctuation"
+                    onChangeText={(latitude) => set({ latitude })}
+                  />
+                </View>
+                <View style={styles.coordField}>
+                  <TextField
+                    label={copy.itemLongitude}
+                    value={values.longitude}
+                    keyboardType="numbers-and-punctuation"
+                    onChangeText={(longitude) => set({ longitude })}
+                  />
+                </View>
+              </View>
+              <TextField
+                label={copy.itemElevation}
+                value={values.elevation}
+                keyboardType="numbers-and-punctuation"
+                onChangeText={(elevation) => set({ elevation })}
+              />
+              <TextField
+                label={copy.itemNotes}
+                value={values.notes}
+                multiline
+                autoCapitalize="sentences"
+                onChangeText={(notes) => set({ notes })}
+              />
+              {attrDefs.length > 0 ? (
+                <>
+                  <SectionHeader title={copy.itemAttributes} />
+                  <CustomFieldValueInputs
+                    defs={attrDefs}
+                    values={Object.fromEntries(
+                      attrDefs.map((def) => [
+                        def.key,
+                        values[ITEM_ATTR + def.key] ?? "",
+                      ]),
+                    )}
+                    onChange={(key, next) => set({ [ITEM_ATTR + key]: next })}
+                    // The system attributes of a plan place are numbers and
+                    // yes/no: none is a date.
+                    onPickDate={() => {}}
+                  />
+                </>
+              ) : null}
+            </>
           ) : null}
         </FormStack>
       ) : null}
@@ -223,6 +307,8 @@ export function PlanItemSheet({
 
 const useStyles = makeStyles((theme, textRole) => ({
   verbs: { gap: spacing(1) },
+  coordRow: { flexDirection: "row", gap: spacing(1) },
+  coordField: { flex: 1 },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
   note: { ...muted(theme, textRole.detail) },
 }));
