@@ -9,7 +9,7 @@
 - **Every route but `/health`, `/ready`, `/meta`, `/places/search` and
   `/users/username-available`** runs
   `requireAuth`, then `resolveUser(req.user!.sub)` (`lib/resolveUser.ts`) for
-  the internal user; never look a user up by `cognitoId` inline. `/ready`, like
+  the internal user; never look a user up by `subject` inline. `/ready`, like
   `/health`, is the platform's own probe: no user data, no auth. `/meta` is
   unauthenticated on purpose — a build too old to authenticate must still be
   told it is stale, and the body carries server constants only (`meta.ts`);

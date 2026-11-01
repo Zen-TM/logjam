@@ -168,7 +168,7 @@ Used with the snapshot workflow. `make dev-snapshot` loads the sanitized snapsho
 
 The `make dev` seed creates three users with deterministic IDs:
 
-| User | cognitoId | Email |
+| User | subject | Email |
 |---|---|---|
 | alice | `fake-alice-sub` | alice@local |
 | bob | `fake-bob-sub` | bob@local |

@@ -50,7 +50,7 @@ function shortHash(value: string): string {
 //   - username already taken by a DIFFERENT user → retry with progressively
 //     more-unique suffixes derived from the sub;
 //   - a concurrent first-login request for THIS same sub winning the race →
-//     recover the row it created (matched on cognitoId).
+//     recover the row it created (matched on subject).
 // An email that becomes owned between the caller's pre-check and the insert is a
 // genuine concurrent conflict → AppError(409). Persistent collisions propagate
 // rather than looping.
@@ -83,7 +83,7 @@ export async function createUserForSignup(params: {
     );
   };
   const recoverRacingRow = async (): Promise<User | null> =>
-    prisma.user.findUnique({ where: { cognitoId: sub } });
+    prisma.user.findUnique({ where: { subject: sub } });
 
   const candidateUsernames = [
     initialUsername,
@@ -95,7 +95,6 @@ export async function createUserForSignup(params: {
     try {
       return await prisma.user.create({
         data: {
-          cognitoId: sub,
           subject: sub,
           email,
           username: candidateUsernames[attempt],
@@ -131,7 +130,7 @@ export async function createUserForSignup(params: {
         throw e;
       }
 
-      // Otherwise the cognitoId unique tripped: a concurrent first-login for
+      // Otherwise the subject unique tripped: a concurrent first-login for
       // this sub won the race. Use its row.
       const racing = await recoverRacingRow();
       if (racing) return racing;
@@ -259,7 +258,7 @@ router.get(
     const { sub, email, username } = req.user!;
 
     let user = await prisma.user.findUnique({
-      where: { cognitoId: sub },
+      where: { subject: sub },
     });
 
     // First time this user has hit the API — create their DB record.
@@ -275,15 +274,15 @@ router.get(
       // case exists for.
       const emailOwner = await prisma.user.findUnique({
         where: { email },
-        select: { id: true, cognitoId: true },
+        select: { id: true, subject: true },
       });
 
-      if (emailOwner && emailOwner.cognitoId !== sub) {
+      if (emailOwner && emailOwner.subject !== sub) {
         // A row exists for this email under a different sub. Rebind it
         // to the new sub only when the inbound JWT is email-verified AND the
         // previous identity no longer exists at the provider (account deleted + recreated).
         // Any other case returns 409 to prevent account takeover.
-        const oldSub = emailOwner.cognitoId;
+        const oldSub = emailOwner.subject;
         const canRebind =
           req.user!.emailVerified &&
           !(await identityProvider().userExists(oldSub));
@@ -301,7 +300,7 @@ router.get(
         );
         user = await prisma.user.update({
           where: { id: emailOwner.id },
-          data: { cognitoId: sub, subject: sub },
+          data: { subject: sub },
         });
       } else {
         // No row owns this email (or a concurrent request for this same sub is
@@ -488,7 +487,7 @@ router.patch(
     let updated;
     try {
       updated = await prisma.user.update({
-        where: { cognitoId: sub },
+        where: { subject: sub },
         data: updates,
       });
     } catch (e) {

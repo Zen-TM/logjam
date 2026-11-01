@@ -32,7 +32,7 @@ function p2002(index: string): Prisma.PrismaClientKnownRequestError {
 const SUB = "abcdef0123456789-new";
 const EMAIL = "new@example.com";
 const INITIAL = "newuser";
-const ROW = { id: "u1", cognitoId: SUB, email: EMAIL, username: INITIAL };
+const ROW = { id: "u1", subject: SUB, email: EMAIL, username: INITIAL };
 
 beforeEach(() => {
   create.mockReset();
@@ -49,26 +49,15 @@ describe("createUserForSignup", () => {
     expect(create.mock.calls[0][0].data.username).toBe(INITIAL);
   });
 
-  // Mutation: write only cognitoId (or only subject) in createUserForSignup.
-  it("writes the sub to both identity columns", async () => {
+  // Mutation: write nothing (or the email) to subject in createUserForSignup.
+  it("writes the sub to subject", async () => {
     create.mockResolvedValueOnce(ROW);
     await createUserForSignup({
       sub: SUB,
       email: EMAIL,
       initialUsername: INITIAL,
     });
-    expect(create.mock.calls[0][0].data).toMatchObject({
-      cognitoId: SUB,
-      subject: SUB,
-    });
-  });
-
-  it("recovers the racing row on a subject collision", async () => {
-    create.mockRejectedValueOnce(p2002("users_subject_key"));
-    findUnique.mockResolvedValueOnce(ROW);
-    await expect(
-      createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),
-    ).resolves.toBe(ROW);
+    expect(create.mock.calls[0][0].data).toMatchObject({ subject: SUB });
   });
 
   it("retries with a sub-suffixed username when the username is taken", async () => {
@@ -115,9 +104,9 @@ describe("createUserForSignup", () => {
     ).resolves.toBe(ROW);
   });
 
-  it("recovers the racing row on a cognitoId collision (concurrent first-login)", async () => {
-    // Postgres reports the cognito_id constraint (not email/username).
-    create.mockRejectedValueOnce(p2002("users_cognito_id_key"));
+  it("recovers the racing row on a subject collision (concurrent first-login)", async () => {
+    // Postgres reports the subject constraint (not email/username).
+    create.mockRejectedValueOnce(p2002("users_subject_key"));
     findUnique.mockResolvedValueOnce(ROW);
     await expect(
       createUserForSignup({ sub: SUB, email: EMAIL, initialUsername: INITIAL }),

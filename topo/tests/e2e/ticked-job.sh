@@ -21,6 +21,6 @@ INSERT INTO topo_jobs (id, user_id, status, name, s3_input_key, layer_options,
                        sharpen, tile_count, updated_at)
 SELECT :'id', id, 'pending', :'name', :'key', :'settings'::jsonb,
        '{"v": 1, "vegetation": true}'::jsonb, 1, now()
-FROM users WHERE cognito_id = 'fake-alice-sub';
+FROM users WHERE subject = 'fake-alice-sub';
 SQL
 echo "$id"
