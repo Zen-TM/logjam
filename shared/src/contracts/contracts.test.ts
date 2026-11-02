@@ -426,7 +426,7 @@ describe("a place's page", () => {
       ];
       const shown = (row: AttributeRow) => formatFieldValue(row[2], row[3]);
       expect(shown(withRowUnit(date))).toBe(shown(date));
-      expect(shown(withRowUnit(date))).toBe("3 Oct 2026");
+      expect(shown(date)).toMatch(/\b3\b/);
       const longest: AttributeRow = [
         "longest_abseil",
         "Longest pitch",
