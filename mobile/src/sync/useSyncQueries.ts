@@ -26,7 +26,7 @@ import {
   type MirrorRoute,
 } from "./mirrorStore";
 import { mirrorQueryError } from "./mirrorQueryError";
-import { onMirrorChanged } from "./syncDb";
+import { getSyncStateValue, onMirrorChanged } from "./syncDb";
 import { countPendingOps, pendingCreateIds } from "./outbox";
 import { countSyncIssues } from "./syncIssues";
 import {
@@ -40,6 +40,17 @@ export function useSyncStatus(): SyncStatus {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
   useEffect(() => onSyncStatusChanged(setSyncStatus), []);
   return syncStatus;
+}
+
+/** When the last sync finished. The engine's own stamp is empty until the first
+ *  sync of a session, so a cold start with no signal reads the stored one. */
+export function useLastSyncAt(): string | null {
+  const live = useSyncStatus().lastSyncAt;
+  const [stored, setStored] = useState<string | null>(null);
+  useEffect(() => {
+    void getSyncStateValue("lastSyncAt").then(setStored).catch(console.error);
+  }, []);
+  return live ?? stored;
 }
 
 export type MirrorQueryState<T> = {
