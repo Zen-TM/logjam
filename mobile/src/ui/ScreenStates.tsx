@@ -60,6 +60,7 @@ export function EmptyState({
           {...action}
           disabled={action.disabledReason != null}
           disabledReason={action.disabledReason ?? ""}
+          reasonShown
         />
       ) : null}
       {action?.disabledReason ? (

@@ -1349,6 +1349,7 @@ const NotificationRow = memo(function NotificationRow({
                   }
                   disabled={actionsDisabled}
                   disabledReason={actionsDisabledReason(online, selecting)}
+                  reasonShown={!online}
                   loading={busyKind === action.kind}
                   onPress={() => onAction(item, target, action)}
                 />
@@ -1491,6 +1492,7 @@ const BatchRow = memo(function BatchRow({
                 }
                 disabled={actionsDisabled}
                 disabledReason={actionsDisabledReason(online, selecting)}
+                reasonShown={!online}
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
@@ -1502,6 +1504,7 @@ const BatchRow = memo(function BatchRow({
                 variant="outlineAccent"
                 disabled={actionsDisabled}
                 disabledReason={actionsDisabledReason(online, selecting)}
+                reasonShown={!online}
                 onPress={() => onBatchAction(batch, "decline")}
               />
             </CardActions>

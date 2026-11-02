@@ -24,8 +24,10 @@ export function showDisabledReason(reason: string): void {
 /**
  * `disabled` and `disabledReason` come as a pair, so the compiler refuses a bare
  * `disabled={…}`; the same union as Logjam Web's `Disablable`. A reason with
- * nothing to disable would say nothing, and is refused too.
+ * nothing to disable would say nothing, and is refused too. `reasonShown` says
+ * the reason is already on screen (under the control, or as its row's
+ * subtitle), so a press does not toast it a second time.
  */
 export type Disablable =
-  | { disabled?: false; disabledReason?: undefined }
-  | { disabled: boolean; disabledReason: string };
+  | { disabled?: false; disabledReason?: undefined; reasonShown?: undefined }
+  | { disabled: boolean; disabledReason: string; reasonShown?: boolean };

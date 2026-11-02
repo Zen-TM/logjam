@@ -271,6 +271,7 @@ export function AddCopySheet({
             loading={busy}
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => void add()}
           />
           {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}

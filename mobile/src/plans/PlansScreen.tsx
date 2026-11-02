@@ -537,6 +537,7 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() => join(item)}
                   />
                   <Button
@@ -545,6 +546,7 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() =>
                       Alert.alert(
                         TRIP_PLAN_JOIN.copy.declineTitle,

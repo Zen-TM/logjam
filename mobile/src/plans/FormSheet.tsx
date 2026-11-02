@@ -286,6 +286,7 @@ export function FormSheet({
                     label={form.myAnswer ? copy.change : copy.answer}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() => onState({ formId: form.id, mode: "answer" })}
                   />
                   {online ? null : (
@@ -349,6 +350,7 @@ export function FormSheet({
               loading={busy}
               disabled={!online}
               disabledReason={OFFLINE}
+              reasonShown
               onPress={() => void send(form)}
             />
             {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}

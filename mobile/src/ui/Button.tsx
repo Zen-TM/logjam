@@ -46,6 +46,7 @@ export function Button({
   variant = "filledAccent",
   disabled = false,
   disabledReason,
+  reasonShown,
   loading = false,
   icon,
   compact = false,
@@ -73,7 +74,10 @@ export function Button({
       accessibilityState={{ disabled: loading, busy: loading }}
       onPress={
         disabled
-          ? () => disabledReason && showDisabledReason(disabledReason)
+          ? () =>
+              disabledReason &&
+              !reasonShown &&
+              showDisabledReason(disabledReason)
           : onPress
       }
       disabled={inactive}

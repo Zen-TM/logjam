@@ -186,6 +186,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
                 loading={busyId === user.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => invite(user.id, user.username)}
               />
             );
@@ -203,6 +204,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           loading={making === "copy"}
           disabled={!online}
           disabledReason={OFFLINE}
+          reasonShown
           onPress={() => void makeLink("copy")}
         />
         <Button
@@ -212,6 +214,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           loading={making === "share"}
           disabled={!online}
           disabledReason={OFFLINE}
+          reasonShown
           onPress={() => void makeLink("share")}
         />
         {/* The buttons only dim: the words go under them (ui/Button.tsx). */}
@@ -234,6 +237,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
                 loading={busyId === link.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => revoke(link)}
               />
             }
