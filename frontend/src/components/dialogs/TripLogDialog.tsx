@@ -20,6 +20,7 @@ import {
   gpxEnds,
   tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
+  TRIPS_TO_LOG,
   type tripPlanTripLogPrefill,
   tripFieldDefs,
   type MediaItem,
@@ -1308,7 +1309,7 @@ function TripLogDialog({
             />
             {nearPlaceIds.length > 0 && (
               <ChipPicker
-                label="Near this track"
+                label={TRIPS_TO_LOG.copy.nearTrack}
                 options={nearPlaceIds.flatMap((id) => {
                   const place = places.find((p) => p.id === id);
                   return place ? [{ value: id, label: place.name }] : [];

@@ -89,16 +89,23 @@ export function recordingsToLog<T extends { startedAt: string | null }>(
   timeZone?: string,
 ): T[] {
   const loggedDays = new Set(trips.map((trip) => trip.date.slice(0, 10)));
-  const cutoff = new Date(today);
-  cutoff.setDate(cutoff.getDate() - RECORDINGS_TO_LOG_DAYS);
-  const oldest = todayDateKey(cutoff);
-  const newest = todayDateKey(today);
+  const dayOf = (instant: Date) =>
+    tripPrefillFromTrack({ startedAt: instant.toISOString() }, timeZone).date;
+  const newest = dayOf(today);
+  // 30 calendar days back from today's date, not 30 x 24 h, so a daylight
+  // saving change does not move the edge.
+  const [year, month, day] = newest.split("-").map(Number);
+  const oldest = todayDateKey(
+    new Date(year, month - 1, day - RECORDINGS_TO_LOG_DAYS),
+  );
   return tracks
     .filter((track) => {
       if (!track.startedAt || Number.isNaN(Date.parse(track.startedAt)))
         return false;
-      const day = tripPrefillFromTrack(track, timeZone).date;
-      return day >= oldest && day <= newest && !loggedDays.has(day);
+      const trackDay = tripPrefillFromTrack(track, timeZone).date;
+      return (
+        trackDay >= oldest && trackDay <= newest && !loggedDays.has(trackDay)
+      );
     })
     .sort(
       (a, b) => Date.parse(b.startedAt ?? "") - Date.parse(a.startedAt ?? ""),

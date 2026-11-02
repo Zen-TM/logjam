@@ -58,14 +58,18 @@ export function BackgroundToast() {
   return (
     <View style={styles.dock} pointerEvents="box-none">
       <Toast message={message} onDismissed={() => setMessage(null)} />
-      <LogTripFromTrackSheet
-        track={logging}
-        onClose={() => setLogging(null)}
-        onSaved={(text) => {
-          setLogging(null);
-          setMessage({ text, tone: "info", nonce: Date.now() });
-        }}
-      />
+      {/* Mounted only while open: it carries the whole trip form and its
+          mirror queries, which nothing else at the root needs. */}
+      {logging ? (
+        <LogTripFromTrackSheet
+          track={logging}
+          onClose={() => setLogging(null)}
+          onSaved={(text) => {
+            setLogging(null);
+            setMessage({ text, tone: "info", nonce: Date.now() });
+          }}
+        />
+      ) : null}
     </View>
   );
 }

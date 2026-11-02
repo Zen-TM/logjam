@@ -41,7 +41,6 @@ import {
   hasActiveTripFilter,
   listSelectionLabel,
   monthlyTripCounts,
-  RECORDINGS_TO_LOG,
   recordingsToLogLabel,
   NO_TYPE_FILTER_VALUE,
   reconcileCustomFieldFilters,
@@ -56,6 +55,7 @@ import {
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
   TRIPS_LIST,
+  TRIPS_TO_LOG,
   tripFilterFieldDefs,
   type CustomFieldFilter,
   type SectionKeysOn,
@@ -405,6 +405,30 @@ export function LogsScreen({
     guest,
   });
 
+  const toLogSections: Record<
+    SectionKeysOn<typeof TRIPS_TO_LOG, "gps">,
+    ReactNode
+  > = {
+    note: (
+      <Text style={styles.toLogHint}>
+        {toLog.length === 0 ? TRIPS_TO_LOG.copy.empty : TRIPS_TO_LOG.copy.note}
+      </Text>
+    ),
+    list: toLog.map((source) => (
+      <Row
+        key={source.key}
+        icon={TRIPS_ADD_ICON.add}
+        title={source.name}
+        subtitle={`${trackDayLabel(source.startedAt)} · ${TRIPS_TO_LOG.copy.verb}`}
+        accessibilityLabel={`${TRIPS_TO_LOG.copy.verb} from ${source.name}`}
+        onPress={() => {
+          setToLogOpen(false);
+          setEditing({ trip: null, fromTrack: source });
+        }}
+      />
+    )),
+  };
+
   // The page, section by section, in the order its contract gives. Exhaustive
   // by type: a section the contract names cannot be left out, and one it does
   // not name cannot be drawn.
@@ -647,29 +671,12 @@ export function LogsScreen({
       <BottomSheet
         visible={toLogOpen}
         onClose={() => setToLogOpen(false)}
-        title={RECORDINGS_TO_LOG.title}
+        title={TRIPS_TO_LOG.title}
       >
         <View style={styles.toLogBody}>
-          {toLog.length === 0 ? (
-            <Text style={styles.toLogHint}>{RECORDINGS_TO_LOG.empty}</Text>
-          ) : (
-            <>
-              <Text style={styles.toLogHint}>{RECORDINGS_TO_LOG.hint}</Text>
-              {toLog.map((source) => (
-                <Row
-                  key={source.key}
-                  icon={TRIPS_ADD_ICON.add}
-                  title={source.name}
-                  subtitle={`${trackDayLabel(source.startedAt)} · ${RECORDINGS_TO_LOG.verb}`}
-                  accessibilityLabel={`${RECORDINGS_TO_LOG.verb} from ${source.name}`}
-                  onPress={() => {
-                    setToLogOpen(false);
-                    setEditing({ trip: null, fromTrack: source });
-                  }}
-                />
-              ))}
-            </>
-          )}
+          {contractSectionKeys(TRIPS_TO_LOG, "gps").map((key) => (
+            <Fragment key={key}>{toLogSections[key]}</Fragment>
+          ))}
         </View>
       </BottomSheet>
 

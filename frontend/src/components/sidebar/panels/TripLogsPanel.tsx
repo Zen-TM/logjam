@@ -20,7 +20,6 @@ import {
   NO_TYPE_FILTER_VALUE,
   mediaDisplayName,
   primaryTripType,
-  RECORDINGS_TO_LOG,
   recordingsToLog,
   recordingsToLogLabel,
   reconcileCustomFieldFilters,
@@ -35,6 +34,7 @@ import {
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
   TRIPS_LIST,
+  TRIPS_TO_LOG,
   trackDayLabel,
   tripTypeLabel,
   tripVerbs,
@@ -785,42 +785,50 @@ function TripLogsPanel({
 
   // The recordings with no trip on their day: one step inside the page, with
   // the way back out, each row opening the trip form on the recording.
+  const toLogSections: Record<
+    SectionKeysOn<typeof TRIPS_TO_LOG, "web">,
+    ReactNode
+  > = {
+    note: (
+      <p className={classes.note}>
+        {toLog.length === 0 ? TRIPS_TO_LOG.copy.empty : TRIPS_TO_LOG.copy.note}
+      </p>
+    ),
+    list: toLog.map(({ file }) => (
+      <Row
+        key={file.id}
+        title={mediaDisplayName(file)}
+        subtitle={trackDayLabel(file.metadata.startedAt ?? null)}
+        leading={<IconTile icon="track" hue="var(--color-accent)" />}
+        trailing={
+          <Button
+            compact
+            variant="outline"
+            onClick={() =>
+              setLoggingTrack({
+                mediaId: file.id,
+                filename: file.filename,
+                startedAt: file.metadata.startedAt ?? null,
+                placeId: file.linkedPlaceId,
+              })
+            }
+          >
+            {TRIPS_TO_LOG.copy.verb}
+          </Button>
+        }
+      />
+    )),
+  };
   const toLogView = (
     <>
       <Hero
-        title={RECORDINGS_TO_LOG.title}
+        title={TRIPS_TO_LOG.title}
         onBack={() => setShowingToLog(false)}
         backLabel={`Back to ${TRIPS_LIST.title}`}
       />
       <div className={classes.list}>
-        <p className={classes.note}>
-          {toLog.length === 0
-            ? RECORDINGS_TO_LOG.empty
-            : RECORDINGS_TO_LOG.hint}
-        </p>
-        {toLog.map(({ file }) => (
-          <Row
-            key={file.id}
-            title={mediaDisplayName(file)}
-            subtitle={trackDayLabel(file.metadata.startedAt ?? null)}
-            leading={<IconTile icon="track" hue="var(--color-accent)" />}
-            trailing={
-              <Button
-                compact
-                variant="outline"
-                onClick={() =>
-                  setLoggingTrack({
-                    mediaId: file.id,
-                    filename: file.filename,
-                    startedAt: file.metadata.startedAt ?? null,
-                    placeId: file.linkedPlaceId,
-                  })
-                }
-              >
-                {RECORDINGS_TO_LOG.verb}
-              </Button>
-            }
-          />
+        {contractSectionKeys(TRIPS_TO_LOG, "web").map((key) => (
+          <Fragment key={key}>{toLogSections[key]}</Fragment>
         ))}
       </div>
     </>
