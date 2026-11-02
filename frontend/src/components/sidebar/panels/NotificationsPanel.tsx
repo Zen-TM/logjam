@@ -91,6 +91,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   people: "friends",
   topo: "lidar",
   export: "export",
+  plan: "plan",
   message: "info",
   problem: "warning",
 };
@@ -104,6 +105,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
+  plan: "var(--hue-plan)",
   message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };

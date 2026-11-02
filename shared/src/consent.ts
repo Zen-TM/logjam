@@ -12,7 +12,7 @@
  * refuses it. Hold a bump until those builds are outside the ADR 0022 support
  * window.
  */
-export const CURRENT_CONSENT_VERSION = "2026-09-28";
+export const CURRENT_CONSENT_VERSION = "2026-10-19";
 
 type ConsentUser = {
   consentVersion: string | null;

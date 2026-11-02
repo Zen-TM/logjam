@@ -14,6 +14,12 @@ import bulkShareRouter from "./bulkShare";
 import fileSendsRouter from "./fileSends";
 import friendsRouter from "./friends";
 import friendInvitesRouter from "./friendInvites";
+import plansRouter from "./plans";
+import planItemsRouter from "./planItems";
+import planSectionsRouter from "./planSections";
+import planFormsRouter from "./planForms";
+import planMembersRouter from "./planMembers";
+import planInvitesRouter, { planInviteLinksRouter } from "./planInvites";
 import notificationsRouter from "./notifications";
 import ropewikiRouter from "./ropewiki";
 import topoJobsRouter from "./topoJobs";
@@ -57,6 +63,13 @@ export const ROUTER_MOUNTS: [string, Router][] = [
   ["/file-sends", fileSendsRouter],
   // Before /friends: its DELETE /:id would otherwise take DELETE /friends/invites.
   ["/friends/invites", friendInvitesRouter],
+  ["/plans/:planId/sections", planSectionsRouter],
+  ["/plans/:planId/forms", planFormsRouter],
+  ["/plans/:planId/invites", planInviteLinksRouter],
+  ["/plans/:planId/items", planItemsRouter],
+  ["/plans/:planId", planMembersRouter],
+  ["/plan-invites", planInvitesRouter],
+  ["/plans", plansRouter],
   ["/friends", friendsRouter],
   ["/notifications", notificationsRouter],
   ["/devices", devicesRouter],
