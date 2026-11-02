@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { globalSignOut } from "@logjam/shared";
+import { failureStaysOnForm, globalSignOut } from "@logjam/shared";
 import { CURRENT_CONSENT_VERSION } from "./consent";
 import {
   apiFetch,
@@ -27,18 +27,6 @@ async function ensureUserExists() {
 }
 
 export type AuthState = "loading" | "signIn" | "authenticated";
-
-// Cognito's answers about this person or this attempt, which the form shows.
-// Anything else means the form cannot finish here (a flow the app client no
-// longer allows, a forced password reset, a blocked request), so the provider's
-// own page takes over.
-const FORM_ANSWERS = new Set([
-  "NotAuthorizedException",
-  "UserNotConfirmedException",
-  "UserNotFoundException",
-  "LimitExceededException",
-  "TooManyRequestsException",
-]);
 
 // Sign-out needs no hook state, so the account page and the consent gate call
 // these directly instead of mounting a second useAuth (and its session check).
@@ -217,8 +205,7 @@ export function useAuth() {
       try {
         signedIn = await signInWithPassword(email, password);
       } catch (err) {
-        const answered = err instanceof Error && FORM_ANSWERS.has(err.name);
-        if (answered || !navigator.onLine) throw err;
+        if (failureStaysOnForm(err, navigator.onLine)) throw err;
         console.error(err);
       }
       if (!signedIn) {

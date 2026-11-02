@@ -62,6 +62,20 @@ Logjam GPS has no public release, so no old build needs the Amplify flow.
   either way. Guard: `api/src/lib/identityProvider.unit.test.ts`.
 - **Prod's Managed Login uses the prefix domain `logjamnsw`, with Logjam's
   branding** (`infra/terraform/envs/prod/cognito.tf`).
+- **Update 2026-11-02: under a Cognito issuer, Logjam GPS draws the same forms
+  on its landing screen** (`mobile/src/screens/AccountForms.tsx`), over the same
+  `shared/src/cognitoAccount.ts` calls and the sign-up and fallback rules in
+  `shared/src/signInForm.ts`, so a Logjam GPS user never sees a Cognito address
+  and a new account answers one form, not two. Under any other issuer, and under
+  fake auth, its landing screen stays one button to the provider's page. A
+  password sign-in is stored as the same `Stored` record the browser flow writes
+  (`signInWithPassword` in `mobile/src/auth/oidcSession.ts`, its endpoints from
+  discovery) and finished through `finishSignIn`, so refresh, sign-out, the
+  different-user wipe and guest linking are unchanged; every Cognito call
+  settles within `SESSION_TIMEOUT_MS`. A password stays in component state and
+  is never stored or logged. Guards: `mobile/src/auth/passwordFlow.test.ts`,
+  `mobile/src/auth/oidcSession.test.ts`, `mobile/src/auth/passwordPrivacy.test.ts`.
+  Everything else above stands.
 
 ## Consequences
 
@@ -78,9 +92,13 @@ Logjam GPS has no public release, so no old build needs the Amplify flow.
     one provider.
   - A list of names can be tested without an account, at 30 a minute per
     address.
-  - Logjam GPS and any other issuer still get the provider's page, whose copy
-    is the provider's, and a new account answers a second form afterwards. They
-    depend on that page being up.
+  - Any other issuer still gets the provider's page, whose copy is the
+    provider's, and a new account answers a second form afterwards. It depends
+    on that page being up. (Updated 2026-11-02: Logjam GPS draws its own forms
+    under Cognito.)
+  - Logjam GPS's code sees the password under Cognito too, so a compromised
+    dependency in the bundle could read one, and about 400 more lines of forms
+    exist for one provider.
   - Every Logjam Web session signed in with Amplify signs in once more.
   - Under an issuer with no adapter, the identity outlives a deleted account
     until its operator removes it. Such an issuer also needs its origin added
@@ -98,6 +116,10 @@ Logjam GPS has no public release, so no old build needs the Amplify flow.
   sees a password, and built first. Tried on a throwaway pool, it made the
   landing page a pointless extra click, stopped saved passwords autofilling and
   read as a regression.
+- **The provider's page for Logjam GPS** (the Chrome sheet, built first in
+  #727 and removed for the forms). No Logjam GPS code sees a password, but it
+  leaves Logjam for a Cognito address, and a new account answers a second form
+  afterwards. It remains the fallback and the only way in under another issuer.
 - **Embed Managed Login in the landing page.** Cognito refuses it, with
   `X-Frame-Options: DENY` and `frame-ancestors 'none'`.
 - **Sign in on the page, and send sign-up and reset to the provider.** Less
