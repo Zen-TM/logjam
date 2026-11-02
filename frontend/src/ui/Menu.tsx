@@ -73,6 +73,15 @@ export function useOutsidePress(
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (refs.some((ref) => ref.current?.contains(target))) return;
+      // A modal dialog opened from inside (a help button's Dialog) portals
+      // out of the floating element; pressing it is not pressing outside.
+      // One the floating element itself sits in is a different matter.
+      const modal = (target as Element).closest?.("dialog[open]");
+      if (
+        modal &&
+        !refs.some((ref) => ref.current && modal.contains(ref.current))
+      )
+        return;
       handleOutside();
     };
     document.addEventListener("pointerdown", onPointerDown, true);

@@ -281,7 +281,7 @@ export const SHARED_PLACE_COLOR = "#B79EC0";
  * green because every palette colour is a pastel: on satellite imagery the
  * ring has to out-shout the ground, not match it. A visited place is never a
  * shared one (`placeStatus`), so a pin wears at most one of the two rings.
- * Guard: `placeTypes.test.ts`.
+ * Guards: `placeTypes.test.ts` (reserved), `placeStatus.test.ts` (never both).
  */
 export const VISITED_PLACE_COLOR = "#2F9E6B";
 

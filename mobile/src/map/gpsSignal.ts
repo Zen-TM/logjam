@@ -101,14 +101,15 @@ export function deliveredFix(
 }
 
 /**
- * Fold a newly arrived fix into the last one. An older fix never replaces a
- * newer one: the cached fix re-read each time the watcher restarts (resume
- * from background, tab change) is older than the live fix it would overwrite,
- * and would grey the arrow until the next delivery.
+ * Fold an arriving fix into the last one. A live delivery always wins; the OS's
+ * cached fix only fills an empty slot. No timestamps are compared: the cached
+ * fix keeps the platform's clock (often GNSS time) and live ones use ours, so
+ * comparing them would let a skewed device clock reject real fixes.
  */
-export function newerFix(
+export function nextFix(
   previous: FixLiveness | null,
-  next: FixLiveness,
+  incoming: FixLiveness,
+  cached: boolean,
 ): FixLiveness {
-  return previous != null && previous.atMs > next.atMs ? previous : next;
+  return cached && previous != null ? previous : incoming;
 }

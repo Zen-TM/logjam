@@ -185,7 +185,8 @@ renumber.
   mark with a ring.
 - **A visited place wears the same ring in `VISITED_PLACE_COLOR`**, also
   reserved. A place is never both visited and shared (`placeStatus`), so a pin
-  has at most one ring. Guard: `placeTypes.test.ts`.
+  has at most one ring. Guards: `placeTypes.test.ts` (the colour is reserved),
+  `placeStatus.test.ts` (never both).
 - **Controls over a photo are black and white on a scrim**, not theme
   colours: words and glyphs on a `SCRIM` are `ON_SCRIM`.
 

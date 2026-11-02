@@ -24,12 +24,18 @@ import {
 import {
   SHARED_PLACE_COLOR,
   VISITED_PLACE_COLOR,
-  SYSTEM_PLACE_TYPES,
   MAP_INK,
   MAP_LABEL_MIN_ZOOM,
 } from "@logjam/shared";
 
 import { PIN_LABEL_TEXT } from "./mapLabelText";
+import type { PlaceFeatureCollection } from "./placeFeatures";
+
+export {
+  OWNED_PLACE_COLOR,
+  toPlaceFeatureCollection,
+  type PlaceFeatureCollection,
+} from "./placeFeatures";
 
 /**
  * The ink, exported because rows and chips elsewhere match the map.
@@ -46,7 +52,6 @@ import { PIN_LABEL_TEXT } from "./mapLabelText";
  * ring of the same hue. It is re-exported here because every map file already
  * imports its ink from this module.
  */
-export const OWNED_PLACE_COLOR = SYSTEM_PLACE_TYPES[0].color;
 export { SHARED_PLACE_COLOR };
 
 const MAX_LABEL_CHARS = 40;
@@ -78,21 +83,6 @@ const LABEL_STYLE = {
   textHaloWidth: 1,
   textAnchor: "top" as const,
   textOffset: [0, 0.8],
-};
-
-export type PlaceFeatureCollection = {
-  type: "FeatureCollection";
-  features: {
-    type: "Feature";
-    id: string;
-    geometry: { type: "Point"; coordinates: [number, number] };
-    properties: {
-      id: string;
-      name: string;
-      color: string;
-      visited?: boolean;
-    };
-  }[];
 };
 
 export const PlacePinsLayer = memo(function PlacePinsLayer({
@@ -236,44 +226,3 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
     </>
   );
 });
-
-/**
- * The shape both maps hand this component.
- *
- * `typeColors` maps a place type id to its colour. A place whose type is not
- * in it — one created on another device and not pulled yet — draws in the
- * fallback rather than vanishing or drawing transparent: an unknown type is a
- * gap in the vocabulary, not a reason to hide a place from someone standing
- * next to it.
- */
-export function toPlaceFeatureCollection(
-  places: {
-    id: string;
-    name: string;
-    latitude: number;
-    longitude: number;
-    placeTypeId?: string;
-  }[],
-  typeColors: Record<string, string> = {},
-  visitedIds?: ReadonlySet<string>,
-): PlaceFeatureCollection {
-  return {
-    type: "FeatureCollection",
-    features: places.map((place) => ({
-      type: "Feature" as const,
-      id: place.id,
-      geometry: {
-        type: "Point" as const,
-        coordinates: [place.longitude, place.latitude] as [number, number],
-      },
-      properties: {
-        id: place.id,
-        name: place.name,
-        visited: visitedIds?.has(place.id) ?? false,
-        color:
-          (place.placeTypeId ? typeColors[place.placeTypeId] : undefined) ??
-          OWNED_PLACE_COLOR,
-      },
-    })),
-  };
-}

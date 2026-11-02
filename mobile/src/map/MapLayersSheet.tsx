@@ -279,7 +279,11 @@ function BasemapTab({
   const styles = useStyles();
   // The map draws the fallback while the pick's server is down (MapScreen);
   // the pick itself stays, so it comes back with the server.
-  const shown = basemapToShow(basemapId, down, basemapFallbackFor(basemapId));
+  const shown = basemapToShow(
+    basemapId,
+    down,
+    basemapFallbackFor(basemapId, down),
+  );
   const name = (id: string) =>
     BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
   const notice =

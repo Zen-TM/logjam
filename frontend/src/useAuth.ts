@@ -99,6 +99,7 @@ export function useAuth() {
   const enterSession = useCallback(async () => {
     // Whoever signs in starts with an empty tile cache, even after a
     // failed session check that left the last user's in place.
+    clearRecentSearches();
     await clearTileCache();
     sessionCheckFailed.current = false;
     // Await provisioning before flipping to authenticated: GET /users/me
@@ -143,6 +144,7 @@ export function useAuth() {
           // Whoever was here last is signed out, however it came about (a
           // session that lapsed while the tab was shut): their GeoPDF tiles
           // go with it.
+          clearRecentSearches();
           void clearTileCache();
           setState("signIn");
         }
@@ -164,6 +166,7 @@ export function useAuth() {
   // that expired mid-render.
   useEffect(() => {
     if (state === "signIn" && !sessionCheckFailed.current) {
+      clearRecentSearches();
       void clearTileCache();
     }
   }, [state]);
@@ -175,6 +178,7 @@ export function useAuth() {
   useEffect(() => {
     if (import.meta.env.VITE_AUTH_MODE === "fake") return;
     setSessionExpiredHandler(() => {
+      clearRecentSearches();
       void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;

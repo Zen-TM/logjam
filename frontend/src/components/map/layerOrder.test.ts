@@ -15,6 +15,7 @@ import {
   GRID_LINES,
   LAND_FILL_LAYER,
   landClassAt,
+  PRESSABLE_LAYERS,
   pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
@@ -250,5 +251,24 @@ describe("MGA grid layers", () => {
   it("have the ids Logjam GPS uses", () => {
     expect(mobile).toContain(`GRID_LINES = "${GRID_LINES}"`);
     expect(mobile).toContain(`GRID_LABELS = "${GRID_LABELS}"`);
+  });
+});
+
+// Mutation: drop "visited-place-halos" from PRESSABLE_LAYERS, the click and
+// mouseenter registrations, or the showPlaces visibility effect in Map.tsx,
+// and the ring around a visited pin asks "What is here?", shows no pointer, or
+// stays green with Places hidden.
+describe("visited-place-halos", () => {
+  const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
+  it("is pressable and follows the Places toggle like its pin", () => {
+    expect(PRESSABLE_LAYERS).toContain("visited-place-halos");
+    for (const ev of ["click", "mouseenter", "mouseleave"]) {
+      expect(source).toContain(
+        `map.on("${ev}", ["place-circles", "visited-place-halos"]`,
+      );
+    }
+    expect(source).toMatch(
+      /setLayoutProperty\(\s*"visited-place-halos",\s*"visibility"/,
+    );
   });
 });

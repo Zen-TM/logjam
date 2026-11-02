@@ -237,7 +237,7 @@ import {
   deliveredFix,
   FIX_MOVE_MIN_M,
   fixQuality,
-  newerFix,
+  nextFix,
   type FixLiveness,
   type FixQuality,
 } from "./gpsSignal";
@@ -987,7 +987,7 @@ export function MapScreen({
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
-    basemapFallbackFor(basemapId),
+    basemapFallbackFor(basemapId, downBasemaps),
   ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
@@ -3717,11 +3717,12 @@ export function MapScreen({
       position: Location.LocationObject,
       cached = false,
     ) => {
-      lastFix.current = newerFix(
+      lastFix.current = nextFix(
         lastFix.current,
         cached
           ? { atMs: position.timestamp, accuracyM: position.coords.accuracy }
           : deliveredFix(position.coords.accuracy, Date.now()),
+        cached,
       );
       noteGpsQuality();
     };
@@ -3746,12 +3747,9 @@ export function MapScreen({
         () => null,
       );
       if (cancelled) return;
-      // Not when a live fix is already newer: a watcher restart (resume,
-      // tab change) must not drag the arrow back to the OS's older cache.
-      if (
-        lastKnown &&
-        (lastFix.current == null || lastFix.current.atMs <= lastKnown.timestamp)
-      ) {
+      // Only before any fix: a watcher restart (resume, tab change) must not
+      // drag the arrow back to the OS's cache (gpsSignal.test.ts, nextFix).
+      if (lastKnown && lastFix.current == null) {
         // Cached MEANS old, and how old is the whole question the arrow's
         // colour answers: this fix can be last week's drive to the trailhead,
         // and drawing it in the user's colour would be misleading. It goes

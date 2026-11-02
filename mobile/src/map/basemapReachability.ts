@@ -6,35 +6,15 @@
 import { useEffect, useState } from "react";
 import {
   BASEMAP_CATALOG,
-  isServerFault,
+  serverAnswers,
   withBasemapDown,
 } from "@logjam/shared";
 
 import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
 import type { BasemapId } from "./sourceResolver";
 
-const PROBE_TIMEOUT_MS = 6_000;
-
 // The Katoomba tile the bundled swatches are cut from.
 const PROBE_TILE = { z: 13, x: 7516, y: 4911 };
-
-/** True when the server gave any answer short of a server fault. HEAD, so no
- *  image is downloaded; a server that refuses HEAD still answers. */
-export async function serverAnswers(url: string): Promise<boolean> {
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      method: "HEAD",
-      signal: abort.signal,
-    });
-    return !isServerFault(response.status);
-  } catch {
-    return false;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 /** The fetched basemaps. The drawn one is read from our own archive and has no
  *  third-party server to probe. */
@@ -52,9 +32,15 @@ function probeUrl(id: BasemapId): string {
 }
 
 /** What stands in for `picked` while its server is down: the default, or the
- *  drawn basemap when the default is the one down. */
-export function basemapFallbackFor(picked: BasemapId): BasemapId {
-  return picked === DEFAULT_BASEMAP ? "protomaps" : DEFAULT_BASEMAP;
+ *  drawn basemap when the pick is the default or the default is down too (a
+ *  SIX outage takes out topo and imagery together). */
+export function basemapFallbackFor(
+  picked: BasemapId,
+  down: ReadonlySet<BasemapId>,
+): BasemapId {
+  return picked === DEFAULT_BASEMAP || down.has(DEFAULT_BASEMAP)
+    ? "protomaps"
+    : DEFAULT_BASEMAP;
 }
 
 /** The basemaps whose server did not answer. Probes on mount, whenever the

@@ -1,5 +1,9 @@
 import { useRef, useState, type KeyboardEvent } from "react";
-import { BASEMAP_CATALOG, BASEMAP_UNAVAILABLE_LABEL } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  BASEMAP_UNAVAILABLE_LABEL,
+  serverAnswers,
+} from "@logjam/shared";
 import { Icon } from "../../ui/Icon";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
@@ -75,7 +79,13 @@ export default function BasemapGallery({
 }) {
   const [lookalikeFailed, setLookalikeFailed] = useState(false);
   const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // The one tab stop: the active tile, or the first enabled one when the
+  // active basemap is down (its button is disabled, so it can't take focus).
   const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
+  const tabStop =
+    activeIndex >= 0 && !unavailable?.has(layers[activeIndex].id)
+      ? activeIndex
+      : layers.findIndex((layer) => !unavailable?.has(layer.id));
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const from = tileRefs.current.findIndex(
@@ -120,7 +130,7 @@ export default function BasemapGallery({
             type="button"
             role="radio"
             aria-checked={active}
-            tabIndex={index === (activeIndex < 0 ? 0 : activeIndex) ? 0 : -1}
+            tabIndex={index === tabStop ? 0 : -1}
             className={classes.tile}
             disabled={down}
             onClick={() => onChange(layer.id)}
@@ -133,9 +143,14 @@ export default function BasemapGallery({
                 className={`${classes.thumb} ${down ? classes.hidden : ""}`}
                 draggable={false}
                 onLoad={vector ? undefined : () => onHealth?.(layer.id, false)}
-                onError={() =>
-                  vector ? setLookalikeFailed(true) : onHealth?.(layer.id, true)
-                }
+                onError={() => {
+                  if (vector) return setLookalikeFailed(true);
+                  // A 404 is a tile outside the provider's coverage, not an
+                  // outage: ask the server before marking it down.
+                  void serverAnswers(thumbnail).then((ok) => {
+                    if (!ok) onHealth?.(layer.id, true);
+                  });
+                }}
               />
             ) : (
               <VectorSwatch />

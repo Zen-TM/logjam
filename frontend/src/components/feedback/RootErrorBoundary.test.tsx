@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   assign: vi.fn(),
   clearTripDraft: vi.fn(),
   clearTileCache: vi.fn(async () => {}),
+  clearRecentSearches: vi.fn(),
   reload: vi.fn(),
 }));
 
@@ -26,6 +27,9 @@ vi.mock("../../auth/oidc", () => ({
   issuerUrl: vi.fn(),
 }));
 vi.mock("../../tripDraft", () => ({ clearTripDraft: mocks.clearTripDraft }));
+vi.mock("../../recentSearches", () => ({
+  clearRecentSearches: mocks.clearRecentSearches,
+}));
 vi.mock("../../geoPdf/cache", () => ({
   clearTileCache: mocks.clearTileCache,
 }));
@@ -39,6 +43,7 @@ beforeEach(() => {
   mocks.signOut.mockClear();
   mocks.clearTripDraft.mockClear();
   mocks.clearTileCache.mockClear();
+  mocks.clearRecentSearches.mockClear();
   mocks.reload.mockClear();
   mocks.assign.mockClear();
   // jsdom cannot navigate: give the recovery verbs somewhere to land.
@@ -102,6 +107,10 @@ describe("RootErrorBoundary", () => {
     // The draft must not outlive the session down ANY exit, and this exit
     // bypasses useAuth — which is why it repeats the clear.
     await vi.waitFor(() => expect(mocks.clearTripDraft).toHaveBeenCalled());
+    // Mutation: drop clearRecentSearches() from endSession.
+    await vi.waitFor(() =>
+      expect(mocks.clearRecentSearches).toHaveBeenCalled(),
+    );
     // Mutation: drop the clearTileCache call in handleSignOut.
     await vi.waitFor(() => expect(mocks.clearTileCache).toHaveBeenCalled());
     await vi.waitFor(() => expect(mocks.signOut).toHaveBeenCalled());

@@ -150,6 +150,9 @@ describe("the session check", () => {
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.state).toBe("signIn"));
     expect(clearTileCache).toHaveBeenCalled();
+    // Mutation: drop clearRecentSearches() beside clearTileCache() in the
+    // mount session check.
+    expect(clearRecentSearches).toHaveBeenCalled();
   });
 
   // Mutation: restore `void clearTileCache()` in the mount `.catch`, or drop
@@ -161,6 +164,7 @@ describe("the session check", () => {
     await waitFor(() => expect(result.current.state).toBe("signIn"));
     await new Promise((r) => setTimeout(r, 0));
     expect(clearTileCache).not.toHaveBeenCalled();
+    expect(clearRecentSearches).not.toHaveBeenCalled();
   });
 
   it("keeps it while signed in", async () => {
@@ -175,6 +179,8 @@ describe("the session check", () => {
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.state).toBe("signIn"));
     expect(clearTileCache.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Mutation: drop clearRecentSearches() from the signIn effect.
+    expect(clearRecentSearches.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it("empties it when the session expires mid-use", async () => {
@@ -185,6 +191,8 @@ describe("the session check", () => {
     expect(expire).toBeTypeOf("function");
     act(() => expire());
     expect(clearTileCache).toHaveBeenCalled();
+    // Mutation: drop clearRecentSearches() from the session-expired handler.
+    expect(clearRecentSearches).toHaveBeenCalled();
   });
 });
 
@@ -299,8 +307,11 @@ describe("useAuth password sign-in", () => {
     oidc.signInWithPassword.mockResolvedValue(true);
     const { result } = await signedOut();
     clearTileCache.mockClear();
+    clearRecentSearches.mockClear();
     await act(() => result.current.signInWithPassword("a@b.co", "pw"));
     expect(clearTileCache).toHaveBeenCalled();
+    // Mutation: drop clearRecentSearches() from enterSession.
+    expect(clearRecentSearches).toHaveBeenCalled();
     expect(apiFetch).toHaveBeenCalledWith("/users/me");
     expect(oidc.signInRedirect).not.toHaveBeenCalled();
     expect(result.current.state).toBe("authenticated");

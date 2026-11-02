@@ -49,6 +49,14 @@ describe("parseCoordinates", () => {
     expect(back.northing).toBeCloseTo(6264000, 0);
   });
 
+  // Mutation: decimals back outside the capture groups (metres truncated).
+  it("keeps the metres' decimals", () => {
+    const p = parseCoordinates("56 245000.6 6264000.4")!;
+    const back = toEastingNorthing(p.lat, p.lon);
+    expect(back.easting).toBeCloseTo(245000.6, 1);
+    expect(back.northing).toBeCloseTo(6264000.4, 1);
+  });
+
   it.each([
     "",
     "Katoomba",

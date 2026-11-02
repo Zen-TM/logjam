@@ -1,6 +1,6 @@
 // The map search box's recent picks, in localStorage on this browser only.
 // They are place names, so sign-out clears them like a trip draft
-// (useAuth.ts endSession; useAuth.test.ts).
+// (useAuth.ts, wherever the GeoPDF tile cache clears; useAuth.test.tsx).
 import { readRecentSearches, type RecentSearch } from "@logjam/shared";
 
 export const RECENT_SEARCHES_KEY = "logjam.recentSearches";

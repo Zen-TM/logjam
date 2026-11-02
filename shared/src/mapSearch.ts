@@ -89,7 +89,7 @@ function parseLatLon(text: string): SearchPoint | null {
 // The zone is required: an easting alone fits every zone, so inferring one
 // would fly somewhere plausible and wrong.
 const MGA =
-  /^(?:MGA\s*)?(?:zone\s*)?(5[456])\s*[C-HJ-NP-X]?\s*[,;]?\s*(\d{6})(?:\.\d+)?\s*(?:m?E)?\s*[,;]?\s*(\d{7})(?:\.\d+)?\s*(?:m?N)?$/i;
+  /^(?:MGA\s*)?(?:zone\s*)?(5[456])\s*[C-HJ-NP-X]?\s*[,;]?\s*(\d{6}(?:\.\d+)?)\s*(?:m?E)?\s*[,;]?\s*(\d{7}(?:\.\d+)?)\s*(?:m?N)?$/i;
 
 function parseMga(text: string): SearchPoint | null {
   const g = MGA.exec(text);

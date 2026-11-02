@@ -5,7 +5,7 @@ import {
   FIX_COARSE_M,
   FIX_STALE_MS,
   fixQuality,
-  newerFix,
+  nextFix,
 } from "./gpsSignal";
 
 const NOW = 1_700_000_000_000;
@@ -70,14 +70,21 @@ describe("deliveredFix", () => {
   });
 });
 
-describe("newerFix", () => {
-  // Mutation: return `next` unconditionally and a restarted watcher's cached
-  // fix overwrites the live one.
-  it("keeps the live fix over an older cached one", () => {
+describe("nextFix", () => {
+  // Mutation: compare atMs (return the later of the two) and a device clock
+  // behind GNSS time rejects the live fix for a cached one stamped ahead.
+  it("a live delivery wins even when the cached fix reads as newer", () => {
+    const cachedAhead = { atMs: Date.now() + 600_000, accuracyM: 5 };
+    const live = deliveredFix(5, Date.now());
+    expect(nextFix(cachedAhead, live, false)).toBe(live);
+  });
+
+  // Mutation: return `incoming` always and a restarted watcher's cached fix
+  // overwrites the live one.
+  it("the cached fix only fills an empty slot", () => {
     const live = { atMs: NOW, accuracyM: 5 };
     const cached = { atMs: NOW - 600_000, accuracyM: 5 };
-    expect(newerFix(live, cached)).toBe(live);
-    expect(newerFix(cached, live)).toBe(live);
-    expect(newerFix(null, cached)).toBe(cached);
+    expect(nextFix(live, cached, true)).toBe(live);
+    expect(nextFix(null, cached, true)).toBe(cached);
   });
 });

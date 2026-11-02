@@ -1673,7 +1673,8 @@ function Map({
         map.getCanvas().style.cursor = "";
       });
 
-      map.on("click", "place-circles", (e) => {
+      // The visited ring is part of the pin, as the shared ring is.
+      map.on("click", ["place-circles", "visited-place-halos"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1693,11 +1694,11 @@ function Map({
         selectPlaceRef.current(id);
       });
 
-      map.on("mouseenter", "place-circles", () => {
+      map.on("mouseenter", ["place-circles", "visited-place-halos"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "place-circles", () => {
+      map.on("mouseleave", ["place-circles", "visited-place-halos"], () => {
         map.getCanvas().style.cursor = "";
       });
       map.on(
@@ -2104,6 +2105,11 @@ function Map({
     const vis = (show: boolean) => (show ? "visible" : "none");
     mapRef.current.setLayoutProperty(
       "place-circles",
+      "visibility",
+      vis(showPlaces),
+    );
+    mapRef.current.setLayoutProperty(
+      "visited-place-halos",
       "visibility",
       vis(showPlaces),
     );

@@ -14,6 +14,26 @@ export function isServerFault(status: number | null | undefined): boolean {
   return status == null || status === 0 || status >= 500;
 }
 
+const PROBE_TIMEOUT_MS = 6_000;
+
+/** True when the server gave any answer short of a server fault. HEAD, so no
+ *  image is downloaded; a server that refuses HEAD still answers. */
+export async function serverAnswers(url: string): Promise<boolean> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "HEAD",
+      signal: abort.signal,
+    });
+    return !isServerFault(response.status);
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** `down` with `id` set or cleared; the same set back when nothing changes, so
  *  a state setter given it does not re-render. */
 export function withBasemapDown(

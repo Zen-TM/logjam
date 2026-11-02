@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   basemapToShow,
   isServerFault,
+  serverAnswers,
   withBasemapDown,
 } from "./basemapAvailability.js";
 
@@ -32,5 +33,25 @@ describe("basemap availability", () => {
     expect(basemapToShow("x", new Set(), "d")).toBe("x");
     expect(basemapToShow("x", new Set(["x", "d"]), "d")).toBe("x");
     expect(basemapToShow("d", new Set(["d"]), "d")).toBe("d");
+  });
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("serverAnswers", () => {
+  // Mutation: treat any non-2xx as down, and a provider that refuses an
+  // unattributed client (403) or HEAD (405) is shown as an outage.
+  it("a refusal is an answer; a 5xx or no connection is not", async () => {
+    for (const [status, answers] of [
+      [200, true],
+      [403, true],
+      [405, true],
+      [503, false],
+    ] as const) {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status }));
+      expect(await serverAnswers("https://x.example/t.png")).toBe(answers);
+    }
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("net")));
+    expect(await serverAnswers("https://x.example/t.png")).toBe(false);
   });
 });
