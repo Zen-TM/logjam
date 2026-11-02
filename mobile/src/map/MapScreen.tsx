@@ -25,7 +25,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  Alert,
   AppState,
   BackHandler,
   Linking,
@@ -63,6 +62,7 @@ import {
   type DeviceMotionMeasurement,
 } from "expo-sensors";
 import {
+  abandonConfirm,
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
   TRACK_MIME_TYPES,
@@ -121,6 +121,7 @@ import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import type { SavedItemReveal } from "../saved/SavedScreen";
+import { samePoints } from "./samePoints";
 import { setRouteEditing } from "./routeEditLock";
 import { collectSnapLines } from "./snapLines";
 import {
@@ -277,6 +278,7 @@ import {
   BottomSheet,
   Button,
   Chip,
+  confirm,
   Icon,
   MapBanner,
   Notice,
@@ -985,6 +987,10 @@ export function MapScreen({
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
+  const notify = useCallback((text: string, tone: "info" | "error") => {
+    toastNonce.current += 1;
+    setToast({ text, tone, nonce: toastNonce.current });
+  }, []);
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
   const downBasemaps = useDownBasemaps(connectivity === "online", pickerOpen);
@@ -1872,59 +1878,29 @@ export function MapScreen({
         setDraftColor(null);
         if (typeof then === "function") then();
       };
-      if (routeDraft.points.length === 0) {
+      // Editing a saved route and leaving its points and colour as they were
+      // loses nothing, so it never asks.
+      const stored = editingRouteId
+        ? routes.data?.find((route) => route.id === editingRouteId)
+        : undefined;
+      if (
+        routeDraft.points.length === 0 ||
+        (stored &&
+          samePoints(routeDraft.points, stored.points) &&
+          (draftColor ?? null) === (stored.color ?? null))
+      ) {
         discard();
         return;
       }
-      // TWO cases, and the wrong sentence is a lie in one of them. Drawing a
-      // new route, the points ARE what is lost. Editing a saved one, they are
-      // not: the stored route is untouched until Save, so the honest promise is
-      // that it stays as it was — "the points you placed will be lost" reads as
-      // if the route itself is going.
-      if (editingRouteId) {
-        Alert.alert("Discard changes?", "The saved route is left as it was.", [
-          { text: "Keep editing", style: "cancel" },
-          { text: "Discard changes", style: "destructive", onPress: discard },
-        ]);
-        return;
-      }
-      Alert.alert(
-        "Discard this route?",
-        "The points you placed will be lost.",
-        [
-          { text: "Keep drawing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: discard },
-        ],
+      // Drawing a new route, the points ARE what is lost; editing a saved one,
+      // the stored route is untouched until Save, so the copy says it stays as
+      // it was (`abandonConfirm`).
+      void confirm(abandonConfirm("route", !editingRouteId)).then(
+        (discarded) => discarded && discard(),
       );
     },
-    [editingRouteId, routeDraft],
+    [draftColor, editingRouteId, routeDraft, routes.data],
   );
-
-  /** Clear confirms for the ROUTE tool, and only there.
-   *
-   *  Clear empties minutes of drawing from a button one thumb-width from Undo,
-   *  and a fat finger is not a decision. Measure's Clear stays immediate — the
-   *  panel's own header says why: a measurement is a question asked once, and a
-   *  confirm on it is friction for nothing. An empty draft has nothing to lose,
-   *  so it just clears (the button is disabled there anyway). */
-  const handleClearRouteDraw = useCallback(() => {
-    if (routeDraft.points.length === 0) {
-      routeDraft.clear();
-      return;
-    }
-    Alert.alert(
-      "Clear all points?",
-      "The line is emptied and the tool stays open. Undo brings the points back.",
-      [
-        { text: "Keep the points", style: "cancel" },
-        {
-          text: "Clear points",
-          style: "destructive",
-          onPress: routeDraft.clear,
-        },
-      ],
-    );
-  }, [routeDraft]);
 
   /** Restore a draft the app was killed in the middle of.
    *
@@ -2078,17 +2054,18 @@ export function MapScreen({
           if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
           else {
             const notAdded = planRouteNotAdded();
-            Alert.alert(notAdded.title, notAdded.body);
+            notify(`${notAdded.title}. ${notAdded.body}`, "error");
           }
         }
       } catch (err) {
         console.error(err);
-        Alert.alert("Route error", "Couldn't save that route.");
+        notify("Couldn't save that route.", "error");
       } finally {
         setSavingRoute(false);
       }
     },
     [
+      notify,
       placeTrackMedia,
       places.data,
       draftPlaceId,
@@ -2723,13 +2700,6 @@ export function MapScreen({
     return () => subscription.remove();
   }, []);
 
-  // A press-and-hold is "something goes here". A sheet rather than an Alert —
-  // Android's Alert drops buttons past three, and these entries carry glyphs
-  // and a subtitle (DESIGN.md).
-  const notify = useCallback((text: string, tone: "info" | "error") => {
-    toastNonce.current += 1;
-    setToast({ text, tone, nonce: toastNonce.current });
-  }, []);
   useEffect(() => {
     if (shownBasemapId === basemapId) return;
     const name = (id: string) =>
@@ -2787,9 +2757,9 @@ export function MapScreen({
         const head = Uint8Array.from(atob(headB64), (c) => c.charCodeAt(0));
         const kind = classifyIncomingBytes(head);
         if (kind === null) {
-          Alert.alert(
-            "Can't open this file",
-            "Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+          notify(
+            "Can't open this file. Logjam GPS can import GeoPDF, GPX, KML/KMZ and GeoJSON files.",
+            "error",
           );
           return;
         }
@@ -2812,14 +2782,14 @@ export function MapScreen({
       } catch (err) {
         console.error(err);
         const code = (err as { code?: string }).code;
-        Alert.alert(
-          "Import failed",
+        notify(
           (code && GEOPDF_ERRORS[code]) ??
             messageFromError(err, "Couldn't import that file."),
+          "error",
         );
       }
     },
-    [fitCameraToBbox],
+    [fitCameraToBbox, notify],
   );
   const onIncomingUrl = useEffectEvent(handleIncomingUrl);
   useEffect(() => {
@@ -4219,7 +4189,7 @@ export function MapScreen({
       notify("Recording — tap your location dot for stats.", "info");
     } catch (err) {
       console.error(err);
-      Alert.alert("Recording error", "Couldn't start recording.");
+      notify("Couldn't start recording.", "error");
     }
   }, [dotWanted, handleLocateMe, notify]);
 
@@ -4240,11 +4210,11 @@ export function MapScreen({
         notify(`Recording again — “${track.name}” continues.`, "info");
       } catch (err) {
         console.error(err);
-        Alert.alert(
-          "Recording error",
-          // The one failure worth naming: another recording is already running,
-          // and the fix is the user's to make.
+        // The one failure worth naming: another recording is already running,
+        // and the fix is the user's to make.
+        notify(
           messageFromError(err, "Couldn't continue that recording."),
+          "error",
         );
       }
     },
@@ -5479,7 +5449,7 @@ export function MapScreen({
             }
             saving={savingRoute}
             onUndo={routeDraft.undo}
-            onClear={handleClearRouteDraw}
+            onClear={routeDraft.clear}
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onSave={() => setNamingRoute(true)}

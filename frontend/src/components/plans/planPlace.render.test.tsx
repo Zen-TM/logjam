@@ -113,7 +113,7 @@ describe("a plan's place on Logjam Web", () => {
         onClose={() => {}}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Other names"), {
+    fireEvent.change(screen.getByLabelText("Also known as"), {
       target: { value: "The Claustral, Claustral Canyon" },
     });
     fireEvent.change(screen.getByLabelText(/^Elevation/), {

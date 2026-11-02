@@ -20,8 +20,10 @@ import {
   type HostInstance,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { ConfirmCopy } from "@logjam/shared";
 
 import { radius, scrim, spacing, makeStyles, useTheme } from "../theme";
+import { confirm } from "./confirm";
 import { IconButton } from "./IconButton";
 import {
   DISMISS_DISTANCE,
@@ -135,9 +137,18 @@ export function BottomSheet({
   header,
   children,
   closable = true,
+  discard = null,
 }: {
   visible: boolean;
   onClose: () => void;
+  /**
+   * Non-null while the form holds work (shared/DESIGN.md §10): every way out
+   * (×, the back gesture, the backdrop, a drag, `onBack`) raises this confirm
+   * first, and `onClose` runs only on its verb. A drag springs back while it
+   * is up. Leave it null in a sub-mode, which backs out to the form without
+   * asking. Guard: `formDiscard.test.ts`.
+   */
+  discard?: ConfirmCopy | null;
   /**
    * False while the sheet's work can't be left (a save in flight, whose
    * reply would land on whatever opens next): a drag springs back, and the
@@ -188,6 +199,19 @@ export function BottomSheet({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  // Every way out, so none can skip the confirm; one at a time, so a double
+  // tap before the alert draws raises one.
+  const asking = useRef(false);
+  const leave = (go: () => void) => {
+    if (discard == null) return go();
+    if (asking.current) return;
+    asking.current = true;
+    void confirm(discard).then((discarded) => {
+      asking.current = false;
+      if (discarded) go();
+    });
+  };
+  const requestClose = () => leave(onClose);
 
   const insets = useSafeAreaInsets();
   const [scrollLocked, setScrollLocked] = useState(false);
@@ -463,7 +487,12 @@ export function BottomSheet({
           animated: false,
         });
       }
-      if (outcome === "close" && closable) {
+      if (outcome === "close" && closable && discard != null) {
+        // The confirm is asynchronous and the owner answers by closing or not:
+        // put the sheet back now, so it never waits off-screen behind it.
+        outerRef.current?.scrollToEnd({ animated: true });
+        requestClose();
+      } else if (outcome === "close" && closable) {
         pull.current.closing = true;
         onClose();
       } else if (outcome === "snap" || outcome === "close")
@@ -516,7 +545,7 @@ export function BottomSheet({
       animationType="none"
       statusBarTranslucent
       navigationBarTranslucent
-      onRequestClose={closable ? onClose : () => {}}
+      onRequestClose={closable ? requestClose : () => {}}
     >
       <Animated.View
         style={[styles.backdrop, { opacity: progress }]}
@@ -576,7 +605,7 @@ export function BottomSheet({
           style={{ height: Math.max(SHEET_TRAVEL, viewportHeight) }}
           accessibilityRole="button"
           accessibilityLabel={`Close ${title}`}
-          onPress={closable ? onClose : undefined}
+          onPress={closable ? requestClose : undefined}
         />
         {/* Keyboard-aware: a sheet containing a TextInput must ride above the
             keyboard, or the field it exists to expose is the one thing hidden.
@@ -623,7 +652,7 @@ export function BottomSheet({
                 <IconButton
                   icon="back"
                   accessibilityLabel="Back"
-                  onPress={onBack}
+                  onPress={() => leave(onBack)}
                 />
               ) : null}
               <Text style={styles.title} accessibilityRole="header">
@@ -634,7 +663,7 @@ export function BottomSheet({
                 accessibilityLabel="Close"
                 color={theme.text}
                 disabled={!closable}
-                onPress={onClose}
+                onPress={requestClose}
               />
             </View>
             {header != null ? (

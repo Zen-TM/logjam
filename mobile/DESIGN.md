@@ -109,7 +109,14 @@ handler or a camera write, read
   parks the target and opens it from `onClosed`**, or it never resolves.
 - **Content that can outgrow the sheet pins its primary action in
   `footer`.**
-- **`Alert` is for destructive confirms only**; a list of choices is a sheet.
+- **`Alert` is raised only by `confirm()`** (`src/ui/confirm.ts`), which
+  draws Cancel and the verb (`confirm.test.ts`), bar the second step of removing a
+  member who has files ("Keep files"). A list of choices is a
+  sheet; an error is a toast.
+- **A form sheet guards its own exits.** `BottomSheet` takes `discard`
+  (`abandonConfirm`): while it is non-null, ×, the back gesture, the backdrop
+  and a drag all raise the confirm, and a drag springs back meanwhile. A
+  sub-mode passes null and backs out to its form (`formDiscard.test.ts`).
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
 - **A background job's toast is at the shell** (`BackgroundToast.tsx`),
@@ -174,7 +181,7 @@ Reads come from the on-device mirror and writes queue in the outbox.
 - **Offline is one muted `StatusPill` in the hero**; a second counts what is
   waiting to sync (`SyncStatusPills`). Never a banner, never per row.
 - **A network-only action is disabled with "Needs a connection" as its
-  subtitle.** These need a connection: downloading regions and topos and a
+  subtitle.** These need a connection: downloading offline maps and sharpened areas and a
   plan's files for the trip; sharing and reading who a place
   is shared with; adopting or discarding a value from a copy;
   full-resolution media not yet on the phone; notification preferences;

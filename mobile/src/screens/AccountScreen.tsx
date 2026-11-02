@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
@@ -53,6 +53,7 @@ import {
   BottomSheet,
   Button,
   Meter,
+  confirm,
   ErrorBanner,
   ErrorState,
   Hero,
@@ -103,7 +104,7 @@ function GuestAccountScreen({
     };
   }, []);
 
-  const startLinking = () => {
+  const startLinking = async () => {
     const message = counts ? linkConfirmationMessage(counts) : null;
     // Nothing recorded yet — there is nothing to warn about, so don't make
     // them dismiss a dialog about their zero places.
@@ -111,10 +112,13 @@ function GuestAccountScreen({
       linkAccount();
       return;
     }
-    Alert.alert("Add this phone's data to an account?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Continue", onPress: linkAccount },
-    ]);
+    const ok = await confirm({
+      confirmTitle: "Add this phone's data to an account?",
+      confirmBody: message,
+      confirmLabel: "Continue",
+      tone: "filled",
+    });
+    if (ok) linkAccount();
   };
 
   const summary = counts ? describeLocalData(counts) : null;
@@ -369,7 +373,7 @@ function LinkedAccountScreen({
         ) : null}
         <Row
           icon="delete"
-          hue={theme.warning}
+          hue={theme.accent}
           title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}

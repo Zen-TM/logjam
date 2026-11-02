@@ -10,7 +10,7 @@
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
@@ -96,18 +96,14 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { backLabelOf, Icon, LoadingState, TAB_BADGE_STYLE } from "./ui";
-
-// Said in one place because it is said from two: the tab bar and the
-// notification-response listener are both ways off the map, and two copies of
-// this sentence would be two chances for them to drift apart.
-function alertFinishRouteFirst(): void {
-  Alert.alert(
-    "Finish your route first",
-    "Save it, or delete the draft, before leaving the map.",
-    [{ text: "OK" }],
-  );
-}
+import {
+  backLabelOf,
+  Icon,
+  LoadingState,
+  TAB_BADGE_STYLE,
+  Toast,
+  type ToastMessage,
+} from "./ui";
 
 function useNavigationTheme() {
   const theme = useTheme();
@@ -912,6 +908,17 @@ export function AppShell({
   );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
+  // Said in one place because it is said from two: the tab bar and the
+  // notification-response listener are both ways off the map, and two copies of
+  // this sentence would be two chances for them to drift apart.
+  const [routeToast, setRouteToast] = useState<ToastMessage | null>(null);
+  const saveRouteFirst = useCallback(() => {
+    setRouteToast((prev) => ({
+      text: "Finish your route first. Save it, or delete the draft, before leaving the map.",
+      tone: "error",
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
+  }, []);
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
   const insets = useSafeAreaInsets();
 
@@ -984,8 +991,8 @@ export function AppShell({
           routeEditing: isRouteEditing(),
         });
         if (target.kind === "blocked") {
-          // With the Alert, so the tap is answered rather than silently ignored.
-          alertFinishRouteFirst();
+          // With the toast, so the tap is answered rather than silently ignored.
+          saveRouteFirst();
           return;
         }
         // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
@@ -1048,7 +1055,7 @@ export function AppShell({
       subscription.remove();
       received.remove();
     };
-  }, [isGuest, accountState]);
+  }, [isGuest, accountState, saveRouteFirst]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
@@ -1127,7 +1134,7 @@ export function AppShell({
                 const target = event.target ?? "";
                 if (target.startsWith("Map")) return;
                 event.preventDefault();
-                alertFinishRouteFirst();
+                saveRouteFirst();
               },
             }}
             screenOptions={{
@@ -1609,6 +1616,19 @@ export function AppShell({
           </Tabs.Navigator>
         </NavigationContainer>
         <BackgroundToast />
+        {/* Docked like BackgroundToast: clear of the tab bar. */}
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            bottom: 64,
+          }}
+          pointerEvents="box-none"
+        >
+          <Toast message={routeToast} onDismissed={() => setRouteToast(null)} />
+        </View>
       </View>
     </AccountStateProvider>
   );

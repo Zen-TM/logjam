@@ -791,8 +791,7 @@ function TripLogsPanel({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}

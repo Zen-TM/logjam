@@ -5,6 +5,7 @@
 // has no hero (shared/DESIGN.md §2).
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
+import type { ConfirmCopy } from "./confirm.js";
 import type { ScreenContract } from "./types.js";
 
 export const SETTINGS = {
@@ -76,7 +77,7 @@ export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or an export mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
   { key: "topoEmail", group: "email", label: "LiDAR maps" },
-  { key: "exportEmail", group: "email", label: "LiDAR map exports" },
+  { key: "exportEmail", group: "email", label: "Area exports" },
   { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
   { key: "shareInApp", group: "inApp", label: "Shares with me" },
 ] as const satisfies readonly {
@@ -119,14 +120,13 @@ export function drawsYoursHeading(own: number, builtIn: number): boolean {
 }
 
 /** What deleting a place type costs. A type with places cannot be deleted. */
-export function placeTypeDeleteConfirm(name: string): {
-  confirmTitle: string;
-  confirmBody: string;
-} {
+export function placeTypeDeleteConfirm(name: string): ConfirmCopy {
   return {
     confirmTitle: `Delete ${name}?`,
     confirmBody:
       "Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none.",
+    confirmLabel: SETTINGS_LIST.copy.deleteType,
+    tone: "destructive",
   };
 }
 
@@ -139,7 +139,7 @@ export function attributeDeleteConfirm(
   label: string,
   count: number | null | "unknown",
   rows: { one: string; many: string },
-): { confirmTitle: string; confirmBody: string } {
+): ConfirmCopy {
   const impact =
     count === "unknown"
       ? ""
@@ -157,6 +157,8 @@ export function attributeDeleteConfirm(
     ]
       .filter(Boolean)
       .join(" "),
+    confirmLabel: SETTINGS_LIST.copy.deleteAttribute,
+    tone: "destructive",
   };
 }
 

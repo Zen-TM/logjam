@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
@@ -29,6 +29,7 @@ import {
   Button,
   ChipPicker,
   ErrorBanner,
+  confirm,
   Field,
   FieldError,
   FormStack,
@@ -345,35 +346,27 @@ export function useCustomFieldForm({
     // Count the rows that carry a value BEFORE confirming: "this also clears it
     // from 12 trips" is the part of the consequence the user can't see.
     countFieldValues(entity, key)
-      .then((affected) => {
-        const { confirmTitle, confirmBody } = attributeDeleteConfirm(
-          editing.label,
-          affected,
-          noun,
-        );
-        Alert.alert(confirmTitle, confirmBody, [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: listCopy.deleteAttribute,
-            style: "destructive",
-            onPress: () => {
-              removeFieldDef(entity, key)
-                .then((removed) => {
-                  onSaved(
-                    defs.filter((def) => def.key !== key),
-                    removed === 0
-                      ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
-                      : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
-                  );
-                  onDone();
-                })
-                .catch((err: unknown) => {
-                  console.error(err);
-                  setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
-                });
-            },
-          },
-        ]);
+      .then(async (affected) => {
+        if (
+          !(await confirm(
+            attributeDeleteConfirm(editing.label, affected, noun),
+          ))
+        )
+          return;
+        removeFieldDef(entity, key)
+          .then((removed) => {
+            onSaved(
+              defs.filter((def) => def.key !== key),
+              removed === 0
+                ? `${capitalize(ATTRIBUTE_NOUN.one)} deleted.`
+                : `${capitalize(ATTRIBUTE_NOUN.one)} deleted. Cleared from ${removed} ${removed === 1 ? noun.one : noun.many}.`,
+            );
+            onDone();
+          })
+          .catch((err: unknown) => {
+            console.error(err);
+            setFormError(`Couldn't delete that ${ATTRIBUTE_NOUN.one}.`);
+          });
       })
       .catch((err: unknown) => {
         console.error(err);

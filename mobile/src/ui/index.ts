@@ -17,6 +17,7 @@ export {
   nextRange,
   type NumberRange,
 } from "@logjam/shared";
+export { confirm } from "./confirm";
 export { Hero } from "./Hero";
 export { TAB_BADGE_STYLE } from "./tabBadgeStyle";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";

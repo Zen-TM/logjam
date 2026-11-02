@@ -20,7 +20,6 @@
 //
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
-import { Alert } from "react-native";
 import { formatDateKey } from "@logjam/shared";
 
 import { unavailableReasonText } from "../../auth/capabilities";
@@ -89,6 +88,7 @@ import {
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import {
+  confirm,
   IconButton,
   Row,
   ScreenScroll,
@@ -533,19 +533,16 @@ function PlaceNamesRow() {
   const online = useConnectivity(offlineOnly) === "online";
 
   const download = () => void requestPlaceRegistry();
-  const remove = () =>
-    Alert.alert(
-      "Remove place names?",
-      "Search finds only your own places until you download them again.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => void removePlaceRegistry(),
-        },
-      ],
-    );
+  const remove = async () => {
+    const ok = await confirm({
+      confirmTitle: "Remove place names?",
+      confirmBody:
+        "Search finds only your own places until you download them again.",
+      confirmLabel: "Remove",
+      tone: "destructive",
+    });
+    if (ok) void removePlaceRegistry();
+  };
 
   const subtitle = downloading
     ? "Downloading…"

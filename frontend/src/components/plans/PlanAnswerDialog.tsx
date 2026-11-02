@@ -5,6 +5,7 @@
 // (`fitAnswerDraft`), so the person sends it against that.
 import { useId, useRef, useState } from "react";
 import {
+  abandonConfirm,
   tripPlanQuestionChoices,
   answersFromDraft,
   draftFromAnswers,
@@ -33,8 +34,6 @@ import {
   TextArea,
   TextField,
 } from "../../ui";
-import ConfirmDialog from "../dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import classes from "./plans.module.css";
@@ -229,10 +228,6 @@ function AnswerForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const bodyRef = useRef<HTMLFormElement>(null);
   const [busy, setBusy] = useState(false);
-  const guard = useUnsavedChangesGuard(
-    JSON.stringify(draft) !== JSON.stringify(opened),
-    onClose,
-  );
 
   async function submit() {
     const parsed = parseTripPlanAnswers(
@@ -294,12 +289,17 @@ function AnswerForm({
         open
         size="large"
         title={form.title}
-        onClose={guard.requestClose}
+        onClose={onClose}
+        discard={
+          JSON.stringify(draft) !== JSON.stringify(opened)
+            ? abandonConfirm("answer", form.myAnswer == null)
+            : null
+        }
         dismissible={!busy}
-        footer={
+        footer={(requestClose) => (
           <>
             <Button
-              onClick={guard.requestClose}
+              onClick={requestClose}
               disabled={busy}
               disabledReason="Sending…"
             >
@@ -309,7 +309,7 @@ function AnswerForm({
               {copy.save}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -339,14 +339,6 @@ function AnswerForm({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your answers will be lost."
-        confirmLabel="Discard"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }

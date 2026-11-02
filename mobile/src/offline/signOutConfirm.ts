@@ -75,7 +75,7 @@ const LINES: { loss: Loss; text: (n: number, c: SignOutCounts) => string }[] = [
   {
     loss: "regions",
     text: (n, c) =>
-      `${pluralCount(n, "saved map region")} (${formatBytes(c.regionBytes)})`,
+      `${pluralCount(n, "offline map")} (${formatBytes(c.regionBytes)})`,
   },
   {
     loss: "geoPdfs",

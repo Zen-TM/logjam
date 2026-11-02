@@ -36,12 +36,6 @@ const GPS_GOTCHAS = [
   },
   {
     selector:
-      "CallExpression[callee.object.name='Alert'][callee.property.name='alert'][arguments.2.type='ArrayExpression'][arguments.2.elements.length>3]",
-    message:
-      "Android drops a fourth Alert button. A list of choices is a BottomSheet; Alert is for a destructive confirm only (mobile/DESIGN.md §4).",
-  },
-  {
-    selector:
       "Property[key.name=/^(shadowColor|shadowOffset|shadowOpacity|shadowRadius)$/]",
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",

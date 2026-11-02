@@ -91,7 +91,7 @@ describe("notificationLabel", () => {
           entityId: "w1",
         }),
       ),
-    ).toEqual({ text: "bob shared a waypoint with you" });
+    ).toEqual({ text: "bob shared a place with you" });
     expect(
       notificationLabel(
         notification("item_shared", {
@@ -99,7 +99,7 @@ describe("notificationLabel", () => {
           entityType: "topoJob",
         }),
       ).text,
-    ).toBe("bob shared a LiDAR topo with you");
+    ).toBe("bob shared a LiDAR map with you");
     // An entity type this build has never heard of still reads as a sentence
     // rather than leaking a raw enum name.
     expect(
@@ -147,6 +147,12 @@ describe("notificationLabel", () => {
         }),
       ),
     ).toEqual({ text: "PDF export failed", detail: "boom" });
+    // Only a real format is upper-cased. Mutation: upper-case the fallback.
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { status: "failed" }),
+      ).text,
+    ).toBe("Area export failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.
@@ -339,7 +345,7 @@ describe("plan notifications", () => {
       ).text;
     expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
     expect(ended("declined")).toBe(
-      "Your request to join Wollangambe trip was turned down",
+      "Your request to join Wollangambe trip was declined",
     );
     expect(ended("deleted")).toBe("Wollangambe trip was deleted");
   });

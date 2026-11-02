@@ -11,6 +11,18 @@
   color: var(--color-text-muted);
 }
 
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.required {
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
 .input {
   composes: body from "../textRoles.generated.module.css";
   min-height: var(--control-lg);

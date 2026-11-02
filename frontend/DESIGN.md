@@ -87,7 +87,6 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   topo's style). It is non-modal and never opens by itself on arrival.
 - **Every filter wears `FilterField`**, and its control follows the shape of
   the attribute (`AttributeFilter`), never its key.
-- **Sort persists; filters do not**, and Reset leaves the sort alone.
 
 ## 3. Surfaces and actions
 

@@ -62,11 +62,11 @@ export function lidarJobSharePromise(
 export function sharePromise(kind: SharePromiseKind | "selection"): string {
   switch (kind) {
     case "place":
-      return "Friends you pick can see this place and its notes and photos, and save a copy or export it. Your trips stay private. Unsharing doesn't remove copies they've already made.";
+      return "Friends you pick can see this place and its notes and photos, and save a copy or export it. Your trips stay private. Stopping sharing doesn't remove copies they've already made.";
     case "route":
       return `Friends you pick can see this route on their map and export it, but can't change or delete it. ${STOP}`;
     case "topoJob":
-      return `Friends you pick can see this LiDAR topo on their map and download or export it. Only you can delete it. ${STOP}`;
+      return `Friends you pick can see this LiDAR map on their map and download or export it. Only you can delete it. ${STOP}`;
     // No surface offers a download or export of the area itself, only of its
     // vegetation layer (contracts.test.ts; the old Export is offered by kind,
     // frontend mapsModel.test.ts).

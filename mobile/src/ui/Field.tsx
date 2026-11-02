@@ -1,3 +1,4 @@
+import { FORM_REQUIRED } from "@logjam/shared";
 import { Text, View } from "react-native";
 
 import { formRhythm, opacity, makeStyles, muted } from "../theme";
@@ -19,6 +20,8 @@ export function Field({
   hint,
   error,
   aside,
+  requiredMark,
+  reserveError,
   disabled,
   children,
 }: {
@@ -28,25 +31,34 @@ export function Field({
   /** This control's validation message, drawn by `FieldError`. */
   error?: string | null;
   aside?: React.ReactNode;
+  /** Marks the field "Required" at the end of its label's line. */
+  requiredMark?: boolean;
+  /** Keeps the error line's height when it is empty (`FieldError`'s `reserve`). */
+  reserveError?: boolean;
   /** Dims the whole field: the kit's one disabled look (`opacity.disabled`). */
   disabled?: boolean;
   children: React.ReactNode;
 }) {
   const styles = useStyles();
+  const end =
+    aside ??
+    (requiredMark ? (
+      <Text style={styles.required}>{FORM_REQUIRED}</Text>
+    ) : null);
 
   return (
     <View style={[styles.field, disabled && styles.disabled]}>
-      {aside != null ? (
+      {end != null ? (
         <View style={styles.head}>
           <Text style={styles.label}>{label}</Text>
-          {aside}
+          {end}
         </View>
       ) : (
         <Text style={styles.label}>{label}</Text>
       )}
       {children}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-      <FieldError message={error} />
+      <FieldError message={error} reserve={reserveError} />
     </View>
   );
 }
@@ -70,4 +82,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: formRhythm.field,
   },
   hint: muted(theme, textRole.detail),
+  required: muted(theme, textRole.detail),
 }));

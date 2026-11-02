@@ -7,7 +7,7 @@
 // sheet only says how each one runs here. A form is a sheet of its own, so
 // Edit is the caller's: this one closes and the caller opens that one.
 import { Fragment } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import {
   tripDeleteConfirm,
@@ -19,7 +19,7 @@ import {
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
 import { makeStyles, spacing, useTheme } from "../theme";
-import { BottomSheet, Row } from "../ui";
+import { BottomSheet, confirm, Row } from "../ui";
 
 export function TripOptionsSheet({
   trip,
@@ -48,26 +48,24 @@ export function TripOptionsSheet({
   const theme = useTheme();
   const styles = useStyles();
 
-  const confirmDelete = (target: MirrorTrip) => {
-    const confirm = tripDeleteConfirm(1);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          deleteTripLocal(target.id)
-            .then(() => {
-              onInfo("Trip deleted.");
-              onGone?.();
-            })
-            .catch((err: unknown) => {
-              console.error(err);
-              onError("Couldn't delete this trip.");
-            });
-        },
-      },
-    ]);
+  const confirmDelete = async (target: MirrorTrip) => {
+    if (
+      !(await confirm({
+        ...tripDeleteConfirm(1),
+        confirmLabel: "Delete",
+        tone: "destructive",
+      }))
+    )
+      return;
+    deleteTripLocal(target.id)
+      .then(() => {
+        onInfo("Trip deleted.");
+        onGone?.();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        onError("Couldn't delete this trip.");
+      });
   };
 
   // Exhaustive by type: every verb the contract names runs here. The sheet
@@ -76,7 +74,7 @@ export function TripOptionsSheet({
     onClose();
     if (id === "open") onOpen?.(target);
     else if (id === "edit") onEdit(target);
-    else confirmDelete(target);
+    else void confirmDelete(target);
   };
 
   return (

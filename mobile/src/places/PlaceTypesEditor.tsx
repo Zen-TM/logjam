@@ -23,13 +23,7 @@
 // is as sensitive as a note. Nothing here logs one.
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from "react-native";
+import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
   drawsYoursHeading,
   isSystemPlaceTypeId,
@@ -55,6 +49,7 @@ import {
 } from "../sync/outbox";
 import {
   Button,
+  confirm,
   ErrorBanner,
   Field,
   FormStack,
@@ -234,40 +229,28 @@ export function usePlaceTypeForm({
     // user never sees — the same rule the place form follows by validating
     // before it enqueues.
     listMirrorPlaces()
-      .then((places) => {
+      .then(async (places) => {
         const inUse = places.filter(
           (place) => place.placeTypeId === editing.id,
         ).length;
         if (inUse > 0) {
-          Alert.alert(
-            `“${editing.name}” is still in use`,
-            `${inUse} place${inUse === 1 ? "" : "s"} ${inUse === 1 ? "is" : "are"} this type. Change ${inUse === 1 ? "it" : "them"} to another type first.`,
+          setFormError(
+            `“${editing.name}” is still in use. ${inUse} place${inUse === 1 ? "" : "s"} ${inUse === 1 ? "is" : "are"} this type. Change ${inUse === 1 ? "it" : "them"} to another type first.`,
           );
           return;
         }
-        const { confirmTitle, confirmBody } = placeTypeDeleteConfirm(
-          editing.name,
-        );
-        Alert.alert(confirmTitle, confirmBody, [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: copy.deleteType,
-            style: "destructive",
-            onPress: () => {
-              deletePlaceTypeLocal(editing.id)
-                .then(() => {
-                  onSaved("Type deleted.");
-                  onDone();
-                })
-                .catch((err: unknown) => {
-                  console.error(err);
-                  // Same reasoning as `save`'s catch: the sheet is still up,
-                  // so this is the banner, not a toast under it.
-                  setFormError("Couldn't delete that type.");
-                });
-            },
-          },
-        ]);
+        if (!(await confirm(placeTypeDeleteConfirm(editing.name)))) return;
+        deletePlaceTypeLocal(editing.id)
+          .then(() => {
+            onSaved("Type deleted.");
+            onDone();
+          })
+          .catch((err: unknown) => {
+            console.error(err);
+            // Same reasoning as `save`'s catch: the sheet is still up,
+            // so this is the banner, not a toast under it.
+            setFormError("Couldn't delete that type.");
+          });
       })
       .catch((err: unknown) => {
         console.error(err);

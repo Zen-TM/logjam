@@ -62,6 +62,8 @@ type MeasureVerbDeclaration = {
   label: string;
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
 };
 
 /** In the order each client draws them. */

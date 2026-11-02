@@ -1,6 +1,10 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { ApiError, messageFromError } from "./apiErrors.js";
+import { ApiError, AUTH_ERROR_CODES, messageFromError } from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
 import { copySay, copyViolations } from "./copyRules.js";
 
@@ -13,7 +17,15 @@ import { copySay, copyViolations } from "./copyRules.js";
 // back to "Basemap".
 
 /** Keys that hold an identifier or a note for developers, not words a user reads. */
-const NOT_COPY = new Set(["id", "key", "reason", "on", "question"]);
+const NOT_COPY = new Set([
+  "id",
+  "key",
+  "reason",
+  "gap",
+  "on",
+  "question",
+  "icon",
+]);
 
 function strings(value: unknown, path: string, out: [string, string][]): void {
   if (typeof value === "string") out.push([path, value]);
@@ -59,6 +71,34 @@ describe("contract copy", () => {
     expect(copyViolations("Finished GeoPDFs")).toEqual([]);
   });
 
+  // One line a rule must flag and one it must leave alone, per rule of the
+  // glossary and the error register. Mutation: loosen any pattern to `/./`,
+  // or narrow it to nothing.
+  it.each([
+    ["please", "Please try again.", "Couldn't save this place."],
+    ["cannot", "We cannot do that.", "We can't do that."],
+    ["that-didnt-work", "That didn't work.", "Couldn't save this place."],
+    ["curly-apostrophe", "Couldn’t save.", "Couldn't save."],
+    ["curly-apostrophe", "Couldn&rsquo;t save.", "Couldn't save."],
+    ["waypoint", "Add a waypoint", "Add a place"],
+    ["custom-field", "Edit custom fields", "Edit attributes"],
+    ["logbook", "Your logbook", "Your trips"],
+    ["trip-log", "Start a trip log", "Log a trip"],
+    ["activity", "By activity", "By trip type"],
+    ["lidar-topo", "Make a LiDAR topo", "Make a sharpened area"],
+    ["lidar-topo", "Open the topo", "Open the sharpened area"],
+    ["lidar-topo", "Use a topo", "OSM Topo"],
+    ["region", "Download a map region", "Save an offline map"],
+    ["unshare", "Unshare", "Stop sharing"],
+    ["recipients", "Visible to recipients", "Friends you pick can see it"],
+    ["turn-down", "Turn down", "Decline"],
+    ["turn-down", "Let in", "Accept"],
+    ["attach-to-place", "Attach to a place", "Link to a place"],
+  ])("flags %s in %j and passes %j", (id, bad, good) => {
+    expect(copyViolations(bad)).toContain(id);
+    expect(copyViolations(good)).not.toContain(id);
+  });
+
   // One word, then a name: the name's own capital makes it read as Title
   // Case ("Join Ranon"). Mutation: empty this set, and the title is flagged.
   const verbThenName = new Set(["tripPlanJoinTitle(Ranon)"]);
@@ -82,6 +122,99 @@ describe("the words an API failure shows", () => {
       messageFromError(new TypeError("Failed to fetch"), "fallback"),
       messageFromError(new Error("Network Error"), "fallback"),
     );
+    expect(messages.flatMap(copyViolations)).toEqual([]);
+  });
+});
+
+// The sentences in shared/src outside contracts/ (labels, notification text,
+// validation and error sentences) keep the same rules as the contracts and the
+// clients: a hit is fixed here, with no baseline. Mutation that turns it red: put "Please"
+// back into `STATUS_MESSAGES[403]` in `apiErrors.ts`.
+describe("shared copy outside contracts/", () => {
+  const SRC = dirname(fileURLToPath(import.meta.url));
+  const files = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory())
+        return entry.name === "contracts" ? [] : files(path);
+      return /\.tsx?$/.test(entry.name) && !/\.(test|d)\./.test(entry.name)
+        ? [path]
+        : [];
+    });
+  const scanned = files(SRC);
+
+  it("reads files at all — a silent zero would pass forever", () => {
+    expect(scanned.length).toBeGreaterThan(40);
+  });
+
+  // Every string literal and template with a space in it: a sentence, not an
+  // identifier, key or URL, wherever it is written (a returned template, a
+  // record, a `failure:` property). Left out: the message of a thrown `Error`
+  // (never shown, §11), Title Case (names in data: canyons, schemes, land
+  // classes), and the two files that quote a provider's own product names and
+  // required credits, which we cannot reword.
+  const PROVIDER_TEXT = new Set(["geoPdfBaseLayers.ts", "demSources.ts"]);
+  const sentences = (path: string): { line: number; text: string }[] => {
+    const sf = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const found: { line: number; text: string }[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+      if (ts.isNewExpression(node) && node.expression.getText() === "Error")
+        return;
+      let text: string | null = null;
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+        text = node.text;
+      else if (ts.isTemplateExpression(node))
+        text =
+          node.head.text +
+          node.templateSpans.map((span) => span.literal.text).join("");
+      if (text && /\s/.test(text.trim()) && !/^https?:/.test(text))
+        found.push({
+          line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          text,
+        });
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+  };
+
+  it("breaks no copy rule", () => {
+    const offenders = scanned
+      .filter(
+        (path) =>
+          relative(SRC, path) !== "copyRules.ts" &&
+          !PROVIDER_TEXT.has(relative(SRC, path)),
+      )
+      .flatMap((path) =>
+        sentences(path).flatMap((found) =>
+          copyViolations(found.text)
+            .filter((id) => id !== "title-case")
+            .map(
+              (id) =>
+                `${relative(SRC, path)}:${found.line}: "${found.text}" — ${copySay(id)}`,
+            ),
+        ),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it("keeps every sign-in and failure message to the register", () => {
+    const messages = [
+      ...Object.values(AUTH_ERROR_CODES),
+      ...Array.from({ length: 200 }, (_, i) =>
+        messageFromError(
+          new ApiError(400 + i, "/x", "GET"),
+          "Couldn't do that.",
+        ),
+      ),
+      messageFromError(new TypeError("Failed to fetch"), "fallback"),
+    ];
     expect(messages.flatMap(copyViolations)).toEqual([]);
   });
 });

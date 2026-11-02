@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -75,6 +75,7 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  confirm,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
@@ -324,19 +325,6 @@ export function PlansScreen({
       .then(() => afterPlanWrite(plan.id, gone))
       .then(() => report(done, "info"))
       .catch((err: unknown) => report(messageFromError(err, failed), "error"));
-  const confirm = (
-    words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
-    destructive: boolean,
-    action: () => void,
-  ) =>
-    Alert.alert(words.confirmTitle, words.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: words.confirmLabel,
-        style: destructive ? "destructive" : "default",
-        onPress: action,
-      },
-    ]);
   // A card's ⋯: the verbs its own page offers that make sense without it open.
   const cardAction = async (
     plan: TripPlanSummary,
@@ -367,17 +355,13 @@ export function PlansScreen({
     const counts = cached
       ? tripPlanCounts(cached.plan)
       : { places: 0, ways: 0 };
-    confirm(
-      planDeleteConfirm(plan.name, counts),
+    if (!(await confirm(planDeleteConfirm(plan.name, counts)))) return;
+    void write(
+      plan,
+      deletePlan(plan.id),
       true,
-      () =>
-        void write(
-          plan,
-          deletePlan(plan.id),
-          true,
-          pageCopy.deleted,
-          pageCopy.deleteFailed,
-        ),
+      pageCopy.deleted,
+      pageCopy.deleteFailed,
     );
   };
 
@@ -393,7 +377,7 @@ export function PlansScreen({
     } else clearSelection();
     report(message, failedIds.length > 0 ? "error" : "info");
   };
-  const runBulk = () => {
+  const runBulk = async () => {
     if (!online) return report(OFFLINE, "error");
     const { lead, leave: leaving } = bulk;
     const steps = (deleteAdded: boolean) => [
@@ -420,7 +404,9 @@ export function PlansScreen({
         run: (deleteAdded) => void finishBulk(steps(deleteAdded)),
       });
     const words = tripPlanBulkConfirm(counts);
-    confirm(words, words.destructive, () => void finishBulk(steps(false)));
+    const tone = words.destructive ? "destructive" : "filled";
+    if (!(await confirm({ ...words, tone }))) return;
+    void finishBulk(steps(false));
   };
   const runBulkArchive = () => {
     if (!online) return report(OFFLINE, "error");
@@ -545,21 +531,17 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
-                    onPress={() =>
-                      Alert.alert(
-                        TRIP_PLAN_JOIN.copy.declineTitle,
-                        TRIP_PLAN_JOIN.copy.declineBody,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: copy.decline,
-                            style: "destructive",
-                            onPress: () =>
-                              leave(item, copy.declined, copy.declineFailed),
-                          },
-                        ],
+                    onPress={async () => {
+                      if (
+                        await confirm({
+                          confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
+                          confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
+                          confirmLabel: copy.decline,
+                          tone: "filled",
+                        })
                       )
-                    }
+                        leave(item, copy.declined, copy.declineFailed);
+                    }}
                   />
                 </CardActions>
                 {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}

@@ -487,22 +487,26 @@ function FriendsPanel({
 
       <ConfirmDialog
         open={removing != null}
-        title={
-          removing ? friendRemoveConfirm(removing.username).confirmTitle : ""
+        copy={
+          removing && {
+            ...friendRemoveConfirm(removing.username),
+            confirmLabel: "Remove",
+            tone: "destructive",
+            icon: "unshare",
+          }
         }
-        message={
-          removing ? friendRemoveConfirm(removing.username).confirmBody : null
-        }
-        confirmLabel="Remove"
         busy={busyId != null}
         onConfirm={() => removing && void handleRemove(removing)}
         onClose={() => setRemoving(null)}
       />
       <ConfirmDialog
         open={removingSelected}
-        title={friendsRemoveConfirm(selectedFriends.length).confirmTitle}
-        message={friendsRemoveConfirm(selectedFriends.length).confirmBody}
-        confirmLabel="Remove"
+        copy={{
+          ...friendsRemoveConfirm(selectedFriends.length),
+          confirmLabel: "Remove",
+          tone: "destructive",
+          icon: "unshare",
+        }}
         busy={busyId != null}
         onConfirm={() => void handleRemoveSelected()}
         onClose={() => setRemovingSelected(false)}

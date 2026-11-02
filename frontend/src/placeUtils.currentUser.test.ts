@@ -43,7 +43,7 @@ describe("useCurrentUser load failure", () => {
     expect(result.current.currentUser).toBeNull();
     // The user is told what happened, in the words the shared mapper owns.
     expect(result.current.error).toBe(
-      "Too many requests. Please wait a moment and try again.",
+      "Too many requests. Wait a moment and try again.",
     );
   });
 

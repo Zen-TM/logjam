@@ -102,8 +102,8 @@ import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { planBounds, planMapPress } from "./plans/plansModel";
 import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
+  abandonConfirm,
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
@@ -1206,26 +1206,28 @@ function App() {
   // hook after an early return runs on some renders and not others, so the
   // sign-in -> map transition would shift every later hook's slot.
   // "Dirty" for a NEW route is any point placed; for an EDIT it is the geometry
-  // differing from what was opened.
+  // or a colour the route already had differing from what was opened.
   const editingOriginal = editingRouteId
     ? (routes.find((route) => route.id === editingRouteId) ?? null)
     : null;
   const draftChanged = editingOriginal
     ? JSON.stringify(routeDraft.points) !==
-      JSON.stringify(editingOriginal.points)
+        JSON.stringify(editingOriginal.points) ||
+      (editingOriginal.color != null && drawColor !== editingOriginal.color)
     : routeDraft.points.length > 0;
 
-  const cancelRouteGuard = useUnsavedChangesGuard(
-    draftChanged,
-    cancelDrawingRoute,
-  );
+  // The route editor is a map tool, not a Dialog, so it asks for itself.
+  const [routeConfirm, setRouteConfirm] = useState<"cancel" | null>(null);
+  const abandonRoute = abandonConfirm("route", !editingRouteId);
+  const requestCancelRoute = () =>
+    draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
 
   // Escape leaves an armed Measure or Draw tool, as its × does (the route's
   // goes through the discard confirm). Heard on the document because the user
   // is on the map, where no panel holds the key; a layer above it (a dialog, a
   // menu, a field) has already consumed the press.
   const cancelArmedTool = useEffectEvent(() => {
-    if (drawingRoute) cancelRouteGuard.requestClose();
+    if (drawingRoute) requestCancelRoute();
     else setActivePanel(null);
   });
   const toolArmed = measuring || drawingRoute;
@@ -1247,10 +1249,6 @@ function App() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [toolArmed]);
-  const clearRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
-    () => routeDraft.reset(),
-  );
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1328,7 +1326,7 @@ function App() {
     };
     if (!drawingRoute) return arm();
     afterRouteCancel.current = arm;
-    cancelRouteGuard.requestClose();
+    requestCancelRoute();
   };
 
   const startEditingRoute = (route: TRoute) => {
@@ -1786,7 +1784,7 @@ function App() {
                   color={drawColor}
                   onColorChange={setDrawColor}
                   onUndo={routeDraft.undo}
-                  onClear={clearRouteGuard.requestClose}
+                  onClear={routeDraft.clear}
                   onReverse={routeDraft.reverse}
                   routeHover={routeHover}
                   // Editing keeps the name it already has; naming belongs to
@@ -1798,7 +1796,7 @@ function App() {
                     if (existing) void saveDrawnRoute(existing.name);
                     else setNamingRoute(true);
                   }}
-                  onCancel={cancelRouteGuard.requestClose}
+                  onCancel={requestCancelRoute}
                   saving={savingRoute}
                   snapMode={snapMode}
                   onSnapModeChange={setSnapMode}
@@ -2100,33 +2098,17 @@ function App() {
         />
 
         <ConfirmDialog
-          open={cancelRouteGuard.guardOpen}
-          // Editing and drawing lose different things, so they cannot share one
-          // sentence: abandoning an edit costs the changes, not the route.
-          title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
-          message={
-            editingRouteId
-              ? "Your changes to this route will be lost. The route itself is not deleted."
-              : "Your placed points will be lost. This cannot be undone."
-          }
-          confirmLabel="Discard"
-          confirmColor="error"
-          onConfirm={cancelRouteGuard.confirmDiscard}
+          open={routeConfirm === "cancel"}
+          copy={abandonRoute}
+          onConfirm={() => {
+            setRouteConfirm(null);
+            cancelDrawingRoute();
+          }}
           onClose={() => {
             // Keeping the route also drops whatever was waiting on its discard.
             afterRouteCancel.current = null;
-            cancelRouteGuard.cancelDiscard();
+            setRouteConfirm(null);
           }}
-        />
-
-        <ConfirmDialog
-          open={clearRouteGuard.guardOpen}
-          title="Clear this route?"
-          message="Your placed points will be lost. This cannot be undone."
-          confirmLabel="Clear"
-          confirmColor="error"
-          onConfirm={clearRouteGuard.confirmDiscard}
-          onClose={clearRouteGuard.cancelDiscard}
         />
 
         <RouteNameDialog

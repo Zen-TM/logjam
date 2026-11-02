@@ -32,7 +32,7 @@ const ENTITY_NOUN: Record<string, string> = {
   // ("Couldn't delete a link between places") — which is exactly what it is.
   placeLink: "link between places",
   route: "route",
-  customFieldDef: "field",
+  customFieldDef: "attribute",
   notification: "notification",
   media: "photo or file",
 };
@@ -61,7 +61,7 @@ const FIELD_LABEL: Record<string, string> = {
   date: "date",
   displayName: "title",
   types: "trip type",
-  customFields: "custom fields",
+  customFields: "attributes",
   placeIds: "linked places",
   elevation: "elevation",
   symbol: "symbol",
@@ -396,7 +396,7 @@ export function shelfSubtitle(entry: ShelfEntry, now: number): string {
  */
 export function shelfExplanation(entry: ShelfEntry): string {
   if (entry.serverValue === null) {
-    return "Another device cleared this field after you wrote it, so your text was dropped.";
+    return "Another device cleared this attribute after you wrote it, so your text was dropped.";
   }
   return "Your change was overwritten by another device on this account.";
 }

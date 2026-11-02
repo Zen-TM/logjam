@@ -13,7 +13,6 @@
 // username-only; recipients never see this section at all.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
-  Alert,
   Clipboard,
   Linking,
   Platform,
@@ -98,6 +97,7 @@ import {
   StatusPill,
   TextField,
   Toast,
+  confirm,
   type ToastMessage,
   Icon,
 } from "../ui";
@@ -317,10 +317,7 @@ export function PlaceDetailScreen({
         ? `maps:0,0?q=${label}@${place.latitude},${place.longitude}`
         : `geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${label})`;
     Linking.openURL(url).catch(() => {
-      Alert.alert(
-        "Couldn't open maps",
-        "No maps app is available on this device.",
-      );
+      notify("No maps app is available on this device.", "error");
     });
   };
 
@@ -894,18 +891,18 @@ export function PlaceDetailScreen({
             onPress={() => {
               const item = foreignItem;
               if (!item) return;
-              Alert.alert(
-                `Discard "${item.label}"?`,
-                "The value is removed from this place. This can't be undone.",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Discard",
-                    style: "destructive",
-                    onPress: () => runForeignAction("discard"),
-                  },
-                ],
-              );
+              void (async () => {
+                if (
+                  await confirm({
+                    confirmTitle: `Discard "${item.label}"?`,
+                    confirmBody:
+                      "The value is removed from this place. This can't be undone.",
+                    confirmLabel: "Discard",
+                    tone: "destructive",
+                  })
+                )
+                  runForeignAction("discard");
+              })();
             }}
           />
         </View>

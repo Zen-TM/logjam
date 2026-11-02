@@ -24,7 +24,7 @@ export const PLACES_LIST = {
       key: "listHead",
       on: "web",
       reason:
-        "It carries the keyboard's range-selection hint, which a touch screen has no use for. Logjam GPS names a sort that is not the default in the filter note instead.",
+        "It carries the keyboard's range-selection hint, which a touch screen can't use. Logjam GPS names a sort that is not the default in the filter note instead.",
     },
     {
       key: "truncated",
@@ -73,13 +73,13 @@ export const PLACES_ADD = {
       key: "importFile",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
     {
       key: "importRopewiki",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
   ],
   copy: {

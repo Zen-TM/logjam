@@ -23,7 +23,7 @@
 // copy is OURS, never the server's message — interpolating a response into a
 // row is how a place name reaches a screenshot (shared/DESIGN.md §13).
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
+import { ActivityIndicator } from "react-native";
 
 import { messageFromError } from "@logjam/shared";
 
@@ -31,7 +31,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
-import { Avatar, ErrorBanner, IconButton, Row } from "../ui";
+import { Avatar, confirm, ErrorBanner, IconButton, Row } from "../ui";
 import { useTheme } from "../theme";
 
 /**
@@ -136,31 +136,23 @@ export function useSharing({
   );
 
   const confirmRevoke = useCallback(
-    (recipient: ShareRecipient) => {
-      Alert.alert(
-        `Stop sharing with ${recipient.sharedWith.username}?`,
-        revokeBody(recipient.sharedWith.username),
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Unshare",
-            style: "destructive",
-            onPress: () => {
-              setBusyId(recipient.id);
-              setActionError(null);
-              Promise.resolve(calls.revoke(recipient.sharedWith.id))
-                .then(() => load())
-                .catch((err: unknown) => {
-                  console.error(err);
-                  setActionError(
-                    messageFromError(err, "Couldn't stop sharing that."),
-                  );
-                })
-                .finally(() => setBusyId(null));
-            },
-          },
-        ],
-      );
+    async (recipient: ShareRecipient) => {
+      const ok = await confirm({
+        confirmTitle: `Stop sharing with ${recipient.sharedWith.username}?`,
+        confirmBody: revokeBody(recipient.sharedWith.username),
+        confirmLabel: "Unshare",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      setBusyId(recipient.id);
+      setActionError(null);
+      Promise.resolve(calls.revoke(recipient.sharedWith.id))
+        .then(() => load())
+        .catch((err: unknown) => {
+          console.error(err);
+          setActionError(messageFromError(err, "Couldn't stop sharing that."));
+        })
+        .finally(() => setBusyId(null));
     },
     [calls, load, revokeBody],
   );

@@ -516,8 +516,8 @@ describe("Invite people after a refused invite", () => {
 
 describe("someone asking to join", () => {
   // Mutation: put the buttons back in a footer, or label them by their
-  // glyph: the row loses its Let in / Turn down on the name's own line.
-  it("is let in or turned down by labelled buttons on their own row", () => {
+  // glyph: the row loses its Accept / Decline on the name's own line.
+  it("is accepted or declined by labelled buttons on their own row", () => {
     const asking = {
       ...plan,
       members: [
@@ -541,9 +541,9 @@ describe("someone asking to join", () => {
       />,
     );
     expect(screen.queryByText("See answers")).toBeNull();
-    const letIn = screen.getByRole("button", { name: "Let in" });
+    const letIn = screen.getByRole("button", { name: "Accept" });
     expect(letIn.closest('[class*="footer"]')).toBeNull();
-    expect(screen.getByRole("button", { name: "Turn down" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
     fireEvent.click(letIn);
     expect(approveMember).toHaveBeenCalledWith(asking.id, "u9");
   });

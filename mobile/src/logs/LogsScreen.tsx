@@ -21,7 +21,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Alert,
   Keyboard,
   RefreshControl,
   SectionList,
@@ -94,6 +93,7 @@ import {
   SearchField,
   SyncStatusPills,
   Toast,
+  confirm,
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
@@ -237,34 +237,30 @@ export function LogsScreen({
     }, [clearSelection]),
   );
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedItems;
     const count = targets.length;
-    const confirm = tripDeleteConfirm(count);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            let failures = 0;
-            for (const trip of targets) {
-              try {
-                await deleteTripLocal(trip.id);
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            if (failures === 0)
-              info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
-            else fail(`${failures} of ${count} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    if (
+      !(await confirm({
+        ...tripDeleteConfirm(count),
+        confirmLabel: "Delete",
+        tone: "destructive",
+      }))
+    )
+      return;
+    let failures = 0;
+    for (const trip of targets) {
+      try {
+        await deleteTripLocal(trip.id);
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    if (failures === 0)
+      info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
+    else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
@@ -466,7 +462,7 @@ export function LogsScreen({
             showSelectAll={selectedItems.length < selectableItems.length}
             onClear={clearSelection}
             onSelectAll={selectAll}
-            onDelete={deleteSelected}
+            onDelete={() => void deleteSelected()}
           />
         ) : (
           <ChipRail

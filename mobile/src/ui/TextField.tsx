@@ -24,6 +24,11 @@ type TextFieldProps = {
   error?: string | null;
   /** One plain sentence under the input saying what it means or takes. */
   hint?: string;
+  /** Marks the field "Required" beside its label. */
+  requiredMark?: boolean;
+  /** Keeps the error line's height when it is empty, so a submit that lights
+   *  the errors does not move the form. */
+  reserveError?: boolean;
   /**
    * Handle on the underlying input. `autoFocus` is unreliable for a field that
    * mounts inside an animating modal — the window isn't focusable yet, so the
@@ -47,6 +52,7 @@ type TextFieldProps = {
   | "textContentType"
   | "autoFocus"
   | "onSubmitEditing"
+  | "onBlur"
   | "returnKeyType"
   | "multiline"
   | "editable"
@@ -59,9 +65,12 @@ export function TextField({
   onChangeText,
   error,
   hint,
+  requiredMark,
+  reserveError,
   multiline,
   inputRef,
   accessory,
+  onBlur,
   ...inputProps
 }: TextFieldProps) {
   const theme = useTheme();
@@ -94,11 +103,21 @@ export function TextField({
       multiline={multiline}
       {...inputProps}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onBlur={(event) => {
+        setFocused(false);
+        onBlur?.(event);
+      }}
     />
   );
   return (
-    <Field label={label} hint={hint} error={error} disabled={disabled}>
+    <Field
+      label={label}
+      hint={hint}
+      error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
+      disabled={disabled}
+    >
       {accessory != null ? (
         <View style={styles.inputRow}>
           {input}

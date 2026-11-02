@@ -70,10 +70,13 @@ function FriendInviteDialog({
   return (
     <ConfirmDialog
       open={invite != null}
-      title={words?.confirmTitle ?? ""}
-      message={words?.confirmBody ?? null}
-      confirmLabel={copy.inviteAccept}
-      confirmColor="primary"
+      copy={
+        words && {
+          ...words,
+          confirmLabel: copy.inviteAccept,
+          tone: "filled",
+        }
+      }
       busy={busy}
       onConfirm={() => void accept()}
       onClose={() => setInvite(null)}

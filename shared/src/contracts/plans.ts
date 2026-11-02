@@ -31,6 +31,7 @@ import { formatBytes } from "../format.js";
 import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
+import { PLACE_FORM } from "./placeForm.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
@@ -437,7 +438,7 @@ export const TRIP_PLAN_PAGE = {
     printFormsNote:
       "Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.",
     printIntro:
-      "For someone not on the trip, such as a parent. It\u2019s a file you keep or send, not a link.",
+      "For someone not on the trip, such as a parent. It's a file you keep or send, not a link.",
     printGoing: "Who's going",
     printSubmit: "Print or save as PDF",
     printLeaders: "Leaders:",
@@ -445,8 +446,8 @@ export const TRIP_PLAN_PAGE = {
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
-    itemOtherNames: "Other names",
-    itemOtherNamesHint: "Separate them with commas.",
+    itemAlsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
+    itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
     itemLatitude: "Latitude",
     itemLongitude: "Longitude",
     itemElevation: "Elevation (m)",
@@ -455,7 +456,7 @@ export const TRIP_PLAN_PAGE = {
     placeTypeFallback: "Place",
     placeSetAside: "Set aside",
     placeSetAsideHint:
-      "The person who added this place had these attributes, and its type here has no field for them. Save a copy to keep them.",
+      "The person who added this place had these attributes, and its type here doesn't have them. Save a copy to keep them.",
     placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
@@ -477,12 +478,12 @@ export const TRIP_PLAN_PAGE = {
     peopleAsking: "Asking to join",
     peopleGoing: "Going",
     peopleInvited: "Invited",
-    letIn: "Let in",
-    turnDown: "Turn down",
+    letIn: "Accept",
+    turnDown: "Decline",
     roleFailed: "Couldn't change their role.",
-    letInFailed: "Couldn't let them in.",
-    turnDownFailed: "Couldn't turn them down.",
-    turnedDown: "Request turned down.",
+    letInFailed: "Couldn't accept them.",
+    turnDownFailed: "Couldn't decline them.",
+    turnedDown: "Request declined.",
     removeFailed: "Couldn't remove them.",
     cancelInvite: "Cancel invite",
     personUnanswered: "Hasn't answered",
@@ -902,7 +903,7 @@ export const TRIP_PLAN_FORMS = {
       key: "list",
       on: "gps",
       reason:
-        "A phone has no room for a column per question, so each person's answers stack under their name.",
+        "A phone is too narrow for a column per question, so each person's answers stack under their name.",
     },
   ],
   copy: {
@@ -957,10 +958,6 @@ export const TRIP_PLAN_FORMS = {
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
     titleNeeded: "Give the form a title.",
-    discardTitle: "Discard changes?",
-    discardBody: "What you changed in this form will be lost.",
-    discardKeep: "Keep editing",
-    discardConfirm: "Discard changes",
     // The chooser a new form starts from.
     chooseTemplates: "Templates",
     chooseMine: "From your other plans",

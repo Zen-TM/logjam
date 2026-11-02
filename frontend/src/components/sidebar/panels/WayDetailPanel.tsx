@@ -266,6 +266,11 @@ export default function WayDetailPanel({
   const sharingPlace =
     sharedPlaces.find((place) => place.id === placeId) ?? null;
   const ownerName = route ? ownerUsername(friends, route.ownerId) : null;
+  const removeShare = removeShareConfirm({
+    kindLabel: "route",
+    itemName: way.title,
+    ownerName,
+  });
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
     setBusy(true);
@@ -787,14 +792,14 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={pendingLink !== null}
-        title="Replace this place's route?"
-        message={
-          pendingLink
-            ? `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`
-            : ""
+        copy={
+          pendingLink && {
+            confirmTitle: "Replace this place's route?",
+            confirmBody: `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`,
+            confirmLabel: "Replace",
+            tone: "filled",
+          }
         }
-        confirmLabel="Replace"
-        confirmColor="primary"
         busy={busy}
         onConfirm={() => {
           const target = pendingLink;
@@ -809,22 +814,12 @@ export default function WayDetailPanel({
           makes) and the button is not the red one a delete uses. */}
       <ConfirmDialog
         open={ending === "remove"}
-        title={
-          removeShareConfirm({
-            kindLabel: "route",
-            itemName: way.title,
-            ownerName,
-          }).title
-        }
-        message={
-          removeShareConfirm({
-            kindLabel: "route",
-            itemName: way.title,
-            ownerName,
-          }).body
-        }
-        confirmLabel="Remove"
-        confirmColor="primary"
+        copy={{
+          confirmTitle: removeShare.title,
+          confirmBody: removeShare.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={handleRemoveShare}
         onClose={() => setEnding(null)}
@@ -832,12 +827,14 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={ending === "copyAndRemove"}
-        title="Save to your Ways and remove?"
-        message={`A copy of "${way.title}" is saved to your Ways first, then ${
-          ownerName ? `${ownerName}'s` : "the owner's"
-        } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`}
-        confirmLabel="Save and remove"
-        confirmColor="primary"
+        copy={{
+          confirmTitle: "Save to your Ways and remove?",
+          confirmBody: `A copy of "${way.title}" is saved to your Ways first, then ${
+            ownerName ? `${ownerName}'s` : "the owner's"
+          } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,
+          confirmLabel: "Save and remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={() => handleCopy(true)}
         onClose={() => setEnding(null)}
@@ -845,9 +842,13 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={confirmDelete}
-        title={route ? "Delete route?" : "Delete this file?"}
-        message={`"${way.title}" is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.`}
-        confirmLabel="Delete"
+        copy={{
+          confirmTitle: `Delete ${way.title}?`,
+          confirmBody:
+            "It is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.",
+          confirmLabel: "Delete",
+          tone: "destructive",
+        }}
         busy={busy}
         onConfirm={() => {
           setConfirmDelete(false);

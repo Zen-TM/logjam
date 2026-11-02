@@ -20,7 +20,7 @@
 // and no Edit, Share or Delete, on BOTH surfaces, because the gate lives in
 // this component rather than in its callers.
 import { Fragment, useMemo, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import {
   placeDeleteConfirm,
@@ -32,7 +32,7 @@ import {
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme } from "../theme";
-import { BottomSheet, closedSheet, Row } from "../ui";
+import { BottomSheet, closedSheet, confirm, Row } from "../ui";
 import { removeSharedPlace } from "../sharing/removeShare";
 import { useCopyPanel } from "../sharing/CopySheet";
 import {
@@ -211,34 +211,35 @@ export function PlaceOptionsSheet({
     onClose();
   };
 
-  const confirmRemoveShare = () => {
-    const confirm = removeShareConfirm({
+  const confirmRemoveShare = async () => {
+    const copy = removeShareConfirm({
       kindLabel: "place",
       itemName: place.name,
     });
     close();
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        // Not `destructive`: alice keeps her place, its notes and its photos.
-        text: "Remove",
-        onPress: () => {
-          removeSharedPlace(place.id)
-            .then(() => {
-              onInfo("Removed.");
-              onGone?.();
-            })
-            .catch((err: unknown) => {
-              // Our own copy, never the error's: it may carry the name.
-              console.error(err);
-              onError("Couldn't remove this shared place.");
-            });
-        },
-      },
-    ]);
+    if (
+      !(await confirm({
+        confirmTitle: copy.title,
+        confirmBody: copy.body,
+        confirmLabel: "Remove",
+        // Not destructive: alice keeps her place, its notes and its photos.
+        tone: "filled",
+      }))
+    )
+      return;
+    removeSharedPlace(place.id)
+      .then(() => {
+        onInfo("Removed.");
+        onGone?.();
+      })
+      .catch((err: unknown) => {
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't remove this shared place.");
+      });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     // The sentence is per-instance — it counts the trips that lose their link —
     // and it is written once, in placeDeleteConfirm (DESIGN.md). The count
     // is derived HERE from the mirrored trips rather than passed in, so neither
@@ -246,27 +247,19 @@ export function PlaceOptionsSheet({
     const linkedTrips = (trips.data ?? []).filter((trip) =>
       trip.places.some((link) => link.id === place.id),
     ).length;
-    const confirm = placeDeleteConfirm({ name: place.name }, linkedTrips);
+    const copy = placeDeleteConfirm({ name: place.name }, linkedTrips);
     close();
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          deletePlaceLocal(place.id)
-            .then(() => {
-              onInfo("Place deleted.");
-              onGone?.();
-            })
-            .catch((err: unknown) => {
-              // Our own copy, never the error's: it may carry the name.
-              console.error(err);
-              onError("Couldn't delete this place.");
-            });
-        },
-      },
-    ]);
+    if (!(await confirm(copy))) return;
+    deletePlaceLocal(place.id)
+      .then(() => {
+        onInfo("Place deleted.");
+        onGone?.();
+      })
+      .catch((err: unknown) => {
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't delete this place.");
+      });
   };
 
   // Exhaustive by type: every verb the contract gives Logjam GPS runs here.
@@ -284,8 +277,8 @@ export function PlaceOptionsSheet({
     share: () => setSharing(true),
     copy: () => setCopyMode("copy"),
     copyAndRemove: () => setCopyMode("copyAndRemove"),
-    remove: confirmRemoveShare,
-    delete: confirmDelete,
+    remove: () => void confirmRemoveShare(),
+    delete: () => void confirmDelete(),
   };
 
   return (

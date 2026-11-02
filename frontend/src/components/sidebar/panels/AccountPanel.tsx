@@ -258,7 +258,7 @@ function AccountPanel({
             </Button>
           )}
           <Row
-            leading={<IconTile icon="delete" hue="var(--color-warning)" />}
+            leading={<IconTile icon="delete" hue="var(--color-accent)" />}
             title={copy.deleteAccount}
             onOpen={() => setDeleteAccountOpen(true)}
           />

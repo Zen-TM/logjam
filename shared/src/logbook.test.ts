@@ -402,7 +402,7 @@ describe("stats presentation", () => {
     expect(statsHeadline(base, null, false).map((tile) => tile.label)).toEqual([
       "Trips",
       "Places visited",
-      "Activity types",
+      "Trip types",
       "Revisited",
     ]);
     expect(statsHeadline(base, "canyoning", true).at(-1)).toEqual({

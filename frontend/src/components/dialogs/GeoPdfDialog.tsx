@@ -27,8 +27,6 @@ import { downloadBlob } from "../../download";
 import { vegetationUrlsFor } from "./geoPdfVegetation";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import ConfirmDialog from "./ConfirmDialog";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
@@ -48,6 +46,7 @@ import type {
   CoordMode,
 } from "@logjam/shared";
 import {
+  abandonConfirm,
   getPaperDimensions,
   getMapDimensions,
   GEOPDF_PADDING_MM,
@@ -889,13 +888,6 @@ function GeoPdfDialog({
     [overlays],
   );
 
-  // Esc / backdrop / X / Cancel route through this so a dirty form prompts
-  // before discarding. "Select on map" bypasses it entirely (it calls
-  // onSelectOnMap, never onClose/requestClose — App flips `open` to false
-  // itself for that round trip). A successful Generate also bypasses it by
-  // calling the raw onClose directly.
-  const guard = useUnsavedChangesGuard(dirty, onClose);
-
   // The renderer is its own chunk: start fetching it on open, so Make it
   // doesn't wait. A failure here resurfaces when Make it imports it again.
   useEffect(() => {
@@ -918,14 +910,15 @@ function GeoPdfDialog({
         title="Export an area"
         size="large"
         dismissible={!generating || progress !== null}
-        onClose={guard.requestClose}
-        footer={
+        onClose={onClose}
+        // "Select on map" and a successful Generate call onClose directly, so
+        // neither asks.
+        discard={dirty ? abandonConfirm("export", true) : null}
+        footer={(requestClose) => (
           <>
             <Button
               onClick={
-                progress
-                  ? () => renderAbort.current?.abort()
-                  : guard.requestClose
+                progress ? () => renderAbort.current?.abort() : requestClose
               }
               disabled={generating && !progress}
               disabledReason="Starting the export…"
@@ -940,7 +933,7 @@ function GeoPdfDialog({
               Make it
             </Button>
           </>
-        }
+        )}
       >
         <div className={classes.form}>
           <p className={classes.wideHint}>This is easier on a bigger screen.</p>
@@ -1460,16 +1453,6 @@ function GeoPdfDialog({
           )}
         </div>
       </Dialog>
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }

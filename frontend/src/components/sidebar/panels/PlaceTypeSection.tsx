@@ -288,10 +288,7 @@ function PlaceTypeSection({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
-        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
-        confirmLabel={copy.deleteType}
-        confirmColor="error"
+        copy={deleting && placeTypeDeleteConfirm(deleting.name)}
         busy={saving}
         onConfirm={async () => {
           const type = deleting;
@@ -313,32 +310,17 @@ function PlaceTypeSection({
           places have still moved, which is the half that carries the data. */}
       <ConfirmDialog
         open={mergingFrom !== null}
-        title={`Merge "${mergingFrom?.name ?? ""}" into another type?`}
-        message={
-          <>
-            <Select
-              label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
-              value={mergeTargetId}
-              onChange={(event) => setMergeTargetId(event.target.value)}
-            >
-              {types
-                .filter((type) => type.id !== mergingFrom?.id)
-                .map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-            </Select>
-            <p className={classes.note}>
-              "{mergingFrom?.name ?? ""}" is then deleted. Values{" "}
-              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no
-              attribute for are kept on each place, and can be added to it
-              later.
-            </p>
-          </>
+        copy={
+          mergingFrom && {
+            confirmTitle: `Merge "${mergingFrom.name}" into another type?`,
+            confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
+              mergeTarget ? `"${mergeTarget.name}"` : "the new type"
+            } has no attribute for are kept on each place, and can be added to it later.`,
+            confirmLabel: "Merge",
+            tone: "destructive",
+            icon: "merge",
+          }
         }
-        confirmLabel="Merge"
-        confirmColor="error"
         busy={saving}
         onConfirm={async () => {
           const type = mergingFrom;
@@ -352,7 +334,21 @@ function PlaceTypeSection({
         onClose={() => {
           if (!saving) setMergingFrom(null);
         }}
-      />
+      >
+        <Select
+          label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+          value={mergeTargetId}
+          onChange={(event) => setMergeTargetId(event.target.value)}
+        >
+          {types
+            .filter((type) => type.id !== mergingFrom?.id)
+            .map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+        </Select>
+      </ConfirmDialog>
     </div>
   );
 }

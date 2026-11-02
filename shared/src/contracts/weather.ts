@@ -27,7 +27,7 @@ export const WEATHER = {
     show: "Show the weather here",
     pastRain: `Rain, past ${WEATHER_PAST_DAYS} days`,
     loading: "Getting the forecast…",
-    failed: "Couldn’t get the forecast.",
+    failed: "Couldn't get the forecast.",
     needsConnection: "Needs a connection",
     refresh: "Refresh",
     tryAgain: "Try again",

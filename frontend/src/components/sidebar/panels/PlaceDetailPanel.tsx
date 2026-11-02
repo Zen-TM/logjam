@@ -1132,10 +1132,15 @@ function PlaceDetailPanel({
       {/* The only one of the three that LOSES something, so it asks first. */}
       <ConfirmDialog
         open={foreignItem !== null && confirmDiscard}
-        title={`Discard "${foreignItem?.label ?? ""}"?`}
-        message="The value is removed from this place. This can't be undone."
-        confirmLabel="Discard"
-        confirmColor="error"
+        copy={
+          foreignItem && {
+            confirmTitle: `Discard "${foreignItem.label}"?`,
+            confirmBody:
+              "The value is removed from this place. This can't be undone.",
+            confirmLabel: "Discard",
+            tone: "destructive",
+          }
+        }
         busy={foreignFieldBusy}
         onConfirm={() => runForeignFieldAction("discard")}
         onClose={() => setConfirmDiscard(false)}
@@ -1143,12 +1148,13 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={trackToDelete != null}
-        title="Delete track?"
-        message={
-          <>
-            This permanently deletes the track <b>{trackToDelete?.filename}</b>.
-            This cannot be undone.
-          </>
+        copy={
+          trackToDelete && {
+            confirmTitle: `Delete ${trackToDelete.filename}?`,
+            confirmBody: "The track is deleted and can't be brought back.",
+            confirmLabel: "Delete",
+            tone: "destructive",
+          }
         }
         busy={deletingTrack}
         onConfirm={handleDeleteTrack}
@@ -1170,8 +1176,12 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={confirmCopyAndRemove}
-        title={copyAndRemoveCopy.title}
-        message={copyAndRemoveCopy.body}
+        copy={{
+          confirmTitle: copyAndRemoveCopy.title,
+          confirmBody: copyAndRemoveCopy.body,
+          confirmLabel: "Save a copy and remove",
+          tone: "filled",
+        }}
         busy={copying}
         onConfirm={() => handleCopyPlace(true)}
         onClose={() => setConfirmCopyAndRemove(false)}
@@ -1181,9 +1191,12 @@ function PlaceDetailPanel({
           `removeShareConfirm`, not this page's own wording. */}
       <ConfirmDialog
         open={confirmRemove}
-        title={removeCopy.title}
-        message={removeCopy.body}
-        confirmLabel="Remove"
+        copy={{
+          confirmTitle: removeCopy.title,
+          confirmBody: removeCopy.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={removing}
         onConfirm={handleRemoveShare}
         onClose={() => setConfirmRemove(false)}
@@ -1191,10 +1204,7 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel="Delete"
-        confirmColor="error"
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={handleDelete}
         onClose={() => setShowDeleteConfirm(false)}

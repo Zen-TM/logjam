@@ -30,22 +30,22 @@ export const TRIPS_LIST = {
     { key: "list" },
   ],
   copy: {
-    typeRail: "Activity",
+    typeRail: "Trip type",
     allTypes: "All",
     noType: "No type",
 
     search: "Search trips",
-    stats: "Logbook stats",
+    stats: "Trip stats",
     clearFilters: "Clear filters",
-    loading: "Loading your logbook…",
+    loading: "Loading your trips…",
 
     firstRunTitle: "No trips yet",
     // The first-run body names the ways in, and they differ: Logjam Web
     // imports, Logjam GPS does not, and a guest's trips never sync.
     firstRunBodyWeb:
-      "Log a trip, or bring your logbook in from a file. Trips you log here reach Logjam GPS for offline use.",
+      "Log a trip, or bring your trips in from a file. Trips you log here reach Logjam GPS for offline use.",
     firstRunBodyGps:
-      "Log a trip, or import your logbook on Logjam Web. Once synced, it works offline.",
+      "Log a trip, or import your trips on Logjam Web. Once synced, it works offline.",
     firstRunBodyGuest:
       "Log a trip to start. Everything is saved on this phone and works offline.",
     filteredTitle: "No trips match",
@@ -67,7 +67,7 @@ export const TRIPS_ADD = {
       key: "importFile",
       on: "web",
       reason:
-        "Logjam GPS has no trip importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
   ],
   copy: {

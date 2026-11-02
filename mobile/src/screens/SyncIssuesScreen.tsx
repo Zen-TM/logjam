@@ -40,12 +40,13 @@
 // `mobile/src/screens/syncIssueDisplay.test.ts`), which a place create op
 // carries (§11 — a list is what ends up in a screenshot).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   BottomSheet,
+  confirm,
   Hero,
   IconButton,
   Row,
@@ -166,25 +167,24 @@ export function SyncIssuesScreen({
       .catch((err: unknown) => console.error(err));
   }, []);
 
-  const confirmResync = useCallback(() => {
-    Alert.alert(
-      "Get a fresh copy?",
-      "Re-downloads your places, trips and photos from scratch. " +
-        "Uploads still waiting are kept.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Download again",
-          onPress: () =>
-            void resyncFromScratch()
-              .then(() => {
-                notify("Downloading a fresh copy…");
-                load();
-              })
-              .catch((err: unknown) => console.error(err)),
-        },
-      ],
-    );
+  const confirmResync = useCallback(async () => {
+    if (
+      !(await confirm({
+        confirmTitle: "Get a fresh copy?",
+        confirmBody:
+          "Re-downloads your places, trips and photos from scratch. " +
+          "Uploads still waiting are kept.",
+        confirmLabel: "Download again",
+        tone: "filled",
+      }))
+    )
+      return;
+    void resyncFromScratch()
+      .then(() => {
+        notify("Downloading a fresh copy…");
+        load();
+      })
+      .catch((err: unknown) => console.error(err));
   }, [load, notify]);
 
   useEffect(() => {
@@ -285,52 +285,46 @@ export function SyncIssuesScreen({
       .catch((err: unknown) => console.error(err));
   }, [load, notify, online, retryable]);
 
-  const confirmBulkRestore = useCallback(() => {
+  const confirmBulkRestore = useCallback(async () => {
     // Restoring is a clobber on every device, and in bulk it is a clobber the
     // user cannot read one value at a time — so it confirms, like the delete
     // beside it, and the body says what it costs.
-    Alert.alert(
-      restorable.length === 1
-        ? "Restore this value?"
-        : `Restore ${restorable.length} values?`,
+    const ok = await confirm({
+      confirmTitle:
+        restorable.length === 1
+          ? "Restore this value?"
+          : `Restore ${restorable.length} values?`,
       // A one-row selection gets the same quoted value the sheet's own confirm
       // gives it: the bar is a different route to the same irreversible write,
       // not a reason to say less about it.
-      restoreConfirmBody(
+      confirmBody: restoreConfirmBody(
         restorable.length,
         restorable.length === 1 && typeof restorable[0].serverValue === "string"
           ? restorable[0].serverValue
           : undefined,
       ),
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Restore",
-          onPress: () => {
-            void Promise.all(
-              restorable.map((entry) => restoreShelfValue(entry.id)),
-            )
-              .then(() => {
-                notify(
-                  restorable.length === 1
-                    ? "Value restored."
-                    : `${restorable.length} values restored.`,
-                );
-                clearSelection();
-                load();
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify("Couldn't restore those.", "error");
-              });
-          },
-        },
-      ],
-    );
+      confirmLabel: "Restore",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    void Promise.all(restorable.map((entry) => restoreShelfValue(entry.id)))
+      .then(() => {
+        notify(
+          restorable.length === 1
+            ? "Value restored."
+            : `${restorable.length} values restored.`,
+        );
+        clearSelection();
+        load();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        notify("Couldn't restore those.", "error");
+      });
   }, [clearSelection, load, notify, restorable]);
 
   /** The bulk delete: discard for stuck rows, forget for lost ones. */
-  const discardSelected = useCallback(() => {
+  const discardSelected = useCallback(async () => {
     const uploadCount = selectedStuck.filter(
       (op) => op.entity === "media",
     ).length;
@@ -340,31 +334,23 @@ export function SyncIssuesScreen({
       lostCount: selectedLost.length,
     });
     const total = selectedStuck.length + selectedLost.length;
-    Alert.alert(
-      total === 1 ? "Discard this?" : `Discard ${total} entries?`,
-      body,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            void Promise.all([
-              ...selectedStuck.map((op) => discardParkedOp(op.seq)),
-              ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
-            ])
-              .then(() => {
-                clearSelection();
-                notify(
-                  total === 1 ? "Discarded." : `${total} entries discarded.`,
-                );
-                load();
-              })
-              .catch((err: unknown) => console.error(err));
-          },
-        },
-      ],
-    );
+    const ok = await confirm({
+      confirmTitle: total === 1 ? "Discard this?" : `Discard ${total} entries?`,
+      confirmBody: body,
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    void Promise.all([
+      ...selectedStuck.map((op) => discardParkedOp(op.seq)),
+      ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
+    ])
+      .then(() => {
+        clearSelection();
+        notify(total === 1 ? "Discarded." : `${total} entries discarded.`);
+        load();
+      })
+      .catch((err: unknown) => console.error(err));
   }, [clearSelection, load, notify, selectedLost, selectedStuck]);
 
   /**
@@ -373,118 +359,110 @@ export function SyncIssuesScreen({
    * dialog is showing them, which is the whole reason this is safe to offer.
    */
   const confirmSendRest = useCallback(
-    (op: ParkedOp) => {
+    async (op: ParkedOp) => {
       setMenuIssue(null);
       const dropped = rejectedFields(op);
       const kept = salvageableFields(op);
-      Alert.alert(
-        "Send the rest?",
-        `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
+      const ok = await confirm({
+        confirmTitle: "Send the rest?",
+        confirmBody:
+          `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
           `${listFields(dropped)} ${dropped.length === 1 ? "is" : "are"} deleted — ` +
           `${dropped.length === 1 ? "it's" : "they're"} what your account refused.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Send the rest",
-            onPress: () =>
-              void retryWithoutFields(op.seq, dropped)
-                .then(() => {
-                  notify(
-                    online
-                      ? "Sending the rest of that change…"
-                      : "Queued. It goes up when you have signal.",
-                  );
-                  load();
-                })
-                .catch((err: unknown) => {
-                  console.error(err);
-                  notify("That didn't work. Try again in a moment.", "error");
-                }),
-          },
-        ],
-      );
+        confirmLabel: "Send the rest",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void retryWithoutFields(op.seq, dropped)
+        .then(() => {
+          notify(
+            online
+              ? "Sending the rest of that change…"
+              : "Queued. It goes up when you have signal.",
+          );
+          load();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify("That didn't work. Try again in a moment.", "error");
+        });
     },
     [load, notify, online],
   );
 
   const confirmDiscard = useCallback(
-    (op: ParkedOp) => {
+    async (op: ParkedOp) => {
       setMenuIssue(null);
-      Alert.alert("Discard this change?", discardExplanation(op), [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () =>
-            void discardParkedOp(op.seq)
-              .then(() => {
-                notify(
-                  op.entity === "media"
-                    ? "Upload deleted from this phone."
-                    : "Change discarded.",
-                );
-                load();
-              })
-              .catch((err: unknown) => console.error(err)),
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: "Discard this change?",
+        confirmBody: discardExplanation(op),
+        confirmLabel: "Discard",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void discardParkedOp(op.seq)
+        .then(() => {
+          notify(
+            op.entity === "media"
+              ? "Upload deleted from this phone."
+              : "Change discarded.",
+          );
+          load();
+        })
+        .catch((err: unknown) => console.error(err));
     },
     [load, notify],
   );
 
   const confirmForget = useCallback(
-    (entry: ShelfEntry) => {
+    async (entry: ShelfEntry) => {
       setMenuIssue(null);
-      Alert.alert(
-        "Discard this value?",
-        "This is the only copy left of what you typed. It can't be got back.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () =>
-              void dismissShelfEntry(entry.id)
-                .then(() => {
-                  notify("Value discarded.");
-                  load();
-                })
-                .catch((err: unknown) => console.error(err)),
-          },
-        ],
-      );
+      const ok = await confirm({
+        confirmTitle: "Discard this value?",
+        confirmBody:
+          "This is the only copy left of what you typed. It can't be got back.",
+        confirmLabel: "Discard",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void dismissShelfEntry(entry.id)
+        .then(() => {
+          notify("Value discarded.");
+          load();
+        })
+        .catch((err: unknown) => console.error(err));
     },
     [load, notify],
   );
 
   const confirmRestore = useCallback(
-    (entry: ShelfEntry) => {
+    async (entry: ShelfEntry) => {
       setMenuIssue(null);
       // The value about to be destroyed is quoted in the dialog: this is the
       // last moment it exists anywhere, and the sheet that was showing it has
       // closed behind the alert.
       const replacing =
         typeof entry.serverValue === "string" ? entry.serverValue : undefined;
-      Alert.alert("Restore this value?", restoreConfirmBody(1, replacing), [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Restore",
-          onPress: () =>
-            void restoreShelfValue(entry.id)
-              .then(() => {
-                notify(
-                  online
-                    ? "Value restored. It'll reach your other devices next sync."
-                    : "Value restored on this phone. It syncs when you have signal.",
-                );
-                load();
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify("Couldn't restore that value.", "error");
-              }),
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: "Restore this value?",
+        confirmBody: restoreConfirmBody(1, replacing),
+        confirmLabel: "Restore",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void restoreShelfValue(entry.id)
+        .then(() => {
+          notify(
+            online
+              ? "Value restored. It'll reach your other devices next sync."
+              : "Value restored on this phone. It syncs when you have signal.",
+          );
+          load();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify("Couldn't restore that value.", "error");
+        });
     },
     [load, notify, online],
   );

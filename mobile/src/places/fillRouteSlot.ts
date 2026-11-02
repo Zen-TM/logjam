@@ -2,9 +2,9 @@
 // in one place, for all five sources.
 //
 // Split from `routeSlot.ts` (which is pure and tested) only because this half
-// reaches the Alert, the mirror and the outbox. The DECISIONS still live there;
+// reaches the confirm, the mirror and the outbox. The DECISIONS still live there;
 // nothing here re-derives an occupant or re-words a sentence.
-import { Alert } from "react-native";
+import { confirm } from "../ui";
 
 import {
   removeOccupantFirst,
@@ -15,27 +15,6 @@ import {
 } from "./routeSlot";
 import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
 import { updateRouteLocal } from "../sync/outbox";
-
-/** The user's answer to "this place already has a route". */
-function confirmDisplacement(
-  placeName: string,
-  occupant: RouteSlotOccupant,
-): Promise<boolean> {
-  const confirm = routeSlotDisplaceConfirm(placeName, occupant);
-  if (!confirm) return Promise.resolve(true);
-  return new Promise((resolve) => {
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-      {
-        text: "Replace",
-        // Nothing here destroys anything — both occupants are unlinked and
-        // both survive — so the button is never the red one.
-        style: "default",
-        onPress: () => resolve(true),
-      },
-    ]);
-  });
-}
 
 /**
  * Confirm the displacement, then write the new way and remove the incumbent in
@@ -59,7 +38,8 @@ export async function fillRouteSlot({
   occupant: RouteSlotOccupant;
   write: () => Promise<unknown>;
 }): Promise<boolean> {
-  if (!(await confirmDisplacement(placeName, occupant))) return false;
+  const displace = routeSlotDisplaceConfirm(placeName, occupant);
+  if (displace && !(await confirm(displace))) return false;
 
   const remove = occupant
     ? () =>

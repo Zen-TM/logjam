@@ -21,7 +21,7 @@
 // confirm the user opened for that place — never in a log or an error string.
 import { mediaCategory, mediaDisplayName } from "@logjam/shared";
 
-import type { DeleteConfirmCopy } from "@logjam/shared";
+import type { ConfirmCopy } from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
 
 /** Where a new way comes from. The panel that offers all five is AddWaySheet. */
@@ -101,7 +101,7 @@ export function routeSlotOccupant(
 export function routeSlotDisplaceConfirm(
   placeName: string,
   occupant: RouteSlotOccupant,
-): DeleteConfirmCopy | null {
+): ConfirmCopy | null {
   if (!occupant) return null;
   return {
     confirmTitle: `${placeName} already has a route`,
@@ -109,6 +109,9 @@ export function routeSlotDisplaceConfirm(
       occupant.kind === "route"
         ? `“${occupant.name}” will be unlinked, but the route is kept.`
         : `“${mediaDisplayName(occupant.media)}” will be unlinked, but the file is kept in Saved.`,
+    confirmLabel: "Replace",
+    // Both occupants are unlinked and both survive: nothing is lost.
+    tone: "filled",
   };
 }
 

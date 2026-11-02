@@ -38,7 +38,6 @@
 // logged, never persisted.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   ScrollView,
   StyleSheet,
@@ -118,6 +117,7 @@ import {
   type ToastMessage,
   Icon,
   EmptyState,
+  confirm,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -717,23 +717,17 @@ export function SavedScreen({
     setOrphans((current) => current.filter((row) => !resumed.has(row.id)));
   }, []);
 
-  const discardOrphan = useCallback((group: UnfinishedRegionGroup) => {
-    Alert.alert(
-      "Discard this download?",
-      "The download so far will be deleted from this phone.",
-      [
-        { text: "Keep it", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            const gone = new Set(group.regions.map((region) => region.id));
-            for (const id of gone) void deleteRegionFile(id);
-            setOrphans((current) => current.filter((row) => !gone.has(row.id)));
-          },
-        },
-      ],
-    );
+  const discardOrphan = useCallback(async (group: UnfinishedRegionGroup) => {
+    const ok = await confirm({
+      confirmTitle: `Discard ${group.label}?`,
+      confirmBody: "The download so far will be deleted from this phone.",
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    const gone = new Set(group.regions.map((region) => region.id));
+    for (const id of gone) void deleteRegionFile(id);
+    setOrphans((current) => current.filter((row) => !gone.has(row.id)));
   }, []);
   // Per-job detail (which basemap, pause/resume/stop, failure copy) lives in
   // the card's ⋯ sheet rather than expanded under it: four states' worth of
@@ -746,21 +740,17 @@ export function SavedScreen({
   const downloadSheetGroup =
     downloadGroups.find((group) => group.groupId === downloadSheetId) ?? null;
   const confirmStopGroup = useCallback(
-    (group: { label: string; jobs: { spec: { id: string } }[] }) => {
-      Alert.alert(
-        "Stop saving these maps?",
-        "The download so far will be deleted from this phone.",
-        [
-          { text: "Keep going", style: "cancel" },
-          {
-            text: "Stop",
-            style: "destructive",
-            onPress: () => {
-              for (const job of group.jobs) cancelRegionDownload(job.spec.id);
-            },
-          },
-        ],
-      );
+    async (group: { label: string; jobs: { spec: { id: string } }[] }) => {
+      const ok = await confirm({
+        confirmTitle: group.label
+          ? `Stop saving ${group.label}?`
+          : "Stop saving these maps?",
+        confirmBody: "The download so far will be deleted from this phone.",
+        confirmLabel: "Stop",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      for (const job of group.jobs) cancelRegionDownload(job.spec.id);
     },
     [],
   );
@@ -801,16 +791,11 @@ export function SavedScreen({
   const confirmCellularOk = useCallback(async (): Promise<boolean> => {
     const netState = await NetInfo.fetch();
     if (netState.type !== "cellular") return true;
-    return new Promise((resolve) => {
-      Alert.alert(
-        "Use mobile data?",
-        "You're not on Wi-Fi. Download over mobile data?",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-          { text: "Download", onPress: () => resolve(true) },
-        ],
-        { cancelable: true, onDismiss: () => resolve(false) },
-      );
+    return confirm({
+      confirmTitle: "Use mobile data?",
+      confirmBody: "You're not on Wi-Fi. Download over mobile data?",
+      confirmLabel: "Download",
+      tone: "filled",
     });
   }, []);
 
@@ -1410,7 +1395,7 @@ export function SavedScreen({
 
   /** One confirm for the whole batch; the sentence itself is
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
-  const deleteSelected = () => {
+  const deleteSelected = async () => {
     const targets = selectedItems;
     const syncedCount = targets.filter(
       (item) => item.category === "route",
@@ -1420,60 +1405,53 @@ export function SavedScreen({
       syncedCount,
       onDeviceBytes: selectedBytes,
     });
-    Alert.alert(`Delete ${countOf(targets.length, "item")}?`, body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            // Sequential, and a failure does not abandon the rest: these are
-            // independent deletes and stopping at the first one leaves the user
-            // guessing which half happened.
-            let failures = 0;
-            // An item with no delete descriptor cannot be selected in the
-            // first place; filtering rather than asserting keeps that true by
-            // construction if the selection rule ever changes.
-            const removals = targets.flatMap((item) => item.delete ?? []);
-            for (const removal of removals) {
-              try {
-                await removal.run();
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            refreshFreeSpace();
-            if (failures === 0)
-              info(`Deleted ${countOf(targets.length, "item")}.`);
-            else fail(`${failures} of ${targets.length} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    const ok = await confirm({
+      confirmTitle: `Delete ${countOf(targets.length, "item")}?`,
+      confirmBody: body,
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    // Sequential, and a failure does not abandon the rest: these are
+    // independent deletes and stopping at the first one leaves the user
+    // guessing which half happened.
+    let failures = 0;
+    // An item with no delete descriptor cannot be selected in the
+    // first place; filtering rather than asserting keeps that true by
+    // construction if the selection rule ever changes.
+    const removals = targets.flatMap((item) => item.delete ?? []);
+    for (const removal of removals) {
+      try {
+        await removal.run();
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    refreshFreeSpace();
+    if (failures === 0) info(`Deleted ${countOf(targets.length, "item")}.`);
+    else fail(`${failures} of ${targets.length} couldn't be deleted.`);
   };
 
   const deleteItem = useCallback(
-    (item: SavedItem) => {
+    async (item: SavedItem) => {
       const removal = item.delete;
       if (!removal) return;
-      Alert.alert(removal.confirmTitle, removal.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            removal
-              .run()
-              .then(refreshFreeSpace)
-              .catch((err: unknown) => {
-                console.error(err);
-                fail(messageFromError(err, "Couldn't delete that."));
-              });
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: `Delete ${item.title}?`,
+        confirmBody: removal.confirmBody,
+        confirmLabel: "Delete",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      removal
+        .run()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't delete that."));
+        });
     },
     [fail, refreshFreeSpace],
   );
@@ -1484,51 +1462,44 @@ export function SavedScreen({
    * from the one source that words this (`removeShareConfirm`).
    */
   const removeSharedItem = useCallback(
-    (item: SavedItem) => {
+    async (item: SavedItem) => {
       const removal = item.removeShare;
       if (!removal) return;
-      Alert.alert(removal.confirmTitle, removal.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          onPress: () => {
-            removal
-              .run()
-              .then(refreshFreeSpace)
-              .catch((err: unknown) => {
-                console.error(err);
-                fail(messageFromError(err, "Couldn't remove that."));
-              });
-          },
-        },
-      ]);
+      const ok = await confirm({
+        ...removal,
+        confirmLabel: "Remove",
+        tone: "filled",
+      });
+      if (!ok) return;
+      removal
+        .run()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't remove that."));
+        });
     },
     [fail, refreshFreeSpace],
   );
 
   /** Delete ONE file out of a grouped card (a basemap, a topo layer). */
   const deleteMember = useCallback(
-    (member: { title: string; delete: () => Promise<unknown> }) => {
-      Alert.alert(
-        `Delete ${member.title}?`,
-        "This map is removed from the device. The rest of this region stays.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => {
-              member
-                .delete()
-                .then(refreshFreeSpace)
-                .catch((err: unknown) => {
-                  console.error(err);
-                  fail(messageFromError(err, "Couldn't delete that."));
-                });
-            },
-          },
-        ],
-      );
+    async (member: { title: string; delete: () => Promise<unknown> }) => {
+      const ok = await confirm({
+        confirmTitle: `Delete ${member.title}?`,
+        confirmBody:
+          "This map is removed from the device. The rest of this region stays.",
+        confirmLabel: "Delete",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      member
+        .delete()
+        .then(refreshFreeSpace)
+        .catch((err: unknown) => {
+          console.error(err);
+          fail(messageFromError(err, "Couldn't delete that."));
+        });
     },
     [fail, refreshFreeSpace],
   );

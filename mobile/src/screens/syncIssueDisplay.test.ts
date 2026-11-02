@@ -567,7 +567,7 @@ describe("shelf copy", () => {
       "Cleared on another device · yesterday",
     );
     expect(shelfExplanation(shelved({ serverValue: null }))).toMatch(
-      /cleared this field/,
+      /cleared this attribute/,
     );
   });
 

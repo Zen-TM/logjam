@@ -212,7 +212,7 @@ export const FRIEND_SHARES = {
     loading: "Loading sharing…",
     emptyHint: "Share a place, a route or a map from its own menu.",
     loadFailed: "Couldn't load what's shared with this friend.",
-    unshareFailed: "Couldn't unshare. Try again.",
+    unshareFailed: "Couldn't stop sharing. Try again.",
   },
 } as const satisfies ScreenContract;
 
@@ -240,7 +240,7 @@ export function unsharedMessage(title: string, username: string): string {
 }
 
 export function bulkUnshareLabel(count: number, username: string): string {
-  return `Unshare ${count} from ${username}`;
+  return `Stop sharing ${count} with ${username}`;
 }
 
 export function bulkRemoveLabel(count: number): string {
@@ -256,10 +256,12 @@ type ShareVerbDeclaration = {
   /** A verb only one client has says why. */
   on?: "gps";
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
 };
 
-const NO_WEB_MENU =
-  "Logjam Web's share rows carry one inline button and no ⋯ menu: a gap, not a choice.";
+const NO_WEB_MENU_GAP =
+  "Logjam Web's share rows carry one inline button and no ⋯ menu.";
 
 /** A friend's share row's verbs, in order. */
 export const FRIEND_SHARE_VERBS = [
@@ -268,24 +270,34 @@ export const FRIEND_SHARE_VERBS = [
     icon: "place",
     label: "Open place",
     on: "gps",
-    reason: NO_WEB_MENU,
+    gap: NO_WEB_MENU_GAP,
   },
-  { id: "unshare", icon: "unshare", label: "Unshare", direction: "theySee" },
+  {
+    id: "unshare",
+    icon: "unshare",
+    label: "Stop sharing",
+    direction: "theySee",
+  },
   {
     id: "copy",
     icon: "copy",
     label: "Save a copy",
     on: "gps",
-    reason: NO_WEB_MENU,
+    gap: NO_WEB_MENU_GAP,
   },
   {
     id: "copyAndRemove",
     icon: "moveCopy",
     label: "Save a copy and remove",
     on: "gps",
-    reason: NO_WEB_MENU,
+    gap: NO_WEB_MENU_GAP,
   },
-  { id: "remove", icon: "hide", label: "Remove", direction: "youSee" },
+  {
+    id: "remove",
+    icon: "hide",
+    label: "Remove from my account",
+    direction: "youSee",
+  },
 ] as const satisfies readonly ShareVerbDeclaration[];
 
 export type FriendShareVerbId = (typeof FRIEND_SHARE_VERBS)[number]["id"];

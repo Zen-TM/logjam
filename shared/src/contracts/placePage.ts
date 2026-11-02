@@ -8,6 +8,7 @@ import { fieldValue } from "../fieldValues.js";
 import { SOURCES_FIELD_KEY } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
+import { PLACE_FORM } from "./placeForm.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
 import type { ScreenContract } from "./types.js";
 
@@ -47,14 +48,14 @@ export const PLACE_PAGE = {
   ],
   copy: {
     // A section's title is the copy under its own key, where it is constant.
-    position: "Position",
+    position: PLACE_FORM.copy.position,
     gauge: "River gauge",
-    doesntFit: "Doesn’t fit this type",
-    notes: "Notes",
-    sources: "Sources",
-    alsoKnownAs: "Also known as",
-    photos: "Photos & videos",
-    route: "Route",
+    doesntFit: "Doesn't fit this type",
+    notes: PLACE_FORM.copy.notes,
+    sources: PLACE_FORM.copy.sources,
+    alsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
+    photos: PLACE_FORM.copy.photos,
+    route: PLACE_FORM.copy.route,
     linkedPlaces: "Linked places",
     trips: "Your trips",
     sharedWith: "Shared with",
@@ -70,8 +71,8 @@ export const PLACE_PAGE = {
     gaugePickerHint:
       "The nearest gauge can be on a different river, so check the name.",
     gaugeLoading: "Loading river gauges…",
-    gaugeMissing: "This gauge isn’t in the latest readings.",
-    gaugeSaveFailed: "Couldn’t save the river gauge.",
+    gaugeMissing: "This gauge isn't in the latest readings.",
+    gaugeSaveFailed: "Couldn't save the river gauge.",
 
     // An empty slot gets a short label, not a lesson (UX §11).
     notesEmpty: "No notes yet.",
@@ -80,7 +81,7 @@ export const PLACE_PAGE = {
     linkedPlacesEmpty: "No linked places.",
     tripsEmpty: "No trips logged here yet.",
     // Trips are private to their owner, so a sharee sees none.
-    tripsShared: "Trips logged here are private to the place’s owner.",
+    tripsShared: "Trips logged here are private to the place's owner.",
     sharedWithEmpty: "Not shared with anyone yet.",
     shareWithFriend: "Share with a friend",
     linkAPlace: "Link a place",
@@ -90,7 +91,7 @@ export const PLACE_PAGE = {
     doesntFitCopied:
       "These came across when you copied this place. Open one to decide what to do with it.",
     doesntFitTypeChange:
-      "These are left over from when you changed this place’s type. Open one to decide what to do with it.",
+      "These are left over from when you changed this place's type. Open one to decide what to do with it.",
   },
 } as const satisfies ScreenContract;
 

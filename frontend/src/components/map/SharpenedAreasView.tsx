@@ -121,10 +121,13 @@ export default function SharpenedAreasView({
           danger: true,
           onSelect: () =>
             ask({
-              title: `Delete ${label}?`,
-              message:
-                "The sharpened area is deleted from your account, and friends you shared it with lose it too. Exports already made from it stay until they expire; one still waiting to start is cancelled.",
-              confirmLabel: "Delete",
+              copy: {
+                confirmTitle: `Delete ${label}?`,
+                confirmBody:
+                  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Exports already made from it stay until they expire; one still waiting to start is cancelled.",
+                confirmLabel: "Delete",
+                tone: "destructive",
+              },
               run: async () => {
                 try {
                   await apiFetch(`/topo-jobs/${job.jobId}`, {
@@ -162,10 +165,12 @@ export default function SharpenedAreasView({
         icon: "close",
         onSelect: () =>
           ask({
-            title: confirm.title,
-            message: confirm.body,
-            confirmLabel: "Remove",
-            tone: "primary",
+            copy: {
+              confirmTitle: confirm.title,
+              confirmBody: confirm.body,
+              confirmLabel: "Remove",
+              tone: "filled",
+            },
             run: async () => {
               try {
                 await unshareEntityWith("topoJob", job.jobId, "me");

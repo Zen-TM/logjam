@@ -14,8 +14,7 @@ export const ACCOUNT = {
     {
       key: "yourData",
       on: "web",
-      reason:
-        "Logjam GPS has no data export: a gap, not a choice. The export is built from the account's server data.",
+      gap: "Logjam GPS has no data export yet.",
     },
     { key: "leaving" },
     // The version and the Terms.

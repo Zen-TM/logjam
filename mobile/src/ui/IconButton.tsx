@@ -11,7 +11,7 @@ import {
 import { Icon, type Glyph } from "./Icon";
 
 // An intent colour as a glyph on a wash of itself falls under 3:1 on
-// Daylight's paper, so a filled button draws its glyph in the text colour and
+// Ghost Gum's paper, so a filled button draws its glyph in the text colour and
 // the wash alone carries the intent, as on Logjam Web.
 const useIntents = makeThemed(
   (theme) => new Set([theme.accent, theme.warning, theme.success]),

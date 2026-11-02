@@ -13,10 +13,9 @@ import {
   fetchComputeEstimate,
   fetchCurrentUser,
 } from "../../placeUtils";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
 import {
+  abandonConfirm,
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
@@ -411,7 +410,6 @@ export default function TopoDialog({
   // finalizing) close is already blocked above; once done there's nothing left
   // to lose.
   const isDirty = phase === "form" && file != null;
-  const guard = useUnsavedChangesGuard(isDirty, performClose);
 
   const uploading = phase === "uploading" || phase === "finalizing";
   const uploadPct =
@@ -441,8 +439,11 @@ export default function TopoDialog({
         dismissible={!uploading}
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
-        onClose={mode === "form" ? guard.requestClose : backToForm}
-        footer={
+        onClose={mode === "form" ? performClose : backToForm}
+        discard={
+          isDirty && mode === "form" ? abandonConfirm("request", true) : null
+        }
+        footer={(requestClose) =>
           uploading ? undefined : phase === "done" ? (
             <Button variant="filled" onClick={onClose}>
               Done
@@ -453,7 +454,7 @@ export default function TopoDialog({
             </Button>
           ) : (
             <>
-              <Button onClick={guard.requestClose}>Cancel</Button>
+              <Button onClick={requestClose}>Cancel</Button>
               <Button variant="filled" onClick={handleSubmit} busy={validating}>
                 Make it
               </Button>
@@ -630,16 +631,6 @@ export default function TopoDialog({
           </>
         )}
       </Dialog>
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your loaded file will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }

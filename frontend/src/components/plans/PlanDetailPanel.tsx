@@ -817,9 +817,7 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={formCopy != null}
-        title={formCopy?.confirmTitle}
-        message={formCopy?.confirmBody}
-        confirmLabel={formCopy?.confirmLabel}
+        copy={formCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={() => {
@@ -869,9 +867,7 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={confirm?.kind === "delete"}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel={deleteCopy.confirmLabel}
+        copy={deleteCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
@@ -892,26 +888,7 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={confirm?.kind === "leave"}
-        title={leaveCopy.confirmTitle}
-        message={
-          <>
-            <p>{leaveCopy.confirmBody}</p>
-            {mineCount.places + mineCount.ways > 0 && (
-              <Checkbox
-                label={planLeaveDeleteAddedLabel(
-                  mineCount,
-                  mineCount.bytes > 0
-                    ? formatBytes(mineCount.bytes)
-                    : undefined,
-                )}
-                checked={deleteAdded}
-                onChange={setDeleteAdded}
-              />
-            )}
-          </>
-        }
-        confirmLabel={leaveCopy.confirmLabel}
-        confirmColor={deleteAdded ? "error" : "primary"}
+        copy={leaveCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
@@ -929,12 +906,21 @@ export default function PlanDetailPanel({
             setBusy(false);
           }
         }}
-      />
+      >
+        {mineCount.places + mineCount.ways > 0 && (
+          <Checkbox
+            label={planLeaveDeleteAddedLabel(
+              mineCount,
+              mineCount.bytes > 0 ? formatBytes(mineCount.bytes) : undefined,
+            )}
+            checked={deleteAdded}
+            onChange={setDeleteAdded}
+          />
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={sectionCopy != null}
-        title={sectionCopy?.confirmTitle}
-        message={sectionCopy?.confirmBody}
-        confirmLabel={sectionCopy?.confirmLabel}
+        copy={sectionCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={() => {

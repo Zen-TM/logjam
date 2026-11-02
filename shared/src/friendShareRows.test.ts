@@ -159,7 +159,7 @@ describe("unshareAllConfirm", () => {
       friendName: FRIEND,
       includesPlace: false,
     });
-    expect(confirm.title).toBe("Unshare 3 items from bob?");
+    expect(confirm.title).toBe("Stop sharing 3 items with bob?");
     expect(confirm.body).toContain("You stay friends");
     expect(confirm.body).toContain("no undo");
     // Never claims it recalls what the friend already copied.
@@ -179,7 +179,7 @@ describe("unshareAllConfirm", () => {
     expect(
       unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: false })
         .title,
-    ).toBe("Unshare 1 item from bob?");
+    ).toBe("Stop sharing 1 item with bob?");
   });
 });
 
