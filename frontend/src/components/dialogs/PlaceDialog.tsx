@@ -32,6 +32,7 @@ import {
   isValidLatitude,
   isValidLongitude,
   coordinateNumber,
+  PLACE_PAGE,
 } from "@logjam/shared";
 import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
@@ -872,7 +873,7 @@ function PlaceDialog({
               variant="tracks"
               canDelete
               onDeleted={handleMediaDeleted}
-              emptyText="No track yet."
+              emptyText={PLACE_PAGE.copy.routeEmpty}
             />
           )}
           <MediaUpload
@@ -885,7 +886,7 @@ function PlaceDialog({
             disabled={saving}
             disabledReason={
               media.some((m) => mediaCategory(m.mediaType) === "track")
-                ? "This place already has a track. Delete it to add another."
+                ? "This place already has a route. Delete it to add another."
                 : undefined
             }
           />

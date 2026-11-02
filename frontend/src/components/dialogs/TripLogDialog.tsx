@@ -32,6 +32,7 @@ import {
   SYSTEM_PLACE_TYPE_IDS,
   todayDateKey,
   tripPrefillFromTrack,
+  TRIP_PAGE,
   TRIP_TYPE_SUGGESTIONS,
   type tripPlanTripLogPrefill,
   tripFieldDefs,
@@ -764,7 +765,7 @@ function TripLogDialog({
         setError(
           messageFromError(
             err,
-            "Couldn't add the track to this trip. You can add it below.",
+            "Couldn't add the route to this trip. You can add it below.",
           ),
         );
       } finally {
@@ -1380,7 +1381,7 @@ function TripLogDialog({
           <SectionHeader title={TRIP_FORM.copy.routes} />
           {attachingTrack && (
             <p className={classes.muted} role="status">
-              Adding the track…
+              Adding the route…
             </p>
           )}
           {!mediaLoading && (
@@ -1389,7 +1390,7 @@ function TripLogDialog({
               variant="tracks"
               canDelete
               onDeleted={handleMediaDeleted}
-              emptyText="No tracks yet."
+              emptyText={TRIP_PAGE.copy.routesEmpty}
             />
           )}
           <MediaUpload

@@ -1858,6 +1858,7 @@ function App() {
             friends={friends}
             friendRequests={friendRequests}
             onRefetchFriends={refetchFriends}
+            onRefetchPlans={refetchPlans}
             onRefetchShared={refetchShared}
             notifications={notifications}
             notificationsLoaded={notificationsLoaded}
