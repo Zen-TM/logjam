@@ -203,6 +203,10 @@ export default function PlanDetailPanel({
     setOpenFormId(null);
     focusSoon(`[data-form-id="${lastOpenedForm.current}"] button`);
   };
+  const openPlacePage = (id: string) => {
+    setViewingPlaceId(id);
+    focusSoon("header button");
+  };
   const openInvite = () => {
     setTab("people");
     setInviting(true);
@@ -596,7 +600,7 @@ export default function PlanDetailPanel({
         onSaved={onOwnChanged}
         onAddCopy={() => setAddingCopy(NOTHING_TICKED)}
         onOpen={onOpenItem}
-        onView={(place) => setViewingPlaceId(place.id)}
+        onView={(place) => openPlacePage(place.id)}
       />
     ),
     forms: tab === "forms" && (

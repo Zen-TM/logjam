@@ -28,7 +28,7 @@ const KEY_STEP: Record<string, number> = {
  * end, and a one-day trip is the start alone (`end` null). A day before the
  * start starts over. Days are "YYYY-MM-DD". The grid is one tab stop: arrows
  * move by a day or a week (into the next month too), Home and End to the
- * month's ends, PageUp and PageDown by a month. The words come in as `labels`, so
+ * week's ends, PageUp and PageDown by a month. The words come in as `labels`, so
  * the kit holds none of a page's copy.
  */
 export function DateRangeField({
@@ -92,10 +92,11 @@ export function DateRangeField({
     });
     let to: string | null = null;
     if (event.key in KEY_STEP) to = addDays(stop, KEY_STEP[event.key]!);
-    else if (event.key === "Home") to = days.find(Boolean) ?? null;
-    else if (event.key === "End")
-      to = [...days].reverse().find(Boolean) ?? null;
-    else if (event.key === "PageUp" || event.key === "PageDown") {
+    else if (event.key === "Home" || event.key === "End") {
+      // The grid's rows are weeks, so a day's column is its place in the week.
+      const column = days.indexOf(stop) % 7;
+      to = addDays(stop, event.key === "Home" ? -column : 6 - column);
+    } else if (event.key === "PageUp" || event.key === "PageDown") {
       const { year, month } = monthOf(stop);
       const total = year * 12 + month + (event.key === "PageUp" ? -1 : 1);
       const target = monthGrid(

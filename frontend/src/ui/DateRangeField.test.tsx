@@ -86,4 +86,30 @@ describe("the date range calendar", () => {
     fireEvent.keyDown(day("2026-12-01"), { key: "ArrowUp" });
     expect(document.activeElement).toBe(day("2026-11-24"));
   });
+
+  // Mutation: send Home/End back to the month's first/last day and Wed 11 Nov
+  // lands on 1 or 30 Nov.
+  it("takes Home and End to the week's Monday and Sunday, into the next month too", () => {
+    render(
+      <DateRangeField
+        label="Dates"
+        labels={labels}
+        start="2026-11-11"
+        end={null}
+        onChange={() => {}}
+      />,
+    );
+    day("2026-11-11").focus();
+    fireEvent.keyDown(day("2026-11-11"), { key: "Home" });
+    expect(document.activeElement).toBe(day("2026-11-09"));
+    fireEvent.keyDown(day("2026-11-09"), { key: "End" });
+    expect(document.activeElement).toBe(day("2026-11-15"));
+    fireEvent.keyDown(day("2026-11-15"), { key: "ArrowRight" });
+    fireEvent.keyDown(day("2026-11-16"), { key: "ArrowUp" });
+    fireEvent.keyDown(day("2026-11-09"), { key: "ArrowDown" });
+    fireEvent.keyDown(day("2026-11-16"), { key: "ArrowDown" });
+    fireEvent.keyDown(day("2026-11-23"), { key: "ArrowDown" });
+    fireEvent.keyDown(day("2026-11-30"), { key: "End" });
+    expect(document.activeElement).toBe(day("2026-12-06"));
+  });
 });

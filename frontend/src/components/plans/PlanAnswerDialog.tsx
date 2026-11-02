@@ -10,10 +10,12 @@ import {
   draftFromAnswers,
   fitAnswerDraft,
   parseTripPlanAnswers,
+  TRIP_PLAN_ANSWER_REQUIRED_SENTENCE,
   TRIP_PLAN_FORMS,
   TRIP_PLAN_LONG_TEXT_ANSWER_MAX_LENGTH,
   TRIP_PLAN_TEXT_ANSWER_MAX_LENGTH,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
+  tripPlanRequiredSummary,
   tripPlanVisibilityLine,
   type TripPlanAnswerDraft as AnswerDraft,
   type TripPlanAnswers,
@@ -239,17 +241,29 @@ function AnswerForm({
     );
     if (!("value" in parsed)) {
       // Each question on its own, so the sentence lands under the one it is about.
+      // A required one left empty says only "Required."; one sentence above
+      // Send counts them.
       const found: Record<string, string> = {};
+      let owed = 0;
       for (const question of form.questions) {
         const one = parseTripPlanAnswers(
           [question],
           answersFromDraft([question], draft),
         );
-        if (!("value" in one))
-          found[question.id] =
-            "sentence" in one ? one.sentence : copy.saveFailed;
+        if (!("value" in one)) {
+          const empty =
+            "sentence" in one &&
+            one.sentence === TRIP_PLAN_ANSWER_REQUIRED_SENTENCE;
+          if (empty) owed += 1;
+          found[question.id] = empty
+            ? copy.required
+            : "sentence" in one
+              ? one.sentence
+              : copy.saveFailed;
+        }
       }
       setErrors(found);
+      if (owed > 0) setError(tripPlanRequiredSummary(owed));
       if (Object.keys(found).length === 0)
         setError("sentence" in parsed ? parsed.sentence : copy.saveFailed);
       else

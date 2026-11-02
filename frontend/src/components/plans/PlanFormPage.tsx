@@ -20,7 +20,14 @@ import {
   type TripPlanMemberView,
   type TripPlanRole,
 } from "@logjam/shared";
-import { Button, Hero, IconButton, Menu, SectionHeader } from "../../ui";
+import {
+  Button,
+  DataTable,
+  Hero,
+  IconButton,
+  Menu,
+  SectionHeader,
+} from "../../ui";
 import { menuEntries } from "./planMenu";
 import classes from "./plans.module.css";
 
@@ -55,47 +62,20 @@ export default function PlanFormPage({
   // Who's going, each with their answer or none, then those asking to join
   // who answered (`tripPlanAnswerTable`, as Logjam GPS draws it).
   const answers = tripPlanAnswerTable(form, members);
-
   const table = (title: string, people: typeof answers.going) => (
     <div className={classes.block}>
       <SectionHeader title={title} />
-      {/* Scrolled sideways on its own, so a keyboard can reach it. */}
-      <div
-        className={classes.tableScroll}
-        role="region"
-        aria-label={title}
-        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt
-        tabIndex={0}
-      >
-        <table className={classes.table}>
-          <thead>
-            <tr>
-              <th scope="col">{copy.member}</th>
-              {answers.columns.map((column) => (
-                <th key={column.id} scope="col">
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {people.map(({ user, answered, cells }) => (
-              <tr key={user.id}>
-                <th scope="row">{user.username}</th>
-                {answered ? (
-                  cells.map((cell, index) => (
-                    <td key={answers.columns[index].id}>{cell}</td>
-                  ))
-                ) : (
-                  <td colSpan={cells.length} className={classes.note}>
-                    {copy.noAnswerYet}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        label={title}
+        corner={copy.member}
+        columns={answers.columns}
+        empty={copy.noAnswerYet}
+        rows={people.map(({ user, answered, cells }) => ({
+          id: user.id,
+          name: user.username,
+          cells: answered ? cells : null,
+        }))}
+      />
     </div>
   );
 

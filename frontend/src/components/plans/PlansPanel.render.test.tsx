@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TripPlanSummary } from "@logjam/shared";
-import { deletePlan, leavePlan } from "../../plansApi";
+import { deletePlan, joinPlan, leavePlan } from "../../plansApi";
 import PlansPanel from "./PlansPanel";
 
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
@@ -17,6 +17,7 @@ vi.mock("../../plansApi", async (importOriginal) => ({
   archivePlan: vi.fn(),
   deletePlan: vi.fn(),
   leavePlan: vi.fn(),
+  joinPlan: vi.fn(),
 }));
 
 const summary = (over: Partial<TripPlanSummary>): TripPlanSummary => ({
@@ -130,5 +131,21 @@ describe("the plans list", () => {
         .getByRole("checkbox", { name: "Select Alpha" })
         .getAttribute("aria-checked"),
     ).toBe("true");
+  });
+});
+
+describe("an invite's card", () => {
+  // Mutation: put "Open" back on the card and Join never calls the API.
+  it("joins at once with the same toast as the invite page", async () => {
+    const onRefetch = renderList([
+      summary({ id: "c", name: "Charlie", status: "invited" }),
+    ]);
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Join" }));
+    await waitFor(() => expect(joinPlan).toHaveBeenCalledWith("c"));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("You joined the plan."),
+    );
+    expect(onRefetch).toHaveBeenCalled();
   });
 });

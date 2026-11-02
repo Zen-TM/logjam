@@ -109,6 +109,9 @@ export const KIT_COMPONENTS = {
 
   // — surfaces —
   Hero: both,
+  DataTable: web(
+    "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",
+  ),
   Dialog: web("a modal over the page; Logjam GPS's equivalent is BottomSheet"),
   SideSheet: web(
     "a sheet beside the list; Logjam GPS's equivalent is BottomSheet",
