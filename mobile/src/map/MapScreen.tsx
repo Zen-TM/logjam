@@ -1465,7 +1465,6 @@ export function MapScreen({
   // anyway, so the map itself is unaffected.
   const isGuest = useAccountState().accountState === "guest";
   // "Saved, and synced" is a promise only a connected, empty outbox keeps.
-  const pendingSyncCount = usePendingSyncCount();
   const savedHereOnly =
     connectivity !== "online" || isGuest || pendingSyncCount > 0;
   const overlays = useApiQuery(
@@ -2738,6 +2737,7 @@ export function MapScreen({
     notify(
       basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
       "done",
+      undefined,
       true,
     );
   }, [shownBasemapId, basemapId, notify]);
@@ -3681,6 +3681,7 @@ export function MapScreen({
           ? "Weak GPS signal — your position could be out by hundreds of metres."
           : "No GPS signal — the grey arrow is where you last had one.",
         "done",
+        undefined,
         true,
       );
     }, GPS_TOAST_DELAY_MS);
@@ -4680,6 +4681,7 @@ export function MapScreen({
           notify(
             `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
             "done",
+            undefined,
             true,
           )
         }

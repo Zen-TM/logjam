@@ -201,7 +201,7 @@ function TripLogsPanel({
 
   const toLog = useMemo(
     () =>
-      loaded
+      state === "ready"
         ? recordingsToLog(
             recordings
               .filter((file) => file.origin === "track")
@@ -212,7 +212,7 @@ function TripLogsPanel({
             tripLogs,
           )
         : [],
-    [loaded, recordings, tripLogs],
+    [state, recordings, tripLogs],
   );
 
   // ── The list ─────────────────────────────────────────────────────────

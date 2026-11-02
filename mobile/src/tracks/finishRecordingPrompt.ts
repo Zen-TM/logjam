@@ -83,7 +83,7 @@ async function announceFinished(trackId: string, queued: boolean) {
     track && track.pointCount >= 2 ? recordedTrackSource(track) : null;
   toast(
     notice ? SAVED_NOTICE : "Recording saved.",
-    "info",
+    "done",
     source
       ? {
           label: "Log a trip",

@@ -66,7 +66,7 @@ export function BackgroundToast() {
           onClose={() => setLogging(null)}
           onSaved={(text) => {
             setLogging(null);
-            setMessage({ text, tone: "info", nonce: Date.now() });
+            setMessage({ text, tone: "done", nonce: Date.now() });
           }}
         />
       ) : null}

@@ -183,6 +183,7 @@ export function DraftToolPanel({
             variant="ghost"
             compact
             disabled={saving}
+            disabledReason={SAVING}
             onPress={() => setSnapOpen((open) => !open)}
           />
         </View>
