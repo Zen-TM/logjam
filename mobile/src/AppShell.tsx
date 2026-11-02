@@ -10,7 +10,7 @@
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
@@ -100,7 +100,8 @@ import {
   backLabelOf,
   Icon,
   LoadingState,
-  TAB_BADGE_STYLE,
+  tabBadgeLabel,
+  tabBadgeStyle,
   Toast,
   type ToastMessage,
 } from "./ui";
@@ -919,6 +920,7 @@ export function AppShell({
       nonce: (prev?.nonce ?? 0) + 1,
     }));
   }, []);
+  const { fontScale } = useWindowDimensions();
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
   const insets = useSafeAreaInsets();
 
@@ -1210,8 +1212,11 @@ export function AppShell({
                 ),
                 ...(unreadCount
                   ? {
-                      tabBarBadge: unreadCount,
-                      tabBarBadgeStyle: TAB_BADGE_STYLE,
+                      tabBarBadge: tabBadgeLabel(unreadCount),
+                      tabBarBadgeStyle: tabBadgeStyle(
+                        tabBadgeLabel(unreadCount),
+                        fontScale,
+                      ),
                     }
                   : {}),
               }}
