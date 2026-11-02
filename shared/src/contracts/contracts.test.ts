@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { formatFieldValue, type AttributeRow } from "../logbook.js";
 import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
@@ -81,8 +82,11 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeSectionTitle,
+  formatPlacePosition,
   placeAttributesTitle,
   placeStatusLabel,
+  withFieldUnit,
+  withRowUnit,
   PLACE_VERBS,
   placeDeleteConfirm,
   PLACES_ADD,
@@ -373,10 +377,78 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "web", true)).toContain(
       "sharedWith",
     );
-    expect(contractSectionsFor(PLACE_PAGE, "web", true)).not.toContain(
+  });
+
+  // Mutation: swap two keys in `PLACE_PAGE.sections` (say "weather" above
+  // "attributes") and both clients draw them in the new order, so this list is
+  // the only thing that notices the page stopped leading with its facts.
+  it("leads with the place's facts and puts the forecast and gauge after them", () => {
+    const order = [
+      "hero",
+      "verbs",
+      "position",
       "navigate",
+      "attributes",
+      "doesntFit",
+      "notes",
+      "sources",
+      "photos",
+      "route",
+      "weather",
+      "gauge",
+      "linkedPlaces",
+      "trips",
+      "sharedWith",
+    ];
+    const ownerOnly = ["doesntFit", "linkedPlaces", "sharedWith"];
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(order);
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).toEqual(
+      order.filter((key) => key !== "navigate"),
     );
-    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
+    expect(contractSectionsFor(PLACE_PAGE, "gps", false)).toEqual(
+      order.filter((key) => !ownerOnly.includes(key)),
+    );
+  });
+
+  it("writes a position and a built-in's unit the same on both clients", () => {
+    expect(formatPlacePosition(-33.559541, 150.3995)).toBe(
+      "-33.55954, 150.39950",
+    );
+    expect(withFieldUnit("longest_abseil", "15")).toBe("15 m");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withFieldUnit("my_own_field", "6")).toBe("6");
+  });
+
+  // Mutation: format every row in `withRowUnit` (not only one with a unit): the
+  // table formats it again and a date attribute reads a day early, so it
+  // runs in a zone east of UTC.
+  it("adds a unit to a row without formatting it a second time", () => {
+    const zone = process.env.TZ;
+    process.env.TZ = "Australia/Sydney";
+    try {
+      const date: AttributeRow = [
+        "first_visit",
+        "First visit",
+        "2026-10-03",
+        "date",
+      ];
+      const shown = (row: AttributeRow) => formatFieldValue(row[2], row[3]);
+      expect(shown(withRowUnit(date))).toBe(shown(date));
+      expect(shown(date)).toMatch(/\b3\b/);
+      const longest: AttributeRow = [
+        "longest_abseil",
+        "Longest pitch",
+        15,
+        "float",
+      ];
+      expect(shown(withRowUnit(longest))).toBe("15 m");
+      expect(
+        withRowUnit(["longest_abseil", "Longest pitch", null, "float"])[2],
+      ).toBeNull();
+    } finally {
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
+    }
   });
 
   // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.

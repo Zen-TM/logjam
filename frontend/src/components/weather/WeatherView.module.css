@@ -12,6 +12,11 @@
   gap: var(--space-1);
 }
 
+.actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
 .age {
   composes: detail from "../../textRoles.generated.module.css";
   color: var(--color-text-muted);

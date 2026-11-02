@@ -30,6 +30,8 @@ export function WeatherView(props: {
   online: boolean;
   /** Fetches again: Refresh, and Try again after a failure. */
   onLoad: () => void;
+  /** Folds the forecast back to its row; the figures stay for the next open. */
+  onHide?: () => void;
   now?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,6 +59,7 @@ function WeatherBody({
   state,
   online,
   onLoad,
+  onHide,
   now: fixedNow,
 }: Parameters<typeof WeatherView>[0]) {
   if (state.status === "idle" || state.status === "loading")
@@ -120,7 +123,13 @@ function WeatherBody({
   };
   return (
     <div className={classes.view}>
-      <Header forecast={forecast} online={online} now={now} onLoad={onLoad} />
+      <Header
+        forecast={forecast}
+        online={online}
+        now={now}
+        onLoad={onLoad}
+        onHide={onHide}
+      />
       {contractSectionKeys(WEATHER, "web").map((key) => (
         <div key={key}>{sections[key]()}</div>
       ))}
@@ -133,25 +142,34 @@ function Header({
   online,
   now,
   onLoad,
+  onHide,
 }: {
   forecast: WeatherForecast;
   online: boolean;
   now: number;
   onLoad: () => void;
+  onHide?: () => void;
 }) {
   return (
     <div className={classes.header}>
       <span className={classes.age}>{weatherAge(forecast.fetchedAt, now)}</span>
-      <Button
-        variant="outline"
-        compact
-        icon="refresh"
-        onClick={onLoad}
-        disabled={!online}
-        disabledReason={WEATHER.copy.needsConnection}
-      >
-        {WEATHER.copy.refresh}
-      </Button>
+      <div className={classes.actions}>
+        <Button
+          variant="outline"
+          compact
+          icon="refresh"
+          onClick={onLoad}
+          disabled={!online}
+          disabledReason={WEATHER.copy.needsConnection}
+        >
+          {WEATHER.copy.refresh}
+        </Button>
+        {onHide && (
+          <Button variant="outline" compact onClick={onHide}>
+            {WEATHER.copy.hide}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

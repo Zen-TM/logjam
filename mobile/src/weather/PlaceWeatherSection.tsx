@@ -5,7 +5,7 @@ import { useState } from "react";
 import { WEATHER, weatherCell, weatherCellKey } from "@logjam/shared";
 
 import { isOfflineOnly } from "../offline/offlineOnlyMode";
-import { Row } from "../ui";
+import { Row, SectionHeader } from "../ui";
 import { useWeather } from "./useWeather";
 import { showWeatherRow } from "./weatherState";
 import { WeatherView } from "./WeatherView";
@@ -26,20 +26,25 @@ export function PlaceWeatherSection({ place }: { place: Spot }) {
 function Section({ place }: { place: Spot }) {
   const weather = useWeather(place, place.elevation, !isOfflineOnly());
   const [pressed, setPressed] = useState(false);
-
-  if (pressed || weather.forecast) return <WeatherView weather={weather} />;
-
   const row = showWeatherRow(weather);
+
   return (
-    <Row
-      icon="weather"
-      title={WEATHER.copy.show}
-      subtitle={row.reason}
-      disabled={row.disabled}
-      onPress={() => {
-        setPressed(true);
-        weather.refresh();
-      }}
-    />
+    <>
+      <SectionHeader title={WEATHER.title} />
+      {pressed || weather.forecast ? (
+        <WeatherView weather={weather} />
+      ) : (
+        <Row
+          icon="weather"
+          title={WEATHER.copy.show}
+          subtitle={row.reason}
+          disabled={row.disabled}
+          onPress={() => {
+            setPressed(true);
+            weather.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }

@@ -123,15 +123,15 @@ describe("weatherDayFacts", () => {
       date: "2026-10-18",
       day: "Today",
       condition: { label: "Clear", icon: "weatherClear" },
-      temperature: "4–17°",
-      rain: "0 mm · 5%",
+      temperature: "4–17°C",
+      rain: "0 mm · 5% chance",
       wind: "10 km/h",
     });
     expect(weatherDayFacts(forecast.days[1], now)).toMatchObject({
       day: "Mon 19",
-      rain: "0.4 mm · 20%",
+      rain: "0.4 mm · 20% chance",
     });
-    expect(weatherDayFacts(forecast.days[5], now).temperature).toBe("-1–8°");
+    expect(weatherDayFacts(forecast.days[5], now).temperature).toBe("-1–8°C");
   });
 
   it("drops the days a kept forecast has outlived", () => {
