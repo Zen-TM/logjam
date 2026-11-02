@@ -80,6 +80,9 @@ export const KIT_COMPONENTS = {
   MapBanner: gps(
     "a mode in the map's top row at the search button's height; Logjam Web's Notice column has room for the whole sentence",
   ),
+  CardActions: gps(
+    "a card footer's buttons share its width; Logjam Web's cards are wide enough that buttons keep their natural size (Row.module.css)",
+  ),
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
   ),

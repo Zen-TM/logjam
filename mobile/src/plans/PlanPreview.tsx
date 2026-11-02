@@ -27,6 +27,7 @@ import { makeStyles, muted, spacing } from "../theme";
 import {
   Avatar,
   Button,
+  CardActions,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -202,10 +203,9 @@ export function PlanPreview({
                 subtitle={page.inviteHint}
                 titleNumberOfLines={3}
                 footer={
-                  <View style={styles.controls}>
+                  <CardActions>
                     <Button
                       label={copy.join}
-                      compact
                       loading={busy === "join"}
                       disabled={!online}
                       disabledReason={OFFLINE}
@@ -213,14 +213,13 @@ export function PlanPreview({
                     />
                     <Button
                       label={copy.decline}
-                      compact
                       variant="outlineAccent"
                       loading={busy === "decline"}
                       disabled={!online}
                       disabledReason={OFFLINE}
                       onPress={askDecline}
                     />
-                  </View>
+                  </CardActions>
                 }
               />
               {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
@@ -300,6 +299,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   block: { gap: spacing(1) },
   muted: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
-  controls: { flexDirection: "row", gap: spacing(1) },
   section: { gap: spacing(1) },
 }));

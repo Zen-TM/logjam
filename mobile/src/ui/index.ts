@@ -2,6 +2,7 @@
 // individual files. Keep this the single public surface of the UI kit.
 export { ActivitySpark, type ActivityBucket } from "./ActivitySpark";
 export { Button } from "./Button";
+export { CardActions } from "./CardActions";
 export { Meter, type MeterSegment } from "./Meter";
 export { Avatar } from "./Avatar";
 export { Chip, type ChipOption } from "./Chip";

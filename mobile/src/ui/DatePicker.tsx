@@ -366,10 +366,10 @@ function DayCell({
               style={[
                 styles.band,
                 {
-                  // The ends under the fill start and stop at its centre; a row's
-                  // own ends are rounded, so a range across weeks reads as pieces.
-                  left: band.isStart ? "50%" : 0,
-                  right: band.isEnd ? "50%" : 0,
+                  // Whole cells, so the band reaches the range's outer edges; a
+                  // row's own ends are rounded, so a range across weeks reads as pieces.
+                  left: 0,
+                  right: 0,
                   borderTopLeftRadius: band.pieceStart ? DAY_PILL_SIZE / 2 : 0,
                   borderBottomLeftRadius: band.pieceStart
                     ? DAY_PILL_SIZE / 2

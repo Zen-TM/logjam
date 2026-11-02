@@ -57,6 +57,7 @@ import { makeStyles, muted, spacing, useHues, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
+  CardActions,
   ChipRail,
   EmptyState,
   ErrorState,
@@ -530,10 +531,9 @@ export function PlansScreen({
                 style={styles.footer}
                 onStartShouldSetResponder={() => true}
               >
-                <View style={styles.pills}>
+                <CardActions>
                   <Button
                     label={TRIP_PLAN_JOIN.copy.join}
-                    compact
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
@@ -541,7 +541,6 @@ export function PlansScreen({
                   />
                   <Button
                     label={copy.decline}
-                    compact
                     variant="outlineAccent"
                     loading={leaving.has(item.id)}
                     disabled={!online}
@@ -562,7 +561,7 @@ export function PlansScreen({
                       )
                     }
                   />
-                </View>
+                </CardActions>
                 {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
               </View>
             ) : undefined

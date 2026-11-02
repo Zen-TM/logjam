@@ -111,6 +111,7 @@ import { clearReadNotifications } from "../api/queries";
 import {
   BottomSheet,
   Button,
+  CardActions,
   EmptyState,
   ErrorState,
   Hero,
@@ -1330,7 +1331,7 @@ const NotificationRow = memo(function NotificationRow({
       footer={
         target ? (
           <>
-            <View style={styles.actions}>
+            <CardActions>
               {target.actions.map((action) => (
                 <Button
                   key={action.kind}
@@ -1340,17 +1341,12 @@ const NotificationRow = memo(function NotificationRow({
                   variant={
                     action.kind === "decline" ? "outlineAccent" : undefined
                   }
-                  compact
-                  // Split the card's width rather than shrink-wrapping the
-                  // label: a full-width target is the one that survives being
-                  // tapped with cold hands, and it belongs to the card it fills.
-                  grow
                   disabled={actionsDisabled}
                   loading={busyKind === action.kind}
                   onPress={() => onAction(item, target, action)}
                 />
               ))}
-            </View>
+            </CardActions>
             {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md). */}
             {!online ? (
               <Text style={styles.actionHint}>Needs a connection</Text>
@@ -1358,16 +1354,14 @@ const NotificationRow = memo(function NotificationRow({
           </>
         ) : notificationAnnouncement(item) ? (
           // A button, not only the row: nothing else says a row opens a message.
-          <View style={styles.actions}>
+          <CardActions>
             <Button
               label={notificationVerb("readMessage").label}
               variant="outlineAccent"
-              compact
-              grow
               disabled={selecting}
               onPress={() => onPress(item)}
             />
-          </View>
+          </CardActions>
         ) : null
       }
     />
@@ -1473,7 +1467,7 @@ const BatchRow = memo(function BatchRow({
         // sent files gets buttons, and only while some are still unanswered.
         batch.group === "files" && pending.length > 0 ? (
           <>
-            <View style={styles.actions}>
+            <CardActions>
               {/* THE COUNT IS THE PROGRESS INDICATOR, so neither of these
                   passes `loading`: `Button` swaps the whole label out for a
                   spinner, which would discard the one thing worth showing — a
@@ -1487,8 +1481,6 @@ const BatchRow = memo(function BatchRow({
                     ? `Saving ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
                     : `Save all ${pending.length}`
                 }
-                compact
-                grow
                 disabled={actionsDisabled}
                 onPress={() => onBatchAction(batch, "accept")}
               />
@@ -1499,12 +1491,10 @@ const BatchRow = memo(function BatchRow({
                     : "Turn all down"
                 }
                 variant="outlineAccent"
-                compact
-                grow
                 disabled={actionsDisabled}
                 onPress={() => onBatchAction(batch, "decline")}
               />
-            </View>
+            </CardActions>
             {/* Accepting a batch is a DOWNLOAD QUEUE — each one presigns, pulls
                 the bytes and runs the import — so the row says so rather than
                 spinning silently for a minute on trail signal. */}
@@ -1612,7 +1602,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // `IconButton`'s own box, so the checkbox standing in for ⋯ occupies exactly
   // that box.
-  actions: { flexDirection: "row", gap: spacing(1) },
   actionHint: {
     ...muted(theme, textRole.meta),
     textAlign: "center",

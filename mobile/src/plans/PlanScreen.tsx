@@ -70,6 +70,7 @@ import {
 } from "../theme";
 import {
   Button,
+  CardActions,
   ChipRail,
   EmptyState,
   ErrorState,
@@ -474,12 +475,11 @@ function PlanPage({
               title={tripPlanFormsToAnswerLine(toAnswer.forms.length)}
               subtitle={online ? undefined : OFFLINE}
               footer={
-                <View style={styles.pills}>
+                <CardActions>
                   {toAnswer.forms.map((form) => (
                     <Button
                       key={form.id}
                       label={form.title}
-                      compact
                       variant="outlineAccent"
                       disabled={!online}
                       disabledReason={OFFLINE}
@@ -488,7 +488,7 @@ function PlanPage({
                       }
                     />
                   ))}
-                </View>
+                </CardActions>
               }
             />
           )}
