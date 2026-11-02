@@ -27,11 +27,13 @@ import TermsTick from "./TermsTick";
 import useSignInArea from "./useSignInArea";
 import {
   FRIENDS,
+  isValidPassword,
   isValidUsername,
   NSW_5M,
+  PASSWORD_HINT,
   TRIP_PLAN_JOIN,
+  signUpFormProblem,
   USERNAME_HINT,
-  USERNAME_RULE,
   USERNAME_TAKEN,
 } from "@logjam/shared";
 import { usernameAvailable } from "../placeUtils";
@@ -39,9 +41,6 @@ import { friendInvite, planInvite } from "../pendingInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import { Button, Checkbox, TextField, ErrorBanner } from "../ui";
-
-const PASSWORD_HINT =
-  "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
 
 function Brand() {
   return (
@@ -202,9 +201,6 @@ function CognitoForms({
     }
   }
 
-  const PASSWORD_REGEX =
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,}$/;
-
   const displayError = localError || error;
 
   function goTo(next: Screen) {
@@ -267,34 +263,23 @@ function CognitoForms({
   async function handleSignUp(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
-    if (!isValidEmailFormat(email)) {
-      setEmailError("Enter a valid email address.");
+    const problem = signUpFormProblem({
+      name,
+      email,
+      username,
+      password,
+      confirmPassword,
+      agreed: consented,
+      ageConfirmed,
+    });
+    if (problem) {
+      setEmailError(problem.field === "email" ? problem.message : null);
+      setUsernameError(problem.field === "username" ? problem.message : null);
+      if (problem.field === "form") setLocalError(problem.message);
       return;
     }
     setEmailError(null);
-    if (!isValidUsername(username)) {
-      setUsernameError(USERNAME_RULE);
-      return;
-    }
     setUsernameError(null);
-    if (password !== confirmPassword) {
-      setLocalError("Passwords do not match");
-      return;
-    }
-    if (!PASSWORD_REGEX.test(password)) {
-      setLocalError(
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
-      );
-      return;
-    }
-    if (!consented) {
-      setLocalError("Agree to the Terms of Use and Privacy Policy to sign up.");
-      return;
-    }
-    if (!ageConfirmed) {
-      setLocalError("Confirm you are 18 or older to sign up.");
-      return;
-    }
     setSubmitting(true);
     if (!(await usernameIsFree())) {
       setSubmitting(false);
@@ -367,7 +352,7 @@ function CognitoForms({
       setLocalError("Passwords do not match");
       return;
     }
-    if (!PASSWORD_REGEX.test(newPassword)) {
+    if (!isValidPassword(newPassword)) {
       setLocalError(
         "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol",
       );

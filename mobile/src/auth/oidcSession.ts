@@ -1,5 +1,9 @@
 // The one place Logjam GPS holds a sign-in: OIDC authorization code + PKCE in
-// the system browser sheet, then the tokens in the secure store.
+// the system browser sheet, or under a Cognito issuer a password sent straight
+// to Cognito (ADR 0045), then the tokens in the secure store. Both end in the
+// same `Stored` record, so refresh, sign-out and a cold start cannot tell them
+// apart. The password is a parameter here and nowhere else: never stored, never
+// logged (Guard: passwordPrivacy.test.ts).
 //
 // Offline-session rules (ADR 0041, 0006, useAuth.ts header) that this file
 // carries:
@@ -11,8 +15,8 @@
 //    session at all, ends the session. A network error, a timeout, a 5xx or a
 //    body that does not parse throws something `classifySessionError` calls
 //    transient (Guard: oidcSession.test.ts, sessionErrors.test.ts).
-//  - Every call that reaches a token endpoint settles within
-//    SESSION_TIMEOUT_MS. A connect that neither succeeds nor fails is the field
+//  - Every call that reaches a token endpoint, or Cognito's own API, settles
+//    within SESSION_TIMEOUT_MS. A connect that neither succeeds nor fails is the field
 //    failure this exists for (apiFetch.ts documents it).
 //  - Nothing here arms a timer to refresh: callers ask, on demand and on
 //    foreground (ADR 0013).
@@ -20,7 +24,17 @@
 import { AuthRequest, ResponseType } from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
 import Constants from "expo-constants";
-import { endSessionUrl, globalSignOut, oidcScopes } from "@logjam/shared";
+import {
+  confirmForgotPassword,
+  confirmSignUp,
+  endSessionUrl,
+  forgotPassword,
+  globalSignOut,
+  oidcScopes,
+  passwordSignIn,
+  resendSignUpCode,
+  signUp,
+} from "@logjam/shared";
 
 import { config } from "../config";
 import { isReachableNow } from "../map/connectivity";
@@ -142,7 +156,7 @@ async function clearStored(): Promise<void> {
 // ── the provider ─────────────────────────────────────────────────────────────
 
 /** Runs `work` and settles within `ms` however `work` behaves; aborts its request when time is up. */
-function within<T>(
+export function within<T>(
   ms: number,
   work: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
@@ -300,6 +314,68 @@ export async function signInWithBrowser(): Promise<BrowserSignIn> {
     accessToken: tokens.access_token,
   };
 }
+
+/** `provider`: Cognito asked for more than a password. */
+export type PasswordSignIn =
+  | ({ type: "success"; commit: () => Promise<void> } & Session)
+  | { type: "provider" };
+
+/**
+ * Cognito issuer only: signs in with a password and returns the session the
+ * browser would, to be stored by `commit` after `finishSignIn`. `provider`:
+ * Cognito wants more than a password (MFA, a new password), which only its own
+ * page can ask for. Throws Cognito's refusal (named as Cognito names it) or any
+ * other failure. The endpoints come from discovery, as in `signInWithBrowser`,
+ * and discovery is asked first so an unreachable provider never receives the
+ * password.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<PasswordSignIn> {
+  const { issuer, clientId } = provider();
+  const doc = await within(SESSION_TIMEOUT_MS, (s) => discover(issuer, s));
+  const tokens = await within(SESSION_TIMEOUT_MS, (s) =>
+    passwordSignIn(issuer, clientId, email, password, s),
+  );
+  if (!tokens) return { type: "provider" };
+  const next: Stored = {
+    idToken: tokens.idToken,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+    tokenEndpoint: doc.token_endpoint,
+    revocationEndpoint: doc.revocation_endpoint,
+    // No end-session endpoint: this sign-in left no browser session to end, and
+    // sign-out would open the browser sheet just to find that out.
+  };
+  return {
+    type: "success",
+    commit: () => writeStored(next),
+    idToken: next.idToken,
+    accessToken: next.accessToken,
+  };
+}
+
+/** Cognito issuer only: the account calls behind the sign-up and reset forms. */
+function account<T>(
+  run: (issuer: string, clientId: string, signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const { issuer, clientId } = provider();
+  return within(SESSION_TIMEOUT_MS, (s) => run(issuer, clientId, s));
+}
+
+export const accountCalls = {
+  signUp: (args: { email: string; password: string; name: string }) =>
+    account((i, c, s) => signUp(i, c, args, s)),
+  confirmSignUp: (email: string, code: string) =>
+    account((i, c, s) => confirmSignUp(i, c, email, code, s)),
+  resendSignUpCode: (email: string) =>
+    account((i, c, s) => resendSignUpCode(i, c, email, s)),
+  forgotPassword: (email: string) =>
+    account((i, c, s) => forgotPassword(i, c, email, s)),
+  confirmForgotPassword: (email: string, code: string, password: string) =>
+    account((i, c, s) => confirmForgotPassword(i, c, email, code, password, s)),
+};
 
 // ── the session ──────────────────────────────────────────────────────────────
 
