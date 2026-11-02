@@ -51,6 +51,16 @@ describe("tripPlanPerson", () => {
     );
   });
 
+  // Mutation: restore the `!== "member"` guard and a member's role vanishes.
+  it("names a going member's role, and no role for anyone not going", () => {
+    expect(
+      tripPlanPerson(plan(), member("bob", "active"), "me", TODAY).role,
+    ).toBe("Member");
+    expect(
+      tripPlanPerson(plan(), member("ask", "requested"), "me", TODAY).role,
+    ).toBeNull();
+  });
+
   // Mutation: offer Let in on an archived plan, or role verbs on a request.
   it("offers a request Let in and Turn down, an invite Cancel invite", () => {
     const p = plan();
