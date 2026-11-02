@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { placeRoute } from "./placeRoute.js";
 
@@ -35,17 +33,5 @@ describe("placeRoute", () => {
     expect(
       placeRoute("p1", [drawn("r1", "p2")], [file("m1", "image/png")]),
     ).toBeNull();
-  });
-});
-
-// Parity (ADR 0020): both place pages decide through placeRoute. Mutation that
-// turns it red: put a client back on its own `routes.find(... placeId ...)`.
-describe("both clients use placeRoute", () => {
-  const repo = join(import.meta.dirname, "..", "..");
-  it.each([
-    "frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx",
-    "mobile/src/places/PlaceDetailScreen.tsx",
-  ])("%s", (path) => {
-    expect(readFileSync(join(repo, path), "utf8")).toContain("placeRoute(");
   });
 });

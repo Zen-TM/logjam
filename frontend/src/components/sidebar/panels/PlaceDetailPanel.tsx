@@ -95,7 +95,7 @@ import {
   SectionHeader,
   StatusPill,
 } from "../../../ui";
-import { formatCanyonGrade } from "../../../placeUtils";
+import { formatCanyonGrade, updateRoute } from "../../../placeUtils";
 
 /**
  * Runs a verb pressed on the place's ROW that needs this page's forms and
@@ -195,6 +195,8 @@ function PlaceDetailPanel({
   onAfterDelete,
   routes,
   onFocusBounds,
+  onOpenRoute,
+  onRoutesChanged,
 }: {
   place: TPlace | undefined;
   places: TPlace[];
@@ -235,6 +237,10 @@ function PlaceDetailPanel({
   routes: TRoute[];
   /** Fit the map to a box, as the route row's tap does. */
   onFocusBounds: (bounds: [number, number, number, number]) => void;
+  /** Open the route's own page (the Way). */
+  onOpenRoute: (route: TRoute) => void;
+  /** A route was changed here (unlinked); the Ways list must refetch. */
+  onRoutesChanged: () => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -884,6 +890,36 @@ function PlaceDetailPanel({
               const bounds = boundsOfPoints(drawnRoute.points);
               if (bounds) onFocusBounds(bounds);
             }}
+            trailing={
+              <>
+                <IconButton
+                  icon="forward"
+                  label="Open way"
+                  onClick={() => onOpenRoute(drawnRoute)}
+                />
+                {isOwnedPlace && (
+                  <IconButton
+                    icon="unlink"
+                    label="Unlink from this place"
+                    onClick={() => {
+                      updateRoute(drawnRoute.id, { placeId: null })
+                        .then(() => {
+                          onRoutesChanged();
+                          toast.success("Route unlinked.");
+                        })
+                        .catch((err: unknown) =>
+                          toast.error(
+                            messageFromError(
+                              err,
+                              "Couldn't unlink that route.",
+                            ),
+                          ),
+                        );
+                    }}
+                  />
+                )}
+              </>
+            }
           />
         ) : track ? (
           <Row

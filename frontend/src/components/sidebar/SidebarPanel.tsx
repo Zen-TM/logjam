@@ -102,6 +102,8 @@ function SidebarPanel({
   onRetryStandaloneFiles,
   onOpenWay,
   onFocusBounds,
+  onOpenRoute,
+  onRoutesChanged,
   wayDetail,
   plansPanel,
   planDetail,
@@ -196,6 +198,8 @@ function SidebarPanel({
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
   /** Fit the map to a box without opening anything. */
   onFocusBounds: (bounds: [number, number, number, number]) => void;
+  onOpenRoute: (route: TRoute) => void;
+  onRoutesChanged: () => void;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -469,6 +473,8 @@ function SidebarPanel({
             onAfterDelete={() => setActivePanel("places")}
             routes={allRoutes}
             onFocusBounds={onFocusBounds}
+            onOpenRoute={onOpenRoute}
+            onRoutesChanged={onRoutesChanged}
           />
         )}
         {activePanel === "trip-detail" && (
