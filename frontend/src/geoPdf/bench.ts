@@ -9,6 +9,7 @@
 // doubles the terrain time. Real tiles come through the /master proxy, which
 // preview keeps (DEV_MASTER_URL); or stub the network, as
 // e2e/geopdf-render.spec.ts does, for a run with none.
+import { PROTOMAPS_SWATCH } from "../basemapSwatch";
 import {
   computeTileToMapTransform,
   computeZoom,
@@ -268,6 +269,40 @@ async function seamCheck(
 }
 
 /**
+ * Render a vector base with `overlays`, with and without Land: how many pixels
+ * of its water does Land change, and how many of the rest? The map's bottom
+ * fifth is left out, as Land's legend box sits over whatever is there.
+ */
+async function landOnWater(overlays: GeoPdfConfig["overlays"]) {
+  const pixelsWith = async (overlays: GeoPdfConfig["overlays"]) => {
+    const r = await run("vector", {
+      config: { overlays },
+      debug: { collectPixels: true },
+    });
+    return new Uint8Array(r.pixels!.strips[0]!.data);
+  };
+  const bare = await pixelsWith([]);
+  const without = await pixelsWith(overlays);
+  const withLand = await pixelsWith([...overlays, "land"]);
+  const hex = Number.parseInt(PROTOMAPS_SWATCH.water.slice(1), 16);
+  const [r, g, b] = [hex >> 16, (hex >> 8) & 255, hex & 255];
+  let water = 0;
+  let waterChanged = 0;
+  let restChanged = 0;
+  for (let i = 0; i < bare.length * 0.8; i += 4) {
+    const isWater = bare[i] === r && bare[i + 1] === g && bare[i + 2] === b;
+    const changed =
+      without[i] !== withLand[i] ||
+      without[i + 1] !== withLand[i + 1] ||
+      without[i + 2] !== withLand[i + 2];
+    if (isWater) water++;
+    if (changed && isWater) waterChanged++;
+    else if (changed) restChanged++;
+  }
+  return { water, waterChanged, restChanged };
+}
+
+/**
  * Render with the terrain helper workers and with none: are the map's pixels
  * the same, byte for byte? Both draw in one strip, so only the pool differs.
  */
@@ -371,6 +406,7 @@ declare global {
       prefetch: typeof prefetch;
       seamCheck: typeof seamCheck;
       poolCheck: typeof poolCheck;
+      landOnWater: typeof landOnWater;
       extentAtDemTileEdge: typeof extentAtDemTileEdge;
       scenarios: string[];
     };
@@ -381,6 +417,7 @@ window.geoPdfBench = {
   prefetch,
   seamCheck,
   poolCheck,
+  landOnWater,
   extentAtDemTileEdge,
   scenarios: [...Object.keys(SCENARIOS), "a3"],
 };

@@ -123,28 +123,33 @@ export function landMvt(x: number, y: number): Buffer {
     3,
     (_o, layer) => {
       layer.writeStringField(1, NSW_LAND.sourceLayer);
-      layer.writeMessage(
-        2,
-        (_f, pbf) => {
-          pbf.writePackedVarint(2, [0, 0]);
-          pbf.writeVarintField(3, 3);
-          const [lo, side] = [-80, 4256];
-          pbf.writePackedVarint(4, [
-            (1 << 3) | 1,
-            zig(lo),
-            zig(lo),
-            (3 << 3) | 2,
-            zig(side),
-            zig(0),
-            zig(0),
-            zig(side),
-            zig(-side),
-            zig(0),
-            (1 << 3) | 7,
-          ]);
-        },
-        null,
-      );
+      // One shape past the tile's edges, and one whose border crosses the lakes
+      // of `basemapMvt` (a lake spans 900 to 2200 of a tile a zoom deeper).
+      for (const [lo, side] of [
+        [-80, 4256],
+        [800, 2496],
+      ] as const)
+        layer.writeMessage(
+          2,
+          (_f, pbf) => {
+            pbf.writePackedVarint(2, [0, 0]);
+            pbf.writeVarintField(3, 3);
+            pbf.writePackedVarint(4, [
+              (1 << 3) | 1,
+              zig(lo),
+              zig(lo),
+              (3 << 3) | 2,
+              zig(side),
+              zig(0),
+              zig(0),
+              zig(side),
+              zig(-side),
+              zig(0),
+              (1 << 3) | 7,
+            ]);
+          },
+          null,
+        );
       layer.writeStringField(3, NSW_LAND.classProperty);
       layer.writeMessage(
         4,

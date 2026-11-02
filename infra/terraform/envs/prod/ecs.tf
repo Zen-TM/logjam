@@ -35,15 +35,6 @@ resource "aws_ecs_task_definition" "api_script" {
       name  = "AWS_REGION"
       value = "ap-southeast-2"
       }, {
-      name  = "COGNITO_CLIENT_ID"
-      value = "545ofbb8l9d1sl6ggbmk6oonn9"
-      }, {
-      name  = "COGNITO_REGION"
-      value = "ap-southeast-2"
-      }, {
-      name  = "COGNITO_USER_POOL_ID"
-      value = "ap-southeast-2_x5zPhJXMk"
-      }, {
       name  = "CORS_ORIGIN"
       value = "https://logjamnsw.com,https://www.logjamnsw.com"
       }, {
