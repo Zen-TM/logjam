@@ -180,7 +180,7 @@ import {
   MINI_FAB_ICON,
   MINI_FAB_SIZE,
   SEARCH_SIZE,
-  MAP_BANNER_INSET,
+  mapBannerInsets,
 } from "./mapChrome";
 import {
   HEADING_SENSOR_MS,
@@ -4597,13 +4597,10 @@ export function MapScreen({
   // Chrome geometry. Notices clear the search row so an expanded search bar
   // never covers them; the scale bar runs from the left edge up to the floating
   // button column on the right.
-  // The top row is occupied whether or not the search pill is in it: the
-  // record button sits in the opposite corner and stays through a tool, a
-  // recording being the one thing that must remain stoppable while measuring.
-  // Clears the top row of chrome — search pill on one side, record button on
-  // the other. While a tool is collecting points BOTH of those are gone
-  // (they'd only be in the way mid-draw), so the stack takes their place
-  // instead of leaving the draw/measure card floating below an empty row.
+  // Clears the top row of chrome: the search pill, in one corner. While a tool
+  // is collecting points it is gone (it'd only be in the way mid-draw), so the
+  // stack takes its place instead of leaving the draw/measure card floating
+  // below an empty row.
   // A banner's label is one short line; the whole sentence is what a press
   // shows and a screen reader says (shared/DESIGN.md §15).
   const banners = [
@@ -4637,7 +4634,7 @@ export function MapScreen({
       />
     ) : null,
   ].filter((banner) => banner !== null);
-  // The first banner takes the top row (the search and record buttons are gone
+  // The first banner takes the top row beside the search pill (which is gone
   // while a tool collects points, which is when it takes the whole row).
   const bannerRows = collectingPoints
     ? banners.length
@@ -4647,9 +4644,9 @@ export function MapScreen({
       ? insets.top + CHROME_GAP
       : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1)) +
     bannerRows * (SEARCH_SIZE + spacing(1));
-  // One button, drawn in the corner, or in the tool panel's header while a
-  // tool is collecting points and has taken the corner: a running recording is
-  // on screen in every map mode (mobile/DESIGN.md §3).
+  // One button, in the action column under Locate: reachable by the thumb that
+  // holds the phone, and on screen in every map mode, a running recording
+  // included (mobile/DESIGN.md §3).
   const recordButton = (
     <RecordButton
       state={
@@ -4676,8 +4673,6 @@ export function MapScreen({
       }
     />
   );
-  const recordingLight =
-    activeTrack && activeTrack.state !== "done" ? recordButton : undefined;
   const recordingWriteFailing = useSyncExternalStore(
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,
@@ -5375,8 +5370,8 @@ export function MapScreen({
         ) : null}
       </Map>
 
-      {/* Map banners: modes with a way out, in the top row between the search
-          and record buttons (a search bar that expands covers the first). Any
+      {/* Map banners: modes with a way out, in the top row beside the search
+          pill (a search bar that expands covers the first). Any
           more stack under it, and the notice stack below moves down by them.
           Drawn before the search bar so it is underneath. */}
       {banners.length > 0 ? (
@@ -5386,8 +5381,7 @@ export function MapScreen({
             styles.bannerColumn,
             {
               top: insets.top + CHROME_GAP,
-              left: MAP_BANNER_INSET,
-              right: MAP_BANNER_INSET,
+              ...mapBannerInsets(controlsOnLeft ? "right" : "left"),
             },
           ]}
         >
@@ -5402,10 +5396,8 @@ export function MapScreen({
       {!collectingPoints ? (
         <MapSearchBar
           topInset={insets.top}
-          // Opposite the action column: the two top-corner controls flip with
-          // the user's handedness together, or they end up in the same corner.
+          // Opposite the action column, so it never sits over the buttons.
           side={controlsOnLeft ? "right" : "left"}
-          reservedWidth={SEARCH_SIZE + CHROME_GAP}
           online={connectivity === "online"}
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
@@ -5429,23 +5421,6 @@ export function MapScreen({
           }}
         />
       ) : null}
-
-      {/* The record button holds the corner the search pill does not, and
-          leaves with it while a tool is collecting points: the draw/measure
-          card now sits under this row, and a HUD that has to dodge a button
-          gets pushed down the screen instead of using it. A running recording
-          does not go with it: its light moves into the tool panel's header. */}
-      {collectingPoints ? null : (
-        <View
-          style={[
-            styles.recordSlot,
-            { top: insets.top + CHROME_GAP },
-            controlsOnLeft ? { left: CHROME_GAP } : { right: CHROME_GAP },
-          ]}
-        >
-          {recordButton}
-        </View>
-      )}
 
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
@@ -5499,7 +5474,6 @@ export function MapScreen({
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onDiscard={measureDraft.close}
-            recordingLight={recordingLight}
           />
         ) : null}
 
@@ -5528,7 +5502,6 @@ export function MapScreen({
             onReverse={routeDraft.reverse}
             color={draftColor}
             onColorChange={setDraftColor}
-            recordingLight={recordingLight}
           />
         ) : null}
 
@@ -5646,6 +5619,7 @@ export function MapScreen({
             color={followMode !== "off" ? theme.onFill : theme.text}
           />
         </Pressable>
+        {recordButton}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
@@ -6128,10 +6102,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     alignItems: "center",
   },
-  // Top corner, on the action column's edge. It is the one control that has to
-  // be findable while a recording runs, so it does not live in the column that
-  // scrolls tools sideways over itself.
-  recordSlot: { position: "absolute" },
   bannerColumn: { position: "absolute", gap: spacing(1) },
   controlButton: {
     width: FAB_SIZE,

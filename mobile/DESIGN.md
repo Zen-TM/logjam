@@ -96,8 +96,9 @@ handler or a camera write, read
 - **A running recording is a light, on screen in every map mode**: the record
   button pulses (a steady halo under Remove animations), its numbers are a
   sheet one tap away, and a recorder that is not saving points says so on the
-  map unasked, as a `critical` notice. When a tool takes the corner the light
-  moves into the tool panel's header. Pause, Resume and Finish are full size
+  map unasked, as a `critical` notice. The button sits in the action column
+  under Locate, on the edge Settings → Map picks, so a thumb reaches it with a
+  tool armed or not. Pause, Resume and Finish are full size
   (48), share the footer (`CardActions`) and are never compact.
 - **A press-and-hold that commits ticks once** (`holdTick`: finishing a
   recording, dropping a point on the map, selecting a row). Nothing else

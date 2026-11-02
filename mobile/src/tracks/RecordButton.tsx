@@ -1,8 +1,8 @@
 // The map's record control: start a recording, and — once one is running — say
 // so and open its stats.
 //
-// It is the same size as the search pill, in the opposite top corner, because
-// what it mostly does is report: a pulsing dot says "still going" for the
+// It is the same size as the map's other buttons, in the action column under
+// Locate, because what it mostly does is report: a pulsing dot says "still going" for the
 // price of one button without covering a third of the map, while numbers live
 // behind a tap.
 //
@@ -163,8 +163,7 @@ export function RecordButton({
 }
 
 const useStyles = makeStyles((theme) => ({
-  // Mirrors MapSearchBar's pill: the two corners of the map's top edge have to
-  // read as one family, not as a button and a lookalike.
+  // The same circle as the action column's other buttons.
   //
   // ONE background in every state: a translucent or tinted background lets
   // the map show straight through over a busy raster, obscuring the control

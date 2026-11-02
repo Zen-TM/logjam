@@ -124,7 +124,6 @@ export type SavedSearchItem = {
 export function MapSearchBar({
   topInset,
   side = "left",
-  reservedWidth = 0,
   online,
   savedItems,
   onSelectPlace,
@@ -135,17 +134,9 @@ export function MapSearchBar({
   topInset: number;
   /**
    * Which top corner it collapses into — the one the action column is NOT on
-   * (Settings → Map). Search and the record button are a pair at the two ends
-   * of the top edge, and the pair has to flip with the user's handedness or
-   * the two related controls end up at opposite corners.
+   * (Settings → Map), so it never expands over the buttons.
    */
   side?: "left" | "right";
-  /**
-   * Width to leave free at the other end when expanded — the record button and
-   * its gap. Without it the bar grows straight over the top of a control that
-   * has to stay reachable while a recording runs.
-   */
-  reservedWidth?: number;
   /** False offline and in offline-only mode: no API search then. */
   online: boolean;
   /** The user's own places, waypoints, tracks and route files. */
@@ -317,7 +308,7 @@ export function MapSearchBar({
 
   const width = grow.interpolate({
     inputRange: [0, 1],
-    outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2 - reservedWidth],
+    outputRange: [SEARCH_SIZE, windowWidth - CHROME_GAP * 2],
   });
   const offerAsk = searchable && !askedHere;
   // Yours first, and above the network's answer whatever state that is in: a
