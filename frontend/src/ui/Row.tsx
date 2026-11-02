@@ -1,4 +1,6 @@
 import {
+  createContext,
+  useContext,
   useId,
   type CSSProperties,
   type HTMLAttributes,
@@ -101,13 +103,52 @@ export function Avatar({ username }: { username: string }) {
   );
 }
 
+const InRowList = createContext(false);
+
+/**
+ * A list of rows, as one tab stop with arrow keys (`useListKeys`) and as a
+ * `list` to assistive tech, so a screen reader says "3 of 35". The page opts in
+ * by drawing its rows in one: nothing is inferred from the markup, so a page
+ * that forgets does not quietly lose its arrow keys without a test noticing
+ * (`e2e/a11y.spec.ts`). Only rows and `ListEnd` may sit directly inside.
+ */
+export function RowList({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const hintId = useId();
+  return (
+    <>
+      <span id={hintId} className="visually-hidden">
+        Arrow keys move between rows, Space selects, Shift+F10 opens actions.
+      </span>
+      <div
+        role="list"
+        data-list=""
+        aria-describedby={hintId}
+        className={[classes.rowList, className].filter(Boolean).join(" ")}
+      >
+        <InRowList.Provider value>{children}</InRowList.Provider>
+      </div>
+    </>
+  );
+}
+
 /**
  * The last thing in a list: the same button its empty state offers ("Add a
  * place type", "Make a GeoPDF"), so adding is where the eye ends up after
  * scrolling to the bottom, not only when there is nothing to scroll.
  */
 export function ListEnd({ children }: { children: ReactNode }) {
-  return <div className={classes.listEnd}>{children}</div>;
+  const inList = useContext(InRowList);
+  return (
+    <div className={classes.listEnd} role={inList ? "listitem" : undefined}>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -171,6 +212,7 @@ export function Row({
   accentEdge?: boolean | "warning";
   disabled?: boolean;
 }) {
+  const inList = useContext(InRowList);
   const subtitleId = useId();
   const descriptionId = useId();
   const describedBy =
@@ -184,6 +226,7 @@ export function Row({
       data-accent-edge={String(accentEdge)}
       data-disabled={disabled}
       data-row=""
+      role={inList ? "listitem" : undefined}
       {...rest}
     >
       {leading != null && <div className={classes.leading}>{leading}</div>}

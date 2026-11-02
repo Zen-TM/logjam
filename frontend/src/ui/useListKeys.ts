@@ -8,20 +8,35 @@ import { nextEnabledIndex } from "./rovingFocus";
 // Shift+F10 or the context-menu key opens its actions. Controls a row carries
 // for another reason (an Accept button) stay in the Tab order.
 //
-// It reads the DOM rather than taking a list, so every page's rows join with no
-// wiring: a "list" is the rows that share a parent. The attributes it reads are
-// set by `Row` (`data-row`, `data-row-open`).
+// A "list" is a `RowList` (`data-list`): the page opts in, and a row outside one
+// is left exactly as it was. The attributes it reads are set by `Row`
+// (`data-row`, `data-row-open`) and `RowList`.
 
+const LIST = "[data-list]";
 const ROW = "[data-row]";
 const OPEN = "[data-row-open]";
 const TILE = '[role="checkbox"]';
 const ACTIONS = '[aria-haspopup="menu"]';
 
+/** One polite live region for the page, made on first use. */
+function announce(message: string) {
+  let region = document.getElementById("list-announcer");
+  if (!region) {
+    region = document.createElement("div");
+    region.id = "list-announcer";
+    region.className = "visually-hidden";
+    region.setAttribute("aria-live", "polite");
+    document.body.append(region);
+  }
+  region.textContent = message;
+}
+
 const rowsOf = (group: Element) =>
-  Array.from(group.children).filter(
-    (child): child is HTMLElement =>
-      child.matches(ROW) && child.querySelector(OPEN) != null,
+  Array.from(group.querySelectorAll<HTMLElement>(ROW)).filter(
+    (row) => row.closest(LIST) === group && openOf(row) != null,
   );
+
+const listOf = (row: Element) => row.closest(LIST);
 
 const openOf = (row: Element) => row.querySelector<HTMLElement>(OPEN);
 
@@ -35,12 +50,7 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
     const current = new WeakMap<Element, Element>();
 
     const sync = () => {
-      const groups = new Set<Element>();
-      for (const open of root.querySelectorAll(OPEN)) {
-        const row = open.closest(ROW);
-        if (row?.parentElement) groups.add(row.parentElement);
-      }
-      for (const group of groups) {
+      for (const group of root.querySelectorAll(LIST)) {
         const rows = rowsOf(group);
         const stop =
           rows.find((row) => row === current.get(group) && isEnabled(row)) ??
@@ -51,6 +61,15 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
             `${OPEN}, ${TILE}, ${ACTIONS}`,
           )) {
             if (control.closest('[role="menu"]')) continue;
+            // What the keys do, for a reader who has not met them.
+            const shortcuts = control.matches(OPEN)
+              ? [
+                  row.querySelector(TILE) && "Space",
+                  row.querySelector(ACTIONS) && "Shift+F10",
+                ]
+              : [control.matches(TILE) ? "Space" : "Shift+F10"];
+            const keys = shortcuts.filter(Boolean).join(" ");
+            if (keys) control.setAttribute("aria-keyshortcuts", keys);
             if (control === keep) control.removeAttribute("tabindex");
             else control.tabIndex = -1;
           }
@@ -75,15 +94,17 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
 
     const onFocusIn = (event: FocusEvent) => {
       const row = (event.target as Element).closest(ROW);
-      if (!row?.parentElement || !openOf(row)) return;
-      current.set(row.parentElement, row);
+      const group = row && listOf(row);
+      if (!row || !group || !openOf(row)) return;
+      current.set(group, row);
       syncSoon();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const row = target.closest<HTMLElement>(ROW);
-      if (!row?.parentElement || !openOf(row)) return;
+      const group = row && listOf(row);
+      if (!row || !group || !openOf(row)) return;
       if (target.closest('input, textarea, select, [role="menu"]')) return;
 
       if (
@@ -104,6 +125,13 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
         tile.dispatchEvent(
           new MouseEvent("click", { bubbles: true, shiftKey: event.shiftKey }),
         );
+        // Focus stays on the title, so the tick is said here.
+        const name = openOf(row)?.textContent ?? "";
+        setTimeout(() =>
+          announce(
+            `${tile.getAttribute("aria-checked") === "true" ? "Selected" : "Not selected"} ${name}`,
+          ),
+        );
         return;
       }
       if (
@@ -113,7 +141,7 @@ export function useListKeys(rootRef: RefObject<HTMLElement | null>) {
         !["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)
       )
         return;
-      const rows = rowsOf(row.parentElement);
+      const rows = rowsOf(group);
       const to = nextEnabledIndex(
         rows.map((each) => !isEnabled(each)),
         rows.indexOf(row),

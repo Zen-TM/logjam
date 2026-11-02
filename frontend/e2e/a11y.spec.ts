@@ -185,6 +185,11 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toHaveCount(
       0,
     );
+    // One layer per press: the selection went, the page did not.
+    // Mutation: drop the `defaultPrevented` guard in `useEscape`.
+    await expect(
+      aside.getByRole("radio", { name: /^You share/ }),
+    ).toBeVisible();
   });
 
   test("Plans: the list, a plan's page and its views", async ({ page }) => {
@@ -1322,9 +1327,9 @@ test.describe("keyboard", () => {
       .evaluate(
         (row) =>
           [
-            ...(row.parentElement as HTMLElement).querySelectorAll<HTMLElement>(
-              "button, a[href], input",
-            ),
+            ...(
+              row.closest("[data-list]") as HTMLElement
+            ).querySelectorAll<HTMLElement>("button, a[href], input"),
           ].filter(
             (el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled,
           ).length,
@@ -1360,6 +1365,35 @@ test.describe("keyboard", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toHaveCount(0);
   });
+
+  // Mutation: draw a page's rows in a plain `div` instead of a `RowList` (drop
+  // it from PlacesPanel) and that page has no list, so its case goes red.
+  for (const panel of ["Places", "Logs", "Ways", "Plans", "Friends", "Inbox"]) {
+    test(`${panel}: its rows are a list with one tab stop`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await page.getByRole("button", { name: new RegExp(`^${panel}`) }).click();
+      const aside = page.locator("aside");
+      await expect(aside.locator("[data-row-open]").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      const { lists, stops } = await aside.evaluate((root) => {
+        const lists = [...root.querySelectorAll("[data-list]")].filter((list) =>
+          list.querySelector("[data-row-open]"),
+        );
+        const stops = [
+          ...root.querySelectorAll<HTMLButtonElement>(
+            '[data-row-open], [data-row] [role="checkbox"], [data-row] [aria-haspopup="menu"]',
+          ),
+        ].filter((el) => el.tabIndex >= 0 && !el.disabled);
+        return { lists: lists.length, stops: stops.length };
+      });
+      expect(lists).toBeGreaterThan(0);
+      expect(stops).toBe(lists);
+      await expect(aside.getByRole("list").first()).toBeVisible();
+    });
+  }
 
   // Mutation: drop `usePanelFocus` and focus is the page's body after Enter,
   // and Escape does nothing.

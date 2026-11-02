@@ -46,9 +46,9 @@ export function usePanelFocus(rootRef: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    // The row last focused, on the root page and on the page one step in: the
-    // way back goes to the first, never to a row of the page just left.
-    const remembered: (Remembered | null)[] = [null, null];
+    // The row last focused on a root page (one with no back arrow), which the
+    // way back returns to.
+    let remembered: Remembered | null = null;
     let depth = backIn(root) ? 1 : 0;
 
     const onFocusIn = (event: FocusEvent) => {
@@ -57,10 +57,8 @@ export function usePanelFocus(rootRef: RefObject<HTMLElement | null>) {
         ?.querySelector<HTMLElement>(ROW_OPEN);
       if (!open) return;
       const opens = Array.from(root.querySelectorAll(ROW_OPEN));
-      remembered[backIn(root) ? 1 : 0] = {
-        index: opens.indexOf(open),
-        text: open.textContent ?? "",
-      };
+      if (backIn(root)) return;
+      remembered = { index: opens.indexOf(open), text: open.textContent ?? "" };
     };
 
     // Only a page that swapped, and only when the swap took focus with it (the
@@ -68,9 +66,7 @@ export function usePanelFocus(rootRef: RefObject<HTMLElement | null>) {
     // keeps its own.
     const place = (page: number) => {
       const target =
-        page === 1
-          ? backIn(root)
-          : remembered[0] && rowAfter(root, remembered[0]);
+        page === 1 ? backIn(root) : remembered && rowAfter(root, remembered);
       target?.focus();
       return target != null;
     };

@@ -47,10 +47,14 @@ export function Tooltip({
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      // Its own layer: this press dismisses the tip, not the page behind it.
+      // Captured, so the layers between it and the document see it handled.
+      event.preventDefault();
+      setOpen(false);
     };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
   const show = () => {

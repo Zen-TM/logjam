@@ -8,7 +8,7 @@ export { Chip, ChipPicker, ChipRail, type ChipOption } from "./Chip";
 export { ActivitySpark, StatGrid, type SparkBucket, type Stat } from "./Stats";
 export { ProfileChart } from "./ProfileChart";
 export { ForecastList, type ForecastRow } from "./Forecast";
-export { Avatar, IconTile, ListEnd, Row, TileCheckbox } from "./Row";
+export { Avatar, IconTile, ListEnd, Row, RowList, TileCheckbox } from "./Row";
 export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox } from "./Choice";

@@ -43,6 +43,7 @@ import {
   LoadingState,
   Menu,
   Row,
+  RowList,
   StatusPill,
 } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
@@ -458,10 +459,10 @@ export default function PlansPanel({
         />
       </div>
     ) : (
-      <div className={classes.list}>
+      <RowList className={classes.list}>
         {rows.map(renderRow)}
         <ListEnd>{newPlanButton}</ListEnd>
-      </div>
+      </RowList>
     ),
   };
 

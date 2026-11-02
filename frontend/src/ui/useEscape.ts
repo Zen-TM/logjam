@@ -18,7 +18,9 @@ export function useEscape(
     const element = ref?.current;
     if (!element) return;
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      // An inner layer that handled the press (a selection that cleared, a
+      // tooltip) only prevents it; it is that layer's, and goes no further.
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       // An open menu inside this layer is the innermost one: it closes itself.
       if ((event.target as Element).closest('[role="menu"]')) return;
       if (handleEscape() === false) return;
