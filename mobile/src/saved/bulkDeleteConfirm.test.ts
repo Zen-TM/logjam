@@ -49,7 +49,7 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 684032,
       }),
     ).toBe(
-      "4 of them are routes and waypoints, removed from your account and from any friends they're shared with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
+      "4 of them are routes and places, removed from your account and from any friends they're shared with. The other one is deleted from this phone, freeing 668 KB. This can't be undone.",
     );
   });
 
@@ -61,7 +61,7 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 0,
       }),
     ).toBe(
-      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
+      "One of them is a route or a place, removed from your account and from any friends they're shared with. The other one is deleted from this phone. This can't be undone.",
     );
   });
 
@@ -73,7 +73,7 @@ describe("bulkDeleteConfirmBody", () => {
         onDeviceBytes: 2097152,
       }),
     ).toBe(
-      "One of them is a route or waypoint, removed from your account and from any friends they're shared with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
+      "One of them is a route or a place, removed from your account and from any friends they're shared with. The other 2 are deleted from this phone, freeing 2 MB. This can't be undone.",
     );
   });
 });

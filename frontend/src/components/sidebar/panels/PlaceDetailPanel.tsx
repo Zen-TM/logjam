@@ -578,7 +578,7 @@ function PlaceDetailPanel({
       .then(setTripLogs)
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't refresh trip logs."));
+        toast.error(messageFromError(err, "Couldn't refresh trips."));
       });
     // Also refresh the global Trip Logs list/search (separate query).
     onRefetchTripLogs();

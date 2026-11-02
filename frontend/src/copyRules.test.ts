@@ -115,6 +115,16 @@ function childExpressionStrings(
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
+    rule: "curly-apostrophe",
+    text: "Unsharing won&rsquo;t remove",
+  },
+  {
+    file: "components/dialogs/SelectedPlacesDialog.tsx",
+    rule: "curly-apostrophe",
+    text: "they&rsquo;ll be unlinked",
+  },
+  {
+    file: "components/dialogs/SelectedPlacesDialog.tsx",
     rule: "cannot",
     text: ",\n            along with their photos, tracks and shares. Your trip logs are kept\n            — they&rsquo;ll be unlinked from these places but stay in your\n            logbook. This cannot be undone.",
   },

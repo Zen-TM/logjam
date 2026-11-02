@@ -58,6 +58,7 @@ import {
   ownTypeCountLabel,
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
+  PLAN_VERB_LISTS,
   friendRemoveConfirm,
   friendRequestMadeFriend,
   friendsRemoveConfirm,
@@ -342,13 +343,13 @@ describe("placeDeleteConfirm", () => {
       "Its notes, photos, tracks and shares go too. This can't be undone.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 1).confirmBody).toContain(
-      "1 logged trip stays in your logbook, unlinked.",
+      "1 logged trip stays, unlinked.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 4).confirmBody).toContain(
-      "4 logged trips stay in your logbook, unlinked.",
+      "4 logged trips stay, unlinked.",
     );
     expect(placeDeleteConfirm({ count: 3 }).confirmBody).toBe(
-      "Their notes, photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone.",
+      "Their notes, photos, tracks and shares go too. Trips that link to them stay, unlinked. This can't be undone.",
     );
   });
 });
@@ -1110,4 +1111,40 @@ describe("abandonConfirm", () => {
       tone: "destructive",
     });
   });
+});
+
+describe("a verb list's reason and gap", () => {
+  const lists: [string, readonly object[]][] = [
+    ["PLACE_VERBS", PLACE_VERBS],
+    ["FRIEND_SHARE_VERBS", FRIEND_SHARE_VERBS],
+    ["MAP_POINT_VERBS", MAP_POINT_VERBS],
+    ["MAP_MEASURE_VERBS", MAP_MEASURE_VERBS],
+    ...PLAN_VERB_LISTS.map((list, i): [string, readonly object[]] => [
+      `PLAN_VERB_LISTS[${i}]`,
+      list,
+    ]),
+  ];
+
+  // A verb only one client has gives exactly one non-empty `reason` or `gap`,
+  // and any other verb gives neither. Mutation: give a one-client verb both,
+  // or `gap: ""`.
+  it.each(lists)(
+    "%s: exactly one of reason or gap, on a one-client verb only",
+    (_name, list) => {
+      for (const verb of list as readonly {
+        id: string;
+        on?: string;
+        reason?: string;
+        gap?: string;
+      }[]) {
+        const given = [verb.reason, verb.gap].filter(
+          (text) => text !== undefined,
+        );
+        if (verb.on) {
+          expect(given, verb.id).toHaveLength(1);
+          expect(given[0]!.trim(), verb.id).not.toBe("");
+        } else expect(given, verb.id).toEqual([]);
+      }
+    },
+  );
 });

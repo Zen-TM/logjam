@@ -1313,8 +1313,7 @@ export function useTripLogs(enabled: boolean) {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load trip logs."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load trips."));
       })
       .finally(() => {
         if (cancelled) return;

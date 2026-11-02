@@ -534,7 +534,7 @@ function UnifiedImportDialog({
     const kind = detectFileKind(parsed.headers);
     if (kind === "unknown") {
       setError(
-        "This file doesn't look like a place list or a trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; logbooks need a place name and date.",
+        "This file doesn't look like a place list or a trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.",
       );
       return;
     }

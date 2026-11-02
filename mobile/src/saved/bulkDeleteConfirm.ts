@@ -40,8 +40,8 @@ export function bulkDeleteConfirmBody({
   // travels beyond this handset.
   const synced =
     syncedCount === 1
-      ? `One of them is a route or waypoint, ${accountReach}`
-      : `${syncedCount} of them are routes and waypoints, ${accountReach}`;
+      ? `One of them is a route or a place, ${accountReach}`
+      : `${syncedCount} of them are routes and places, ${accountReach}`;
   const rest =
     onDeviceCount === 1
       ? "The other one is deleted from this phone"
