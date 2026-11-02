@@ -55,7 +55,7 @@ export const COPY_RULES: readonly CopyRule[] = [
   },
   {
     id: "curly-apostrophe",
-    pattern: /[’‘]/,
+    pattern: /[’‘]|&[lr]squo;/,
     say: "A straight apostrophe: '.",
   },
   { id: "waypoint", pattern: /\bwaypoints?\b/i, say: 'Say "place".' },
@@ -77,7 +77,8 @@ export const COPY_RULES: readonly CopyRule[] = [
   { id: "activity", pattern: /\bactivit(?:y|ies)\b/i, say: 'Say "trip type".' },
   {
     id: "lidar-topo",
-    pattern: /\bLiDAR (?:topos?|overlays?)\b|\btopos?\b/i,
+    pattern:
+      /\bLiDAR (?:topos?|overlays?)\b|(?<!\b(?:OSM|Cycle|Maps) )\btopos?\b/i,
     say: 'A sharpen job\'s result is a "sharpened area"; "LiDAR map" where either kind is meant.',
   },
   {

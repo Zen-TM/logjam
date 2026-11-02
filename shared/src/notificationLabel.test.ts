@@ -147,6 +147,12 @@ describe("notificationLabel", () => {
         }),
       ),
     ).toEqual({ text: "PDF export failed", detail: "boom" });
+    // Only a real format is upper-cased. Mutation: upper-case the fallback.
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { status: "failed" }),
+      ).text,
+    ).toBe("Area export failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.

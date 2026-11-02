@@ -11,6 +11,7 @@ const SRC = join(import.meta.dirname, "..");
 
 // Files still to move to confirm(); delete an entry when its file moves.
 const BASELINE: string[] = [
+  "../App.tsx",
   "AppShell.tsx",
   "customFields/CustomFieldsEditor.tsx",
   "imports/ImportOptionsSheet.tsx",
@@ -62,6 +63,11 @@ const callers = (dir: string): string[] =>
       : [];
   });
 
+const appCallers = () =>
+  readFileSync(join(SRC, "..", "App.tsx"), "utf8").includes("Alert.alert(")
+    ? ["../App.tsx"]
+    : [];
+
 describe("confirm", () => {
   beforeEach(() => alert.mockReset());
 
@@ -108,7 +114,7 @@ describe("confirm", () => {
 // (mobile/DESIGN.md §4). Mutation: add `Alert.alert(` to any screen outside
 // the baseline, or migrate a baselined file and leave its entry.
 describe("Alert.alert is called only by confirm()", () => {
-  const found = callers(SRC).sort();
+  const found = [...callers(SRC), ...appCallers()].sort();
 
   it("is not called by a file the baseline does not list", () => {
     expect(found.filter((file) => !BASELINE.includes(file))).toEqual([]);

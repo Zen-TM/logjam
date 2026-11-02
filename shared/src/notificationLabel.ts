@@ -133,7 +133,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "topo_export_complete": {
       const format =
         EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
-        String(p.format ?? "Area").toUpperCase();
+        (p.format ? String(p.format).toUpperCase() : "Area");
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,
