@@ -1,15 +1,14 @@
 // Snap picker for the measure and route-draw HUDs.
 //
-// A wrapped ChipRail from the kit, not a hand-rolled chip row
-// (DESIGN.md): four short options, all visible at once, and per §2 the
-// wrapped form is right because this picks a SETTING rather than filtering a
-// list below it.
+// A ChipRail from the kit, not a hand-rolled chip row (DESIGN.md), in ONE
+// scrolling line: the panel opens it from its "Snap" button rather than keeping
+// a labelled two-row block on screen over the map.
 //
 // It lives in the tool it changes, not in the layers sheet, because it governs
 // what the next tap does.
-import { MAP_MEASURE, MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
+import { MAP_SNAP_OPTIONS, type SnapMode } from "@logjam/shared";
 
-import { ChipRail, Field } from "../ui";
+import { ChipRail } from "../ui";
 
 export function SnapPicker({
   mode,
@@ -21,12 +20,11 @@ export function SnapPicker({
   disabled?: boolean;
 }) {
   return (
-    <Field label={MAP_MEASURE.copy.snap}>
-      <ChipRail
-        options={MAP_SNAP_OPTIONS.map((option) => ({ ...option, disabled }))}
-        value={mode}
-        onChange={onChange}
-      />
-    </Field>
+    <ChipRail
+      scroll
+      options={MAP_SNAP_OPTIONS.map((option) => ({ ...option, disabled }))}
+      value={mode}
+      onChange={onChange}
+    />
   );
 }
