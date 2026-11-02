@@ -176,6 +176,7 @@ import {
   MINI_FAB_ICON,
   MINI_FAB_SIZE,
   SEARCH_SIZE,
+  MAP_BANNER_INSET,
 } from "./mapChrome";
 import {
   HEADING_SENSOR_MS,
@@ -262,7 +263,7 @@ import {
   Button,
   Chip,
   Icon,
-  IconButton,
+  MapBanner,
   Notice,
   Row,
   TextField,
@@ -4491,9 +4492,65 @@ export function MapScreen({
   // the other. While a tool is collecting points BOTH of those are gone
   // (they'd only be in the way mid-draw), so the stack takes their place
   // instead of leaving the draw/measure card floating below an empty row.
-  const noticeTop = collectingPoints
-    ? insets.top + CHROME_GAP
-    : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1);
+  const navText =
+    navTarget &&
+    (navDistanceM != null && navBearingDeg != null
+      ? `${formatDistanceM(navDistanceM)} · ${compassPointFor(navBearingDeg)} ${Math.round(navBearingDeg)}°`
+      : "waiting for GPS…");
+  // A banner's label is one short line; the whole sentence is what a press
+  // shows and a screen reader says (shared/DESIGN.md §15).
+  const banners = [
+    planOnMap && !collectingPoints ? (
+      <MapBanner
+        key="plan"
+        icon="plan"
+        label={planOnMap.name}
+        dismissLabel={TRIP_PLAN_PAGE.copy.backToMap}
+        onDismiss={leavePlan}
+        onPress={() => onOpenPlan?.(planOnMap.id)}
+      />
+    ) : null,
+    navTarget ? (
+      <MapBanner
+        key="nav"
+        icon="navigateTo"
+        label={navText ?? ""}
+        fullText={`${navTarget.name} · ${navText}`}
+        dismissLabel="Stop navigating"
+        onDismiss={() => setNavTarget(null)}
+        onPress={() => notify(`${navTarget.name} · ${navText}`, "info")}
+      />
+    ) : null,
+    // A map that quietly hides pins is a map you can't trust. Says how many
+    // are missing, and the dismiss IS the way out: it turns the Places
+    // screen's "show only these" option back off.
+    withholdingPlaces ? (
+      <MapBanner
+        key="filter"
+        icon="filter"
+        label={`${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+        fullText={`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
+        dismissLabel="Show all places again"
+        onDismiss={() => setPlaceMapFilterEnabled(false)}
+        onPress={() =>
+          notify(
+            `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
+            "info",
+          )
+        }
+      />
+    ) : null,
+  ].filter((banner) => banner !== null);
+  // The first banner takes the top row (the search and record buttons are gone
+  // while a tool collects points, which is when it takes the whole row).
+  const bannerRows = collectingPoints
+    ? banners.length
+    : Math.max(0, banners.length - 1);
+  const noticeTop =
+    (collectingPoints
+      ? insets.top + CHROME_GAP
+      : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1)) +
+    bannerRows * (SEARCH_SIZE + spacing(1));
   const recordingWriteFailing = useSyncExternalStore(
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,
@@ -4774,7 +4831,6 @@ export function MapScreen({
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
                   beforeId={BAND_MARKERS.land}
-                  style={{ rasterOpacity: planOnMap ? PLAN_DIM : 1 }}
                 />
               )}
             </ResolvedSource>
@@ -5164,40 +5220,23 @@ export function MapScreen({
         ) : null}
       </Map>
 
-      {/* Plan mode's banner: between the search and record buttons, under the
-          search bar when that expands. */}
-      {planOnMap && !collectingPoints ? (
+      {/* Map banners: modes with a way out, in the top row between the search
+          and record buttons (a search bar that expands covers the first). Any
+          more stack under it, and the notice stack below moves down by them.
+          Drawn before the search bar so it is underneath. */}
+      {banners.length > 0 ? (
         <View
           pointerEvents="box-none"
           style={[
-            styles.planBanner,
+            styles.bannerColumn,
             {
               top: insets.top + CHROME_GAP,
-              left: CHROME_GAP + SEARCH_SIZE + spacing(1),
-              right: CHROME_GAP + SEARCH_SIZE + spacing(1),
+              left: MAP_BANNER_INSET,
+              right: MAP_BANNER_INSET,
             },
           ]}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={planOnMap.name}
-            onPress={() => onOpenPlan?.(planOnMap.id)}
-          >
-            <Notice
-              icon="plan"
-              numberOfLines={1}
-              action={
-                <IconButton
-                  icon="close"
-                  size={16}
-                  accessibilityLabel={TRIP_PLAN_PAGE.copy.backToMap}
-                  onPress={leavePlan}
-                />
-              }
-            >
-              {planOnMap.name}
-            </Notice>
-          </Pressable>
+          {banners}
         </View>
       ) : null}
 
@@ -5404,25 +5443,6 @@ export function MapScreen({
           </Notice>
         ) : null}
 
-        {/* A map that quietly hides pins is a map you can't trust. Says how many
-            are missing, and the dismiss IS the way out — clearing it turns the
-            Places screen's "show only these" option back off. */}
-        {withholdingPlaces ? (
-          <Notice
-            icon="filter"
-            action={
-              <IconButton
-                icon="close"
-                size={16}
-                accessibilityLabel="Show all places again"
-                onPress={() => setPlaceMapFilterEnabled(false)}
-              />
-            }
-          >
-            {`Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`}
-          </Notice>
-        ) : null}
-
         {/* A download keeps running while the user walks around the map, so it
             reports here rather than only from the Saved tab.
 
@@ -5518,37 +5538,6 @@ export function MapScreen({
           />
         ) : null}
       </View>
-
-      {/* Navigate-to-marker readout: live distance + bearing from the
-          latest fix. Static labels only — coordinates never rendered. */}
-      {navTarget ? (
-        <View
-          style={[styles.navDock, { top: noticeTop }]}
-          pointerEvents="box-none"
-        >
-          {/* The distance and bearing live at the end of this line, so a
-              one-line cap cuts off the half that changes. */}
-          <Notice
-            icon="navigateTo"
-            action={
-              <IconButton
-                icon="close"
-                size={16}
-                accessibilityLabel="Stop navigating"
-                onPress={() => setNavTarget(null)}
-              />
-            }
-          >
-            {`${navTarget.name}${
-              navDistanceM != null && navBearingDeg != null
-                ? ` · ${formatDistanceM(navDistanceM)} · ${compassPointFor(
-                    navBearingDeg,
-                  )} ${Math.round(navBearingDeg)}°`
-                : " · waiting for GPS…"
-            }`}
-          </Notice>
-        </View>
-      ) : null}
 
       {/* Attribution is required by the providers and lives behind the (i)
           button to preserve map space. */}
@@ -5972,11 +5961,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // be findable while a recording runs, so it does not live in the column that
   // scrolls tools sideways over itself.
   recordSlot: { position: "absolute" },
-  planBanner: {
-    position: "absolute",
-    height: SEARCH_SIZE,
-    justifyContent: "center",
-  },
+  bannerColumn: { position: "absolute", gap: spacing(1) },
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
@@ -6001,8 +5986,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "flex-start",
     gap: INSTRUMENT_GAP,
   },
-  // Where the navigation readout sits: a Notice, centred, in the notice stack's
-  // column.
-  navDock: { position: "absolute", left: spacing(2), right: spacing(2) },
   attributionText: { ...muted(theme, textRole.detail) },
 }));

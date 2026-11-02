@@ -25,12 +25,13 @@ export function addableFromMirror(
   },
 ) {
   const onServer = (id: string) => !state.pendingCreates.has(id);
-  // A shared place is mirrored "shared"; one made here is "owner" before
-  // its create lands, so it waits too.
-  const places = own.places.filter(
-    (place) => place.syncRole === "owner" && onServer(place.id),
+  // A place shared with the caller is offered too (the API copies it as it
+  // does their own); one made here is "owner" before its create lands, so it
+  // waits.
+  const places = own.places.filter((place) => onServer(place.id));
+  const ownPlaceIds = new Set(
+    places.filter((p) => p.syncRole === "owner").map((place) => place.id),
   );
-  const ownPlaceIds = new Set(places.map((place) => place.id));
   return tripPlanAddable(
     {
       places,

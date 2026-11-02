@@ -30,7 +30,7 @@ const ids = (rows: { id: string }[]) => rows.map((row) => row.id);
 describe("what Add a copy offers from the mirror", () => {
   // Mutation: drop the pending-create filter, and a pin dropped offline is
   // offered, 404s, and stops the run with every pick after it unsent.
-  it("leaves out places not on the server yet, and shared ones", () => {
+  it("leaves out places not on the server yet, and offers shared ones", () => {
     const offered = addableFromMirror(
       {
         places: [place("mine"), place("pending"), place("bobs", "shared")],
@@ -39,7 +39,7 @@ describe("what Add a copy offers from the mirror", () => {
       },
       state,
     );
-    expect(ids(offered.places)).toEqual(["mine"]);
+    expect(ids(offered.places)).toEqual(["mine", "bobs"]);
   });
 
   // Mutation: map a null owner to `me`, and an unsynced route is offered.

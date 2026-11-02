@@ -20,6 +20,7 @@ import {
   planItemVerbs,
   tripPlanAdoptTheirs,
   tripPlanInPlanNow,
+  tripPlanSetAsideRows,
   tripPlanSame,
   tripPlanTheirsChanged,
   SYSTEM_FIELD_DEFS,
@@ -32,7 +33,10 @@ import {
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
-import { CustomFieldValueInputs } from "../customFields/CustomFieldValues";
+import {
+  AttributeTable,
+  CustomFieldValueInputs,
+} from "../customFields/CustomFieldValues";
 import { coerceCustomFields } from "../customFields/fieldValueCoercion";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
@@ -378,6 +382,14 @@ export function PlanItemSheet({
                     onChange={(key, next) => set({ [ITEM_ATTR + key]: next })}
                     onPickDate={setDateKey}
                   />
+                </>
+              ) : null}
+              {item?.kind === "place" &&
+              tripPlanSetAsideRows(item).length > 0 ? (
+                <>
+                  <SectionHeader title={copy.placeSetAside} />
+                  <Text style={styles.note}>{copy.placeSetAsideHint}</Text>
+                  <AttributeTable rows={tripPlanSetAsideRows(item)} />
                 </>
               ) : null}
             </>

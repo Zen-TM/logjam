@@ -14,13 +14,15 @@ import {
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
   TRIP_PLAN_PAGE,
-  SYSTEM_PLACE_TYPES,
   tripPlanAddedByLine,
   tripPlanCopyCoordinatesLabel,
+  tripPlanPlaceType,
+  tripPlanSetAsideRows,
   type TripPlanPlace,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
+import { placeTypeGlyph } from "../places/placeTypeIcon";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
@@ -85,9 +87,8 @@ export function PlanPlaceSheet({
   const photos = place
     ? openablePlanMedia(planId, place.media, files, onPhone, online)
     : [];
-  const type = SYSTEM_PLACE_TYPES.find(
-    (each) => each.id === place?.placeTypeId,
-  );
+  const type = place ? tripPlanPlaceType(place) : null;
+  const setAside = place ? tripPlanSetAsideRows(place) : [];
   const position = place ? mapPointPosition(place) : "";
   // A plan place is always of a system type, so the system definitions
   // label its attributes.
@@ -107,14 +108,20 @@ export function PlanPlaceSheet({
         panel.body
       ) : place ? (
         <View style={styles.body}>
-          <Text style={styles.detail}>
-            {[
-              type?.name ?? TRIP_PLAN_PAGE.copy.placeTypeFallback,
-              tripPlanAddedByLine(place.addedBy),
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </Text>
+          <View style={styles.typeLine}>
+            {type ? (
+              <Icon
+                idea={placeTypeGlyph(type.iconKey)}
+                size={16}
+                color={theme.textMuted}
+              />
+            ) : null}
+            <Text style={styles.detail}>
+              {[type?.name, tripPlanAddedByLine(place.addedBy)]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+          </View>
           {place.altNames.length > 0 ? (
             <Text style={styles.detail}>
               {PLACE_PAGE.copy.alsoKnownAs} {place.altNames.join(", ")}
@@ -143,6 +150,18 @@ export function PlanPlaceSheet({
             }}
           />
           {attributes.length > 0 ? <AttributeTable rows={attributes} /> : null}
+          {setAside.length > 0 ? (
+            <>
+              <SectionHeader
+                title={TRIP_PLAN_PAGE.copy.placeSetAside}
+                count={setAside.length}
+              />
+              <Text style={styles.detail}>
+                {TRIP_PLAN_PAGE.copy.placeSetAsideHint}
+              </Text>
+              <AttributeTable rows={setAside} />
+            </>
+          ) : null}
           {place.media.length > 0 ? (
             <>
               <SectionHeader title={PLACE_PAGE.copy.photos} />
@@ -202,6 +221,7 @@ export function PlanPlaceSheet({
 
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
+  typeLine: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   detail: { ...muted(theme, textRole.detail) },
   notes: { ...textRole.body, color: theme.text },
 }));
