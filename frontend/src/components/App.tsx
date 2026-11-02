@@ -334,10 +334,9 @@ function App() {
   // The box an opening was given (a selection's, a topo's).
   const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
   // A new key for every opening that is not a pick coming back
-  // (`freshExportDialog`), because a pick the dialog left for may never return:
-  // another product can take the box tool over it. e2e/export-area.spec.ts (run
-  // in CI; App has no render harness) holds the mechanism through its Map tools
-  // caller.
+  // (`freshExportDialog`), so an opening never starts on another's form. While a
+  // pick is out, Tools is off and the pages are dimmed, so the pick comes back
+  // or is cancelled back (e2e/export-area.spec.ts).
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
