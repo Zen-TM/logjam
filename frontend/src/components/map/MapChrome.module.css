@@ -92,8 +92,9 @@
 }
 
 /* Beneath MapLibre's control corners (z-index 2), like the scale bar beside it:
-   on a narrow map the credits run leftwards over both, and the compass must
-   not be the one thing drawn over the credit text. */
+   where the credits are wider than the room beside them and Map.module.css
+   does not lift them (a desktop with a panel open) they run leftwards over
+   both, and the compass must not be the one thing drawn over the credit text. */
 .instruments {
   position: absolute;
   z-index: 1;

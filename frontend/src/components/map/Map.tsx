@@ -153,6 +153,7 @@ import {
 } from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
+import { collapseCreditsOnce } from "./collapseCredits";
 import type {
   TPlace,
   TFilters,
@@ -1090,28 +1091,17 @@ function Map({
       userFixRef.current = null;
     });
     // Compact: it collapses to an (i) once the map is moved, which OSMF's
-    // attribution guideline allows while the credit stays one press away.
+    // attribution guideline allows while the credit stays one press away. On a
+    // phone the open box would sit over a quarter of the map and the compass and
+    // scale bar, so there it starts as the (i); wider maps keep MapLibre's open
+    // credits until the first drag.
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
-    // MapLibre opens a compact control when the first credit arrives and
-    // closes it on the first drag, which on a phone leaves a box over a quarter
-    // of the map until then. Close it as soon as it first opens: the (i) alone.
     const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-    if (credits) {
-      const open = "maplibregl-compact-show";
-      const collapse = () => {
-        if (!credits.classList.contains(open)) return;
-        credits.classList.remove(open);
-        observer.disconnect();
-      };
-      const observer = new MutationObserver(collapse);
-      observer.observe(credits, {
-        attributes: true,
-        attributeFilter: ["class"],
-      });
-      collapse();
+    if (credits && window.innerWidth <= MOBILE_MAX_WIDTH_PX) {
+      collapseCreditsOnce(credits);
     }
     map.addControl(
       new maplibregl.ScaleControl({
