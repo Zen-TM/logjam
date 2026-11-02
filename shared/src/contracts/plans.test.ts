@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { contractSectionKeys } from "./types.js";
 import { answersFromDraft } from "../tripPlanAnswerDraft.js";
 import {
   TRIP_PLAN_FORM_PRESETS,
@@ -37,6 +38,7 @@ import {
   tripPlanRowPill,
   tripPlanRowSubtitle,
   tripPlansBadgeCount,
+  TRIP_PLAN_PAGE,
   tripPlansEmpty,
   tripPlansHeroTitle,
   tripPlanTripLogPrefill,
@@ -62,8 +64,8 @@ import {
   TRIP_PLAN_ANSWER_MISSING,
   tripPlanQuestionChoices,
   opensPreview,
-  tripPlanInvitedLine,
-  tripPlanPreviewHeaded,
+  tripPlanInvitePage,
+  TRIP_PLAN_PREVIEW,
   tripPlanTripLogPlacesLine,
   tripPlanAddCopyPriceLine,
   tripPlanAddOutcome,
@@ -954,30 +956,42 @@ describe("an invite's preview", () => {
   const preview = {
     startDate: "2026-11-26" as DateOnly,
     endDate: "2026-11-27" as DateOnly,
-    invitedBy: { id: "c", username: "carol" },
+    tripTypes: ["canyoning"],
+    invitedBy: { id: "c", username: "carol" } as {
+      id: string;
+      username: string;
+    } | null,
+    sections: [],
+    members: [{ id: "c", username: "carol" }],
   };
-  // Mutation: drop the invitedBy part, or join a stray " · " when there is
-  // no invitedBy.
-  it("says the dates and who invited, whichever there are", () => {
-    expect(tripPlanInvitedLine(preview, 2026)).toBe(
-      "Thu 26 – Fri 27 Nov · Invited by carol",
-    );
-    expect(tripPlanInvitedLine({ ...preview, invitedBy: null }, 2026)).toBe(
-      "Thu 26 – Fri 27 Nov",
-    );
+  const label = (t: string) => t.toUpperCase();
+  // Mutation: drop the inviter from the title, or the types from the facts.
+  it("names who invited, and the dates and types", () => {
+    const page = tripPlanInvitePage(preview, label, 2026);
+    expect(page.inviteTitle).toBe("carol invited you");
+    expect(page.facts).toBe("Thu 26 – Fri 27 Nov · CANYONING");
     expect(
-      tripPlanInvitedLine(
-        { startDate: null, endDate: null, invitedBy: preview.invitedBy },
-        2026,
-      ),
-    ).toBe("No dates yet · Invited by carol");
+      tripPlanInvitePage({ ...preview, invitedBy: null }, label, 2026)
+        .inviteTitle,
+    ).toBe(TRIP_PLAN_PREVIEW.copy.invited);
+    expect(
+      tripPlanInvitePage(
+        { ...preview, startDate: null, endDate: null, tripTypes: [] },
+        label,
+      ).facts,
+    ).toBe("No dates yet");
   });
 
-  // Mutation: always head the people, and a preview of people alone gets a
-  // lone heading.
-  it("heads its groups only beside a second one", () => {
-    expect(tripPlanPreviewHeaded({ sections: [] })).toBe(false);
-    expect(tripPlanPreviewHeaded({ sections: [{}] as never })).toBe(true);
+  // Mutation: leave the write-up's empty line out, and "Going" has no
+  // group above it to divide from.
+  it("says so when nothing is written, and counts who is going", () => {
+    const page = tripPlanInvitePage(preview, label, 2026);
+    expect(page.writeUpEmpty).toBe(TRIP_PLAN_PREVIEW.copy.writeUpEmpty);
+    expect(page.going.count).toBe(1);
+    expect(
+      tripPlanInvitePage({ ...preview, sections: [{}] as never }, label)
+        .writeUpEmpty,
+    ).toBeNull();
   });
 });
 
@@ -1342,5 +1356,14 @@ describe("invite role order", () => {
     expect([...TRIP_PLAN_ROLES_PICK_ORDER].sort()).toEqual(
       [...TRIP_PLAN_ROLES].sort(),
     );
+  });
+});
+
+describe("a plan's page sections", () => {
+  it("draws the dates line inside the write-up, on both clients", () => {
+    // Red if the line comes back as a header section on either client.
+    for (const on of ["web", "gps"] as const) {
+      expect(contractSectionKeys(TRIP_PLAN_PAGE, on)).not.toContain("dates");
+    }
   });
 });

@@ -86,8 +86,6 @@ export const TRIP_PLANS_LIST = {
     makeFailed: "Couldn't make the plan.",
     saveFailed: "Couldn't save the plan.",
 
-    plansActions: "Plans actions",
-    selectAllPlans: "Select all plans",
     archiveSelected: "Archive the selected plans",
     unarchiveSelected: "Bring back the selected plans",
   },
@@ -332,15 +330,11 @@ export const TRIP_PLAN_PAGE = {
     { key: "hero" },
     // At most one, by priority (`tripPlanNotice`).
     { key: "notices" },
-    // One line: dates · trip types · the caller's role.
-    {
-      key: "dates",
-      on: "web",
-      reason:
-        "Logjam GPS's header is short so the body gets the screen: the line sits at the top of the write-up instead.",
-    },
     // One rail over the four views below; only the chosen one is drawn.
     { key: "views" },
+    // Starts with one line: dates · trip types · the caller's role
+    // (`tripPlanDatesLine`), then the sections, their text drawn as Markdown
+    // (`planWriteUpBlocks`). Both clients, so it is not a header section.
     { key: "writeUp" },
     // Above On the map's rows, while that view is chosen and has a place or
     // a way: the map in plan mode, the plan's items only.
@@ -379,8 +373,6 @@ export const TRIP_PLAN_PAGE = {
     datesPrevMonth: "Previous month",
     datesNextMonth: "Next month",
     datesClear: "Clear dates",
-    datesHintTap: "Tap a day twice for a one-day trip.",
-    datesHintClick: "Click a day twice for a one-day trip.",
 
     views: "Plan view",
     viewWriteUp: "Write-up",
@@ -397,6 +389,8 @@ export const TRIP_PLAN_PAGE = {
     sectionNewTitle: "New write-up section",
     sectionTitleField: "Title",
     sectionBody: "Text",
+    sectionBodyHint:
+      "Markdown works: **bold**, - lists, [links](https://example.com).",
     sectionTitlePlaceholder: "For example, Overview, Gear or Access",
     sectionSave: "Save",
     sectionSaveFailed: "Couldn't save the section.",
@@ -639,18 +633,21 @@ export const TRIP_PLAN_PREVIEW = {
   id: "plans.preview",
   question: "What would I be joining, and what does it ask first?",
   sections: [
-    // The name, then "dates · Invited by …" (`tripPlanInvitedLine`).
+    // The name, then "dates · trip types" (`tripPlanInvitePage`).
     { key: "hero" },
-    // "Invited", with Join and Decline.
+    // "carol invited you", what joining shows, and Join and Decline.
     { key: "notice" },
+    // Always a group, an empty line when nothing is written, so "Going"
+    // always has one to divide from (shared/DESIGN.md §2).
     { key: "writeUp" },
-    // Who's going. People are headed only beside a write-up
-    // (`tripPlanPreviewHeaded`, shared/DESIGN.md §2).
     { key: "people" },
   ],
   // The join dialog's and the plan page's words, not a second copy.
   copy: {
-    invited: TRIP_PLANS_LIST.copy.pillInvited,
+    invited: "You're invited",
+    joinHint: "Joining lets everyone in the plan see you're going.",
+    writeUpEmpty: "Nothing is written yet.",
+    gone: "This invite is gone: it was withdrawn, or the plan was deleted.",
     join: TRIP_PLAN_JOIN.copy.join,
     decline: TRIP_PLAN_JOIN.copy.decline,
     declined: TRIP_PLANS_LIST.copy.declined,
@@ -661,26 +658,33 @@ export const TRIP_PLAN_PREVIEW = {
   },
 } as const satisfies ScreenContract;
 
-/** The preview's line under its name: its dates, and who invited. */
-export function tripPlanInvitedLine(
-  preview: Pick<TripPlanInvitedPreview, "startDate" | "endDate" | "invitedBy">,
-  thisYear: number = new Date().getFullYear(),
-): string {
-  return [
-    tripPlanDatesLabel(preview.startDate, preview.endDate, thisYear),
-    preview.invitedBy &&
-      `${TRIP_PLAN_JOIN.copy.invitedBy} ${preview.invitedBy.username}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-/** Whether the preview's people take a heading: only beside a write-up to
- *  divide them from. */
-export function tripPlanPreviewHeaded(
-  preview: Pick<TripPlanInvitedPreview, "sections">,
-): boolean {
-  return preview.sections.length > 0;
+/**
+ * What the invited preview shows, in the order of `TRIP_PLAN_PREVIEW`'s
+ * sections, for both clients: the facts under the name, the invite's own
+ * words, the write-up (or its empty line) and who is going.
+ */
+export function tripPlanInvitePage(
+  preview: Pick<
+    TripPlanInvitedPreview,
+    "startDate" | "endDate" | "tripTypes" | "invitedBy" | "sections" | "members"
+  >,
+  typeLabel: (type: string) => string,
+  thisYear?: number,
+) {
+  const copy = TRIP_PLAN_PREVIEW.copy;
+  return {
+    facts: [
+      tripPlanDatesLabel(preview.startDate, preview.endDate, thisYear),
+      ...preview.tripTypes.map(typeLabel),
+    ].join(" · "),
+    inviteTitle: preview.invitedBy
+      ? `${preview.invitedBy.username} invited you`
+      : copy.invited,
+    inviteHint: copy.joinHint,
+    sections: preview.sections,
+    writeUpEmpty: preview.sections.length === 0 ? copy.writeUpEmpty : null,
+    going: { title: copy.people, count: preview.members.length },
+  };
 }
 
 /** The join dialog's title. */

@@ -22,7 +22,12 @@ export function tripPlanPatch(
 ): TripPlanPatch {
   const patch: TripPlanPatch = {};
   if (now.name !== was.name) patch.name = { from: was.name, to: now.name };
-  if (now.startDate !== was.startDate || now.endDate !== was.endDate)
+  // A start alone and a start with the same end are one trip, so settling one
+  // (`settleDayRange`) is not an edit.
+  if (
+    now.startDate !== was.startDate ||
+    (now.endDate ?? now.startDate) !== (was.endDate ?? was.startDate)
+  )
     patch.dates = {
       from: { startDate: was.startDate, endDate: was.endDate },
       to: { startDate: now.startDate, endDate: now.endDate },
