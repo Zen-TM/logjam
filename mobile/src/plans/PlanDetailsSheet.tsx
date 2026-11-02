@@ -1,4 +1,4 @@
-// A plan's name, dates and trip types: New plan and Edit name and dates are
+// A plan's name, dates and trip types: New plan and Edit plan are
 // one form (shared/DESIGN.md §10). An edit sends only what changed, each as
 // the value last seen and the new one, so a save over someone else's change
 // is refused, not lost; when the plan is fetched again under the open sheet,
@@ -6,7 +6,7 @@
 // and an edited field the plan changed shows the plan's value under it. The
 // dates are a sub-mode of this sheet (mobile/DESIGN.md §4).
 import { useMemo, useState } from "react";
-import { Text } from "react-native";
+import { Text, View } from "react-native";
 import {
   messageFromError,
   parseTripPlanCreate,
@@ -29,7 +29,7 @@ import {
 } from "@logjam/shared";
 
 import { tripTypeLabel, tripTypeMeta } from "../logs/tripTypeMeta";
-import { makeStyles, muted, useTheme } from "../theme";
+import { makeStyles, muted, spacing, useTheme } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -188,18 +188,32 @@ export function PlanDetailsSheet({
             />
           </FormStack>
         ) : (
-          <Button
-            label="Done"
-            icon="done"
-            onPress={() => {
-              const settled = settleDayRange({
-                start: values.startDate,
-                end: values.endDate,
-              });
-              set({ startDate: settled.start, endDate: settled.end });
-              toForm();
-            }}
-          />
+          // Clear sits beside Done, not under the grid: a sheet at 360dp has
+          // no room for a third row, and a footer never scrolls away.
+          <View style={styles.datesActions}>
+            {values.startDate ? (
+              <Button
+                label={TRIP_PLAN_PAGE.copy.datesClear}
+                icon="close"
+                variant="outlineAccent"
+                grow
+                onPress={() => set({ startDate: null, endDate: null })}
+              />
+            ) : null}
+            <Button
+              label="Done"
+              icon="done"
+              grow
+              onPress={() => {
+                const settled = settleDayRange({
+                  start: values.startDate,
+                  end: values.endDate,
+                });
+                set({ startDate: settled.start, endDate: settled.end });
+                toForm();
+              }}
+            />
+          </View>
         )
       }
     >
@@ -217,16 +231,6 @@ export function PlanDetailsSheet({
               set({ startDate: next.start, endDate: next.end });
             }}
           />
-          {values.startDate ? (
-            <Button
-              label={TRIP_PLAN_PAGE.copy.datesClear}
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                set({ startDate: null, endDate: null });
-              }}
-            />
-          ) : null}
         </FormStack>
       ) : (
         <FormStack>
@@ -270,4 +274,5 @@ export function PlanDetailsSheet({
 
 const useStyles = makeStyles((theme, textRole) => ({
   theirs: { ...muted(theme, textRole.detail) },
+  datesActions: { flexDirection: "row", gap: spacing(1) },
 }));

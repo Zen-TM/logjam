@@ -79,9 +79,16 @@ import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
 import { startPlanDownload } from "./planDownloads";
 import { LeaveSheet, type LeaveWords } from "./LeaveSheet";
-import { archivePlan, createPlan, deletePlan, leavePlan } from "./plansApi";
+import {
+  archivePlan,
+  createPlan,
+  deletePlan,
+  joinPlan,
+  leavePlan,
+} from "./plansApi";
 import {
   afterPlanWrite,
+  fetchPlan,
   planChanged,
   pollPlans,
   readCachedPlan,
@@ -253,6 +260,37 @@ export function PlansScreen({
         .catch((err: unknown) =>
           setToast({
             text: messageFromError(err, failed),
+            tone: "error",
+            nonce: Date.now(),
+          }),
+        )
+        .finally(() =>
+          setLeaving((was) => {
+            const next = new Set(was);
+            next.delete(plan.id);
+            return next;
+          }),
+        );
+    },
+    [poll, setToast],
+  );
+
+  // Join is immediate, as on the invite page; the toast is the answer.
+  const join = useCallback(
+    (plan: TripPlanSummary) => {
+      setLeaving((was) => new Set(was).add(plan.id));
+      void joinPlan(plan.id)
+        .then(async () => {
+          await Promise.all([poll(), fetchPlan(plan.id)]).catch(console.error);
+          setToast({
+            text: TRIP_PLAN_JOIN.copy.joined,
+            tone: "info",
+            nonce: Date.now(),
+          });
+        })
+        .catch((err: unknown) =>
+          setToast({
+            text: messageFromError(err, TRIP_PLAN_JOIN.copy.joinFailed),
             tone: "error",
             nonce: Date.now(),
           }),
@@ -453,7 +491,7 @@ export function PlansScreen({
               ) : null}
             </View>
           }
-          // An invite answers in its footer: Open (the preview) · Decline. The
+          // An invite answers in its footer: Join · Decline, as on its page (the row opens the preview). The
           // downloaded and changed marks sit under the line, so a long one
           // can't squeeze the name and dates.
           footer={
@@ -494,9 +532,12 @@ export function PlansScreen({
               >
                 <View style={styles.pills}>
                   <Button
-                    label={copy.open}
+                    label={TRIP_PLAN_JOIN.copy.join}
                     compact
-                    onPress={() => onOpenPlan(item)}
+                    loading={leaving.has(item.id)}
+                    disabled={!online}
+                    disabledReason={OFFLINE}
+                    onPress={() => join(item)}
                   />
                   <Button
                     label={copy.decline}
@@ -531,6 +572,7 @@ export function PlansScreen({
     },
     [
       assetHue.plan,
+      join,
       leave,
       leaving,
       onOpenPlan,

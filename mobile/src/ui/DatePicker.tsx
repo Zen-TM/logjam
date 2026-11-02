@@ -50,6 +50,9 @@ const SWIPE_SLOP = 8;
 const PAGE_MS = 130;
 /** Day pill box; the radius is exactly half of this — see the style comment. */
 const DAY_PILL_SIZE = 36;
+// Wider than tall: a 6-row month plus the nav and weekday row must fit a
+// 360x740dp sheet with its footer, with no scrolling. The pill is 36 high.
+const DAY_ASPECT = 7 / 6;
 const YEAR_COLUMNS = 4;
 const YEAR_ROWS = 5;
 const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
@@ -563,7 +566,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   day: {
     flex: 1,
-    aspectRatio: 1,
+    aspectRatio: DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -603,9 +606,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   yearRow: { flexDirection: "row" },
   yearCell: {
     flex: 1,
-    // Five rows of these match the six 1:1 day rows, so switching grids barely
+    // Five rows of these match the six day rows, so switching grids barely
     // moves the sheet's height.
-    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6),
+    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6) * DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },

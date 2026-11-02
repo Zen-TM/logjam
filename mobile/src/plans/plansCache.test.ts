@@ -58,6 +58,7 @@ const { clearMirror, wipeAllSyncData, wipeMirror } = await import(
 const {
   afterPlanWrite,
   downloadPlan,
+  fetchesOnOpen,
   fetchPlan,
   opensAsPreview,
   planChanged,
@@ -425,6 +426,28 @@ describe("a downloaded plan keeps itself current", () => {
     await fetchPlan("a");
     await settle();
     expect((await readCachedPlan("a"))?.downloadedAt).toBe(stamp);
+  });
+});
+
+const downloadedCopy = async () => {
+  api.getPlan.mockResolvedValue(view("a"));
+  await downloadPlan("a", () => {});
+};
+
+describe("fetchesOnOpen", () => {
+  // Mutation: gate the fetch on the list's stamp again. A plan the list had
+  // not yet seen move opened on its old copy (UAT 2026-11-02).
+  it("fetches whenever online, and refreshes a downloaded copy", async () => {
+    await downloadedCopy();
+    expect(fetchesOnOpen(true, false)).toBe(true);
+    expect(fetchesOnOpen(false, false)).toBe(false);
+    expect(fetchesOnOpen(true, true)).toBe(false);
+    api.getPlan.mockResolvedValue(view("a", "2026-10-05T00:00:00.000Z"));
+    await fetchPlan("a");
+    expect((await readCachedPlan("a"))?.plan.updatedAt).toBe(
+      "2026-10-05T00:00:00.000Z",
+    );
+    expect((await readCachedPlan("a"))?.downloadedAt).not.toBeNull();
   });
 });
 

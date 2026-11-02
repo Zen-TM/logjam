@@ -186,8 +186,9 @@ const HERO_OVERLAP = 16;
  */
 const MIN_TOP_INSET = HERO_OVERLAP + 22;
 // Room for the frame's handles around a plan's area, which the camera fits
-// and the frame then sits on (see applyBounds). The top clears the hero.
-const BOUNDS_PADDING = { top: 72, bottom: 32, left: 32, right: 32 };
+// and the frame then sits on (see applyBounds). The top clears the hero; the
+// bottom clears the "Move the map" hint.
+const BOUNDS_PADDING = { top: 72, bottom: 64, left: 32, right: 32 };
 
 /**
  * The controls panel's height, fixed so the MAP never resizes under a frame the

@@ -83,8 +83,8 @@ export function SelectionBar({
       <IconButton
         icon={deleteIcon}
         accessibilityLabel={deleteLabel}
+        // The glyph carries the intent; a tinted disc read as already pressed.
         color={destructive ? theme.warning : theme.accent}
-        filled
         disabled={deleteDisabled}
         onPress={onDelete}
       />

@@ -103,6 +103,14 @@ export async function readCachedPlanStamps(): Promise<
   );
 }
 
+/** Opening a plan online always fetches it: the list's stamp only moves when
+ *  the list is polled, so "the list says nothing moved" can be a copy the API
+ *  has already left behind. (Only a plan being left or deleted skips it.)
+ *  Guard: plansCache.test.ts ("fetchesOnOpen"). */
+export function fetchesOnOpen(online: boolean, leaving: boolean): boolean {
+  return online && !leaving;
+}
+
 /** The poll says the plan moved on since this phone's copy was fetched. */
 export function planChanged(
   summary: Pick<TripPlanSummary, "updatedAt">,

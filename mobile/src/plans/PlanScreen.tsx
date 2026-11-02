@@ -86,6 +86,7 @@ import {
   todayDateKey,
   type ChipOption,
   type ToastMessage,
+  useNow,
 } from "../ui";
 import { FormBuilderSheet, type FormBuilderState } from "./FormBuilderSheet";
 import { FormSheet, type FormSheetState } from "./FormSheet";
@@ -109,6 +110,7 @@ import { AddCopySheet } from "./AddCopySheet";
 import { SectionSheet, type SectionSheetState } from "./SectionSheet";
 import {
   afterPlanWrite,
+  fetchesOnOpen,
   fetchPlan,
   planMovedOn,
   readCachedPlan,
@@ -133,8 +135,8 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
   // A Leave or Delete under way: the plan stays drawn while the page goes.
   const leaving = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
-  // When the cache was last read: "Updated 3 days ago" is relative to it.
-  const [now, setNow] = useState(0);
+  // "Updated 3 days ago" is relative to it, and ticks while the page is open.
+  const now = useNow();
 
   const reread = useCallback(async () => {
     const [plan, list, stamps] = await Promise.all([
@@ -143,7 +145,7 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
       readCachedPlanStamps(),
     ]);
     const moved = plan != null && planMovedOn(planId, list, stamps);
-    if (!plan && leaving.current) return { stale: false };
+    if (!plan && leaving.current) return { leaving: true };
     if (plan) held.current = true;
     else if (held.current) setGone(true);
     // Same copy (a mirror signal about something else): keep the object, so
@@ -157,8 +159,7 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
         : plan,
     );
     setChanged(moved);
-    setNow(Date.now());
-    return { stale: plan == null || moved };
+    return { leaving: false };
   }, [planId]);
 
   const refresh = useCallback(async () => {
@@ -179,7 +180,7 @@ function usePlan(planId: string, online: boolean, blocked: boolean) {
     let cancelled = false;
     void (async () => {
       const state = await reread();
-      if (!cancelled && online && state.stale) await refresh();
+      if (!cancelled && fetchesOnOpen(online, state.leaving)) await refresh();
     })().catch(console.error);
     const unsubscribe = onMirrorChanged(
       () => void reread().catch(console.error),
@@ -1076,11 +1077,13 @@ function FormFooter({
         </View>
       ) : null}
       {tally
-        ? tripPlanFormTallyLines(tally, me ?? undefined).map((line) => (
-            <Text key={line} style={styles.age}>
-              {line}
-            </Text>
-          ))
+        ? tripPlanFormTallyLines(tally, me ?? undefined, pending).map(
+            (line) => (
+              <Text key={line} style={styles.age}>
+                {line}
+              </Text>
+            ),
+          )
         : null}
     </View>
   );
@@ -1108,17 +1111,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(4),
   },
   section: { gap: spacing(1) },
-  // The title is SectionHeader's style without its margins, so the ⋯ centres
-  // on the line.
+  // A section's title is a real title (Logjam Web's h3), larger than the bold
+  // line a Markdown heading demotes to, so it stays above its own body.
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: formRhythm.section,
   },
-  sectionTitle: {
-    ...muted(theme, textRole.section),
-    flex: 1,
-    letterSpacing: 0.8,
-  },
+  sectionTitle: { ...textRole.heading, color: theme.text, flex: 1 },
   sectionBody: { ...textRole.body, color: theme.text },
 }));

@@ -5,14 +5,7 @@
 // sliver says there is more. A cell and a header are cut at two lines at
 // fixed heights (the two halves must stay aligned), and pressing one says it
 // whole.
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TRIP_PLAN_FORMS, type tripPlanAnswerTable } from "@logjam/shared";
 
 import { makeStyles, muted, spacing } from "../theme";
@@ -26,12 +19,16 @@ const CELL_HEIGHT = 56;
 export function AnswersTable({
   columns,
   rows,
+  onSay,
 }: {
   columns: Table["columns"];
   rows: Table["going"];
+  /** Shows a pressed cell or header whole, in the sheet that holds the table;
+   *  a header has no title of its own (null). */
+  onSay: (title: string | null, body: string) => void;
 }) {
   const styles = useStyles();
-  const say = (title: string, body: string) => Alert.alert(title, body);
+  const say = onSay;
   return (
     <View style={styles.table}>
       <View style={styles.names}>
@@ -60,7 +57,7 @@ export function AnswersTable({
                 key={column.id}
                 accessibilityRole="button"
                 accessibilityLabel={column.label}
-                onPress={() => Alert.alert(column.label)}
+                onPress={() => say(null, column.label)}
                 style={styles.column}
               >
                 <Text style={[styles.cell, styles.head]} numberOfLines={2}>
@@ -110,7 +107,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: theme.line,
   },
-  scroll: { flex: 1 },
+  // Clipped: a cell scrolled half under the pinned names must not draw its
+  // ellipsis over them.
+  scroll: { flex: 1, overflow: "hidden" },
   line: { flexDirection: "row" },
   column: { width: COLUMN_WIDTH },
   cell: {

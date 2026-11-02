@@ -182,15 +182,17 @@ type MapStackParams = {
   // Where the map was looking when "Save maps for offline use" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
   // A plan's Download the map for this area passes its items' bounds.
-  MapRegionDownload:
-    | {
-        basemapId: BasemapId;
-        center: [number, number];
-        zoom: number;
-      }
-    | { bounds: [number, number, number, number] }
-    | undefined;
+  MapRegionDownload: RegionDownloadParams;
 };
+
+type RegionDownloadParams =
+  | {
+      basemapId: BasemapId;
+      center: [number, number];
+      zoom: number;
+    }
+  | { bounds: [number, number, number, number] }
+  | undefined;
 
 type PlacesStackParams = {
   PlaceList: undefined;
@@ -263,6 +265,8 @@ type MoreStackParams = {
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
+  // A plan's Download the map for this area, pushed here so Back is the plan.
+  MoreRegionDownload: RegionDownloadParams;
   MoreTripDetail: { trip: MirrorTrip };
   // A plan left or deleted comes back here with what happened.
   Plans: { message?: { text: string; at: number } } | undefined;
@@ -339,6 +343,49 @@ const useStackScreenOptions = makeThemed(
       contentStyle: { backgroundColor: theme.page },
     }) as const,
 );
+
+// One download screen for two stacks: the Map tab's, and the More tab's for a
+// plan's "Download the map for this area", so Back returns to that plan, named
+// by `backLabelOf`, instead of the Map tab.
+function RegionDownloadRoute({
+  navigation,
+  route,
+}: {
+  navigation: {
+    goBack: () => void;
+    getState: () => Parameters<typeof backLabelOf>[0];
+    getParent: () =>
+      | { navigate: (name: string, params?: object) => void }
+      | undefined;
+  };
+  route: { key: string; params?: RegionDownloadParams };
+}) {
+  return (
+    <RegionDownloadScreen
+      onBack={() => navigation.goBack()}
+      backLabel={backLabelOf(navigation.getState(), route.key)}
+      // The download is already running by now: it reports as a card in
+      // the Saved tab's Regions filter, which is also where it lives
+      // once it lands.
+      onStarted={() => {
+        // Popped as well as left: without it, coming back lands on the
+        // framing screen for an area already downloading.
+        navigation.goBack();
+        navigation.getParent()?.navigate("Saved", {
+          screen: "SavedHome",
+          params: { filter: "region", nonce: Date.now() },
+        });
+      }}
+      {...(route.params && "bounds" in route.params
+        ? { initialBounds: route.params.bounds }
+        : {
+            initialBasemapId: route.params?.basemapId,
+            initialCenter: route.params?.center,
+            initialZoom: route.params?.zoom,
+          })}
+    />
+  );
+}
 
 function MapStackNav() {
   const stackScreenOptions = useStackScreenOptions();
@@ -436,29 +483,7 @@ function MapStackNav() {
         options={{ headerShown: false }}
       >
         {({ navigation, route }) => (
-          <RegionDownloadScreen
-            onBack={() => navigation.goBack()}
-            backLabel={backLabelOf(navigation.getState(), route.key)}
-            // The download is already running by now: it reports as a card in
-            // the Saved tab's Regions filter, which is also where it lives
-            // once it lands.
-            onStarted={() => {
-              // Popped as well as left: without it, coming back to the Map tab
-              // lands on the framing screen for an area already downloading.
-              navigation.goBack();
-              navigation.getParent()?.navigate("Saved", {
-                screen: "SavedHome",
-                params: { filter: "region", nonce: Date.now() },
-              });
-            }}
-            {...(route.params && "bounds" in route.params
-              ? { initialBounds: route.params.bounds }
-              : {
-                  initialBasemapId: route.params?.basemapId,
-                  initialCenter: route.params?.center,
-                  initialZoom: route.params?.zoom,
-                })}
-          />
+          <RegionDownloadRoute navigation={navigation} route={route} />
         )}
       </MapStack.Screen>
       {/* Place and trip detail both carry their own Hero, which owns the
@@ -1248,6 +1273,17 @@ export function AppShell({
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
+                    name="MoreRegionDownload"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <RegionDownloadRoute
+                        navigation={navigation}
+                        route={route}
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
                     name="MorePlaceDetail"
                     options={{ headerShown: false }}
                   >
@@ -1406,9 +1442,8 @@ export function AppShell({
                             })
                           }
                           onDownloadMap={(bounds) =>
-                            navigation.getParent()?.navigate("Map", {
-                              screen: "MapRegionDownload",
-                              params: { bounds },
+                            navigation.navigate("MoreRegionDownload", {
+                              bounds,
                             })
                           }
                           onGone={(text) =>

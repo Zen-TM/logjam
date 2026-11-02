@@ -153,8 +153,16 @@ export function FormSheet({
     }
   }, [error, answering, onError]);
 
-  const back =
-    (answering || choosing) && form
+  // A table cell or header pressed: its whole text, as a layer of this sheet
+  // (back returns to the form), not a stock Android alert.
+  const [said, setSaid] = useState<{
+    title: string | null;
+    body: string;
+  } | null>(null);
+  const saying = said != null && form != null && !answering && !choosing;
+  const back = saying
+    ? () => setSaid(null)
+    : (answering || choosing) && form
       ? () => {
           setError(null);
           setChanged(false);
@@ -165,6 +173,7 @@ export function FormSheet({
   // open while another closes (PlanItemSheet's Save a copy does the same).
   const parked = useRef<(() => void) | null>(null);
   const close = () => {
+    setSaid(null);
     setError(null);
     setChanged(false);
     onState(null);
@@ -291,14 +300,22 @@ export function FormSheet({
           list: sees ? (
             <View style={styles.block}>
               <SectionHeader title={copy.answers} count={table.going.length} />
-              <AnswersTable columns={table.columns} rows={table.going} />
+              <AnswersTable
+                columns={table.columns}
+                rows={table.going}
+                onSay={(title, body) => setSaid({ title, body })}
+              />
               {table.asking.length > 0 ? (
                 <>
                   <SectionHeader
                     title={copy.asking}
                     count={table.asking.length}
                   />
-                  <AnswersTable columns={table.columns} rows={table.asking} />
+                  <AnswersTable
+                    columns={table.columns}
+                    rows={table.asking}
+                    onSay={(title, body) => setSaid({ title, body })}
+                  />
                 </>
               ) : null}
             </View>
@@ -311,7 +328,7 @@ export function FormSheet({
       visible={form != null}
       // Inside answering, every way out (drag, back, ×) backs out one layer.
       onClose={back ?? close}
-      title={form?.title ?? ""}
+      title={saying ? (said.title ?? form.title) : (form?.title ?? "")}
       onBack={back}
       onClosed={() => {
         const open = parked.current;
@@ -339,7 +356,11 @@ export function FormSheet({
         ) : undefined
       }
     >
-      {answering && form ? (
+      {saying ? (
+        <View style={styles.block}>
+          <Text style={styles.said}>{said.body}</Text>
+        </View>
+      ) : answering && form ? (
         <PlanFormFields
           form={form}
           draft={draft}
@@ -382,6 +403,7 @@ export function FormSheet({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(2) },
   block: { gap: spacing(1) },
+  said: { ...textRole.body, color: theme.text },
   visibility: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   grow: { flex: 1 },
   muted: { ...muted(theme, textRole.detail) },
