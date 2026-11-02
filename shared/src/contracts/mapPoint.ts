@@ -76,6 +76,9 @@ export const MAP_POINT = {
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
     elevationNeedsConnection: "Needs a connection",
+    // The marker verb's subtitle once "synced" is not yet true: the phone is
+    // offline, a change is still queued, or there is no account to sync to.
+    markerSavedHere: "Saved on this phone",
     coordinatesCopied: "Coordinates copied.",
   },
 } as const satisfies ScreenContract;
@@ -198,20 +201,32 @@ export type MapPointVerb = {
   subtitle: string | null;
 };
 
-const asVerb = (verb: PointVerbDeclaration): MapPointVerb => ({
-  id: verb.id as MapPointVerbId,
-  icon: verb.icon,
-  label: verb.label,
-  subtitle: verb.subtitle ?? null,
-});
+const asVerb =
+  (savedHereOnly: boolean) =>
+  (verb: PointVerbDeclaration): MapPointVerb => ({
+    id: verb.id as MapPointVerbId,
+    icon: verb.icon,
+    label: verb.label,
+    subtitle:
+      verb.id === "dropMarker" && savedHereOnly
+        ? MAP_POINT.copy.markerSavedHere
+        : (verb.subtitle ?? null),
+  });
 
-/** The verbs one client's tap panel has, in the order it draws them. */
-export function mapPointVerbs(platform: ContractPlatform): MapPointVerb[] {
+/**
+ * The verbs one client's tap panel has, in the order it draws them.
+ * `savedHereOnly`: what a marker promises is true only once it has synced, so
+ * the verb says "Saved on this phone" while that is all that is known.
+ */
+export function mapPointVerbs(
+  platform: ContractPlatform,
+  savedHereOnly = false,
+): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
     .filter(
       (verb) => verb.tap !== false && (verb.on == null || verb.on === platform),
     )
-    .map(asVerb);
+    .map(asVerb(savedHereOnly));
 }
 
 /**
@@ -219,13 +234,16 @@ export function mapPointVerbs(platform: ContractPlatform): MapPointVerb[] {
  * press-and-hold sheet and Logjam Web's right-click or long-press menu draw
  * exactly these, in this order.
  */
-export function mapHoldVerbs(platform: ContractPlatform): MapPointVerb[] {
+export function mapHoldVerbs(
+  platform: ContractPlatform,
+  savedHereOnly = false,
+): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
     .filter(
       (verb) =>
         verb.hold != null && (verb.hold === "both" || verb.hold === platform),
     )
-    .map(asVerb);
+    .map(asVerb(savedHereOnly));
 }
 
 /** A bare lat/lng, as a map hands one back from a press. */
@@ -252,6 +270,8 @@ export type MapPointFact = {
   value: string;
   /** Takes the whole line. */
   span?: true;
+  /** Why there is no figure: the value is then "—" and this is its caption. */
+  note?: string;
   /** Pressing the figure copies it (Logjam GPS); Logjam Web has a verb. */
   copyable?: true;
 };
@@ -311,7 +331,10 @@ export function mapPointFacts(input: {
           ? `${Math.round(elevation.metres)} m`
           : elevation.state === "checking"
             ? copy.elevationChecking
-            : copy.elevationNeedsConnection,
+            : "—",
+      ...(elevation.state === "unavailable"
+        ? { note: copy.elevationNeedsConnection }
+        : {}),
     },
   ];
   if (fix)
