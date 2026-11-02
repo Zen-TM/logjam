@@ -74,6 +74,11 @@ export const COPY_RULES: readonly CopyRule[] = [
     pattern: /\btrip logs?\b/i,
     say: 'Say "trip"; the verb is "Log a trip".',
   },
+  {
+    id: "logs-tab",
+    pattern: /\bLogs\b/,
+    say: 'The trips tab is "Trips".',
+  },
   { id: "activity", pattern: /\bactivit(?:y|ies)\b/i, say: 'Say "trip type".' },
   {
     id: "lidar-topo",

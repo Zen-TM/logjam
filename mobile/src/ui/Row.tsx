@@ -37,6 +37,7 @@ export function Row({
   icon,
   hue,
   right,
+  badge,
   footer,
   progress,
   onPress,
@@ -67,6 +68,13 @@ export function Row({
   icon?: Glyph;
   hue?: string;
   right?: React.ReactNode;
+  /**
+   * How many are waiting on this row, drawn before `right` (§5's trailing
+   * order). A count is a badge, never the subtitle; zero is absent. The
+   * caller words it for a screen reader in `accessibilityLabel` ("Inbox, 3
+   * unread").
+   */
+  badge?: number;
   /**
    * Full-width content pinned under the row's own line, INSIDE the card — the
    * slot for per-row actions that don't fit the trailing accessory (§5's order
@@ -135,7 +143,16 @@ export function Row({
             </Text>
           ) : null}
         </View>
-        {right != null ? <View style={styles.right}>{right}</View> : null}
+        {right != null || badge ? (
+          <View style={[styles.right, badge ? styles.rightRow : null]}>
+            {badge ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{badge}</Text>
+              </View>
+            ) : null}
+            {right}
+          </View>
+        ) : null}
       </View>
       {footer != null ? <View style={styles.footer}>{footer}</View> : null}
       {progress != null ? (
@@ -264,6 +281,17 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(0.5),
   },
+  rightRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: spacing(1),
+    borderRadius: radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.warning,
+  },
+  badgeText: { ...textRole.caption, color: theme.onFill },
   title: { ...textRole.rowTitle, color: theme.text },
   subtitle: muted(theme, textRole.detail),
   progressTrack: {

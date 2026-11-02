@@ -36,6 +36,8 @@ export * from "./placePage.js";
 export * from "./tripVerbs.js";
 export * from "./tripPage.js";
 export * from "./tripLogs.js";
+export * from "./nav.js";
+export * from "./ways.js";
 export * from "./inbox.js";
 export * from "./friends.js";
 export * from "./leaderboard.js";

@@ -19,12 +19,22 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
-import { useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Text, View } from "react-native";
 import {
+  labelWithBadge,
+  navFor,
+  navLabel,
   tripPlansBadgeCount,
   tripPlansMoreSubtitle,
-  TRIP_PLANS_LIST,
+  type NavId,
+  type NavIdOn,
   type TripPlanSummary,
 } from "@logjam/shared";
 
@@ -47,14 +57,13 @@ import {
   Hero,
   Row,
   ScreenScroll,
-  StatusPill,
   Icon,
   Toast,
   todayDateKey,
   type Glyph,
   type ToastMessage,
 } from "../ui";
-import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
+import { syncHealth, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
@@ -66,6 +75,11 @@ const useToneStyle = makeThemed(
     problem: { icon: "warning", color: theme.warning },
   }),
 );
+
+/** The entries of More: every Logjam GPS destination that is not a tab. */
+type MoreId = Exclude<NavIdOn<"gps">, "places" | "logs" | "saved">;
+
+const navIcon = (id: NavId) => navFor("gps").find((e) => e.id === id)!.icon;
 
 export function MoreScreen({
   unreadCount,
@@ -124,8 +138,103 @@ export function MoreScreen({
     await requestSync();
     if (getSyncStatus().state !== "error")
       setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
-  }, []);
+  }, [setToast]);
   const user = userQuery.data;
+
+  // The menu is `NAV`'s More entries in `NAV`'s order; this only says what each
+  // row shows. tsc refuses an entry with no row here.
+  const rows: Record<MoreId, ReactNode> = {
+    // The one "something is waiting on you" signal. Files a friend sent are
+    // answered inline in the inbox, so their waiting count is part of this one.
+    inbox: (
+      <Row
+        icon={navIcon("inbox")}
+        title={navLabel("inbox")}
+        badge={unreadCount ?? 0}
+        accessibilityLabel={labelWithBadge(navLabel("inbox"), unreadCount ?? 0)}
+        onPress={onOpenInbox}
+        {...capabilityRowProps("inbox", accountState, online)}
+        right={<Trailing />}
+      />
+    ),
+    // Read from the plans cache, which the shell's poll keeps fresh: the hub
+    // fetches nothing of its own. An invite is also an unread inbox row, so it
+    // badges this row, not the tab a second time.
+    plans: (
+      <Row
+        icon={navIcon("plans")}
+        title={navLabel("plans")}
+        subtitle={
+          plans && !plansWaiting
+            ? tripPlansMoreSubtitle(plans, todayDateKey())
+            : undefined
+        }
+        badge={plansWaiting}
+        accessibilityLabel={labelWithBadge(
+          navLabel("plans"),
+          plansWaiting,
+          "waiting on you",
+        )}
+        onPress={onOpenPlans}
+        {...capabilityRowProps("plans", accountState, online)}
+        right={<Trailing />}
+      />
+    ),
+    friends: (
+      <Row
+        icon={navIcon("friends")}
+        title={navLabel("friends")}
+        // Managing friendships needs an account and a connection; say which in
+        // place of a subtitle rather than letting the screen fail after the tap
+        // (DESIGN.md).
+        onPress={onOpenFriends}
+        {...capabilityRowProps("friends", accountState, online)}
+        right={<Trailing />}
+      />
+    ),
+    // Sync issues can only exist once something has tried to sync.
+    syncIssues: isGuest ? null : (
+      <Row
+        icon={navIcon("syncIssues")}
+        hue={issueCount > 0 ? theme.warning : undefined}
+        title="Account sync issues"
+        badge={issueCount}
+        accessibilityLabel={labelWithBadge(
+          "Account sync issues",
+          issueCount,
+          "need you",
+        )}
+        onPress={onOpenSyncIssues}
+        right={<Trailing />}
+      />
+    ),
+    settings: (
+      <Row
+        icon={navIcon("settings")}
+        title={navLabel("settings")}
+        onPress={onOpenSettings}
+        right={<Trailing />}
+      />
+    ),
+    account: (
+      <Row
+        icon={navIcon("account")}
+        // The Account row stays live for a guest: it is the way IN to an
+        // account, so disabling it with "Needs an account" would be a joke at
+        // the user's expense.
+        title={isGuest ? "Create an account" : navLabel("account")}
+        subtitle={
+          isGuest
+            ? "Back up and share what's on this phone"
+            : user
+              ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
+              : undefined
+        }
+        onPress={onOpenAccount}
+        right={<Trailing />}
+      />
+    ),
+  };
 
   return (
     // Hero pinned, menu scrolls (DESIGN.md) — the menu is short today, but the rule is
@@ -174,97 +283,11 @@ export function MoreScreen({
       </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
-        {/* The one "something is waiting on you" signal. Files a friend sent
-            are answered inline in the inbox, so their waiting count is part of
-            this one. */}
-        <Row
-          icon="notifications"
-          title="Inbox"
-          subtitle={unreadCount ? `${unreadCount} unread` : "Nothing new"}
-          onPress={onOpenInbox}
-          {...capabilityRowProps("inbox", accountState, online)}
-          right={
-            <Trailing
-              badge={
-                unreadCount ? (
-                  <StatusPill label={String(unreadCount)} tone="accent" />
-                ) : null
-              }
-            />
-          }
-        />
-        {/* Read from the plans cache, which the shell's poll keeps fresh: the
-            hub fetches nothing of its own. An invite is also an unread inbox
-            row, so it badges this row, not the tab a second time. */}
-        <Row
-          icon="plan"
-          title={TRIP_PLANS_LIST.title}
-          subtitle={
-            plans ? tripPlansMoreSubtitle(plans, todayDateKey()) : undefined
-          }
-          onPress={onOpenPlans}
-          {...capabilityRowProps("plans", accountState, online)}
-          right={
-            <Trailing
-              badge={
-                plansWaiting ? (
-                  <StatusPill label={String(plansWaiting)} tone="accent" />
-                ) : null
-              }
-            />
-          }
-        />
-        <Row
-          icon="friends"
-          title="Friends"
-          // Managing friendships needs an account and a connection; say which
-          // in place of a subtitle rather than letting the screen fail after
-          // the tap (DESIGN.md).
-          onPress={onOpenFriends}
-          {...capabilityRowProps("friends", accountState, online)}
-          right={<Trailing />}
-        />
-        {/* Sync issues can only exist once something has tried to sync. */}
-        {isGuest ? null : (
-          <Row
-            icon="warning"
-            hue={issueCount > 0 ? theme.warning : undefined}
-            title="Account sync issues"
-            subtitle={syncIssuesSubtitle(issueCount)}
-            onPress={onOpenSyncIssues}
-            right={
-              <Trailing
-                badge={
-                  issueCount > 0 ? (
-                    <StatusPill label={String(issueCount)} tone="warning" />
-                  ) : null
-                }
-              />
-            }
-          />
-        )}
-        <Row
-          icon="settings"
-          title="Settings"
-          onPress={onOpenSettings}
-          right={<Trailing />}
-        />
-        <Row
-          icon="account"
-          // The Account row stays live for a guest: it is the way IN to an
-          // account, so disabling it with "Needs an account" would be a joke at
-          // the user's expense.
-          title={isGuest ? "Create an account" : "Account"}
-          subtitle={
-            isGuest
-              ? "Back up and share what's on this phone"
-              : user
-                ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
-                : undefined
-          }
-          onPress={onOpenAccount}
-          right={<Trailing />}
-        />
+        {navFor("gps")
+          .filter((entry) => !entry.tab)
+          .map((entry) => (
+            <Fragment key={entry.id}>{rows[entry.id as MoreId]}</Fragment>
+          ))}
       </ScreenScroll>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -286,17 +309,9 @@ function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
   return plans;
 }
 
-/** Optional badge, then the chevron — the §5 trailing order. */
-function Trailing({ badge }: { badge?: React.ReactNode }) {
+function Trailing() {
   const theme = useTheme();
-  const styles = useStyles();
-
-  return (
-    <View style={styles.trailing}>
-      {badge}
-      <Icon idea="disclosure" size={20} color={theme.textMuted} />
-    </View>
-  );
+  return <Icon idea="disclosure" size={20} color={theme.textMuted} />;
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
@@ -307,5 +322,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   healthText: { flex: 1, gap: spacing(0.25) },
   headline: { ...textRole.rowTitle },
   detail: { ...muted(theme, textRole.detail) },
-  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 }));

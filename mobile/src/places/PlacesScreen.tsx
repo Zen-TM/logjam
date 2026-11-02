@@ -39,6 +39,7 @@ import {
   activePlaceFilterCount,
   placeMatchesSearch,
   comparePlaces,
+  PLACE_SORT_OPTIONS,
   contractSectionKeys,
   distinctTripTypes,
   EMPTY_PLACE_FILTERS,
@@ -111,6 +112,7 @@ import {
   type ToastMessage,
   EmptyState,
 } from "../ui";
+import { useStoredSort } from "../sortPreference";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
@@ -184,7 +186,11 @@ export function PlacesScreen({
   const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
-  const [sort, setSort] = useState<PlaceSortKey>("name");
+  const [sort, setSort] = useStoredSort<PlaceSortKey>(
+    "places",
+    PLACE_SORT_OPTIONS.map((option) => option.key),
+    "name",
+  );
   const [sheet, setSheet] = useState<
     "filters" | "bulkShare" | "placeTypeForm" | "typeAttributes" | null
   >(null);

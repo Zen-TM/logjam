@@ -23,6 +23,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
 | The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
 | Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
+| Where a user can go: the tabs, the rail and More, in order, with their words                                                | `contracts/nav.ts` (`NAV`)                                                       |
 | A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
 | How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 

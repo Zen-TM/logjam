@@ -133,7 +133,7 @@ Vite prints `Local:   http://localhost:5173/`.
 
 Open <http://localhost:5173>. There is no sign-in screen: with fake auth,
 every request is the seeded user **alice**, and Logjam Web opens on the map
-with its sidebar (Places, Logs, Friends and so on). Open **Places** to see her
+with its sidebar (Places, Trips, Friends and so on). Open **Places** to see her
 seeded places.
 
 **It worked if** `curl -H 'Authorization: Bearer x' localhost:8080/users/me`

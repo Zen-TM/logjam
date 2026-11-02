@@ -129,6 +129,7 @@ export function Row({
   subtitle,
   description,
   trailing,
+  badge,
   footer,
   onOpen,
   href,
@@ -147,6 +148,10 @@ export function Row({
    *  glyph says to a sighted reader (a status). */
   description?: string;
   trailing?: ReactNode;
+  /** How many are waiting on this row, drawn before `trailing`. A count is a
+   *  badge, never the subtitle; zero is absent. Word it for assistive tech in
+   *  `aria-label` ("Inbox, 3 unread"). */
+  badge?: number;
   /** Controls that answer the row (Accept, Decline), on a line of their own
    *  INSIDE the card, under the text. Below the card they read as a caption
    *  for the next row down. */
@@ -223,7 +228,16 @@ export function Row({
           </span>
         )}
       </div>
-      {trailing != null && <div className={classes.trailing}>{trailing}</div>}
+      {(trailing != null || !!badge) && (
+        <div className={classes.trailing}>
+          {!!badge && (
+            <span className={classes.badge} aria-hidden>
+              {badge}
+            </span>
+          )}
+          {trailing}
+        </div>
+      )}
       {footer != null && <div className={classes.footer}>{footer}</div>}
     </div>
   );

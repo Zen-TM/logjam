@@ -21,6 +21,12 @@ describe("backLabelOf", () => {
     expect(backLabelOf(fromInbox, "b")).toBe(INBOX.title);
   });
 
+  it("calls the trips tab Trips", () => {
+    expect(
+      backLabelOf({ routes: [r("a", "TripList"), r("b", "TripDetail")] }, "b"),
+    ).toBe("Trips");
+  });
+
   it("takes a plan's or friend's own name from its params", () => {
     const s = {
       routes: [

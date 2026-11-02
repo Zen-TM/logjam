@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   FRIENDS,
   INBOX,
+  labelWithBadge,
   PLACES_LIST,
   TRIPS_LIST,
   TRIP_PLANS_LIST,
@@ -10,7 +11,6 @@ import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
   MORE_BADGE_NOUN,
   NAV_ITEMS_FOR_TEST,
   type NavItem,
@@ -32,8 +32,8 @@ describe("partitionNavItems", () => {
       "plans",
       "friends",
       "inbox",
-      "account",
       "settings",
+      "account",
     ]);
     expect(moreItems).toEqual([]);
   });
@@ -46,7 +46,7 @@ describe("partitionNavItems", () => {
     expect(railItems[spacerAfterIndex! + 1].id).toBe(PERSONAL_ITEMS[0].id);
   });
 
-  it("gives narrow web Logjam GPS's tabs: Places, Logs, Ways between Map and More", () => {
+  it("gives narrow web Logjam GPS's tabs: Places, Trips, Ways between Map and More", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(true);
     expect(ids(railItems)).toEqual(["places", "logs", "ways"]);
     expect(spacerAfterIndex).toBeNull();

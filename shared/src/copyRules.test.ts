@@ -83,6 +83,7 @@ describe("contract copy", () => {
     ["custom-field", "Edit custom fields", "Edit attributes"],
     ["logbook", "Your logbook", "Your trips"],
     ["trip-log", "Start a trip log", "Log a trip"],
+    ["logs-tab", "Back to Logs", "Back to Trips"],
     ["activity", "By activity", "By trip type"],
     ["lidar-topo", "Make a LiDAR topo", "Make a sharpened area"],
     ["lidar-topo", "Open the topo", "Open the sharpened area"],

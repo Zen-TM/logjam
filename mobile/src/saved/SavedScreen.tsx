@@ -60,6 +60,7 @@ import {
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  WAY_KIND_WORDS,
   wayVerbIcon,
   wayVerbLabel,
   type IconIdea,
@@ -266,18 +267,13 @@ const CATEGORY_META: Record<
     icon: "lidar",
   },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
-  // Routes you drew, as opposed to files you brought in. Kept a separate
-  // category rather than folded into "import": a route is editable in place and
-  // an import is an opaque file, and a list that mixes them would need to
-  // explain which rows can be edited.
-  route: { label: "Route", plural: "Routes", icon: "route" },
-  // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
-  // here is a whole FILE the user brought in from another app, and it may hold
-  // points and polygons as readily as lines. "Files" alone was rejected as too
-  // vague — everything in this tab is a file — so the distinguishing word is
-  // the one that survives.
-  import: { label: "Import", plural: "Imports", icon: "importedFile" },
-  track: { label: "Track", plural: "Tracks", icon: "track" },
+  // The three kinds of line are `WAY_KIND_WORDS`, shared with Logjam Web's Ways
+  // page. Route stays a category of its own beside import: a route is editable
+  // in place and an import is an opaque file, and a list that mixed them would
+  // need to explain which rows can be edited.
+  route: WAY_KIND_WORDS.route,
+  import: WAY_KIND_WORDS.import,
+  track: WAY_KIND_WORDS.track,
 };
 
 // Reading order for the filter rail, the capacity meter and the "add to this

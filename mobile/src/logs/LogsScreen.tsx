@@ -45,6 +45,7 @@ import {
   NO_TYPE_FILTER_VALUE,
   reconcileCustomFieldFilters,
   sortTrips,
+  TRIP_SORT_OPTIONS,
   tripDeleteConfirm,
   tripsEmptyKind,
   tripsEmptyState,
@@ -103,6 +104,7 @@ import {
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
+import { useStoredSort } from "../sortPreference";
 import { LogsFilterSheet } from "./LogsFilterSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 
@@ -134,14 +136,18 @@ export function LogsScreen({
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  // Attribute filters and the sort live and die with the screen, like every
-  // other filter here: the state never leaves the device and is never
-  // persisted, so a month-old filter can't greet the user as missing trips.
+  // Attribute filters live and die with the screen, like every other filter
+  // here: they are never persisted, so a month-old filter can't greet the user
+  // as missing trips. The sort is a preference and outlives it.
   const [customFilters, setCustomFilters] = useState<
     Record<string, CustomFieldFilter>
   >({});
   const [includeUnknowns, setIncludeUnknowns] = useState(false);
-  const [sort, setSort] = useState<TripSortKey>("newest");
+  const [sort, setSort] = useStoredSort<TripSortKey>(
+    "trips",
+    TRIP_SORT_OPTIONS.map((option) => option.key),
+    "newest",
+  );
   const { defs: tripDefs } = useFieldDefs("tripLog");
   const [menuTripId, setMenuTripId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
