@@ -25,6 +25,7 @@ import { Text, View } from "react-native";
 
 import { copyAndRemoveConfirm, copyConfirm } from "@logjam/shared";
 
+import { unavailableReasonText } from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { listMediaForLinked } from "../sync/mirrorStore";
 import { spacing, makeStyles } from "../theme";
@@ -189,6 +190,9 @@ export function useCopyPanel({
           onConfirm(media.count > 0 ? { copyMedia: withMedia } : {})
         }
         disabled={busy || !online}
+        disabledReason={
+          online ? "Saving…" : unavailableReasonText("needs-connection")
+        }
         loading={busy}
         grow
       />

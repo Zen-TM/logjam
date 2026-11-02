@@ -17,7 +17,7 @@ import { MAP_INK } from "@logjam/shared";
 import { useEffect, useMemo, useRef } from "react";
 import { PanResponder, PixelRatio, StyleSheet, View } from "react-native";
 
-import { radius, scrim, withAlpha, makeStyles } from "../theme";
+import { radius, scrim, withAlpha, makeStyles, veil } from "../theme";
 import { moveFrameEdge, type FrameEdge, type FrameInsets } from "./regionFrame";
 
 /** Touch height of a handle; the visible bar is much thinner. */
@@ -278,7 +278,7 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.pill,
     backgroundColor: theme.accent,
     borderWidth: 1,
-    borderColor: withAlpha(MAP_INK.label, 0.6),
+    borderColor: withAlpha(MAP_INK.label, veil.dim),
   },
   barV: {
     width: BAR_THICKNESS,
@@ -286,6 +286,6 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.pill,
     backgroundColor: theme.accent,
     borderWidth: 1,
-    borderColor: withAlpha(MAP_INK.label, 0.6),
+    borderColor: withAlpha(MAP_INK.label, veil.dim),
   },
 }));

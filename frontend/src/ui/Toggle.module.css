@@ -78,9 +78,14 @@
   outline-offset: 2px;
 }
 
+/* The reason replaces the description, so it stays at full strength; the title
+   and the switch dim (Row.module.css). */
 .row[data-disabled] {
-  opacity: var(--opacity-disabled);
   cursor: default;
+}
+
+.row[data-disabled] .title {
+  opacity: var(--opacity-disabled);
 }
 
 .text {

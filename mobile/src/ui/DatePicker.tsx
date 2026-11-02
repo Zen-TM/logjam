@@ -10,6 +10,8 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  wash,
+  opacity,
 } from "../theme";
 import {
   addMonths,
@@ -548,7 +550,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  disabledNav: { opacity: 0.3 },
+  disabledNav: { opacity: opacity.disabled },
   labelButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -591,19 +593,19 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
+  todayRing: { borderWidth: 1, borderColor: theme.accent },
   band: {
     position: "absolute",
     top: "50%",
     marginTop: -DAY_PILL_SIZE / 2,
     height: DAY_PILL_SIZE,
-    backgroundColor: withAlpha(theme.accent, 0.18),
+    backgroundColor: withAlpha(theme.accent, wash.strong),
   },
   selectedFill: { backgroundColor: theme.accent },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: opacity.pressed },
   dayText: { ...textRole.detail, color: theme.text },
   selectedText: { ...textRole.control, color: theme.onFill },
-  disabledText: { color: withAlpha(theme.textMuted, 0.45) },
+  disabledText: { color: theme.textMuted, opacity: opacity.disabled },
   // Four rows of four, sized to match the six day rows so switching grids
   // barely moves the sheet's height.
   yearRow: { flexDirection: "row" },

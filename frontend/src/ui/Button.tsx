@@ -29,7 +29,7 @@ export type Disablable =
  * request runs.
  *
  * `disabledReason` (shared/DESIGN.md §5) says why a disabled button is, and what to do: it
- * shows as a tooltip on hover and on focus and a screen reader hears it as the
+ * shows as a tooltip on hover, on focus and on a press (a touch screen never hovers), and a screen reader hears it as the
  * description. A button that carries one stays FOCUSABLE (`aria-disabled`, and
  * the press does nothing), because a disabled button can neither be tabbed to
  * nor hovered for its tooltip.
@@ -88,7 +88,7 @@ export function Button({
   );
   if (!explained) return button();
   return (
-    <Tooltip content={disabledReason as string}>
+    <Tooltip content={disabledReason as string} openOnPress>
       {(describedById) => button(describedById)}
     </Tooltip>
   );
@@ -171,7 +171,7 @@ export function IconButton({
   );
   if (!explained) return button();
   return (
-    <Tooltip content={`${label} — ${disabledReason}`}>
+    <Tooltip content={`${label} — ${disabledReason}`} openOnPress>
       {(describedById) => button(describedById)}
     </Tooltip>
   );

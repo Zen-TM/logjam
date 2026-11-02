@@ -17,6 +17,21 @@ import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.
 import { PlaceWeather } from "./PlaceWeather";
 import { WeatherView } from "./WeatherView";
 
+// A press on a disabled button opens its reason in a tooltip, which positions
+// itself with ResizeObserver and the popover API; jsdom has neither.
+const stubObserver = () =>
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+Object.assign(HTMLElement.prototype, {
+  showPopover() {},
+  hidePopover() {},
+});
+
 // A made-up spot near Katoomba, a published town.
 const spot = { latitude: -33.71234, longitude: 150.31188 };
 const now = new Date(2026, 9, 18, 9).getTime();
@@ -33,6 +48,7 @@ function setOnline(online: boolean) {
 }
 
 beforeEach(() => {
+  stubObserver();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(now);
   setOnline(true);

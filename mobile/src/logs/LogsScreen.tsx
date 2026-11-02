@@ -68,6 +68,7 @@ import {
   makeStyles,
   useTheme,
   muted,
+  wash,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -776,7 +777,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingLeft: spacing(1.5),
     paddingRight: spacing(0.5),
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(theme.accent, 0.12),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   rangeText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },

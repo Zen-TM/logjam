@@ -34,6 +34,7 @@ import {
   TOUCH_TARGET_MIN,
   type ThemeSchemeId,
   type ThemeTokens,
+  WASH,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "./prefsDb";
@@ -262,6 +263,16 @@ export const formRhythm = FORM_RHYTHM;
 
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;
+
+/** The tints: `withAlpha(token, wash.selected)`. A literal alpha is a lint
+ *  error (eslint.config.js). */
+export const wash = WASH;
+
+/** A page-coloured surface drawn over the map or a photo, which a wash is too
+ *  faint to be: chrome you read through to the map (`map`), a fade or a frame
+ *  (`dim`), and the near-invisible fill iOS needs to hit-test a view (`hit`).
+ *  Same lint as `wash`. */
+export const veil = { map: 0.9, dim: 0.6, hit: 0.01 } as const;
 
 /** Control heights: a phone is a touch screen, so it takes the touch set. */
 export const controlSize = CONTROL.touch;

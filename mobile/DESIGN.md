@@ -17,7 +17,8 @@ multi-select); `src/screens/` (the More hub and plain settings pages).
   `useTheme().<role>`; an identity hue is `useHues()`. A function outside a
   component takes `theme` as an argument. `radius`, `spacing(n)` (8 × n, only
   the steps of `SPACE`) and `controlSize` are plain imports; a tint is
-  `withAlpha(token, a)`.
+  `withAlpha(token, wash.subtle | selected | strong)`, and a page-coloured
+  surface over the map is `veil.*`; a literal alpha is a lint error.
 - **A scheme change repaints the running app**, so nothing holds a colour at
   module scope (`logjam/no-launch-theme`). Text size still applies at the
   next launch, and its control says so.

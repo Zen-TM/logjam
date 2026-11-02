@@ -41,7 +41,11 @@ import {
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
+import {
+  capabilityRowProps,
+  capabilityStatus,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { readPlansList } from "../plans/plansCache";
@@ -141,6 +145,7 @@ export function MoreScreen({
       setToast({ text: "Synced.", tone: "done", nonce: Date.now() });
   }, []);
   const user = userQuery.data;
+  const syncNowStatus = capabilityStatus("syncNow", accountState, online);
 
   // The menu is `NAV`'s More entries in `NAV`'s order; this only says what each
   // row shows. tsc refuses an entry with no row here.
@@ -263,9 +268,11 @@ export function MoreScreen({
               variant="outlineAccent"
               compact
               loading={syncStatus.state === "syncing"}
-              disabled={
-                capabilityStatus("syncNow", accountState, online).status !==
-                "available"
+              disabled={syncNowStatus.status !== "available"}
+              disabledReason={
+                syncNowStatus.status === "available"
+                  ? ""
+                  : unavailableReasonText(syncNowStatus.reason)
               }
               onPress={() => void syncNow()}
             />

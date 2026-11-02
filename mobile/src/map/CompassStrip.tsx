@@ -27,7 +27,14 @@
 import { StyleSheet, Text, View } from "react-native";
 import { compassPointFor } from "@logjam/shared";
 
-import { radius, spacing, textScale, withAlpha, makeStyles } from "../theme";
+import {
+  radius,
+  spacing,
+  textScale,
+  withAlpha,
+  makeStyles,
+  veil,
+} from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import { compassTicks, displayHeading } from "./compassTape";
 
@@ -118,9 +125,9 @@ const CENTRE_LINE_WIDTH = 2;
 
 const useStyles = makeStyles((theme, textRole) => ({
   frame: {
-    backgroundColor: withAlpha(theme.page, 0.92),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.7),
+    borderColor: theme.accent,
     borderRadius: radius.md,
     // The tape runs past both ends of the box; without this it draws over the
     // rest of the map.
@@ -143,7 +150,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   markMinor: {
     width: 1,
     height: 3,
-    backgroundColor: withAlpha(theme.text, 0.6),
+    backgroundColor: theme.textMuted,
   },
   label: {
     ...textRole.caption,
@@ -155,7 +162,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     position: "absolute",
     left: spacing(0.5),
     bottom: spacing(0.25),
-    color: withAlpha(theme.text, 0.7),
+    color: theme.textMuted,
   },
   centreLine: {
     position: "absolute",

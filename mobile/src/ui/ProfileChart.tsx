@@ -44,6 +44,8 @@ import {
   makeStyles,
   useTheme,
   muted,
+  veil,
+  wash,
 } from "../theme";
 import { SheetScrollLock } from "./BottomSheet";
 
@@ -335,7 +337,7 @@ export function ProfileChart({
         {/* Over the columns, not under: it fades their feet into the surface so
             the silhouette reads as one shape rather than a row of bars. */}
         <LinearGradient
-          colors={[withAlpha(theme.page, 0), withAlpha(theme.page, 0.55)]}
+          colors={[withAlpha(theme.page, 0), withAlpha(theme.page, veil.dim)]}
           style={styles.fade}
           pointerEvents="none"
         />
@@ -361,13 +363,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "flex-end",
     height: CHART_HEIGHT,
-    backgroundColor: withAlpha(theme.textMuted, 0.08),
+    backgroundColor: withAlpha(theme.textMuted, wash.subtle),
     borderRadius: radius.sm,
     overflow: "hidden",
   },
   // No gap: contiguous columns read as an area, which is what a profile is.
   column: { flex: 1, justifyContent: "flex-end" },
-  bar: { backgroundColor: withAlpha(theme.accent, 0.85) },
+  bar: { backgroundColor: theme.accent },
   scrubLine: {
     position: "absolute",
     top: 0,

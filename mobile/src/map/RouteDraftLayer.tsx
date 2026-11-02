@@ -34,7 +34,7 @@ import {
   arrowSegmentFeatures,
   routeArrowStyle,
 } from "./routeArrowStyle";
-import { touchTargetMin, useTheme, withAlpha } from "../theme";
+import { touchTargetMin, useTheme, withAlpha, veil } from "../theme";
 
 /**
  * Anchor sizes and fills.
@@ -375,6 +375,6 @@ const styles = StyleSheet.create({
     width: touchTargetMin,
     height: touchTargetMin,
     borderRadius: touchTargetMin / 2,
-    backgroundColor: withAlpha(MAP_INK.ring, 0.01),
+    backgroundColor: withAlpha(MAP_INK.ring, veil.hit),
   },
 });

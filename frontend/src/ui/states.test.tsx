@@ -11,6 +11,20 @@ import {
   Toast,
 } from ".";
 
+// A press on a disabled button opens its reason in a tooltip, which positions
+// itself with ResizeObserver and the popover API; jsdom has neither.
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    disconnect() {}
+  },
+);
+Object.assign(HTMLElement.prototype, {
+  showPopover() {},
+  hidePopover() {},
+});
+
 afterEach(cleanup);
 
 // The kit's states that are LOGIC rather than looks (UX §4 and §5). The fills

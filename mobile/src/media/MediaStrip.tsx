@@ -26,6 +26,7 @@ import {
   makeStyles,
   useTheme,
   muted,
+  wash,
 } from "../theme";
 import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
@@ -573,13 +574,16 @@ function AttachmentTile({
             styles.tile,
             styles.glyphTile,
             {
-              backgroundColor: withAlpha(tint, 0.16),
-              borderColor: withAlpha(tint, 0.5),
+              backgroundColor: tint,
+              borderColor: tint,
             },
           ]}
         >
-          <Icon idea={glyphFor(category)} size={22} color={tint} />
-          <Text style={styles.glyphLabel} numberOfLines={2}>
+          <Icon idea={glyphFor(category)} size={22} color={theme.onFill} />
+          <Text
+            style={[styles.glyphLabel, { color: theme.onFill }]}
+            numberOfLines={2}
+          >
             {item.filename ?? "Attachment"}
           </Text>
         </View>
@@ -669,11 +673,11 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.accent, 0.1),
+    borderColor: theme.accent,
+    backgroundColor: withAlpha(theme.accent, wash.selected),
     gap: spacing(0.25),
   },
-  addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
+  addTilePressed: { backgroundColor: withAlpha(theme.accent, wash.strong) },
   addTileLabel: { ...textRole.caption, color: theme.text },
   tileLoading: {
     ...StyleSheet.absoluteFill,

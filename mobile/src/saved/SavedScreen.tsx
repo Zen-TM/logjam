@@ -137,7 +137,11 @@ import { showsGeoPdfRunCard } from "./geoPdfRunCard";
 import { importVectorFileFromPicker } from "../imports/vectorImports";
 import { useVectorImports } from "../imports/useVectorImports";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
+import {
+  capabilityRowProps,
+  capabilityStatus,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import type { BasemapId, MapArtifact } from "../map/sourceResolver";
 import {
@@ -486,9 +490,12 @@ export function SavedScreen({
   // and stay in the same sheet — the point being that "Add to this device"
   // still does something useful without an account.
   const { accountState } = useAccountState();
-  const lidarReady =
-    capabilityStatus("lidarOverlays", accountState, online).status ===
-    "available";
+  const lidarStatus = capabilityStatus("lidarOverlays", accountState, online);
+  const lidarReady = lidarStatus.status === "available";
+  const lidarWhyNot =
+    lidarStatus.status === "available"
+      ? "Another download is running"
+      : unavailableReasonText(lidarStatus.reason);
   const pendingCount = usePendingSyncCount();
   const pendingCreates = usePendingCreateIds();
 
@@ -1761,6 +1768,7 @@ export function SavedScreen({
                 accessibilityLabel="Cancel this import"
                 onPress={cancelGeoPdfImportRun}
                 disabled={!CANCELLABLE_PHASES.includes(importRun.phase)}
+                disabledReason="Can't be cancelled at this step"
               />
             }
           />
@@ -1946,6 +1954,7 @@ export function SavedScreen({
                         // but still rendered, because its absence would resize the
                         // row (see the note above).
                         disabled={selecting}
+                        disabledReason="Tap the row to pick it"
                         onPress={item.inlineAction.onPress}
                       />
                     ) : null}
@@ -2025,6 +2034,7 @@ export function SavedScreen({
                       accessibilityLabel={`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
+                      disabledReason={lidarWhyNot}
                       onPress={() => handleSaveOverlayJob(job)}
                     />
                   }
@@ -2538,6 +2548,7 @@ function SavedAddButton({ action }: { action: SavedAction }) {
         icon="addSaved"
         compact
         disabled={action.disabledReason != null}
+        disabledReason={action.disabledReason ?? ""}
         onPress={action.onPress}
       />
       {action.disabledReason ? (

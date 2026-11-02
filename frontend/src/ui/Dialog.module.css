@@ -20,7 +20,7 @@
 }
 
 .dialog::backdrop {
-  background: var(--scrim);
+  background: var(--scrim-light);
 }
 
 .large {

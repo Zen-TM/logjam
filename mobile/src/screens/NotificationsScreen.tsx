@@ -1179,6 +1179,12 @@ export function NotificationsScreen({
   );
 }
 
+/** Why a row's buttons are dimmed, for the press that asks. */
+function actionsDisabledReason(online: boolean, selecting: boolean): string {
+  if (!online) return "Needs a connection";
+  return selecting ? "Finish picking first" : "Working…";
+}
+
 function keyExtractor(item: TNotification): string {
   return item.id;
 }
@@ -1328,6 +1334,7 @@ const NotificationRow = memo(function NotificationRow({
                     action.kind === "decline" ? "outlineAccent" : undefined
                   }
                   disabled={actionsDisabled}
+                  disabledReason={actionsDisabledReason(online, selecting)}
                   loading={busyKind === action.kind}
                   onPress={() => onAction(item, target, action)}
                 />
@@ -1345,6 +1352,7 @@ const NotificationRow = memo(function NotificationRow({
               label={notificationVerb("readMessage").label}
               variant="outlineAccent"
               disabled={selecting}
+              disabledReason="Finish picking first"
               onPress={() => onPress(item)}
             />
           </CardActions>
@@ -1468,6 +1476,7 @@ const BatchRow = memo(function BatchRow({
                     : `Accept all ${pending.length}`
                 }
                 disabled={actionsDisabled}
+                disabledReason={actionsDisabledReason(online, selecting)}
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
@@ -1476,6 +1485,7 @@ const BatchRow = memo(function BatchRow({
                 }
                 variant="outlineAccent"
                 disabled={actionsDisabled}
+                disabledReason={actionsDisabledReason(online, selecting)}
                 onPress={() => onBatchAction(batch, "decline")}
               />
             </CardActions>

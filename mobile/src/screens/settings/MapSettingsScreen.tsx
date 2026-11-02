@@ -567,6 +567,7 @@ function PlaceNamesRow() {
             icon="delete"
             accessibilityLabel="Remove place names"
             disabled={downloading}
+            disabledReason="Downloading…"
             onPress={remove}
           />
         ) : (
@@ -574,6 +575,11 @@ function PlaceNamesRow() {
             icon="saveOffline"
             accessibilityLabel="Download place names"
             disabled={downloading || !online}
+            disabledReason={
+              online
+                ? "Downloading…"
+                : unavailableReasonText("needs-connection")
+            }
             onPress={download}
           />
         )

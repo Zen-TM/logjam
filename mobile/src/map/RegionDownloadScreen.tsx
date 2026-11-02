@@ -483,6 +483,18 @@ export function RegionDownloadScreen({
   // user and all have the same ways out, so they are one chip — three
   // sentences in a hero band cost more map than they ever bought.
   const overCap = caps != null && !caps.ok;
+  // Why Save is off, for the press that asks: each cause as it reads on screen.
+  const noArea = bbox == null || caps == null;
+  const TOO_LARGE = "Too large — reduce the area, detail or maps";
+  const noSaveReason = busy
+    ? "Saving…"
+    : noArea
+      ? "Waiting for the map"
+      : overCap
+        ? TOO_LARGE
+        : gate.warning === "failed"
+          ? "Couldn't check your sharpened areas"
+          : "Checking your sharpened areas…";
 
   const startDownloads = useCallback(
     (
@@ -732,6 +744,13 @@ export function RegionDownloadScreen({
                     variant="outlineAccent"
                     onPress={() => handleSave(false)}
                     disabled={bbox == null || caps?.ok !== true || busy}
+                    disabledReason={
+                      busy
+                        ? "Saving…"
+                        : noArea
+                          ? "Waiting for the map"
+                          : TOO_LARGE
+                    }
                   />
                 </View>
               }
@@ -818,6 +837,7 @@ export function RegionDownloadScreen({
             icon="saveOffline"
             onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
+            disabledReason={noSaveReason}
           />
         </View>
       </View>

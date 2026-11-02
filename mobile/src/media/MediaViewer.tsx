@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { mediaCategory, THEME_SCHEMES } from "@logjam/shared";
 
-import { radius, scrim, spacing, textRoles, withAlpha } from "../theme";
+import { radius, scrim, spacing, textRoles, withAlpha, veil } from "../theme";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { IconButton, Icon } from "../ui";
@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
   counter: {
     ...textRoles.control,
     color: photoChrome.text,
-    backgroundColor: withAlpha(photoChrome.page, 0.6),
+    backgroundColor: withAlpha(photoChrome.page, veil.dim),
     borderRadius: radius.pill,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(0.25),

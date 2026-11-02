@@ -32,6 +32,7 @@ import {
   withAlpha,
   makeStyles,
   muted,
+  veil,
 } from "../theme";
 import { readoutFigures, useLiveReadout } from "./liveReadout";
 
@@ -136,7 +137,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     width: CHIP_WIDTH,
     minHeight: READOUT_CHIP_HEIGHT,
-    backgroundColor: withAlpha(theme.page, 0.8),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
@@ -151,6 +152,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
     marginVertical: spacing(1),
-    backgroundColor: withAlpha(theme.text, 0.25),
+    backgroundColor: theme.line,
   },
 }));

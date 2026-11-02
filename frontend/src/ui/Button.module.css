@@ -53,8 +53,10 @@
   color: var(--color-on-fill);
 }
 
+/* A fill answers the pointer with `--opacity-pressed`, as on Logjam GPS. */
 .filled:hover:not(:disabled, [aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
+  background: var(--color-accent);
+  opacity: var(--opacity-pressed);
 }
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
@@ -81,7 +83,8 @@
 }
 
 .destructive:hover:not(:disabled, [aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-text));
+  background: var(--color-warning);
+  opacity: var(--opacity-pressed);
 }
 
 .button:disabled,

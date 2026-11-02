@@ -85,7 +85,10 @@
   border-color: var(--color-line);
 }
 
-.row[data-disabled="true"] {
+/* The reason is the subtitle, so it stays at full strength: at the disabled
+   opacity "Needs a connection" falls under 3:1. The tile, title and controls
+   dim instead. */
+.row[data-disabled="true"] :is(.leading, .title, .trailing, .footer) {
   opacity: var(--opacity-disabled);
 }
 

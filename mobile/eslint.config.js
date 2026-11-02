@@ -59,6 +59,12 @@ const GPS_GOTCHAS = [
   },
   {
     selector:
+      "CallExpression[callee.name='withAlpha'][arguments.1.type='Literal'][arguments.1.value!=0]",
+    message:
+      "A tint is a named alpha: withAlpha(token, wash.subtle | selected | strong), or veil.* for a surface over the map. A literal alpha is a value nobody measured (mobile/DESIGN.md §1).",
+  },
+  {
+    selector:
       "CallExpression[callee.name='emitToast'] MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/], JSXExpressionContainer > MemberExpression[property.name='message'][object.name=/^(err|error|e|ex)$/]",
     message:
       "An error's message can carry a place name or a file name. Show words we wrote (shared/DESIGN.md §11, messageFromError from @logjam/shared), never err.message.",

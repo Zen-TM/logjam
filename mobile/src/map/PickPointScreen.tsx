@@ -348,6 +348,7 @@ export function PickPointScreen({
             // disabled one saying why (DESIGN.md), which is what the hint
             // above is for.
             disabled={picked == null}
+            disabledReason="Tap the map to pick a point"
             onPress={() => picked && onConfirm(picked)}
           />
         </View>

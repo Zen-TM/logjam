@@ -54,10 +54,13 @@ import {
   makeStyles,
   useTheme,
   muted,
+  veil,
 } from "../theme";
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
+
+const SAVING = "Saving…";
 import { useElevationProfile } from "./useElevationProfile";
 const VERBS = Object.fromEntries(
   mapMeasureVerbs("gps").map((verb) => [verb.id, verb]),
@@ -164,6 +167,7 @@ export function DraftToolPanel({
             icon="undo"
             accessibilityLabel={VERBS.undo.label}
             disabled={!canUndo || saving}
+            disabledReason={saving ? SAVING : "Nothing to undo"}
             onPress={onUndo}
           />
           <Button
@@ -171,6 +175,7 @@ export function DraftToolPanel({
             variant="outlineAccent"
             compact
             disabled={points.length === 0 || saving}
+            disabledReason={saving ? SAVING : "Nothing to clear"}
             onPress={onClear}
           />
         </View>
@@ -180,6 +185,7 @@ export function DraftToolPanel({
               icon="reverse"
               accessibilityLabel="Reverse the direction of this route"
               disabled={!hasLine || saving}
+              disabledReason={saving ? SAVING : "Needs two points"}
               onPress={onReverse}
             />
           ) : null}
@@ -208,6 +214,7 @@ export function DraftToolPanel({
                 : "Discard this route and close the tool"
             }
             disabled={saving}
+            disabledReason={SAVING}
             onPress={onDiscard}
           />
           {onSave ? (
@@ -216,6 +223,7 @@ export function DraftToolPanel({
               icon="done"
               compact
               disabled={!hasLine || saving}
+              disabledReason={saving ? SAVING : "Needs two points"}
               onPress={onSave}
             />
           ) : null}
@@ -227,10 +235,10 @@ export function DraftToolPanel({
 
 const useStyles = makeStyles((theme, textRole) => ({
   bar: {
-    backgroundColor: withAlpha(theme.page, 0.94),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.4),
+    borderColor: theme.accent,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(1),
     gap: spacing(1),

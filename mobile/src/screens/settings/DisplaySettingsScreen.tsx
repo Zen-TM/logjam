@@ -32,6 +32,7 @@ import {
   type TextScale,
   makeStyles,
   useTheme,
+  wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
 import {
@@ -214,7 +215,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   schemeSelected: {
     borderColor: theme.accent,
-    backgroundColor: withAlpha(theme.accent, 0.1),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   schemePressed: { backgroundColor: theme.cardPressed },
   swatches: { flexDirection: "row", gap: spacing(0.5) },

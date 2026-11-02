@@ -96,6 +96,7 @@ import {
   useTheme,
   controlSize,
   muted,
+  wash,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -468,6 +469,13 @@ export function useSharePanel({
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
             }
+            disabledReason={
+              sending
+                ? "Sending…"
+                : selected.size === 0
+                  ? "Pick at least one friend"
+                  : "None of these can be shared"
+            }
           />
         </View>
       ),
@@ -540,6 +548,7 @@ export function useSharePanel({
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
+            disabledReason={sending ? "Sending…" : "Pick at least one friend"}
             loading={sending}
           />
         </View>
@@ -816,8 +825,8 @@ function PromiseBanner({
       style={[
         styles.promise,
         {
-          backgroundColor: withAlpha(hue, 0.12),
-          borderColor: withAlpha(hue, 0.5),
+          backgroundColor: withAlpha(hue, wash.selected),
+          borderColor: hue,
         },
       ]}
     >
