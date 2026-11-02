@@ -677,7 +677,11 @@ function App() {
   } = useStandaloneFiles(
     // A plan's page offers them to Add a place or way, whatever the Ways layer says.
     loadsUserData &&
-      (activePanel === "ways" || activePanel === "plan-detail" || showWays),
+      (activePanel === "ways" ||
+        activePanel === "plan-detail" ||
+        // The Trips hero counts the recordings that have no trip yet.
+        activePanel === "logs" ||
+        showWays),
   );
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),

@@ -37,6 +37,12 @@
   border: 1px solid var(--color-line);
 }
 
+.toLog {
+  flex-shrink: 0;
+  display: flex;
+  padding: 0 var(--gutter) 8px;
+}
+
 .stripText {
   flex: 1;
   min-width: 0;

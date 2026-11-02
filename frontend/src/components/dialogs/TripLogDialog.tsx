@@ -17,6 +17,7 @@ import {
   primaryTripType,
   SYSTEM_PLACE_TYPE_IDS,
   todayDateKey,
+  gpxEnds,
   tripPrefillFromTrack,
   TRIP_TYPE_SUGGESTIONS,
   type tripPlanTripLogPrefill,
@@ -718,6 +719,8 @@ function TripLogDialog({
   // be taken out again and a Cancel deletes it with the draft. Once per open.
   // The form state it reads is the populate's, which was set during render.
   const [attachingTrack, setAttachingTrack] = useState(false);
+  // Places near where the track began and ended, offered as chips.
+  const [nearPlaceIds, setNearPlaceIds] = useState<string[]>([]);
   const attachedSessionRef = useRef(-1);
   useEffect(() => {
     if (!open || tripLog || !fromTrack) return;
@@ -732,6 +735,13 @@ function TripLogDialog({
         const response = await fetch(url);
         if (!response.ok) throw new Error("The file could not be fetched.");
         const file = new File([await response.blob()], fromTrack.filename);
+        setNearPlaceIds(
+          tripPrefillFromTrack(
+            { startedAt: null, ends: gpxEnds(await file.text()) },
+            undefined,
+            places,
+          ).nearPlaceIds,
+        );
         const resolved = resolveMediaType(file);
         if (!resolved) throw new Error("Unsupported track file.");
         const tripId = await ensureLinkedTripId();
@@ -1296,6 +1306,17 @@ function TripLogDialog({
               }
               onOpen={openPlacesPicker}
             />
+            {nearPlaceIds.length > 0 && (
+              <ChipPicker
+                label="Near this track"
+                options={nearPlaceIds.flatMap((id) => {
+                  const place = places.find((p) => p.id === id);
+                  return place ? [{ value: id, label: place.name }] : [];
+                })}
+                selected={selectedPlaceIds}
+                onToggle={togglePlace}
+              />
+            )}
             {/* The new place's position: typed, or picked on the map. The name
                 is what was typed in the picker. */}
             {creating && (

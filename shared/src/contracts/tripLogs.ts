@@ -115,6 +115,22 @@ export const TRIPS_FILTER_SHEET = {
   },
 } as const satisfies ScreenContract;
 
+/**
+ * The hero's way into the recordings that have no trip on their day
+ * (`recordingsToLog`). Absent at none: nothing is owed.
+ */
+export const RECORDINGS_TO_LOG = {
+  title: "Recordings to log",
+  verb: "Log a trip",
+  empty: "Every recent recording has a trip.",
+  hint: "Recordings from the last 30 days on a day with no trip.",
+} as const;
+
+/** "1 recording to log", "3 recordings to log". */
+export function recordingsToLogLabel(count: number): string {
+  return `${count} ${count === 1 ? "recording" : "recordings"} to log`;
+}
+
 /** "1 trip", "37 trips". */
 export function tripsCountLabel(count: number): string {
   return `${count} ${count === 1 ? "trip" : "trips"}`;

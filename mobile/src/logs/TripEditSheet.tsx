@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import {
   abandonConfirm,
@@ -147,6 +147,8 @@ export function TripEditSheet({
   const [customTypes, setCustomTypes] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [placeSearch, setPlaceSearch] = useState("");
+  // Places near where the track began and ended, offered as chips.
+  const [nearIds, setNearIds] = useState<string[]>([]);
   const [dateTarget, setDateTarget] = useState<DateTarget>({ kind: "trip" });
   // Place-cap refusal (the picker's FieldError) and a failed save (the banner
   // above Save): each error in its one place, neither a toast while the form is
@@ -359,6 +361,25 @@ export function TripEditSheet({
     },
     [typeOptions],
   );
+
+  useEffect(() => {
+    if (!visible || !fromTrack?.ends) return;
+    let live = true;
+    fromTrack
+      .ends()
+      .then((ends) => {
+        if (live)
+          setNearIds(
+            tripPrefillFromTrack({ startedAt: null, ends }, undefined, places)
+              .nearPlaceIds,
+          );
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      setNearIds([]);
+    };
+  }, [visible, fromTrack, places]);
 
   const togglePlace = useCallback(
     (place: MirrorPlace) => {
@@ -653,6 +674,21 @@ export function TripEditSheet({
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
             onPress={() => setMode("places")}
           />
+
+          {!editing && nearIds.length > 0 ? (
+            <ChipPicker
+              label="Near this track"
+              options={nearIds.flatMap((id) => {
+                const place = places.find((p) => p.id === id);
+                return place ? [{ value: id, label: place.name }] : [];
+              })}
+              selected={selected.map((link) => link.id)}
+              onToggle={(id) => {
+                const place = places.find((p) => p.id === id);
+                if (place) togglePlace(place);
+              }}
+            />
+          ) : null}
 
           {/* Read-only: the recording goes with the trip when it is saved. A row
               with nothing to press is not pressable (shared/DESIGN.md §4). */}

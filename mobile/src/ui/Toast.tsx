@@ -5,9 +5,14 @@ import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
+/** Same shape as the shared toast action, so the two can merge into one. */
+export type ToastAction = { label: string; onPress: () => void };
+
 export type ToastMessage = {
   text: string;
   tone: "info" | "error";
+  /** The one thing the outcome offers ("Log a trip"); pressing it dismisses. */
+  action?: ToastAction;
   /** Bump on every new message so a repeat of the same text re-shows + re-times. */
   nonce: number;
 };
@@ -92,15 +97,19 @@ export function Toast({
       }),
     ]);
     show.start();
-    const timer = setTimeout(() => {
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) dismissed();
-      });
-    }, VISIBLE_MS[message.tone]);
+    const timer = setTimeout(
+      () => {
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished) dismissed();
+        });
+        // An offer has to stay reachable, as long as an error does.
+      },
+      VISIBLE_MS[message.action ? "error" : message.tone],
+    );
     return () => {
       show.stop();
       clearTimeout(timer);
@@ -129,6 +138,18 @@ export function Toast({
           color={theme.onInverse}
         />
         <Text style={styles.text}>{message.text}</Text>
+        {message.action ? (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => {
+              message.action?.onPress();
+              onDismissed();
+            }}
+          >
+            <Text style={styles.action}>{message.action.label}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
@@ -167,4 +188,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   toastError: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   close: { marginLeft: spacing(0.5) },
   text: { ...textRole.control, flexShrink: 1, color: theme.onInverse },
+  action: {
+    ...textRole.control,
+    color: theme.onInverse,
+    textDecorationLine: "underline",
+  },
 }));

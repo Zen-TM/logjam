@@ -21,13 +21,21 @@ import { onPlaceRegistryToast } from "./offline/placeRegistry";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 import { onPermissionToast } from "./permissionAlert";
 import { onPlanDownloadToast } from "./plans/planDownloads";
-import { onRecordingToast } from "./tracks/finishRecordingPrompt";
+import {
+  onLogTripRequest,
+  onRecordingToast,
+} from "./tracks/finishRecordingPrompt";
+import { LogTripFromTrackSheet } from "./tracks/LogTripFromTrackSheet";
+import type { TripTrackSource } from "./tracks/tripTrackSource";
 
 /** Bottom tab bar height plus a little air — the toast sits above both. */
 const TAB_BAR_CLEARANCE = 64;
 
 export function BackgroundToast() {
   const [message, setMessage] = useState<ToastMessage | null>(null);
+  // The finish toast's "Log a trip": the form opens here, over whatever screen
+  // the user is on, because the recorder's own sheet has gone by then.
+  const [logging, setLogging] = useState<TripTrackSource | null>(null);
 
   useEffect(() => {
     // The nonce is what re-runs the animation when the same text repeats.
@@ -40,6 +48,7 @@ export function BackgroundToast() {
       onPlanDownloadToast(show),
       onRecordingToast(show),
       onPermissionToast(show),
+      onLogTripRequest(setLogging),
     ];
     return () => {
       for (const unsubscribe of unsubscribes) unsubscribe();
@@ -49,6 +58,14 @@ export function BackgroundToast() {
   return (
     <View style={styles.dock} pointerEvents="box-none">
       <Toast message={message} onDismissed={() => setMessage(null)} />
+      <LogTripFromTrackSheet
+        track={logging}
+        onClose={() => setLogging(null)}
+        onSaved={(text) => {
+          setLogging(null);
+          setMessage({ text, tone: "info", nonce: Date.now() });
+        }}
+      />
     </View>
   );
 }
