@@ -965,7 +965,7 @@ test.describe("desktop", () => {
 
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard this place?",
+      name: "Discard this request?",
     });
     await confirm.getByRole("button", { name: "Discard" }).click();
     await expect(dialog).toHaveCount(0);
@@ -1022,7 +1022,7 @@ test.describe("desktop", () => {
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard this place?",
+      name: "Discard this export?",
     });
     await expect(confirm).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
