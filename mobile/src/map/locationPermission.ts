@@ -5,8 +5,11 @@ import * as Location from "expo-location";
 
 import { alertPermissionDenied } from "../permissionAlert";
 
-/** True when granted. Denials surface an alert (never fail silently). */
-export async function ensureForegroundLocationPermission(): Promise<boolean> {
+/** True when granted. Denials are said out loud (never fail silently): a
+ *  toast, or `onMessage` where a modal would cover one. */
+export async function ensureForegroundLocationPermission(
+  onMessage?: (text: string) => void,
+): Promise<boolean> {
   let { status, canAskAgain } = await Location.getForegroundPermissionsAsync();
   if (status !== "granted") {
     ({ status, canAskAgain } =
@@ -21,6 +24,7 @@ export async function ensureForegroundLocationPermission(): Promise<boolean> {
     settingsMessage:
       "Location is off. Turn it on for Logjam GPS in system settings.",
     canAskAgain,
+    onMessage,
   });
   return false;
 }

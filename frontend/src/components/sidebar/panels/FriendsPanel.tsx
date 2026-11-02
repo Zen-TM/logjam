@@ -491,6 +491,7 @@ function FriendsPanel({
             ...friendRemoveConfirm(removing.username),
             confirmLabel: "Remove",
             tone: "destructive",
+            icon: "unshare",
           }
         }
         busy={busyId != null}
@@ -503,6 +504,7 @@ function FriendsPanel({
           ...friendsRemoveConfirm(selectedFriends.length),
           confirmLabel: "Remove",
           tone: "destructive",
+          icon: "unshare",
         }}
         busy={busyId != null}
         onConfirm={() => void handleRemoveSelected()}

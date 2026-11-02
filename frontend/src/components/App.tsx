@@ -1183,13 +1183,14 @@ function App() {
   // hook after an early return runs on some renders and not others, so the
   // sign-in -> map transition would shift every later hook's slot.
   // "Dirty" for a NEW route is any point placed; for an EDIT it is the geometry
-  // differing from what was opened.
+  // or a colour the route already had differing from what was opened.
   const editingOriginal = editingRouteId
     ? (routes.find((route) => route.id === editingRouteId) ?? null)
     : null;
   const draftChanged = editingOriginal
     ? JSON.stringify(routeDraft.points) !==
-      JSON.stringify(editingOriginal.points)
+        JSON.stringify(editingOriginal.points) ||
+      (editingOriginal.color != null && drawColor !== editingOriginal.color)
     : routeDraft.points.length > 0;
 
   // The route editor is a map tool, not a Dialog, so it asks for itself.

@@ -302,6 +302,7 @@ export function planLeaveConfirm(name: string): ConfirmCopy {
       "You lose access at once. Your answers to its forms go. What you added stays in the plan, and its files keep counting against your storage.",
     confirmLabel: "Leave plan",
     tone: "destructive",
+    icon: "leave",
   };
 }
 
@@ -467,6 +468,7 @@ export function planRemoveConfirm(
     }`,
     confirmLabel: "Remove",
     tone: "destructive",
+    icon: "unshare",
     deleteFilesLabel: files ? `Delete their files instead (${counted})` : null,
   };
 }

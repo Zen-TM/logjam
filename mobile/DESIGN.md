@@ -110,7 +110,8 @@ handler or a camera write, read
 - **Content that can outgrow the sheet pins its primary action in
   `footer`.**
 - **`Alert` is raised only by `confirm()`** (`src/ui/confirm.ts`), which
-  draws Cancel and the verb (`confirm.test.ts`). A list of choices is a
+  draws Cancel and the verb (`confirm.test.ts`), bar the second step of removing a
+  member who has files ("Keep files"). A list of choices is a
   sheet; an error is a toast.
 - **A form sheet guards its own exits.** `BottomSheet` takes `discard`
   (`abandonConfirm`): while it is non-null, ×, the back gesture, the backdrop

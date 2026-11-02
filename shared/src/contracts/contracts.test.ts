@@ -48,6 +48,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   MAP_TERRAIN,
   attributeDeleteConfirm,
+  SETTINGS_LIST,
   contractSectionKeys,
   deleteAccountPhrase,
   deleteAccountPhraseMatches,
@@ -59,6 +60,7 @@ import {
   ownTypeCountLabel,
   placeTypeDeleteConfirm,
   FRIEND_SHARE_VERBS,
+  PLAN_VERB_LISTS,
   friendRemoveConfirm,
   friendRequestMadeFriend,
   friendsRemoveConfirm,
@@ -716,6 +718,12 @@ describe("a way's verbs", () => {
     );
   });
 
+  // Mutation: word the delete item per client again.
+  it("words Delete once for both clients", () => {
+    expect(wayVerbLabel("delete", "web")).toBe("Delete way");
+    expect(wayVerbLabel("delete", "gps")).toBe("Delete way");
+  });
+
   // One verb, one word and one glyph on both clients, and the same word and
   // glyph a place's own "log a trip" wears (shared/DESIGN.md §6).
   it("declares Log a trip once, with the trip glyph", () => {
@@ -1085,25 +1093,35 @@ describe("abandonConfirm", () => {
       confirmBody: "Nothing you've entered is kept.",
       confirmLabel: "Discard",
       tone: "destructive",
+      icon: "close",
     });
     expect(abandonConfirm("trip", false)).toEqual({
       confirmTitle: "Discard your changes?",
       confirmBody: "The trip stays as it was.",
       confirmLabel: "Discard",
       tone: "destructive",
+      icon: "close",
     });
   });
 });
 
 describe("the delete confirms", () => {
-  // Mutation: drop `tone` or `confirmLabel` from any of the three.
-  it("each carry a Delete verb in the warning tone", () => {
-    for (const copy of [
-      placeDeleteConfirm({ name: "Claustral" }),
-      placeTypeDeleteConfirm("Canyon"),
-      attributeDeleteConfirm("Water level", 0, { one: "trip", many: "trips" }),
-    ]) {
-      expect(copy.confirmLabel).toBe("Delete");
+  // Mutation: drop `tone` or `confirmLabel` from any of the three, or word
+  // a label apart from the menu item that raises it.
+  it("each carry the menu's Delete verb in the warning tone", () => {
+    const copies = [
+      [placeDeleteConfirm({ name: "Claustral" }), "Delete"],
+      [placeTypeDeleteConfirm("Canyon"), SETTINGS_LIST.copy.deleteType],
+      [
+        attributeDeleteConfirm("Water level", 0, {
+          one: "trip",
+          many: "trips",
+        }),
+        SETTINGS_LIST.copy.deleteAttribute,
+      ],
+    ] as const;
+    for (const [copy, label] of copies) {
+      expect(copy.confirmLabel).toBe(label);
       expect(copy.tone).toBe("destructive");
     }
   });
@@ -1143,4 +1161,40 @@ describe("the place form and the trip form", () => {
     expect(TRIP_FORM.copy.logged).toBe("Trip logged.");
     expect(TRIP_FORM.copy.saved).toBe("Trip saved.");
   });
+});
+
+describe("a verb list's reason and gap", () => {
+  const lists: [string, readonly object[]][] = [
+    ["PLACE_VERBS", PLACE_VERBS],
+    ["FRIEND_SHARE_VERBS", FRIEND_SHARE_VERBS],
+    ["MAP_POINT_VERBS", MAP_POINT_VERBS],
+    ["MAP_MEASURE_VERBS", MAP_MEASURE_VERBS],
+    ...PLAN_VERB_LISTS.map((list, i): [string, readonly object[]] => [
+      `PLAN_VERB_LISTS[${i}]`,
+      list,
+    ]),
+  ];
+
+  // A verb only one client has gives exactly one non-empty `reason` or `gap`,
+  // and any other verb gives neither. Mutation: give a one-client verb both,
+  // or `gap: ""`.
+  it.each(lists)(
+    "%s: exactly one of reason or gap, on a one-client verb only",
+    (_name, list) => {
+      for (const verb of list as readonly {
+        id: string;
+        on?: string;
+        reason?: string;
+        gap?: string;
+      }[]) {
+        const given = [verb.reason, verb.gap].filter(
+          (text) => text !== undefined,
+        );
+        if (verb.on) {
+          expect(given, verb.id).toHaveLength(1);
+          expect(given[0]!.trim(), verb.id).not.toBe("");
+        } else expect(given, verb.id).toEqual([]);
+      }
+    },
+  );
 });

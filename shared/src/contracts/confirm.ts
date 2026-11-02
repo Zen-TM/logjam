@@ -21,11 +21,13 @@ export function abandonConfirm(thing: string, isNew: boolean): ConfirmCopy {
         confirmBody: "Nothing you've entered is kept.",
         confirmLabel: "Discard",
         tone: "destructive",
+        icon: "close",
       }
     : {
         confirmTitle: "Discard your changes?",
         confirmBody: `The ${thing} stays as it was.`,
         confirmLabel: "Discard",
         tone: "destructive",
+        icon: "close",
       };
 }

@@ -57,7 +57,7 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   },
 ];
 
-// Rewritten by the copy sweep; delete an entry with its string.
+// Strings still to reword to the glossary; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
     file: "imports/ImportOptionsSheet.tsx",

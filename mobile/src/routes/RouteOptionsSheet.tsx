@@ -447,7 +447,7 @@ export function RouteOptionsSheet({
             absent rather than offered and refused. */}
           {actions.delete ? (
             <Row
-              title="Delete way"
+              title={wayVerbLabel("delete", "gps")}
               icon="delete"
               hue={theme.warning}
               disabled={busy}

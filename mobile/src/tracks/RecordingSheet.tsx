@@ -137,6 +137,7 @@ export function RecordingSheet({
   const handlePauseResume = useCallback(() => {
     if (!activeTrack) return;
     const work = async () => {
+      setError(null);
       if (recording) {
         await pauseTrackRecording(activeTrack.id);
         return;
@@ -144,9 +145,9 @@ export function RecordingSheet({
       // Resuming arms the location service again, and the permission can have
       // been revoked while the recording was paused (Android 12+ auto-revoke,
       // or the user changing it in settings). Ask the same way starting does —
-      // that alert names the problem and offers system settings, where the
-      // generic error below reads as "the pause button glitched".
-      if (!(await ensureForegroundLocationPermission())) return;
+      // that names the problem and offers system settings, where the generic
+      // error below reads as "the pause button glitched".
+      if (!(await ensureForegroundLocationPermission(setError))) return;
       await resumeTrackRecording(activeTrack);
     };
     work().catch((err: unknown) => {
