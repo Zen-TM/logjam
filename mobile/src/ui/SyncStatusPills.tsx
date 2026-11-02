@@ -8,7 +8,6 @@
 //
 // The offline pill still shows for a guest: being offline is true regardless of
 // whether an account exists, and it explains why the map is blank.
-import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { useAccountState } from "../auth/AccountStateContext";
@@ -27,9 +26,10 @@ export function SyncStatusPills({
 }) {
   const isGuest = useAccountState().accountState === "guest";
   const showPending = pendingCount > 0 && !isGuest;
-  // Read once per mount: a day is the finest the label tells.
-  const [now] = useState(Date.now);
-  const age = syncAgeLabel(useLastSyncAt(), now);
+  const lastSyncAt = useLastSyncAt();
+  // Only drawn offline, and a tab screen outlives the day it was opened on, so
+  // the clock is read as the pill is drawn, not when the screen mounted.
+  const age = online ? null : syncAgeLabel(lastSyncAt);
 
   if (online && !showPending) return null;
   return (

@@ -23,7 +23,7 @@ const MONTHS = [
  *  Hermes ships no reliable `Intl` weekday names. */
 export function syncAgeLabel(
   lastSyncAt: string | null,
-  now: number,
+  now = Date.now(),
 ): string | null {
   const then = lastSyncAt ? new Date(lastSyncAt) : null;
   if (!then || Number.isNaN(then.getTime())) return null;

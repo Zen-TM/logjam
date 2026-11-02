@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  applyAccountScheme,
   BRIGHT_LIGHT_SCHEME_ID,
   getThemeSchemeId,
   isBrightLight,
@@ -50,10 +51,44 @@ describe("Bright light", () => {
     expect(isBrightLight()).toBe(false);
   });
 
-  it("goes to a dark scheme when the sunlight one was already the pick", () => {
+  // Mutation: a Settings pick of Ghost Gum is read as Bright light (the switch
+  // from the scheme id, not the flag), and off then goes dark with no way back.
+  it("is off when Ghost Gum was picked by name", () => {
     setThemeSchemeId(BRIGHT_LIGHT_SCHEME_ID);
-    setBrightLight(true);
+    expect(isBrightLight()).toBe(false);
     setBrightLight(false);
+    expect(getThemeSchemeId()).toBe(BRIGHT_LIGHT_SCHEME_ID);
+  });
+});
+
+describe("the account's scheme while Bright light is on", () => {
+  // Mutation: drop the isBrightLight() check in applyAccountScheme, and a
+  // launch or a refetch turns the sun off.
+  it("waits instead of painting", () => {
+    setBrightLight(true);
+    applyAccountScheme("basalt");
+    expect(getThemeSchemeId()).toBe(BRIGHT_LIGHT_SCHEME_ID);
+    expect(isBrightLight()).toBe(true);
+  });
+
+  // Mutation: restore the scheme remembered when it went on, and a scheme
+  // changed on Logjam Web meanwhile never comes back to this phone.
+  it("is what off returns to", () => {
+    setThemeSchemeId("sandstone");
+    setBrightLight(true);
+    applyAccountScheme("scribblyGum");
+    setBrightLight(false);
+    expect(getThemeSchemeId()).toBe("scribblyGum");
+  });
+
+  it("is painted when Bright light is off", () => {
+    applyAccountScheme("basalt");
+    expect(getThemeSchemeId()).toBe("basalt");
+  });
+
+  it("ignores what is not a scheme", () => {
+    applyAccountScheme("not-a-scheme");
+    applyAccountScheme(undefined);
     expect(getThemeSchemeId()).toBe("sandstone");
   });
 });

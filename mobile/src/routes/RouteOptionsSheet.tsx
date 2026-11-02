@@ -379,7 +379,13 @@ export function RouteOptionsSheet({
               onPress={onShowOnMap}
             />
           ) : null}
-          {routeBox ? <MapCoverageRow bbox={routeBox} onSave={close} /> : null}
+          {routeBox ? (
+            <MapCoverageRow
+              bbox={routeBox}
+              route={route.points}
+              onSave={close}
+            />
+          ) : null}
           <Row
             title="View stats"
             icon="stats"

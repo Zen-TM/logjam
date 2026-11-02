@@ -51,9 +51,8 @@ import {
 } from "@logjam/shared";
 
 import {
-  BRIGHT_LIGHT_SCHEME_ID,
   setBrightLight,
-  useThemeSchemeId,
+  useBrightLight,
   spacing,
   makeStyles,
   useTheme,
@@ -155,6 +154,7 @@ export function MapLayersSheet({
   onSaveArea,
   onOpenSaved,
   onImportFile,
+  onError,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -176,6 +176,7 @@ export function MapLayersSheet({
   onOpenSaved: (category: "region") => void;
   /** The overlays list ends with the way to add one: the existing importer. */
   onImportFile: () => void;
+  onError: (message: string) => void;
 }) {
   const styles = useStyles();
 
@@ -256,7 +257,7 @@ export function MapLayersSheet({
         ) : null
       }
     >
-      {legend ? null : <BrightLightRow />}
+      {legend ? null : <BrightLightRow onError={onError} />}
       <View style={styles.rail}>
         <ChipRail
           options={tabKeys.map((key) => ({
@@ -275,13 +276,17 @@ export function MapLayersSheet({
 
 /** The sunlight scheme, one switch away; off returns to the dark scheme it
  *  came from. */
-function BrightLightRow() {
-  const bright = useThemeSchemeId() === BRIGHT_LIGHT_SCHEME_ID;
+function BrightLightRow({ onError }: { onError: (message: string) => void }) {
   return (
     <SwitchRow
       title={copy.brightLight}
-      checked={bright}
-      onChange={setBrightLight}
+      checked={useBrightLight()}
+      onChange={(on) => {
+        if (!setBrightLight(on))
+          onError(
+            "This phone wouldn't store that theme, so it lasts until Logjam GPS closes.",
+          );
+      }}
     />
   );
 }

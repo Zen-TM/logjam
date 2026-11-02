@@ -5941,6 +5941,7 @@ export function MapScreen({
           setPickerOpen(false);
           onImportFile?.();
         }}
+        onError={(text) => notify(text, "error")}
       />
     </View>
   );

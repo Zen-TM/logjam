@@ -26,7 +26,6 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   currentConsentVersionOf,
-  isThemeSchemeId,
   needsReconsent,
   TRIP_PLANS_LIST,
   type IconIdea,
@@ -45,8 +44,7 @@ import { registerShellTriggers } from "./shellTriggers";
 import { registerSyncTriggers } from "./sync/syncEngine";
 import {
   makeThemed,
-  setThemeSchemeId,
-  isBrightLight,
+  applyAccountScheme,
   spacing,
   useTheme,
   useThemeMode,
@@ -953,8 +951,7 @@ export function AppShell({
   useEffect(() => {
     const accountScheme = userQuery.data?.uiPreferences?.themeSchemeId;
     // Bright light is this phone's, for as long as it is on.
-    if (isThemeSchemeId(accountScheme) && !isBrightLight())
-      setThemeSchemeId(accountScheme);
+    applyAccountScheme(accountScheme);
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   // The account's slope bands, kept on the phone so the map has them offline.
