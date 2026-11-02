@@ -1111,6 +1111,7 @@ function GeoPdfDialog({
                 <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
                   <ChipRail
                     label="Scale"
+                    wrap
                     className={classes.railCell}
                     options={SCALE_OPTIONS}
                     value={scaleChoice(extentState.scale, scaleOtherPicked)}
