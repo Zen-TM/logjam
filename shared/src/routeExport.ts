@@ -89,3 +89,8 @@ export function exportFilename(
     .slice(0, 80);
   return `${safe || fallback}.${extension}`;
 }
+
+/** A track file's name for a list: `exportFilename`'s extension is for the download only. */
+export function trackDisplayName(filename: string): string {
+  return filename.replace(/(?<=.)\.(gpx|kml)$/i, "");
+}

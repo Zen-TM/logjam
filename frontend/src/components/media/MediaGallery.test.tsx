@@ -53,14 +53,14 @@ describe("a track in the gallery is a row", () => {
         onDeleted={() => {}}
       />,
     );
-    const link = screen.getByRole("link", { name: "descent.gpx" });
+    // The row names the track; the extension belongs to the download only.
+    // Mutation: pass `m.filename` as the row title and the name gains ".gpx".
+    const link = screen.getByRole("link", { name: "descent" });
     expect(link.getAttribute("href")).toBe("https://files.test/descent.gpx");
-    expect(link.hasAttribute("download")).toBe(true);
+    expect(link.getAttribute("download")).toBe("descent.gpx");
+    expect(screen.queryByRole("button", { name: "Delete descent" })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Delete descent.gpx" }),
-    ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Actions for descent.gpx" }),
+      screen.getByRole("button", { name: "Actions for descent" }),
     ).toBeTruthy();
   });
 
@@ -73,7 +73,7 @@ describe("a track in the gallery is a row", () => {
         onDeleted={() => {}}
       />,
     );
-    expect(screen.getByRole("link", { name: "descent.gpx" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "descent" })).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
   });
 });

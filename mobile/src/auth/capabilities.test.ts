@@ -112,12 +112,23 @@ describe("shareCapabilityStatus", () => {
     });
   });
 
-  // PRECEDENCE, both halves of it. An offline user is told to find signal, not
-  // to wait for a queue that is itself waiting on that signal — one outage, one
-  // explanation, and the only one with a next step. A guest is told neither:
-  // they have no account for anything to sync TO.
-  it("reports needs-connection over needs-upload for an offline linked user", () => {
-    expect(shareCapabilityStatus("linked", false, false)).toEqual({
+  // PRECEDENCE: a row the account does not hold is reported as such whether or
+  // not the phone is reachable right now. The reading of connectivity flaps (it
+  // takes seconds to settle after a screen mounts), and two Share rows on the
+  // same place said different things while it did. The user's next step is the
+  // same either way: wait for the row to sync.
+  // Mutation: check `online` before `onServer` and this reads needs-connection.
+  it("reports needs-upload over needs-connection for an unsynced row, online or not", () => {
+    for (const online of [true, false]) {
+      expect(shareCapabilityStatus("linked", online, false)).toEqual({
+        status: "unavailable",
+        reason: "needs-upload",
+      });
+    }
+  });
+
+  it("reports needs-connection for a synced row when offline", () => {
+    expect(shareCapabilityStatus("linked", false, true)).toEqual({
       status: "unavailable",
       reason: "needs-connection",
     });
