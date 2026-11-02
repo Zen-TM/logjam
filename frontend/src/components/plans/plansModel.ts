@@ -1,8 +1,9 @@
-// The pure decisions of Plans' pages that only Logjam Web has (the print
-// summary, what a press on the map asks), out of the components so a test can
+// The pure decisions of Plans' pages that Logjam Web draws itself (the print
+// summary, what a press on the map asks, where the map fits), out of the components so a test can
 // hold them (frontend/DESIGN.md §4). The edit forms' own are in shared.
 import {
   currentTripPlanAnswers,
+  planExtent,
   TRIP_PLAN_FORM_PRESETS,
   TRIP_PLAN_PRINTED_COLUMNS,
   TRIP_PLAN_PRINTED_PRESETS,
@@ -163,16 +164,18 @@ export function planMapPress(
   }
 }
 
-/** The box the map fits to when a plan opens: its places and every point of
- *  its routes, as MapLibre's `fitBounds` takes it. Null when it has none. */
+/** The box the map fits to when a plan opens, as MapLibre's `fitBounds` takes
+ *  it. Padded 10% with a 2 km minimum edge by `placesBounds`, which Logjam GPS
+ *  does not share: its `planBbox` frames a place at about 1 km, unpadded. */
 export function planBounds(
   plan: Pick<TripPlanView, "places" | "routes">,
 ): [number, number, number, number] | null {
-  const box = placesBounds([
-    ...plan.places,
-    ...plan.routes.flatMap((route) =>
-      route.points.map(([longitude, latitude]) => ({ longitude, latitude })),
-    ),
-  ]);
+  const extent = planExtent(plan);
+  const box =
+    extent &&
+    placesBounds([
+      { longitude: extent.west, latitude: extent.south },
+      { longitude: extent.east, latitude: extent.north },
+    ]);
   return box && [box.west, box.south, box.east, box.north];
 }
