@@ -139,8 +139,8 @@ and CloudFront reads them through origin access control:
 | audit | CloudTrail and Postgres audit (pgaudit) records, object-locked (`envs/prod/audit.tf`) | `audit_bucket` |
 
 **Auth.** One Cognito user pool, with a hosted-pages domain and Logjam's
-branding (Managed Login, `envs/prod/cognito.tf`) that both clients sign in
-through. Account deletion has the API call `AdminDeleteUser` on that pool (its
+branding (Managed Login, `envs/prod/cognito.tf`), which is the fallback when
+either client's own forms (ADR 0045) cannot finish a sign-in. Account deletion has the API call `AdminDeleteUser` on that pool (its
 IAM grant is `AdminGetUser` and `AdminDeleteUser`, `envs/prod/iam.tf`). The API verifies each request's JWT against
 the pool's public keys (`api/src/middleware/auth.ts`). Cognito does not send
 its own email: it hands each verification code, encrypted with a KMS key, to

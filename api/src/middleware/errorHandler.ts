@@ -6,6 +6,7 @@ import { logger, redactTilePathPatterns, safeErrorForLog } from "../lib/logger";
 // The class lives apart so that auth.ts can refuse a request without loading
 // the logger, which reads the environment as it loads.
 export {
+  accepted,
   AppError,
   fault,
   malformed,

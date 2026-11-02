@@ -29,6 +29,11 @@ const ALLOWED: { file: string; reason: string }[] = [
     reason:
       "MapLibre's own scale-bar element, which has no class of ours to compose onto",
   },
+  {
+    file: "components/plans/PlanSummary.module.css",
+    reason:
+      "the print summary's paper sizes, in points on an A4 page: the roles are rem for a screen",
+  },
 ];
 
 function files(dir: string, ext: RegExp): string[] {

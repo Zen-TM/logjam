@@ -17,6 +17,19 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** The longest a person's name runs in a row's sentence. A longer one is cut
+ *  with an ellipsis, so the verb after it (a row clamps its lines) still shows.
+ *  Guard: notificationLabel.test.ts ("a long username"). */
+export const NOTIFICATION_NAME_MAX = 16;
+
+function who(value: unknown, fallback: string): string {
+  const name = str(value);
+  if (!name) return fallback;
+  return name.length > NOTIFICATION_NAME_MAX
+    ? `${name.slice(0, NOTIFICATION_NAME_MAX - 1)}…`
+    : name;
+}
+
 /**
  * What a shared entity is CALLED in a sentence, by its `entityType`.
  *
@@ -51,6 +64,11 @@ export const NOTIFICATION_TYPES = [
   "egress_quota_warning",
   "egress_quota_exceeded",
   "announcement",
+  "plan_invited",
+  "plan_join_request",
+  "plan_join_approved",
+  "plan_member_joined",
+  "plan_access_ended",
 ] as const;
 
 export function notificationLabel(n: TNotification): NotificationLabel {
@@ -58,7 +76,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
   switch (n.type) {
     case "friend_request":
       return {
-        text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request`,
+        text: `${who(p.requesterUsername, "Someone")} sent you a friend request`,
       };
     case "friend_request_accepted":
       // An invite link redeemed writes this type too, flagged, because the
@@ -66,12 +84,12 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return {
         text:
           p.viaInvite === true
-            ? `${str(p.acceptedByUsername) ?? "Someone"} used your invite link and is now a friend`
-            : `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
+            ? `${who(p.acceptedByUsername, "Someone")} used your invite link and is now a friend`
+            : `${who(p.acceptedByUsername, "Someone")} accepted your friend request`,
       };
     case "place_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.placeName) ?? "a place"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${str(p.placeName) ?? "a place"} with you`,
       };
     // A directly-shared saved item. The payload carries the entity's TYPE and
     // its id, and deliberately no name: the recipient already holds the row
@@ -82,7 +100,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // what shows which one.
     case "item_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
       };
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
@@ -90,14 +108,14 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // read time — rendered here, never logged.
     case "file_sent":
       return {
-        text: `${str(p.sentByUsername) ?? "Someone"} sent you ${str(p.filename) ?? "a file"}`,
+        text: `${who(p.sentByUsername, "Someone")} sent you ${str(p.filename) ?? "a file"}`,
         // A send that lapsed before it was saved keeps its row and loses its
         // buttons, so the row has to say why it can no longer be answered —
         // otherwise the offer just disappears and the user is left looking for
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          detail: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+          detail: `This file expired. Ask ${who(p.sentByUsername, "them")} to send it again.`,
         }),
       };
     case "topo_complete":
@@ -153,6 +171,35 @@ export function notificationLabel(n: TNotification): NotificationLabel {
         ? { text: title, detail: ANNOUNCEMENT.from }
         : { text: ANNOUNCEMENT.untitled };
     }
+    // Plans. The plan's name is resolved at read time like a place's, except
+    // in plan_access_ended, which carries it: the plan is gone, or gone for
+    // this person, and they are owed which one (api/src/routes/notifications.ts).
+    case "plan_invited":
+      return {
+        text: `${who(p.invitedByUsername, "Someone")} invited you to ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_join_request":
+      return {
+        text: `${who(p.requesterUsername, "Someone")} asked to join ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_join_approved":
+      return {
+        text: `${who(p.approvedByUsername, "A leader")} let you into ${str(p.planName) ?? "a trip plan"}`,
+      };
+    case "plan_member_joined":
+      return {
+        text: `${who(p.memberUsername, "Someone")} joined ${str(p.planName) ?? "your trip plan"}`,
+      };
+    case "plan_access_ended": {
+      const plan = str(p.planName);
+      if (p.reason === "declined")
+        return {
+          text: `Your request to join ${plan ?? "a trip plan"} was turned down`,
+        };
+      if (p.reason === "deleted")
+        return { text: `${plan ?? "A trip plan"} was deleted` };
+      return { text: `You're no longer in ${plan ?? "a trip plan"}` };
+    }
     default:
       return { text: "Notification" };
   }
@@ -186,6 +233,7 @@ export type NotificationKind =
   | "topo"
   | "export"
   | "message"
+  | "plan"
   | "problem";
 
 /**
@@ -222,6 +270,12 @@ export function notificationKind(n: TNotification): NotificationKind {
     case "egress_quota_warning":
     case "egress_quota_exceeded":
       return "problem";
+    case "plan_invited":
+    case "plan_join_request":
+    case "plan_join_approved":
+    case "plan_member_joined":
+    case "plan_access_ended":
+      return "plan";
     default:
       return "people";
   }
@@ -254,6 +308,33 @@ export function notificationAnnouncement(
   const id = str(p.announcementId);
   if (!id || typeof p.body !== "string") return null;
   return { id, title: str(p.title) ?? ANNOUNCEMENT.untitled, body: p.body };
+}
+
+/** Where a plan notification opens: its plan, on People for a join request
+ *  (where it is answered), and as a preview for an invite (the reader is not
+ *  in the plan yet). */
+export type NotificationPlanTarget = {
+  planId: string;
+  view?: "people";
+  invited: boolean;
+};
+
+/** The plan this notification is about, if any. An id only, resolved
+ *  against the authed API, which 404s a plan the reader is no longer in. */
+export function notificationPlanTarget(
+  n: TNotification,
+): NotificationPlanTarget | null {
+  const planId = n.payload.planId;
+  if (
+    !n.type.startsWith("plan_") ||
+    n.type === "plan_access_ended" ||
+    typeof planId !== "string" ||
+    planId.length === 0
+  )
+    return null;
+  return n.type === "plan_join_request"
+    ? { planId, view: "people", invited: false }
+    : { planId, invited: n.type === "plan_invited" };
 }
 
 // ── The list: its cap, order and day grouping ────────────────────────────────
