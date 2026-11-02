@@ -5,7 +5,7 @@ import { z } from "zod";
 import {
   say,
   normalizeThemeSchemeId,
-  normalizeUserUiPreferences,
+  normalizeUserUiPreferencesKeepingNoPick,
   MAX_SLOPE_BANDS,
   parseSlopeBands,
   normalizeImportMergePolicy,
@@ -198,7 +198,7 @@ async function serializeUserForResponse(
     storageUsedBytes: Number(user.storageUsedBytes),
     storageQuotaBytes: Number(user.storageQuotaBytes),
     uiPreferences: {
-      ...normalizeUserUiPreferences(user.uiPreferences),
+      ...normalizeUserUiPreferencesKeepingNoPick(user.uiPreferences),
       ...(await defsForUserResponse(user.id)),
     },
   };
@@ -457,7 +457,9 @@ router.patch(
         }
       }
 
-      const current = normalizeUserUiPreferences(user.uiPreferences);
+      const current = normalizeUserUiPreferencesKeepingNoPick(
+        user.uiPreferences,
+      );
       updates.uiPreferences = {
         ...current,
         // The projection this object was built from carries the two custom

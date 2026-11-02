@@ -371,6 +371,34 @@ export function normalizeImportMergePolicy(
   return result as unknown as import("./mergePlace.js").PlaceMergePolicy;
 }
 
+/**
+ * The scheme the user picked, or null when none is stored. A missing or
+ * unreadable value is not a pick: `normalizeUserUiPreferences` fills it with
+ * the default, which would hide from a client that the account has no
+ * preference and the OS should decide.
+ */
+export function storedThemeSchemeId(value: unknown): ThemeSchemeId | null {
+  return typeof value === "object" && value !== null
+    ? normalizeThemeSchemeId((value as Record<string, unknown>).themeSchemeId)
+    : null;
+}
+
+/**
+ * `normalizeUserUiPreferences` for the wire and for writing back: the scheme is
+ * present only when the user picked one, so "no pick" survives a round trip and
+ * saving any other preference does not store the default as a pick.
+ */
+export function normalizeUserUiPreferencesKeepingNoPick(value: unknown): Omit<
+  UserUiPreferences,
+  "themeSchemeId"
+> & {
+  themeSchemeId?: ThemeSchemeId;
+} {
+  const { themeSchemeId: _filled, ...rest } = normalizeUserUiPreferences(value);
+  const picked = storedThemeSchemeId(value);
+  return picked ? { ...rest, themeSchemeId: picked } : rest;
+}
+
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {
   if (typeof value === "object" && value !== null) {
     const prefs = value as Record<string, unknown>;

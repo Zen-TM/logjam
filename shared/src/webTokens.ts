@@ -135,8 +135,9 @@ export function webTokensCss(): string {
     ...webScaleProperties(),
     ...webSchemeProperties(THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID]),
   ]);
-  // A coarse pointer (a finger) gets the touch sizes and Logjam GPS's type scale. Keyed to the POINTER,
-  // not the width: a narrow desktop window still has a mouse.
+  // A coarse pointer (a finger) gets the touch control sizes and Logjam GPS's
+  // type scale. Keyed to the POINTER, not the width: a narrow desktop window
+  // still has a mouse.
   const coarse =
     "@media (pointer: coarse) {\n" +
     block("  :root", [

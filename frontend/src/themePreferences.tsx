@@ -9,9 +9,9 @@ import {
 } from "react";
 import {
   DEFAULT_THEME_SCHEME_ID,
-  normalizeThemeSchemeId,
   normalizeUserUiPreferences,
   schemeForOs,
+  storedThemeSchemeId,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type ThemeScheme,
@@ -67,8 +67,7 @@ export function ThemePreferencesProvider({
 
     try {
       const user = await fetchCurrentUser();
-      const picked = normalizeThemeSchemeId(user.uiPreferences?.themeSchemeId);
-      setSchemeId(picked ?? osScheme());
+      setSchemeId(storedThemeSchemeId(user.uiPreferences) ?? osScheme());
     } catch (err) {
       // Best-effort: keep the local default theme rather than surface a
       // toast for a background hydration failure — but still log it, or a

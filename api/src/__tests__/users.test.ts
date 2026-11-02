@@ -25,7 +25,6 @@ describe("users routes (fake auth = alice)", () => {
     expect(typeof res.body.storageQuotaBytes).toBe("number");
     // uiPreferences is normalized into the canonical shape.
     expect(res.body.uiPreferences).toBeTruthy();
-    expect(typeof res.body.uiPreferences.themeSchemeId).toBe("string");
     expect(res.body.uiPreferences.notifications).toBeTruthy();
     // Derived monthly-tile-usage fields are augmented onto the response.
     expect(typeof res.body.monthlyComputeUsage).toBe("number");
@@ -41,7 +40,7 @@ describe("users routes (fake auth = alice)", () => {
     const res = await request(API_URL)
       .patch("/users/me")
       .set(AUTH)
-      .send({ themeSchemeId: before.body.uiPreferences.themeSchemeId });
+      .send({ slopeBands: before.body.uiPreferences.slopeBands });
     expect(res.status).toBe(200);
     expect(typeof res.body.monthlyComputeUsage).toBe("number");
     expect(typeof res.body.monthlyComputeCredits).toBe("number");
@@ -113,10 +112,14 @@ describe("users routes (fake auth = alice)", () => {
       expect(res.status).toBe(200);
       expect(res.body.uiPreferences.themeSchemeId).toBe("scribblyGum");
     } finally {
-      await request(API_URL)
-        .patch("/users/me")
-        .set(AUTH)
-        .send({ themeSchemeId: original });
+      // There is no way to unset a pick, so an account that had none keeps
+      // the retired id's scheme.
+      if (original) {
+        await request(API_URL)
+          .patch("/users/me")
+          .set(AUTH)
+          .send({ themeSchemeId: original });
+      }
     }
   });
 
