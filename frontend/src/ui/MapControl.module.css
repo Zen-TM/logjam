@@ -10,15 +10,15 @@
   padding: 0;
   border: none;
   border-radius: var(--radius-lg);
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
   cursor: pointer;
   transition: background-color var(--motion-fast);
 }
 
 .mapButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-text) 14%, var(--color-page));
+  background: var(--color-card-pressed);
 }
 
 /* Stays filled under the pointer: hover must not read as "off". */
@@ -40,8 +40,8 @@
   flex-direction: column;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--color-page);
-  box-shadow: var(--shadow-float);
+  background: var(--color-card);
+  box-shadow: var(--shadow-map-card);
 }
 
 .group .mapButton {
@@ -67,10 +67,10 @@
   box-sizing: border-box;
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
   max-width: 100%;
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
 }
 
 /* The end pad centres the round action in the pill's end cap. */
@@ -136,6 +136,6 @@
   border: 2px solid var(--color-page);
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
   pointer-events: none;
 }

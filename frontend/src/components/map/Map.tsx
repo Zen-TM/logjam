@@ -17,11 +17,15 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 setWorkerUrl(maplibreWorkerUrl);
 import { PMTiles, Protocol } from "pmtiles";
 import {
-  INK,
   MAP_INK,
   mgaGrid,
   MGA_GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
+  MAP_LABEL_SIZE,
+  PIN_CASING_COLOR,
+  PIN_CASING_WIDTH,
+  PIN_HALO_COLOR,
+  pinHaloRadius,
   CONTOUR_LABELS_MIN_ZOOM,
   CONTOURS_MIN_ZOOM,
   CONTOURS_MINOR_MIN_ZOOM,
@@ -210,6 +214,13 @@ const NOTHING_MUTED: ReadonlySet<string> = new Set();
 /** Below this the pin's dot is under 13px across, no bigger than its badge. */
 const PLACE_BADGE_MIN_ZOOM = 10;
 
+/** A pin's circle radius by zoom, `grow` applied to each end (the halo's). */
+function pinRadius(
+  grow: (r: number) => number = (r) => r,
+): maplibregl.ExpressionSpecification {
+  return ["interpolate", ["linear"], ["zoom"], 7, grow(4), 14, grow(10)];
+}
+
 /** A layer's opacity, lowered on a feature stamped `muted`: the user's own
  *  things beside an open plan's (`mutedIds`). */
 function dimmed(opacity: number): maplibregl.ExpressionSpecification {
@@ -226,7 +237,7 @@ function readCssVar(name: string, fallback: string): string {
 function applyPlaceThemePaint(map: maplibregl.Map) {
   // A place whose type has not loaded wears the palette's first colour.
   const fallback = PLACE_TYPE_COLORS[0];
-  const ink = INK;
+  const ink = PIN_CASING_COLOR;
   // The accent is the scheme's own colour and follows it onto the map; a
   // label and its halo are drawn on the basemap, so they do not (MAP_INK).
   const accent = readCssVar("--color-accent", "#deb188");
@@ -242,7 +253,11 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
+    map.setPaintProperty(
+      "place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   // A shared pin is the SAME pin as your own, with a thin ring set apart from
   // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
@@ -253,7 +268,11 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
+    map.setPaintProperty(
+      "shared-place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
@@ -419,7 +438,17 @@ const WEB_LABEL_BASE_SCALE = 1.75;
 // labelScale and the web base bump. Single source for every topo label layer.
 function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
   const s = scale * WEB_LABEL_BASE_SCALE;
-  return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
+  const [zFrom, sizeFrom] = MAP_LABEL_SIZE.rampFrom;
+  const [zTo, sizeTo] = MAP_LABEL_SIZE.rampTo;
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    zFrom,
+    sizeFrom * s,
+    zTo,
+    sizeTo * s,
+  ];
 }
 
 // Paint the statewide contours in place via setPaintProperty. Called when the
@@ -1455,15 +1484,33 @@ function Map({
         });
       }
 
+      // The white halo round each pin's casing, under both pins so a shared
+      // pin's halo never cuts into your own (mapPin.ts).
+      for (const [id, source] of [
+        ["place-halo", "places"],
+        ["shared-place-halo", "shared-places"],
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source,
+          paint: {
+            "circle-radius": pinRadius(pinHaloRadius),
+            "circle-color": PIN_HALO_COLOR,
+            ...(source === "places" ? { "circle-opacity": dimmed(1) } : {}),
+          },
+        });
+      }
+
       map.addLayer({
         id: "place-circles",
         type: "circle",
         source: "places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": PLACE_TYPE_COLORS[0],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
           "circle-opacity": dimmed(1),
           "circle-stroke-opacity": dimmed(1),
         },
@@ -1474,10 +1521,10 @@ function Map({
         type: "circle",
         source: "shared-places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": readCssVar("--color-accent", "#3b82f6"),
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
         },
       });
 
@@ -1542,7 +1589,7 @@ function Map({
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1562,7 +1609,7 @@ function Map({
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1605,7 +1652,7 @@ function Map({
             "text-rotation-alignment": "viewport",
             "text-field": ["get", "text"],
             "text-font": ["Noto Sans Medium"],
-            "text-size": 11,
+            "text-size": MAP_LABEL_SIZE.pin,
           },
           paint: {
             "text-color": MAP_INK.label,
@@ -1660,7 +1707,7 @@ function Map({
             visibility: "none",
             "text-field": ["get", "name"],
             "text-font": ["Noto Sans Medium"],
-            "text-size": 12,
+            "text-size": MAP_LABEL_SIZE.pin,
             "text-max-width": 10,
             "text-offset": [0, 1.2],
             "text-anchor": "top",
@@ -2123,6 +2170,8 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const vis = (show: boolean) => (show ? "visible" : "none");
+    for (const id of ["place-halo", "shared-place-halo"])
+      mapRef.current.setLayoutProperty(id, "visibility", vis(showPlaces));
     mapRef.current.setLayoutProperty(
       "place-circles",
       "visibility",

@@ -398,4 +398,13 @@ renumber.
   it is lives on the thing: the shared badge, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.
+- **A point mark is a hue fill, a `MAP_INK.casing` ring and a white halo**, the
+  same on both clients, so it reads on light land and on satellite. Guard:
+  `shared/src/mapPin.test.ts` and the checker's mark pairs.
+- **A control over the map is a card**: the `card` fill and a `line` edge, its
+  shape kept per medium (circles on Logjam GPS, rounded squares on Logjam Web).
+  Guards: `mobile/src/map/mapMarks.test.ts`,
+  `frontend/src/components/map/mapMarks.test.ts`.
+- **Map label sizes are `MAP_LABEL_SIZE`**, read by both clients. Logjam GPS's pin
+  names follow the text size up to 1.5x. Guards: the same two tests.
 - **Offline, the map is blank outside offline maps.**

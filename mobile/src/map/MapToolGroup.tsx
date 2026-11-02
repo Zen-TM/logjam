@@ -198,10 +198,15 @@ const useStyles = makeStyles((theme) => ({
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
     backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     alignItems: "center",
     justifyContent: "center",
   },
-  controlActive: { backgroundColor: theme.accent },
+  controlActive: {
+    backgroundColor: theme.accent,
+    borderColor: theme.accent,
+  },
   // The + sits between the two: above an unarmed tool retreating past it
   // (so the bare + shows, not a stray dark circle), below the ARMED one
   // (armedToolSlot) so the running tool's icon is what's left showing once

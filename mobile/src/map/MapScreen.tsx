@@ -141,6 +141,7 @@ import {
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
+  opacity,
   slopTo,
   spacing,
   makeStyles,
@@ -5321,6 +5322,14 @@ export function MapScreen({
         ) : null}
       </Map>
 
+      {/* Behind the status bar, whose clock and icons the system draws in the
+          scheme's own ink: a veil in the page colour, so they read over any
+          basemap. */}
+      <View
+        pointerEvents="none"
+        style={[styles.statusScrim, { height: insets.top }]}
+      />
+
       {/* Map banners: modes with a way out, in the top row between the search
           and record buttons (a search bar that expands covers the first). Any
           more stack under it, and the notice stack below moves down by them.
@@ -6090,12 +6099,22 @@ const useStyles = makeStyles((theme, textRole) => ({
   // be findable while a recording runs, so it does not live in the column that
   // scrolls tools sideways over itself.
   recordSlot: { position: "absolute" },
+  statusScrim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: theme.page,
+    opacity: opacity.pressed,
+  },
   bannerColumn: { position: "absolute", gap: spacing(1) },
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
     backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -6104,10 +6123,15 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: MINI_FAB_SIZE,
     borderRadius: MINI_FAB_SIZE / 2,
     backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     alignItems: "center",
     justifyContent: "center",
   },
-  controlActive: { backgroundColor: theme.accent },
+  controlActive: {
+    backgroundColor: theme.accent,
+    borderColor: theme.accent,
+  },
   instruments: {
     position: "absolute",
     left: CHROME_GAP,

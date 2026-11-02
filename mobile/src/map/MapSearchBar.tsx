@@ -617,6 +617,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: SEARCH_SIZE,
     borderRadius: SEARCH_SIZE / 2,
     backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     // The field is clipped by the growing circle rather than spilling past it.
     overflow: "hidden",
   },
@@ -645,6 +647,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   panel: {
     alignSelf: "stretch",
     backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.line,
     borderRadius: radius.lg,
     overflow: "hidden",
     maxHeight: 260,
