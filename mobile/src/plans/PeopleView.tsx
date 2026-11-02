@@ -1,7 +1,8 @@
 // A plan's People (`TRIP_PLAN_PAGE`'s `people`): who's asking to join and
 // who's invited (a leader's alone), and who's going. A leader lets a request
-// in or turns it down on its row, cancels an invite on its row, and runs a
-// person's ⋯ (`planMemberVerbs`): another role, or Remove. Every remove sends
+// in or turns it down on its row, cancels an invite on its row, and presses a
+// person's row (or its ⋯) for their sheet (`tripPlanPerson`): who they are, the
+// forms they haven't answered, and what the viewer may do: another role, Remove. Every remove sends
 // the status the leader saw, so a stale row removes nobody (409). Every write
 // is online-only, so offline each control is disabled with its reason.
 import { Fragment, useState } from "react";
@@ -11,7 +12,8 @@ import {
   formatBytes,
   messageFromError,
   planAddVerbLabel,
-  planMemberVerbs,
+  tripPlanPerson,
+  todayDateKey,
   planRemoveConfirm,
   planSelfRoleConfirm,
   tripPlanActionsFor,
@@ -24,7 +26,7 @@ import {
   PLAN_ROLE_OF_VERB,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
-  type PlanMemberVerbId,
+  type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -66,7 +68,9 @@ export function PeopleView({
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const [menuFor, setMenuFor] = useState<TripPlanMemberView | null>(null);
+  // The person whose sheet is open, by id: it reads the plan as it is now, so
+  // a write that removes them closes it.
+  const [personId, setPersonId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   // The person a write is running for: their row's controls wait for it.
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -127,8 +131,27 @@ export function PeopleView({
     ]);
   };
 
-  const run = (id: PlanMemberVerbId, member: TripPlanMemberView) => {
-    setMenuFor(null);
+  const letIn = (member: TripPlanMemberView) =>
+    write(
+      member,
+      () => approveMember(plan.id, member.user.id),
+      tripPlanLetInMessage(member.user.username),
+      copy.letInFailed,
+    );
+
+  const cancelInvite = (member: TripPlanMemberView) =>
+    write(
+      member,
+      () => removeMember(plan.id, member.user.id, "invited"),
+      copy.inviteCancelled,
+      copy.cancelInviteFailed,
+    );
+
+  const run = (id: PlanPersonActionId, member: TripPlanMemberView) => {
+    setPersonId(null);
+    if (id === "letIn") return letIn(member);
+    if (id === "turnDown") return turnDown(member);
+    if (id === "cancelInvite") return cancelInvite(member);
     const role = PLAN_ROLE_OF_VERB[id];
     if (!role) return remove(member);
     const change = () =>
@@ -177,7 +200,6 @@ export function PeopleView({
 
   const leader = plan.myRole === "leader";
   const going = tripPlanGoing(plan.members);
-  const leaders = going.filter((member) => member.role === "leader").length;
   const asking = leader
     ? plan.members.filter((member) => member.status === "requested")
     : [];
@@ -189,13 +211,11 @@ export function PeopleView({
     [asking.length, going.length, invited.length].filter((n) => n > 0).length >
     1;
   const verbsFor = (member: TripPlanMemberView) =>
-    myId
-      ? planMemberVerbs(
-          plan.myRole,
-          { role: member.role, self: member.user.id === myId },
-          { archived, leaders },
-        )
-      : [];
+    tripPlanPerson(plan, member, myId, todayDateKey()).actions;
+  const person = plan.members.find((each) => each.user.id === personId);
+  const personView = person
+    ? tripPlanPerson(plan, person, myId, todayDateKey())
+    : null;
 
   return (
     <>
@@ -208,6 +228,7 @@ export function PeopleView({
           icon="account"
           title={member.user.username}
           subtitle={online ? undefined : OFFLINE}
+          onPress={() => setPersonId(member.user.id)}
           right={
             <View style={styles.right}>
               {/* An archived plan takes no one in; turning down still works. */}
@@ -218,14 +239,7 @@ export function PeopleView({
                   color={theme.accent}
                   accessibilityLabel={copy.letIn}
                   disabled={!online || busyId === member.user.id}
-                  onPress={() =>
-                    write(
-                      member,
-                      () => approveMember(plan.id, member.user.id),
-                      tripPlanLetInMessage(member.user.username),
-                      copy.letInFailed,
-                    )
-                  }
+                  onPress={() => letIn(member)}
                 />
               )}
               <IconButton
@@ -248,6 +262,7 @@ export function PeopleView({
             key={member.user.id}
             icon="account"
             title={member.user.username}
+            onPress={() => setPersonId(member.user.id)}
             right={
               <View style={styles.right}>
                 {member.role === "member" ? null : (
@@ -264,7 +279,7 @@ export function PeopleView({
                     )}
                     color={theme.textMuted}
                     disabled={busyId === member.user.id}
-                    onPress={() => setMenuFor(member)}
+                    onPress={() => setPersonId(member.user.id)}
                   />
                 ) : null}
               </View>
@@ -280,6 +295,7 @@ export function PeopleView({
           key={member.user.id}
           icon="account"
           title={member.user.username}
+          onPress={() => setPersonId(member.user.id)}
           subtitle={
             !online
               ? OFFLINE
@@ -296,14 +312,7 @@ export function PeopleView({
                 loading={busyId === member.user.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
-                onPress={() =>
-                  write(
-                    member,
-                    () => removeMember(plan.id, member.user.id, "invited"),
-                    copy.inviteCancelled,
-                    copy.cancelInviteFailed,
-                  )
-                }
+                onPress={() => cancelInvite(member)}
               />
             )
           }
@@ -326,13 +335,28 @@ export function PeopleView({
       ) : null}
 
       <BottomSheet
-        visible={menuFor !== null}
-        onClose={() => setMenuFor(null)}
-        title={menuFor?.user.username ?? ""}
+        visible={personView !== null}
+        onClose={() => setPersonId(null)}
+        title={personView?.name ?? ""}
       >
-        {menuFor ? (
+        {person && personView ? (
           <View style={styles.verbs}>
-            {verbsFor(menuFor).map((verb, index, all) => (
+            <Text style={styles.detail}>
+              {[personView.status, personView.role, personView.invitedBy]
+                .filter(Boolean)
+                .join(" · ")}
+            </Text>
+            {personView.unanswered && personView.unanswered.length > 0 ? (
+              <>
+                <SectionHeader title={copy.personUnanswered} />
+                {personView.unanswered.map((title) => (
+                  <Text key={title} style={styles.detail}>
+                    {title}
+                  </Text>
+                ))}
+              </>
+            ) : null}
+            {personView.actions.map((verb, index, all) => (
               <Fragment key={verb.id}>
                 {verb.separated && index > 0 && !all[index - 1].separated ? (
                   <View style={styles.rule} />
@@ -343,7 +367,7 @@ export function PeopleView({
                   title={verb.label}
                   subtitle={online ? undefined : OFFLINE}
                   disabled={!online}
-                  onPress={() => run(verb.id, menuFor)}
+                  onPress={() => run(verb.id, person)}
                 />
               </Fragment>
             ))}
@@ -364,5 +388,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   right: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   verbs: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
+  detail: { ...muted(theme, textRole.detail) },
   note: { ...muted(theme, textRole.detail), textAlign: "center" },
 }));
