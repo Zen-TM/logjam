@@ -35,8 +35,8 @@ export const GRID_LABELS = "mga-grid-labels";
  *  of these is not the thing pressed. */
 export const PRESSABLE_LAYERS = [
   "place-circles",
-  "visited-place-halos",
-  "shared-place-halos",
+  "visited-place-badges",
+  "shared-place-badges",
   "shared-place-circles",
   "routes-hit",
   "place-tracks-hit",

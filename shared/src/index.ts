@@ -91,6 +91,7 @@ export * from "./bulkReadAction.js";
 export * from "./notificationActions.js";
 export * from "./routeArrow.js";
 export * from "./gaugeIcon.js";
+export * from "./placeBadge.js";
 export * from "./format.js";
 export * from "./icons.js";
 export * from "./kit.js";

@@ -267,20 +267,20 @@ export const PLACE_TYPE_COLORS = [
 ] as const;
 
 /**
- * The ring on a pin someone shared with you, and the tint on every "shared"
+ * The badge on a pin someone shared with you, and the tint on every "shared"
  * chip and row. ONE hue for one idea across map pins, chips, and rows.
  *
  * Reserved — never a type colour, or a shared Marker would be a blue dot with a
- * blue ring and the two axes would collapse into one.
+ * blue badge and the two axes would collapse into one.
  */
 export const SHARED_PLACE_COLOR = "#B79EC0";
 
 /**
- * The ring on a pin for a place you have visited (`placeStatus` "done").
+ * The badge on a pin for a place you have visited (`placeStatus` "done").
  * Reserved like `SHARED_PLACE_COLOR`, for the same reason, and a saturated
  * green because every palette colour is a pastel: on satellite imagery the
- * ring has to out-shout the ground, not match it. A visited place is never a
- * shared one (`placeStatus`), so a pin wears at most one of the two rings.
+ * badge has to out-shout the ground, not match it. A visited place is never a
+ * shared one (`placeStatus`), so a pin wears at most one of the two badges.
  * Guards: `placeTypes.test.ts` (reserved), `placeStatus.test.ts` (never both).
  */
 export const VISITED_PLACE_COLOR = "#2F9E6B";

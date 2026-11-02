@@ -1,5 +1,11 @@
 import { Button, Checkbox, Notice } from "../../ui";
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -14,6 +20,7 @@ import {
   INK,
   MAP_INK,
   mgaGrid,
+  MGA_GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
   CONTOUR_LABELS_MIN_ZOOM,
   CONTOURS_MIN_ZOOM,
@@ -22,8 +29,12 @@ import {
   SLOPE_MIN_ZOOM,
   zoomFadeIn,
   PLACE_TYPE_COLORS,
-  SHARED_PLACE_COLOR,
-  VISITED_PLACE_COLOR,
+  PLACE_BADGE_OFFSET,
+  PLACE_BADGE_PIN_RADIUS,
+  PLACE_BADGE_SHARED_IMAGE,
+  PLACE_BADGE_SIZE,
+  PLACE_BADGE_URIS,
+  PLACE_BADGE_VISITED_IMAGE,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
@@ -172,6 +183,8 @@ import {
   slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
+  type SearchPin,
+  searchPinAfter,
   type SlopeBand,
   type VectorStyleSettings,
   metersPerPixel,
@@ -194,6 +207,9 @@ const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
+/** Below this the pin's dot is under 13px across, no bigger than its badge. */
+const PLACE_BADGE_MIN_ZOOM = 10;
+
 /** A layer's opacity, lowered on a feature stamped `muted`: the user's own
  *  things beside an open plan's (`mutedIds`). */
 function dimmed(opacity: number): maplibregl.ExpressionSpecification {
@@ -210,7 +226,6 @@ function readCssVar(name: string, fallback: string): string {
 function applyPlaceThemePaint(map: maplibregl.Map) {
   // A place whose type has not loaded wears the palette's first colour.
   const fallback = PLACE_TYPE_COLORS[0];
-  const shared = SHARED_PLACE_COLOR;
   const ink = INK;
   // The accent is the scheme's own colour and follows it onto the map; a
   // label and its halo are drawn on the basemap, so they do not (MAP_INK).
@@ -239,9 +254,6 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
     ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
     map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
-  }
-  if (map.getLayer("shared-place-halos")) {
-    map.setPaintProperty("shared-place-halos", "circle-stroke-color", shared);
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
@@ -841,6 +853,7 @@ function Map({
   }, []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
@@ -1456,54 +1469,6 @@ function Map({
         },
       });
 
-      // The ring around a shared place, 2px clear of its pin. Also what keeps a
-      // shared place reachable: your own copy of it sits on the SAME coordinate
-      // and draws on top, so without the ring nothing of it shows or takes a
-      // click. Transparent fill, so it adds no mass of its own.
-      map.addLayer({
-        id: "shared-place-halos",
-        type: "circle",
-        source: "shared-places",
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            7,
-            7.5,
-            14,
-            13.5,
-          ],
-          "circle-opacity": 0,
-          "circle-stroke-color": SHARED_PLACE_COLOR,
-          "circle-stroke-width": 1.5,
-        },
-      });
-
-      // The same ring in the visited colour. A visited place is never a shared
-      // one (placeStatus), so a pin wears at most one.
-      map.addLayer({
-        id: "visited-place-halos",
-        type: "circle",
-        source: "places",
-        filter: ["==", ["get", "done"], true],
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            7,
-            7.5,
-            14,
-            13.5,
-          ],
-          "circle-opacity": 0,
-          "circle-stroke-color": VISITED_PLACE_COLOR,
-          "circle-stroke-width": 1.5,
-          "circle-stroke-opacity": dimmed(1),
-        },
-      });
-
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1515,6 +1480,59 @@ function Map({
           "circle-stroke-width": 1.5,
         },
       });
+
+      // The status badge on a pin's upper-right rim: a person for a shared
+      // place, a tick for a visited one (never both, placeStatus). It sticks
+      // out past the dot, so it is still seen and pressed when your own copy
+      // of a shared place sits on the same coordinate and covers the dot. It
+      // scales with the pin (icon-size and its offset follow the dot's radius)
+      // and is hidden below PLACE_BADGE_MIN_ZOOM, where it would be no
+      // smaller than the pin it labels.
+      const badges: [
+        string,
+        string,
+        string,
+        maplibregl.FilterSpecification | undefined,
+      ][] = [
+        [
+          "shared-place-badges",
+          "shared-places",
+          PLACE_BADGE_SHARED_IMAGE,
+          undefined,
+        ],
+        [
+          "visited-place-badges",
+          "places",
+          PLACE_BADGE_VISITED_IMAGE,
+          ["==", ["get", "done"], true],
+        ],
+      ];
+      for (const [id, source, image, filter] of badges) {
+        map.addLayer({
+          id,
+          type: "symbol",
+          source,
+          minzoom: PLACE_BADGE_MIN_ZOOM,
+          ...(filter ? { filter } : {}),
+          layout: {
+            "icon-image": image,
+            "icon-size": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7,
+              (PLACE_BADGE_SIZE * 4) / PLACE_BADGE_PIN_RADIUS,
+              14,
+              (PLACE_BADGE_SIZE * 10) / PLACE_BADGE_PIN_RADIUS,
+            ],
+            "icon-offset": PLACE_BADGE_OFFSET,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint:
+            id === "visited-place-badges" ? { "icon-opacity": dimmed(1) } : {},
+        });
+      }
 
       map.addLayer({
         id: "place-labels",
@@ -1557,21 +1575,20 @@ function Map({
 
       applyPlaceThemePaint(map);
 
-      for (const id of ["mga-grid-lines", "mga-grid-labels"])
-        map.addSource(id, {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
+      map.addSource("mga-grid", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
       map.addLayer(
         {
           id: GRID_LINES,
           type: "line",
-          source: "mga-grid-lines",
+          source: "mga-grid",
           layout: { visibility: "none" },
           paint: {
             "line-color": MAP_INK.grid,
-            "line-width": 0.75,
-            "line-opacity": 0.8,
+            "line-width": MGA_GRID_STYLE.lineWidth,
+            "line-opacity": MGA_GRID_STYLE.lineOpacity,
           },
         },
         GAUGE_BELOW,
@@ -1580,9 +1597,12 @@ function Map({
         {
           id: GRID_LABELS,
           type: "symbol",
-          source: "mga-grid-labels",
+          source: "mga-grid",
           layout: {
             visibility: "none",
+            "symbol-placement": "line",
+            "symbol-spacing": MGA_GRID_STYLE.labelSpacing,
+            "text-rotation-alignment": "viewport",
             "text-field": ["get", "text"],
             "text-font": ["Noto Sans Medium"],
             "text-size": 11,
@@ -1673,8 +1693,8 @@ function Map({
         map.getCanvas().style.cursor = "";
       });
 
-      // The visited ring is part of the pin, as the shared ring is.
-      map.on("click", ["place-circles", "visited-place-halos"], (e) => {
+      // The status badges are part of the pin they sit on.
+      map.on("click", ["place-circles", "visited-place-badges"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1685,7 +1705,7 @@ function Map({
 
       // One registration over both layers, so a press on the pin (which is
       // inside the ring) selects once rather than once per layer.
-      map.on("click", ["shared-place-halos", "shared-place-circles"], (e) => {
+      map.on("click", ["shared-place-badges", "shared-place-circles"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1694,16 +1714,16 @@ function Map({
         selectPlaceRef.current(id);
       });
 
-      map.on("mouseenter", ["place-circles", "visited-place-halos"], () => {
+      map.on("mouseenter", ["place-circles", "visited-place-badges"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", ["place-circles", "visited-place-halos"], () => {
+      map.on("mouseleave", ["place-circles", "visited-place-badges"], () => {
         map.getCanvas().style.cursor = "";
       });
       map.on(
         "mouseenter",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           if (pickModeRef.current) return;
           map.getCanvas().style.cursor = "pointer";
@@ -1711,7 +1731,7 @@ function Map({
       );
       map.on(
         "mouseleave",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           map.getCanvas().style.cursor = "";
         },
@@ -2109,7 +2129,7 @@ function Map({
       vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "visited-place-halos",
+      "visited-place-badges",
       "visibility",
       vis(showPlaces),
     );
@@ -2119,7 +2139,7 @@ function Map({
       vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "shared-place-halos",
+      "shared-place-badges",
       "visibility",
       vis(showPlaces),
     );
@@ -2197,12 +2217,7 @@ function Map({
         },
         map.getZoom(),
       );
-      (map.getSource("mga-grid-lines") as maplibregl.GeoJSONSource).setData(
-        grid.lines,
-      );
-      (map.getSource("mga-grid-labels") as maplibregl.GeoJSONSource).setData(
-        grid.labels,
-      );
+      (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
     };
     draw();
     map.on("moveend", draw);
@@ -2299,6 +2314,16 @@ function Map({
       "route-draft-line",
       "line-dasharray",
       measuring ? [...DRAFT_LINE.measureDash] : undefined,
+    );
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-dasharray",
+      measuring ? [...DRAFT_LINE.measureCasingDash] : undefined,
+    );
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-width",
+      measuring ? DRAFT_LINE.measureCasingWidth : DRAFT_LINE.casingWidth,
     );
     map.setLayoutProperty(
       "route-draft-direction",
@@ -2647,6 +2672,27 @@ function Map({
     };
   }, [routeHover, mapLoaded]);
 
+  // The pin for a searched location. A DOM marker, so it sits over every pin
+  // layer, and pointer-events: none (Map.module.css) so a click goes through
+  // to the map, which is what removes it (searchPinAfter).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !searchPin) return;
+    const map = mapRef.current;
+    const element = document.createElement("div");
+    element.className = classes.searchPin;
+    element.innerHTML =
+      '<svg viewBox="0 0 24 32" width="24" height="32" aria-hidden="true"><path d="M12 31C12 31 2 19.5 2 12a10 10 0 0 1 20 0c0 7.5-10 19-10 19z" fill="currentColor" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#fff"/></svg>';
+    const marker = new maplibregl.Marker({ element, anchor: "bottom" })
+      .setLngLat([searchPin.lon, searchPin.lat])
+      .addTo(map);
+    const onClick = () => setSearchPin(searchPinAfter("tap"));
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+      marker.remove();
+    };
+  }, [searchPin, mapLoaded]);
+
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2698,6 +2744,18 @@ function Map({
           : id === GAUGE_ICON_IMAGE
             ? GAUGE_ICON_SDF_URI
             : null;
+      // Badges are plain bitmaps, two colours and a rim, so there is no tint
+      // to protect and MapLibre can take the decoded element itself.
+      const badgeUri = (PLACE_BADGE_URIS as Record<string, string>)[id];
+      if (badgeUri) {
+        if (map.hasImage(id)) return;
+        const badge = new Image();
+        badge.onload = () => {
+          if (!map.hasImage(id)) map.addImage(id, badge);
+        };
+        badge.src = badgeUri;
+        return;
+      }
       if (sdfUri) {
         if (map.hasImage(id)) return;
         const arrow = new Image();
@@ -3251,9 +3309,13 @@ function Map({
         metersPerPixel(targetCenter[1], 0) / (targetWidthM / framePxW),
       );
 
+      // North-up and flat too: this ease replaces the one that flattens the
+      // map for the selection (`flattenForSelection`).
       m.easeTo({
         center: targetCenter,
         zoom: targetZoom,
+        bearing: 0,
+        pitch: 0,
         duration: 600,
       });
 
@@ -3462,11 +3524,12 @@ function Map({
     const map = mapRef.current;
     if (map) applyTerrainNow(map, ++terrainToggleRef.current);
   });
-  const toggleTerrain = () => {
+  const toggleTerrain = () => setTerrainOn(!is3D);
+  const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
     if (!map) return;
     const toggle = ++terrainToggleRef.current;
-    if (is3D) {
+    if (!on) {
       // Turning off — nothing to wait for, flatten immediately
       pendingTiltRef.current = false;
       map.setTerrain(null);
@@ -3475,7 +3538,9 @@ function Map({
       map.easeTo({ pitch: 0, duration: 1000 });
     } else {
       // Toast to inform user about movement controls in 3D mode
-      if (window.matchMedia("(pointer: coarse)").matches) {
+      if (quiet) {
+        // Coming back after an area selection: they have seen it.
+      } else if (window.matchMedia("(pointer: coarse)").matches) {
         toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
         toast.info(
@@ -3488,8 +3553,36 @@ function Map({
       applyTerrainNow(map, toggle);
     }
 
-    setIs3D(!is3D);
+    setIs3D(on);
   };
+
+  // Picking an area turns the map north-up and flat: its extent is north, south, east and
+  // west (geoPdfExtent.ts, useBoxDraw) and the GeoPDF prints a north-up page,
+  // so a turned or tilted frame would get something other than what it framed.
+  // 3D comes back when the selection ends.
+  const selectingArea =
+    (selectingBbox ?? false) ||
+    (selectingGeoPdfExtent ?? false) ||
+    (selectingFilterArea ?? false);
+  const flattenForSelection = useEffectEvent(() => {
+    const map = mapRef.current;
+    if (!map) return () => {};
+    const was3D = is3D;
+    if (was3D) setTerrainOn(false);
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+    map.easeTo({ bearing: 0, pitch: 0, duration: 600 });
+    return () => {
+      map.dragRotate.enable();
+      map.touchZoomRotate.enableRotation();
+      map.keyboard.enableRotation();
+      if (was3D && mapRef.current === map) setTerrainOn(true, true);
+    };
+  });
+  useEffect(() => {
+    if (selectingArea && mapLoaded) return flattenForSelection();
+  }, [selectingArea, mapLoaded]);
 
   return (
     <div
@@ -3506,17 +3599,13 @@ function Map({
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
         tools={mapTools}
-        toolsDisabled={
-          (selectingBbox ?? false) || (selectingGeoPdfExtent ?? false)
-        }
+        selectingArea={selectingArea}
         notices={notices}
         search={
           // Live during a point pick or a route draw (a quick fly-to), off
           // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
-            disabled={
-              (selectingBbox ?? false) || (selectingGeoPdfExtent ?? false)
-            }
+            disabled={selectingArea}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
@@ -3545,6 +3634,7 @@ function Map({
                 duration: 1200,
               })
             }
+            onSearchPin={setSearchPin}
           />
         }
       />

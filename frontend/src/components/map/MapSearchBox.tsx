@@ -4,9 +4,10 @@ import {
   COORDINATE_RESULT_KIND,
   GAUGES,
   parseCoordinates,
-  RECENT_SEARCHES_CLEAR,
   RECENT_SEARCHES_HEADING,
   type RecentSearch,
+  type SearchPin,
+  searchPinAfter,
   type SearchPoint,
   gaugeDisplayName,
   geocode,
@@ -25,11 +26,7 @@ import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MapSearchBox.module.css";
 import { Icon } from "../../ui";
 import { useGauges } from "../gauges/useGauges";
-import {
-  clearRecentSearches,
-  loadRecentSearches,
-  saveRecentSearches,
-} from "../../recentSearches";
+import { loadRecentSearches, saveRecentSearches } from "../../recentSearches";
 
 const PLACE_RESULTS = 5;
 const GAUGE_RESULTS = 3;
@@ -43,8 +40,7 @@ type Option =
   | { kind: "askLocations"; id: string }
   | { kind: "location"; id: string; result: GeocodeResult }
   | { kind: "coordinate"; id: string; point: SearchPoint }
-  | { kind: "recent"; id: string; recent: RecentSearch }
-  | { kind: "clearRecents"; id: string };
+  | { kind: "recent"; id: string; recent: RecentSearch };
 
 /**
  * Search places and locations, top-left over the map; `/` focuses it.
@@ -67,6 +63,7 @@ export default function MapSearchBox({
   onSelectPlace,
   onSelectGauge,
   onSelectLocation,
+  onSearchPin,
   disabled = false,
 }: {
   /** Off while an area is being selected: a fly-to would move the frame's map
@@ -77,6 +74,8 @@ export default function MapSearchBox({
   onSelectPlace: (place: TPlace) => void;
   onSelectGauge: (gauge: Gauge) => void;
   onSelectLocation: (lat: number, lon: number) => void;
+  /** The temporary pin for the searched location, or none (searchPinAfter). */
+  onSearchPin: (pin: SearchPin | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [focused, setFocused] = useState(false);
@@ -170,16 +169,11 @@ export default function MapSearchBox({
 
   const options = useMemo<Option[]>(() => {
     if (trimmed === "")
-      return recents.length === 0
-        ? []
-        : [
-            ...recents.map((recent, index) => ({
-              kind: "recent" as const,
-              id: `h-${index}`,
-              recent,
-            })),
-            { kind: "clearRecents" as const, id: "clear-recents" },
-          ];
+      return recents.map((recent, index) => ({
+        kind: "recent" as const,
+        id: `h-${index}`,
+        recent,
+      }));
     const needle = trimmed.toLowerCase();
     const matches = (place: TPlace) =>
       place.name.toLowerCase().includes(needle) ||
@@ -272,11 +266,6 @@ export default function MapSearchBox({
       setError(null);
       return;
     }
-    if (option.kind === "clearRecents") {
-      clearRecentSearches();
-      setRecents([]);
-      return;
-    }
     // Places and gauges open their own panel and are found by typing again;
     // recents are the picks that are just a point to fly to.
     const point: SearchPoint | null =
@@ -300,6 +289,7 @@ export default function MapSearchBox({
     if (option.kind === "place") onSelectPlace(option.place);
     else if (option.kind === "gauge") onSelectGauge(option.gauge);
     else if (point) onSelectLocation(point.lat, point.lon);
+    onSearchPin(searchPinAfter({ pick: point }));
     if (point) {
       const next = addRecentSearch(recents, point);
       setRecents(next);
@@ -335,6 +325,8 @@ export default function MapSearchBox({
           onChange={(event) => {
             setQuery(event.target.value);
             setActiveId(null);
+            if (!event.target.value.trim())
+              onSearchPin(searchPinAfter("clear"));
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -354,8 +346,10 @@ export default function MapSearchBox({
                 choose(option);
               }
             } else if (event.key === "Escape") {
-              if (query) reset();
-              else inputRef.current?.blur();
+              if (query) {
+                reset();
+                onSearchPin(searchPinAfter("clear"));
+              } else inputRef.current?.blur();
             }
           }}
         />
@@ -384,7 +378,9 @@ export default function MapSearchBox({
                     : "place"
                   : option.kind === "gauge"
                     ? "gauge"
-                    : "map";
+                    : option.kind === "recent"
+                      ? "recent"
+                      : "map";
               const label =
                 option.kind === "place"
                   ? option.place.name
@@ -398,9 +394,7 @@ export default function MapSearchBox({
                           ? option.point.label
                           : option.kind === "recent"
                             ? option.recent.label
-                            : option.kind === "clearRecents"
-                              ? RECENT_SEARCHES_CLEAR
-                              : searchLocationsLabel(trimmed);
+                            : searchLocationsLabel(trimmed);
               const detail =
                 option.kind === "registry"
                   ? placeResultDetail(option.result)
@@ -414,13 +408,7 @@ export default function MapSearchBox({
                   key={option.id}
                   id={`${listId}-${option.id}`}
                   role="option"
-                  aria-label={
-                    option.kind === "clearRecents"
-                      ? `${RECENT_SEARCHES_CLEAR} ${RECENT_SEARCHES_HEADING.toLowerCase()}`
-                      : detail
-                        ? `${label}, ${detail}`
-                        : undefined
-                  }
+                  aria-label={detail ? `${label}, ${detail}` : undefined}
                   aria-selected={index === activeIndex}
                   className={classes.option}
                   // pointerdown, not click: the input would blur first and

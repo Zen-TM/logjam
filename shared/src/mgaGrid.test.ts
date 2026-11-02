@@ -10,7 +10,7 @@ describe("mgaGrid", () => {
   // Mutation: drop the min-zoom test and the grid builds at state zoom.
   it("is empty below the minimum zoom", () => {
     expect(mgaGridStep(8.9)).toBeNull();
-    expect(mgaGrid(view, 8.9).lines.features).toHaveLength(0);
+    expect(mgaGrid(view, 8.9).features).toHaveLength(0);
   });
 
   it("steps by zoom", () => {
@@ -21,8 +21,8 @@ describe("mgaGrid", () => {
   // Web Mercator; also catches an easting line that is not at a whole step.
   it("draws densified lines on whole steps of the grid", () => {
     const g = mgaGrid(view, 14);
-    expect(g.lines.features.length).toBeGreaterThan(8);
-    const first = g.lines.features[0].geometry.coordinates;
+    expect(g.features.length).toBeGreaterThan(8);
+    const first = g.features[0].geometry.coordinates;
     expect(first.length).toBeGreaterThan(2);
     const e = toEastingNorthing(first[0][1], first[0][0]).easting;
     expect(Math.abs(e / 1000 - Math.round(e / 1000))).toBeLessThan(1e-6);
@@ -39,7 +39,7 @@ describe("mgaGrid", () => {
         south: -33.7 - d * 0.83,
         north: -33.7 + d * 0.83,
       };
-      expect(mgaGrid(v, z).lines.features.length).toBeLessThan(80);
+      expect(mgaGrid(v, z).features.length).toBeLessThan(80);
     }
   });
 
@@ -49,11 +49,18 @@ describe("mgaGrid", () => {
     expect(mgaGridLabel(250000, 10000)).toBe("50");
   });
 
+  // Mutation: drop `text` from a line and the symbol layer drawing labels
+  // along the lines has nothing to draw.
+  it("carries each line's label on the line", () => {
+    const g = mgaGrid(view, 14);
+    for (const f of g.features) expect(f.properties.text).toMatch(/^\d\d$/);
+  });
+
   it("uses the zone of the view centre across a boundary", () => {
     const g = mgaGrid(
       { west: 149.9, south: -33.7, east: 150.1, north: -33.6 },
       11,
     );
-    expect(g.lines.features.length).toBeGreaterThan(0);
+    expect(g.features.length).toBeGreaterThan(0);
   });
 });

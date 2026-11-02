@@ -289,7 +289,7 @@ describe("a place type's name is the user's only one of it", () => {
 // Mutation: add VISITED_PLACE_COLOR to PLACE_TYPE_COLORS, or set it equal to
 // SHARED_PLACE_COLOR, and this turns red.
 describe("VISITED_PLACE_COLOR", () => {
-  it("is reserved: no type colour and not the shared ring", () => {
+  it("is reserved: no type colour and not the shared badge", () => {
     const visited = VISITED_PLACE_COLOR.toUpperCase();
     expect(
       (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),

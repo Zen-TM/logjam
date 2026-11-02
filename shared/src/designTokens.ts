@@ -43,19 +43,26 @@ export const MAP_INK = {
   labelHalo: "rgba(255,255,255,0.8)",
 } as const;
 
+const DRAFT_CORE = 4;
+const MEASURE_DASH = [2, 2.5] as const;
+const MEASURE_CASING = DRAFT_CORE + 2;
+
 /**
  * The route-draw and measure line on both clients: a coloured core over a
  * wider casing in `MAP_INK.casing`, so it reads on light, dark, topo and
- * satellite basemaps and over the slope colours. A measurement keeps the same
- * casing and dashes the core (units of line width, round caps), so the two
- * tools stay distinct from each other and from saved routes. Guard:
- * `designTokens.test.ts`.
+ * satellite basemaps and over the slope colours. A measurement dashes the core
+ * (units of line width, round caps) and its casing in step, 1 px wider each
+ * side, so each dash wears a thin rim rather than the line a dark band. A
+ * dasharray counts line widths, so the casing's is the core's scaled by
+ * core/casing to land on the same pixels. Guard: `designTokens.test.ts`.
  */
 export const DRAFT_LINE = {
-  coreWidth: 4,
+  coreWidth: DRAFT_CORE,
   casingWidth: 8,
   casingColor: MAP_INK.casing,
-  measureDash: [2, 2.5],
+  measureDash: MEASURE_DASH,
+  measureCasingWidth: MEASURE_CASING,
+  measureCasingDash: MEASURE_DASH.map((d) => (d * DRAFT_CORE) / MEASURE_CASING),
 } as const;
 
 /** Names on the map, a place's and a gauge's, appear from this zoom on both

@@ -73,4 +73,15 @@ describe("DRAFT_LINE", () => {
     );
     expect(DRAFT_LINE.measureDash[0]).toBeGreaterThanOrEqual(1.5);
   });
+
+  // Mutation: drop the core/casing scaling from `measureCasingDash` and the
+  // casing's dashes drift off the core's, a rim on one end and none on the other.
+  it("dashes a measurement's casing on the core's pixels", () => {
+    const px = (dash: readonly number[], width: number) =>
+      dash.map((d) => d * width);
+    expect(
+      px(DRAFT_LINE.measureCasingDash, DRAFT_LINE.measureCasingWidth),
+    ).toEqual(px(DRAFT_LINE.measureDash, DRAFT_LINE.coreWidth));
+    expect(DRAFT_LINE.measureCasingWidth).toBeGreaterThan(DRAFT_LINE.coreWidth);
+  });
 });

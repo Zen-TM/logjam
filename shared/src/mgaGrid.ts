@@ -26,20 +26,25 @@ export function mgaGridStep(zoom: number): 10000 | 1000 | 100 | null {
   return zoom < 16 ? 1000 : 100;
 }
 
+/**
+ * How both clients draw it. The labels repeat along each line every
+ * `labelSpacing` px, upright, rather than sitting at the view's edge: Logjam
+ * GPS turns the map, and a turned view's extent reaches past the screen, so an
+ * edge label lands off it.
+ */
+export const MGA_GRID_STYLE = {
+  lineWidth: 1,
+  lineOpacity: 0.9,
+  labelSpacing: 300,
+} as const;
+
 type Line = {
   type: "Feature";
-  properties: Record<string, never>;
+  /** The line's label, which the symbol layer draws along it. */
+  properties: { text: string };
   geometry: { type: "LineString"; coordinates: [number, number][] };
 };
-type Label = {
-  type: "Feature";
-  properties: { text: string };
-  geometry: { type: "Point"; coordinates: [number, number] };
-};
-export interface MgaGrid {
-  lines: { type: "FeatureCollection"; features: Line[] };
-  labels: { type: "FeatureCollection"; features: Label[] };
-}
+export type MgaGrid = { type: "FeatureCollection"; features: Line[] };
 
 const SEGMENTS = 8;
 
@@ -52,10 +57,7 @@ export function mgaGridLabel(metres: number, step: number): string {
 }
 
 export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
-  const out: MgaGrid = {
-    lines: { type: "FeatureCollection", features: [] },
-    labels: { type: "FeatureCollection", features: [] },
-  };
+  const out: MgaGrid = { type: "FeatureCollection", features: [] };
   const step = mgaGridStep(zoom);
   if (step === null) return out;
 
@@ -83,29 +85,22 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
       { length: SEGMENTS + 1 },
       (_, i) => from + ((to - from) * i) / SEGMENTS,
     );
-  const label = (metres: number, point: [number, number]) =>
-    out.labels.features.push({
+  const line = (metres: number, coordinates: [number, number][]) =>
+    out.features.push({
       type: "Feature",
       properties: { text: mgaGridLabel(metres, step) },
-      geometry: { type: "Point", coordinates: point },
-    });
-  const line = (coordinates: [number, number][]) =>
-    out.lines.features.push({
-      type: "Feature",
-      properties: {},
       geometry: { type: "LineString", coordinates },
     });
 
-  // Labels sit a tenth in from the view's edge so they stay on screen.
-  const nLabel = nMax - (nMax - nMin) * 0.1;
-  const eLabel = eMin + (eMax - eMin) * 0.1;
-  for (let e = Math.ceil(eMin / step) * step; e <= eMax; e += step) {
-    line(run(nMin, nMax).map((n) => at(e, n)));
-    label(e, at(e, nLabel));
-  }
-  for (let n = Math.ceil(nMin / step) * step; n <= nMax; n += step) {
-    line(run(eMin, eMax).map((e) => at(e, n)));
-    label(n, at(eLabel, n));
-  }
+  for (let e = Math.ceil(eMin / step) * step; e <= eMax; e += step)
+    line(
+      e,
+      run(nMin, nMax).map((n) => at(e, n)),
+    );
+  for (let n = Math.ceil(nMin / step) * step; n <= nMax; n += step)
+    line(
+      n,
+      run(eMin, eMax).map((e) => at(e, n)),
+    );
   return out;
 }

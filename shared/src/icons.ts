@@ -97,6 +97,7 @@ export const ICONS = {
   info: { web: "info", gps: "info" },
   help: { web: "circle-help", gps: "help-circle" },
   pending: { web: "clock", gps: "clock" },
+  recent: { web: "history", gps: "mci:history" }, // a recent search
   offline: { web: "cloud-off", gps: "cloud-off" },
   sync: { web: "cloud", gps: "cloud" },
   uploading: { web: "cloud-upload", gps: "upload-cloud" },

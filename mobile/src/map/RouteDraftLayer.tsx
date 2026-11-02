@@ -214,9 +214,14 @@ export function RouteDraftLayer({
           filter={ROUTE_LAYER_FILTER}
           style={{
             lineColor: DRAFT_LINE.casingColor,
-            lineWidth: DRAFT_LINE.casingWidth,
             lineCap: "round",
             lineJoin: "round",
+            ...(dotted
+              ? {
+                  lineWidth: DRAFT_LINE.measureCasingWidth,
+                  lineDasharray: [...DRAFT_LINE.measureCasingDash],
+                }
+              : { lineWidth: DRAFT_LINE.casingWidth }),
           }}
         />
         <Layer

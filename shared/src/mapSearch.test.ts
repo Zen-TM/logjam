@@ -4,6 +4,7 @@ import {
   MAX_RECENT_SEARCHES,
   parseCoordinates,
   readRecentSearches,
+  searchPinAfter,
 } from "./mapSearch";
 import { toEastingNorthing } from "./geoPdfExtent";
 
@@ -100,5 +101,23 @@ describe("recent searches", () => {
         { label: "a", lat: 1, lon: 2, extra: 1 },
       ]),
     ).toEqual([{ label: "a", lat: 1, lon: 2 }]);
+  });
+});
+
+// Mutation: return the pick's point for "tap" or "clear", or drop a picked
+// point (or keep a stale one when the pick is a place), and these go red.
+describe("searchPinAfter", () => {
+  it("drops the pin exactly at a picked point, label left out", () => {
+    expect(
+      searchPinAfter({ pick: { label: "x", lat: -33.7, lon: 150.3 } }),
+    ).toEqual({
+      lat: -33.7,
+      lon: 150.3,
+    });
+  });
+  it("is gone after a tap, a cleared box, or a pick that is not a point", () => {
+    expect(searchPinAfter("tap")).toBeNull();
+    expect(searchPinAfter("clear")).toBeNull();
+    expect(searchPinAfter({ pick: null })).toBeNull();
   });
 });

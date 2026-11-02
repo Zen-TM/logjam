@@ -105,6 +105,8 @@ import {
   TRIP_PLAN_PAGE,
   planRouteNotAdded,
   type SharpenedArea,
+  type SearchPin,
+  searchPinAfter,
 } from "@logjam/shared";
 import {
   isPlanPin,
@@ -974,6 +976,8 @@ export function MapScreen({
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
+  /** The pin for a searched location: gone at the next map press (searchPinAfter). */
+  const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const [tappedLand, setTappedLand] = useState<string | null>(null);
   /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
   const landAskedFor = useRef<MapPoint | null>(null);
@@ -2211,6 +2215,7 @@ export function MapScreen({
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
       const [lon, lat] = event.nativeEvent.lngLat;
+      setSearchPin(searchPinAfter("tap"));
       // The second tap of a double tap already did its work (it zoomed); it
       // must not also ask what is under the finger. Cleared here rather than on
       // a timer, so exactly one press is swallowed however long MapLibre takes
@@ -5262,6 +5267,27 @@ export function MapScreen({
               `anchor` names the part of the BUTTON put on the coordinate, so
               sitting it to the LEFT of the point means anchoring its RIGHT edge
               there and pushing it back by the gap. */}
+          {/* The searched location. A Marker is a native view over the GL
+              surface, so over every pin layer; it takes no press (the map
+              underneath gets the tap that clears it). Its tip is the point. */}
+          {searchPin ? (
+            <Marker
+              key="search-pin"
+              id="search-pin"
+              lngLat={[searchPin.lon, searchPin.lat]}
+              anchor="bottom"
+            >
+              {/* Logjam Web's drop (Map.tsx, `searchPin`): a filled teardrop
+                  in the accent, white rim and centre. A square with one sharp
+                  corner, turned to point down. */}
+              <View pointerEvents="none" style={styles.searchPinBox}>
+                <View style={styles.searchPin}>
+                  <View style={styles.searchPinDot} />
+                </View>
+              </View>
+            </Marker>
+          ) : null}
+
           {selectedAnchorCoord && !anchorDragging ? (
             <Marker
               key="anchor-delete"
@@ -5329,6 +5355,7 @@ export function MapScreen({
           online={connectivity === "online"}
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
+          onSearchPin={setSearchPin}
           onSelectSaved={(item) => {
             if (item.gaugeId) {
               setShowGauges(true);
@@ -6001,6 +6028,32 @@ function RouteNameForm({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
+  // The search pin's tip lands on the Marker's bottom anchor: a 24 px square
+  // turned 45° reaches 12√2 ≈ 17 px below its centre, the box's half height.
+  searchPinBox: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchPin: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderBottomRightRadius: 0,
+    transform: [{ rotate: "45deg" }],
+    backgroundColor: theme.accent,
+    borderWidth: 2,
+    borderColor: MAP_INK.ring,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchPinDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: MAP_INK.ring,
+  },
   // The selected point's delete button: circular, warning-coloured, and the
   // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
   // rather than translucent — it sits over the map, which can be any colour

@@ -44,10 +44,11 @@ import {
 } from "react-native";
 import {
   addRecentSearch,
+  type SearchPin,
+  searchPinAfter,
   COORDINATE_RESULT_KIND,
   geocode,
   parseCoordinates,
-  RECENT_SEARCHES_CLEAR,
   RECENT_SEARCHES_HEADING,
   type SearchPoint,
   GEOCODE_MIN_QUERY_LENGTH,
@@ -85,11 +86,7 @@ import {
   searchRows,
   type PlaceAnswer,
 } from "./placeSearch";
-import {
-  clearRecentSearches,
-  loadRecentSearches,
-  saveRecentSearches,
-} from "./recentSearches";
+import { loadRecentSearches, saveRecentSearches } from "./recentSearches";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { FieldError, Icon, type Glyph } from "../ui";
@@ -132,6 +129,7 @@ export function MapSearchBar({
   savedItems,
   onSelectPlace,
   onSelectSaved,
+  onSearchPin,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
@@ -154,6 +152,8 @@ export function MapSearchBar({
   savedItems: readonly SavedSearchItem[];
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;
+  /** The temporary pin for the searched location, or none (searchPinAfter). */
+  onSearchPin: (pin: SearchPin | null) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -329,6 +329,7 @@ export function MapSearchBar({
   // gauges open their own sheets and are found again by typing.
   const flyTo = (point: SearchPoint) => {
     onSelectPlace(point.lat, point.lon);
+    onSearchPin(searchPinAfter({ pick: point }));
     const next = addRecentSearch(recents, point);
     setRecents(next);
     saveRecentSearches(next);
@@ -377,7 +378,10 @@ export function MapSearchBar({
             ref={inputRef}
             style={styles.input}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(text) => {
+              setQuery(text);
+              if (!text.trim()) onSearchPin(searchPinAfter("clear"));
+            }}
             placeholder="Search for a place…"
             placeholderTextColor={theme.textMuted}
             accessibilityLabel="Search for a place to centre the map"
@@ -390,7 +394,11 @@ export function MapSearchBar({
             accessibilityRole="button"
             accessibilityLabel={query ? "Clear search" : "Close search"}
             hitSlop={hitSlop}
-            onPress={() => (query ? setQuery("") : collapse())}
+            onPress={() => {
+              onSearchPin(searchPinAfter("clear"));
+              if (query) setQuery("");
+              else collapse();
+            }}
           >
             <Icon idea="close" size={GLYPH} color={theme.text} />
           </Pressable>
@@ -419,26 +427,20 @@ export function MapSearchBar({
                     accessibilityRole="button"
                     style={({ pressed }) => [
                       styles.result,
+                      styles.savedResult,
                       pressed && styles.resultPressed,
                     ]}
                     onPress={() => flyTo(recent)}
                   >
-                    <Text style={styles.resultText} numberOfLines={2}>
+                    <Icon idea="recent" size={16} color={theme.textMuted} />
+                    <Text
+                      style={[styles.resultText, styles.savedText]}
+                      numberOfLines={2}
+                    >
                       {recent.label}
                     </Text>
                   </Pressable>
                 ))}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${RECENT_SEARCHES_CLEAR} ${RECENT_SEARCHES_HEADING.toLowerCase()}`}
-                  hitSlop={hitSlop}
-                  onPress={() => {
-                    clearRecentSearches();
-                    setRecents([]);
-                  }}
-                >
-                  <Text style={styles.retry}>{RECENT_SEARCHES_CLEAR}</Text>
-                </Pressable>
               </>
             ) : null}
             {coordinate ? (
@@ -473,6 +475,7 @@ export function MapSearchBar({
                       ]}
                       onPress={() => {
                         onSelectSaved(item);
+                        onSearchPin(searchPinAfter({ pick: null }));
                         collapse();
                       }}
                     >

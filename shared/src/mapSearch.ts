@@ -8,7 +8,6 @@
 import { fromEastingNorthing } from "./geoPdfExtent.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
-export const RECENT_SEARCHES_CLEAR = "Clear";
 export const COORDINATE_RESULT_KIND = "Coordinates";
 
 export interface SearchPoint {
@@ -140,4 +139,20 @@ export function readRecentSearches(raw: unknown): RecentSearch[] {
     )
     .map(({ label, lat, lon }) => ({ label, lat, lon }))
     .slice(0, MAX_RECENT_SEARCHES);
+}
+
+/** Where the temporary pin for a searched location stands. */
+export type SearchPin = Pick<SearchPoint, "lat" | "lon">;
+
+/**
+ * The pin after a map or search action. A picked point (a coordinate, a
+ * registry or geocoder result, a recent) drops it exactly there; picking
+ * anything else, a tap on the map, or emptying the box takes it away. Panning
+ * and zooming are not events here: the user looks around the pin.
+ */
+export function searchPinAfter(
+  event: "tap" | "clear" | { pick: SearchPoint | null },
+): SearchPin | null {
+  if (typeof event === "string" || !event.pick) return null;
+  return { lat: event.pick.lat, lon: event.pick.lon };
 }

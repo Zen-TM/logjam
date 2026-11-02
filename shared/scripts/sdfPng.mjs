@@ -79,6 +79,11 @@ export function sdfPng(width, height, points) {
       rgba[at + 3] = Math.max(0, Math.min(255, alpha));
     }
   }
+  return rgbaPng(width, height, rgba);
+}
+
+/** 8-bit straight-alpha RGBA pixels as PNG bytes. */
+export function rgbaPng(width, height, rgba) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);

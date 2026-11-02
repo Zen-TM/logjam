@@ -182,10 +182,14 @@ renumber.
 - **Colour is never the only signal**: a hue travels with a glyph, a word or
   a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
-  mark with a ring.
-- **A visited place wears the same ring in `VISITED_PLACE_COLOR`**, also
+  mark with a person badge at its upper-right edge.
+- **A visited place wears a tick badge in `VISITED_PLACE_COLOR`**, also
   reserved. A place is never both visited and shared (`placeStatus`), so a pin
-  has at most one ring. Guards: `placeTypes.test.ts` (the colour is reserved),
+  has at most one badge. A badge is a glyph in a coloured disc, not a ring:
+  colour alone told people nothing, and the glyph is what says it. The images
+  and their size and offset are `shared/src/placeBadge.ts`, so both clients
+  draw the same thing. Guards: `placeBadge.test.ts` (disc colours, glyphs,
+  generator in step), `placeTypes.test.ts` (the colours are reserved),
   `placeStatus.test.ts` (never both).
 - **Controls over a photo are black and white on a scrim**, not theme
   colours: words and glyphs on a `SCRIM` are `ON_SCRIM`.
@@ -368,7 +372,7 @@ renumber.
   widens the pill; pressing it opens what it is about or shows the whole text,
   which a screen reader says too. A sentence or buttons are a `Notice`.
 - **Overlays divide by what a thing is** (Places, Ways). Whose
-  it is lives on the thing: the shared ring, the shared row mark.
+  it is lives on the thing: the shared badge, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.
 - **Offline, the map is blank outside saved regions.**

@@ -12,7 +12,7 @@ const visitedOf = (fc: ReturnType<typeof toPlaceFeatureCollection>) =>
   fc.features.map((f) => f.properties.visited);
 
 describe("toPlaceFeatureCollection visited stamp", () => {
-  // Mutation: stamp every feature true (or none), and the visited halo
+  // Mutation: stamp every feature true (or none), and the visited badge
   // draws on the wrong places.
   it("is true only for ids in the set", () => {
     expect(

@@ -71,6 +71,7 @@ function renderBox(
       onSelectPlace={() => {}}
       onSelectGauge={() => {}}
       onSelectLocation={() => {}}
+      onSearchPin={() => {}}
       {...props}
     />,
   );
@@ -272,22 +273,43 @@ describe("MapSearchBox", () => {
     expect(localStorage.getItem("logjam.recentSearches")).toContain("MGA 56");
   });
 
-  it("lists recent picks on an empty focused box, and clears them", async () => {
+  it("lists recent picks on an empty focused box, with no clear row", async () => {
     localStorage.clear();
-    const onSelectLocation = vi.fn();
-    const input = renderBox({ onSelectLocation });
+    const input = renderBox();
     type(input, "-33.71, 150.31");
     fireEvent.pointerDown(screen.getAllByRole("option")[0]);
 
     cleanup();
-    const again = renderBox({ onSelectLocation });
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toContain(
+    renderBox();
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
       "-33.71000, 150.31000",
-    );
-    expect(again).toBeTruthy();
-    fireEvent.pointerDown(
-      screen.getByRole("option", { name: /Clear recent/i }),
-    );
-    expect(localStorage.getItem("logjam.recentSearches")).toBeNull();
+    ]);
+    expect(screen.queryByText("Clear")).toBeNull();
+  });
+
+  // Mutation: stop calling onSearchPin on a pick, or on emptying the box, and
+  // the pin is never dropped or never leaves.
+  it("drops a pin at a picked point and removes it when the box is emptied", async () => {
+    localStorage.clear();
+    const onSearchPin = vi.fn();
+    const input = renderBox({ onSearchPin });
+    type(input, "-33.71, 150.31");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    expect(onSearchPin).toHaveBeenLastCalledWith({ lat: -33.71, lon: 150.31 });
+
+    type(input, "abc");
+    type(input, "");
+    expect(onSearchPin).toHaveBeenLastCalledWith(null);
+  });
+
+  it("clears the pin when one of your own places is picked", async () => {
+    const onSearchPin = vi.fn();
+    const input = renderBox({
+      onSearchPin,
+      places: [{ id: "1", name: "Mine", altNames: [] } as unknown as TPlace],
+    });
+    type(input, "Mine");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    expect(onSearchPin).toHaveBeenLastCalledWith(null);
   });
 });

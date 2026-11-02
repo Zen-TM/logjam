@@ -1,7 +1,7 @@
 // The place pins: a dot and a name per place, shared first so owned draws on
-// top of it. A shared place gets the same dot as an owned one plus a thin halo
-// (fill = type, ring = shared); the halo is also the only part of it a thumb
-// can reach when your own copy sits on the same coordinate.
+// top of it. A shared place gets the same dot as an owned one plus a person
+// badge, a visited one a tick badge; the badge is also the only part of a
+// shared place a thumb can reach when your own copy sits on the same coordinate.
 //
 // Extracted from `MapScreen` when the place point-picker needed the same pins
 // as reference ("is there already a place there?" is most of what a picker is
@@ -17,14 +17,19 @@ import { memo } from "react";
 import type { NativeSyntheticEvent } from "react-native";
 import {
   GeoJSONSource,
+  Images,
   Layer,
   type PressEventWithFeatures,
 } from "@maplibre/maplibre-react-native";
 
 import {
   SHARED_PLACE_COLOR,
-  VISITED_PLACE_COLOR,
   MAP_INK,
+  PLACE_BADGE_OFFSET,
+  PLACE_BADGE_SHARED_IMAGE,
+  PLACE_BADGE_SIZE,
+  PLACE_BADGE_URIS,
+  PLACE_BADGE_VISITED_IMAGE,
   MAP_LABEL_MIN_ZOOM,
 } from "@logjam/shared";
 
@@ -46,10 +51,10 @@ export {
  * rather than a literal, because a fallback that does not appear in the
  * palette is a thirteenth colour nothing checks.
  *
- * Ownership is shown on the RING, which is the axis that has only two values,
+ * Sharing is shown on the BADGE, which is the axis that has only two values,
  * and `SHARED_PLACE_COLOR` is RESERVED — never a type colour (guard:
  * shared/src/placeTypes.test.ts), or a shared Marker would be a dot and a
- * ring of the same hue. It is re-exported here because every map file already
+ * badge of the same hue. It is re-exported here because every map file already
  * imports its ink from this module.
  */
 export { SHARED_PLACE_COLOR };
@@ -73,6 +78,25 @@ const MUTED_OPACITY = [
   PLAN_DIM,
   1,
 ] as unknown as number;
+
+// Bitmaps, not SDFs: a badge is a coloured disc with a white glyph and rim.
+const BADGE_IMAGES = Object.fromEntries(
+  Object.entries(PLACE_BADGE_URIS).map(([name, uri]) => [
+    name,
+    { source: { uri } },
+  ]),
+);
+
+// The status badge at a pin's upper-right rim: a person for shared, a tick for
+// visited. It sticks out past the dot, so it is still there to see and press
+// when the user's own copy sits on the same coordinate and covers the dot.
+const BADGE_STYLE = {
+  iconSize: PLACE_BADGE_SIZE,
+  iconOffset: PLACE_BADGE_OFFSET,
+  iconAllowOverlap: true,
+  iconIgnorePlacement: true,
+  iconOpacity: MUTED_OPACITY,
+};
 
 const LABEL_STYLE = {
   textField: PLACE_LABEL_EXPR as unknown as string,
@@ -105,48 +129,17 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
 }) {
   return (
     <>
+      <Images images={BADGE_IMAGES} />
       <GeoJSONSource
         id={`${idPrefix}shared-places`}
         data={sharedFc}
         onPress={onPress}
       >
-        {/* A RING SET APART FROM THE DOT, not a bigger, heavier dot.
-            Drawing shared places as a heavier dot (e.g. 12 px across
-            against an owned pin's 7.5) would make the one kind of place the
-            user did not create shout louder than everything they did. The
-            weight is the problem, not the ink: this draws the SAME dot an owned
-            place gets and hangs a thin halo around it, which reads as a mark ON
-            a pin rather than as a louder pin.
-
-            The halo is also what keeps a shared place reachable. A shared place
-            and your own copy of it very often sit on the SAME coordinate — that
-            is what "copy" means — and the owned source draws on top, so two
-            identical circles leave nothing of the shared one showing and
-            nothing for a thumb to land on. The gap between dot and halo is that
-            margin, now a ring's width instead of a pin's. */}
-        <Layer
-          key={`${idPrefix}shared-place-halos`}
-          type="circle"
-          id={`${idPrefix}shared-place-halos`}
-          // FILL = TYPE, RING = SHARED (§2.8). Colour cannot encode ownership:
-          // it says which KIND of place this is, on both maps, for every type
-          // the user has invented. So "someone shared this with me" is the ring,
-          // which is the axis with two values — and here it is only the ring:
-          // the fill is transparent so the halo adds no mass of its own,
-          // whatever it is drawn over.
-          style={{
-            circleRadius: 9,
-            circleOpacity: 0,
-            circleStrokeColor: SHARED_PLACE_COLOR,
-            circleStrokeWidth: 1.5,
-            circleStrokeOpacity: MUTED_OPACITY,
-          }}
-        />
         <Layer
           key={`${idPrefix}shared-place-circles`}
           type="circle"
           id={`${idPrefix}shared-place-circles`}
-          // Identical to an owned pin, deliberately: the halo says what is
+          // Identical to an owned pin, deliberately: the badge says what is
           // different about this place, so the dot does not have to.
           style={{
             circleRadius: 6,
@@ -158,12 +151,18 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           }}
         />
         <Layer
+          type="symbol"
+          key={`${idPrefix}shared-place-badges`}
+          id={`${idPrefix}shared-place-badges`}
+          style={{ ...BADGE_STYLE, iconImage: PLACE_BADGE_SHARED_IMAGE }}
+        />
+        <Layer
           key={`${idPrefix}shared-place-labels`}
           type="symbol"
           id={`${idPrefix}shared-place-labels`}
           minzoom={MAP_LABEL_MIN_ZOOM}
           // Pushed clear of an owned label, and exempt from collision, for the
-          // same reason the halo exists: stacked on one coordinate the two
+          // same reason the badge exists: stacked on one coordinate the two
           // labels collide, and MapLibre places symbol layers top-down — so
           // the owned label, being the higher layer, wins every time and the
           // shared place loses both its dot and its name. The offset keeps
@@ -184,21 +183,6 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         data={ownedFc}
         onPress={onPress}
       >
-        {/* The same halo as a shared place's, in the visited colour: a place
-            is never both (`placeStatus`), so a pin wears one ring at most. */}
-        <Layer
-          key={`${idPrefix}visited-place-halos`}
-          type="circle"
-          id={`${idPrefix}visited-place-halos`}
-          filter={["==", ["get", "visited"], true]}
-          style={{
-            circleRadius: 9,
-            circleOpacity: 0,
-            circleStrokeColor: VISITED_PLACE_COLOR,
-            circleStrokeWidth: 1.5,
-            circleStrokeOpacity: MUTED_OPACITY,
-          }}
-        />
         <Layer
           key={`${idPrefix}place-circles`}
           type="circle"
@@ -214,6 +198,13 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleOpacity: MUTED_OPACITY,
             circleStrokeOpacity: MUTED_OPACITY,
           }}
+        />
+        <Layer
+          type="symbol"
+          key={`${idPrefix}visited-place-badges`}
+          id={`${idPrefix}visited-place-badges`}
+          filter={["==", ["get", "visited"], true]}
+          style={{ ...BADGE_STYLE, iconImage: PLACE_BADGE_VISITED_IMAGE }}
         />
         <Layer
           key={`${idPrefix}place-labels`}
