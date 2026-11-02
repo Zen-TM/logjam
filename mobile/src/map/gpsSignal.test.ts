@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  arrivedFix,
   deliveredFix,
   FIX_COARSE_M,
   FIX_STALE_MS,
@@ -95,5 +96,23 @@ describe("fixAgeLabel", () => {
     expect(fixAgeLabel(21_000)).toBe("21 s ago");
     expect(fixAgeLabel(125_000)).toBe("2 min ago");
     expect(fixAgeLabel(3 * 3_600_000)).toBe("3 h ago");
+  });
+});
+
+// Mutation: stamp a live fix with `platformMs`, and a phone clock behind GNSS
+// time greys every figure and the arrow.
+describe("arrivedFix", () => {
+  it("stamps a live delivery with our clock", () => {
+    expect(arrivedFix(8, NOW - 600_000, NOW, false)).toEqual({
+      atMs: NOW,
+      accuracyM: 8,
+    });
+  });
+
+  it("lets the OS's cached fix keep its own age", () => {
+    expect(arrivedFix(8, NOW - 600_000, NOW, true)).toEqual({
+      atMs: NOW - 600_000,
+      accuracyM: 8,
+    });
   });
 });

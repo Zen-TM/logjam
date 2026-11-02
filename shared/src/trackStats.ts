@@ -908,6 +908,13 @@ export function formatDistanceM(distanceM: number): string {
   return `${(distanceM / 1000).toFixed(1)} km`;
 }
 
+/** "3.4 km/h" as ["3.4", " km/h"]: a figure and its unit, for a display that
+ *  sets them in two sizes. No unit leaves the second empty. */
+export function splitUnit(text: string): [string, string] {
+  const at = text.indexOf(" ");
+  return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
+}
+
 /** Human speed: km/h with one decimal. Null (no timestamps) reads as unknown. */
 export function formatSpeedMps(speedMps: number | null): string {
   if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0)

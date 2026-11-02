@@ -114,6 +114,22 @@ export function deliveredFix(
 }
 
 /**
+ * The liveness of a fix that just arrived, for the arrow and for every figure
+ * from the position: our clock for a live delivery, the platform's only for
+ * the OS's cached one (`deliveredFix`).
+ */
+export function arrivedFix(
+  accuracyM: number | null,
+  platformMs: number,
+  nowMs: number,
+  cached: boolean,
+): FixLiveness {
+  return cached
+    ? { atMs: platformMs, accuracyM }
+    : deliveredFix(accuracyM, nowMs);
+}
+
+/**
  * Fold an arriving fix into the last one. A live delivery always wins; the OS's
  * cached fix only fills an empty slot. No timestamps are compared: the cached
  * fix keeps the platform's clock (often GNSS time) and live ones use ours, so

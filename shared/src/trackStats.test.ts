@@ -9,6 +9,7 @@ import {
   computeTrackStats,
   formatDistanceM,
   formatClockMs,
+  splitUnit,
   formatDurationMs,
   formatSpeedMps,
   initialBearingDegrees,
@@ -324,6 +325,11 @@ describe("formatters", () => {
     expect(formatDurationMs(47 * 60_000)).toBe("47 min");
     expect(formatDurationMs(192 * 60_000)).toBe("3 h 12 min");
     expect(formatDurationMs(-1)).toBe("—");
+  });
+
+  it("splits a figure from its unit", () => {
+    expect(splitUnit("3.4 km/h")).toEqual(["3.4", " km/h"]);
+    expect(splitUnit("—")).toEqual(["—", ""]);
   });
 
   // Mutation: return `formatDurationMs`'s words, and a recording's first

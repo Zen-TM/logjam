@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { compassPointFor, formatDistanceM } from "@logjam/shared";
-
-import { fixAgeLabel, type FixQuality } from "../map/gpsSignal";
+import type { FixQuality } from "../map/gpsSignal";
+import { navFigures } from "../map/navFigures";
 import { makeStyles, spacing, radius, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -60,36 +59,35 @@ export function NavReadout({
     };
   }, [active, stale]);
 
-  const known = distanceM != null && bearingDeg != null;
-  const age = stale && fixAtMs != null ? fixAgeLabel(now - fixAtMs) : null;
-  const [distance, unit] = known
-    ? splitUnit(formatDistanceM(distanceM))
-    : ["—", ""];
-  const bearing = known
-    ? `${compassPointFor(bearingDeg)} ${Math.round(bearingDeg)}°`
-    : "—";
-  const figure = [styles.figure, stale && styles.grey];
-  const second = !known
+  const f = navFigures(distanceM, bearingDeg, quality, fixAtMs, now);
+  const figure = [styles.figure, f.grey && styles.grey];
+  const second = !f.known
     ? `${name} · waiting for GPS…`
-    : age
-      ? `${name} · ${age}`
+    : f.age
+      ? `${name} · ${f.age}`
       : name;
+  // What a screen reader says for the figures: the age and "about" included.
+  const spoken = !f.known
+    ? "waiting for GPS"
+    : `${f.about ? "about " : ""}${f.distance}${f.unit}, ${f.bearing}${f.age ? `, ${f.age}` : ""}`;
 
   return (
-    <View
-      style={styles.card}
-      accessibilityLabel={`${name}: ${known ? `${distance}${unit}, ${bearing}` : "waiting for GPS"}${age ? `, ${age}` : ""}${quality === "coarse" ? ", about" : ""}`}
-    >
+    <View style={styles.card}>
       <View style={styles.top}>
-        <Icon idea="navigateTo" size={20} color={theme.accent} />
-        <Text style={figure}>
-          {quality === "coarse" && known ? (
-            <Text style={styles.unit}>about </Text>
-          ) : null}
-          {distance}
-          <Text style={styles.unit}>{unit}</Text>
-        </Text>
-        <Text style={figure}>{bearing}</Text>
+        {/* Its own focus target, so the X stays a button of its own. */}
+        <View
+          accessible
+          accessibilityLabel={`${name}: ${spoken}`}
+          style={styles.figures}
+        >
+          <Icon idea="navigateTo" size={20} color={theme.accent} />
+          <Text style={figure}>
+            {f.about ? <Text style={styles.unit}>about </Text> : null}
+            {f.distance}
+            <Text style={styles.unit}>{f.unit}</Text>
+          </Text>
+          <Text style={figure}>{f.bearing}</Text>
+        </View>
         <IconButton
           icon="close"
           size={16}
@@ -104,11 +102,6 @@ export function NavReadout({
   );
 }
 
-function splitUnit(text: string): [string, string] {
-  const at = text.indexOf(" ");
-  return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
-}
-
 const useStyles = makeStyles((theme, textRole) => ({
   card: {
     alignSelf: "stretch",
@@ -120,6 +113,12 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(1),
   },
   top: { flexDirection: "row", alignItems: "center", gap: spacing(1.5) },
+  figures: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
+  },
   figure: { ...textRole.instrument, color: theme.text, flexShrink: 1 },
   unit: { ...textRole.control },
   grey: { color: theme.textMuted },

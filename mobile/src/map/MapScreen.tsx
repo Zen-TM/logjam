@@ -160,6 +160,7 @@ import { setOfflineOnly as setOfflineOnlyMode } from "../offline/offlineOnlyMode
 import {
   deriveSpeedMps,
   publishLiveReadout,
+  publishTerrainElevation,
   refreshLiveReadout,
   type ReadoutFix,
 } from "./liveReadout";
@@ -235,7 +236,7 @@ import {
   type NorthReference,
 } from "./mapPreferences";
 import {
-  deliveredFix,
+  arrivedFix,
   FIX_MOVE_MIN_M,
   fixQuality,
   nextFix,
@@ -3681,18 +3682,23 @@ export function MapScreen({
         lon: position.coords.longitude,
         lat: position.coords.latitude,
         speedMps: position.coords.speed,
-        // Our clock for a live delivery, the platform's only for the OS's cached
-        // fix, as the arrow does (`deliveredFix`): a drifted phone clock must not
-        // grey every figure.
-        atMs: cached ? position.timestamp : Date.now(),
+        // The platform's own time, for differencing two fixes: a skewed clock
+        // cancels out in a difference, and our arrival time would not.
+        timeMs: position.timestamp,
       };
+      const { atMs } = arrivedFix(
+        position.coords.accuracy,
+        position.timestamp,
+        Date.now(),
+        cached,
+      );
       const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
       previousReadoutFix.current = fix;
       publishLiveReadout({
         speedMps,
         elevationM: position.coords.altitude,
         fromTerrain: false,
-        atMs: fix.atMs,
+        atMs,
         accuracyM: position.coords.accuracy,
       });
 
@@ -3707,13 +3713,7 @@ export function MapScreen({
       })
         .then(({ heights: [elevationM] }) => {
           if (seq !== readoutSeq.current || elevationM == null) return;
-          publishLiveReadout({
-            speedMps,
-            elevationM,
-            fromTerrain: true,
-            atMs: fix.atMs,
-            accuracyM: position.coords.accuracy,
-          });
+          publishTerrainElevation(elevationM);
         })
         // No detail: the error could carry a tile index, which is a position.
         .catch(() => undefined);
@@ -3746,9 +3746,12 @@ export function MapScreen({
     ) => {
       lastFix.current = nextFix(
         lastFix.current,
-        cached
-          ? { atMs: position.timestamp, accuracyM: position.coords.accuracy }
-          : deliveredFix(position.coords.accuracy, Date.now()),
+        arrivedFix(
+          position.coords.accuracy,
+          position.timestamp,
+          Date.now(),
+          cached,
+        ),
         cached,
       );
       noteGpsQuality();

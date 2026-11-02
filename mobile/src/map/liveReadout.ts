@@ -42,7 +42,9 @@ export type ReadoutFix = {
    * sentinel straight through).
    */
   speedMps: number | null;
-  atMs: number;
+  /** When the platform says the fix was taken. Only differences of these are
+   *  used (a skewed clock cancels out); the age of a fix is `LiveReadout.atMs`. */
+  timeMs: number;
 };
 
 /**
@@ -64,7 +66,7 @@ export function deriveSpeedMps(
     return current.speedMps;
   }
   if (!previous) return null;
-  const gapMs = current.atMs - previous.atMs;
+  const gapMs = current.timeMs - previous.timeMs;
   if (gapMs < MIN_DERIVE_GAP_MS || gapMs > FIX_STALE_MS) return null;
   const metres = haversineMeters(
     previous.lat,
@@ -125,6 +127,15 @@ export function publishLiveReadout(next: LiveReadout | null): void {
 }
 
 /**
+ * The terrain's height for the current fix. It merges into whatever is
+ * published NOW rather than rebuilding the reading it was asked for, so a
+ * slow tile read cannot put an older age or speed back.
+ */
+export function publishTerrainElevation(elevationM: number): void {
+  if (live) publishLiveReadout({ ...live, elevationM, fromTerrain: true });
+}
+
+/**
  * A fix arrived that moved too little to act on. It still proves the sky is
  * there, so the figures keep their height and are not aged for standing still.
  */
@@ -136,7 +147,7 @@ export function refreshLiveReadout(
   if (live) publishLiveReadout({ ...live, atMs, accuracyM, speedMps });
 }
 
-function getLiveReadout(): LiveReadout | null {
+export function getLiveReadout(): LiveReadout | null {
   return live;
 }
 

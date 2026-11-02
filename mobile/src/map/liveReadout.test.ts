@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { FIX_COARSE_M, FIX_STALE_MS } from "./gpsSignal";
-import { deriveSpeedMps, readoutFigures } from "./liveReadout";
+import {
+  deriveSpeedMps,
+  getLiveReadout,
+  publishLiveReadout,
+  publishTerrainElevation,
+  readoutFigures,
+  refreshLiveReadout,
+} from "./liveReadout";
 
 const at = (
   atMs: number,
@@ -12,7 +19,7 @@ const at = (
   lat,
   lon,
   speedMps,
-  atMs,
+  timeMs: atMs,
 });
 
 describe("deriveSpeedMps", () => {
@@ -101,6 +108,50 @@ describe("readoutFigures", () => {
       speedMps: null,
       elevationM: null,
       age: null,
+    });
+  });
+});
+
+// Mutations that turn these red: delete the `refreshLiveReadout` call in
+// MapScreen's watcher (the chip greys 20 s after you stop walking), or make
+// `publishTerrainElevation` rebuild the reading it was asked for (a slow tile
+// read puts the old age and speed back).
+describe("the published reading", () => {
+  const base = {
+    speedMps: 1.4,
+    elevationM: 253,
+    fromTerrain: false,
+    atMs: 1000,
+    accuracyM: 8,
+  };
+
+  it("a refresh moves the age and speed and keeps the height", () => {
+    publishLiveReadout({ ...base, fromTerrain: true });
+    refreshLiveReadout(9000, 30, 0);
+    expect(getLiveReadout()).toEqual({
+      speedMps: 0,
+      elevationM: 253,
+      fromTerrain: true,
+      atMs: 9000,
+      accuracyM: 30,
+    });
+  });
+
+  it("a refresh before any reading publishes nothing", () => {
+    publishLiveReadout(null);
+    refreshLiveReadout(9000, 30, 0);
+    expect(getLiveReadout()).toBeNull();
+  });
+
+  it("a late terrain height does not undo a later refresh", () => {
+    publishLiveReadout(base);
+    refreshLiveReadout(9000, 8, 0);
+    publishTerrainElevation(260);
+    expect(getLiveReadout()).toMatchObject({
+      elevationM: 260,
+      fromTerrain: true,
+      atMs: 9000,
+      speedMps: 0,
     });
   });
 });

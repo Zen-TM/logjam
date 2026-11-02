@@ -23,7 +23,7 @@
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { formatSpeedMps } from "@logjam/shared";
+import { formatSpeedMps, splitUnit } from "@logjam/shared";
 
 import {
   fontSize,
@@ -40,13 +40,14 @@ import { readoutFigures, useLiveReadout } from "./liveReadout";
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
 const VALUE_LINE = Math.round(fontSize.xxl * 1.2);
 
-/** Its drawn height, exported for the same reason `SCALE_BAR_HEIGHT` is: the
+/** Its drawn height at the default text size (a larger system font grows the
+ *  chip past it), exported for the same reason `SCALE_BAR_HEIGHT` is: the
  *  native compass ornament is positioned by a NUMBER and has to clear the whole
  *  stack (see MapScreen's `ornamentMarginY`). */
 export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
 /** Wide enough for the longest pair either column produces ("12.5 km/h",
- *  "1234 m") and the longest label ("Elevation · 12 min ago") without the
+ *  "1234 m") and the longest label ("12 min ago") without the
  *  columns touching, and never wider. */
 const CHIP_WIDTH = 248;
 
@@ -85,7 +86,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
       : `${Math.round(figures.elevationM)} m`,
   );
   // Every figure from the position says how far to trust it: its age once the
-  // fix is stale, "about" when it is a tower's guess (gpsSignal.ts).
+  // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
+  // the label's place (over the figure, so "about" reads into it) because the
+  // name plus the age does not fit a column at a large system font.
   const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
   const grey = figures.quality === "stale";
 
@@ -93,7 +96,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
     <View style={styles.chip} pointerEvents="none">
       <View style={styles.column}>
         <Text style={styles.label} numberOfLines={1}>
-          {note && figures.speedMps != null ? `Speed · ${note}` : "Speed"}
+          {note && figures.speedMps != null ? note : "Speed"}
         </Text>
         <Text
           style={[styles.value, grey && styles.grey]}
@@ -111,9 +114,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
             someone already asking. The screen reader still gets it, on the
             value below. */}
         <Text style={styles.label} numberOfLines={1}>
-          {note && figures.elevationM != null
-            ? `Elevation · ${note}`
-            : "Elevation"}
+          {note && figures.elevationM != null ? note : "Elevation"}
         </Text>
         <Text
           style={[styles.value, grey && styles.grey]}
@@ -127,13 +128,6 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   );
 });
 
-/** "3.4 km/h" as the figure and its unit: the figure is the `instrument` size
- *  and the unit a step down, or two of them do not fit a phone's width. */
-function splitUnit(text: string): [string, string] {
-  const at = text.indexOf(" ");
-  return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
-}
-
 const useStyles = makeStyles((theme, textRole) => ({
   // Same translucent warm backing as the scale bar — these sit in one stack
   // over map imagery of any brightness and have to read as one instrument set.
@@ -141,7 +135,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "center",
     width: CHIP_WIDTH,
-    height: READOUT_CHIP_HEIGHT,
+    minHeight: READOUT_CHIP_HEIGHT,
     backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
