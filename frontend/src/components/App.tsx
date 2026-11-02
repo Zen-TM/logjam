@@ -1561,6 +1561,7 @@ function App() {
             standaloneFilesError={standaloneFilesError}
             onRetryStandaloneFiles={refetchStandaloneFiles}
             onOpenWay={openWay}
+            onFocusBounds={setFlyToBounds}
             currentUserId={currentUser?.id ?? null}
             wayDetail={
               selectedWay ? (

@@ -101,6 +101,7 @@ function SidebarPanel({
   standaloneFilesError,
   onRetryStandaloneFiles,
   onOpenWay,
+  onFocusBounds,
   wayDetail,
   plansPanel,
   planDetail,
@@ -193,6 +194,8 @@ function SidebarPanel({
   onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
+  /** Fit the map to a box without opening anything. */
+  onFocusBounds: (bounds: [number, number, number, number]) => void;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -464,6 +467,8 @@ function SidebarPanel({
             verbRequest={placeVerbRequest}
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}
+            routes={allRoutes}
+            onFocusBounds={onFocusBounds}
           />
         )}
         {activePanel === "trip-detail" && (

@@ -24,7 +24,10 @@ import {
   formatDateKey,
   formatFieldValue,
   isReservedFieldKey,
+  formatDistanceM,
   mediaCategory,
+  placeRoute,
+  routeLengthM,
   primaryTripType,
   placeDeleteConfirm,
   removeShareConfirm,
@@ -58,7 +61,9 @@ import type {
   TTripLog,
   TPlaceShare,
   TPlaceType,
+  TRoute,
 } from "../../../placeUtils";
+import { boundsOfPoints } from "./waysModel";
 import {
   deletePlace,
   getCustomFields,
@@ -188,6 +193,8 @@ function PlaceDetailPanel({
   onQuotaChanged,
   onRefetchTripLogs,
   onAfterDelete,
+  routes,
+  onFocusBounds,
 }: {
   place: TPlace | undefined;
   places: TPlace[];
@@ -224,6 +231,10 @@ function PlaceDetailPanel({
   // Leave the (now-empty) place-detail panel after a delete so it doesn't
   // dead-end in "No place selected".
   onAfterDelete: () => void;
+  /** Every drawn route the user can see; one may fill this place's route slot. */
+  routes: TRoute[];
+  /** Fit the map to a box, as the route row's tap does. */
+  onFocusBounds: (bounds: [number, number, number, number]) => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -644,8 +655,9 @@ function PlaceDetailPanel({
   const visualMedia = placeMedia.filter(
     (m) => mediaCategory(m.mediaType) !== "track",
   );
-  const track =
-    placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
+  const slot = place ? placeRoute(place.id, routes, placeMedia) : null;
+  const track = slot?.kind === "file" ? slot.file : null;
+  const drawnRoute = slot?.kind === "drawn" ? slot.route : null;
 
   const copy = PLACE_PAGE.copy;
   const sources = placeSources(current.fieldValues);
@@ -863,7 +875,17 @@ function PlaceDetailPanel({
     route: () => (
       <section className={classes.section}>
         <SectionHeader title={copy.route} />
-        {track ? (
+        {drawnRoute ? (
+          <Row
+            leading={<IconTile icon="route" hue="var(--hue-route)" />}
+            title={drawnRoute.name}
+            subtitle={`Drawn route · ${formatDistanceM(routeLengthM(drawnRoute.points))}`}
+            onOpen={() => {
+              const bounds = boundsOfPoints(drawnRoute.points);
+              if (bounds) onFocusBounds(bounds);
+            }}
+          />
+        ) : track ? (
           <Row
             leading={<IconTile icon="track" hue="var(--hue-track)" />}
             title={track.filename}
