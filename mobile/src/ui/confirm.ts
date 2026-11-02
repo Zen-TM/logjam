@@ -1,10 +1,21 @@
-import { Alert } from "react-native";
 import type { ConfirmCopy } from "@logjam/shared";
 
+type Pending = {
+  copy: ConfirmCopy;
+  cancelLabel: string;
+  resolve: (confirmed: boolean) => void;
+};
+
+// What `ConfirmHost` (mounted once, in the shell) is asked to draw: first in,
+// first shown. Kept apart from the component so the queue runs in a plain test.
+const queue: Pending[] = [];
+const listeners = new Set<() => void>();
+const emit = () => listeners.forEach((listener) => listener());
+
 /**
- * The one way Logjam GPS raises an `Alert` (mobile/DESIGN.md §4): Cancel and
- * the verb, never a second wording of Cancel. Resolves true on the verb and
- * false on Cancel or a dismissal.
+ * The one way Logjam GPS asks "are you sure" (mobile/DESIGN.md §4): a themed
+ * dialog with Cancel and the verb, never a second wording of Cancel. Resolves
+ * true on the verb and false on Cancel, the backdrop or the back gesture.
  *
  * `cancelLabel` is the one exception, for the second step of a two-step verb
  * where "Cancel" would read as backing out of the whole thing: removing a
@@ -17,22 +28,27 @@ export function confirm(
   options?: { cancelLabel?: string },
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    Alert.alert(
-      copy.confirmTitle,
-      copy.confirmBody,
-      [
-        {
-          text: options?.cancelLabel ?? "Cancel",
-          style: "cancel",
-          onPress: () => resolve(false),
-        },
-        {
-          text: copy.confirmLabel,
-          style: copy.tone === "destructive" ? "destructive" : "default",
-          onPress: () => resolve(true),
-        },
-      ],
-      { cancelable: true, onDismiss: () => resolve(false) },
-    );
+    queue.push({
+      copy,
+      cancelLabel: options?.cancelLabel ?? "Cancel",
+      resolve,
+    });
+    emit();
   });
+}
+
+/** The confirm on screen, or undefined. Stable between answers. */
+export const pendingConfirm = (): Pending | undefined => queue[0];
+
+export function answerConfirm(confirmed: boolean) {
+  const answered = queue.shift();
+  emit();
+  answered?.resolve(confirmed);
+}
+
+export function subscribeConfirm(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }

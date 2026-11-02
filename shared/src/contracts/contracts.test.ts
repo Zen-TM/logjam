@@ -96,6 +96,10 @@ import {
   TRIP_FORM,
   listSelectionLabel,
   tripDeleteConfirm,
+  planDeleteConfirm,
+  planFormDeleteConfirm,
+  planItemDeleteConfirm,
+  planSectionDeleteConfirm,
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
@@ -415,15 +419,22 @@ describe("a trip's verbs", () => {
   });
 
   it("says what goes and what stays, for one trip or many", () => {
-    expect(tripDeleteConfirm(1)).toEqual({
-      confirmTitle: "Delete this trip?",
+    expect(tripDeleteConfirm({ title: "Claustral" })).toEqual({
+      confirmTitle: "Delete Claustral?",
       confirmBody:
         "Its photos, videos and tracks go too. The places it links to stay. This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "destructive",
     });
-    expect(tripDeleteConfirm(3)).toEqual({
+    expect(tripDeleteConfirm({ count: 1 }).confirmTitle).toBe(
+      "Delete this trip?",
+    );
+    expect(tripDeleteConfirm({ count: 3 })).toEqual({
       confirmTitle: "Delete 3 trips?",
       confirmBody:
         "Their photos, videos and tracks go too. The places they link to stay. This can't be undone.",
+      confirmLabel: "Delete",
+      tone: "destructive",
     });
   });
 });
@@ -1124,6 +1135,31 @@ describe("the delete confirms", () => {
       expect(copy.confirmLabel).toBe(label);
       expect(copy.tone).toBe("destructive");
     }
+  });
+
+  // Mutation: drop "This can't be undone." from any one, or name its thing
+  // in the title no longer ("Delete this trip?" for a trip that has a title).
+  it("every delete names its thing and says it can't be undone", () => {
+    const copies = [
+      placeDeleteConfirm({ name: "Claustral" }),
+      tripDeleteConfirm({ title: "Claustral" }),
+      planDeleteConfirm("Claustral", { places: 1, ways: 0 }),
+      planSectionDeleteConfirm("Claustral"),
+      planFormDeleteConfirm({
+        title: "Claustral",
+        answers: [],
+        myAnswer: null,
+      }),
+      planItemDeleteConfirm("Claustral"),
+      placeTypeDeleteConfirm("Claustral"),
+      attributeDeleteConfirm("Claustral", 0, { one: "trip", many: "trips" }),
+    ];
+    for (const copy of copies) {
+      expect(copy.confirmTitle).toContain("Delete Claustral");
+      expect(copy.confirmBody).toMatch(/This can't be undone\.$/);
+    }
+    for (const copy of copies.slice(0, 6))
+      expect(copy.confirmLabel).toBe("Delete");
   });
 });
 
