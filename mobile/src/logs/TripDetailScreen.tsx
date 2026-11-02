@@ -55,11 +55,13 @@ import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 export function TripDetailScreen({
   trip,
   onBack,
+  backLabel,
   onOpenPlace,
   onFocusOnMap,
 }: {
   trip: MirrorTrip;
   onBack: () => void;
+  backLabel: string;
   onOpenPlace: (placeId: string, name: string) => void;
   /** Opens the Map tab framed on this route attachment's extent (resolved
    *  here, first) — nothing is drawn on the map. */
@@ -237,6 +239,7 @@ export function TripDetailScreen({
         title={tripTitle(current)}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="overflow"

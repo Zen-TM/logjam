@@ -9,6 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { NOTIFICATION_TYPES } from "@logjam/shared";
+import { PLAN_PERSON_KEY } from "../lib/planMembership";
 
 const read = (...p: string[]) =>
   readFileSync(join(import.meta.dirname, "..", "..", ...p), "utf8");
@@ -19,6 +20,10 @@ const purgeSource = read("src", "routes", "users.ts");
 // cascade removes; the purge deliberately has no line for them.
 const REMOVED_BY_CASCADE = ["Share", "FileSendRecipient"];
 
+// Rows that belong to a plan, not to the user who made them, so they outlive
+// the account: every `User` relation is SetNull.
+const OUTLIVES_ACCOUNT = ["TripPlan", "TripPlanInvite"];
+
 /** model name -> its `User` relation lines (the ones that name the owner). */
 function modelsRelatedToUser(): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -28,7 +33,7 @@ function modelsRelatedToUser(): Map<string, string[]> {
     const relations = body
       .split("\n")
       .map((l) => l.trim())
-      .filter((l) => /^\w+\s+User\s+@relation\(/.test(l));
+      .filter((l) => /^\w+\s+User\??\s+@relation\(/.test(l));
     if (relations.length > 0) out.set(name, relations);
   }
   return out;
@@ -60,7 +65,10 @@ describe("account-delete purge covers every model related to User", () => {
   it("deletes each one explicitly or names it as removed by the cascade", () => {
     const purged = explicitlyPurged();
     const uncovered = [...modelsRelatedToUser().keys()].filter(
-      (model) => !purged.has(model) && !REMOVED_BY_CASCADE.includes(model),
+      (model) =>
+        !purged.has(model) &&
+        !REMOVED_BY_CASCADE.includes(model) &&
+        !OUTLIVES_ACCOUNT.includes(model),
     );
     expect(
       uncovered,
@@ -80,6 +88,19 @@ describe("account-delete purge covers every model related to User", () => {
       expect(explicitlyPurged().has(model)).toBe(false);
     }
   });
+
+  // Mutation that turns this red: making TripPlan.createdBy cascade, which
+  // would delete a group's plan with its creator's account.
+  it("only lists a model as outliving the account when every User relation is SetNull", () => {
+    const related = modelsRelatedToUser();
+    for (const model of OUTLIVES_ACCOUNT) {
+      const relations = related.get(model);
+      expect(relations, `${model} has no User relation`).toBeDefined();
+      for (const line of relations!) {
+        expect(line, `${model}: ${line}`).toContain("onDelete: SetNull");
+      }
+    }
+  });
 });
 
 // A notification row is held by the recipient, so the cascade from the sender
@@ -88,7 +109,8 @@ describe("account-delete purge covers every model related to User", () => {
 //
 // Mutations that turn this red: creating a notification in a file not listed
 // here, listing a type its file does not create, or a listed type sent to
-// another user missing from the purge in routes/users.ts, or a type added to
+// another user missing from the purge in routes/users.ts (for the plan
+// types, the purge no longer reading PLAN_PERSON_KEY), or a type added to
 // NOTIFICATION_TYPES that no site lists and isn't retired (or listed but not
 // declared).
 describe("account-delete purge covers every notification type", () => {
@@ -103,6 +125,13 @@ describe("account-delete purge covers every notification type", () => {
     "api/src/routes/fileSends.ts": ["file_sent"],
     "api/src/routes/friendInvites.ts": ["friend_request_accepted"],
     "api/src/routes/friends.ts": ["friend_request", "friend_request_accepted"],
+    "api/src/lib/planMembership.ts": [
+      "plan_invited",
+      "plan_join_request",
+      "plan_join_approved",
+      "plan_member_joined",
+      "plan_access_ended",
+    ],
     "api/src/routes/shares.ts": ["item_shared"],
     "api/src/routes/sharing.ts": ["place_shared"],
     "api/src/scripts/announce.ts": ["announcement"],
@@ -112,8 +141,10 @@ describe("account-delete purge covers every notification type", () => {
   // Declared because older rows still hold them, but no file creates them now.
   const RETIRED = ["topo_export_skipped"];
   // Only ever sent to the user the row is about, so the purge's
-  // `notification.deleteMany({ userId })` already removes them.
+  // `notification.deleteMany({ userId })` already removes them; or, for
+  // plan_access_ended, naming no user at all.
   const HELD_BY_OWNER_ONLY = [
+    "plan_access_ended",
     "egress_quota_exceeded",
     "egress_quota_warning",
     "topo_complete",
@@ -146,9 +177,11 @@ describe("account-delete purge covers every notification type", () => {
 
   it("lists each type its file creates", () => {
     const missing = Object.entries(CREATION_SITES).flatMap(([file, types]) =>
-      types.filter(
-        (t) => !readFileSync(join(repo, file), "utf8").includes(`"${t}"`),
-      ),
+      types.filter((t) => {
+        const src = readFileSync(join(repo, file), "utf8");
+        // A string, or a key of an object such as PLAN_PERSON_KEY.
+        return !src.includes(`"${t}"`) && !src.includes(`${t}:`);
+      }),
     );
     expect(missing).toEqual([]);
   });
@@ -161,10 +194,18 @@ describe("account-delete purge covers every notification type", () => {
     ).toEqual([...NOTIFICATION_TYPES].sort());
   });
 
+  // The plan types are named through PLAN_PERSON_KEY, which also says which
+  // payload key holds the person; the purge must read it.
   it("names each type sent to another user in the purge", () => {
     const purge = purgeSource.slice(purgeSource.indexOf("$transaction(["));
+    const viaPlanMap = purge.includes("PLAN_PERSON_KEY")
+      ? Object.keys(PLAN_PERSON_KEY)
+      : [];
     const unnamed = [...new Set(Object.values(CREATION_SITES).flat())].filter(
-      (t) => !HELD_BY_OWNER_ONLY.includes(t) && !purge.includes(`"${t}"`),
+      (t) =>
+        !HELD_BY_OWNER_ONLY.includes(t) &&
+        !viaPlanMap.includes(t) &&
+        !purge.includes(`"${t}"`),
     );
     expect(unnamed).toEqual([]);
   });

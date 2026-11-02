@@ -78,7 +78,13 @@ const copy = ACCOUNT.copy;
  * is told the counts and the irreversibility BEFORE they reach a password
  * field, not after.
  */
-function GuestAccountScreen({ onBack }: { onBack: () => void }) {
+function GuestAccountScreen({
+  onBack,
+  backLabel,
+}: {
+  onBack: () => void;
+  backLabel: string;
+}) {
   const styles = useStyles();
 
   const { linkAccount } = useAccountState();
@@ -114,7 +120,7 @@ function GuestAccountScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={styles.root}>
-      <Hero eyebrow="Account" title="No account" onBack={onBack}>
+      <Hero title="No account" onBack={onBack} backLabel={backLabel}>
         <Text style={styles.email}>
           {summary
             ? `${summary} on this phone`
@@ -175,10 +181,12 @@ const SHEET_TITLE: Record<Exclude<SheetMode, "closed">, string> = {
 
 export function AccountScreen({
   onBack,
+  backLabel,
   onSignOut,
   onOpenFriends,
 }: {
   onBack: () => void;
+  backLabel: string;
   onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
@@ -186,10 +194,12 @@ export function AccountScreen({
   // A guest has no account record, no quotas and nothing to sign out of, so
   // this is a different screen rather than the same one with everything
   // disabled — the whole point of it is the way IN.
-  if (accountState === "guest") return <GuestAccountScreen onBack={onBack} />;
+  if (accountState === "guest")
+    return <GuestAccountScreen onBack={onBack} backLabel={backLabel} />;
   return (
     <LinkedAccountScreen
       onBack={onBack}
+      backLabel={backLabel}
       onSignOut={onSignOut}
       onOpenFriends={onOpenFriends}
     />
@@ -198,10 +208,12 @@ export function AccountScreen({
 
 function LinkedAccountScreen({
   onBack,
+  backLabel,
   onSignOut,
   onOpenFriends,
 }: {
   onBack: () => void;
+  backLabel: string;
   onSignOut: SignOutHandler;
   onOpenFriends: () => void;
 }) {
@@ -246,9 +258,9 @@ function LinkedAccountScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow="Account"
         title={user.username}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="edit"

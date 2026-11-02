@@ -2,19 +2,19 @@
 // the message's own title, who it is from, and its body drawn from the shared
 // parser's tree with plain `Text`. Nothing in the tree is markup, and there is
 // no WebView (a native dependency would change the fingerprint, ADR 0023).
-import { Linking, Platform, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   ANNOUNCEMENT,
   notificationAnnouncement,
   parseMessageMarkdown,
   type MessageBlock,
-  type MessageInline,
 } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
-import { inlineText, makeStyles, muted, spacing } from "../theme";
+import { makeStyles, muted, spacing } from "../theme";
 import { BottomSheet } from "../ui";
-import { listMarker, messageSpans } from "./messageSpans";
+import { MessageInlines as Inlines } from "./MessageInlines";
+import { listMarker } from "./messageSpans";
 
 export function AnnouncementSheet({
   notification,
@@ -96,31 +96,6 @@ function Block({ block }: { block: MessageBlock }) {
   }
 }
 
-// Nested Text inherits its parent's role, so a run only adds its emphasis.
-function Inlines({ inlines }: { inlines: MessageInline[] }) {
-  const styles = useStyles();
-  return messageSpans(inlines).map((span, i) => {
-    const { href } = span;
-    return (
-      <Text
-        key={i}
-        style={[
-          span.strong && inlineText.strong,
-          span.em && styles.em,
-          span.code && Platform.select(inlineText.code),
-          href !== null && styles.link,
-        ]}
-        {...(href !== null && {
-          accessibilityRole: "link" as const,
-          onPress: () => void Linking.openURL(href).catch(console.error),
-        })}
-      >
-        {span.text}
-      </Text>
-    );
-  });
-}
-
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(2), paddingBottom: spacing(2) },
   from: { ...muted(theme, textRole.detail) },
@@ -131,8 +106,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   list: { gap: spacing(1) },
   item: { flexDirection: "row", gap: spacing(1) },
   itemText: { flex: 1 },
-  em: { fontStyle: "italic" },
-  // Text-coloured and underlined, as `TextLink`: words are never an intent
-  // colour (shared/DESIGN.md §7).
-  link: { textDecorationLine: "underline" },
 }));
