@@ -29,12 +29,13 @@ import {
   FRIENDS,
   isValidUsername,
   NSW_5M,
+  TRIP_PLAN_JOIN,
   USERNAME_HINT,
   USERNAME_RULE,
   USERNAME_TAKEN,
 } from "@logjam/shared";
 import { usernameAvailable } from "../placeUtils";
-import { pendingFriendInvite } from "../pendingFriendInvite";
+import { friendInvite, planInvite } from "../pendingInvite";
 import BrandMark from "./brand/BrandMark";
 import BrandWordmark from "./brand/BrandWordmark";
 import { Button, Checkbox, TextField, ErrorBanner } from "../ui";
@@ -83,11 +84,19 @@ function Intro() {
 }
 
 function InviteNote() {
-  if (!pendingFriendInvite()) return null;
   return (
-    <p className={classes.successBanner} role="status">
-      {FRIENDS.copy.inviteSignIn}
-    </p>
+    <>
+      {friendInvite.pending() && (
+        <p className={classes.successBanner} role="status">
+          {FRIENDS.copy.inviteSignIn}
+        </p>
+      )}
+      {planInvite.pending() && (
+        <p className={classes.successBanner} role="status">
+          {TRIP_PLAN_JOIN.copy.signIn}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -145,7 +154,10 @@ function CognitoForms({
     newAccountUsername?: string,
   ) => Promise<void>;
 }) {
-  const [screen, setScreen] = useState<Screen>("signIn");
+  const [screen, setScreen] = useState<Screen>(
+    // Someone opening a plan invite has usually never signed up.
+    planInvite.pending() ? "signUp" : "signIn",
+  );
   // Set only once the sign-up form, ticks and all, has been accepted: it is what
   // records consent at first sign-in, so whatever is typed in the field isn't.
   const [signedUpUsername, setSignedUpUsername] = useState<string>();

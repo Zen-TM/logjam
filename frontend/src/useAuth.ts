@@ -9,6 +9,7 @@ import {
 import { messageFromError } from "./errors/messageFromError";
 import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
+import { friendInvite, planInvite } from "./pendingInvite";
 import {
   completeSignInFromUrl,
   issuerUrl,
@@ -48,6 +49,10 @@ async function endSession() {
   // rules, root AGENTS.md). Cleared before the network call so a failure
   // can't strand it.
   clearTripDraft();
+  // An invite waiting in this tab was for whoever opened its link; the next
+  // account to sign in here must not be handed it.
+  friendInvite.clear();
+  planInvite.clear();
   // The GeoPDF tile cache shows which areas were printed: same line. It
   // clears here because the user is known to be signing out.
   await clearTileCache();
