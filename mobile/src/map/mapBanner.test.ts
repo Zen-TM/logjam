@@ -16,7 +16,8 @@ import {
 // Mutations that turn it red: put `action={<IconButton .../>}` back on a `<Notice` in
 // MapScreen.tsx; make MAP_BANNER_INSET smaller than the search pill plus two
 // gaps; give `mapBannerInsets` the inset on the wrong side (the banner would
-// cover the pill, or leave the freed corner empty).
+// cover the pill, or leave the freed corner empty); pass `mapBannerInsets` or
+// `<MapSearchBar side=` anything but the one `searchSide` in MapScreen.tsx.
 const hasNoticeWithAction = (src: string) =>
   /<Notice\b[^>]*\baction=\{\s*<IconButton/.test(src);
 
@@ -47,5 +48,14 @@ describe("map banners", () => {
       left: CHROME_GAP,
       right: MAP_BANNER_INSET,
     });
+  });
+
+  it("gives the banner and the search pill the same side", () => {
+    const src = readFileSync(join(__dirname, "MapScreen.tsx"), "utf8");
+    expect(src).toContain("...mapBannerInsets(searchSide)");
+    expect(src).toContain("side={searchSide}");
+    expect(src).toContain(
+      'const searchSide = controlsOnLeft ? "right" : "left"',
+    );
   });
 });

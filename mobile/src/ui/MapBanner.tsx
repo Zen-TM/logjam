@@ -6,11 +6,11 @@ import { Icon, type Glyph } from "./Icon";
 import { IconButton } from "./IconButton";
 
 /**
- * A mode the map is in, as a pill in the top row between the search and record
- * buttons (a plan on the map, navigating to a place, a filter hiding pins). It
+ * A mode the map is in, as a pill in the top row beside the search
+ * button (a plan on the map, navigating to a place, a filter hiding pins). It
  * is the search button's height and colour, so it reads as part of that row,
  * and the parent insets it so an expanded search bar covers it
- * (`MAP_BANNER_INSET`). Whatever does not fit is cut to one line; pressing the
+ * (`mapBannerInsets`). Whatever does not fit is cut to one line; pressing the
  * pill opens what it is about or shows `fullText` (shared/DESIGN.md §15).
  * Status that is not a mode with a way out stays a `Notice`.
  */

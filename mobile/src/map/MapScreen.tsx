@@ -30,6 +30,7 @@ import {
   BackHandler,
   Linking,
   Pressable,
+  ScrollView,
   Text,
   View,
   useWindowDimensions,
@@ -4683,6 +4684,9 @@ export function MapScreen({
   // bottom-left, 3 is bottom-right). Absolute offsets rather than a flex
   // direction because all three are absolutely positioned against the map.
   const controlsOnLeft = controlSide === "left";
+  const searchSide = controlsOnLeft ? "right" : "left";
+  // Where the action column starts, measured: it grows with what is in it.
+  const [columnTop, setColumnTop] = useState<number | null>(null);
   /**
    * How high MapLibre's compass ornament sits, clearing the instruments below
    * it in the same corner.
@@ -5381,7 +5385,7 @@ export function MapScreen({
             styles.bannerColumn,
             {
               top: insets.top + CHROME_GAP,
-              ...mapBannerInsets(controlsOnLeft ? "right" : "left"),
+              ...mapBannerInsets(searchSide),
             },
           ]}
         >
@@ -5397,7 +5401,7 @@ export function MapScreen({
         <MapSearchBar
           topInset={insets.top}
           // Opposite the action column, so it never sits over the buttons.
-          side={controlsOnLeft ? "right" : "left"}
+          side={searchSide}
           online={connectivity === "online"}
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
@@ -5424,8 +5428,21 @@ export function MapScreen({
 
       {/* Everything that talks to the user from the top of the map stacks in
           one column, so a second message can never land on top of the first. */}
-      <View
-        style={[styles.noticeStack, { top: noticeTop }]}
+      <ScrollView
+        style={[
+          styles.noticeStack,
+          {
+            top: noticeTop,
+            // Ends where the action column starts, so a tall panel or a
+            // second notice scrolls instead of running under its buttons.
+            maxHeight:
+              columnTop === null
+                ? undefined
+                : Math.max(0, columnTop - noticeTop - spacing(1)),
+          },
+        ]}
+        contentContainerStyle={styles.noticeStackContent}
+        keyboardShouldPersistTaps="handled"
         pointerEvents="box-none"
       >
         {/* The recording's numbers live behind the record button now, but this
@@ -5570,21 +5587,24 @@ export function MapScreen({
         {downloadProgress ? (
           <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
-      </View>
+      </ScrollView>
 
       {/* One column of actions on one edge; the OTHER edge belongs to the map's
           own instruments (native compass + compass tape + scale bar). Which is
           which is the user's (Settings → Map): the two swap as a pair, because
           the point of the setting is which side the thumb reaches, and leaving
           the instruments put would only move the buttons on top of them. */}
-      <View style={[styles.controls, controlsEdge]}>
+      <View
+        style={[styles.controls, controlsEdge]}
+        onLayout={(e) => setColumnTop(e.nativeEvent.layout.y)}
+      >
         {/* THE TOOL GROUP IS AT THE TOP OF THE COLUMN, and that is a layout
             constraint rather than a preference. Its tray opens SIDEWAYS, across
             the map towards the opposite edge — which is where the instruments
             live. Placed lower, the tray would collide with the speed/elevation
             chip; from the top it clears the whole stack. It is also the
-            least-reached button of the four, so the two that are reached
-            (layers, locate) keep the thumb end of the column. */}
+            least-reached button of the five, so the three that are reached
+            (layers, locate, record) keep the thumb end of the column. */}
         <MapToolGroup
           side={controlsOnLeft ? "left" : "right"}
           open={toolsOpen}
@@ -5619,7 +5639,11 @@ export function MapScreen({
             color={followMode !== "off" ? theme.onFill : theme.text}
           />
         </Pressable>
-        {recordButton}
+        {/* An idle Record is out of the way while a tool collects points: a
+            stray map tap must not start a recording. A running one stays. */}
+        {collectingPoints && !(activeTrack && activeTrack.state !== "done")
+          ? null
+          : recordButton}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Map data attribution"
@@ -6092,8 +6116,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     position: "absolute",
     left: spacing(2),
     right: spacing(2),
-    gap: spacing(1),
   },
+  noticeStackContent: { gap: spacing(1) },
   sheetBody: { gap: spacing(1) },
   controls: {
     position: "absolute",

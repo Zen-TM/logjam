@@ -97,8 +97,9 @@ handler or a camera write, read
   button pulses (a steady halo under Remove animations), its numbers are a
   sheet one tap away, and a recorder that is not saving points says so on the
   map unasked, as a `critical` notice. The button sits in the action column
-  under Locate, on the edge Settings → Map picks, so a thumb reaches it with a
-  tool armed or not. Pause, Resume and Finish are full size
+  under Locate, on the edge Settings → Map picks, so a thumb reaches it. While a
+  tool is armed an idle button is hidden, so a map tap cannot start a
+  recording; a running one stays. Pause, Resume and Finish are full size
   (48), share the footer (`CardActions`) and are never compact.
 - **A press-and-hold that commits ticks once** (`holdTick`: finishing a
   recording, dropping a point on the map, selecting a row). Nothing else

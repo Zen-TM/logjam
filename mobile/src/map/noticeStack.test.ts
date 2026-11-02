@@ -12,7 +12,7 @@ const source = readFileSync(
   new URL("./MapScreen.tsx", import.meta.url),
   "utf8",
 );
-const stack = source.slice(source.indexOf("style={[styles.noticeStack"));
+const stack = source.slice(source.indexOf("styles.noticeStack,"));
 
 describe("the notice stack", () => {
   it("puts the critical notice, then the navigation readout, first", () => {
@@ -31,7 +31,7 @@ describe("the notice stack", () => {
   it("draws the readout once, inside the stack", () => {
     expect(source.match(/<NavReadout/g)).toHaveLength(1);
     expect(source.indexOf("<NavReadout")).toBeGreaterThan(
-      source.indexOf("style={[styles.noticeStack"),
+      source.indexOf("styles.noticeStack,"),
     );
   });
 });
