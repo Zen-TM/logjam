@@ -37,6 +37,10 @@ export default defineConfig({
     // Playwright ships no chromium for some hosts; drive system Chrome via the
     // chrome channel instead.
     channel: "chrome",
+    // Playwright's browser is light by default, and an account with no scheme
+    // pick follows the OS: dark keeps the suite on Sandstone, the default
+    // scheme. Ghost Gum is reached through a stored pick (a11y.spec.ts).
+    colorScheme: "dark",
   },
   projects: [
     {
