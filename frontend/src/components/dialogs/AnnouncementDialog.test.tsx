@@ -22,6 +22,13 @@ const open = (body: string) =>
   ).baseElement.querySelector("dialog")!;
 
 describe("AnnouncementDialog", () => {
+  // A dialog with no decision closes by x and by Close (shared/DESIGN.md §3).
+  // Mutation: drop the `footer` from the Dialog.
+  it("has a Close button as well as the x", () => {
+    const view = within(open("Hello"));
+    expect(view.getAllByRole("button", { name: "Close" })).toHaveLength(2);
+  });
+
   // Mutation: drop a case from `block` or `inlines` (that kind then draws
   // nothing), or the `.from` line.
   it("draws every block and inline kind as its own element", () => {

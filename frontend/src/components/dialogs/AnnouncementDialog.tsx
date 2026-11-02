@@ -4,7 +4,7 @@ import {
   parseMessageMarkdown,
   type MessageBlock,
 } from "@logjam/shared";
-import { Dialog } from "../../ui";
+import { Button, Dialog } from "../../ui";
 import { messageInlines } from "../MessageInlines";
 import classes from "./AnnouncementDialog.module.css";
 
@@ -69,6 +69,7 @@ function AnnouncementDialog({
       title={message?.title}
       onClose={onClose}
       size="large"
+      footer={<Button onClick={onClose}>Close</Button>}
     >
       <p className={classes.from}>{ANNOUNCEMENT.from}</p>
       <div className={classes.message}>{blocks.map(block)}</div>

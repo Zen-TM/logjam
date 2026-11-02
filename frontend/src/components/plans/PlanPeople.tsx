@@ -289,6 +289,7 @@ export default function PlanPeople({
         open={personView != null}
         title={personView?.name}
         onClose={() => setPersonId(null)}
+        footer={<Button onClick={() => setPersonId(null)}>Close</Button>}
       >
         {person && personView && (
           <div className={classes.list}>

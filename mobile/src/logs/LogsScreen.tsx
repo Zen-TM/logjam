@@ -251,11 +251,13 @@ export function LogsScreen({
     const targets = selectedItems;
     const count = targets.length;
     if (
-      !(await confirm({
-        ...tripDeleteConfirm(count),
-        confirmLabel: "Delete",
-        tone: "destructive",
-      }))
+      !(await confirm(
+        tripDeleteConfirm(
+          targets[0] && count === 1
+            ? { title: tripTitle(targets[0]) }
+            : { count },
+        ),
+      ))
     )
       return;
     let failures = 0;

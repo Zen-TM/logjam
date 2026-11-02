@@ -386,7 +386,13 @@ export function PlacesScreen({
   const deleteSelected = useCallback(async () => {
     const targets = selectedItems;
     const count = targets.length;
-    if (!(await confirm(placeDeleteConfirm({ count })))) return;
+    const only = targets.length === 1 ? targets[0] : undefined;
+    if (
+      !(await confirm(
+        placeDeleteConfirm(only ? { name: only.name } : { count }),
+      ))
+    )
+      return;
     let failures = 0;
     for (const place of targets) {
       try {

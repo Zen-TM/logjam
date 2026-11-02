@@ -454,7 +454,15 @@ function TripLogsPanel({
   };
 
   // ── Render ───────────────────────────────────────────────────────────
-  const deleteCopy = tripDeleteConfirm(pendingDelete?.length ?? 1);
+  const pendingTrip =
+    pendingDelete?.length === 1
+      ? tripLogs.find((trip) => trip.id === pendingDelete[0])
+      : undefined;
+  const deleteCopy = tripDeleteConfirm(
+    pendingTrip
+      ? { title: tripTitle(pendingTrip) }
+      : { count: pendingDelete?.length ?? 1 },
+  );
   const rangeText = rangeSet
     ? dateRangeLabel(dateFrom || null, dateTo || null)
     : null;
@@ -907,7 +915,7 @@ function TripLogsPanel({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}
