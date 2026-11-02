@@ -65,8 +65,12 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityHint={disabled ? disabledReason : undefined}
-      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      // Not `disabled` in the state: TalkBack may then refuse the double-tap
+      // that asks why, so the hint says it is unavailable instead.
+      accessibilityHint={
+        disabled ? `Unavailable. ${disabledReason}` : undefined
+      }
+      accessibilityState={{ disabled: loading, busy: loading }}
       onPress={
         disabled
           ? () => disabledReason && showDisabledReason(disabledReason)

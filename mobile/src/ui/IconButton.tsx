@@ -49,8 +49,11 @@ export function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint={disabled ? disabledReason : undefined}
-      accessibilityState={{ disabled }}
+      // Not `disabled` in the state: TalkBack may then refuse the double-tap
+      // that asks why, so the hint says it is unavailable instead.
+      accessibilityHint={
+        disabled ? `Unavailable. ${disabledReason}` : undefined
+      }
       // Stays pressable, and says why (shared/DESIGN.md §5).
       onPress={
         disabled
