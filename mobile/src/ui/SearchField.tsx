@@ -33,11 +33,13 @@ export function SearchField({
   const theme = useTheme();
   const styles = useStyles();
   const [focused, setFocused] = useState(false);
+  const clearable = value !== "" && editable;
 
   return (
     <View
       style={[
         styles.pill,
+        !clearable && styles.endPad,
         focused && styles.focused,
         !editable && styles.disabled,
       ]}
@@ -58,7 +60,7 @@ export function SearchField({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
       />
-      {value !== "" && editable ? (
+      {clearable ? (
         <IconButton
           icon="close"
           size={16}
@@ -83,6 +85,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderColor: withAlpha(theme.accent, 0.45),
     backgroundColor: theme.field,
   },
+  // The clear button's own box insets the end when it is there.
+  endPad: { paddingRight: spacing(1.5) },
   focused: { borderColor: theme.accent },
   disabled: { opacity: opacity.disabled },
   input: { ...textRole.body, flex: 1, paddingVertical: 0, color: theme.text },

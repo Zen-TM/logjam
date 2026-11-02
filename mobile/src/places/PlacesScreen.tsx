@@ -64,6 +64,7 @@ import {
   qualityLabel,
   type PlacesEmptyKind,
   type PlaceStatus,
+  type PlaceStatusFilterValue,
   type SectionKeysOn,
 } from "@logjam/shared";
 
@@ -130,7 +131,7 @@ import { placeTypeGlyph } from "./placeTypeIcon";
 
 const { copy } = PLACES_LIST;
 
-type Bucket = "all" | PlaceStatus;
+type Bucket = PlaceStatusFilterValue;
 
 /** The type rail's "every type" chip. A sentinel rather than `null`, because
  *  `ChipRail` keys its chips by value. No place type can collide with
@@ -982,8 +983,7 @@ const PlaceRow = memo(function PlaceRow({
 
   const meta = placeStatusMeta(theme)[status];
   const quality = qualityLabel(numericFieldValue(place.fieldValues, "quality"));
-  // The glyph stays the STATUS one — that is what the rail filters on, and the
-  // map is where a type is a colour. What the row owes a mixed list is the
+  // The glyph stays the STATUS one, and the map is where a type is a colour. What the row owes a mixed list is the
   // type's NAME, and only while the list is mixed: with a tab selected the
   // strip above already says it, and a place of a type with no grades
   // summarises to nothing at all, so this is often the only second line.
@@ -1035,9 +1035,9 @@ const PlaceRow = memo(function PlaceRow({
   );
 });
 
-/** An empty tick list, an exhausted one and an over-tight filter are three
- * different problems with three different ways out. Which is which, and the
- * words, are `placesEmptyKind` and `placesEmptyState` in `@logjam/shared`. */
+/** An empty tick list and an over-tight filter are different problems with
+ * different ways out. Which is which, and the words, are `placesEmptyKind` and
+ * `placesEmptyState` in `@logjam/shared`. */
 function EmptyPanel({
   kind,
   onAdd,

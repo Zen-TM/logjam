@@ -63,9 +63,12 @@ export const PLACES_FILTER_SHEET = {
   },
 } as const satisfies ScreenContract;
 
+/** The status filter's value: every status, or one of them. */
+export type PlaceStatusFilterValue = "all" | PlaceStatus;
+
 /** The status filter's options: every place is exactly one of these. */
 export const PLACE_STATUS_FILTER_OPTIONS: readonly {
-  value: "all" | PlaceStatus;
+  value: PlaceStatusFilterValue;
   label: string;
 }[] = [
   { value: "all", label: PLACES_FILTER_SHEET.copy.allStatuses },

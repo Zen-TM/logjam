@@ -5,11 +5,11 @@ import {
   activePlaceFilterCount,
   EMPTY_PLACE_FILTERS,
   type PlaceFilters,
-  type PlaceStatus,
+  type PlaceStatusFilterValue,
   type RegionBbox,
 } from "@logjam/shared";
 
-export type StatusBucket = "all" | PlaceStatus;
+export type StatusBucket = PlaceStatusFilterValue;
 
 /**
  * The status is two filter fields read together — ownership and
@@ -34,7 +34,7 @@ export function withBucket(
 }
 
 /**
- * Which chip the filter corresponds to. A combination the rail cannot show (an
+ * Which chip the filter corresponds to. A combination the sheet cannot show (an
  * ownership or completion set by an older build's accordion, still in session
  * storage) maps to its nearest chip — and `normaliseBucket` rewrites the filter
  * to match, so no hidden axis goes on narrowing the list with no chip lit.

@@ -13,7 +13,7 @@ import {
   type FieldDateRange,
   type PlaceFilters,
   type PlaceSortKey,
-  type PlaceStatus,
+  type PlaceStatusFilterValue,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
 } from "@logjam/shared";
@@ -71,8 +71,8 @@ type Props = {
   onClose: () => void;
   filters: PlaceFilters;
   onChangeFilters: (next: PlaceFilters) => void;
-  status: "all" | PlaceStatus;
-  onChangeStatus: (next: "all" | PlaceStatus) => void;
+  status: PlaceStatusFilterValue;
+  onChangeStatus: (next: PlaceStatusFilterValue) => void;
   sort: PlaceSortKey;
   onChangeSort: (next: PlaceSortKey) => void;
   onReset: () => void;

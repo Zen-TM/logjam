@@ -323,6 +323,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },
   // No `flex`: in this column it would mean a height of nothing, and the next
-  // row would draw over the field.
+  // row would draw over the field (`kit.test.ts`).
   valueField: { maxWidth: 200 },
 }));

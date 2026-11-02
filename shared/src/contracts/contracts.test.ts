@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
 import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
@@ -77,6 +78,7 @@ import {
   placeDeleteConfirm,
   PLACES_ADD,
   PLACES_FILTER_SHEET,
+  PLACE_STATUS_FILTER_OPTIONS,
   placesEmptyKind,
   placesEmptyState,
   placesFilterNote,
@@ -148,6 +150,16 @@ describe("every screen contract", () => {
 });
 
 describe("the places filter sheet", () => {
+  // Mutation: drop a status from the list, and that filter cannot be set.
+  it("offers All, then every status in order", () => {
+    expect(PLACE_STATUS_FILTER_OPTIONS.map((option) => option.value)).toEqual([
+      "all",
+      ...PLACE_STATUS_ORDER,
+    ]);
+    for (const option of PLACE_STATUS_FILTER_OPTIONS)
+      expect(option.label, option.value).toBeTruthy();
+  });
+
   it("titles every section", () => {
     const copy: Record<string, string> = PLACES_FILTER_SHEET.copy;
     for (const section of PLACES_FILTER_SHEET.sections)

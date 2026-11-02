@@ -580,7 +580,7 @@ test.describe("desktop", () => {
     // answers the same question 311 times and charges 7.4s for it against 0.17s
     // for two rows, with an identical result. Three walks of that put the case
     // at 51.7s alone and over the 60s cap under any parallel load. Everything
-    // the case is about survives the search: the hero, both chip rails, the
+    // the case is about survives the search: the hero, the type rail, the
     // sort-and-filter button, a row and its menu.
     await aside.getByRole("searchbox").first().fill("claustral");
     await expect(aside.getByRole("radio", { name: /^All/ })).toBeVisible();
