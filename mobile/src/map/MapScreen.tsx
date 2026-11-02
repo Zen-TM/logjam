@@ -137,6 +137,7 @@ import {
   useMirrorTrips,
   useMirrorPlaceTracks,
   useMirrorRoutes,
+  usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
@@ -933,6 +934,9 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
+  // The last frame was only partly drawn: tiles are still coming, or never will.
+  const [mapLoading, setMapLoading] = useState(false);
+  const pendingSyncCount = usePendingSyncCount();
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const offlineOnlyRef = useRef(offlineOnly);
   useLayoutEffect(() => {
@@ -4759,8 +4763,8 @@ export function MapScreen({
     }
     if (coverageHere.current) return null;
     return coverageHere.others.length > 0
-      ? "Offline — switch to a basemap you saved for this area."
-      : "Offline — no map saved for this area.";
+      ? "No saved map here for this basemap — switch to one you saved."
+      : "No saved map here.";
   })();
 
   const geoPdfNoticeText = misalignedGeoPdfNotice(
@@ -4929,6 +4933,8 @@ export function MapScreen({
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
+        onDidFinishRenderingFrame={() => setMapLoading(true)}
+        onDidFinishRenderingFrameFully={() => setMapLoading(false)}
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
@@ -5543,6 +5549,15 @@ export function MapScreen({
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
 
+        {/* A guest has no account for changes to wait on (SyncStatusPills). */}
+        {connectivity === "offline" ? (
+          <Notice icon="offline">Offline</Notice>
+        ) : null}
+
+        {pendingSyncCount > 0 && !isGuest ? (
+          <Notice icon="uploading">{`${pendingSyncCount} waiting to sync`}</Notice>
+        ) : null}
+
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
 
         {/* A GeoPDF whose control points disagree is drawn off the ground it
@@ -5618,7 +5633,15 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
+          {/* Online and still drawing: the one cue that a blank map is
+              loading and not broken. Offline it is the notice that explains. */}
+          <Icon
+            idea={
+              mapLoading && connectivity === "online" ? "loading" : "layers"
+            }
+            size={FAB_ICON}
+            color={theme.text}
+          />
         </Pressable>
         <Pressable
           accessibilityRole="button"

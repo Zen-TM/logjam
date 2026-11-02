@@ -12,7 +12,7 @@ import { fieldLabel } from "./fieldLabel";
  * `Field` inside `TextField.tsx`.
  *
  * `aside` shares the label's line, at its end: a reading of the control
- * ("z14 · ≈ 4 m per pixel").
+ * ("Sharp to about 4 m on the ground").
  */
 export function Field({
   label,

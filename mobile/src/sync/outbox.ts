@@ -65,9 +65,10 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
 }
 
 /**
- * Local changes not yet accepted by the server — queued, inflight or blocked.
- * Drives the "N waiting to sync" indicator; `blocked` rows are counted because
- * from the user's point of view they are still unsent work.
+ * Things the user made or changed that the server has not accepted yet: a place
+ * created and renamed offline is one thing, not two ops. A place link is part
+ * of its trip or place, not a thing of its own. Drives the "N waiting to sync"
+ * indicator.
  */
 export async function countPendingOps(): Promise<number> {
   const db = await getSyncDb();
@@ -79,7 +80,7 @@ export async function countPendingOps(): Promise<number> {
   // on "3 changes waiting to send" and not on the screen for things only the
   // user can resolve.
   const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying')",
+    "SELECT COUNT(DISTINCT entity || ':' || entity_id) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying') AND entity != 'placeLink'",
   );
   return row?.n ?? 0;
 }

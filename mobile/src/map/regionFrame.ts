@@ -10,6 +10,7 @@
 // It assumes a NORTH-UP, unpitched map, because `getVisibleBounds` returns the
 // axis-aligned box around a rotated view, which no linear mapping can undo. The
 // download screen disables rotation and pitch for exactly this reason.
+import { tileMetersPerPixel } from "./scaleBar";
 import type { RegionBbox } from "@logjam/shared";
 
 export type FrameInsets = {
@@ -218,3 +219,21 @@ export function defaultFrameInsets(size: {
  * discoverable.
  */
 export { tileMetersPerPixel as metresPerPixel } from "./scaleBar";
+
+const DETAIL_NAMES: Record<number, string> = {
+  12: "Overview",
+  13: "Coarse",
+  14: "Medium",
+  15: "Detailed",
+  16: "Fine",
+  17: "Very fine",
+  18: "Finest",
+};
+
+/** A detail level named by the ground it resolves: "Fine, 2 m". */
+export function detailLabel(zoom: number, latitudeDeg: number): string {
+  const metres = tileMetersPerPixel(latitudeDeg, zoom);
+  const rounded =
+    metres >= 10 ? Math.round(metres) : Math.round(metres * 10) / 10;
+  return `${DETAIL_NAMES[zoom] ?? "Detail"}, ${rounded} m`;
+}

@@ -106,6 +106,7 @@ import {
   defaultFrameInsets,
   startingArea,
   frameToBbox,
+  detailLabel,
   metresPerPixel,
   type FrameInsets,
   type FrameViewport,
@@ -787,7 +788,7 @@ export function RegionDownloadScreen({
                   archive comes with you. */}
                 {vectorOnly
                   ? "Detailed map only · sharp at any zoom"
-                  : `z${deepestZoom} · ≈ ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m per pixel`}
+                  : `Sharp to about ${metresPerPixel(centreLat, deepestZoom).toFixed(1)} m on the ground`}
               </Text>
             }
           >
@@ -795,7 +796,7 @@ export function RegionDownloadScreen({
               scroll
               options={DETAIL_ZOOMS.map((zoom) => ({
                 value: String(zoom),
-                label: `z${zoom}`,
+                label: detailLabel(zoom, centreLat),
               }))}
               value={String(detailZoom)}
               onChange={(next) => setDetailZoom(Number(next))}
