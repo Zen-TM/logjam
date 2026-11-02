@@ -73,6 +73,7 @@ export * from "./friendShareRows.js";
 export * from "./syncClient.js";
 export * from "./routeExport.js";
 export * from "./placeRoute.js";
+export * from "./planExtent.js";
 export * from "./routeValidation.js";
 export * from "./elevation.js";
 export * from "./demSources.js";

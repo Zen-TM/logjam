@@ -91,7 +91,7 @@ import PlansPanel from "./plans/PlansPanel";
 import PlanDetailPanel from "./plans/PlanDetailPanel";
 import PlanInvitedPage from "./plans/PlanInvitedPage";
 import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
-import { planMapPress } from "./plans/plansModel";
+import { planBounds, planMapPress } from "./plans/plansModel";
 import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
@@ -640,6 +640,14 @@ function App() {
     toast.error,
   );
   const planOnMap = planFetch.view;
+  // Fit once per plan opened, not per refetch: the user may have panned since.
+  // Adjusted during render, as the lint rule against setState in an effect asks.
+  const [fittedPlanId, setFittedPlanId] = useState<string | null>(null);
+  if ((planOnMap?.id ?? null) !== fittedPlanId) {
+    setFittedPlanId(planOnMap?.id ?? null);
+    const bounds = planOnMap && planBounds(planOnMap);
+    if (bounds) setFlyToBounds(bounds);
+  }
   const planMapPlaces = useMemo<TPlace[]>(
     () => planOnMap?.places.map((place) => ({ ...place, ownerId: "" })) ?? [],
     [planOnMap],
