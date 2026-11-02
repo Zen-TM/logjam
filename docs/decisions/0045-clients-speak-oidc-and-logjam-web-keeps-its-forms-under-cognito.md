@@ -17,8 +17,7 @@ Cognito's Managed Login is an OIDC provider, so prod can stay on Cognito while
 the clients speak the standard flow. Its sign-up page cannot ask for a username,
 the terms or the 18+ confirmation, and prod's pool had no domain.
 
-Logjam GPS has no public release, so no old build needs the Amplify flow
-(the installed build keeps working until it is upgraded, #728).
+Logjam GPS has no public release, so no old build needs the Amplify flow.
 
 ## Decision
 
@@ -91,8 +90,7 @@ Logjam GPS has no public release, so no old build needs the Amplify flow
   - Leaving Cognito still means a password reset for every user or a lazy
     migration, and matching users to new subjects needs its own design.
 - **Neutral:** the Cognito email-sender Lambda and the pool's users are
-  unchanged. `ALLOW_USER_SRP_AUTH` and the `COGNITO_*` settings stay until the
-  installed build is upgraded (#728).
+  unchanged.
 
 ## Alternatives considered
 
