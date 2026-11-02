@@ -24,7 +24,7 @@ export const FRIENDS = {
   ],
   copy: {
     add: "Add",
-    addTitle: "Add a friend",
+    addTitle: "Add friend",
     searchField: "Search by username",
     searchHint: `Keep typing — at least ${USER_SEARCH_MIN_CHARS} characters.`,
     searchEmpty: "No one by that name.",
@@ -41,6 +41,8 @@ export const FRIENDS = {
     firstRunBody:
       "Friends are who you can share a place, a route or a map with. Find one by their username.",
     noRequestsTitle: "No pending requests",
+    noRequestsBody:
+      "A request you send or receive waits here until someone answers it.",
     loadFailed: "Couldn't load friends.",
 
     acceptFailed: "Couldn't accept friend request.",

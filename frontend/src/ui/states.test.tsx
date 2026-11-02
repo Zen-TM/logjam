@@ -1,6 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button, ErrorState, LoadingState, Row, StatGrid, SwitchRow } from ".";
+import {
+  Button,
+  ErrorState,
+  ListBody,
+  LoadingState,
+  Row,
+  StatGrid,
+  SwitchRow,
+  Toast,
+} from ".";
 
 afterEach(cleanup);
 
@@ -154,5 +163,66 @@ describe("loading and failed states", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A failed load never draws the empty state (shared/DESIGN.md §11). Mutation
+// that turns it red: draw `empty` before checking `state === "failed"`.
+describe("ListBody", () => {
+  const body = (state: "loading" | "failed" | "ready", onRetry = vi.fn()) =>
+    render(
+      <ListBody
+        state={state}
+        error="Couldn't load places."
+        onRetry={onRetry}
+        empty={<p>Add your first place</p>}
+      >
+        <p>the list</p>
+      </ListBody>,
+    );
+
+  it("draws the error with Try again for a failed load, never the empty state", () => {
+    const onRetry = vi.fn();
+    body("failed", onRetry);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Couldn't load places.",
+    );
+    expect(screen.queryByText("Add your first place")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws the loading line while loading, then the empty state, else the list", () => {
+    body("loading");
+    expect(screen.getByRole("status")).toBeTruthy();
+    cleanup();
+    body("ready");
+    expect(screen.getByText("Add your first place")).toBeTruthy();
+    cleanup();
+    render(
+      <ListBody state="ready" error={null}>
+        <p>the list</p>
+      </ListBody>,
+    );
+    expect(screen.getByText("the list")).toBeTruthy();
+  });
+});
+
+describe("Toast action", () => {
+  // Mutation that turns it red: drop the dismiss after the action.
+  it("does the action, then dismisses", () => {
+    const onPress = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <Toast
+        message="Saved."
+        tone="done"
+        action={{ label: "Open", onPress }}
+        onDismiss={onDismiss}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

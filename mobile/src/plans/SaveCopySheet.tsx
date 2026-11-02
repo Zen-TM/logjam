@@ -56,7 +56,7 @@ export function useSaveCopyPanel({
   target: SaveCopyTarget | null;
   online: boolean;
   onFinished: () => void;
-  onDone: (message: string, tone: "info" | "error") => void;
+  onDone: (message: string, tone: "done" | "error") => void;
 }) {
   const styles = useStyles();
   const [busy, setBusy] = useState(false);
@@ -84,7 +84,7 @@ export function useSaveCopyPanel({
       onFinished();
       onDone(
         [tripPlanSavedMessage(item.kind), skipped].filter(Boolean).join(" "),
-        skipped ? "error" : "info",
+        skipped ? "error" : "done",
       );
     } catch (err) {
       const message = messageFromError(err, copy.saveCopyFailed);
@@ -141,7 +141,7 @@ export function SaveCopySheet({
   target: SaveCopyTarget | null;
   online: boolean;
   onClose: () => void;
-  onDone: (message: string, tone: "info" | "error") => void;
+  onDone: (message: string, tone: "done" | "error") => void;
 }) {
   const panel = useSaveCopyPanel({
     planId,

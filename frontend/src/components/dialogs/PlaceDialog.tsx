@@ -510,7 +510,7 @@ function PlaceDialog({
       }
       committedRef.current = true;
       onSaved();
-      toast.success(isEdit ? PLACE_FORM.copy.saved : PLACE_FORM.copy.added);
+      toast.done(isEdit ? PLACE_FORM.copy.saved : PLACE_FORM.copy.added);
       onClose();
     } catch (err) {
       console.error(err);

@@ -40,6 +40,33 @@ function summaryOf(fields: {
   });
 }
 
+describe("placeSummary without facts", () => {
+  // Mutation that turns it red: drop the notes fallback (a campsite's line is
+  // empty again), or let notes win over facts.
+  it("shows the first line of the notes, bare of Markdown marks", () => {
+    expect(placeSummary({ notes: "\n## Flat spot by the creek\nMore." })).toBe(
+      "Flat spot by the creek",
+    );
+  });
+
+  // Mutation: strip every leading `-`, or drop the length cap.
+  it("keeps a minus sign that is not a bullet, and cuts a long line", () => {
+    expect(placeSummary({ notes: "-33.86, 151.20" })).toBe("-33.86, 151.20");
+    expect(placeSummary({ notes: "- gate code 1234" })).toBe("gate code 1234");
+    const long = placeSummary({ notes: "word ".repeat(100) });
+    expect(long.length).toBeLessThanOrEqual(80);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("keeps the facts when there are any, and is empty with neither", () => {
+    expect(
+      placeSummary({ fieldValues: { hours: 5 }, notes: "Gate is locked" }),
+    ).toBe("5 h");
+    expect(placeSummary({ notes: "  \n " })).toBe("");
+    expect(placeSummary({})).toBe("");
+  });
+});
+
 describe("placeSummary", () => {
   it("leads with the grade, then time and rope length", () => {
     expect(

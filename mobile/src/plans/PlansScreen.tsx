@@ -60,11 +60,10 @@ import {
   CardActions,
   ChipRail,
   EmptyState,
-  ErrorState,
   Hero,
   IconButton,
   ListEnd,
-  LoadingState,
+  ListBody,
   Row,
   SelectionBar,
   SelectionMark,
@@ -187,7 +186,7 @@ export function PlansScreen({
   const [toastAt, setToastAt] = useState<number | undefined>(undefined);
   if (message && message.at !== toastAt) {
     setToastAt(message.at);
-    setToast({ text: message.text, tone: "info", nonce: message.at });
+    setToast({ text: message.text, tone: "done", nonce: message.at });
   }
   const today = todayDateKey();
 
@@ -257,7 +256,7 @@ export function PlansScreen({
       void leavePlan(plan.id)
         .then(async () => {
           await poll();
-          setToast({ text: done, tone: "info", nonce: Date.now() });
+          setToast({ text: done, tone: "done", nonce: Date.now() });
         })
         .catch((err: unknown) =>
           setToast({
@@ -286,7 +285,7 @@ export function PlansScreen({
           await Promise.all([poll(), fetchPlan(plan.id)]).catch(console.error);
           setToast({
             text: TRIP_PLAN_JOIN.copy.joined,
-            tone: "info",
+            tone: "done",
             nonce: Date.now(),
           });
         })
@@ -309,7 +308,7 @@ export function PlansScreen({
   );
 
   const report = useCallback(
-    (text: string, tone: "info" | "error") =>
+    (text: string, tone: "done" | "error") =>
       setToast({ text, tone, nonce: Date.now() }),
     [setToast],
   );
@@ -323,7 +322,7 @@ export function PlansScreen({
   ) =>
     call
       .then(() => afterPlanWrite(plan.id, gone))
-      .then(() => report(done, "info"))
+      .then(() => report(done, "done"))
       .catch((err: unknown) => report(messageFromError(err, failed), "error"));
   // A card's ⋯: the verbs its own page offers that make sense without it open.
   const cardAction = async (
@@ -375,7 +374,7 @@ export function PlansScreen({
       selectOnly(failedIds);
       await poll();
     } else clearSelection();
-    report(message, failedIds.length > 0 ? "error" : "info");
+    report(message, failedIds.length > 0 ? "error" : "done");
   };
   const runBulk = async () => {
     if (!online) return report(OFFLINE, "error");
@@ -659,14 +658,27 @@ export function PlansScreen({
         )}
       </View>
     ),
-    list:
-      shown.kind === "loading" ? (
-        <LoadingState label={copy.loading} />
-      ) : shown.kind === "neverFetched" ? (
-        <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.noPlansOffline} />
-      ) : shown.kind === "failed" ? (
-        <ErrorState message={shown.message} onRetry={() => void poll()} />
-      ) : (
+    list: (
+      <ListBody
+        state={
+          shown.kind === "loading"
+            ? "loading"
+            : shown.kind === "failed"
+              ? "failed"
+              : "ready"
+        }
+        loadingLabel={copy.loading}
+        error={shown.kind === "failed" ? shown.message : null}
+        onRetry={() => void poll()}
+        empty={
+          shown.kind === "neverFetched" ? (
+            <EmptyState
+              icon="offline"
+              title={TRIP_PLAN_OFFLINE.noPlansOffline}
+            />
+          ) : undefined
+        }
+      >
         <FlatList
           style={styles.list}
           contentContainerStyle={styles.listContent}
@@ -707,7 +719,8 @@ export function PlansScreen({
             ) : undefined
           }
         />
-      ),
+      </ListBody>
+    ),
   };
 
   return (

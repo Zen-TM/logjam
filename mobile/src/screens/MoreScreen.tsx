@@ -123,7 +123,7 @@ export function MoreScreen({
   const syncNow = useCallback(async () => {
     await requestSync();
     if (getSyncStatus().state !== "error")
-      setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
+      setToast({ text: "Synced.", tone: "done", nonce: Date.now() });
   }, []);
   const user = userQuery.data;
 

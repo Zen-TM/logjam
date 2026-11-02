@@ -420,7 +420,7 @@ export function MapSettingsScreen() {
             // stretch, and getting it on the following trip is no use.
             applyRecordingOptionsToActiveTrack()
               .then((applied) => {
-                if (applied) notify("Recording now at the new detail.", "info");
+                if (applied) notify("Recording now at the new detail.", "done");
               })
               .catch((error: unknown) => {
                 console.error(error);
@@ -479,7 +479,7 @@ export function MapSettingsScreen() {
                 next
                   ? "Raw sensors will be logged from the next recording."
                   : "Sensor logging off from the next recording.",
-                "info",
+                "done",
               );
             }}
           />

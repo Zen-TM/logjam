@@ -59,7 +59,7 @@ import PlanAddCopyDialog from "./PlanAddCopyDialog";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace } from "../../placeUtils";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 
 const plan: TripPlanView = {
@@ -506,7 +506,7 @@ describe("Invite people after a refused invite", () => {
     });
     fireEvent.click(carol);
     fireEvent.click(dave);
-    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    await waitFor(() => expect(toast.done).toHaveBeenCalled());
     await waitFor(() => expect(dave.getAttribute("aria-busy")).toBeNull());
     expect(carol.getAttribute("aria-busy")).toBe("true");
     send();

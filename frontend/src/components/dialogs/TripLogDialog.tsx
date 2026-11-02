@@ -1041,7 +1041,7 @@ function TripLogDialog({
       // draft that this save says nothing about.
       if (!tripLog) clearTripDraft();
       onSaved();
-      toast.success(tripLog ? TRIP_FORM.copy.saved : TRIP_FORM.copy.logged);
+      toast.done(tripLog ? TRIP_FORM.copy.saved : TRIP_FORM.copy.logged);
       onClose();
     } catch (err) {
       console.error(err);

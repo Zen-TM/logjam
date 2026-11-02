@@ -167,7 +167,7 @@ function announceSettledGroups(): void {
     announcedGroups.add(group.groupId);
     const message = {
       text: regionGroupToastText(group),
-      tone: group.unfinished > 0 ? ("error" as const) : ("info" as const),
+      tone: group.unfinished > 0 ? ("error" as const) : ("done" as const),
     };
     for (const listener of toastListeners) listener(message);
   }

@@ -529,7 +529,7 @@ function UnifiedImportDialog({
     // duplicate column) — the file still loaded, but fields may be misaligned
     // from here on, so flag it rather than staying silent.
     if (parsed.parseErrors.length > 0) {
-      toast.info(
+      toast.done(
         `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} (see console) — some fields may be misaligned. Check the column mapping before importing.`,
       );
       console.error("CSV parse issues in", file.name, parsed.parseErrors);
@@ -1233,7 +1233,7 @@ function UnifiedImportDialog({
       const result = await undoImport(outcome.batchId);
       onRefetchPlaces();
       onRefetchTripLogs();
-      toast.success(undoToastMessage(result));
+      toast.done(undoToastMessage(result));
       onClose();
     } catch (err) {
       console.error(err);

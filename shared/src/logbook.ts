@@ -305,7 +305,7 @@ export function yearBuckets(
 // the hard way (the comments say which).
 
 /** The label a tag-less trip is filed under, everywhere on a stats screen. */
-export const UNTAGGED_ACTIVITY_LABEL = "Untagged";
+export const UNTAGGED_ACTIVITY_LABEL = "No type";
 
 export function logbookActivityLabel(type: string): string {
   return type === UNTAGGED_ACTIVITY

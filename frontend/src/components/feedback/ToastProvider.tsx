@@ -7,26 +7,27 @@ import {
   useRef,
   useState,
 } from "react";
-import { Toast, type ToastSeverity } from "../../ui";
+import { toastMs, type ToastAction, type ToastTone } from "@logjam/shared";
+import { Toast } from "../../ui";
 import classes from "./ToastProvider.module.css";
 
 type ToastEntry = {
   id: number;
   message: string;
-  severity: ToastSeverity;
+  tone: ToastTone;
+  action?: ToastAction;
 };
 
 type ToastContextValue = {
-  error: (message: string) => void;
-  success: (message: string) => void;
-  info: (message: string) => void;
+  error: (message: string, action?: ToastAction) => void;
+  /** An outcome that worked. */
+  done: (message: string, action?: ToastAction) => void;
 };
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 let nextId = 0;
 const MAX_TOASTS = 3;
-const AUTO_HIDE_MS = 6000;
 
 /** One toast's timer. Paused while the pointer is over the stack or focus is in
  *  it, so a message being read (or its Dismiss being reached by keyboard) does
@@ -40,7 +41,7 @@ function TimedToast({
   paused: boolean;
   onDismiss: (id: number) => void;
 }) {
-  const remaining = useRef(AUTO_HIDE_MS);
+  const remaining = useRef(toastMs(entry.tone, entry.action));
   useEffect(() => {
     if (paused) return;
     const startedAt = Date.now();
@@ -56,7 +57,8 @@ function TimedToast({
   return (
     <Toast
       message={entry.message}
-      severity={entry.severity}
+      tone={entry.tone}
+      action={entry.action}
       onDismiss={() => onDismiss(entry.id)}
     />
   );
@@ -67,14 +69,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
 
-  const push = useCallback((message: string, severity: ToastSeverity) => {
-    setToasts((prev) => {
-      const next = [...prev, { id: nextId++, message, severity }];
-      return next.length > MAX_TOASTS
-        ? next.slice(next.length - MAX_TOASTS)
-        : next;
-    });
-  }, []);
+  const push = useCallback(
+    (message: string, tone: ToastTone, action?: ToastAction) => {
+      setToasts((prev) => {
+        const next = [...prev, { id: nextId++, message, tone, action }];
+        return next.length > MAX_TOASTS
+          ? next.slice(next.length - MAX_TOASTS)
+          : next;
+      });
+    },
+    [],
+  );
 
   const dismiss = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -89,9 +94,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   // stable, so the memo only ever recomputes once.
   const value = useMemo<ToastContextValue>(
     () => ({
-      error: (m) => push(m, "error"),
-      success: (m) => push(m, "success"),
-      info: (m) => push(m, "info"),
+      error: (m, action) => push(m, "error", action),
+      done: (m, action) => push(m, "done", action),
     }),
     [push],
   );

@@ -240,7 +240,7 @@ describe("outcome messages", () => {
   it("reports a clean copy run as info", () => {
     expect(copyOutcomeMessage({ copied: 2, failed: [] })).toEqual({
       text: "Saved 2 copies.",
-      tone: "info",
+      tone: "done",
     });
   });
 
@@ -351,7 +351,7 @@ describe("copyAndRemoveOutcomeMessage", () => {
       copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] }),
     ).toEqual({
       text: "Saved 1 copy and removed the shared one.",
-      tone: "info",
+      tone: "done",
     });
   });
 

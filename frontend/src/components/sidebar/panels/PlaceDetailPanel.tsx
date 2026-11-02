@@ -500,7 +500,7 @@ function PlaceDetailPanel({
       setSelectedPlaceID(null);
       onRefetch();
       onQuotaChanged();
-      toast.success("Place deleted.");
+      toast.done("Place deleted.");
       // Return to the places list — the detail panel has nothing to show now.
       onAfterDelete();
     } catch (err) {
@@ -520,7 +520,7 @@ function PlaceDetailPanel({
       onRefetchShared();
       setSelectedPlaceID(null);
       onAfterDelete();
-      toast.success("Removed.");
+      toast.done("Removed.");
     } catch (err) {
       console.error(err);
       toast.error(
@@ -560,7 +560,7 @@ function PlaceDetailPanel({
             : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
         );
       } else {
-        toast.success(
+        toast.done(
           andRemove ? "Copied, and the shared one removed." : "Copied.",
         );
       }

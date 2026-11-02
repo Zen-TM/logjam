@@ -278,7 +278,7 @@ export function copyOutcomeMessage(outcome: {
   mediaSkipped?: number;
   /** The skip was the account's storage filling up, not a transfer fault. */
   mediaOutOfSpace?: boolean;
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { copied, failed } = outcome;
   const skipped = outcome.mediaSkipped ?? 0;
   const sentence = mediaSkippedSentence(
@@ -290,7 +290,7 @@ export function copyOutcomeMessage(outcome: {
   if (failed.length === 0) {
     return {
       text: `${saved}.${media}`,
-      tone: skipped > 0 ? "error" : "info",
+      tone: skipped > 0 ? "error" : "done",
     };
   }
   if (copied === 0) {
@@ -333,7 +333,7 @@ export function copyAndRemoveOutcomeMessage(outcome: {
   failed: string[];
   mediaSkipped: number;
   mediaOutOfSpace: boolean;
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { done, copiedNotRemoved, failed, mediaSkipped, mediaOutOfSpace } =
     outcome;
   const parts: string[] = [];
@@ -367,7 +367,7 @@ export function copyAndRemoveOutcomeMessage(outcome: {
     tone:
       failed.length > 0 || copiedNotRemoved.length > 0 || mediaSkipped > 0
         ? "error"
-        : "info",
+        : "done",
   };
 }
 
@@ -385,10 +385,10 @@ export function unshareOutcomeMessage(args: {
 export function removeOutcomeMessage(outcome: {
   removed: number;
   failed: string[];
-}): { text: string; tone: "info" | "error" } {
+}): { text: string; tone: "done" | "error" } {
   const { removed, failed } = outcome;
   const gone = removed === 1 ? "Removed 1 item" : `Removed ${removed} items`;
-  if (failed.length === 0) return { text: `${gone}.`, tone: "info" };
+  if (failed.length === 0) return { text: `${gone}.`, tone: "done" };
   if (removed === 0) {
     return {
       text:

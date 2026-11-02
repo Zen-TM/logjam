@@ -15,7 +15,7 @@ import {
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
 import SettingsPanel from "./SettingsPanel";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("./ThemeChooser", () => ({ default: () => null }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
@@ -33,10 +33,19 @@ const user = {
   uiPreferences: { leaderboardOptIn: false },
 } as TUser;
 
-function show(onCurrentUserChange = vi.fn()) {
+function renderPanel(
+  onCurrentUserChange = vi.fn(),
+  {
+    currentUser = user as TUser | null,
+    currentUserError = null as string | null,
+    onRetryCurrentUser = () => {},
+  } = {},
+) {
   render(
     <SettingsPanel
-      currentUser={user}
+      currentUser={currentUser}
+      currentUserError={currentUserError}
+      onRetryCurrentUser={onRetryCurrentUser}
       customFieldDefs={[]}
       onCustomFieldDefsChange={() => {}}
       placeCustomFieldDefs={[]}
@@ -46,6 +55,10 @@ function show(onCurrentUserChange = vi.fn()) {
       onCurrentUserChange={onCurrentUserChange}
     />,
   );
+}
+
+function show(onCurrentUserChange = vi.fn()) {
+  renderPanel(onCurrentUserChange);
   return screen.getByRole("switch", { name: LEADERBOARD_SETTING.label });
 }
 
@@ -62,7 +75,7 @@ describe("the leaderboard switch", () => {
     fireEvent.click(toggle);
 
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(LEADERBOARD_SETTING.joined),
+      expect(toast.done).toHaveBeenCalledWith(LEADERBOARD_SETTING.joined),
     );
     expect(updateUserPreferences).toHaveBeenCalledWith({
       leaderboardOptIn: true,
@@ -110,5 +123,29 @@ describe("the notification switches", () => {
         expect(after(inApp, row)).toBe(true);
       }
     }
+  });
+});
+
+describe("an account that did not load", () => {
+  // Mutation: drop the `!currentUser &&` guard, and a failed refetch under a
+  // loaded account replaces the switches with an error.
+  it("says so with Try again, and only when there is no account to show", () => {
+    const retry = vi.fn();
+    renderPanel(vi.fn(), {
+      currentUser: null,
+      currentUserError: "Couldn't load your account.",
+      onRetryCurrentUser: retry,
+    });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Couldn't load your account.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("switch")).toBeNull();
+    cleanup();
+    renderPanel(vi.fn(), {
+      currentUserError: "Couldn't load your account.",
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

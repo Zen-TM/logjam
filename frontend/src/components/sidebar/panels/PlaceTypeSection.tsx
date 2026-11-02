@@ -137,7 +137,7 @@ function PlaceTypeSection({
   const addTypeButton = (
     <Button
       compact
-      variant="outline"
+      variant="filled"
       icon="add"
       onClick={() => setEditing("new")}
     >

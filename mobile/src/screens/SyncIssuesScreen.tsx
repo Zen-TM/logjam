@@ -138,7 +138,7 @@ export function SyncIssuesScreen({
   // disappearing means the change finally landed.
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") =>
+    (text: string, tone: ToastMessage["tone"] = "done") =>
       setToast({ text, tone, nonce: Date.now() }),
     [],
   );
@@ -196,7 +196,7 @@ export function SyncIssuesScreen({
     (
       run: Promise<unknown>,
       done: string,
-      tone: ToastMessage["tone"] = "info",
+      tone: ToastMessage["tone"] = "done",
     ) => {
       setMenuIssue(null);
       void run

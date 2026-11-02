@@ -187,7 +187,7 @@ export default function PlanAddCopyDialog({
       });
       if (!outcome) return setError(why);
       if (outcome.tone === "error") toast.error(outcome.message);
-      else toast.success(outcome.message);
+      else toast.done(outcome.message);
       onAdded();
       onClose();
     } finally {

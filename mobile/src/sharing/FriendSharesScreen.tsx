@@ -162,7 +162,7 @@ export function FriendSharesScreen({
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") =>
+    (text: string, tone: ToastMessage["tone"] = "done") =>
       setToast({ text, tone, nonce: Date.now() }),
     [],
   );

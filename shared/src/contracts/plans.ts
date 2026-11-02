@@ -396,6 +396,9 @@ export const TRIP_PLAN_PAGE = {
 
     // The write-up.
     writeUpEmpty: "Nothing written yet.",
+    writeUpEmptyTitle: "No write-up yet",
+    writeUpEmptyBody:
+      "Sections for the route, the meeting point and what to bring go here.",
     sectionTitle: "Write-up section",
     sectionNewTitle: "New write-up section",
     sectionTitleField: "Title",
@@ -462,9 +465,10 @@ export const TRIP_PLAN_PAGE = {
     tripLogNext: "Next",
 
     // Forms.
-    formsEmptyLeader:
-      "No forms yet. Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
-    formsEmpty: "No forms yet.",
+    formsEmpty: "No forms yet",
+    formsEmptyBodyLeader:
+      "Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
+    formsEmptyBody: "A leader adds forms for everyone to fill in.",
     pillNotAnswered: "Not answered",
     seenByLeaders: "Leaders see answers",
     seenByMembers: "Everyone sees answers",
@@ -1543,14 +1547,14 @@ export function tripPlanAddOutcome(args: {
   outOfSpace: boolean;
   /** The stop's reason, when one stopped the run. */
   why: string | null;
-}): { message: string; tone: "info" | "error" } | null {
+}): { message: string; tone: "done" | "error" } | null {
   if (args.added === 0) return null;
   const photos = mediaSkippedSentence(args.skipped, args.outOfSpace);
   return {
     message: [tripPlanAddedMessage(args.added, args.asked), photos, args.why]
       .filter(Boolean)
       .join(" "),
-    tone: photos || args.why ? "error" : "info",
+    tone: photos || args.why ? "error" : "done",
   };
 }
 

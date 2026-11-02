@@ -77,8 +77,11 @@ describe("LeaderboardPage", () => {
     expect(screen.getAllByRole("img", { name: "bronze medal" })).toHaveLength(
       1,
     );
-    expect(screen.getByRole("heading", { name: "#1 of 4" })).toBeTruthy();
-    expect(screen.getByText(leaderboardSeasonLine("2026–27"))).toBeTruthy();
+    // The page is named for what it is; the rank rides on the line beneath.
+    expect(screen.getByRole("heading", { name: "Leaderboard" })).toBeTruthy();
+    expect(
+      screen.getByText(`#1 of 4 · ${leaderboardSeasonLine("2026–27")}`),
+    ).toBeTruthy();
   });
 
   // Mutation: drop the 0-canyon condition, and 21 June is all gold.

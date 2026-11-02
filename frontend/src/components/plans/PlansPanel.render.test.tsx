@@ -10,7 +10,7 @@ import type { TripPlanSummary } from "@logjam/shared";
 import { deletePlan, joinPlan, leavePlan } from "../../plansApi";
 import PlansPanel from "./PlansPanel";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../plansApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../plansApi")>()),
@@ -144,7 +144,7 @@ describe("an invite's card", () => {
     fireEvent.click(screen.getByRole("button", { name: "Join" }));
     await waitFor(() => expect(joinPlan).toHaveBeenCalledWith("c"));
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("You joined the plan."),
+      expect(toast.done).toHaveBeenCalledWith("You joined the plan."),
     );
     expect(onRefetch).toHaveBeenCalled();
   });

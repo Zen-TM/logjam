@@ -150,7 +150,7 @@ export default function MapPointPopover({
         .writeText(
           `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`,
         )
-        .then(() => toast.success(MAP_POINT.copy.coordinatesCopied))
+        .then(() => toast.done(MAP_POINT.copy.coordinatesCopied))
         .catch(() => toast.error("Couldn't copy the coordinates."));
     },
   };

@@ -20,6 +20,7 @@ import type {
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
   PLACE_SEARCH_API_PATH,
+  loadStateOf,
   tallyNotifications,
   type PlaceSearchRequest,
   type PlaceSearchResponse,
@@ -677,6 +678,8 @@ export function usePlaces(enabled: boolean) {
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True once a fetch has SUCCEEDED, not merely settled: a failed first load
+  // is `state: "failed"`, never an empty list (`loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -686,7 +689,10 @@ export function usePlaces(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -698,6 +704,7 @@ export function usePlaces(enabled: boolean) {
         if (cancelled) return;
         setPlaces(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
@@ -705,9 +712,7 @@ export function usePlaces(enabled: boolean) {
           setError(messageFromError(err, "Couldn't load places."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -716,7 +721,15 @@ export function usePlaces(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { places, total, loading, loaded, error, refetch };
+  return {
+    places,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 export function useSharedPlaces(enabled: boolean) {
@@ -1287,8 +1300,9 @@ export function useTripLogs(enabled: boolean) {
   // True owner-filtered total before the server's list cap; null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  // False until the first fetch settles: an empty list before then is not "no
-  // trips yet", and saying so flashes a first-run screen at every user.
+  // False until a fetch succeeds: an empty list before then is not "no trips
+  // yet", and saying so flashes a first-run screen at every user, or covers a
+  // failed load (`state: "failed"`, `loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1299,7 +1313,10 @@ export function useTripLogs(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -1311,6 +1328,7 @@ export function useTripLogs(enabled: boolean) {
         if (cancelled) return;
         setTripLogs(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
@@ -1318,9 +1336,7 @@ export function useTripLogs(enabled: boolean) {
           setError(messageFromError(err, "Couldn't load trip logs."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1329,7 +1345,15 @@ export function useTripLogs(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, total, loading, loaded, error, refetch };
+  return {
+    tripLogs,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 // ── Media (object storage) ────────────────────────────────────

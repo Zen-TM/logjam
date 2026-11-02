@@ -56,7 +56,7 @@ export default function RemoveSharedButton({
     try {
       await remove();
       setConfirming(false);
-      toast.success(`${itemName} removed.`);
+      toast.done(`${itemName} removed.`);
       onRemoved();
     } catch (err) {
       console.error(err);

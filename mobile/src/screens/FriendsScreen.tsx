@@ -57,6 +57,7 @@ import {
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
+  loadStateOf,
 } from "@logjam/shared";
 
 import {
@@ -91,12 +92,11 @@ import {
   Button,
   EmptyState,
   ErrorBanner,
-  ErrorState,
   Hero,
   confirm,
   ListEnd,
   IconButton,
-  LoadingState,
+  ListBody,
   Row,
   ChipRail,
   StatusPill,
@@ -156,7 +156,7 @@ export function FriendsScreen({
   const [menuItem, setMenuItem] = useState<FriendItem | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -320,10 +320,21 @@ export function FriendsScreen({
       </View>
     );
   }
-  if (friends === null && loadError) {
-    return <ErrorState message={loadError} onRetry={() => void load()} />;
+  // With the Hero kept: a failed load must leave the way back.
+  if (friends === null) {
+    return (
+      <View style={styles.root}>
+        <Hero title={FRIENDS.title} onBack={onBack} backLabel={backLabel} />
+        <ListBody
+          state={loadStateOf(false, loadError)}
+          error={loadError}
+          onRetry={() => void load()}
+        >
+          {null}
+        </ListBody>
+      </View>
+    );
   }
-  if (friends === null) return <LoadingState />;
 
   const buckets: ChipOption<Bucket>[] = [
     {
@@ -364,9 +375,8 @@ export function FriendsScreen({
               />
             ) : null}
             <Button
-              label={copy.add}
+              label={copy.addTitle}
               icon="addFriend"
-              variant="outlineAccent"
               compact
               onPress={() => setAddOpen(true)}
             />
@@ -726,7 +736,9 @@ function EmptyPanel({
   onAdd: () => void;
 }) {
   if (kind === "noRequests") {
-    return <EmptyState title={copy.noRequestsTitle} />;
+    return (
+      <EmptyState title={copy.noRequestsTitle} hint={copy.noRequestsBody} />
+    );
   }
   return (
     <EmptyState

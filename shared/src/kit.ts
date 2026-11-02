@@ -64,6 +64,9 @@ export const KIT_COMPONENTS = {
     "the checkbox a row shows during a multi-select; Logjam Web uses TileCheckbox",
   ),
   SelectionBar: both,
+  SelectionVerb: web(
+    "a verb in the selection bar, in words; Logjam GPS's bar draws its own buttons",
+  ),
   SettingsRow: web(
     "a setting as a line with its control; Logjam GPS composes Row and Toggle",
   ),
@@ -135,6 +138,7 @@ export const KIT_COMPONENTS = {
   EmptyState: both,
   LoadingState: both,
   ErrorState: both,
+  ListBody: both,
   ErrorBanner: both,
   FieldError: both,
 

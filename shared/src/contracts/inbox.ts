@@ -22,6 +22,7 @@ export const INBOX = {
     clearSearch: "Clear search",
     showEverything: "Show everything",
     markAllRead: "Mark all as read",
+    markedAllRead: "All marked as read.",
 
     bucketAll: "All",
     bucketUnread: "Unread",
@@ -40,7 +41,9 @@ export const INBOX = {
     noMatchBody:
       "The search runs over what a row says — a name, a place, a filename.",
     noUnreadTitle: "Nothing unread",
+    noUnreadBody: "New shares, requests and finished maps land here.",
     noReadTitle: "Nothing read yet",
+    noReadBody: "Open something, or mark it read, and it moves here.",
   },
 } as const satisfies ScreenContract;
 

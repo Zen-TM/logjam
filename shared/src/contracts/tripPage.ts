@@ -27,7 +27,7 @@ export const TRIP_PAGE = {
     notes: TRIP_FORM.copy.notes,
     attributes: TRIP_FORM.copy.attributes,
 
-    noType: "No type set",
+    noType: "No type",
     // An empty slot gets a short label, not a lesson (UX §11).
     placesEmpty: "No places linked.",
     photosEmpty: "No photos yet.",

@@ -71,12 +71,12 @@ import {
   EmptyState,
   Hero,
   IconButton,
-  ListEnd,
   Menu,
   Row,
   RowList,
   SearchField,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   StatusPill,
   type ChipOption,
@@ -166,7 +166,7 @@ function FriendsPanel({
     setBusyId(id);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       onRefetchFriends();
     } catch (err) {
       console.error(err);
@@ -199,7 +199,7 @@ function FriendsPanel({
         await removeFriend(friend.friendshipId);
         removed += 1;
       }
-      toast.success(friendsRemovedMessage(removed));
+      toast.done(friendsRemovedMessage(removed));
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.removeFailed));
@@ -269,7 +269,8 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
-  // The same button is the empty state's and the end of the list's.
+  // The hero's add, offered again where the page has nothing else; a list of
+  // friends does not end with a third.
   const addFriendButton = (
     <Button variant="filled" icon="addFriend" onClick={() => setAddOpen(true)}>
       {copy.addTitle}
@@ -311,11 +312,11 @@ function FriendsPanel({
             {leaderboardButton()}
             <Button
               compact
-              variant="outline"
+              variant="filled"
               icon="addFriend"
               onClick={() => setAddOpen(true)}
             >
-              {copy.add}
+              {copy.addTitle}
             </Button>
           </>
         }
@@ -330,12 +331,9 @@ function FriendsPanel({
             countLabel={`${selectedFriends.length} selected`}
             onClear={clear}
           >
-            <IconButton
-              icon={friendVerb("remove").icon}
-              label={friendVerb("remove").label}
-              tone="danger"
-              onClick={() => setRemovingSelected(true)}
-            />
+            <SelectionVerb danger onClick={() => setRemovingSelected(true)}>
+              {friendVerb("remove").label}
+            </SelectionVerb>
           </SelectionBar>
         ) : (
           <ChipRail
@@ -360,7 +358,11 @@ function FriendsPanel({
           </div>
         ) : emptyKind === "noRequests" ? (
           <div className={classes.emptyArea}>
-            <EmptyState icon="friends" title={copy.noRequestsTitle} />
+            <EmptyState
+              icon="friends"
+              title={copy.noRequestsTitle}
+              body={copy.noRequestsBody}
+            />
           </div>
         ) : (
           <RowList className={classes.list}>
@@ -464,7 +466,6 @@ function FriendsPanel({
                   }
                 />
               ))}
-            <ListEnd>{addFriendButton}</ListEnd>
           </RowList>
         )}
       </>
@@ -571,7 +572,7 @@ export function AddFriendDialog({
         new Set(prev).add(user.id),
       );
       if (friended) {
-        toast.success(friendAcceptedMessage(user.username));
+        toast.done(friendAcceptedMessage(user.username));
         onFriended();
       }
       onSent();
@@ -692,7 +693,7 @@ export function InviteLink({ open }: { open: boolean }) {
     // (FriendsPanel.render.test.tsx).
     try {
       await navigator.clipboard.writeText(url);
-      toast.success(copy.inviteCopied);
+      toast.done(copy.inviteCopied);
     } catch (err) {
       console.error(err);
       setLink(url);
@@ -708,7 +709,7 @@ export function InviteLink({ open }: { open: boolean }) {
       await revokeFriendInvites();
       setLink(null);
       setLive(0);
-      toast.success(copy.inviteRevoked);
+      toast.done(copy.inviteRevoked);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.inviteRevokeFailed));

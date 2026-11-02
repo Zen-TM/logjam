@@ -35,7 +35,7 @@ export function startPlanDownload(planId: string): Promise<void> {
   })
     // Stopped by the sign-out wipe: nothing to report, to anyone.
     .then((done) => {
-      if (done) toast(TRIP_PLAN_OFFLINE.downloadDone, "info");
+      if (done) toast(TRIP_PLAN_OFFLINE.downloadDone, "done");
     })
     .catch((err: unknown) =>
       toast(

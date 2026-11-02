@@ -44,7 +44,7 @@ export function PlanTripLogSheet({
   plan: TripPlanView | null;
   online: boolean;
   onClose: () => void;
-  onSaved: (message: string, tone: "info" | "error") => void;
+  onSaved: (message: string, tone: "done" | "error") => void;
 }) {
   const styles = useStyles();
   const places = useMirrorPlaces();
@@ -205,7 +205,7 @@ export function PlanTripLogSheet({
           queueMicrotask(() => {
             logged.current = null;
           });
-          onSaved(message, "info");
+          onSaved(message, "done");
         }}
       />
     </>

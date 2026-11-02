@@ -27,7 +27,11 @@ import type {
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import { TRIPS_LIST, type NotificationPlanTarget } from "@logjam/shared";
+import {
+  TRIPS_LIST,
+  type LoadState,
+  type NotificationPlanTarget,
+} from "@logjam/shared";
 import { PanelCloseContext } from "../../ui/Hero";
 import { useListKeys } from "../../ui/useListKeys";
 import { usePanelFocus } from "../../ui/usePanelFocus";
@@ -71,7 +75,8 @@ function SidebarPanel({
   waysLoaded,
   // Places
   places,
-  placesLoaded,
+  placesState,
+  placesError,
   placesTotal,
   sharedPlaces,
   onAddPlace,
@@ -135,7 +140,8 @@ function SidebarPanel({
   selectedTripLogId,
   setSelectedTripLogId,
   tripLogsTotal,
-  tripLogsLoaded,
+  tripLogsState,
+  tripLogsError,
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -159,7 +165,8 @@ function SidebarPanel({
   waysLoaded: boolean;
   // Places
   places: TPlace[];
-  placesLoaded: boolean;
+  placesState: LoadState;
+  placesError: string | null;
   placesTotal: number | null;
   sharedPlaces: TPlace[];
   onAddPlace: () => void;
@@ -241,7 +248,8 @@ function SidebarPanel({
   setSelectedTripLogId: (id: string | null) => void;
   tripLogsTotal: number | null;
   /** False until the first trip fetch settles. */
-  tripLogsLoaded: boolean;
+  tripLogsState: LoadState;
+  tripLogsError: string | null;
   onRefetchTripLogs: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -353,7 +361,8 @@ function SidebarPanel({
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
-            placesLoaded={placesLoaded}
+            placesState={placesState}
+            placesError={placesError}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
             placeTypes={placeTypes}
@@ -414,7 +423,9 @@ function SidebarPanel({
             onBack={backToLogs}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loaded={tripLogsLoaded}
+            state={tripLogsState}
+            error={tripLogsError}
+            onRetry={onRefetchTripLogs}
             places={places}
             customFieldDefs={customFieldDefs}
             placeCustomFieldDefs={placeCustomFieldDefs}
@@ -426,7 +437,8 @@ function SidebarPanel({
             onOpenStats={() => onLogsViewChange("stats")}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loaded={tripLogsLoaded}
+            state={tripLogsState}
+            error={tripLogsError}
             onRefetchTripLogs={onRefetchTripLogs}
             onOpenTrip={openTripDetail}
             onFiltersOpenChange={onFiltersOpenChange}
@@ -451,6 +463,8 @@ function SidebarPanel({
         {activePanel === "settings" && (
           <SettingsPanel
             currentUser={currentUser}
+            currentUserError={currentUserError}
+            onRetryCurrentUser={onRetryCurrentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             placeCustomFieldDefs={placeCustomFieldDefs}

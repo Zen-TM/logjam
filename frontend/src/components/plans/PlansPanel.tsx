@@ -40,6 +40,7 @@ import {
   IconTile,
   ListEnd,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   LoadingState,
   Menu,
@@ -181,7 +182,7 @@ export default function PlansPanel({
       const rejected = results[0];
       if (rejected.status === "rejected")
         toast.error(messageFromError(rejected.reason, failed));
-      else toast.success(worked);
+      else toast.done(worked);
     } else {
       const lines = (["delete", "leave", "archive", "unarchive"] as const)
         .map((kind) => {
@@ -196,7 +197,7 @@ export default function PlansPanel({
         })
         .filter(Boolean);
       (results.every((r) => r.status === "fulfilled")
-        ? toast.success
+        ? toast.done
         : toast.error)(lines.join(" "));
     }
     setBusyId(null);
@@ -222,7 +223,7 @@ export default function PlansPanel({
     setBusyId(plan.id);
     try {
       await joinPlan(plan.id);
-      toast.success(TRIP_PLAN_JOIN.copy.joined);
+      toast.done(TRIP_PLAN_JOIN.copy.joined);
       onRefetch();
     } catch (err) {
       console.error(err);
@@ -238,7 +239,7 @@ export default function PlansPanel({
     setBusyId(plan.id);
     try {
       await leavePlan(plan.id);
-      toast.success(declining ? copy.declined : copy.withdrawn);
+      toast.done(declining ? copy.declined : copy.withdrawn);
       onRefetch();
     } catch (err) {
       console.error(err);
@@ -407,22 +408,22 @@ export default function PlansPanel({
             onClear={clear}
           >
             {offers.archive && archiveVerb && (
-              <IconButton
-                icon={archiveVerb.icon}
-                label={archiveVerb.label}
+              <SelectionVerb
                 disabled={busyId != null}
                 disabledReason="Working…"
                 onClick={() => runOrConfirm(archiveVerb.id, selected)}
-              />
+              >
+                {archiveVerb.label}
+              </SelectionVerb>
             )}
-            <IconButton
-              icon={offers.destructive ? "delete" : "leave"}
-              label={offers.deleteLabel}
-              tone={offers.destructive ? "danger" : undefined}
+            <SelectionVerb
+              danger={offers.destructive}
               disabled={busyId != null}
               disabledReason="Working…"
               onClick={() => ask(selected)}
-            />
+            >
+              {offers.deleteLabel}
+            </SelectionVerb>
           </SelectionBar>
         ) : (
           <ChipRail

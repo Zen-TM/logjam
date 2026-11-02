@@ -123,7 +123,7 @@ function TripDetailPanel({
       setConfirmingDelete(false);
       onRefetchTripLogs();
       onQuotaChanged();
-      toast.success("Trip deleted.");
+      toast.done("Trip deleted.");
       onAfterDelete();
     } catch (err) {
       console.error(err);

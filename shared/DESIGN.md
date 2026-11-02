@@ -306,6 +306,10 @@ renumber.
 
 - **Loading is not empty, and failed is neither.** A first load says it is
   loading; a failed one says so, with Try again.
+  A list's data is a `LoadState` and `ListBody` draws it on both clients; a
+  failed first load never counts as loaded, so it never reads as "add your
+  first place" (`loadStateOf`). A refetch that fails under a list already
+  shown leaves the list and toasts.
 - **An empty screen says what would be here and offers the way in.** A
   filtered-empty list offers Clear filters.
 - **An error has one place**: under its field; above the submit of a form
@@ -318,6 +322,11 @@ renumber.
 - **A requirement shows on submit; a limit shows live.** An error clears when
   its field is edited.
 - **A toast reports an outcome and goes on its own**; errors stay longer.
+  It has two tones, `done` and `error`, stays `TOAST_MS` (a toast with an
+  action stays as long as an error), and offers at most one action ("Undo",
+  "Open"). It floats clear of the map's scale bar and credits. An action with
+  no other sign (Mark all as read) says so in a `done` toast; one the user
+  watches happen (copying coordinates) swaps its glyph in place instead.
 - **A toast reports an event; a condition that lasts is shown while it is
   true** (no fix, points not being saved), by a notice or by the figure it
   affects.

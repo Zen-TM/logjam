@@ -70,15 +70,6 @@
   padding: 4px var(--gutter) var(--gutter);
 }
 
-.emptyArea {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 var(--gutter) 15%;
-}
-
 .loading {
   composes: detail from "../../../textRoles.generated.module.css";
   margin: 0;

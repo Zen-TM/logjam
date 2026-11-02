@@ -134,7 +134,9 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
 
     // Adding someone is a dialog, not a box above the list.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Add friend", exact: true })
+      .click();
     const addDialog = page.locator("dialog[open]");
     await expect(
       addDialog.getByRole("searchbox", { name: "Search by username" }),
@@ -468,7 +470,7 @@ test.describe("desktop", () => {
     // only looks.
     await button.click();
     await expect(
-      aside.getByRole("heading", { level: 2, name: "#2 of 3" }),
+      aside.getByRole("heading", { level: 2, name: "Leaderboard" }),
     ).toBeVisible();
     await expect(aside.getByRole("button", { name: "Dismiss" })).toBeVisible();
     await expectNoViolations(page, "aside");

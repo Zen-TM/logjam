@@ -37,7 +37,7 @@ vi.mock("../../placeUtils", () => ({
 }));
 vi.mock("../../useIsMobile", () => ({ useIsMobile: () => false }));
 vi.mock("../feedback/ToastProvider", () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));
 
 const point = { latitude: -33.71234, longitude: 150.31188 };

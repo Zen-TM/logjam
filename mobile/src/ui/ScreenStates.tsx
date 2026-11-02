@@ -1,4 +1,5 @@
-import type { ComponentProps } from "react";
+import type { LoadState } from "@logjam/shared";
+import type { ComponentProps, ReactNode } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
 import { spacing, makeStyles, useTheme, withAlpha, muted } from "../theme";
@@ -84,6 +85,37 @@ export function ErrorState({
       ) : null}
     </View>
   );
+}
+
+/**
+ * What a list's body is while its data is `state`: the loading line, the
+ * failure with Try again, the `empty` state when there is one, or `children`.
+ * A failed load never reaches `empty` (shared/DESIGN.md §11), so the one place
+ * that chooses is here, not in each screen. Logjam Web's `ListBody` is the same.
+ */
+export function ListBody({
+  state,
+  loadingLabel,
+  error,
+  onRetry,
+  empty,
+  children,
+}: {
+  state: LoadState;
+  loadingLabel?: string;
+  /** Our sentence for a load that failed ("Couldn't load your inbox"). */
+  error: string | null;
+  onRetry?: () => void;
+  /** Drawn instead of `children` when the data is in hand and there is nothing to list. */
+  empty?: ReactNode;
+  children: ReactNode;
+}) {
+  if (state === "loading") return <LoadingState label={loadingLabel} />;
+  if (state === "failed")
+    return (
+      <ErrorState message={error ?? "Couldn't load this."} onRetry={onRetry} />
+    );
+  return <>{empty ?? children}</>;
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

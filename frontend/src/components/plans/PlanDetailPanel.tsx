@@ -270,7 +270,7 @@ export default function PlanDetailPanel({
     setBusy(true);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       refetch();
       return true;
     } catch (err) {
@@ -526,7 +526,8 @@ export default function PlanDetailPanel({
         {plan.sections.length === 0 ? (
           <EmptyState
             icon="notes"
-            title={copy.writeUpEmpty}
+            title={copy.writeUpEmptyTitle}
+            body={copy.writeUpEmptyBody}
             actions={
               canAddSection && (
                 <Button
@@ -608,7 +609,12 @@ export default function PlanDetailPanel({
         {plan.forms.length === 0 ? (
           <EmptyState
             icon="form"
-            title={role === "leader" ? copy.formsEmptyLeader : copy.formsEmpty}
+            title={copy.formsEmpty}
+            body={
+              role === "leader"
+                ? copy.formsEmptyBodyLeader
+                : copy.formsEmptyBody
+            }
             actions={
               canBuildForms && (
                 <Button
@@ -797,7 +803,7 @@ export default function PlanDetailPanel({
               formUpdatedAt: answeringForm.updatedAt,
             });
             setAnswering(null);
-            toast.success(formsCopy.saved);
+            toast.done(formsCopy.saved);
             refetch();
           }}
         />
@@ -874,7 +880,7 @@ export default function PlanDetailPanel({
           try {
             setBusy(true);
             await deletePlan(plan.id);
-            toast.success(copy.deleted);
+            toast.done(copy.deleted);
             setConfirm(null);
             onPlansChanged();
             onBack();
@@ -895,7 +901,7 @@ export default function PlanDetailPanel({
           try {
             setBusy(true);
             await leavePlan(plan.id, deleteAdded);
-            toast.success(copy.left);
+            toast.done(copy.left);
             setConfirm(null);
             onPlansChanged();
             onBack();
