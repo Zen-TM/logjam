@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   activityTalliesOverlap,
   countTripsInLastMonths,
+  defaultTrackName,
   dateRangeLabel,
   datePresets,
   dateSummary,
@@ -526,5 +527,26 @@ describe("dateSummary", () => {
   it("names the open end when only one is set", () => {
     expect(dateSummary(["2026-01-01", null])).toBe("From 2026-01-01");
     expect(dateSummary([null, "2026-03-31"])).toBe("To 2026-03-31");
+  });
+});
+
+describe("defaultTrackName", () => {
+  // Mutation: build the name with `toLocaleDateString()` and the numeric,
+  // order-ambiguous "3/11/2026" is back.
+  it("names a track with the day the way every other date reads", () => {
+    const name = defaultTrackName(new Date(2026, 10, 3, 9, 30));
+    expect(name).toBe(`Track ${formatDateKey("2026-11-03")}`);
+    expect(name).toMatch(/Nov/);
+    expect(name).not.toContain("/");
+  });
+
+  // Mutation: `now.toISOString().slice(0, 10)` reads the 2nd here.
+  it("uses the local day, not the UTC one", () => {
+    // 01:30 on the 3rd in Sydney (UTC+11) is still the 2nd in UTC.
+    inTimeZone("Australia/Sydney", () => {
+      expect(defaultTrackName(new Date("2026-11-02T14:30:00.000Z"))).toBe(
+        `Track ${formatDateKey("2026-11-03")}`,
+      );
+    });
   });
 });

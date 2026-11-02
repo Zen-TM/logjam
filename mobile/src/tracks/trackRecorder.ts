@@ -21,6 +21,7 @@ import { AppState } from "react-native";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
 import {
+  defaultTrackName,
   computeTrackStats,
   pickNextTrackColor,
   recordedDurationMs,
@@ -384,7 +385,7 @@ export async function startTrackRecording(): Promise<Track> {
     // Set when the recording finishes and is serialised for backup.
     mediaId: null,
     // Default label from the local date — user can rename on finish.
-    name: `Track ${now.toLocaleDateString()}`,
+    name: defaultTrackName(now),
     state: "recording",
     color,
     visible: true,

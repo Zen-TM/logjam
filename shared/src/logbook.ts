@@ -39,6 +39,11 @@ export function todayDateKey(now: Date = new Date()): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** "Track 3 Nov 2026" — a recording's name until the user renames it. */
+export function defaultTrackName(now: Date = new Date()): string {
+  return `Track ${formatDateKey(todayDateKey(now))}`;
+}
+
 /** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
 export function formatTripDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString(undefined, {

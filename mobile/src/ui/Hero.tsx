@@ -19,7 +19,7 @@ import { IconButton } from "./IconButton";
 export function Hero({
   eyebrow,
   title,
-  titleNumberOfLines = 1,
+  titleNumberOfLines = 2,
   value,
   secondaryValue,
   valueSuffix,

@@ -6,7 +6,7 @@
 // the ordering and the failure handling, neither of which is device-dependent.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RecordedTrackPoint } from "@logjam/shared";
+import { defaultTrackName, type RecordedTrackPoint } from "@logjam/shared";
 
 type TaskHandler = (event: {
   data?: { locations: unknown[] };
@@ -96,6 +96,7 @@ const appendRejectedFixes = vi.fn(async () => {});
 const addTrackPointSuppression = vi.fn(async () => {});
 const updateTrack = vi.fn(async () => {});
 const deleteTrack = vi.fn(async () => {});
+const insertTrack = vi.fn(async (_track: { name: string }) => {});
 let activeTrack: Record<string, unknown> | null = null;
 let storedPoints: RecordedTrackPoint[] = [];
 
@@ -107,7 +108,7 @@ vi.mock("./tracksDb", () => ({
     addTrackPointSuppression(...(args as [])),
   updateTrack: (...args: unknown[]) => updateTrack(...(args as [])),
   deleteTrack: (...args: unknown[]) => deleteTrack(...(args as [])),
-  insertTrack: vi.fn(async () => {}),
+  insertTrack,
   findActiveTrack: async () => activeTrack,
   getTrack: async () => activeTrack,
   lastTrackPoint: async () => storedPoints.at(-1) ?? null,
@@ -452,6 +453,15 @@ describe("arming and marking", () => {
       pausedMs: 60_000,
       pausedAt: null,
     });
+  });
+
+  // Mutation: back to `now.toLocaleDateString()` and a US phone names it
+  // "Track 11/3/2026", which reads as March elsewhere.
+  it("names a new track from the shared date formatter, not the numeric locale date", async () => {
+    await startTrackRecording();
+    const name = insertTrack.mock.calls.at(-1)?.[0].name;
+    expect(name).toBe(defaultTrackName(new Date()));
+    expect(name).not.toContain("/");
   });
 
   it("drops the row when starting cannot arm the location task", async () => {

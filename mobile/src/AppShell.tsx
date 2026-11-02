@@ -96,7 +96,7 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { backLabelOf, Icon, LoadingState } from "./ui";
+import { backLabelOf, Icon, LoadingState, TAB_BADGE_STYLE } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -1197,7 +1197,12 @@ export function AppShell({
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="moreTab" color={color} />
                 ),
-                ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
+                ...(unreadCount
+                  ? {
+                      tabBarBadge: unreadCount,
+                      tabBarBadgeStyle: TAB_BADGE_STYLE,
+                    }
+                  : {}),
               }}
             >
               {() => (
