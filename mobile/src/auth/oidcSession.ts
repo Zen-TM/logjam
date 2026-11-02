@@ -345,7 +345,8 @@ export async function signInWithPassword(
     refreshToken: tokens.refreshToken,
     tokenEndpoint: doc.token_endpoint,
     revocationEndpoint: doc.revocation_endpoint,
-    endSessionEndpoint: doc.end_session_endpoint,
+    // No end-session endpoint: this sign-in left no browser session to end, and
+    // sign-out would open the browser sheet just to find that out.
   };
   return {
     type: "success",

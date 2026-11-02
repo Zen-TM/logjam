@@ -264,6 +264,7 @@ function CognitoForms({
     e.preventDefault();
     setLocalError(null);
     const problem = signUpFormProblem({
+      name,
       email,
       username,
       password,

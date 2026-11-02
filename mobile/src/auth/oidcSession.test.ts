@@ -403,11 +403,24 @@ describe("signInWithPassword", () => {
       refreshToken: "r2",
       tokenEndpoint: TOKEN_ENDPOINT,
       revocationEndpoint: "https://auth.test/oauth2/revoke",
-      endSessionEndpoint: "https://auth.test/logout",
     });
     // And that record is a session: it works with no network, then refreshes.
     fetchMock.mockReset().mockRejectedValue(new TypeError("offline"));
     expect((await getSession())?.accessToken).toBe("a2");
+  });
+
+  // Mutation: store `endSessionEndpoint` here, as `signInWithBrowser` does.
+  it("signs out without opening the browser, having left no session in it", async () => {
+    provider(() => signedIn());
+    const result = await signInWithPassword("a@example.com", "pw");
+    if (result.type !== "success") throw new Error("expected success");
+    await result.commit();
+    await endProviderSession(await signOutLocally());
+    expect(openAuthSession).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://auth.test/oauth2/revoke",
+      expect.anything(),
+    );
   });
 
   it("signs in against Cognito's API with USER_AUTH", async () => {

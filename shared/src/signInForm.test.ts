@@ -15,6 +15,7 @@ import { passwordSignIn } from "./cognitoAccount.js";
 // fails (the unknown-counts-as-free test).
 
 const good = {
+  name: "Canyon Fan",
   email: "a@b.co",
   username: "canyon_fan",
   password: "Abcdef1!",
@@ -29,6 +30,13 @@ afterEach(() => vi.unstubAllGlobals());
 describe("signUpFormProblem", () => {
   it("accepts a complete form", () => {
     expect(signUpFormProblem(good)).toBeNull();
+  });
+
+  // Mutation: drop the name check.
+  it("asks for a name, which Cognito would otherwise refuse", () => {
+    expect(signUpFormProblem({ ...good, name: "  " })?.message).toBe(
+      "Enter your name.",
+    );
   });
 
   it("names the first problem, in the order the form reads", () => {

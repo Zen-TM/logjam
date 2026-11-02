@@ -37,6 +37,16 @@ describe("AccountForms", () => {
       expect(f).toContain('autoComplete="new-password"');
   });
 
+  // Mutation: move `clearPasswords()` above the unconfirmed branch in
+  // `signInWith`: the code would be accepted, then an empty password sent.
+  it("keeps the password until an unconfirmed account's code is accepted", () => {
+    const signInWith = /const signInWith =[\s\S]*?\n {2}};/.exec(source)![0];
+    expect(signInWith.indexOf("result.unconfirmed")).toBeGreaterThan(-1);
+    expect(signInWith.indexOf("clearPasswords()")).toBeGreaterThan(
+      signInWith.indexOf("return;"),
+    );
+  });
+
   // Mutation: console.error the password, or write it to a store.
   it("never logs or stores a password", () => {
     expect(source).not.toMatch(/console\.[a-z]+\([^)]*assword/);

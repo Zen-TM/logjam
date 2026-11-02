@@ -26,6 +26,7 @@ export type SignUpFormProblem = {
 
 /** The first thing wrong with the sign-up form, or null when it can be sent. */
 export function signUpFormProblem(form: {
+  name: string;
   email: string;
   username: string;
   password: string;
@@ -33,6 +34,10 @@ export function signUpFormProblem(form: {
   agreed: boolean;
   ageConfirmed: boolean;
 }): SignUpFormProblem | null {
+  // The pool requires it (infra/terraform/envs/prod/cognito.tf).
+  if (!form.name.trim()) {
+    return { field: "form", message: "Enter your name." };
+  }
   if (!isValidEmailFormat(form.email)) {
     return { field: "email", message: "Enter a valid email address." };
   }

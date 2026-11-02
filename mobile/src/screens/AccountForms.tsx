@@ -21,11 +21,6 @@ import {
 import { accountCalls } from "../auth/oidcSession";
 import type { useAuth } from "../auth/useAuth";
 import { isUsernameFree } from "../api/queries";
-import {
-  PRIVACY_POLICY_URL,
-  TERMS_URL,
-  openLegalDocument,
-} from "../legalLinks";
 import { makeStyles, spacing } from "../theme";
 import {
   Button,
@@ -35,6 +30,7 @@ import {
   TextField,
   TextLink,
 } from "../ui";
+import { TermsSwitch } from "./TermsSwitch";
 
 type Auth = ReturnType<typeof useAuth>;
 type Screen =
@@ -94,6 +90,7 @@ export function AccountForms({
     setCode("");
     // Only the sign-up's email code needs the password that was just typed.
     if (next !== "confirmSignUp") clearPasswords();
+    setNotice(null);
     setScreen(next);
   };
 
@@ -124,18 +121,19 @@ export function AccountForms({
       password,
       newAccountUsername,
     );
-    // Sent, so gone, whichever way it went.
-    clearPasswords();
-    if (result.type === "done") return;
-    if (result.unconfirmed) {
-      // Signed up, never entered the code: send one and ask for it here.
+    if (result.type === "form" && result.unconfirmed) {
+      // Signed up, never entered the code: send one and ask for it here. The
+      // password stays until the code is accepted, which signs them in.
       setSignedUpUsername(undefined);
       goTo("confirmSignUp");
       await sendCode(email.trim());
-    } else {
-      goTo("signIn");
-      setError(result.message);
+      return;
     }
+    // Sent, so gone, whichever way it went.
+    clearPasswords();
+    if (result.type === "done") return;
+    goTo("signIn");
+    setError(result.message);
   };
 
   const onSignIn = () => {
@@ -153,6 +151,7 @@ export function AccountForms({
 
   const onSignUp = () => {
     const problem = signUpFormProblem({
+      name,
       email,
       username,
       password,
@@ -182,9 +181,8 @@ export function AccountForms({
   const onConfirmSignUp = () =>
     submit("Confirmation failed. Please try again.", async () => {
       await accountCalls.confirmSignUp(email.trim(), code.trim());
-      // The password is still held from the sign-up form, so the just-verified
-      // account signs in without a second form. After a restart it is not, and
-      // the sign-in form asks for it.
+      // The password is held from the form that led here, so the just-verified
+      // account signs in without asking again.
       await signInWith(signedUpUsername);
     });
 
@@ -288,7 +286,7 @@ export function AccountForms({
       <FormStack>
         <Text style={styles.heading}>Check your email</Text>
         <Text style={styles.body}>
-          We sent a code to {email.trim()}. Spam included.
+          We sent a code to {email.trim()}. Check your spam folder too.
         </Text>
         {codeField("Verification code")}
         {noticeText}
@@ -385,20 +383,7 @@ export function AccountForms({
           editable={!submitting}
         />
         {passwordFields("Password")}
-        <TextLink
-          label="Read the Terms of Use"
-          onPress={() => openLegalDocument(TERMS_URL)}
-        />
-        <TextLink
-          label="Read the Privacy Policy"
-          onPress={() => openLegalDocument(PRIVACY_POLICY_URL)}
-        />
-        <SwitchRow
-          title="I agree to the terms"
-          description="Terms and Privacy Policy"
-          checked={agreed}
-          onChange={setAgreed}
-        />
+        <TermsSwitch checked={agreed} onChange={setAgreed} />
         <SwitchRow
           title="I am 18 or older"
           checked={ageConfirmed}
