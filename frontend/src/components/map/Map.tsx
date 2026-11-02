@@ -2303,9 +2303,9 @@ function Map({
     );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
 
-  // A measurement is the same draft drawn DOTTED and without direction arrows:
-  // a route is a thing you are making, a measurement a thing you are asking,
-  // and it has no way it runs.
+  // A measurement is the same draft drawn DOTTED, arrows and all, as on Logjam
+  // GPS: a route is a thing you are making, a measurement a thing you are
+  // asking.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -2324,11 +2324,6 @@ function Map({
       "route-draft-casing",
       "line-width",
       measuring ? DRAFT_LINE.measureCasingWidth : DRAFT_LINE.casingWidth,
-    );
-    map.setLayoutProperty(
-      "route-draft-direction",
-      "visibility",
-      measuring ? "none" : "visible",
     );
   }, [measuring, mapLoaded]);
 
