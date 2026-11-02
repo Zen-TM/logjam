@@ -10,7 +10,7 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   bulkSharePlaces: (...args: unknown[]) => bulkSharePlaces(...args),
 }));
 vi.mock("../feedback/ToastProvider", () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn() }),
+  useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));
 
 HTMLDialogElement.prototype.showModal = function showModal() {

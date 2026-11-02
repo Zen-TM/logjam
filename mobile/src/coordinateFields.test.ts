@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 // add a Latitude or Longitude field that does not use it.
 const SRC = dirname(fileURLToPath(import.meta.url));
 const FIELD =
-  /label="(Latitude|Longitude)"|label=\{copy\.item(Latitude|Longitude)\}/;
+  /label="(Latitude|Longitude)"|label=\{copy\.item(Latitude|Longitude)\}|label=\{PLACE_FORM\.copy\.(latitude|longitude)\}/;
 // With the whitespace gone, so a call a formatter wrapped still reads.
 const routed = (text: string, axis: string) =>
   new RegExp(`coordinateEntry\\([^)]*"${axis}"|axis:"${axis}"`).test(

@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import { PLACE_FORM, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import PlaceDialog from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -120,6 +120,6 @@ describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
     expect(box(/^Latitude/).value).toBe("-33,6290 150");
     expect(box(/^Longitude/).value).toBe("");
     fireEvent.blur(box(/^Latitude/));
-    expect(screen.getByText("Enter a valid number")).toBeTruthy();
+    expect(screen.getByText(PLACE_FORM.copy.latitudeInvalid)).toBeTruthy();
   });
 });
