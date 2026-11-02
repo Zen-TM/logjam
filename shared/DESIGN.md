@@ -200,7 +200,10 @@ renumber.
 - **`Row` is the only list row.** The body opens; the ⋯ acts. Trailing
   order: metric, status, ⋯. A row that asks a question (accept or decline)
   answers it in its footer. A maintainer message's footer says Read
-  message, since nothing else says its row opens one.
+  message, since nothing else says its row opens one. On Logjam GPS the
+  buttons in a card's footer share its full width equally (`CardActions`: two
+  get half each, one takes it all, three or more stack); Logjam Web's wider cards keep natural-size
+  compact buttons.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
   a LiDAR topo) opens on the map. A thing with nowhere to open does its one

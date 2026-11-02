@@ -1498,9 +1498,20 @@ describe("storage when someone goes", () => {
         plans.push(res.body.id);
       }
       const [kept, empty] = plans;
-      for (const userId of [BOB_ID, CAROL_ID])
+      // Carol joins a second later: rows made in the same millisecond would
+      // leave "earliest" to the id tie-break.
+      for (const [userId, at] of [
+        [BOB_ID, new Date(Date.now() - 2000)],
+        [CAROL_ID, new Date(Date.now() - 1000)],
+      ] as const)
         await prisma.tripPlanMember.create({
-          data: { planId: kept, userId, status: "active", role: "member" },
+          data: {
+            planId: kept,
+            userId,
+            status: "active",
+            role: "member",
+            createdAt: at,
+          },
         });
       await prisma.tripPlanMember.create({
         data: {
