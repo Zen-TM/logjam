@@ -38,7 +38,10 @@ function half(
  * a pair outside the globe.
  */
 export function parseCoordinatePair(text: string): CoordinatePair | null {
-  const match = PAIR.exec(text.replace(/[°º]/g, "").replace(/−/g, "-").trim());
+  const plain = text.replace(/[°º]/g, "").replace(/−/g, "-").trim();
+  // Two whole numbers on a bare comma are one number with a decimal comma.
+  if (/^[+-]?\d+,\d+$/.test(plain)) return null;
+  const match = PAIR.exec(plain);
   if (!match) return null;
   const first = half(match[1], match[2], match[3], match[4]);
   const second = half(match[5], match[6], match[7], match[8]);
@@ -57,19 +60,33 @@ export function parseCoordinatePair(text: string): CoordinatePair | null {
   return { latitude: latitude || 0, longitude: longitude || 0 };
 }
 
+/** The previous text with one character typed into it. */
+function isKeystroke(text: string, previous: string): boolean {
+  if (text.length !== previous.length + 1) return false;
+  let at = 0;
+  while (at < previous.length && text[at] === previous[at]) at += 1;
+  return text.slice(at + 1) === previous.slice(at);
+}
+
+/** A coordinate field's text as a number: NaN for empty text and for
+ *  anything that is not wholly a number. `parseFloat` reads "-33.6, 150" as
+ *  -33.6, and `Number("")` is 0. */
+export function coordinateNumber(text: string): number {
+  return text.trim() === "" ? NaN : Number(text);
+}
+
 /**
  * What a coordinate field's text becomes: a pasted pair fills both fields,
- * anything else is only this field's text, untouched. A keystroke (the text
- * is the previous text plus one character) never splits, so typing a pair
- * does not cut it in two at the first digit of its second half.
+ * anything else is only this field's text, untouched. A keystroke never
+ * splits, so typing a pair does not cut it in two at the first digit of its
+ * second half.
  */
 export function coordinateEntry(
   text: string,
   axis: Axis,
   previous: string,
 ): Partial<Record<Axis, string>> {
-  const pair =
-    text.length === previous.length + 1 ? null : parseCoordinatePair(text);
+  const pair = isKeystroke(text, previous) ? null : parseCoordinatePair(text);
   return pair
     ? { latitude: String(pair.latitude), longitude: String(pair.longitude) }
     : { [axis]: text };

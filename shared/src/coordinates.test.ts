@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { coordinateEntry, parseCoordinatePair } from "./coordinates.js";
+import {
+  coordinateEntry,
+  coordinateNumber,
+  parseCoordinatePair,
+} from "./coordinates.js";
 
 const pair = { latitude: -33.629, longitude: 150.3156 };
 
@@ -30,6 +34,9 @@ describe("parseCoordinatePair", () => {
     "",
     "-33.6290",
     "-33,6290",
+    // A decimal comma whose fraction is small enough to pass as a longitude.
+    "-33,15",
+    "12,34",
     "-33,6290 150,3156",
     "-33.6290, 150.3156, 12",
     "-33.6290 abc",
@@ -41,6 +48,21 @@ describe("parseCoordinatePair", () => {
     "1.2.3, 4",
   ])("leaves %j alone", (text) => {
     expect(parseCoordinatePair(text)).toBeNull();
+  });
+
+  it("still splits whole numbers that have a space or a point", () => {
+    expect(parseCoordinatePair("-33, 15")).toEqual({
+      latitude: -33,
+      longitude: 15,
+    });
+    expect(parseCoordinatePair("-33 15")).toEqual({
+      latitude: -33,
+      longitude: 15,
+    });
+    expect(parseCoordinatePair("-33.5,15")).toEqual({
+      latitude: -33.5,
+      longitude: 15,
+    });
   });
 
   it("keeps a zero without a sign", () => {
@@ -67,6 +89,15 @@ describe("coordinateEntry", () => {
     });
   });
 
+  // Mutation: compare lengths alone, and a pair pasted over a selection one
+  // character shorter than it is taken for a keystroke and left in one field.
+  it("splits a pair pasted over a selection, whatever their lengths", () => {
+    expect(coordinateEntry("-33, 150", "latitude", "-33.123")).toEqual({
+      latitude: "-33",
+      longitude: "150",
+    });
+  });
+
   // Mutation: sanitise the text, and a mistake is quietly rewritten.
   it("keeps anything else exactly as typed", () => {
     expect(coordinateEntry("-33,6290 150,3156", "latitude", "")).toEqual({
@@ -75,5 +106,16 @@ describe("coordinateEntry", () => {
     expect(coordinateEntry("12abc", "longitude", "")).toEqual({
       longitude: "12abc",
     });
+  });
+});
+
+describe("coordinateNumber", () => {
+  // Mutation: parseFloat, and "-33.6, 150" is quietly -33.6; Number(""), and
+  // an empty field is 0.
+  it("reads a plain number and nothing else", () => {
+    expect(coordinateNumber(" -33.629 ")).toBe(-33.629);
+    expect(coordinateNumber("0")).toBe(0);
+    for (const text of ["", "  ", "-33.6, 150", "12abc", "33,6"])
+      expect(coordinateNumber(text)).toBeNaN();
   });
 });

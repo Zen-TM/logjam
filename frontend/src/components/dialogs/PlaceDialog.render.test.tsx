@@ -102,7 +102,7 @@ describe("PlaceDialog, while open", () => {
 
 const box = (label: RegExp) => screen.getByLabelText(label) as HTMLInputElement;
 
-// Finding web-prod-veteran-04. Mutation: put NumberField's sanitising back
+// Mutation: put NumberField's sanitising back
 // on the coordinate fields, and the pair is joined into -33.62901503156.
 describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
   it("fills Latitude and Longitude", () => {

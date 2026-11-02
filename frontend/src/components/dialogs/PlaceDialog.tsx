@@ -18,6 +18,7 @@ import {
   isSystemFieldDef,
   isValidLatitude,
   isValidLongitude,
+  coordinateNumber,
 } from "@logjam/shared";
 import {
   numericFieldError,
@@ -333,8 +334,8 @@ function PlaceDialog({
     if (draftPlaceId) return Promise.resolve(draftPlaceId);
     if (draftPromiseRef.current) return draftPromiseRef.current;
 
-    const parsedLat = parseFloat(latitude);
-    const parsedLng = parseFloat(longitude);
+    const parsedLat = coordinateNumber(latitude);
+    const parsedLng = coordinateNumber(longitude);
     if (
       !name.trim() ||
       !latitude ||
@@ -433,8 +434,8 @@ function PlaceDialog({
     setError(null);
     setInvalidField(null);
     try {
-      const parsedLat = parseFloat(latitude);
-      const parsedLng = parseFloat(longitude);
+      const parsedLat = coordinateNumber(latitude);
+      const parsedLng = coordinateNumber(longitude);
       if (!name.trim()) {
         // Inline under the Name field (FieldError), not the bottom banner.
         setInvalidField("name");
