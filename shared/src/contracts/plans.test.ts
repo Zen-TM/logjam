@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { SYSTEM_PLACE_TYPES } from "../placeTypes.js";
 import { contractSectionKeys } from "./types.js";
 import { answersFromDraft } from "../tripPlanAnswerDraft.js";
 import {
@@ -24,6 +25,8 @@ import {
   PLAN_VERB_LISTS,
   sortTripPlans,
   tripPlanAddedByLine,
+  tripPlanPlaceType,
+  tripPlanSetAsideRows,
   tripPlanBucket,
   tripPlanCounts,
   tripPlanDatesLabel,
@@ -1365,5 +1368,44 @@ describe("a plan's page sections", () => {
     for (const on of ["web", "gps"] as const) {
       expect(contractSectionKeys(TRIP_PLAN_PAGE, on)).not.toContain("dates");
     }
+  });
+});
+
+describe("a plan place's type", () => {
+  const canyon = "00000000-0000-4000-8000-000000000001";
+  it("is the adder's custom type by name and icon, else the system type's", () => {
+    const system = SYSTEM_PLACE_TYPES[0];
+    expect(
+      tripPlanPlaceType({
+        placeTypeId: system.id,
+        typeName: null,
+        typeIconKey: null,
+      }),
+    ).toEqual({ name: system.name, iconKey: system.iconKey });
+    expect(
+      tripPlanPlaceType({
+        placeTypeId: system.id,
+        typeName: "Swimming hole",
+        typeIconKey: "waves",
+      }),
+    ).toEqual({ name: "Swimming hole", iconKey: "waves" });
+    expect(
+      tripPlanPlaceType({
+        placeTypeId: canyon,
+        typeName: null,
+        typeIconKey: null,
+      }),
+    ).toEqual({ name: "Place", iconKey: "map-pin" });
+  });
+
+  it("lists its set-aside attributes as read-only rows", () => {
+    expect(tripPlanSetAsideRows({ foreignFields: null })).toEqual([]);
+    expect(
+      tripPlanSetAsideRows({
+        foreignFields: [
+          { key: "depth", label: "Depth", type: "number", value: 3 },
+        ],
+      }),
+    ).toEqual([["depth", "Depth", 3, "number"]]);
   });
 });

@@ -56,6 +56,10 @@ export async function resolveCopyPlaceType(
   recipientId: string,
   sourceTypeId: string,
   requested?: unknown,
+  /** A plan's place: its custom type's name, kept when it was added. The
+   *  copier's own type of that name wins; a type is never created for it, so
+   *  no match leaves the plan place's system type. */
+  planTypeName?: string | null,
 ): Promise<CopyTypeResolution> {
   if (requested !== undefined && requested !== null) {
     if (typeof requested !== "string" || requested.length === 0) {
@@ -82,15 +86,16 @@ export async function resolveCopyPlaceType(
   // is a 500-shaped situation reported as one rather than papered over.
   if (!source) throw fault("The place's type is missing");
 
-  if (source.ownerId === null)
+  if (source.ownerId === null && !planTypeName)
     return { placeTypeId: source.id, created: false };
 
   const candidates = await prisma.placeType.findMany({
     where: visiblePlaceTypeWhere(recipientId),
     select: { id: true, ownerId: true, name: true },
   });
-  const matched = matchPlaceTypeByName(source.name, candidates);
+  const matched = matchPlaceTypeByName(planTypeName ?? source.name, candidates);
   if (matched) return { placeTypeId: matched.id, created: false };
+  if (planTypeName) return { placeTypeId: source.id, created: false };
 
   const created = await createPlaceType(recipientId, undefined, {
     name: source.name,
@@ -114,7 +119,7 @@ export async function resolveCopyPlaceType(
  * and so has no one's definitions but the system's. Into a plan
  * (`recipientId` null), every value without a system definition is parked.
  * Out of a plan (`sourceOwnerId` null), the parked values ARE the plan's
- * values, which every member saw and could not adopt, so they are fed back
+ * values, which members see read-only and cannot adopt, so they are fed back
  * through the split as values, each its own definition, as a type change does.
  * Guard: __tests__/planItems.test.ts ("lands a place of the adder's own type
  * as a Marker").

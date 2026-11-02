@@ -267,6 +267,8 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body.item).toMatchObject({
       placeTypeId: MARKER_TYPE_ID,
+      typeName: "Test swimming hole",
+      typeIconKey: "marker",
       fieldValues: {},
       foreignFields: [
         {
@@ -336,12 +338,209 @@ describe("POST /plans/:id/items (Add a place or way)", () => {
     }
   });
 
-  // Mutation: read the source with requirePlaceAccess instead of ownerId.
-  it("404s a place shared with the caller, as it does a missing one", async () => {
-    const res = await add(BOB_SUB, { kind: "place", id: SHARED_PLACE_ID });
+  // Mutation: drop the `shares` arm of the place lookup in addPlace and bob's
+  // add of a place shared with him 404s; drop the `ownerId` arm and alice's
+  // own add 404s.
+  it("adds a place shared with the caller, carrying no owner-private field", async () => {
+    const type = await prisma.placeType.create({
+      data: {
+        ownerId: ALICE_ID,
+        name: "Test shared hole",
+        iconKey: "marker",
+        color: "#4BB4D9",
+      },
+    });
+    await prisma.customFieldDef.create({
+      data: {
+        ownerId: ALICE_ID,
+        entity: "place",
+        key: "test_shared_depth",
+        label: "Test shared depth",
+        type: "string",
+        placeTypes: { create: { placeTypeId: type.id } },
+      },
+    });
+    const placeId = await ownPlace(ALICE_SUB, {
+      placeTypeId: type.id,
+      fieldValues: { test_shared_depth: "deep" },
+    });
+    // Owner-private: written straight to the column, as only a copy would.
+    await prisma.place.update({
+      where: { id: placeId },
+      data: {
+        foreignFields: [
+          {
+            key: "test_owner_secret",
+            label: "Test owner secret label",
+            type: "string",
+            value: "hush",
+          },
+        ],
+      },
+    });
+    await prisma.placeShare.create({
+      data: { placeId, sharedById: ALICE_ID, sharedWithId: BOB_ID },
+    });
+
+    const res = await add(BOB_SUB, { kind: "place", id: placeId });
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    // The set-aside label is the owner's, from the owner's definitions.
+    expect(res.body.item).toMatchObject({
+      placeTypeId: MARKER_TYPE_ID,
+      typeName: "Test shared hole",
+      foreignFields: [
+        { key: "test_shared_depth", label: "Test shared depth", value: "deep" },
+      ],
+    });
+    // Mutation: read the owner's foreignFields in reconcileCopiedPlace for a
+    // plan (sourceOwnerId set), and the secret reaches every member.
+    const row = await prisma.place.findUniqueOrThrow({
+      where: { id: res.body.item.id },
+    });
+    expect(row).toMatchObject({ ownerId: null, addedById: BOB_ID });
+    expect(JSON.stringify(row.foreignFields)).not.toContain("secret");
+    expect(JSON.stringify(res.body)).not.toContain("hush");
+
+    await prisma.place.delete({ where: { id: placeId } });
+    await prisma.placeType.delete({ where: { id: type.id } });
+  });
+
+  // Mutation: widen the lookup to any place with an owner.
+  it("404s a place that is neither the caller's nor shared with them", async () => {
+    const strangers = await ownPlace(CAROL_SUB);
+    const res = await add(BOB_SUB, { kind: "place", id: strangers });
     expect(res.status).toBe(404);
     expect(res.body.error).toBe("Couldn't find that.");
     expect(await prisma.place.count({ where: { planId } })).toBe(0);
+  });
+
+  // Mutation: skip the typeName in the save's type resolution, or let it
+  // create a type on a miss.
+  it("saves a copy into the saver's own type of that name, never creating one", async () => {
+    const type = await prisma.placeType.create({
+      data: {
+        ownerId: ALICE_ID,
+        name: "Test named hole",
+        iconKey: "marker",
+        color: "#4BB4D9",
+      },
+    });
+    await prisma.customFieldDef.create({
+      data: {
+        ownerId: ALICE_ID,
+        entity: "place",
+        key: "test_named_depth",
+        label: "Test named depth",
+        type: "string",
+        placeTypes: { create: { placeTypeId: type.id } },
+      },
+    });
+    const placeId = await ownPlace(ALICE_SUB, {
+      placeTypeId: type.id,
+      fieldValues: { test_named_depth: "deep" },
+    });
+    const added = await add(ALICE_SUB, { kind: "place", id: placeId });
+    expect(added.status, JSON.stringify(added.body)).toBe(201);
+    const save = (sub: string) =>
+      request(API_URL)
+        .post(`/plans/${planId}/items/place/${added.body.item.id}/save`)
+        .set(as(sub))
+        .send({});
+
+    // The adder gets their own type back, the value in its field.
+    const mine = await save(ALICE_SUB);
+    expect(mine.status, JSON.stringify(mine.body)).toBe(201);
+    expect(mine.body).toMatchObject({
+      placeTypeId: type.id,
+      createdPlaceType: false,
+      fieldValues: { test_named_depth: "deep" },
+    });
+
+    // Another member with no such type: a Marker, the value set aside, and
+    // no type made.
+    const theirs = await save(BOB_SUB);
+    expect(theirs.status, JSON.stringify(theirs.body)).toBe(201);
+    expect(theirs.body).toMatchObject({
+      placeTypeId: MARKER_TYPE_ID,
+      createdPlaceType: false,
+      foreignFields: [
+        { key: "test_named_depth", label: "Test named depth", value: "deep" },
+      ],
+    });
+    expect(
+      await prisma.placeType.count({
+        where: { ownerId: BOB_ID, name: "Test named hole" },
+      }),
+    ).toBe(0);
+
+    // The same name in another case matches too (matchPlaceTypeByName).
+    const bobType = await prisma.placeType.create({
+      data: {
+        ownerId: BOB_ID,
+        name: "TEST NAMED HOLE",
+        iconKey: "marker",
+        color: "#4BB4D9",
+      },
+    });
+    const matched = await save(BOB_SUB);
+    expect(matched.body).toMatchObject({
+      placeTypeId: bobType.id,
+      createdPlaceType: false,
+    });
+
+    await prisma.place.deleteMany({
+      where: {
+        id: { in: [placeId, mine.body.id, theirs.body.id, matched.body.id] },
+      },
+    });
+    await prisma.placeType.deleteMany({
+      where: { id: { in: [type.id, bobType.id] } },
+    });
+  });
+
+  // Mutation: key the type name off the place's type being custom, not off
+  // the type being a non-system one, and a system type gains a name; or drop
+  // the foreignFields from the payload.
+  it("keeps a system type, setting its custom attributes aside for every member to see", async () => {
+    await prisma.customFieldDef.create({
+      data: {
+        ownerId: ALICE_ID,
+        entity: "place",
+        key: "test_all_types_note",
+        label: "Test all-types note",
+        type: "string",
+        appliesToAllTypes: true,
+      },
+    });
+    const placeId = await ownPlace(ALICE_SUB, {
+      fieldValues: { test_all_types_note: "mossy" },
+    });
+    const added = await add(ALICE_SUB, { kind: "place", id: placeId });
+    expect(added.status, JSON.stringify(added.body)).toBe(201);
+
+    const view = await request(API_URL)
+      .get(`/plans/${planId}`)
+      .set(as(BOB_SUB));
+    expect(view.status).toBe(200);
+    expect(view.body.places).toMatchObject([
+      {
+        placeTypeId: CANYON_TYPE_ID,
+        typeName: null,
+        typeIconKey: null,
+        foreignFields: [
+          {
+            key: "test_all_types_note",
+            label: "Test all-types note",
+            value: "mossy",
+          },
+        ],
+      },
+    ]);
+
+    await prisma.place.delete({ where: { id: placeId } });
+    await prisma.customFieldDef.deleteMany({
+      where: { ownerId: ALICE_ID, key: "test_all_types_note" },
+    });
   });
 
   // Mutation: requirePlanWrite → a plan-exists check in the POST and

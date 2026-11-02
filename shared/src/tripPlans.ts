@@ -158,6 +158,10 @@ export type TripPlanPlace = TripPlanItemBase & {
   elevation: number | null;
   /** Always a system type. */
   placeTypeId: string;
+  /** The adder's custom type, kept by name and icon key; null for a system
+   *  type. Clients show it in place of the system type's own. */
+  typeName: string | null;
+  typeIconKey: string | null;
   notes: string | null;
   /** Keys of the system type's definitions only. */
   fieldValues: Record<string, unknown>;

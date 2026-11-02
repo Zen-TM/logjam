@@ -38,7 +38,8 @@ SET name = 'place-' || substring(id::text, 1, 8),
     notes = NULL,
     gauge_id = NULL,
     field_values = '{}',
-    foreign_fields = NULL;
+    foreign_fields = NULL,
+    type_name = NULL;
 
 -- TRIP TYPES are user-authored tags ("Claustral recon", "with Dad"), held in two
 -- places that must keep MATCHING after the scrub: a trip's own `types`, and the

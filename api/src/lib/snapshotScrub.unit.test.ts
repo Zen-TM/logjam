@@ -45,6 +45,7 @@ const OWNER_DATA_MODELS = [
 const SCRUB_EXEMPT: Record<string, string> = {
   "places.import_key":
     "derived from name+coords, but opaque and needed for re-import dedupe",
+  "places.type_icon_key": "curated icon vocabulary, not user text",
   "places.ropewiki_snapshot": "public RopeWiki text, not user-authored",
   "trip_logs.import_key": "opaque",
   "custom_field_defs.key":

@@ -44,6 +44,8 @@ export const OWNER_PRIVATE_PLACE_FIELDS: Record<string, string> = {
   // place is shared; withheld anyway, as addedById names another user.
   planId: "the plan holding the place, for plan members only",
   addedById: "the plan member who added the place",
+  typeName: "a plan place's custom type name, for plan members only",
+  typeIconKey: "a plan place's custom type icon, for plan members only",
 };
 
 /**
