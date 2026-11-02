@@ -163,15 +163,20 @@ const IDENTITY_FILLS = [
 ];
 
 /**
- * Pairs that fail today and are KNOWN to, each with where it renders. They are
- * printed but do not fail the run — and a known failure that starts PASSING
- * does fail it, so this list can only shrink: fix the pair, delete its line.
- * Adding to it is a decision to ship an inaccessible pair, and needs saying.
+ * Pairs that fail today and are KNOWN to, keyed by scheme and pair
+ * (`"ghostGum: textMuted on page"`), so a pair excused in one scheme is still
+ * held in the others. Each carries the ratio it has today as a floor: a known
+ * failure that falls below it fails the run, and one that starts PASSING does
+ * too, so this list can only shrink: fix the pair, delete its line. Adding to
+ * it is a decision to ship an inaccessible pair, and needs saying.
  */
 const KNOWN_FAILURES = new Map([
-  ["line on page (separation: a card's edge)", "retuned by the look-retune PR"],
-  ["textMuted on page", "retuned by the look-retune PR"],
-  ["textMuted on cardPressed", "retuned by the look-retune PR"],
+  ["sandstone: line on page (separation: a card's edge)", { floor: 1.43, why: "its line is under 1.5:1 on the page" }],
+  ["basalt: line on page (separation: a card's edge)", { floor: 1.47, why: "its line is under 1.5:1 on the page" }],
+  ["scribblyGum: line on page (separation: a card's edge)", { floor: 1.25, why: "its line is under 1.5:1 on the page" }],
+  ["ghostGum: line on page (separation: a card's edge)", { floor: 1.22, why: "its line is under 1.5:1 on the page" }],
+  ["ghostGum: textMuted on page", { floor: 6.62, why: "its muted text is under 7:1" }],
+  ["ghostGum: textMuted on cardPressed", { floor: 6.0, why: "its muted text is under 7:1" }],
 ]);
 
 // Reference basemap grounds a point mark is drawn on, not tokens: the OSM Topo
@@ -273,17 +278,21 @@ const schemes = parseSchemes(src, INK);
 const failuresOnly = process.argv.includes("--failures");
 
 let totalFail = 0;
-const knownPassing = new Set();
-const knownFailing = new Set();
+const seenKnown = new Set();
+const fixedKnown = [];
 for (const [id, scheme] of Object.entries(schemes)) {
   const rows = pairsFor(scheme).map((p) => {
     const r = ratio(p.fg, p.bg);
-    return { ...p, ratio: r, pass: r >= p.min, known: KNOWN_FAILURES.has(p.name) };
+    const key = `${id}: ${p.name}`;
+    const known = KNOWN_FAILURES.get(key);
+    if (known) seenKnown.add(key);
+    if (known && r >= p.min) fixedKnown.push(key);
+    // A known failure may not get worse than it is today.
+    const regressed = known && !(r >= p.min) && r < known.floor - 0.005;
+    return { ...p, ratio: r, pass: r >= p.min, known: known && !regressed, key };
   });
   const fails = rows.filter((r) => !r.pass && !r.known);
   totalFail += fails.length;
-  for (const r of rows) if (r.pass && r.known) knownPassing.add(r.name);
-  for (const r of rows) if (!r.pass && r.known) knownFailing.add(r.name);
   if (failuresOnly && fails.length === 0) continue;
   console.log(`\n=== ${id} (${scheme.mode}) ${fails.length ? `(${fails.length} FAIL)` : "(all pass)"} ===`);
   for (const r of failuresOnly ? rows.filter((row) => !row.pass) : rows) {
@@ -293,15 +302,14 @@ for (const [id, scheme] of Object.entries(schemes)) {
     );
   }
 }
-// A known failure passes only once it passes under EVERY scheme.
-const fixedKnown = [...KNOWN_FAILURES.keys()].filter(
-  (name) => knownPassing.has(name) && !knownFailing.has(name),
-);
-for (const name of fixedKnown) {
-  console.log(`\n✗ "${name}" now passes in every scheme — delete it from KNOWN_FAILURES.`);
-}
-const knownStill = [...knownFailing].map((name) => `${name} (${KNOWN_FAILURES.get(name)})`);
-if (knownStill.length) console.log(`\n! ${knownStill.length} known failing pair(s): ${knownStill.join("; ")}`);
-const ok = totalFail === 0 && fixedKnown.length === 0;
+const unmatched = [...KNOWN_FAILURES.keys()].filter((key) => !seenKnown.has(key));
+for (const key of fixedKnown)
+  console.log(`\n✗ "${key}" now passes — delete it from KNOWN_FAILURES.`);
+for (const key of unmatched)
+  console.log(`\n✗ "${key}" matches no scheme or pair — delete it from KNOWN_FAILURES.`);
+const knownStill = [...KNOWN_FAILURES].filter(([key]) => seenKnown.has(key) && !fixedKnown.includes(key));
+if (knownStill.length)
+  console.log(`\n! ${knownStill.length} known failing pair(s): ${knownStill.map(([key, k]) => `${key} (${k.why})`).join("; ")}`);
+const ok = totalFail === 0 && fixedKnown.length === 0 && unmatched.length === 0;
 console.log(`\n${ok ? "✓ ALL PASS" : `✗ ${totalFail} failing pair(s)`}`);
 process.exit(ok ? 0 : 1);
