@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError, AUTH_ERROR_CODES, messageFromError } from "./apiErrors.js";
 import * as contracts from "./contracts/index.js";
-import { copySay, copyViolations, userFacingStrings } from "./copyRules.js";
+import { copySay, copyViolations } from "./copyRules.js";
 
 // Every string a screen contract declares keeps the copy rules of
 // shared/DESIGN.md §12: no "Retry", no "the app", no "basemap", "tiles" or "the
@@ -79,6 +79,7 @@ describe("contract copy", () => {
     ["cannot", "We cannot do that.", "We can't do that."],
     ["that-didnt-work", "That didn't work.", "Couldn't save this place."],
     ["curly-apostrophe", "Couldn’t save.", "Couldn't save."],
+    ["curly-apostrophe", "Couldn&rsquo;t save.", "Couldn't save."],
     ["waypoint", "Add a waypoint", "Add a place"],
     ["custom-field", "Edit custom fields", "Edit attributes"],
     ["logbook", "Your logbook", "Your trips"],
@@ -86,6 +87,7 @@ describe("contract copy", () => {
     ["activity", "By activity", "By trip type"],
     ["lidar-topo", "Make a LiDAR topo", "Make a sharpened area"],
     ["lidar-topo", "Open the topo", "Open the sharpened area"],
+    ["lidar-topo", "Use a topo", "OSM Topo"],
     ["region", "Download a map region", "Save an offline map"],
     ["unshare", "Unshare", "Stop sharing"],
     ["recipients", "Visible to recipients", "Friends you pick can see it"],
@@ -124,9 +126,9 @@ describe("the words an API failure shows", () => {
   });
 });
 
-// The words in shared/src outside contracts/ (labels, notification text, the
-// error sentences) keep the same rules as the contracts and the clients, with
-// no allow-list: a hit is fixed here. Mutation that turns it red: put "Please"
+// The sentences in shared/src outside contracts/ (labels, notification text,
+// validation and error sentences) keep the same rules as the contracts and the
+// clients: a hit is fixed here, with no baseline. Mutation that turns it red: put "Please"
 // back into `STATUS_MESSAGES[403]` in `apiErrors.ts`.
 describe("shared copy outside contracts/", () => {
   const SRC = dirname(fileURLToPath(import.meta.url));
@@ -145,15 +147,60 @@ describe("shared copy outside contracts/", () => {
     expect(scanned.length).toBeGreaterThan(40);
   });
 
-  it("breaks no copy rule", () => {
-    const offenders = scanned.flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap((found) =>
-        copyViolations(found.text).map(
-          (id) =>
-            `${relative(SRC, path)}:${found.line}: "${found.text}" — ${copySay(id)}`,
-        ),
-      ),
+  // Every string literal and template with a space in it: a sentence, not an
+  // identifier, key or URL, wherever it is written (a returned template, a
+  // record, a `failure:` property). Left out: the message of a thrown `Error`
+  // (never shown, §11), Title Case (names in data: canyons, schemes, land
+  // classes), and the two files that quote a provider's own product names and
+  // required credits, which we cannot reword.
+  const PROVIDER_TEXT = new Set(["geoPdfBaseLayers.ts", "demSources.ts"]);
+  const sentences = (path: string): { line: number; text: string }[] => {
+    const sf = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
     );
+    const found: { line: number; text: string }[] = [];
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+      if (ts.isNewExpression(node) && node.expression.getText() === "Error")
+        return;
+      let text: string | null = null;
+      if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+        text = node.text;
+      else if (ts.isTemplateExpression(node))
+        text =
+          node.head.text +
+          node.templateSpans.map((span) => span.literal.text).join("");
+      if (text && /\s/.test(text.trim()) && !/^https?:/.test(text))
+        found.push({
+          line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          text,
+        });
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+    return found;
+  };
+
+  it("breaks no copy rule", () => {
+    const offenders = scanned
+      .filter(
+        (path) =>
+          relative(SRC, path) !== "copyRules.ts" &&
+          !PROVIDER_TEXT.has(relative(SRC, path)),
+      )
+      .flatMap((path) =>
+        sentences(path).flatMap((found) =>
+          copyViolations(found.text)
+            .filter((id) => id !== "title-case")
+            .map(
+              (id) =>
+                `${relative(SRC, path)}:${found.line}: "${found.text}" — ${copySay(id)}`,
+            ),
+        ),
+      );
     expect(offenders).toEqual([]);
   });
 

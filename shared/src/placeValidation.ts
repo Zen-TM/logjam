@@ -82,7 +82,7 @@ export function numericConstraintError(
     return `${label} must be a whole number`;
   }
   if (min !== null && value < min) {
-    if (min === 0) return `${label} cannot be negative`;
+    if (min === 0) return `${label} can't be negative`;
     return max === null
       ? `${label} must be at least ${min}`
       : `${label} must be between ${min} and ${max}`;

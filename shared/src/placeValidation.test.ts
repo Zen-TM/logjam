@@ -94,10 +94,10 @@ describe("numericConstraintError", () => {
   });
   it("rejects negatives on count/length/duration fields", () => {
     expect(numericConstraintError(-3, CONSTRAINT.numAbseils)).toBe(
-      "Pitches cannot be negative",
+      "Pitches can't be negative",
     );
     expect(numericConstraintError(-1, CONSTRAINT.hours)).toBe(
-      "Hours cannot be negative",
+      "Hours can't be negative",
     );
   });
   it("rejects non-integers on integer fields", () => {
@@ -176,7 +176,7 @@ describe("validatePlacePayload", () => {
         { latitude: -33, longitude: 150, fieldValues: { num_abseils: -3 } },
         { requireCoords: true, defs: SYSTEM_FIELD_DEFS },
       ),
-    ).toBe("Pitches cannot be negative");
+    ).toBe("Pitches can't be negative");
   });
   it("ignores null numeric fields (unset)", () => {
     expect(
@@ -260,7 +260,7 @@ describe("validateFieldValues", () => {
 
   it("enforces a one-sided bound without inventing the other end", () => {
     expect(validateFieldValues({ num_abseils: -1 }, SYSTEM_FIELD_DEFS)).toBe(
-      "Pitches cannot be negative",
+      "Pitches can't be negative",
     );
     expect(
       validateFieldValues({ num_abseils: 900 }, SYSTEM_FIELD_DEFS),

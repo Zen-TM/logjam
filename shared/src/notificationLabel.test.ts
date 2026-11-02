@@ -147,6 +147,12 @@ describe("notificationLabel", () => {
         }),
       ),
     ).toEqual({ text: "PDF export failed", detail: "boom" });
+    // Only a real format is upper-cased. Mutation: upper-case the fallback.
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { status: "failed" }),
+      ).text,
+    ).toBe("Area export failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.
@@ -339,7 +345,7 @@ describe("plan notifications", () => {
       ).text;
     expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
     expect(ended("declined")).toBe(
-      "Your request to join Wollangambe trip was turned down",
+      "Your request to join Wollangambe trip was declined",
     );
     expect(ended("deleted")).toBe("Wollangambe trip was deleted");
   });
