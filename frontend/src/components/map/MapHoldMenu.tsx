@@ -74,7 +74,9 @@ export default function MapHoldMenu({
                 data-verb={verb.id}
                 onOpen={() => {
                   run[verb.id as MapHoldVerbId<"web">](point);
-                  onClose();
+                  // Focus back to the map, as the tap panel does: the row that
+                  // had it is gone.
+                  close();
                 }}
               />
             ))}

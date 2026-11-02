@@ -975,6 +975,17 @@ describe("the map point panel", () => {
         }),
       ),
     ).not.toContain("accuracy");
+    // Mutation: label the receiver's height "Elevation", and a height that can
+    // be tens of metres off the terrain's reads as the terrain's.
+    const receiver = mapPointFacts({
+      point,
+      elevation: { state: "receiver", metres: 1021.6 },
+      from: null,
+    })[1];
+    expect([receiver.label, receiver.value]).toEqual([
+      "GPS altitude",
+      "1022 m",
+    ]);
     expect(fixAgeLabel(2_000)).toBe("just now");
     expect(fixAgeLabel(150_000)).toBe("2 min ago");
   });

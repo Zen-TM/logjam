@@ -20,6 +20,7 @@ import {
   mapPointPosition,
   mapPointVerbs,
   type MapPointCoord,
+  type MapPointElevation,
   type MapPointVerbId,
 } from "@logjam/shared";
 
@@ -93,7 +94,15 @@ export function MapPointSheet({
       {/* Mounted only with a point, so the elevation request inside is tied to
           the sheet being open rather than firing for a stale coordinate every
           time the map re-renders. */}
-      {point ? (
+      {point && fix ? (
+        <FixDetail
+          key={`${point.latitude},${point.longitude}`}
+          point={point}
+          fix={fix}
+          allowNetwork={allowNetwork}
+          onInfo={onInfo}
+        />
+      ) : point ? (
         <PointDetail
           // A new point starts clean: its height must not be the last one's.
           key={`${point.latitude},${point.longitude}`}
@@ -105,12 +114,76 @@ export function MapPointSheet({
           onDropMarker={onDropMarker}
           onInfo={onInfo}
           allowNetwork={allowNetwork}
-          fix={fix ?? null}
           weatherOpen={weatherOpen}
           onShowWeather={() => setWeatherPoint(point)}
         />
       ) : null}
     </BottomSheet>
+  );
+}
+
+/**
+ * The viewer's own position, as the receiver last gave it. Nothing to do with
+ * it, so no verbs, no slope and no forecast: only the figures, and none of them
+ * asks anyone anything but the terrain tiles the map already reads.
+ */
+function FixDetail({
+  point,
+  fix,
+  allowNetwork = true,
+  onInfo,
+}: {
+  point: MapPoint;
+  fix: OwnFix;
+  allowNetwork?: boolean;
+  onInfo: (message: string) => void;
+}) {
+  const styles = useStyles();
+  // The sheet is mounted per point, so this is when the fix was asked about.
+  const [openedAt] = useState(() => Date.now());
+  const profilePoints = useMemo<[number, number][]>(
+    () => [
+      [point.longitude, point.latitude],
+      [point.longitude + 0.00001, point.latitude],
+    ],
+    [point.latitude, point.longitude],
+  );
+  const { profile, loading } = useElevationProfile([profilePoints], {
+    allowNetwork,
+  });
+  const terrainM = profile?.samples[0]?.elevationM ?? null;
+  // The terrain's height only; the receiver's own, labelled as that, once no
+  // terrain figure is coming (offline, which is when a fix is wanted most).
+  const elevation: MapPointElevation =
+    terrainM != null
+      ? { state: "known", metres: terrainM }
+      : loading
+        ? { state: "checking" }
+        : fix.altitudeM != null
+          ? { state: "receiver", metres: fix.altitudeM }
+          : { state: "unavailable" };
+  const stats: Stat[] = mapPointFacts({
+    point,
+    elevation,
+    from: null,
+    fix: { atMs: fix.atMs, accuracyM: fix.accuracyM, nowMs: openedAt },
+  }).map((fact) => ({
+    label: fact.label,
+    value: fact.value,
+    ...(fact.span ? { span: true } : {}),
+    ...(fact.copyable
+      ? {
+          onCopy: () => {
+            Clipboard.setString(mapPointPosition(point));
+            onInfo(MAP_POINT.copy.coordinatesCopied);
+          },
+        }
+      : {}),
+  }));
+  return (
+    <View style={styles.body}>
+      <StatGrid stats={stats} />
+    </View>
   );
 }
 
@@ -123,7 +196,6 @@ function PointDetail({
   onDropMarker,
   onInfo,
   allowNetwork = true,
-  fix,
   weatherOpen,
   onShowWeather,
 }: {
@@ -135,13 +207,10 @@ function PointDetail({
   onDropMarker: (point: MapPoint) => void;
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
-  fix: OwnFix | null;
   weatherOpen: boolean;
   onShowWeather: () => void;
 }) {
   const styles = useStyles();
-  // The sheet is mounted per point, so this is when the fix was asked about.
-  const [openedAt] = useState(() => Date.now());
 
   // The elevation endpoint profiles a LINE, and the shortest legal one is two
   // points (MIN_ROUTE_POINTS). A degenerate line would divide by zero in
@@ -159,10 +228,7 @@ function PointDetail({
   const { profile, loading } = useElevationProfile([profilePoints], {
     allowNetwork,
   });
-  // Terrain first, as for any point; the receiver's own height when there is
-  // no signal to ask with, which is when a fix is wanted most.
-  const elevationM =
-    profile?.samples[0]?.elevationM ?? (fix ? fix.altitudeM : null);
+  const elevationM = profile?.samples[0]?.elevationM ?? null;
 
   // Null until known, and null for good where only the coarse worldwide DEM
   // has heights: the figure is then simply absent, never a guess.
@@ -204,22 +270,11 @@ function PointDetail({
           ? { state: "checking" }
           : // Public tiles, so a guest with signal gets a height like anyone.
             { state: "unavailable" },
-    // The fix is where the viewer is: a distance from itself would read 0 m.
-    from:
-      userCoord && !fix
-        ? { latitude: userCoord[1], longitude: userCoord[0] }
-        : null,
-    slopeDegrees: fix ? null : slopeDeg,
+    from: userCoord
+      ? { latitude: userCoord[1], longitude: userCoord[0] }
+      : null,
+    slopeDegrees: slopeDeg,
     land,
-    ...(fix
-      ? {
-          fix: {
-            atMs: fix.atMs,
-            accuracyM: fix.accuracyM,
-            nowMs: openedAt,
-          },
-        }
-      : {}),
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
@@ -234,13 +289,6 @@ function PointDetail({
   };
 
   if (weatherOpen) return <WeatherView weather={weather} />;
-
-  if (fix)
-    return (
-      <View style={styles.body}>
-        <StatGrid stats={stats} />
-      </View>
-    );
 
   return (
     <View style={styles.body}>

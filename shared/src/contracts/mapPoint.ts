@@ -70,6 +70,8 @@ export const MAP_POINT = {
     // The press-and-hold sheet's title: what can go at the point.
     holdTitle: "What goes here?",
     notReported: "Not reported",
+    // The receiver's own height, when no terrain figure arrives for a fix.
+    gpsAltitude: "GPS altitude",
     elevationChecking: "Checking…",
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
@@ -78,10 +80,10 @@ export const MAP_POINT = {
   },
 } as const satisfies ScreenContract;
 
-/** The words that differ only by how each medium presses. */
 /** Location search has one placeholder on both clients. */
 export const MAP_SEARCH_PLACEHOLDER = "Search places and locations";
 
+/** The words that differ only by how each medium presses. */
 export const MAP_POINT_NO_FIX_NOTE: Record<ContractPlatform, string> = {
   web: "Press the locate button to see the distance.",
   gps: "Tap the locate button to see the distance.",
@@ -231,6 +233,8 @@ export type MapPointCoord = { latitude: number; longitude: number };
 
 export type MapPointElevation =
   | { state: "known"; metres: number }
+  /** The receiver's altitude, labelled as such: it is not the terrain's height. */
+  | { state: "receiver"; metres: number }
   | { state: "checking" }
   | { state: "unavailable" };
 
@@ -301,9 +305,9 @@ export function mapPointFacts(input: {
     },
     {
       key: "elevation",
-      label: copy.elevation,
+      label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,
       value:
-        elevation.state === "known"
+        elevation.state === "known" || elevation.state === "receiver"
           ? `${Math.round(elevation.metres)} m`
           : elevation.state === "checking"
             ? copy.elevationChecking

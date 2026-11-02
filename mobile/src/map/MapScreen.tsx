@@ -357,6 +357,7 @@ import { withDefaultEasing } from "./cameraStop";
 import {
   ANCHOR_DROP_SELECT_MS,
   anchorIndexAtPress,
+  pressIsOnFix,
   pressIsOnAnchor,
 } from "./anchorHit";
 import { degreesPerDp } from "./scaleBar";
@@ -2772,12 +2773,15 @@ export function MapScreen({
         longitude: point.longitude,
         placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
       })
-        .then((id) =>
+        .then((id) => {
+          // A marker dropped with Places switched off would be drawn nowhere,
+          // and the toast would be its only handle.
+          setShowPlaces(true);
           notify(`Marker ${markerCount + 1} dropped.`, "info", {
             label: "Name it",
             onPress: () => setNamingPlaceId(id),
-          }),
-        )
+          });
+        })
         .catch((err: unknown) => {
           // A drop that fails silently leaves no marker and no reason.
           console.error(err);
@@ -3368,14 +3372,12 @@ export function MapScreen({
       const [lon, lat] = event.nativeEvent.lngLat;
       if (
         here &&
-        dotWanted &&
-        !collectingPoints &&
-        !swallowNextPress.current &&
-        anchorIndexAtPress(
-          [[here.coords.longitude, here.coords.latitude]],
+        pressIsOnFix(
+          dotWanted ? userCoord : null,
           [lon, lat],
           degreesPerDp(camera.zoom),
-        ) !== null
+          collectingPoints || swallowNextPress.current,
+        )
       ) {
         setSearchPin(searchPinAfter("tap"));
         setTappedFix({
@@ -3392,7 +3394,7 @@ export function MapScreen({
       }
       handleMapPress(event);
     },
-    [camera.zoom, collectingPoints, dotWanted, handleMapPress],
+    [camera.zoom, collectingPoints, dotWanted, handleMapPress, userCoord],
   );
 
   /**

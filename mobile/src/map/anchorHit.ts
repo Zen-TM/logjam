@@ -108,3 +108,23 @@ export function anchorIndexAtPress(
   }
   return bestIndex;
 }
+
+/**
+ * Whether a map press lands on the location arrow AS DRAWN, so it opens the
+ * sheet for the fix instead of asking about the ground beside it. The arrow is
+ * drawn at `drawn` (it moves only after the 5 m filter), so that is what is
+ * tested, never the latest raw fix; null when no arrow is on the map. A tool
+ * that is armed owns every press, and so does the second tap of a double tap.
+ */
+export function pressIsOnFix(
+  drawn: RoutePoint | null,
+  press: RoutePoint,
+  degreesPerDp: number,
+  suppressed: boolean,
+): boolean {
+  return (
+    !suppressed &&
+    drawn !== null &&
+    anchorIndexAtPress([drawn], press, degreesPerDp) !== null
+  );
+}
