@@ -59,9 +59,9 @@
 }
 
 /* Two layers under the number: ::before is the band, one continuous strip per
-   week row (rounded at the row's ends, and under the start and end days from
-   their centre); ::after is the circle behind the selected, today and
-   hovered day. */
+   week row whose ends are the circle's own footprint, so a selected start or
+   end day's circle covers the band's end exactly; ::after is the circle behind
+   the selected, today and hovered day. */
 .cell {
   position: relative;
   isolation: isolate;
@@ -94,11 +94,13 @@
 }
 
 .pieceStart::before {
+  left: calc(50% - var(--control-md) / 2);
   border-top-left-radius: var(--radius-pill);
   border-bottom-left-radius: var(--radius-pill);
 }
 
 .pieceEnd::before {
+  right: calc(50% - var(--control-md) / 2);
   border-top-right-radius: var(--radius-pill);
   border-bottom-right-radius: var(--radius-pill);
 }
