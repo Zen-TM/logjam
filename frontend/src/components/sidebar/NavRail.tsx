@@ -5,6 +5,7 @@ import {
   aggregateBadgeCount,
   isPanelInMore,
   labelWithBadge,
+  MORE_BADGE_NOUN,
   type NavBadgeCounts,
 } from "./navItems";
 import { useIsMobile } from "../../useIsMobile";
@@ -19,6 +20,7 @@ function NavButton({
   icon,
   active,
   count,
+  badgeNoun,
   onClick,
   ref,
   ...rest
@@ -27,6 +29,7 @@ function NavButton({
   icon: Glyph;
   active: boolean;
   count: number;
+  badgeNoun?: string;
   onClick: () => void;
   ref?: Ref<HTMLButtonElement>;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">) {
@@ -36,7 +39,7 @@ function NavButton({
       type="button"
       className={classes.item}
       data-active={active}
-      aria-label={labelWithBadge(label, count)}
+      aria-label={labelWithBadge(label, count, badgeNoun)}
       onClick={onClick}
       {...rest}
     >
@@ -86,6 +89,7 @@ function NavRail({
         active={activePanel === item.id}
         aria-current={activePanel === item.id ? "page" : undefined}
         count={badgeCounts[item.id] ?? 0}
+        badgeNoun={item.badgeNoun}
         onClick={() => toggle(item.id)}
       />
       {index === spacerAfterIndex && <div className={classes.spacer} />}
@@ -124,6 +128,7 @@ function NavRail({
           accessibleLabel: labelWithBadge(
             item.label,
             badgeCounts[item.id] ?? 0,
+            item.badgeNoun,
           ),
           icon: item.icon,
           badge: badgeCounts[item.id],
@@ -136,6 +141,7 @@ function NavRail({
             icon="moreTab"
             active={isPanelInMore(moreItems, activePanel)}
             count={moreCount}
+            badgeNoun={MORE_BADGE_NOUN}
           />
         )}
       />

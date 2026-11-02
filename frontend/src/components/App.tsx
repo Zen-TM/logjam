@@ -62,7 +62,10 @@ import { RouteDrawPanel } from "./routes/RouteDrawPanel";
 import { MeasurePanel } from "./map/MeasurePanel";
 import RouteNameDialog from "./dialogs/RouteNameDialog";
 import WayDetailPanel from "./sidebar/panels/WayDetailPanel";
-import TripLogDialog, { type TripLogTrack } from "./dialogs/TripLogDialog";
+import TripLogDialog, {
+  type TripLogPrefill,
+  type TripLogTrack,
+} from "./dialogs/TripLogDialog";
 import { seedBaseLayer } from "./dialogs/geoPdfBaseLayer";
 import { mapLayerFor } from "./dialogs/geoPdfFraming";
 import { footprintBounds } from "./map/topoFootprint";
@@ -76,6 +79,7 @@ import {
   type BoxPick,
 } from "./map/boxPick";
 import {
+  boundsOfPoints,
   buildWays,
   wayFromRoute,
   type WayItem,
@@ -83,6 +87,12 @@ import {
 import { createRouteHoverChannel } from "./map/routeHover";
 import type { WayVerbId } from "./sidebar/panels/wayActions";
 import FriendInviteDialog from "./dialogs/FriendInviteDialog";
+import PlansPanel from "./plans/PlansPanel";
+import PlanDetailPanel from "./plans/PlanDetailPanel";
+import PlanInvitedPage from "./plans/PlanInvitedPage";
+import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
+import { planMapPress } from "./plans/plansModel";
+import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
 import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
@@ -99,6 +109,14 @@ import {
   MAP_MEASURE_ICON,
   MAP_TERRAIN,
   LIDAR_JOB_COPY,
+  opensPreview,
+  PLAN_ADD_VERBS,
+  planVerbsFor,
+  TRIP_PLAN_PAGE,
+  tripPlansBadgeCount,
+  tripPlanTripLogPrefill,
+  type TripPlanItemKind,
+  type TripPlanPageView,
 } from "@logjam/shared";
 import type { MapPointCoord, OverlaySource } from "@logjam/shared";
 import { useAuth, signOut } from "../useAuth";
@@ -155,6 +173,12 @@ function App() {
     null,
   );
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
+  // The plan whose page is open.
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  // "Start a trip log from this plan": the trip form, pre-filled.
+  const [tripLogPrefill, setTripLogPrefill] = useState<TripLogPrefill | null>(
+    null,
+  );
   // Which view the two-view pages open on — remembered for the session, so a
   // return to Logs lands where the user left it.
   const [logsView, setLogsView] = useStoredState<LogsView>(
@@ -539,6 +563,9 @@ function App() {
     if (panel !== "trip-detail") {
       setSelectedTripLogId(null);
     }
+    if (panel !== "plan-detail") {
+      setSelectedPlanId(null);
+    }
     setActivePanel(panel);
   }, []);
 
@@ -550,9 +577,31 @@ function App() {
     if (activePanel === "trip-detail") {
       setSelectedTripLogId(null);
     }
+    if (activePanel === "plan-detail") {
+      setSelectedPlanId(null);
+    }
     setActivePanel(null);
   }, [activePanel]);
 
+  // The view a plan opens on (a join request opens on People, where it is
+  // answered), and whether it opens as an invite's preview: said by whoever
+  // opens it, since the plans list may not know of an invite yet.
+  const [planView, setPlanView] = useState<TripPlanPageView>("writeUp");
+  const [planInvited, setPlanInvited] = useState(false);
+  const [planAddCopy, setPlanAddCopy] = useState<{
+    kind: TripPlanItemKind;
+    id: string;
+  } | null>(null);
+  const consumePlanAddCopy = useCallback(() => setPlanAddCopy(null), []);
+  const openPlan = useCallback(
+    (planId: string, view: TripPlanPageView = "writeUp", invited = false) => {
+      setSelectedPlanId(planId);
+      setPlanView(view);
+      setPlanInvited(invited);
+      setActivePanel("plan-detail");
+    },
+    [],
+  );
   const {
     places,
     total: placesTotal,
@@ -560,6 +609,35 @@ function App() {
     error: placesError,
     refetch,
   } = usePlaces(loadsUserData);
+  const {
+    plans,
+    loaded: plansLoaded,
+    error: plansError,
+    refetch: refetchPlans,
+  } = usePlans(loadsUserData);
+  const planPreviewed =
+    selectedPlanId != null &&
+    opensPreview(
+      planInvited,
+      plans.find((plan) => plan.id === selectedPlanId)?.status,
+    );
+  // The open plan's full fetch: its page renders from it, and while it is
+  // open the map draws its places and ways instead of the user's own.
+  const planFetch = usePlan(
+    loadsUserData && activePanel === "plan-detail" && !planPreviewed
+      ? selectedPlanId
+      : null,
+    toast.error,
+  );
+  const planOnMap = planFetch.view;
+  const planMapPlaces = useMemo<TPlace[]>(
+    () => planOnMap?.places.map((place) => ({ ...place, ownerId: "" })) ?? [],
+    [planOnMap],
+  );
+  const planMapRoutes = useMemo<TRoute[]>(
+    () => planOnMap?.routes.map((route) => ({ ...route, ownerId: "" })) ?? [],
+    [planOnMap],
+  );
   const {
     places: sharedPlaces,
     error: sharedError,
@@ -586,7 +664,11 @@ function App() {
     loaded: standaloneFilesLoaded,
     error: standaloneFilesError,
     refetch: refetchStandaloneFiles,
-  } = useStandaloneFiles(loadsUserData && (activePanel === "ways" || showWays));
+  } = useStandaloneFiles(
+    // A plan's page offers them to Add a place or way, whatever the Ways layer says.
+    loadsUserData &&
+      (activePanel === "ways" || activePanel === "plan-detail" || showWays),
+  );
   const shownStandaloneIds = useMemo(
     () => (showWays ? standaloneFiles.map((file) => file.id) : []),
     [showWays, standaloneFiles],
@@ -618,8 +700,47 @@ function App() {
     loaded: routesLoaded,
     refetch: refetchRoutes,
   } = useRoutes(
-    loadsUserData && (showWays || drawingRoute || activePanel === "ways"),
+    loadsUserData &&
+      (showWays ||
+        drawingRoute ||
+        activePanel === "ways" ||
+        activePanel === "plan-detail"),
   );
+  // Beside a plan the user's own are drawn as the layer switches allow, all
+  // dimmed beside the plan's.
+  const mineShown = {
+    places: !planOnMap || showPlaces,
+    ways: !planOnMap || showWays,
+  };
+  const mutedIds = useMemo<ReadonlySet<string>>(
+    () =>
+      planOnMap
+        ? new Set([
+            ...places.map((place) => place.id),
+            ...sharedPlaces.map((place) => place.id),
+            ...routes.map((route) => route.id),
+            ...standaloneFiles.map((file) => file.id),
+          ])
+        : new Set(),
+    [planOnMap, places, sharedPlaces, routes, standaloneFiles],
+  );
+  // One of the user's own things pressed on the map asks for Add a place or way,
+  // only while the page itself offers it (not on an archived plan).
+  const pressInPlan = (press: Parameters<typeof planMapPress>[0]) => {
+    const pick = planMapPress(
+      press,
+      { places, routes, files: standaloneFiles, tracks: placeTracks },
+      currentUser?.id ?? null,
+    );
+    if (
+      pick &&
+      planOnMap &&
+      planVerbsFor(PLAN_ADD_VERBS, "web", planOnMap.myRole, {
+        archived: planOnMap.archivedAt != null,
+      }).some((verb) => verb.id === "copy")
+    )
+      setPlanAddCopy(pick);
+  };
 
   // Ways is built from three fetches, so it has nothing to say until all three
   // have settled — one still in flight would show a short list as if it were
@@ -721,6 +842,12 @@ function App() {
   useEffect(() => {
     if (tripLogsError) toast.error(tripLogsError);
   }, [tripLogsError, toast]);
+  // A first load that fails is said by Plans itself (its ErrorState); only
+  // a later refetch's failure, under a list already shown, is a toast.
+  const plansBackgroundError = plans.length > 0 ? plansError : null;
+  useEffect(() => {
+    if (plansBackgroundError) toast.error(plansBackgroundError);
+  }, [plansBackgroundError, toast]);
 
   useBootDefinitions(
     loadsUserData,
@@ -1207,23 +1334,43 @@ function App() {
 
   // A filter changes what the MAP shows too, so the map says so while the
   // Places page is closed or scrolled away.
-  const notices =
-    filtersActive && !dimUI ? (
-      <Notice
-        icon="filter"
-        action={
-          <IconButton
-            icon="close"
-            label="Clear filters"
-            size={14}
-            round
-            onClick={clearFilters}
-          />
-        }
-      >
-        Showing {filteredPlaces.length} of {allPlaces.length} places
-      </Notice>
-    ) : null;
+  // While a plan is open the map shows it, and says so first.
+  const backToMyMap = () => {
+    setSelectedPlanId(null);
+    setActivePanel(null);
+  };
+  const notices = planOnMap ? (
+    <Notice
+      icon="plan"
+      twoLines
+      action={
+        <IconButton
+          icon="close"
+          label={TRIP_PLAN_PAGE.copy.backToMap}
+          size={14}
+          round
+          onClick={backToMyMap}
+        />
+      }
+    >
+      {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
+    </Notice>
+  ) : filtersActive && !dimUI ? (
+    <Notice
+      icon="filter"
+      action={
+        <IconButton
+          icon="close"
+          label="Clear filters"
+          size={14}
+          round
+          onClick={clearFilters}
+        />
+      }
+    >
+      Showing {filteredPlaces.length} of {allPlaces.length} places
+    </Notice>
+  ) : null;
 
   // Opening Export an area anew: no stale form, and no pick result from last time.
   const freshExportDialog = () => {
@@ -1386,7 +1533,10 @@ function App() {
           <NavRail
             activePanel={activePanel}
             onPanelChange={handlePanelChange}
-            badgeCounts={{ inbox: unreadCount }}
+            badgeCounts={{
+              inbox: unreadCount,
+              plans: tripPlansBadgeCount(plans),
+            }}
           />
           <SidebarPanel
             activePanel={activePanel}
@@ -1448,6 +1598,87 @@ function App() {
                   onLogTrip={setLogTripFromTrack}
                   onDeleteFile={handleDeleteStandaloneFile}
                   routeHover={routeHover}
+                />
+              ) : null
+            }
+            plansPanel={
+              <PlansPanel
+                plans={plans}
+                loaded={plansLoaded}
+                error={plansError}
+                onRefetch={refetchPlans}
+                onOpenPlan={(id, invited) => openPlan(id, "writeUp", invited)}
+              />
+            }
+            onOpenPlan={(target) => {
+              refetchPlans();
+              openPlan(target.planId, target.view, target.invited);
+            }}
+            planDetail={
+              selectedPlanId && planPreviewed ? (
+                <PlanInvitedPage
+                  key={selectedPlanId}
+                  planId={selectedPlanId}
+                  onBack={() => {
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                  onJoined={() => {
+                    refetchPlans();
+                    setPlanInvited(false);
+                  }}
+                  onDeclined={() => {
+                    refetchPlans();
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                />
+              ) : selectedPlanId ? (
+                <PlanDetailPanel
+                  myUserId={currentUser?.id ?? null}
+                  initialView={planView}
+                  key={selectedPlanId}
+                  view={planFetch.view}
+                  error={planFetch.error}
+                  gone={planFetch.gone}
+                  name={plans.find((plan) => plan.id === selectedPlanId)?.name}
+                  refetch={planFetch.refetch}
+                  own={{
+                    places,
+                    routes,
+                    files: standaloneFiles,
+                  }}
+                  currentUser={currentUser}
+                  onOwnChanged={() => {
+                    refetch();
+                    refetchRoutes();
+                    refetchStandaloneFiles();
+                    refetchCurrentUser();
+                  }}
+                  onOpenItem={(item) => {
+                    if (item.kind === "place")
+                      setFlyToPlace({
+                        lat: item.latitude,
+                        lng: item.longitude,
+                      });
+                    else if (item.kind === "route") {
+                      const bounds = boundsOfPoints(item.points);
+                      if (bounds) setFlyToBounds(bounds);
+                    }
+                  }}
+                  addCopyRequest={planAddCopy}
+                  onAddCopyRequestConsumed={consumePlanAddCopy}
+                  onBack={() => {
+                    setSelectedPlanId(null);
+                    setActivePanel("plans");
+                  }}
+                  onPlansChanged={refetchPlans}
+                  onStartTripLog={(plan, places) =>
+                    setTripLogPrefill({
+                      ...tripPlanTripLogPrefill(plan),
+                      ...places,
+                    })
+                  }
                 />
               ) : null
             }
@@ -1558,20 +1789,36 @@ function App() {
         <main id="main-content" className={classes.main}>
           <h1 className={classes.visuallyHidden}>Logjam place map</h1>
           <Map
-            filters={filters}
-            places={places}
-            sharedPlaces={sharedPlaces}
-            showPlaces={showPlaces}
+            filters={planOnMap ? emptyFilters : filters}
+            // An open plan's things are drawn whatever the layer switches say;
+            // the switches go on deciding the user's own, shown beside them
+            // dimmed (`mutedIds`).
+            places={
+              planOnMap
+                ? [...planMapPlaces, ...(mineShown.places ? places : [])]
+                : places
+            }
+            sharedPlaces={!planOnMap || mineShown.places ? sharedPlaces : []}
+            showPlaces={showPlaces || !!planOnMap}
             // One overlay for every line, so nothing has to be partitioned by
             // ownership on the way to the map any more.
-            showWays={showWays}
+            showWays={showWays || !!planOnMap}
             showGauges={showGauges}
             onShowGauges={() => setShowGauges(true)}
-            placeTracks={placeTracks}
-            standaloneTracks={standaloneTracks}
-            routes={routes}
+            placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
+            standaloneTracks={
+              !planOnMap || mineShown.ways ? standaloneTracks : []
+            }
+            routes={
+              planOnMap
+                ? [...planMapRoutes, ...(mineShown.ways ? routes : [])]
+                : routes
+            }
+            mutedIds={mutedIds}
+            searchSelects={!planOnMap}
             routeHover={routeHover}
             selectRoute={(id) => {
+              if (planOnMap) return pressInPlan({ kind: "route", id });
               const route = routes.find((r) => r.id === id);
               if (route)
                 openWay(
@@ -1586,6 +1833,7 @@ function App() {
             // would have made it.
             onMeasureFrom={startMeasuring}
             selectTrack={(mediaId) => {
+              if (planOnMap) return pressInPlan({ kind: "track", id: mediaId });
               const way = allWays.find(
                 (each) => each.kind !== "route" && each.id === mediaId,
               );
@@ -1606,6 +1854,10 @@ function App() {
             onDrawPointDelete={routeDraft.deleteAnchorAt}
             onDrawPointInsert={routeDraft.insertAnchorAt}
             selectPlace={(id) => {
+              if (planOnMap) {
+                if (id) pressInPlan({ kind: "place", id });
+                return;
+              }
               // A pin opens the place, wherever you pressed it from.
               setSelectedPlaceID(id);
               setActivePanel("place-detail");
@@ -1728,6 +1980,17 @@ function App() {
           mapView={mapCenter}
         />
 
+        <PlanInviteLinkDialog
+          enabled={loadsUserData}
+          onOpenPlan={(id, invited) => {
+            refetchPlans();
+            openPlan(id, "writeUp", invited);
+          }}
+          onShowPlans={() => {
+            refetchPlans();
+            handlePanelChange("plans");
+          }}
+        />
         <FriendInviteDialog
           enabled={loadsUserData}
           onFriended={() => {
@@ -1815,6 +2078,26 @@ function App() {
             }}
             places={places}
             fromTrack={logTripFromTrack}
+            customFieldDefs={customFieldDefs}
+            onCustomFieldDefsChange={setCustomFieldDefs}
+            existingTripTypes={tripLogs.flatMap((trip) => trip.types)}
+            onPickCoords={startPickingCoords}
+            onPlaceCreated={refetch}
+          />
+        )}
+
+        {/* The trip form, opened from a plan's "Start a trip log". */}
+        {tripLogPrefill && (
+          <TripLogDialog
+            open={!pickingCoords}
+            onClose={() => setTripLogPrefill(null)}
+            onSaved={() => {
+              setTripLogPrefill(null);
+              refetchAfterTripWrite();
+              refetchCurrentUser();
+            }}
+            places={places}
+            prefill={tripLogPrefill}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={setCustomFieldDefs}
             existingTripTypes={tripLogs.flatMap((trip) => trip.types)}

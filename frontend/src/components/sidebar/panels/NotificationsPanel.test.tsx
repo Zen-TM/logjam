@@ -94,6 +94,7 @@ function Harness({ rows }: { rows: TNotification[] }) {
         setActivePanel={noop}
         onShowSharpened={noop}
         onTopoFlyTarget={noop}
+        onOpenPlan={noop}
       />
     </ToastProvider>
   );

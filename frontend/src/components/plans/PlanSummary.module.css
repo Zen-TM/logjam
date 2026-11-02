@@ -1,0 +1,97 @@
+/* The print summary. Paper is not a scheme: black on white,
+   whatever the screen's scheme, a deliberate exception to colours being
+   roles. The page is A4 whatever prints it, a phone included. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+}
+
+.line {
+  composes: body from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.body {
+  white-space: pre-wrap;
+}
+
+@media screen {
+  .summary {
+    display: none;
+  }
+}
+
+/* Top level: browsers ignore an @page nested in @media, and the default margin
+   then left the browser's own header and footer, and so the text, within
+   reach of a printer's unprintable edge (about 5 mm). Guard:
+   PlanSummary.margins.test.ts. */
+@page {
+  size: A4;
+  margin: 15mm;
+}
+
+@media print {
+  /* While the summary is mounted, only it prints: no app chrome, no map.
+     Any other print of Logjam Web is left alone. Guard: e2e/a11y.spec.ts,
+     the Plans case. */
+  :global(body:has(> #plan-print) > *:not(#plan-print)) {
+    display: none !important;
+  }
+
+  /* Paper, with "Background graphics" ticked in a dark scheme too. */
+  :global(body:has(> #plan-print)) {
+    --color-page: #fff;
+    color-scheme: light;
+  }
+
+  .summary {
+    color: #000;
+    font:
+      11pt / 1.4 system-ui,
+      sans-serif;
+  }
+
+  .summary h1 {
+    font-size: 18pt;
+    margin: 0 0 4pt;
+  }
+
+  .summary h2 {
+    font-size: 13pt;
+    margin: 14pt 0 4pt;
+    break-after: avoid;
+  }
+
+  .summary p {
+    margin: 0 0 4pt;
+  }
+
+  .summary table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  /* Repeated on every page a long table runs onto. */
+  .summary thead {
+    display: table-header-group;
+  }
+
+  .summary tr {
+    break-inside: avoid;
+  }
+
+  .summary th,
+  .summary td {
+    padding: 3pt 6pt 3pt 0;
+    border-bottom: 1px solid #999;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .summary footer {
+    margin-top: 18pt;
+    font-size: 9pt;
+  }
+}

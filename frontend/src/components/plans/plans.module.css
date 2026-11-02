@@ -1,0 +1,231 @@
+/* Plans' pages and dialogs: layout only. Hero and rails are pinned, only the
+   list scrolls (frontend/DESIGN.md §2). */
+.root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--gutter);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* Room for each card's focus ring inside the scroller. */
+  padding: var(--space-0-5) var(--gutter) var(--gutter);
+}
+
+.emptyArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
+/* A notice that asks for a press: a card, its buttons inside it. */
+.noticeCard {
+  flex-shrink: 0;
+  margin: var(--space-1) var(--gutter) 0;
+}
+
+.datesLine {
+  composes: detail from "../../textRoles.generated.module.css";
+  flex-shrink: 0;
+  margin: var(--space-1) var(--gutter) 0;
+  color: var(--color-text-muted);
+}
+
+/* A write-up section: read on the page, its title an h3. The space above it
+   is bigger than the gap inside it (shared/DESIGN.md §2). */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding-top: var(--space-1-5);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.sectionTitle {
+  composes: heading from "../../textRoles.generated.module.css";
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.body {
+  composes: body from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  composes: detail from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+/* What the plan says now, beside the user's text after a 409. */
+.theirs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding-left: var(--space-1-5);
+  border-left: 2px solid var(--color-line);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+
+.pair > * {
+  flex: 1 1 10rem;
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* A question someone answers, or a group of controls under one label. */
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.questionLabel {
+  /* The kit TextField's own label, so mixed questions look alike. */
+  composes: detail from "../../textRoles.generated.module.css";
+  padding: 0;
+  color: var(--color-text-muted);
+}
+
+/* One question in the builder: its fields, set apart by a hairline. */
+.questionEditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-1-5) 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.questionTools {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-1-5);
+}
+
+.answers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-0-5);
+  margin: 0;
+}
+
+.answers dd {
+  margin: 0 0 var(--space-1);
+}
+
+/* Everyone's answers: a column per question, scrolled sideways on its own
+   when the questions outgrow the panel. */
+.tableScroll {
+  overflow-x: auto;
+}
+
+.table {
+  composes: detail from "../../textRoles.generated.module.css";
+  border-collapse: collapse;
+  min-width: 100%;
+  color: var(--color-text);
+}
+
+.table th,
+.table td {
+  padding: var(--space-0-5) var(--space-1);
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+/* A place's attributes: label left, answer right, as the place page's table. */
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fact {
+  composes: body from "../../textRoles.generated.module.css";
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1-5);
+  padding: var(--space-1) 0;
+  border-bottom: var(--hairline);
+}
+
+.fact:last-child {
+  border-bottom: none;
+}
+
+.fact dt {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}

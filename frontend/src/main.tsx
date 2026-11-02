@@ -5,10 +5,11 @@ import App from "./components/App.tsx";
 import { ThemePreferencesProvider } from "./themePreferences";
 import { ToastProvider } from "./components/feedback/ToastProvider";
 import { RootErrorBoundary } from "./components/feedback/RootErrorBoundary";
-import { captureFriendInvite } from "./pendingFriendInvite";
+import { friendInvite, planInvite } from "./pendingInvite";
 
-// Before anything renders or signs in: see pendingFriendInvite.ts.
-captureFriendInvite();
+// Before anything renders or signs in: see pendingInvite.ts.
+friendInvite.capture();
+planInvite.capture();
 
 // No #root: browser-check.js replaced it with the "needs a newer
 // browser" page. Test: src/browserCheck.test.ts.
