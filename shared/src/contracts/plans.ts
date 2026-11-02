@@ -478,6 +478,7 @@ export const TRIP_PLAN_PAGE = {
     turnedDown: "Request turned down.",
     removeFailed: "Couldn't remove them.",
     cancelInvite: "Cancel invite",
+    personUnanswered: "Hasn't answered",
     cancelInviteFailed: "Couldn't cancel the invite.",
     inviteCancelled: "Invite cancelled.",
 
