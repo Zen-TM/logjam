@@ -130,17 +130,17 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   nest a button in a button; the tile, marks and ⋯ stay their own controls.
 - **Pick the control by the job**:
 
-| Job | Component |
-|---|---|
-| One choice from a few | `ChipRail` |
-| Several from a vocabulary the user extends, or from a short parallel set with no field of its own (Terrain, Overlays) | `ChipPicker` |
-| An item in a set that carries a field or needs a sentence of its own / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card` |
-| A colour | `ColourField`: `palette` for an identity hue, free only for the slope scale |
-| A field that points at a place | `PlacePicker`, never a `<select>` or the network |
-| A dense settings line | `SettingsRow`, with `InfoTip` for what the words cannot say |
-| A state as a word | `StatusPill`, never a `Chip` |
-| A list's closing add button | `ListEnd`, fed the empty state's button |
-| Loading / failed load | `LoadingState` / `ErrorState` |
+| Job                                                                                                                                           | Component                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| One choice from a few                                                                                                                         | `ChipRail`                                                                  |
+| Several from a vocabulary the user extends, or from a short parallel set with no field of its own (Terrain, Overlays)                         | `ChipPicker`                                                                |
+| An item in a set that carries a field or needs a sentence of its own / a setting that applies at once / one that applies at once over the map | `Checkbox` / `SwitchRow` / `Checkbox card`                                  |
+| A colour                                                                                                                                      | `ColourField`: `palette` for an identity hue, free only for the slope scale |
+| A field that points at a place                                                                                                                | `PlacePicker`, never a `<select>` or the network                            |
+| A dense settings line                                                                                                                         | `SettingsRow`, with `InfoTip` for what the words cannot say                 |
+| A state as a word                                                                                                                             | `StatusPill`, never a `Chip`                                                |
+| A list's closing add button                                                                                                                   | `ListEnd`, fed the empty state's button                                     |
+| Loading / failed load                                                                                                                         | `LoadingState` / `ErrorState`                                               |
 
 - **A chip has no note of its own**: what a set needs said goes in the group's
   `hint`, and why a chip is off is that hint too (`disabled` chip, reason in
