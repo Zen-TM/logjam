@@ -12,6 +12,52 @@ describe("notificationTapTarget", () => {
     ).toEqual({ kind: "place", placeId: "c-1" });
   });
 
+  // Mutation: drop the `view`, and a join request opens on the write-up,
+  // away from where it is answered.
+  it("opens a join request on the plan's People", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_join_request", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({
+      kind: "plan",
+      planId: "p-1",
+      view: "people",
+      invited: false,
+    });
+  });
+
+  // Mutation: send these to the inbox, and a push about a plan the reader is
+  // in doesn't open it.
+  it.each(["plan_join_approved", "plan_member_joined"])(
+    "opens the plan a %s push names",
+    (type) => {
+      expect(
+        notificationTapTarget({
+          data: { type, planId: "p-1" },
+          routeEditing: false,
+        }),
+      ).toEqual({
+        kind: "plan",
+        planId: "p-1",
+        view: undefined,
+        invited: false,
+      });
+    },
+  );
+
+  // Mutation: drop `invited`, and an invite push opens the member's page,
+  // which 404s for someone not in the plan yet.
+  it("opens an invite as its plan's preview", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "plan_invited", planId: "p-1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "plan", planId: "p-1", view: undefined, invited: true });
+  });
+
   // Mutation: drop the announcementId branch and these land on the bare inbox.
   it("opens the message an announcement push names", () => {
     expect(
@@ -23,6 +69,7 @@ describe("notificationTapTarget", () => {
   });
 
   it.each([
+    ["a plan the recipient lost", { type: "plan_access_ended", planId: "p-1" }],
     ["no id at all", { type: "friendRequest" }],
     ["an id that is not a string", { placeId: 7 }],
     ["a null id", { placeId: null }],

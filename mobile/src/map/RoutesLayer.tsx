@@ -33,7 +33,10 @@ export const RoutesLayer = memo(function RoutesLayer({
   hiddenRouteId,
   onPressRoute,
 }: {
-  routes: readonly MirrorRoute[];
+  /** `muted`: drawn faint, beside a plan's ways on the map in plan mode. */
+  routes: readonly (Pick<MirrorRoute, "id" | "points" | "color"> & {
+    muted?: boolean;
+  })[];
   hiddenRouteId: string | null;
   /** Tapping a line opens its options sheet. Absent while a tool owns the
    *  map's taps. */
@@ -54,6 +57,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           const properties = {
             routeId: route.id,
             routeColor: route.color ?? unsyncedRouteColor,
+            muted: route.muted === true,
           };
           return [
             {
@@ -111,7 +115,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineWidth: 6,
           lineCap: "round",
           lineJoin: "round",
-          lineOpacity: 0.7,
+          lineOpacity: ["case", ["get", "muted"], 0.25, 0.7],
         }}
       />
       <Layer
@@ -125,6 +129,7 @@ export const RoutesLayer = memo(function RoutesLayer({
           lineWidth: 3,
           lineCap: "round",
           lineJoin: "round",
+          lineOpacity: ["case", ["get", "muted"], 0.4, 1],
         }}
       />
       <Layer

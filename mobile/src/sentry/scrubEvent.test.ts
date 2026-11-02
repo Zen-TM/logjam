@@ -121,6 +121,67 @@ describe("scrubStructure", () => {
     });
   });
 
+  // The user-written values of a cached plan's write-up, places, ways, forms
+  // and answers (GET /plans/:id, made up here) leave as "[redacted]". Not
+  // covered: a media item's `filename` and `metadata.bbox` (a plan's photos
+  // and files), which no key catches anywhere in mobile, plan or not.
+  // Mutation that turns this red: delete `body`, `questions`, `answers` or
+  // `points` from SENSITIVE_KEYS.
+  it("censors a trip plan's write-up, places, ways, forms and answers", () => {
+    const secrets = [
+      "Wollemi slot trip",
+      "Meet at the locked gate",
+      "Emergency contact",
+      "0400 000 000",
+      "Hidden pool",
+      "Exit gully",
+      "Bring a wetsuit",
+      "Abseil",
+      "151.234567",
+      "-33.456789",
+    ];
+    const plan = {
+      id: "plan-1",
+      name: "Wollemi slot trip",
+      tripTypes: ["Abseil"],
+      sections: [
+        { id: "s1", title: "Overview", body: "Meet at the locked gate" },
+      ],
+      places: [
+        {
+          id: "p1",
+          name: "Hidden pool",
+          latitude: -33.456789,
+          longitude: 151.234567,
+          notes: "Bring a wetsuit",
+        },
+      ],
+      routes: [
+        {
+          id: "r1",
+          name: "Exit gully",
+          points: [
+            [151.234567, -33.456789],
+            [151.24, -33.46],
+          ],
+        },
+      ],
+      forms: [
+        {
+          id: "form-1",
+          title: "Safety contacts",
+          questions: [{ id: "q1", kind: "phone", label: "Emergency contact" }],
+          myAnswer: { answers: { q1: "0400 000 000" } },
+          answers: [{ user: { id: "u2" }, answers: { q1: "0400 000 000" } }],
+        },
+      ],
+    };
+    const scrubbed = JSON.stringify(scrubStructure({ plan }));
+    for (const secret of secrets) expect(scrubbed).not.toContain(secret);
+    // Ids survive: they are what a report needs to be any use.
+    expect(scrubbed).toContain("form-1");
+  });
+
   it("scrubs URLs inside string values", () => {
     expect(
       scrubStructure({ url: "https://api.logjamnsw.com/places/abc" }),

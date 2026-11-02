@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
+import { weekBand, type BandCell } from "@logjam/shared";
+
 import {
   hitSlop,
   radius,
@@ -11,6 +13,7 @@ import {
 } from "../theme";
 import {
   addMonths,
+  type DateRange,
   formatMonthLabel,
   monthGrid,
   monthOf,
@@ -47,6 +50,9 @@ const SWIPE_SLOP = 8;
 const PAGE_MS = 130;
 /** Day pill box; the radius is exactly half of this — see the style comment. */
 const DAY_PILL_SIZE = 36;
+// Wider than tall: a 6-row month plus the nav and weekday row must fit a
+// 360x740dp sheet with its footer, with no scrolling. The pill is 36 high.
+const DAY_ASPECT = 7 / 6;
 const YEAR_COLUMNS = 4;
 const YEAR_ROWS = 5;
 const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
@@ -54,9 +60,16 @@ const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
 export function DatePicker({
   value,
   onChange,
+  range,
+  allowFuture = false,
 }: {
   value: string | null;
   onChange: (key: string) => void;
+  /** Highlights start..end (end null = one day). Taps still arrive in
+   *  `onChange`; `pickDay` turns them into the next range. */
+  range?: DateRange;
+  /** A trip log records what happened; a plan looks ahead. */
+  allowFuture?: boolean;
 }) {
   const styles = useStyles();
 
@@ -201,24 +214,32 @@ export function DatePicker({
                   ))}
                 </View>
               ))
-            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => (
-                <View key={weekIndex} style={styles.week}>
-                  {week.map((key, dayIndex) => {
-                    if (key === null)
-                      return <View key={dayIndex} style={styles.day} />;
-                    return (
-                      <DayCell
-                        key={dayIndex}
-                        dateKey={key}
-                        selected={key === value}
-                        isToday={key === today}
-                        disabled={key > today}
-                        onPress={() => onChange(key)}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
+            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => {
+                const band = range ? weekBand(range, week) : [];
+                return (
+                  <View key={weekIndex} style={styles.week}>
+                    {week.map((key, dayIndex) => {
+                      if (key === null)
+                        return <View key={dayIndex} style={styles.day} />;
+                      return (
+                        <DayCell
+                          key={key}
+                          dateKey={key}
+                          selected={
+                            range
+                              ? key === range.start || key === range.end
+                              : key === value
+                          }
+                          band={band[dayIndex] ?? null}
+                          isToday={key === today}
+                          disabled={!allowFuture && key > today}
+                          onPress={() => onChange(key)}
+                        />
+                      );
+                    })}
+                  </View>
+                );
+              })}
         </Animated.View>
       </View>
     </View>
@@ -233,6 +254,10 @@ function usePager() {
   const [width, setWidth] = useState(0);
   const [pan] = useState(() => new Animated.Value(0));
   const paging = useRef(false);
+  // The slide-in waits for the new month to be on screen: starting it from
+  // the animation callback put the OLD grid (and its range band) on the
+  // incoming side for the frames before React's render landed.
+  const slideIn = useRef<number | null>(null);
   const widthRef = useRef(0);
   useEffect(() => {
     widthRef.current = width;
@@ -250,22 +275,30 @@ function usePager() {
       duration: PAGE_MS,
       useNativeDriver: true,
     }).start(() => {
+      slideIn.current = delta;
       commit();
-      pan.setValue(delta * widthRef.current);
-      Animated.timing(pan, {
-        toValue: 0,
-        duration: PAGE_MS,
-        useNativeDriver: true,
-      }).start(() => {
-        paging.current = false;
-      });
-      // Belt and braces: if that second animation is interrupted its callback
-      // may never run, and a stuck flag silently disables paging forever.
+      // Belt and braces: if the slide-in is interrupted its callback may never
+      // run, and a stuck flag silently disables paging forever.
       setTimeout(() => {
         paging.current = false;
-      }, PAGE_MS * 3);
+      }, PAGE_MS * 4);
     });
   };
+
+  // Runs after the render that `commit` caused.
+  useEffect(() => {
+    const delta = slideIn.current;
+    if (delta === null) return;
+    slideIn.current = null;
+    pan.setValue(delta * widthRef.current);
+    Animated.timing(pan, {
+      toValue: 0,
+      duration: PAGE_MS,
+      useNativeDriver: true,
+    }).start(() => {
+      paging.current = false;
+    });
+  });
 
   return {
     pan,
@@ -280,12 +313,14 @@ function usePager() {
 function DayCell({
   dateKey,
   selected,
+  band,
   isToday,
   disabled,
   onPress,
 }: {
   dateKey: string;
   selected: boolean;
+  band: BandCell | null;
   isToday: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -324,16 +359,43 @@ function DayCell({
       style={styles.day}
     >
       {({ pressed }) => (
-        <View
-          style={[
-            styles.dayPill,
-            isToday && styles.todayRing,
-            selected && styles.selectedFill,
-            pressed && !disabled && styles.pressed,
-          ]}
-        >
-          {label}
-        </View>
+        <>
+          {band ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.band,
+                {
+                  // A piece's ends are the pill's own footprint, so a selected
+                  // start or end day's pill covers the band's end exactly; a row's
+                  // ends are rounded too, so a range across weeks reads as pieces.
+                  left: band.pieceStart ? "50%" : 0,
+                  marginLeft: band.pieceStart ? -DAY_PILL_SIZE / 2 : 0,
+                  right: band.pieceEnd ? "50%" : 0,
+                  marginRight: band.pieceEnd ? -DAY_PILL_SIZE / 2 : 0,
+                  borderTopLeftRadius: band.pieceStart ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomLeftRadius: band.pieceStart
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                  borderTopRightRadius: band.pieceEnd ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomRightRadius: band.pieceEnd
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                },
+              ]}
+            />
+          ) : null}
+          <View
+            style={[
+              styles.dayPill,
+              isToday && styles.todayRing,
+              selected && styles.selectedFill,
+              pressed && !disabled && styles.pressed,
+            ]}
+          >
+            {label}
+          </View>
+        </>
       )}
     </Pressable>
   );
@@ -507,7 +569,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   day: {
     flex: 1,
-    aspectRatio: 1,
+    aspectRatio: DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -530,6 +592,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
+  band: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -DAY_PILL_SIZE / 2,
+    height: DAY_PILL_SIZE,
+    backgroundColor: withAlpha(theme.accent, 0.18),
+  },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
   dayText: { ...textRole.detail, color: theme.text },
@@ -540,9 +609,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   yearRow: { flexDirection: "row" },
   yearCell: {
     flex: 1,
-    // Five rows of these match the six 1:1 day rows, so switching grids barely
+    // Five rows of these match the six day rows, so switching grids barely
     // moves the sheet's height.
-    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6),
+    aspectRatio: (7 / YEAR_COLUMNS) * (YEAR_ROWS / 6) * DAY_ASPECT,
     alignItems: "center",
     justifyContent: "center",
   },

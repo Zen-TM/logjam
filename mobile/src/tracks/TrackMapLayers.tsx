@@ -11,6 +11,7 @@ import {
 
 import { listTrackPoints, type Track } from "./tracksDb";
 import { trackPointsToFeature } from "./trackGeoJson";
+import { PLAN_DIM } from "../plans/planMap";
 import { PIN_FLOOR } from "../map/layerOrder";
 import { stopSourcePress } from "../map/sourcePress";
 
@@ -44,11 +45,13 @@ const TrackLine = memo(function TrackLine({
   track,
   stored,
   liveCoord,
+  dim,
   onPress,
 }: {
   track: Track;
   stored: RecordedTrackPoint[];
   liveCoord: [number, number] | null;
+  dim: boolean;
   onPress: TrackPressHandler;
 }) {
   const tail = track.state === "recording" ? liveCoord : null;
@@ -104,7 +107,7 @@ const TrackLine = memo(function TrackLine({
         style={{
           lineColor: track.color,
           lineWidth: 3,
-          lineOpacity: 0.9,
+          lineOpacity: dim ? PLAN_DIM : 0.9,
           lineJoin: "round",
           lineCap: "round",
         }}
@@ -121,6 +124,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   tracks,
   liveCoord,
   showTracks,
+  dim = false,
   onTrackPress,
 }: {
   tracks: Track[];
@@ -137,6 +141,8 @@ export const TrackMapLayers = memo(function TrackMapLayers({
   /** The Tracks master switch. A live recording/paused track still draws even
    *  when this is off — the layer sheet's switch governs saved tracks. */
   showTracks: boolean;
+  /** Faint, under a plan on the map. */
+  dim?: boolean;
   /** Tapping a recorded line opens its options. Stable identity required —
    *  TrackLine is memoised against MapScreen's compass-rate re-render. */
   onTrackPress: TrackPressHandler;
@@ -200,6 +206,7 @@ export const TrackMapLayers = memo(function TrackMapLayers({
           track={track}
           stored={pointsById.get(track.id) ?? EMPTY_POINTS}
           liveCoord={liveCoord}
+          dim={dim}
           onPress={onTrackPress}
         />
       ))}
