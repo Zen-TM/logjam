@@ -56,7 +56,7 @@ describe("Dialog", () => {
       );
     const dialog = () => screen.getAllByRole("dialog", { hidden: true })[0]!;
 
-    // Mutation: call `onClose` directly in `closeIfDismissible`.
+    // Mutation: call `onClose` directly in `requestClose`.
     it.each([
       ["Escape", () => fireEvent.keyDown(dialog(), { key: "Escape" })],
       [
@@ -95,5 +95,15 @@ describe("Dialog", () => {
       fireEvent.click(screen.getByLabelText("Close"));
       expect(onClose).toHaveBeenCalledOnce();
     });
+  });
+
+  // Mutation: test `footer` rather than `foot` before drawing the <footer>.
+  it("draws no footer when a footer function returns nothing", () => {
+    render(
+      <Dialog open title="Working" onClose={() => {}} footer={() => null}>
+        body
+      </Dialog>,
+    );
+    expect(document.querySelector("footer")).toBeNull();
   });
 });

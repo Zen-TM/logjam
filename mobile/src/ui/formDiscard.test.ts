@@ -48,3 +48,20 @@ describe("form sheets", () => {
     expect(missing).toEqual([...NO_WORK_TO_LOSE].sort());
   });
 });
+
+// `BottomSheet` sends every exit through `leave`: the back gesture, the
+// backdrop, the screen-reader dismiss, the x and `onBack` (the drag release
+// calls `requestClose` when `discard` is set). Mutation: pass `onClose`
+// straight to the x's `onPress`.
+describe("BottomSheet exits", () => {
+  const code = readFileSync(join(SRC, "ui/BottomSheet.tsx"), "utf8");
+
+  it("routes each through the discard confirm", () => {
+    expect(code).toContain("onRequestClose={closable ? requestClose");
+    expect(code).toContain("onPress={closable ? requestClose");
+    expect(code).toContain("onPress={requestClose}");
+    expect(code).toContain("leave(onBack)");
+    expect(code).not.toMatch(/onPress=\{(closable \? )?onClose\b/);
+    expect(code).not.toContain("onRequestClose={closable ? onClose");
+  });
+});
