@@ -180,6 +180,7 @@ function LeaderboardPage({
         title={copy.rulesTitle}
         size="small"
         onClose={() => setRulesOpen(false)}
+        footer={<Button onClick={() => setRulesOpen(false)}>Close</Button>}
       >
         <ul className={classes.rules}>
           {copy.rules.split("\n").map((rule) => (
