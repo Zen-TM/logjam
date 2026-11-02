@@ -21,11 +21,14 @@ export type MapHoldRun = Record<
 export function MapHoldSheet({
   point,
   run,
+  savedHereOnly,
   onClose,
   onClosed,
 }: {
   point: MapPointCoord | null;
   run: MapHoldRun;
+  /** Not yet known to be synced: offline, a change queued, or no account. */
+  savedHereOnly?: boolean;
   onClose: () => void;
   /** After the sheet has gone: the place form cannot open over it (a second
    *  Modal over the first does not hold focus). */
@@ -42,7 +45,7 @@ export function MapHoldSheet({
       {/* The gap is the sheet-list convention (MapPointSheet, SavedScreen):
           rows flush against each other read as one slab, not separate targets. */}
       <View style={styles.body}>
-        {mapHoldVerbs("gps").map((verb) => (
+        {mapHoldVerbs("gps", savedHereOnly).map((verb) => (
           <Row
             key={verb.id}
             icon={verb.icon}

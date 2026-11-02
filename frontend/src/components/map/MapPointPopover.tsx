@@ -125,6 +125,7 @@ export default function MapPointPopover({
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
+    ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
   }));
 

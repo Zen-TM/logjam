@@ -52,6 +52,7 @@ export function MapPointSheet({
   onDropMarker,
   onInfo,
   allowNetwork,
+  savedHereOnly,
   fix,
 }: {
   point: MapPoint | null;
@@ -71,6 +72,8 @@ export function MapPointSheet({
    * False in "Simulating offline mode": elevation then comes only from tiles
    * already on the phone, and nothing goes out.
    */
+  /** Not yet known to be synced: offline, a change queued, or no account. */
+  savedHereOnly?: boolean;
   allowNetwork?: boolean;
 }) {
   // The weather replaces the facts in place and backs out to them
@@ -114,6 +117,7 @@ export function MapPointSheet({
           onDropMarker={onDropMarker}
           onInfo={onInfo}
           allowNetwork={allowNetwork}
+          savedHereOnly={savedHereOnly}
           weatherOpen={weatherOpen}
           onShowWeather={() => setWeatherPoint(point)}
         />
@@ -170,6 +174,7 @@ function FixDetail({
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
+    ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
     ...(fact.copyable
       ? {
@@ -196,6 +201,7 @@ function PointDetail({
   onDropMarker,
   onInfo,
   allowNetwork = true,
+  savedHereOnly = false,
   weatherOpen,
   onShowWeather,
 }: {
@@ -207,6 +213,7 @@ function PointDetail({
   onDropMarker: (point: MapPoint) => void;
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
+  savedHereOnly?: boolean;
   weatherOpen: boolean;
   onShowWeather: () => void;
 }) {
@@ -278,6 +285,7 @@ function PointDetail({
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
+    ...(fact.note ? { note: fact.note } : {}),
     ...(fact.span ? { span: true } : {}),
     ...(fact.copyable ? { onCopy: copyPosition } : {}),
   }));
@@ -296,7 +304,7 @@ function PointDetail({
       {userCoord == null ? (
         <Text style={styles.note}>{MAP_POINT_NO_FIX_NOTE.gps}</Text>
       ) : null}
-      {mapPointVerbs("gps").map((verb) => (
+      {mapPointVerbs("gps", savedHereOnly).map((verb) => (
         <Row
           key={verb.id}
           icon={verb.icon}

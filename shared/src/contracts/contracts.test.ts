@@ -891,13 +891,33 @@ describe("the map point panel", () => {
       expect(facts.map((fact) => fact.key)).not.toContain("slope");
   });
 
+  // Mutation: ignore `savedHereOnly` in `asVerb`, and a marker dropped offline
+  // still promises "Saved, and synced".
+  it("does not promise a sync the marker has not had", () => {
+    const subtitle = (savedHereOnly: boolean) =>
+      [
+        mapPointVerbs("gps", savedHereOnly),
+        mapHoldVerbs("gps", savedHereOnly),
+      ].map(
+        (verbs) => verbs.find((verb) => verb.id === "dropMarker")?.subtitle,
+      );
+    expect(subtitle(false)).toEqual(["Saved, and synced", "Saved, and synced"]);
+    expect(subtitle(true)).toEqual([
+      "Saved on this phone",
+      "Saved on this phone",
+    ]);
+  });
+
   it("says why there is no height rather than showing a dash", () => {
     const unavailable = mapPointFacts({
       point,
       elevation: { state: "unavailable" },
       from: null,
     });
-    expect(unavailable[1].value).toBe("Needs a connection");
+    expect(unavailable[1]).toMatchObject({
+      value: "—",
+      note: "Needs a connection",
+    });
   });
 
   // Mutation: give a verb `on: "web"` with no client that draws it, or two

@@ -11,6 +11,8 @@ export type Stat = {
   span?: boolean;
   /** A figure read at arm's length while moving: the `instrument` role. */
   instrument?: boolean;
+  /** Under the value, muted: why there is no figure. */
+  note?: string;
   /** Makes the cell copy its value on tap, and draws a copy glyph beside the
    *  value so the tap can be found: a tile that only reveals it is a button
    *  when pressed is one nobody presses. */
@@ -50,6 +52,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
                 />
               ) : null}
             </View>
+            {stat.note ? <Text style={styles.note}>{stat.note}</Text> : null}
           </>
         );
         return stat.onCopy ? (
@@ -97,6 +100,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   pressed: { backgroundColor: theme.cardPressed },
   label: { ...muted(theme, textRole.section), letterSpacing: 0.8 },
   valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
+  note: { ...muted(theme, textRole.meta) },
   value: {
     flexShrink: 1,
     ...textRole.heading,
