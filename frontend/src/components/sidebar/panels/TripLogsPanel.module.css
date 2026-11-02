@@ -40,7 +40,7 @@
 .toLog {
   flex-shrink: 0;
   display: flex;
-  padding: 0 var(--gutter) 8px;
+  padding: 0 var(--gutter) var(--space-1);
 }
 
 .stripText {
