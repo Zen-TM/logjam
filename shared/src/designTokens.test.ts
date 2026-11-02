@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { FONT, FORM_RHYTHM, SPACE, TEXT_ROLES } from "./designTokens.js";
+import {
+  DRAFT_LINE,
+  FONT,
+  FORM_RHYTHM,
+  SPACE,
+  TEXT_ROLES,
+} from "./designTokens.js";
 
 describe("FORM_RHYTHM", () => {
   // A label hugs its control, fields are a field apart, and a heading divides
@@ -53,5 +59,18 @@ describe("TEXT_ROLES", () => {
       );
       expect(extra, `${name} carries ${extra.join(", ")}`).toEqual([]);
     }
+  });
+});
+
+describe("DRAFT_LINE", () => {
+  // The casing must show beyond the core on both sides, and a measure dash must
+  // be longer than it is wide, or the line is a row of dots again. Mutation
+  // that turns it red: set `casingWidth` to `coreWidth`, or `measureDash[0]`
+  // to 0.1.
+  it("casts a casing wider than the core, with dashes not dots", () => {
+    expect(DRAFT_LINE.casingWidth).toBeGreaterThanOrEqual(
+      DRAFT_LINE.coreWidth + 3,
+    );
+    expect(DRAFT_LINE.measureDash[0]).toBeGreaterThanOrEqual(1.5);
   });
 });

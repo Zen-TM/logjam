@@ -212,7 +212,10 @@
   border: 3px dashed var(--color-accent);
   background: transparent;
   pointer-events: none;
-  z-index: 5;
+  /* Under all the map chrome (z-index 1-3): the compass, zoom and scale bar
+     still apply and must not sit in the scrim. Above the canvas, which is
+     unpositioned. */
+  z-index: 0;
   box-shadow: 0 0 0 9999px color-mix(in srgb, black 40%, transparent);
 }
 

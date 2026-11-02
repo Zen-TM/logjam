@@ -300,13 +300,22 @@ export function detectMgaZone(lon: number): 54 | 55 | 56 {
   return 56;
 }
 
+/** Easting and northing in a chosen zone, not the one `lon` falls in. */
+export function toZoneEastingNorthing(
+  lat: number,
+  lon: number,
+  zone: 54 | 55 | 56,
+): { easting: number; northing: number } {
+  const [easting, northing] = proj4(WGS84, mgaProj(zone), [lon, lat]);
+  return { easting, northing };
+}
+
 export function toEastingNorthing(
   lat: number,
   lon: number,
 ): { easting: number; northing: number; zone: 54 | 55 | 56 } {
   const zone = detectMgaZone(lon);
-  const [easting, northing] = proj4(WGS84, mgaProj(zone), [lon, lat]);
-  return { easting, northing, zone };
+  return { ...toZoneEastingNorthing(lat, lon, zone), zone };
 }
 
 export function fromEastingNorthing(

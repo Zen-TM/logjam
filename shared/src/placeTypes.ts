@@ -275,6 +275,16 @@ export const PLACE_TYPE_COLORS = [
  */
 export const SHARED_PLACE_COLOR = "#B79EC0";
 
+/**
+ * The ring on a pin for a place you have visited (`placeStatus` "done").
+ * Reserved like `SHARED_PLACE_COLOR`, for the same reason, and a saturated
+ * green because every palette colour is a pastel: on satellite imagery the
+ * ring has to out-shout the ground, not match it. A visited place is never a
+ * shared one (`placeStatus`), so a pin wears at most one of the two rings.
+ * Guard: `placeTypes.test.ts`.
+ */
+export const VISITED_PLACE_COLOR = "#2F9E6B";
+
 export type PlaceTypeColor = (typeof PLACE_TYPE_COLORS)[number];
 
 /**

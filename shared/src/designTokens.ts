@@ -37,8 +37,25 @@ export const MAP_INK = {
   ring: "#FFFFFF",
   /** A river gauge's drop: one colour for every gauge, never scaled by reading. */
   gauge: "#3B82C4",
+  /** The MGA grid's lines: a mid tone that reads on light and dark basemaps. */
+  grid: "#8C8279",
   /** The light halo behind a LiDAR topo's own label colour. */
   labelHalo: "rgba(255,255,255,0.8)",
+} as const;
+
+/**
+ * The route-draw and measure line on both clients: a coloured core over a
+ * wider casing in `MAP_INK.casing`, so it reads on light, dark, topo and
+ * satellite basemaps and over the slope colours. A measurement keeps the same
+ * casing and dashes the core (units of line width, round caps), so the two
+ * tools stay distinct from each other and from saved routes. Guard:
+ * `designTokens.test.ts`.
+ */
+export const DRAFT_LINE = {
+  coreWidth: 4,
+  casingWidth: 8,
+  casingColor: MAP_INK.casing,
+  measureDash: [2, 2.5],
 } as const;
 
 /** Names on the map, a place's and a gauge's, appear from this zoom on both

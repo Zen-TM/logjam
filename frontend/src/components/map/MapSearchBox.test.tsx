@@ -246,4 +246,48 @@ describe("MapSearchBox", () => {
       "Location search isn't available right now. Try again in a few minutes.",
     );
   });
+
+  // Mutation: drop `disabled={disabled}` from the input, or the early return
+  // that stops "/" focusing it.
+  it("is off while an area is selected, and the / shortcut leaves it alone", () => {
+    renderBox({ disabled: true });
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  // Mutation: drop parseCoordinates from the options, or choose() stop
+  // recording the pick, and these go red.
+  it("offers a typed coordinate first, flies to it and remembers it", async () => {
+    localStorage.clear();
+    const onSelectLocation = vi.fn();
+    const input = renderBox({ onSelectLocation });
+    type(input, "56 245000 6264000");
+    const row = screen.getAllByRole("option")[0];
+    expect(row.textContent).toContain("MGA 56 245000 6264000");
+    fireEvent.pointerDown(row);
+    expect(onSelectLocation).toHaveBeenCalledOnce();
+    expect(onSelectLocation.mock.calls[0][0]).toBeCloseTo(-33.7, 0);
+    expect(localStorage.getItem("logjam.recentSearches")).toContain("MGA 56");
+  });
+
+  it("lists recent picks on an empty focused box, and clears them", async () => {
+    localStorage.clear();
+    const onSelectLocation = vi.fn();
+    const input = renderBox({ onSelectLocation });
+    type(input, "-33.71, 150.31");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+
+    cleanup();
+    const again = renderBox({ onSelectLocation });
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toContain(
+      "-33.71000, 150.31000",
+    );
+    expect(again).toBeTruthy();
+    fireEvent.pointerDown(
+      screen.getByRole("option", { name: /Clear recent/i }),
+    );
+    expect(localStorage.getItem("logjam.recentSearches")).toBeNull();
+  });
 });

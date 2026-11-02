@@ -13,9 +13,17 @@ import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
+  mgaGrid,
   MAP_LABEL_MIN_ZOOM,
+  CONTOUR_LABELS_MIN_ZOOM,
+  CONTOURS_MIN_ZOOM,
+  CONTOURS_MINOR_MIN_ZOOM,
+  GAUGES_MIN_ZOOM,
+  SLOPE_MIN_ZOOM,
+  zoomFadeIn,
   PLACE_TYPE_COLORS,
   SHARED_PLACE_COLOR,
+  VISITED_PLACE_COLOR,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
@@ -42,6 +50,8 @@ import {
   GAUGE_BELOW,
   GAUGE_LABELS,
   GAUGE_LAYER,
+  GRID_LABELS,
+  GRID_LINES,
   LAND_EDGE_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
@@ -53,6 +63,7 @@ import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   arrowSegmentFeatures,
+  DRAFT_LINE,
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
@@ -152,6 +163,8 @@ import {
 import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
+  BASEMAP_FAIL_AFTER,
+  isServerFault,
   extentFromCentreAndSize,
   rgbaCssFromHex,
   contourWidthStops,
@@ -529,6 +542,7 @@ function Map({
   showWays,
   showGauges,
   onShowGauges,
+  showMgaGrid,
   placeTracks,
   standaloneTracks,
   routes,
@@ -557,6 +571,7 @@ function Map({
   onFilterAreaSelected,
   topoLayers,
   sharpenedAreas,
+  onBasemapHealth,
   slopeBands,
   activeLayerId,
   selectingGeoPdfExtent,
@@ -604,6 +619,7 @@ function Map({
   /** The river gauge drops, an optional layer (off until asked for). */
   showGauges: boolean;
   onShowGauges: () => void;
+  showMgaGrid: boolean;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -670,6 +686,8 @@ function Map({
   }[];
   /** The sharpened areas the user can see: 3D terrain reads them too. */
   sharpenedAreas?: readonly SharpenedOverlay[];
+  /** A basemap's tiles keep failing on a server fault (`down`), or load again. */
+  onBasemapHealth?: (id: string, down: boolean) => void;
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
   activeLayerId: string;
@@ -936,6 +954,12 @@ function Map({
   // effect (never re-add a known-missing source — stops the per-load retry
   // spam).
   const failedTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Consecutive failed tile loads per basemap; a tile that loads resets it.
+  const baseFailsRef = useRef<Record<string, number>>({});
+  const onBasemapHealthRef = useRef(onBasemapHealth);
+  useEffect(() => {
+    onBasemapHealthRef.current = onBasemapHealth;
+  }, [onBasemapHealth]);
   // Topo entries whose transient (non-terminal) load error was already logged
   // this session — one console line per source, not one per flaky tile.
   const transientTopoSourcesRef = useRef<Set<string>>(new Set());
@@ -1037,11 +1061,33 @@ function Map({
     // can flag it. A transient error (network blip, 5xx, per-tile miss) is left
     // in place so MapLibre retries; one blip must not blacklist a healthy
     // overlay for the whole session.
+    map.on("data", (event) => {
+      const { sourceId, tile } = event as { sourceId?: string; tile?: unknown };
+      if (tile && sourceId && baseFailsRef.current[sourceId]) {
+        baseFailsRef.current[sourceId] = 0;
+        onBasemapHealthRef.current?.(sourceId, false);
+      }
+    });
     map.on("error", (event) => {
       const { sourceId } = event as { sourceId?: unknown };
       // The router's way of saying "draw the parent": not an error at all,
       // for a Terrain layer and for the 3D terrain source alike.
       if (isAbsentTerrainTile(event.error)) return;
+      if (
+        typeof sourceId === "string" &&
+        BASE_LAYERS.some((layer) => layer.id === sourceId)
+      ) {
+        // A device with no signal is the offline notice's business, not an
+        // outage of this server.
+        const status = (event.error as { status?: number } | undefined)?.status;
+        if (navigator.onLine && isServerFault(status)) {
+          const fails = (baseFailsRef.current[sourceId] ?? 0) + 1;
+          baseFailsRef.current[sourceId] = fails;
+          if (fails >= BASEMAP_FAIL_AFTER)
+            onBasemapHealthRef.current?.(sourceId, true);
+        }
+        return;
+      }
       if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
         // Not ours — keep MapLibre's default behaviour of printing the error
         // (binding any "error" listener suppresses it otherwise).
@@ -1294,6 +1340,17 @@ function Map({
       // SOLID. A route is a thing you are making; the measure tool's dotted
       // line is a thing you are asking (the `measuring` effect below).
       map.addLayer({
+        id: "route-draft-casing",
+        type: "line",
+        source: "route-draft",
+        filter: ["!=", ["get", "kind"], ARROW_FEATURE_KIND],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": DRAFT_LINE.casingColor,
+          "line-width": DRAFT_LINE.casingWidth,
+        },
+      });
+      map.addLayer({
         id: "route-draft-line",
         type: "line",
         source: "route-draft",
@@ -1304,7 +1361,7 @@ function Map({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": initialDraftColor,
-          "line-width": 3,
+          "line-width": DRAFT_LINE.coreWidth,
         },
       });
       map.addLayer({
@@ -1423,6 +1480,30 @@ function Map({
         },
       });
 
+      // The same ring in the visited colour. A visited place is never a shared
+      // one (placeStatus), so a pin wears at most one.
+      map.addLayer({
+        id: "visited-place-halos",
+        type: "circle",
+        source: "places",
+        filter: ["==", ["get", "done"], true],
+        paint: {
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            7,
+            7.5,
+            14,
+            13.5,
+          ],
+          "circle-opacity": 0,
+          "circle-stroke-color": VISITED_PLACE_COLOR,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-opacity": dimmed(1),
+        },
+      });
+
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1476,6 +1557,45 @@ function Map({
 
       applyPlaceThemePaint(map);
 
+      for (const id of ["mga-grid-lines", "mga-grid-labels"])
+        map.addSource(id, {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+      map.addLayer(
+        {
+          id: GRID_LINES,
+          type: "line",
+          source: "mga-grid-lines",
+          layout: { visibility: "none" },
+          paint: {
+            "line-color": MAP_INK.grid,
+            "line-width": 0.75,
+            "line-opacity": 0.8,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.addLayer(
+        {
+          id: GRID_LABELS,
+          type: "symbol",
+          source: "mga-grid-labels",
+          layout: {
+            visibility: "none",
+            "text-field": ["get", "text"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": 11,
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+
       map.addSource("gauges", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1487,6 +1607,7 @@ function Map({
           id: GAUGE_LAYER,
           type: "symbol",
           source: "gauges",
+          minzoom: GAUGES_MIN_ZOOM,
           layout: {
             visibility: "none",
             "icon-image": GAUGE_ICON_IMAGE,
@@ -1496,7 +1617,12 @@ function Map({
           },
           paint: {
             "icon-color": MAP_INK.gauge,
-            "icon-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "icon-opacity": zoomFadeIn(GAUGES_MIN_ZOOM, [
+              "case",
+              ["get", "recent"],
+              1,
+              0.35,
+            ]) as maplibregl.ExpressionSpecification,
             "icon-halo-color": MAP_INK.ring,
             "icon-halo-width": 1.5,
           },
@@ -1523,6 +1649,9 @@ function Map({
             "text-color": MAP_INK.label,
             "text-halo-color": MAP_INK.casing,
             "text-halo-width": 1.5,
+            "text-opacity": zoomFadeIn(
+              MAP_LABEL_MIN_ZOOM,
+            ) as maplibregl.ExpressionSpecification,
           },
         },
         GAUGE_BELOW,
@@ -2043,6 +2172,39 @@ function Map({
     });
   }, [showGauges, gaugeFile, mapLoaded]);
 
+  // The MGA grid, rebuilt for the view each time the camera settles.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    const vis = showMgaGrid ? "visible" : "none";
+    for (const id of [GRID_LINES, GRID_LABELS])
+      map.setLayoutProperty(id, "visibility", vis);
+    if (!showMgaGrid) return;
+    const draw = () => {
+      const b = map.getBounds();
+      const grid = mgaGrid(
+        {
+          west: b.getWest(),
+          south: b.getSouth(),
+          east: b.getEast(),
+          north: b.getNorth(),
+        },
+        map.getZoom(),
+      );
+      (map.getSource("mga-grid-lines") as maplibregl.GeoJSONSource).setData(
+        grid.lines,
+      );
+      (map.getSource("mga-grid-labels") as maplibregl.GeoJSONSource).setData(
+        grid.labels,
+      );
+    };
+    draw();
+    map.on("moveend", draw);
+    return () => {
+      map.off("moveend", draw);
+    };
+  }, [showMgaGrid, mapLoaded]);
+
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2130,8 +2292,7 @@ function Map({
     map.setPaintProperty(
       "route-draft-line",
       "line-dasharray",
-      // Round caps turn a near-zero dash into a dot.
-      measuring ? [0.1, 2] : undefined,
+      measuring ? [...DRAFT_LINE.measureDash] : undefined,
     );
     map.setLayoutProperty(
       "route-draft-direction",
@@ -2686,7 +2847,11 @@ function Map({
                   id: layerId,
                   type: "color-relief",
                   source: srcId,
+                  minzoom: SLOPE_MIN_ZOOM,
                   paint: {
+                    "color-relief-opacity": zoomFadeIn(
+                      SLOPE_MIN_ZOOM,
+                    ) as maplibregl.ExpressionSpecification,
                     "color-relief-color": slopeReliefColor(
                       slopeBandsRef.current ?? [],
                     ) as maplibregl.ExpressionSpecification,
@@ -2770,7 +2935,12 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            minzoom: 14,
+            minzoom: CONTOURS_MINOR_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MINOR_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
+            },
           });
         }
         // Major contours (50m): elevation divisible by 50
@@ -2782,9 +2952,15 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: CONTOURS_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
+            },
           });
         }
-        // Elevation labels on major contours at z12+
+        // Elevation labels on major contours
         const labelsId = `topo-${id}-labels`;
         if (!map.getLayer(labelsId)) {
           map.addLayer({
@@ -2793,7 +2969,7 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            minzoom: 12,
+            minzoom: CONTOUR_LABELS_MIN_ZOOM,
             layout: {
               "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
               "text-font": ["Noto Sans Medium"],
@@ -2810,6 +2986,9 @@ function Map({
             paint: {
               "text-halo-color": "rgba(255, 255, 255, 0.8)",
               "text-halo-width": 1.5,
+              "text-opacity": zoomFadeIn(
+                CONTOUR_LABELS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
             },
           });
         }
@@ -3321,10 +3500,17 @@ function Map({
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
         tools={mapTools}
+        toolsDisabled={
+          (selectingBbox ?? false) || (selectingGeoPdfExtent ?? false)
+        }
         notices={notices}
         search={
-          // Always available, including during pick modes for a quick fly-to.
+          // Live during a point pick or a route draw (a quick fly-to), off
+          // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
+            disabled={
+              (selectingBbox ?? false) || (selectingGeoPdfExtent ?? false)
+            }
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {

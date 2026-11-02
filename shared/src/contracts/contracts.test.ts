@@ -759,6 +759,7 @@ describe("the map's overlays list", () => {
       "ways",
       "land",
       "gauges",
+      "mgaGrid",
       "importFile",
     ]);
     expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toEqual([
@@ -767,6 +768,7 @@ describe("the map's overlays list", () => {
       "geoPdfs",
       "land",
       "gauges",
+      "mgaGrid",
       "importFile",
     ]);
   });

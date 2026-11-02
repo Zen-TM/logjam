@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { FIX_COARSE_M, FIX_STALE_MS, fixQuality } from "./gpsSignal";
+import {
+  deliveredFix,
+  FIX_COARSE_M,
+  FIX_STALE_MS,
+  fixQuality,
+  newerFix,
+} from "./gpsSignal";
 
 const NOW = 1_700_000_000_000;
 
@@ -53,5 +59,25 @@ describe("fixQuality", () => {
 
   it("has nothing to trust before the first fix", () => {
     expect(fixQuality(null, NOW)).toBe("stale");
+  });
+});
+
+describe("deliveredFix", () => {
+  // Mutation: return `{ atMs: <platform timestamp>, ... }` and a skewed device
+  // clock greys every live fix.
+  it("stamps a delivery with our clock, whatever the platform said", () => {
+    expect(fixQuality(deliveredFix(8, NOW), NOW + 1000)).toBe("live");
+  });
+});
+
+describe("newerFix", () => {
+  // Mutation: return `next` unconditionally and a restarted watcher's cached
+  // fix overwrites the live one.
+  it("keeps the live fix over an older cached one", () => {
+    const live = { atMs: NOW, accuracyM: 5 };
+    const cached = { atMs: NOW - 600_000, accuracyM: 5 };
+    expect(newerFix(live, cached)).toBe(live);
+    expect(newerFix(cached, live)).toBe(live);
+    expect(newerFix(null, cached)).toBe(cached);
   });
 });

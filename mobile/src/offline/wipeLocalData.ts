@@ -9,7 +9,8 @@
 // recorded tracks, downloaded map regions, imports, and sync mirrors. A single
 // entry point prevents account transition paths from drifting apart.
 //
-// **Deliberately not wiped:** device preferences (`logjam-prefs.db`). Theme,
+// **Deliberately not wiped:** device preferences (`logjam-prefs.db`), bar the
+// recent map searches, which are place names. Theme,
 // app-lock and crash-report choices are statements about this handset, not
 // about the account, and clearing them would silently disarm a lock the owner
 // turned on. The guest-mode preference is cleared by the caller that knows the
@@ -31,6 +32,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
+import { clearRecentSearches } from "../map/recentSearches";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { stopPlansForWipe } from "../plans/plansCache";
 import { wipeAllSyncData, withSyncTransaction } from "../sync/syncDb";
@@ -107,6 +109,10 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // a minute to stop eight screens re-fetching it; a minute is long enough for
   // the next account to read the departing one's name off a settings screen.
   invalidateCurrentUser();
+
+  // Recent map searches are place names in the device prefs store, which the
+  // wipe otherwise leaves alone.
+  clearRecentSearches();
 
   // MapLibre's own ambient cache. Every ONLINE basemap and topo tile the
   // previous user browsed is in there keyed by z/x/y — which IS the area they

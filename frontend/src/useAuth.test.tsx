@@ -34,6 +34,8 @@ vi.mock("./placeUtils", () => ({
 }));
 vi.mock("./geoPdf/cache", () => ({ clearTileCache }));
 vi.mock("./tripDraft", () => ({ clearTripDraft }));
+const clearRecentSearches = vi.hoisted(() => vi.fn());
+vi.mock("./recentSearches", () => ({ clearRecentSearches }));
 
 import { useAuth, signOut, signOutEverywhere } from "./useAuth";
 
@@ -271,6 +273,8 @@ describe("signOutEverywhere", () => {
       "fresh",
     );
     expect(clearTripDraft).toHaveBeenCalledOnce();
+    // Mutation: drop clearRecentSearches() from endSession.
+    expect(clearRecentSearches).toHaveBeenCalledOnce();
     expect(oidc.endProviderSession).toHaveBeenCalledOnce();
   });
 });

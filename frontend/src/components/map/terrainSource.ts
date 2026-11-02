@@ -113,7 +113,7 @@ export async function applyTerrain(
 ): Promise<void> {
   const source = await terrainSourceFor(map, areas, openArchive, origin);
   if (!isCurrent()) return;
-  map.setTerrain({ source, exaggeration: 1.5 });
+  map.setTerrain({ source, exaggeration: 1 });
   dropStaleTerrainSources(map, source);
   if (afterIdle) map.once("idle", afterIdle);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { VECTOR_STYLE_DEFAULTS } from "@logjam/shared";
+import { VECTOR_STYLE_DEFAULTS, zoomFadeIn } from "@logjam/shared";
 
 import { buildTopoVectorLayerDefs } from "./topoVectorLayers";
 
@@ -10,10 +10,16 @@ describe("buildTopoVectorLayerDefs", () => {
     expect(defs.map((d) => d.suffix)).toEqual(["minor", "major", "labels"]);
   });
 
-  it("gates minor contours to z14+ and labels to z12+", () => {
-    expect(defs.find((d) => d.suffix === "minor")?.minzoom).toBe(14);
-    expect(defs.find((d) => d.suffix === "labels")?.minzoom).toBe(12);
-    expect(defs.find((d) => d.suffix === "major")?.minzoom).toBeUndefined();
+  // Mutation: drop a layer's opacity ramp and it pops in at its minzoom.
+  it("gates each layer to the shared zooms and fades it in from there", () => {
+    const zooms = { minor: 14, labels: 13, major: 12 };
+    for (const [suffix, z] of Object.entries(zooms)) {
+      const def = defs.find((d) => d.suffix === suffix);
+      expect(def?.minzoom).toBe(z);
+      expect(
+        def?.style[suffix === "labels" ? "textOpacity" : "lineOpacity"],
+      ).toEqual(zoomFadeIn(z));
+    }
   });
 
   it("filters major vs minor on 50 m elevation multiples", () => {

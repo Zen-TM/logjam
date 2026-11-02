@@ -12,18 +12,25 @@ import {
   GAUGE_ICON_IMAGE,
   GAUGE_ICON_SDF_URI,
   GAUGE_ICON_SIZE,
+  GAUGES_MIN_ZOOM,
   gaugeDisplayName,
   latestGaugeReading,
   MAP_INK,
   MAP_LABEL_MIN_ZOOM,
   type GaugeLatestFile,
+  zoomFadeIn,
 } from "@logjam/shared";
 
 import { PIN_FLOOR } from "../map/layerOrder";
 import { PIN_LABEL_TEXT } from "../map/mapLabelText";
 
 const FAINT = 0.35;
-const RECENT = ["case", ["get", "recent"], 1, FAINT] as unknown as number;
+const RECENT = zoomFadeIn(GAUGES_MIN_ZOOM, [
+  "case",
+  ["get", "recent"],
+  1,
+  FAINT,
+]) as unknown as number;
 // An SDF, inlined, for the reasons at `ROUTE_ARROW_IMAGES` in MapScreen.tsx.
 const GAUGE_IMAGES = {
   [GAUGE_ICON_IMAGE]: { source: { uri: GAUGE_ICON_SDF_URI }, sdf: true },
@@ -65,6 +72,7 @@ export const GaugesLayer = memo(function GaugesLayer({
           type="symbol"
           id="gauge-drops"
           beforeId={PIN_FLOOR}
+          minzoom={GAUGES_MIN_ZOOM}
           style={{
             iconImage: GAUGE_ICON_IMAGE,
             iconSize: GAUGE_ICON_SIZE,
@@ -84,6 +92,7 @@ export const GaugesLayer = memo(function GaugesLayer({
           beforeId={PIN_FLOOR}
           minzoom={MAP_LABEL_MIN_ZOOM}
           style={{
+            textOpacity: zoomFadeIn(MAP_LABEL_MIN_ZOOM) as unknown as number,
             textField: ["get", "name"] as unknown as string,
             ...PIN_LABEL_TEXT,
             textMaxWidth: 10,

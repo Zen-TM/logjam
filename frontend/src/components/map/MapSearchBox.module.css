@@ -39,6 +39,10 @@
   color: var(--color-text-muted);
 }
 
+.input:disabled {
+  opacity: var(--opacity-disabled);
+}
+
 .input:focus-visible {
   outline: none;
 }

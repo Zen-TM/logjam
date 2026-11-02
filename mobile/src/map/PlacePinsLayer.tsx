@@ -23,6 +23,7 @@ import {
 
 import {
   SHARED_PLACE_COLOR,
+  VISITED_PLACE_COLOR,
   SYSTEM_PLACE_TYPES,
   MAP_INK,
   MAP_LABEL_MIN_ZOOM,
@@ -85,7 +86,12 @@ export type PlaceFeatureCollection = {
     type: "Feature";
     id: string;
     geometry: { type: "Point"; coordinates: [number, number] };
-    properties: { id: string; name: string; color: string };
+    properties: {
+      id: string;
+      name: string;
+      color: string;
+      visited?: boolean;
+    };
   }[];
 };
 
@@ -188,6 +194,21 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         data={ownedFc}
         onPress={onPress}
       >
+        {/* The same halo as a shared place's, in the visited colour: a place
+            is never both (`placeStatus`), so a pin wears one ring at most. */}
+        <Layer
+          key={`${idPrefix}visited-place-halos`}
+          type="circle"
+          id={`${idPrefix}visited-place-halos`}
+          filter={["==", ["get", "visited"], true]}
+          style={{
+            circleRadius: 9,
+            circleOpacity: 0,
+            circleStrokeColor: VISITED_PLACE_COLOR,
+            circleStrokeWidth: 1.5,
+            circleStrokeOpacity: MUTED_OPACITY,
+          }}
+        />
         <Layer
           key={`${idPrefix}place-circles`}
           type="circle"
@@ -234,6 +255,7 @@ export function toPlaceFeatureCollection(
     placeTypeId?: string;
   }[],
   typeColors: Record<string, string> = {},
+  visitedIds?: ReadonlySet<string>,
 ): PlaceFeatureCollection {
   return {
     type: "FeatureCollection",
@@ -247,6 +269,7 @@ export function toPlaceFeatureCollection(
       properties: {
         id: place.id,
         name: place.name,
+        visited: visitedIds?.has(place.id) ?? false,
         color:
           (place.placeTypeId ? typeColors[place.placeTypeId] : undefined) ??
           OWNED_PLACE_COLOR,

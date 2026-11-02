@@ -9,6 +9,7 @@ import {
   placeTypeColorName,
   RESERVED_FIELD_KEYS,
   SHARED_PLACE_COLOR,
+  VISITED_PLACE_COLOR,
   isReservedFieldKey,
   isSystemPlaceTypeId,
   freePlaceTypeName,
@@ -282,5 +283,17 @@ describe("a place type's name is the user's only one of it", () => {
     const renamed = freePlaceTypeName(long, [{ id: "x", name: long }]);
     expect(renamed).toHaveLength(PLACE_TYPE_NAME_MAX_LENGTH);
     expect(renamed.endsWith(" (2)")).toBe(true);
+  });
+});
+
+// Mutation: add VISITED_PLACE_COLOR to PLACE_TYPE_COLORS, or set it equal to
+// SHARED_PLACE_COLOR, and this turns red.
+describe("VISITED_PLACE_COLOR", () => {
+  it("is reserved: no type colour and not the shared ring", () => {
+    const visited = VISITED_PLACE_COLOR.toUpperCase();
+    expect(
+      (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
+    ).not.toContain(visited);
+    expect(visited).not.toBe(SHARED_PLACE_COLOR.toUpperCase());
   });
 });

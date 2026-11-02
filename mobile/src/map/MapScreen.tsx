@@ -94,6 +94,8 @@ import {
   landNameOf,
   NSW_LAND,
   slopeReliefColor,
+  SLOPE_MIN_ZOOM,
+  zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
   type TerrainSwitchKey,
@@ -232,8 +234,10 @@ import {
   type NorthReference,
 } from "./mapPreferences";
 import {
+  deliveredFix,
   FIX_MOVE_MIN_M,
   fixQuality,
+  newerFix,
   type FixLiveness,
   type FixQuality,
 } from "./gpsSignal";
@@ -243,6 +247,8 @@ import {
   setBasemapPreference,
   setTerrainLayers,
   readGaugesLayer,
+  readMgaGridLayer,
+  setMgaGridLayer,
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
@@ -253,7 +259,14 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  basemapFallbackNotice,
+  basemapToShow,
+  ROUTE_ARROW_SDF_URI,
+  placeStatus,
+} from "@logjam/shared";
+import { basemapFallbackFor, useDownBasemaps } from "./basemapReachability";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { onMirrorChanged } from "../sync/syncDb";
@@ -276,6 +289,7 @@ import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
+import { MgaGridLayer } from "./MgaGridLayer";
 import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
@@ -967,6 +981,14 @@ export function MapScreen({
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
+  // A basemap whose tile server is down is not drawn; the fallback is, and the
+  // pick stays, so the map returns to it when the server answers again.
+  const downBasemaps = useDownBasemaps(connectivity === "online", pickerOpen);
+  const shownBasemapId = basemapToShow(
+    basemapId,
+    downBasemaps,
+    basemapFallbackFor(basemapId),
+  ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
   // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
@@ -1119,6 +1141,11 @@ export function MapScreen({
   const setShowGauges = useCallback((on: boolean) => {
     setShowGaugesState(on);
     setGaugesLayer(on);
+  }, []);
+  const [showMgaGrid, setShowMgaGridState] = useState(readMgaGridLayer);
+  const setShowMgaGrid = useCallback((on: boolean) => {
+    setShowMgaGridState(on);
+    setMgaGridLayer(on);
   }, []);
   const {
     file: gaugeFile,
@@ -1476,7 +1503,7 @@ export function MapScreen({
    * notice. `basemapId` itself stays the user's choice, and is what the picker
    * ticks and what the preference stores.
    */
-  const renderedBasemapId = useDeferredValue(basemapId);
+  const renderedBasemapId = useDeferredValue(shownBasemapId);
 
   const basemapResolved = useMemo(
     () =>
@@ -1653,6 +1680,20 @@ export function MapScreen({
   // stay separate: the filter is "these particular places", the switch is
   // "places at all", and folding one into the other would have turning the
   // pins back on silently discard a filter the user set on another screen.
+  // The viewer's own trip tally per place, as the Places screen derives it.
+  const visitedIds = useMemo(() => {
+    const counts = new globalThis.Map<string, number>();
+    for (const trip of trips.data ?? []) {
+      for (const link of trip.places) {
+        counts.set(link.id, (counts.get(link.id) ?? 0) + 1);
+      }
+    }
+    const ids = new Set<string>();
+    for (const [id, n] of counts) {
+      if (placeStatus({ syncRole: "owner" }, n) === "done") ids.add(id);
+    }
+    return ids;
+  }, [trips.data]);
   const ownedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
@@ -1664,6 +1705,7 @@ export function MapScreen({
             )
           : [],
         placeTypeColors,
+        visitedIds,
       ),
     [
       allowedPlaceIds,
@@ -1671,6 +1713,7 @@ export function MapScreen({
       ownedPlaces,
       placeTypeColors,
       showPlaces,
+      visitedIds,
     ],
   );
   // A shared place obeys the per-type switches too: "stop drawing campsites"
@@ -2682,6 +2725,15 @@ export function MapScreen({
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
+  useEffect(() => {
+    if (shownBasemapId === basemapId) return;
+    const name = (id: string) =>
+      BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
+    notify(
+      basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
+      "info",
+    );
+  }, [shownBasemapId, basemapId, notify]);
 
   // Dropping a MARKER: a place of the system Marker type. The drop never
   // waits on a form — the place is written first and its verb sheet opens
@@ -3661,11 +3713,16 @@ export function MapScreen({
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
     // Every delivery, applied or not, is what says the sky is still there.
-    const noteFixArrived = (position: Location.LocationObject) => {
-      lastFix.current = {
-        atMs: position.timestamp,
-        accuracyM: position.coords.accuracy,
-      };
+    const noteFixArrived = (
+      position: Location.LocationObject,
+      cached = false,
+    ) => {
+      lastFix.current = newerFix(
+        lastFix.current,
+        cached
+          ? { atMs: position.timestamp, accuracyM: position.coords.accuracy }
+          : deliveredFix(position.coords.accuracy, Date.now()),
+      );
       noteGpsQuality();
     };
     // Displacement filter measured from the last fix we ACTED on — 5 m
@@ -3689,13 +3746,18 @@ export function MapScreen({
         () => null,
       );
       if (cancelled) return;
-      if (lastKnown) {
+      // Not when a live fix is already newer: a watcher restart (resume,
+      // tab change) must not drag the arrow back to the OS's older cache.
+      if (
+        lastKnown &&
+        (lastFix.current == null || lastFix.current.atMs <= lastKnown.timestamp)
+      ) {
         // Cached MEANS old, and how old is the whole question the arrow's
         // colour answers: this fix can be last week's drive to the trailhead,
         // and drawing it in the user's colour would be misleading. It goes
         // through the same rule as a live one, so an hours-old one arrives
         // already grey.
-        noteFixArrived(lastKnown);
+        noteFixArrived(lastKnown, true);
         // The readout gets it too, and for the same reason the marker does: a
         // chip showing two dashes until the first watch callback lands reads
         // as broken, and indoors that callback can be minutes away. A cached
@@ -4472,6 +4534,14 @@ export function MapScreen({
       onChange: setShowGauges,
     },
     {
+      key: "mgaGrid",
+      icon: "mgaGrid",
+      hue: theme.neutral,
+      title: MAP_OVERLAYS.copy.mgaGrid,
+      value: showMgaGrid,
+      onChange: setShowMgaGrid,
+    },
+    {
       key: "geoPdfs",
       icon: "geoPdf",
       hue: assetHue.geoPdf,
@@ -4911,9 +4981,12 @@ export function MapScreen({
               type="color-relief"
               id={`nsw-slope-${r.key}`}
               beforeId={groundBefore[`nsw-slope-${r.key}`]}
-              minzoom={r.layerMinZoom ?? 0}
+              minzoom={Math.max(r.layerMinZoom ?? 0, SLOPE_MIN_ZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               paint={{
+                "color-relief-opacity": zoomFadeIn(
+                  SLOPE_MIN_ZOOM,
+                ) as unknown as number,
                 "color-relief-color": slopeReliefColor(
                   slopeBands,
                 ) as ColorReliefColor,
@@ -5087,6 +5160,10 @@ export function MapScreen({
               }}
             />
           </GeoJSONSource>
+        ) : null}
+
+        {showMgaGrid && viewportBbox ? (
+          <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
         ) : null}
 
         {showGauges && gaugeFile ? (
@@ -5813,6 +5890,7 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}

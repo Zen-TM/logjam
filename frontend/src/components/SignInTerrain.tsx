@@ -104,7 +104,9 @@ uniform vec3 shade;
 void main() {
   vec2 px = vec2(gl_FragCoord.x, gl_FragCoord.y) / dpr;
   vec2 uv = (px - origin) / extent;
-  vec3 n = normalize(texture2D(normals, uv).xyz * 2.0 - 1.0);
+  vec3 n = texture2D(normals, uv).xyz * 2.0 - 1.0;
+  // Heights 1.5 times true: a normal (-dz/dx, -dz/dy, 1) scales in x and y.
+  n = normalize(vec3(n.xy * 1.5, n.z));
   // Calmer behind the card, at the left.
   float calm = mix(0.5, 1.15, smoothstep(0.1, 0.75, px.x / width));
   float t = (dot(n, light) - light.z) * calm * gain;

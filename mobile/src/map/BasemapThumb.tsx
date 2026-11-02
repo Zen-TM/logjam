@@ -80,11 +80,25 @@ const THUMBS: Partial<Record<BasemapId, { drawable: string; asset: number }>> =
 export const BASEMAP_THUMB_CREDIT =
   "Preview tiles: © OpenStreetMap contributors, OpenTopoMap and CyclOSM (CC BY-SA); © State of New South Wales (Spatial Services).";
 
-export function BasemapThumb({ basemapId }: { basemapId: BasemapId }) {
+export function BasemapThumb({
+  basemapId,
+  unavailable = false,
+}: {
+  basemapId: BasemapId;
+  /** The basemap's tile server is down: a warning where the sample would be. */
+  unavailable?: boolean;
+}) {
   const { assetHue } = useHues();
   const styles = useStyles();
 
   const thumb = THUMBS[basemapId];
+  if (unavailable) {
+    return (
+      <View style={[styles.tile, styles.glyphTile]}>
+        <Icon idea="warning" size={20} color={assetHue.region} />
+      </View>
+    );
+  }
   if (thumb === undefined) {
     return (
       <View style={[styles.tile, styles.glyphTile]}>

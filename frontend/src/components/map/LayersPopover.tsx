@@ -44,6 +44,11 @@ const countOf = (count: number, noun: string) =>
  * question about the map. Three tabs (Map, Terrain, Overlays); a row with more
  * inside it than a switch (the slope bands) opens a sub-view in place.
  */
+/** "Show river gauges", but "Show MGA grid": an acronym keeps its capitals. */
+function showLabel(title: string) {
+  return `Show ${/^[A-Z]{2}/.test(title) ? title : title[0].toLowerCase() + title.slice(1)}`;
+}
+
 export default function LayersPopover({
   open,
   onClose,
@@ -54,12 +59,16 @@ export default function LayersPopover({
   setShowWays,
   showGauges,
   setShowGauges,
+  showMgaGrid,
+  setShowMgaGrid,
   placeCount,
   wayCount,
   completedTopoJobs,
   baseLayers,
   activeLayerId,
   onActiveLayerChange,
+  unavailableBasemaps,
+  onBasemapHealth,
   terrainLayers,
   onTerrainLayerChange,
   slopeBands,
@@ -86,6 +95,8 @@ export default function LayersPopover({
   setShowWays: (v: boolean) => void;
   showGauges: boolean;
   setShowGauges: (v: boolean) => void;
+  showMgaGrid: boolean;
+  setShowMgaGrid: (v: boolean) => void;
   /** Every place drawn: the user's own and the ones shared with them. */
   placeCount: number;
   /** Null while the lines are not loaded (they load with their layer). */
@@ -94,6 +105,9 @@ export default function LayersPopover({
   baseLayers: readonly BaseLayer[];
   activeLayerId: string;
   onActiveLayerChange: (id: string) => void;
+  /** Basemaps whose tile server is down, and the swatch probe that tells. */
+  unavailableBasemaps?: ReadonlySet<string>;
+  onBasemapHealth?: (id: string, down: boolean) => void;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
   slopeBands: SlopeBand[];
@@ -142,6 +156,7 @@ export default function LayersPopover({
     showWays,
     terrainLayers.land,
     showGauges,
+    showMgaGrid,
   ].filter(Boolean).length;
 
   const close = () => {
@@ -162,6 +177,8 @@ export default function LayersPopover({
             : "Map layers"
       }
       className={classes.popover}
+      // Panning or pressing the map closes it; the Layers button toggles.
+      dismissOnOutsidePress
       // Both views carry their own × in the header.
       closeButton={false}
     >
@@ -230,6 +247,8 @@ export default function LayersPopover({
                     activeLayerId={activeLayerId}
                     onChange={onActiveLayerChange}
                     mapView={mapView}
+                    unavailable={unavailableBasemaps}
+                    onHealth={onBasemapHealth}
                   />
                 </div>
               ),
@@ -299,6 +318,13 @@ export default function LayersPopover({
                     checked={showGauges}
                     onToggle={setShowGauges}
                   />
+                  <OverlayRow
+                    icon="mgaGrid"
+                    hue="var(--color-neutral)"
+                    title={MAP_OVERLAYS.copy.mgaGrid}
+                    checked={showMgaGrid}
+                    onToggle={setShowMgaGrid}
+                  />
                   {/* The list ends with the way to add to it: the same
                       import the Ways and Logs lists offer. */}
                   <Row
@@ -366,7 +392,7 @@ export function TerrainPane({
               // the basemap that can.
               checked={layers[key] && !printed && !shadowed}
               onChange={(on) => onChange(key, on)}
-              label={`Show ${title.toLowerCase()}`}
+              label={showLabel(title)}
               disabled={printed || shadowed}
             />
           </>
@@ -554,7 +580,7 @@ function OverlayRow({
           <Toggle
             checked={checked}
             onChange={onToggle}
-            label={`Show ${title.toLowerCase()}`}
+            label={showLabel(title)}
           />
         </>
       }

@@ -1,10 +1,24 @@
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
+import { BASEMAP_CATALOG, BASEMAP_UNAVAILABLE_LABEL } from "@logjam/shared";
+import { Icon } from "../../ui/Icon";
 import { PROTOMAPS_SWATCH } from "../../basemapSwatch";
 import { nextEnabledIndex } from "../../ui/rovingFocus";
 import { previewUrlFor, type TileLayer } from "../sidebar/panels/tilePreview";
 import classes from "./BasemapGallery.module.css";
 
 export type BaseLayer = TileLayer & { id: string; name: string };
+
+// A vector basemap has no XYZ tile, so its swatch is the tile of the raster
+// rendering of the same OpenStreetMap cartography: it tracks the view like the
+// others for one image, where a second WebGL map per swatch would not. It is
+// a lookalike, not the style itself, so a failed load only falls back to the
+// drawn scrap below and never marks the basemap down (that tile is OSM's
+// server, not our archive).
+const OSM_LOOKALIKE = (() => {
+  const osm = BASEMAP_CATALOG.find((entry) => entry.id === "osm");
+  if (!osm) throw new Error("osm missing from BASEMAP_CATALOG");
+  return { tiles: [osm.urlTemplate], maxzoom: osm.displayMaxZoom };
+})();
 
 /** A drawn scrap of the vector basemap's own palette — land, a creek, a road
  *  and a lane — because a vector basemap has no XYZ tile to thumbnail. */
@@ -43,6 +57,8 @@ export default function BasemapGallery({
   activeLayerId,
   onChange,
   mapView,
+  unavailable,
+  onHealth,
   oneRow = false,
 }: {
   label: string;
@@ -50,8 +66,14 @@ export default function BasemapGallery({
   activeLayerId: string;
   onChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
+  /** Basemaps whose tile server is down: drawn as such and not selectable. */
+  unavailable?: ReadonlySet<string>;
+  /** A swatch tile loaded (`false`) or failed (`true`). The gallery remounts
+   *  when the panel opens, so a recovered server is found on the next open. */
+  onHealth?: (id: string, down: boolean) => void;
   oneRow?: boolean;
 }) {
+  const [lookalikeFailed, setLookalikeFailed] = useState(false);
   const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
 
@@ -60,7 +82,7 @@ export default function BasemapGallery({
       (tile) => tile === document.activeElement,
     );
     const to = nextEnabledIndex(
-      layers.map(() => false),
+      layers.map((layer) => unavailable?.has(layer.id) ?? false),
       from,
       event.key,
     );
@@ -80,10 +102,15 @@ export default function BasemapGallery({
     >
       {layers.map((layer, index) => {
         const active = layer.id === activeLayerId;
-        const thumbnail =
-          mapView && layer.tiles.length > 0
-            ? previewUrlFor(layer, mapView)
-            : null;
+        const vector = layer.tiles.length === 0;
+        const down = unavailable?.has(layer.id) ?? false;
+        const thumbnail = !mapView
+          ? null
+          : vector
+            ? lookalikeFailed
+              ? null
+              : previewUrlFor(OSM_LOOKALIKE, mapView)
+            : previewUrlFor(layer, mapView);
         return (
           <button
             key={layer.id}
@@ -95,17 +122,29 @@ export default function BasemapGallery({
             aria-checked={active}
             tabIndex={index === (activeIndex < 0 ? 0 : activeIndex) ? 0 : -1}
             className={classes.tile}
+            disabled={down}
             onClick={() => onChange(layer.id)}
           >
             {thumbnail ? (
+              // Kept while down: its load is the probe that clears the state.
               <img
                 src={thumbnail}
                 alt=""
-                className={classes.thumb}
+                className={`${classes.thumb} ${down ? classes.hidden : ""}`}
                 draggable={false}
+                onLoad={vector ? undefined : () => onHealth?.(layer.id, false)}
+                onError={() =>
+                  vector ? setLookalikeFailed(true) : onHealth?.(layer.id, true)
+                }
               />
             ) : (
               <VectorSwatch />
+            )}
+            {down && (
+              <span className={classes.down}>
+                <Icon idea="warning" size={18} />
+                {BASEMAP_UNAVAILABLE_LABEL}
+              </span>
             )}
             <span className={classes.caption}>{layer.name}</span>
           </button>

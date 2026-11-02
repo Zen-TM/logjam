@@ -183,6 +183,9 @@ renumber.
   a shape. A selected row is an accent edge and a check, not a tint.
 - **One hue means "shared" and nothing else**: a shared place is your own
   mark with a ring.
+- **A visited place wears the same ring in `VISITED_PLACE_COLOR`**, also
+  reserved. A place is never both visited and shared (`placeStatus`), so a pin
+  has at most one ring. Guard: `placeTypes.test.ts`.
 - **Controls over a photo are black and white on a scrim**, not theme
   colours: words and glyphs on a `SCRIM` are `ON_SCRIM`.
 

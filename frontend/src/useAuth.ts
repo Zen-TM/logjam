@@ -9,6 +9,7 @@ import {
 import { messageFromError } from "./errors/messageFromError";
 import { clearTileCache } from "./geoPdf/cache";
 import { clearTripDraft } from "./tripDraft";
+import { clearRecentSearches } from "./recentSearches";
 import { friendInvite, planInvite } from "./pendingInvite";
 import {
   completeSignInFromUrl,
@@ -37,6 +38,7 @@ async function endSession() {
   // rules, root AGENTS.md). Cleared before the network call so a failure
   // can't strand it.
   clearTripDraft();
+  clearRecentSearches();
   // An invite waiting in this tab was for whoever opened its link; the next
   // account to sign in here must not be handed it.
   friendInvite.clear();

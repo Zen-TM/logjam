@@ -14,6 +14,7 @@ import {
   Menu,
   NorthNeedle,
   useEscape,
+  useOutsidePress,
   type MenuEntry,
   type Glyph,
 } from "../../ui";
@@ -57,6 +58,7 @@ export default function MapChrome({
   notices,
   layersButton,
   tools,
+  toolsDisabled = false,
 }: {
   /** Null until the map has loaded. */
   map: maplibregl.Map | null;
@@ -67,12 +69,15 @@ export default function MapChrome({
   notices?: ReactNode;
   layersButton?: ReactNode;
   tools: readonly MapTool[];
+  /** While an area is being selected: a second tool can't start over it. */
+  toolsDisabled?: boolean;
 }) {
   const toast = useToast();
   const [bearing, setBearing] = useState(0);
   const [zoom, setZoom] = useState({ atMin: false, atMax: false });
   const [locate, setLocate] = useState<LocateState>("off");
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpenState, setToolsOpen] = useState(false);
+  const toolsOpen = toolsOpenState && !toolsDisabled;
   const trayId = useId();
   // The tray AND its button: opening the tray leaves focus on the button, so
   // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
@@ -126,6 +131,8 @@ export default function MapChrome({
     setToolsOpen(false);
     toolsButtonRef.current?.focus();
   });
+
+  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false));
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);
@@ -203,6 +210,7 @@ export default function MapChrome({
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
+            disabled={toolsDisabled}
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
