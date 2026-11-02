@@ -2,7 +2,7 @@ import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   ACCOUNT,
   contractSectionKeys,
-  formatCredits,
+  formatCreditsOf,
   SIGN_OUT_EVERYWHERE_BODY,
   SIGN_OUT_EVERYWHERE_FAILED,
   type SectionKeysOn,
@@ -187,8 +187,10 @@ function AccountPanel({
             )}
           />
           <p className={classes.meterLabel}>
-            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
-            {formatCredits(currentUser.monthlyComputeCredits)}
+            {formatCreditsOf(
+              currentUser.monthlyComputeUsage,
+              currentUser.monthlyComputeCredits,
+            )}
             {creditsResetLabel && (
               <span className={classes.meterHint}>
                 {" "}

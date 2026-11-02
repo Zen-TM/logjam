@@ -119,3 +119,19 @@ export function formatCredits(credits: number): string {
   const hours = rounded / 60;
   return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} credit-hours`;
 }
+
+/**
+ * "used of quota" in ONE unit, picked from the quota. Formatting each side on
+ * its own printed "76 credits of 20 credit-hours" once usage was under the hour
+ * threshold and the allowance was over it.
+ */
+export function formatCreditsOf(used: number, quota: number): string {
+  const rounded = Math.max(0, Math.round(used));
+  const roundedQuota = Math.max(0, Math.round(quota));
+  if (roundedQuota >= 90) {
+    const hours = (n: number) =>
+      n / 60 >= 10 ? String(Math.round(n / 60)) : (n / 60).toFixed(1);
+    return `${hours(rounded)} of ${hours(roundedQuota)} credit-hours`;
+  }
+  return `${rounded} of ${roundedQuota} credit${roundedQuota === 1 ? "" : "s"}`;
+}

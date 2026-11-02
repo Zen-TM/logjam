@@ -22,6 +22,7 @@ import {
   ElvisZipError,
   estimateElvisTileCount,
   formatCredits,
+  formatCreditsOf,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
@@ -682,8 +683,8 @@ function ZipSummary({
       ? [
           "Credits",
           jobCredits !== null
-            ? `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · about ${formatCredits(jobCredits)} for this one`
-            : `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · we can't tell yet what this one will cost`,
+            ? `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCredits(jobCredits)} for this one`
+            : `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · we can't tell yet what this one will cost`,
         ]
       : null,
   ];

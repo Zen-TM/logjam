@@ -2559,7 +2559,7 @@ async function main() {
         "",
         "## If something looks wrong",
         "",
-        "1. Pull to refresh.",
+        "1. Pull down to refresh on Logjam GPS, or reload the page on Logjam Web.",
         "2. Sign out and in again.",
         "",
         "### On Logjam GPS",
