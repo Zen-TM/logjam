@@ -6,6 +6,10 @@
 // out is offered: a fresh install can go on without an account, while a guest
 // linking one (or a rejected session) goes back to where they came from.
 //
+// Under a Cognito issuer the screen signs in, signs up and resets a password
+// itself (`AccountForms`, ADR 0045); under any other issuer it is one button to
+// the provider's page.
+//
 // Load-bearing rather than decorative:
 //
 //  1. **The storage warning.** Guest data is on this phone and nowhere else —
@@ -26,6 +30,7 @@ import { Image, ScrollView, Text, View } from "react-native";
 import type { useAuth } from "../auth/useAuth";
 import { radius, spacing, makeStyles, muted } from "../theme";
 import { Button, ErrorBanner, FormStack } from "../ui";
+import { AccountForms } from "./AccountForms";
 
 type Auth = ReturnType<typeof useAuth>;
 
@@ -42,7 +47,10 @@ export function LandingScreen({ auth }: { auth: Auth }) {
 
   return (
     <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.mark}>
           <Image
             source={require("../../assets/logo.png")}
@@ -55,7 +63,13 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           </Text>
         </View>
 
-        {mode === "signIn" ? (
+        {mode === "signIn" && auth.ownForms ? (
+          <AccountForms
+            auth={auth}
+            offersGuest={offersGuest}
+            onExplainGuest={() => setMode("guestExplainer")}
+          />
+        ) : mode === "signIn" ? (
           <SignInPanel
             auth={auth}
             offersGuest={offersGuest}

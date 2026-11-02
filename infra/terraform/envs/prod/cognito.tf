@@ -5,9 +5,9 @@
 # subtle attribute drift from forcing pool replacement. The pool already
 # carries deletion_protection = ACTIVE server-side too.
 #
-# Logjam GPS signs in through Managed Login (the user pool domain and branding
-# below) with OIDC code + PKCE. So can Logjam Web, whose own forms use
-# ALLOW_USER_AUTH (docs/decisions/0045).
+# Both clients' own forms sign in with ALLOW_USER_AUTH. Managed Login (the user
+# pool domain and branding below), with OIDC code + PKCE, is their fallback
+# (docs/decisions/0045).
 
 resource "aws_cognito_user_pool" "main" {
   auto_verified_attributes = ["email"]

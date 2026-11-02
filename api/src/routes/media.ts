@@ -169,7 +169,7 @@ async function assertPlaceTrackSlotFree(
  * persists something the rename endpoint would then refuse, stranding the file
  * at a name its own edit screen cannot save.
  */
-function parseMediaDisplayName(value: unknown): string | null {
+export function parseMediaDisplayName(value: unknown): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string")
     throw malformed("displayName must be a string");
@@ -542,8 +542,10 @@ router.post(
           ).map((s) => s.placeId)
         : [],
     );
-    const visible = rows.filter((m) => {
+    const visible = rows.filter((m): m is typeof m & { ownerId: string } => {
       if (m.ownerId === user.id) return true;
+      // A plan's file (null owner) is nobody's, so never served here.
+      if (m.ownerId === null) return false;
       const placeId = placeIdOfMedia(m);
       return placeId !== null && sharedPlaceIds.has(placeId);
     });

@@ -36,6 +36,7 @@ import {
   notificationDeleteConfirm,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
   notificationVerb,
 } from "@logjam/shared";
 
@@ -82,6 +83,7 @@ export function NotificationOptionsSheet({
 
   const label = notificationLabel(notification);
   const openable = notificationPlaceId(notification) !== null;
+  const plan = notificationPlanTarget(notification) !== null;
   const destination = notificationDestination(notification);
 
   const act = (run: () => void) => {
@@ -120,6 +122,13 @@ export function NotificationOptionsSheet({
           <Row
             icon={notificationVerb("open").icon}
             title={notificationVerb("open").label}
+            onPress={() => act(() => onOpen(notification))}
+          />
+        ) : null}
+        {plan ? (
+          <Row
+            icon={notificationVerb("openPlan").icon}
+            title={notificationVerb("openPlan").label}
             onPress={() => act(() => onOpen(notification))}
           />
         ) : null}

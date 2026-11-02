@@ -58,7 +58,6 @@ import {
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
-  friendSearchHint,
 } from "@logjam/shared";
 
 import {
@@ -71,7 +70,6 @@ import {
   getLeaderboard,
   removeFriend,
   revokeFriendInvites,
-  searchUsers,
   sendFriendRequest,
   type Friend,
   type FriendRequest,
@@ -102,13 +100,11 @@ import {
   Row,
   ChipRail,
   StatusPill,
-  TextField,
   Toast,
   type ChipOption,
   type ToastMessage,
 } from "../ui";
-
-const SEARCH_MIN_CHARS = 3;
+import { UserSearch } from "./UserSearch";
 
 type Bucket = FriendsBucket;
 
@@ -125,10 +121,12 @@ type FriendItem =
 
 export function FriendsScreen({
   onBack,
+  backLabel,
   onOpenShares,
   onOpenLeaderboard,
 }: {
   onBack: () => void;
+  backLabel: string;
   /** Push the leaderboard, for someone who has joined it. */
   onOpenLeaderboard: () => void;
   /**
@@ -320,7 +318,7 @@ export function FriendsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow={FRIENDS.title} title={FRIENDS.title} onBack={onBack} />
+        <Hero title={FRIENDS.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -356,9 +354,9 @@ export function FriendsScreen({
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
       <Hero
-        eyebrow={FRIENDS.title}
         title={friendsHeroTitle(requests.length, friends.length)}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <View style={styles.heroActions}>
             {/* Nothing at all until the user joins: Settings is the only way in. */}
@@ -584,60 +582,16 @@ function AddFriendBody({
   existingIds: string[];
   onSent: () => void;
 }) {
-  const theme = useTheme();
   const styles = useStyles();
 
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<UserSearchResult[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
-  const [searching, setSearching] = useState(false);
   const [sentIds, setSentIds] = useState<string[]>([]);
   // Made a friend by sending (they had already asked), shown until the
   // reloaded list says so itself.
   const [friendedIds, setFriendedIds] = useState<string[]>([]);
-  // The search field's own problem (§8, rule 1).
-  const [searchError, setSearchError] = useState<string | null>(null);
   // Not this field's problem — it's the tapped "Add" row's — so it goes in a
   // banner rather than under the search box (§8, rule 2). The sheet stays open
   // on a failed send, so this is a banner, never the toast a closed form gets.
   const [sendError, setSendError] = useState<string | null>(null);
-
-  const changeQuery = (next: string) => {
-    setQuery(next);
-    // A fresh search supersedes whichever row's send just failed.
-    setSendError(null);
-    setSearchError(null);
-    if (next.trim().length < SEARCH_MIN_CHARS) setResults([]);
-    else setSearching(true);
-  };
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < SEARCH_MIN_CHARS) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      searchUsers(trimmed)
-        .then(({ data, total: all }) => {
-          if (!cancelled) {
-            setResults(data);
-            setTotal(all);
-            setSearchError(null);
-          }
-        })
-        .catch((err: unknown) => {
-          console.error(err);
-          if (!cancelled)
-            setSearchError(messageFromError(err, copy.searchFailed));
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query]);
 
   const send = useCallback(
     async (user: UserSearchResult) => {
@@ -715,58 +669,28 @@ function AddFriendBody({
     }
   }, []);
 
-  const trimmed = query.trim();
   return (
     <View style={styles.addBody}>
-      <TextField
+      <UserSearch
         label={copy.searchField}
-        value={query}
-        onChangeText={changeQuery}
-        autoCapitalize="none"
-        error={searchError}
+        failed={copy.searchFailed}
+        // A fresh search supersedes whichever row's send just failed.
+        onChange={() => setSendError(null)}
+        right={(user) =>
+          existingIds.includes(user.id) || friendedIds.includes(user.id) ? (
+            <StatusPill label={copy.pillFriend} tone="muted" />
+          ) : sentIds.includes(user.id) ? (
+            <StatusPill label={copy.pillRequested} tone="outline" />
+          ) : (
+            <Button
+              label={copy.add}
+              variant="outlineAccent"
+              compact
+              onPress={() => void send(user)}
+            />
+          )
+        }
       />
-      {searching ? (
-        <ActivityIndicator color={theme.accent} style={styles.spinner} />
-      ) : null}
-      {!searching &&
-      trimmed.length >= SEARCH_MIN_CHARS &&
-      results.length === 0 ? (
-        <Text style={styles.hint}>{copy.searchEmpty}</Text>
-      ) : null}
-      {trimmed.length > 0 && trimmed.length < SEARCH_MIN_CHARS ? (
-        <Text style={styles.hint}>{copy.searchHint}</Text>
-      ) : null}
-      {results.map((user) => {
-        const alreadyFriend =
-          existingIds.includes(user.id) || friendedIds.includes(user.id);
-        const sent = sentIds.includes(user.id);
-        return (
-          <Row
-            key={user.id}
-            icon="account"
-            title={user.username}
-            right={
-              alreadyFriend ? (
-                <StatusPill label={copy.pillFriend} tone="muted" />
-              ) : sent ? (
-                <StatusPill label={copy.pillRequested} tone="outline" />
-              ) : (
-                <Button
-                  label={copy.add}
-                  variant="outlineAccent"
-                  compact
-                  onPress={() => void send(user)}
-                />
-              )
-            }
-          />
-        );
-      })}
-      {friendSearchHint(results.length, total) ? (
-        <Text style={styles.hint}>
-          {friendSearchHint(results.length, total)}
-        </Text>
-      ) : null}
       <Text style={styles.hint}>{copy.inviteHint}</Text>
       <Button
         label={copy.inviteShare}

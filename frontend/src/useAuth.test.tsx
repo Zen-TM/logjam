@@ -210,6 +210,16 @@ describe("signOut", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  // Mutation: drop friendInvite.clear() or planInvite.clear() from endSession.
+  it("clears the pending friend and plan invites", async () => {
+    await signedIn();
+    sessionStorage.setItem("pendingFriendInvite", "friend-token");
+    sessionStorage.setItem("pendingPlanInvite", "plan-token");
+    await act(() => signOut());
+    expect(sessionStorage.getItem("pendingFriendInvite")).toBeNull();
+    expect(sessionStorage.getItem("pendingPlanInvite")).toBeNull();
+  });
+
   it("reloads when the provider cannot be reached, so a corrupt session is still escapable", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     oidc.endProviderSession.mockRejectedValue(new Error("boom"));

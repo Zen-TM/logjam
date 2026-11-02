@@ -40,6 +40,12 @@ export const OWNER_PRIVATE_PLACE_FIELDS: Record<string, string> = {
   // how and when the owner bulk-loaded their data.
   importKey: "import idempotency key — the owner's filing, not the record",
   importBatchId: "groups one import run of the owner's",
+  // Plans. Null on any place a sharee can see, since only an owned
+  // place is shared; withheld anyway, as addedById names another user.
+  planId: "the plan holding the place, for plan members only",
+  addedById: "the plan member who added the place",
+  typeName: "a plan place's custom type name, for plan members only",
+  typeIconKey: "a plan place's custom type icon, for plan members only",
 };
 
 /**

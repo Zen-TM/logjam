@@ -43,6 +43,8 @@ vi.mock("../map/connectivity", () => ({ isReachableNow: () => reachable() }));
 
 const {
   SESSION_TIMEOUT_MS,
+  accountCalls,
+  signInWithPassword,
   SessionTimeoutError,
   assertCanSignOutEverywhere,
   endProviderSession,
@@ -359,6 +361,138 @@ describe("signInWithBrowser", () => {
     await expect(signInWithBrowser()).rejects.toThrow("access_denied");
     expect(stored()).toBeNull();
   });
+});
+
+describe("signInWithPassword", () => {
+  const COGNITO = "https://cognito-idp.ap-southeast-2.amazonaws.com/";
+  const signedIn = (extra: Record<string, unknown> = {}) =>
+    answer(200, {
+      AuthenticationResult: {
+        IdToken: FRESH(),
+        AccessToken: "a2",
+        RefreshToken: "r2",
+        ExpiresIn: 3600,
+      },
+      ...extra,
+    });
+  const discovery = () =>
+    answer(200, {
+      authorization_endpoint: "https://auth.test/oauth2/authorize",
+      token_endpoint: TOKEN_ENDPOINT,
+      revocation_endpoint: "https://auth.test/oauth2/revoke",
+      end_session_endpoint: "https://auth.test/logout",
+    });
+  function provider(cognito: () => unknown) {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("openid-configuration") ? discovery() : cognito(),
+    );
+  }
+
+  // Mutation: take the endpoints from anywhere but discovery, or drop the
+  // refresh token: a refresh, a sign-out and a cold start then break for a
+  // password sign-in only.
+  it("stores the shape the browser stores, only when committed", async () => {
+    provider(() => signedIn());
+    const result = await signInWithPassword("a@example.com", "pw");
+    if (result.type !== "success") throw new Error("expected success");
+    expect(stored()).toBeNull();
+    await result.commit();
+    expect(stored()).toEqual({
+      idToken: expect.any(String),
+      accessToken: "a2",
+      refreshToken: "r2",
+      tokenEndpoint: TOKEN_ENDPOINT,
+      revocationEndpoint: "https://auth.test/oauth2/revoke",
+    });
+    // And that record is a session: it works with no network, then refreshes.
+    fetchMock.mockReset().mockRejectedValue(new TypeError("offline"));
+    expect((await getSession())?.accessToken).toBe("a2");
+  });
+
+  // Mutation: store `endSessionEndpoint` here, as `signInWithBrowser` does.
+  it("signs out without opening the browser, having left no session in it", async () => {
+    provider(() => signedIn());
+    const result = await signInWithPassword("a@example.com", "pw");
+    if (result.type !== "success") throw new Error("expected success");
+    await result.commit();
+    await endProviderSession(await signOutLocally());
+    expect(openAuthSession).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://auth.test/oauth2/revoke",
+      expect.anything(),
+    );
+  });
+
+  it("signs in against Cognito's API with USER_AUTH", async () => {
+    provider(() => signedIn());
+    await signInWithPassword("a@example.com", "pw");
+    const call = fetchMock.mock.calls.find(([u]) => u === COGNITO)!;
+    expect(call[1].headers["X-Amz-Target"]).toBe(
+      "AWSCognitoIdentityProviderService.InitiateAuth",
+    );
+    expect(JSON.parse(call[1].body)).toMatchObject({
+      ClientId: "client",
+      AuthFlow: "USER_AUTH",
+      AuthParameters: { USERNAME: "a@example.com", PASSWORD: "pw" },
+    });
+  });
+
+  // Mutation: return `success` without checking for AuthenticationResult.
+  it("is `provider` when Cognito asks for more than a password, storing nothing", async () => {
+    provider(() => answer(200, { ChallengeName: "NEW_PASSWORD_REQUIRED" }));
+    await expect(signInWithPassword("a@example.com", "pw")).resolves.toEqual({
+      type: "provider",
+    });
+    expect(stored()).toBeNull();
+  });
+
+  it("throws Cognito's refusal under the name Cognito gave it", async () => {
+    provider(() =>
+      answer(400, { __type: "NotAuthorizedException", message: "Incorrect" }),
+    );
+    await expect(
+      signInWithPassword("a@example.com", "pw"),
+    ).rejects.toMatchObject({ name: "NotAuthorizedException" });
+    expect(stored()).toBeNull();
+  });
+
+  // Mutation: send the password before discovery has answered.
+  it("never sends the password when discovery fails", async () => {
+    fetchMock.mockResolvedValue(answer(503, {}));
+    await expect(signInWithPassword("a@example.com", "pw")).rejects.toThrow();
+    expect(fetchMock.mock.calls.every(([u]) => u !== COGNITO)).toBe(true);
+  });
+
+  // Mutation: call passwordSignIn or an account call without `within`.
+  it.each([
+    ["sign-in", () => signInWithPassword("a@example.com", "pw")],
+    [
+      "sign-up",
+      () => accountCalls.signUp({ email: "a@b.co", password: "pw", name: "n" }),
+    ],
+    ["confirm sign-up", () => accountCalls.confirmSignUp("a@b.co", "1")],
+    ["resend", () => accountCalls.resendSignUpCode("a@b.co")],
+    ["forgot password", () => accountCalls.forgotPassword("a@b.co")],
+    ["reset", () => accountCalls.confirmForgotPassword("a@b.co", "1", "pw")],
+  ])(
+    "settles within SESSION_TIMEOUT_MS when Cognito's %s never answers",
+    async (_name, run) => {
+      vi.useFakeTimers();
+      fetchMock.mockImplementation((url: string) =>
+        url.endsWith("openid-configuration")
+          ? Promise.resolve(discovery())
+          : new Promise(() => {}),
+      );
+      const done = run();
+      const outcome = expect(done).rejects.toBeInstanceOf(SessionTimeoutError);
+      await vi.advanceTimersByTimeAsync(SESSION_TIMEOUT_MS + 1);
+      await outcome;
+      // A timeout is not a rejection of the session: the fallback may follow.
+      expect(classifySessionError(await done.catch((e: unknown) => e))).toBe(
+        "transient",
+      );
+    },
+  );
 });
 
 describe("sign out", () => {
