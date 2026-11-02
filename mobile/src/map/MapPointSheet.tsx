@@ -34,6 +34,14 @@ import { WeatherView } from "../weather/WeatherView";
 /** A bare lat/lng, as the map hands one back from a tap. */
 export type MapPoint = MapPointCoord;
 
+/** The viewer's own fix, when the point is it: the platform's own figures. */
+export type OwnFix = {
+  atMs: number;
+  accuracyM: number | null;
+  /** What the receiver reported; the terrain's height is asked for first. */
+  altitudeM: number | null;
+};
+
 export function MapPointSheet({
   point,
   userCoord,
@@ -43,8 +51,12 @@ export function MapPointSheet({
   onDropMarker,
   onInfo,
   allowNetwork,
+  fix,
 }: {
   point: MapPoint | null;
+  /** Set when the point is the viewer's own position (a press on the arrow):
+   *  then the sheet is about the fix, and offers nothing to do with it. */
+  fix?: OwnFix | null;
   /** The land class drawn at the point, or null: the Land overlay off or empty there. */
   land: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
@@ -69,7 +81,13 @@ export function MapPointSheet({
     <BottomSheet
       visible={point !== null}
       onClose={weatherOpen ? closeWeather : onClose}
-      title={weatherOpen ? WEATHER.title : MAP_POINT.title}
+      title={
+        weatherOpen
+          ? WEATHER.title
+          : fix
+            ? MAP_POINT.copy.fixTitle
+            : MAP_POINT.title
+      }
       onBack={weatherOpen ? closeWeather : undefined}
     >
       {/* Mounted only with a point, so the elevation request inside is tied to
@@ -87,6 +105,7 @@ export function MapPointSheet({
           onDropMarker={onDropMarker}
           onInfo={onInfo}
           allowNetwork={allowNetwork}
+          fix={fix ?? null}
           weatherOpen={weatherOpen}
           onShowWeather={() => setWeatherPoint(point)}
         />
@@ -104,6 +123,7 @@ function PointDetail({
   onDropMarker,
   onInfo,
   allowNetwork = true,
+  fix,
   weatherOpen,
   onShowWeather,
 }: {
@@ -115,10 +135,13 @@ function PointDetail({
   onDropMarker: (point: MapPoint) => void;
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
+  fix: OwnFix | null;
   weatherOpen: boolean;
   onShowWeather: () => void;
 }) {
   const styles = useStyles();
+  // The sheet is mounted per point, so this is when the fix was asked about.
+  const [openedAt] = useState(() => Date.now());
 
   // The elevation endpoint profiles a LINE, and the shortest legal one is two
   // points (MIN_ROUTE_POINTS). A degenerate line would divide by zero in
@@ -136,7 +159,10 @@ function PointDetail({
   const { profile, loading } = useElevationProfile([profilePoints], {
     allowNetwork,
   });
-  const elevationM = profile?.samples[0]?.elevationM ?? null;
+  // Terrain first, as for any point; the receiver's own height when there is
+  // no signal to ask with, which is when a fix is wanted most.
+  const elevationM =
+    profile?.samples[0]?.elevationM ?? (fix ? fix.altitudeM : null);
 
   // Null until known, and null for good where only the coarse worldwide DEM
   // has heights: the figure is then simply absent, never a guess.
@@ -178,11 +204,22 @@ function PointDetail({
           ? { state: "checking" }
           : // Public tiles, so a guest with signal gets a height like anyone.
             { state: "unavailable" },
-    from: userCoord
-      ? { latitude: userCoord[1], longitude: userCoord[0] }
-      : null,
-    slopeDegrees: slopeDeg,
+    // The fix is where the viewer is: a distance from itself would read 0 m.
+    from:
+      userCoord && !fix
+        ? { latitude: userCoord[1], longitude: userCoord[0] }
+        : null,
+    slopeDegrees: fix ? null : slopeDeg,
     land,
+    ...(fix
+      ? {
+          fix: {
+            atMs: fix.atMs,
+            accuracyM: fix.accuracyM,
+            nowMs: openedAt,
+          },
+        }
+      : {}),
   }).map((fact) => ({
     label: fact.label,
     value: fact.value,
@@ -197,6 +234,13 @@ function PointDetail({
   };
 
   if (weatherOpen) return <WeatherView weather={weather} />;
+
+  if (fix)
+    return (
+      <View style={styles.body}>
+        <StatGrid stats={stats} />
+      </View>
+    );
 
   return (
     <View style={styles.body}>

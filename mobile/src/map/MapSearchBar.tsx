@@ -59,6 +59,7 @@ import {
   searchLocationsLabel,
   searchPlaces,
   type GeocodeResult,
+  MAP_SEARCH_PLACEHOLDER,
 } from "@logjam/shared";
 
 import {
@@ -382,7 +383,7 @@ export function MapSearchBar({
               setQuery(text);
               if (!text.trim()) onSearchPin(searchPinAfter("clear"));
             }}
-            placeholder="Search for a place…"
+            placeholder={MAP_SEARCH_PLACEHOLDER}
             placeholderTextColor={theme.textMuted}
             accessibilityLabel="Search for a place to centre the map"
             autoCorrect={false}

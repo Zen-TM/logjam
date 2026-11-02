@@ -1190,7 +1190,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='dialog'][aria-label='Slope bands']");
   });
 
-  test("What is here?: asked by a right-click, drawn at the point", async ({
+  test("What goes here?: offered by a right-click; What is here? by Enter", async ({
     page,
   }) => {
     await openApp(page);
@@ -1199,31 +1199,38 @@ test.describe("desktop", () => {
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const canvas = page.locator("canvas.maplibregl-canvas");
     const box = (await canvas.boundingBox())!;
-    // A right-click asks wherever it lands, so a seeded pin under the pointer
+    // A right-click offers wherever it lands, so a seeded pin under the pointer
     // cannot swallow the press.
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
       button: "right",
     });
-    const panel = page.getByRole("dialog", { name: "This point" });
-    await expect(panel).toBeVisible();
+    const hold = page.getByRole("dialog", { name: "What goes here?" });
+    await expect(hold).toBeVisible();
     await expect(
-      panel.getByRole("button", { name: "Add a place here" }),
+      hold.getByRole("button", { name: "Add a place here" }),
     ).toBeVisible();
     await expect(
-      panel.getByRole("button", { name: "Copy coordinates" }),
+      hold.getByRole("button", { name: "Measure from here" }),
     ).toBeVisible();
-    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
+    await expectNoViolations(
+      page,
+      "[role='dialog'][aria-label='What goes here?']",
+    );
 
     // Escape closes it, takes the dot with it and gives focus back to the map.
     await page.keyboard.press("Escape");
-    await expect(panel).toHaveCount(0);
+    await expect(hold).toHaveCount(0);
     await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
     await expect(canvas).toBeFocused();
 
     // Reachable without a pointer: Enter on the focused map asks about the
     // middle of what is visible, and Tab walks the panel's own controls.
+    const panel = page.getByRole("dialog", { name: "This point" });
     await page.keyboard.press("Enter");
     await expect(panel).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Copy coordinates" }),
+    ).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
   });
@@ -1282,7 +1289,7 @@ test.describe("desktop", () => {
       button: "right",
     });
     await page
-      .getByRole("dialog", { name: "This point" })
+      .getByRole("dialog", { name: "What goes here?" })
       .getByRole("button", { name: "Measure from here" })
       .click();
     await expect(

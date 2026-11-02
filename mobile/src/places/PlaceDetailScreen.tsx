@@ -396,7 +396,11 @@ export function PlaceDetailScreen({
     ),
 
     navigate: () => (
-      <Row icon="navigateTo" title={copy.openInMaps} onPress={openInMapsApp} />
+      <Row
+        icon="openExternal"
+        title={copy.openInMaps}
+        onPress={openInMapsApp}
+      />
     ),
 
     weather: () => <PlaceWeatherSection place={place} />,

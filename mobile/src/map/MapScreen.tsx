@@ -101,7 +101,6 @@ import {
   type TerrainSwitchKey,
   nswContourStyle,
   MAP_INK,
-  MAP_MEASURE,
   TRIP_PLAN_PAGE,
   planRouteNotAdded,
   type SharpenedArea,
@@ -280,7 +279,6 @@ import {
   Icon,
   MapBanner,
   Notice,
-  Row,
   TextField,
   Toast,
   type ToastMessage,
@@ -288,7 +286,8 @@ import {
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
-import { MapPointSheet, type MapPoint } from "./MapPointSheet";
+import { MapHoldSheet } from "./MapHoldSheet";
+import { MapPointSheet, type MapPoint, type OwnFix } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
 import { MgaGridLayer } from "./MgaGridLayer";
@@ -974,6 +973,9 @@ export function MapScreen({
   // Press-and-hold target, and the point handed to the place form once that
   // sheet has actually closed (never two sheets at once — DESIGN.md).
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
+  /** Set with `tappedPoint` when the press landed on the location arrow: the
+   *  sheet is then about the fix itself. */
+  const [tappedFix, setTappedFix] = useState<OwnFix | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
   /** The pin for a searched location: gone at the next map press (searchPinAfter). */
@@ -1385,6 +1387,9 @@ export function MapScreen({
   // Latest fix, in a ref as well as in state: entering a follow mode has to
   // recentre NOW, from the sensor callback's own value, not on the next render.
   const latestFix = useRef<[number, number] | null>(null);
+  /** The freshest delivery as the platform gave it: what a press on the arrow
+   *  reads, because the arrow itself only moves every 5 m. */
+  const lastPosition = useRef<Location.LocationObject | null>(null);
   // The heading chase (heading.ts). Samples go in from the sensor callback, the
   // display comes out of a fixed-rate ticker; both live in refs because both
   // run outside React's render cycle.
@@ -2243,6 +2248,7 @@ export function MapScreen({
         void addToolPoint(lon, lat);
         return;
       }
+      setTappedFix(null);
       // A tap is not a pan, so it does not stop follow mode — looking at a
       // spot on the map or opening the point panel should not drop follow mode.
       const tapped = { latitude: lat, longitude: lon };
@@ -2342,6 +2348,10 @@ export function MapScreen({
   /** The two verbs that need a FORM. Each is a sheet of its own, so the
    *  options sheet closes before one opens (DESIGN.md). */
   const [editingPlace, setEditingPlace] = useState<MirrorPlace | null>(null);
+  /** A just-dropped marker the toast's "Name it" opens in the edit form. */
+  const [namingPlaceId, setNamingPlaceId] = useState<string | null>(null);
+  const namingPlace =
+    (places.data ?? []).find((row) => row.id === namingPlaceId) ?? null;
   const [loggingPlace, setLoggingPlace] = useState<MirrorPlace | null>(null);
   // The recording whose "Log a trip" was pressed.
   const [loggingTrack, setLoggingTrack] = useState<TripTrackSource | null>(
@@ -2726,10 +2736,13 @@ export function MapScreen({
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
   // and a subtitle (DESIGN.md).
-  const notify = useCallback((text: string, tone: "info" | "error") => {
-    toastNonce.current += 1;
-    setToast({ text, tone, nonce: toastNonce.current });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: "info" | "error", action?: ToastMessage["action"]) => {
+      toastNonce.current += 1;
+      setToast({ text, tone, nonce: toastNonce.current, action });
+    },
+    [],
+  );
   useEffect(() => {
     if (shownBasemapId === basemapId) return;
     const name = (id: string) =>
@@ -2741,9 +2754,9 @@ export function MapScreen({
   }, [shownBasemapId, basemapId, notify]);
 
   // Dropping a MARKER: a place of the system Marker type. The drop never
-  // waits on a form — the place is written first and its verb sheet opens
-  // over it, so cancelling leaves a saved, auto-named marker rather than losing
-  // the mark.
+  // waits on a form — the place is written first, so leaving it alone keeps a
+  // saved, auto-named marker rather than losing the mark. The toast offers the
+  // one thing a quick drop left out.
   //
   // ponytail: the auto-name is a count of marker places, not of every place —
   // "Marker 4" beside three canyons reads right: it is a place of the system
@@ -2759,7 +2772,12 @@ export function MapScreen({
         longitude: point.longitude,
         placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
       })
-        .then((id) => setOptionsPlaceId(id))
+        .then((id) =>
+          notify(`Marker ${markerCount + 1} dropped.`, "info", {
+            label: "Name it",
+            onPress: () => setNamingPlaceId(id),
+          }),
+        )
         .catch((err: unknown) => {
           // A drop that fails silently leaves no marker and no reason.
           console.error(err);
@@ -3339,6 +3357,45 @@ export function MapScreen({
   });
 
   /**
+   * A press on your own arrow opens the sheet for the fix itself, not for a
+   * cursor beside it; anything else is `handleMapPress`. The same DP reach as
+   * an anchor (ADR 0015), and only while the arrow is drawn. Declared here
+   * because `dotWanted` is.
+   */
+  const handleMapOrArrowPress = useCallback(
+    (event: NativeSyntheticEvent<PressEvent>) => {
+      const here = lastPosition.current;
+      const [lon, lat] = event.nativeEvent.lngLat;
+      if (
+        here &&
+        dotWanted &&
+        !collectingPoints &&
+        !swallowNextPress.current &&
+        anchorIndexAtPress(
+          [[here.coords.longitude, here.coords.latitude]],
+          [lon, lat],
+          degreesPerDp(camera.zoom),
+        ) !== null
+      ) {
+        setSearchPin(searchPinAfter("tap"));
+        setTappedFix({
+          atMs: here.timestamp,
+          accuracyM: here.coords.accuracy,
+          altitudeM: here.coords.altitude,
+        });
+        setTappedLand(null);
+        setTappedPoint({
+          latitude: here.coords.latitude,
+          longitude: here.coords.longitude,
+        });
+        return;
+      }
+      handleMapPress(event);
+    },
+    [camera.zoom, collectingPoints, dotWanted, handleMapPress],
+  );
+
+  /**
    * Fold one fix into the marker and, in a follow mode, into the camera.
    */
   const applyFix = useCallback(
@@ -3722,6 +3779,7 @@ export function MapScreen({
       position: Location.LocationObject,
       cached = false,
     ) => {
+      lastPosition.current = position;
       lastFix.current = nextFix(
         lastFix.current,
         cached
@@ -4876,7 +4934,7 @@ export function MapScreen({
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
-        onPress={handleMapPress}
+        onPress={handleMapOrArrowPress}
         onLongPress={handleMapLongPress}
       >
         <Camera ref={cameraRef} initialViewState={CAMERA_DEFAULTS} />
@@ -5704,6 +5762,7 @@ export function MapScreen({
       <MapPointSheet
         allowNetwork={!offlineOnly}
         point={tappedPoint}
+        fix={tappedFix}
         land={tappedLand}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
@@ -5717,8 +5776,8 @@ export function MapScreen({
           The place form can't open from here directly — a second Modal over the
           first doesn't hold focus — so the point is parked and picked up in
           `onClosed`. */}
-      <BottomSheet
-        visible={longPressPoint !== null}
+      <MapHoldSheet
+        point={longPressPoint}
         onClose={() => setLongPressPoint(null)}
         onClosed={() => {
           const point = pendingPlacePoint.current;
@@ -5726,75 +5785,45 @@ export function MapScreen({
           pendingPlacePoint.current = null;
           setAddPlaceAt(point);
         }}
-        title="What goes here?"
-      >
-        {/* The gap is the sheet-list convention (MapPointSheet, SavedScreen):
-            rows flush against each other read as one slab rather than four
-            targets. */}
-        <View style={styles.sheetBody}>
-          <Row
-            icon="flag"
-            // A marker is a place with the system Marker type — "Add a place"
-            // below opens the full place form, while this drops a marker with
-            // a name and default pin.
-            title="Drop a marker"
-            subtitle="A quick pin, no form"
-            onPress={() => {
-              const point = longPressPoint;
-              setLongPressPoint(null);
-              if (point) dropMarkerAt(point);
-            }}
-          />
-          <Row
-            icon="navigateTo"
-            title="Navigate here"
-            onPress={() => {
-              const point = longPressPoint;
-              setLongPressPoint(null);
-              if (point) navigateToPoint(point);
-            }}
-          />
-          <Row
-            icon="draw"
-            title="Draw a route from here"
-            onPress={() => {
-              const point = longPressPoint;
-              setLongPressPoint(null);
-              if (point) startRouteDrawAt(point);
-            }}
-          />
-          <Row
-            icon="measure"
-            title={MAP_MEASURE.copy.fromHere}
-            onPress={() => {
-              const point = longPressPoint;
-              setLongPressPoint(null);
-              if (point) startMeasureAt(point);
-            }}
-          />
-          <Row
-            icon="addPlace"
-            title="Add a place"
-            subtitle="With this position filled in"
-            onPress={() => {
-              pendingPlacePoint.current = longPressPoint;
-              setLongPressPoint(null);
-            }}
-          />
-        </View>
-      </BottomSheet>
+        run={{
+          navigate: (point) => {
+            setLongPressPoint(null);
+            navigateToPoint(point);
+          },
+          dropMarker: (point) => {
+            setLongPressPoint(null);
+            dropMarkerAt(point);
+          },
+          drawRoute: (point) => {
+            setLongPressPoint(null);
+            startRouteDrawAt(point);
+          },
+          measure: (point) => {
+            setLongPressPoint(null);
+            startMeasureAt(point);
+          },
+          addPlace: (point) => {
+            pendingPlacePoint.current = point;
+            setLongPressPoint(null);
+          },
+        }}
+      />
 
       {/* ONE form for both modes (DESIGN.md): a long-press drops a new
           place here, and "Edit place" in the pin's options sheet reopens the
           same fields on an existing one. The two states are mutually exclusive
           — each entry point clears the other. */}
       <PlaceEditSheet
-        visible={addPlaceAt !== null || editingPlace !== null}
-        place={editingPlace}
+        visible={
+          addPlaceAt !== null || editingPlace !== null || namingPlace !== null
+        }
+        place={editingPlace ?? namingPlace}
+        focusName={namingPlace !== null && editingPlace === null}
         initialCoords={addPlaceAt}
         onClose={() => {
           setAddPlaceAt(null);
           setEditingPlace(null);
+          setNamingPlaceId(null);
         }}
         onSaved={(text) => notify(text, "info")}
       />
@@ -6078,7 +6107,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     right: spacing(2),
     gap: spacing(1),
   },
-  sheetBody: { gap: spacing(1) },
   controls: {
     position: "absolute",
     right: CHROME_GAP,
