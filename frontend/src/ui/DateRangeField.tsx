@@ -179,8 +179,6 @@ export function DateRangeField({
                 b && classes.inRange,
                 b?.pieceStart && classes.pieceStart,
                 b?.pieceEnd && classes.pieceEnd,
-                b?.isStart && classes.bandStart,
-                b?.isEnd && classes.bandEnd,
                 edge && classes.end,
                 day === today && classes.today,
               ]
