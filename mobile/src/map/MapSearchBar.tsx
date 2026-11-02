@@ -26,7 +26,8 @@
 // PRIVACY: only the typed string leaves Logjam GPS, to our API when the phone
 // has no registry, to Nominatim when asked (shared/src/geocode.test.ts), and
 // nowhere when it has. No saved place's name or coordinates is sent — the saved matches are the
-// reason they do not have to be — and results are not persisted.
+// reason they do not have to be. The only thing persisted is the short list of
+// recent picks (`recentSearches.ts`), on this phone, cleared on sign-out.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -42,7 +43,14 @@ import {
   type TextInputInstance,
 } from "react-native";
 import {
+  addRecentSearch,
+  type SearchPin,
+  searchPinAfter,
+  COORDINATE_RESULT_KIND,
   geocode,
+  parseCoordinates,
+  RECENT_SEARCHES_HEADING,
+  type SearchPoint,
   GEOCODE_MIN_QUERY_LENGTH,
   messageFromError,
   PLACE_REGISTRY_ATTRIBUTION,
@@ -78,6 +86,7 @@ import {
   searchRows,
   type PlaceAnswer,
 } from "./placeSearch";
+import { loadRecentSearches, saveRecentSearches } from "./recentSearches";
 import { CHROME_GAP, SEARCH_SIZE } from "./mapChrome";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { FieldError, Icon, type Glyph } from "../ui";
@@ -120,6 +129,7 @@ export function MapSearchBar({
   savedItems,
   onSelectPlace,
   onSelectSaved,
+  onSearchPin,
 }: {
   /** Status-bar inset — chrome must never sit under the camera cutout. */
   topInset: number;
@@ -142,6 +152,8 @@ export function MapSearchBar({
   savedItems: readonly SavedSearchItem[];
   onSelectPlace: (latitude: number, longitude: number) => void;
   onSelectSaved: (item: SavedSearchItem) => void;
+  /** The temporary pin for the searched location, or none (searchPinAfter). */
+  onSearchPin: (pin: SearchPin | null) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -158,7 +170,9 @@ export function MapSearchBar({
     results: GeocodeResult[];
     error: string | null;
   } | null>(null);
+  const [recents, setRecents] = useState(loadRecentSearches);
   const trimmed = query.trim();
+  const coordinate = expanded ? parseCoordinates(trimmed) : null;
   const searchable = expanded && trimmed.length >= GEOCODE_MIN_QUERY_LENGTH;
   const askedHere = searchable && asked === trimmed;
   const answer = askedHere && search?.query === trimmed ? search : null;
@@ -310,9 +324,25 @@ export function MapSearchBar({
   // saved match is already correct while the geocoder is still being waited
   // on, and with no signal it is the only answer there will ever be.
   const rows = searchRows(localMatches, places, offerAsk);
+  const showRecents = expanded && trimmed === "" && recents.length > 0;
+  // Every pick that is just a point to fly to is remembered; saved things and
+  // gauges open their own sheets and are found again by typing.
+  const flyTo = (point: SearchPoint) => {
+    onSelectPlace(point.lat, point.lon);
+    onSearchPin(searchPinAfter({ pick: point }));
+    const next = addRecentSearch(recents, point);
+    setRecents(next);
+    saveRecentSearches(next);
+    collapse();
+  };
   const showPanel =
     expanded &&
-    (rows.length > 0 || loading || error !== null || results.length > 0);
+    (showRecents ||
+      coordinate !== null ||
+      rows.length > 0 ||
+      loading ||
+      error !== null ||
+      results.length > 0);
 
   return (
     <View
@@ -348,7 +378,10 @@ export function MapSearchBar({
             ref={inputRef}
             style={styles.input}
             value={query}
-            onChangeText={setQuery}
+            onChangeText={(text) => {
+              setQuery(text);
+              if (!text.trim()) onSearchPin(searchPinAfter("clear"));
+            }}
             placeholder="Search for a place…"
             placeholderTextColor={theme.textMuted}
             accessibilityLabel="Search for a place to centre the map"
@@ -361,7 +394,11 @@ export function MapSearchBar({
             accessibilityRole="button"
             accessibilityLabel={query ? "Clear search" : "Close search"}
             hitSlop={hitSlop}
-            onPress={() => (query ? setQuery("") : collapse())}
+            onPress={() => {
+              onSearchPin(searchPinAfter("clear"));
+              if (query) setQuery("");
+              else collapse();
+            }}
           >
             <Icon idea="close" size={GLYPH} color={theme.text} />
           </Pressable>
@@ -381,6 +418,47 @@ export function MapSearchBar({
       {showPanel ? (
         <View style={styles.panel}>
           <ScrollView keyboardShouldPersistTaps="handled">
+            {showRecents ? (
+              <>
+                <Text style={styles.credit}>{RECENT_SEARCHES_HEADING}</Text>
+                {recents.map((recent) => (
+                  <Pressable
+                    key={`${recent.lat},${recent.lon},${recent.label}`}
+                    accessibilityRole="button"
+                    style={({ pressed }) => [
+                      styles.result,
+                      styles.savedResult,
+                      pressed && styles.resultPressed,
+                    ]}
+                    onPress={() => flyTo(recent)}
+                  >
+                    <Icon idea="recent" size={16} color={theme.textMuted} />
+                    <Text
+                      style={[styles.resultText, styles.savedText]}
+                      numberOfLines={2}
+                    >
+                      {recent.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </>
+            ) : null}
+            {coordinate ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${coordinate.label}, ${COORDINATE_RESULT_KIND}`}
+                style={({ pressed }) => [
+                  styles.result,
+                  pressed && styles.resultPressed,
+                ]}
+                onPress={() => flyTo(coordinate)}
+              >
+                <Text style={styles.resultText} numberOfLines={1}>
+                  {coordinate.label}
+                </Text>
+                <Text style={styles.resultKind}>{COORDINATE_RESULT_KIND}</Text>
+              </Pressable>
+            ) : null}
             {rows.map((row) => {
               switch (row.kind) {
                 case "saved": {
@@ -397,6 +475,7 @@ export function MapSearchBar({
                       ]}
                       onPress={() => {
                         onSelectSaved(item);
+                        onSearchPin(searchPinAfter({ pick: null }));
                         collapse();
                       }}
                     >
@@ -422,10 +501,13 @@ export function MapSearchBar({
                         styles.result,
                         pressed && styles.resultPressed,
                       ]}
-                      onPress={() => {
-                        onSelectPlace(place.lat, place.lon);
-                        collapse();
-                      }}
+                      onPress={() =>
+                        flyTo({
+                          label: place.name,
+                          lat: place.lat,
+                          lon: place.lon,
+                        })
+                      }
                     >
                       <Text style={styles.resultText} numberOfLines={2}>
                         {place.name}
@@ -496,10 +578,13 @@ export function MapSearchBar({
                       styles.result,
                       pressed && styles.resultPressed,
                     ]}
-                    onPress={() => {
-                      onSelectPlace(result.lat, result.lon);
-                      collapse();
-                    }}
+                    onPress={() =>
+                      flyTo({
+                        label: result.displayName,
+                        lat: result.lat,
+                        lon: result.lon,
+                      })
+                    }
                   >
                     <Text style={styles.resultText} numberOfLines={2}>
                       {result.displayName}

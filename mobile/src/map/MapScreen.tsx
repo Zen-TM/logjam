@@ -94,6 +94,8 @@ import {
   landNameOf,
   NSW_LAND,
   slopeReliefColor,
+  SLOPE_MIN_ZOOM,
+  zoomFadeIn,
   terrainBeforeIds,
   type TerrainLayerKey,
   type TerrainSwitchKey,
@@ -103,6 +105,8 @@ import {
   TRIP_PLAN_PAGE,
   planRouteNotAdded,
   type SharpenedArea,
+  type SearchPin,
+  searchPinAfter,
 } from "@logjam/shared";
 import {
   isPlanPin,
@@ -232,8 +236,10 @@ import {
   type NorthReference,
 } from "./mapPreferences";
 import {
+  deliveredFix,
   FIX_MOVE_MIN_M,
   fixQuality,
+  nextFix,
   type FixLiveness,
   type FixQuality,
 } from "./gpsSignal";
@@ -243,6 +249,8 @@ import {
   setBasemapPreference,
   setTerrainLayers,
   readGaugesLayer,
+  readMgaGridLayer,
+  setMgaGridLayer,
   setGaugesLayer,
 } from "./basemapPreference";
 import { useSlopeBands } from "./slopeBandsPreference";
@@ -253,7 +261,14 @@ import { FocusPulse } from "./FocusPulse";
 import { MapToolGroup, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
-import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
+import {
+  BASEMAP_CATALOG,
+  basemapFallbackNotice,
+  basemapToShow,
+  ROUTE_ARROW_SDF_URI,
+  placeStatus,
+} from "@logjam/shared";
+import { basemapFallbackFor, useDownBasemaps } from "./basemapReachability";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
 import { onMirrorChanged } from "../sync/syncDb";
@@ -276,6 +291,7 @@ import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
+import { MgaGridLayer } from "./MgaGridLayer";
 import { useGauges } from "../gauges/useGauges";
 import { PlaceEditSheet } from "../places/PlaceEditSheet";
 import { fillRouteSlot } from "../places/fillRouteSlot";
@@ -960,6 +976,8 @@ export function MapScreen({
   const [longPressPoint, setLongPressPoint] = useState<MapPoint | null>(null);
   /** Where the user last tapped — the point panel's subject, and its dot. */
   const [tappedPoint, setTappedPoint] = useState<MapPoint | null>(null);
+  /** The pin for a searched location: gone at the next map press (searchPinAfter). */
+  const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const [tappedLand, setTappedLand] = useState<string | null>(null);
   /** The tap `tappedLand` is being read for: a later tap's answer alone counts. */
   const landAskedFor = useRef<MapPoint | null>(null);
@@ -967,6 +985,14 @@ export function MapScreen({
   const pendingPlacePoint = useRef<MapPoint | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
+  // A basemap whose tile server is down is not drawn; the fallback is, and the
+  // pick stays, so the map returns to it when the server answers again.
+  const downBasemaps = useDownBasemaps(connectivity === "online", pickerOpen);
+  const shownBasemapId = basemapToShow(
+    basemapId,
+    downBasemaps,
+    basemapFallbackFor(basemapId, downBasemaps),
+  ) as BasemapId;
   // Both point tools run the SAME draft model — same anchors, same drag,
   // delete and snapping. What differs is the exit (measure discards silently,
   // route draw confirms and saves) and the ink (shared/DESIGN.md §11).
@@ -1119,6 +1145,11 @@ export function MapScreen({
   const setShowGauges = useCallback((on: boolean) => {
     setShowGaugesState(on);
     setGaugesLayer(on);
+  }, []);
+  const [showMgaGrid, setShowMgaGridState] = useState(readMgaGridLayer);
+  const setShowMgaGrid = useCallback((on: boolean) => {
+    setShowMgaGridState(on);
+    setMgaGridLayer(on);
   }, []);
   const {
     file: gaugeFile,
@@ -1476,7 +1507,7 @@ export function MapScreen({
    * notice. `basemapId` itself stays the user's choice, and is what the picker
    * ticks and what the preference stores.
    */
-  const renderedBasemapId = useDeferredValue(basemapId);
+  const renderedBasemapId = useDeferredValue(shownBasemapId);
 
   const basemapResolved = useMemo(
     () =>
@@ -1653,6 +1684,20 @@ export function MapScreen({
   // stay separate: the filter is "these particular places", the switch is
   // "places at all", and folding one into the other would have turning the
   // pins back on silently discard a filter the user set on another screen.
+  // The viewer's own trip tally per place, as the Places screen derives it.
+  const visitedIds = useMemo(() => {
+    const counts = new globalThis.Map<string, number>();
+    for (const trip of trips.data ?? []) {
+      for (const link of trip.places) {
+        counts.set(link.id, (counts.get(link.id) ?? 0) + 1);
+      }
+    }
+    const ids = new Set<string>();
+    for (const [id, n] of counts) {
+      if (placeStatus({ syncRole: "owner" }, n) === "done") ids.add(id);
+    }
+    return ids;
+  }, [trips.data]);
   const ownedFc = useMemo(
     () =>
       toPlaceFeatureCollection(
@@ -1664,6 +1709,7 @@ export function MapScreen({
             )
           : [],
         placeTypeColors,
+        visitedIds,
       ),
     [
       allowedPlaceIds,
@@ -1671,6 +1717,7 @@ export function MapScreen({
       ownedPlaces,
       placeTypeColors,
       showPlaces,
+      visitedIds,
     ],
   );
   // A shared place obeys the per-type switches too: "stop drawing campsites"
@@ -2168,6 +2215,7 @@ export function MapScreen({
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
       const [lon, lat] = event.nativeEvent.lngLat;
+      setSearchPin(searchPinAfter("tap"));
       // The second tap of a double tap already did its work (it zoomed); it
       // must not also ask what is under the finger. Cleared here rather than on
       // a timer, so exactly one press is swallowed however long MapLibre takes
@@ -2682,6 +2730,15 @@ export function MapScreen({
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
+  useEffect(() => {
+    if (shownBasemapId === basemapId) return;
+    const name = (id: string) =>
+      BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
+    notify(
+      basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
+      "info",
+    );
+  }, [shownBasemapId, basemapId, notify]);
 
   // Dropping a MARKER: a place of the system Marker type. The drop never
   // waits on a form — the place is written first and its verb sheet opens
@@ -3661,11 +3718,17 @@ export function MapScreen({
     let subscription: Location.LocationSubscription | null = null;
     let cancelled = false;
     // Every delivery, applied or not, is what says the sky is still there.
-    const noteFixArrived = (position: Location.LocationObject) => {
-      lastFix.current = {
-        atMs: position.timestamp,
-        accuracyM: position.coords.accuracy,
-      };
+    const noteFixArrived = (
+      position: Location.LocationObject,
+      cached = false,
+    ) => {
+      lastFix.current = nextFix(
+        lastFix.current,
+        cached
+          ? { atMs: position.timestamp, accuracyM: position.coords.accuracy }
+          : deliveredFix(position.coords.accuracy, Date.now()),
+        cached,
+      );
       noteGpsQuality();
     };
     // Displacement filter measured from the last fix we ACTED on — 5 m
@@ -3689,13 +3752,15 @@ export function MapScreen({
         () => null,
       );
       if (cancelled) return;
-      if (lastKnown) {
+      // Only before any fix: a watcher restart (resume, tab change) must not
+      // drag the arrow back to the OS's cache (gpsSignal.test.ts, nextFix).
+      if (lastKnown && lastFix.current == null) {
         // Cached MEANS old, and how old is the whole question the arrow's
         // colour answers: this fix can be last week's drive to the trailhead,
         // and drawing it in the user's colour would be misleading. It goes
         // through the same rule as a live one, so an hours-old one arrives
         // already grey.
-        noteFixArrived(lastKnown);
+        noteFixArrived(lastKnown, true);
         // The readout gets it too, and for the same reason the marker does: a
         // chip showing two dashes until the first watch callback lands reads
         // as broken, and indoors that callback can be minutes away. A cached
@@ -4472,6 +4537,14 @@ export function MapScreen({
       onChange: setShowGauges,
     },
     {
+      key: "mgaGrid",
+      icon: "mgaGrid",
+      hue: theme.neutral,
+      title: MAP_OVERLAYS.copy.mgaGrid,
+      value: showMgaGrid,
+      onChange: setShowMgaGrid,
+    },
+    {
       key: "geoPdfs",
       icon: "geoPdf",
       hue: assetHue.geoPdf,
@@ -4911,9 +4984,12 @@ export function MapScreen({
               type="color-relief"
               id={`nsw-slope-${r.key}`}
               beforeId={groundBefore[`nsw-slope-${r.key}`]}
-              minzoom={r.layerMinZoom ?? 0}
+              minzoom={Math.max(r.layerMinZoom ?? 0, SLOPE_MIN_ZOOM)}
               maxzoom={r.layerMaxZoom ?? MAX_LAYER_ZOOM}
               paint={{
+                "color-relief-opacity": zoomFadeIn(
+                  SLOPE_MIN_ZOOM,
+                ) as unknown as number,
                 "color-relief-color": slopeReliefColor(
                   slopeBands,
                 ) as ColorReliefColor,
@@ -5089,6 +5165,10 @@ export function MapScreen({
           </GeoJSONSource>
         ) : null}
 
+        {showMgaGrid && viewportBbox ? (
+          <MgaGridLayer bbox={viewportBbox} zoom={camera.zoom} />
+        ) : null}
+
         {showGauges && gaugeFile ? (
           <GaugesLayer
             file={gaugeFile}
@@ -5187,6 +5267,27 @@ export function MapScreen({
               `anchor` names the part of the BUTTON put on the coordinate, so
               sitting it to the LEFT of the point means anchoring its RIGHT edge
               there and pushing it back by the gap. */}
+          {/* The searched location. A Marker is a native view over the GL
+              surface, so over every pin layer; it takes no press (the map
+              underneath gets the tap that clears it). Its tip is the point. */}
+          {searchPin ? (
+            <Marker
+              key="search-pin"
+              id="search-pin"
+              lngLat={[searchPin.lon, searchPin.lat]}
+              anchor="bottom"
+            >
+              {/* Logjam Web's drop (Map.tsx, `searchPin`): a filled teardrop
+                  in the accent, white rim and centre. A square with one sharp
+                  corner, turned to point down. */}
+              <View pointerEvents="none" style={styles.searchPinBox}>
+                <View style={styles.searchPin}>
+                  <View style={styles.searchPinDot} />
+                </View>
+              </View>
+            </Marker>
+          ) : null}
+
           {selectedAnchorCoord && !anchorDragging ? (
             <Marker
               key="anchor-delete"
@@ -5254,6 +5355,7 @@ export function MapScreen({
           online={connectivity === "online"}
           savedItems={savedSearchItems}
           onSelectPlace={handleSelectPlace}
+          onSearchPin={setSearchPin}
           onSelectSaved={(item) => {
             if (item.gaugeId) {
               setShowGauges(true);
@@ -5813,6 +5915,7 @@ export function MapScreen({
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
+        downBasemaps={downBasemaps}
         terrainLayers={terrainLayers}
         onTerrainLayerChange={chooseTerrainLayer}
         artifacts={artifacts}
@@ -5925,6 +6028,32 @@ function RouteNameForm({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
+  // The search pin's tip lands on the Marker's bottom anchor: a 24 px square
+  // turned 45° reaches 12√2 ≈ 17 px below its centre, the box's half height.
+  searchPinBox: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchPin: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderBottomRightRadius: 0,
+    transform: [{ rotate: "45deg" }],
+    backgroundColor: theme.accent,
+    borderWidth: 2,
+    borderColor: MAP_INK.ring,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchPinDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: MAP_INK.ring,
+  },
   // The selected point's delete button: circular, warning-coloured, and the
   // full touch target (it is a Marker child, so it cannot take a hitSlop). Solid
   // rather than translucent — it sits over the map, which can be any colour

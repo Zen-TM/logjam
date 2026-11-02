@@ -72,6 +72,8 @@ vi.mock("../tracks/trackRecorder", () => ({
     return Promise.resolve();
   },
 }));
+const clearRecentSearches = vi.hoisted(() => vi.fn());
+vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -117,6 +119,12 @@ beforeEach(() => {
 
 describe("wipeAllLocalData", () => {
   // Red if a directory is dropped from the loop (or from WIPED_DIRS' use).
+  // Mutation: drop clearRecentSearches() from wipeAllLocalData.
+  it("forgets the recent map searches", async () => {
+    await wipeAllLocalData();
+    expect(clearRecentSearches).toHaveBeenCalledOnce();
+  });
+
   it("deletes every declared directory", async () => {
     const { failed } = await wipeAllLocalData();
     expect(failed).toEqual([]);

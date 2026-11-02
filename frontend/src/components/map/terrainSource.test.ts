@@ -190,7 +190,11 @@ describe("terrainSourceFor", () => {
       await go([area]);
       const withArea = map.setTerrain.mock.calls[0]![0].source as string;
       await go([]);
-      expect(map.setTerrain.mock.calls[1]![0].source).toBe(NSW_TERRAIN_SOURCE);
+      // Mutation: exaggeration back to 1.5 (heights drawn taller than true).
+      expect(map.setTerrain.mock.calls[1]![0]).toEqual({
+        source: NSW_TERRAIN_SOURCE,
+        exaggeration: 1,
+      });
       expect(map.removeSource).toHaveBeenCalledWith(withArea);
       expect(map.removeSource).not.toHaveBeenCalledWith(
         WORLDWIDE_TERRAIN_SOURCE,

@@ -428,10 +428,11 @@ describe("the WaterNSW credit", () => {
 describe("the Overlays list", () => {
   // Mutation: move gauges above `geoPdfs` in the contract.
   it.each(["web", "gps"] as const)(
-    "ends with the gauges, then the import, on %s",
+    "ends with the gauges, the grid, then the import, on %s",
     (client) => {
-      expect(contractSectionKeys(MAP_OVERLAYS, client).slice(-2)).toEqual([
+      expect(contractSectionKeys(MAP_OVERLAYS, client).slice(-3)).toEqual([
         "gauges",
+        "mgaGrid",
         "importFile",
       ]);
     },

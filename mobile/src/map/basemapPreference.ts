@@ -49,6 +49,15 @@ export const readGaugesLayer = (): boolean =>
 export const setGaugesLayer = (on: boolean): boolean =>
   writePref(GAUGES_PREF_KEY, on ? "on" : "off");
 
+const MGA_GRID_PREF_KEY = "mapMgaGrid";
+
+/** The MGA grid overlay, off until the user switches it on. */
+export const readMgaGridLayer = (): boolean =>
+  readPref(MGA_GRID_PREF_KEY) === "on";
+
+export const setMgaGridLayer = (on: boolean): boolean =>
+  writePref(MGA_GRID_PREF_KEY, on ? "on" : "off");
+
 /** False when the device refused to store it, so the caller can say so. */
 export function setBasemapPreference(basemapId: BasemapId): boolean {
   return writePref(BASEMAP_PREF_KEY, basemapId);

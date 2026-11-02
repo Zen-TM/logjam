@@ -20,6 +20,15 @@
   pointer-events: none;
 }
 
+.searchPin {
+  /* Sized by its SVG's own width and height (Map.tsx); flex, or an inline
+     SVG's line gap lifts the tip off the point. */
+  display: flex;
+  color: var(--color-accent);
+  /* A mark, not a control: a click on it is a click on the map. */
+  pointer-events: none;
+}
+
 .map {
   --map-inset-left: 0px;
   /* How far in from the map's right edge the credits stop: past the action
@@ -212,7 +221,10 @@
   border: 3px dashed var(--color-accent);
   background: transparent;
   pointer-events: none;
-  z-index: 5;
+  /* Under all the map chrome (z-index 1-3): the compass, zoom and scale bar
+     still apply and must not sit in the scrim. Above the canvas, which is
+     unpositioned. */
+  z-index: 0;
   box-shadow: 0 0 0 9999px color-mix(in srgb, black 40%, transparent);
 }
 

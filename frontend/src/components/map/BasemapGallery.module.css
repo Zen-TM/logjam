@@ -47,3 +47,26 @@
     grid-auto-flow: column;
   }
 }
+
+.tile:disabled {
+  cursor: not-allowed;
+}
+
+/* Kept in the page so its load can clear the state, but takes no room: the
+   notice stands in its place. */
+.hidden {
+  display: none;
+}
+
+.down {
+  composes: thumb;
+  composes: meta from "../../textRoles.generated.module.css";
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--space-1) / 2);
+  border: 1px dashed var(--color-line);
+  color: var(--color-warning);
+  text-align: center;
+}

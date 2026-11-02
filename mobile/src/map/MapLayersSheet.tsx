@@ -37,6 +37,9 @@ import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
+  BASEMAP_UNAVAILABLE_LABEL,
+  basemapFallbackNotice,
+  basemapToShow,
   contractSectionKeys,
   LAND_CLASSES,
   MAP_LAYERS,
@@ -67,6 +70,7 @@ import {
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
+import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
@@ -132,6 +136,7 @@ export function MapLayersSheet({
   connectivity,
   basemapId,
   onBasemapChange,
+  downBasemaps,
   terrainLayers,
   onTerrainLayerChange,
   artifacts,
@@ -148,6 +153,8 @@ export function MapLayersSheet({
   connectivity: Connectivity;
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  /** Basemaps whose tile server did not answer (`useDownBasemaps`). */
+  downBasemaps: ReadonlySet<BasemapId>;
   terrainLayers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onTerrainLayerChange: (key: TerrainSwitchKey, on: boolean) => void;
   artifacts: MapArtifact[];
@@ -182,6 +189,7 @@ export function MapLayersSheet({
       <BasemapTab
         basemapId={basemapId}
         onBasemapChange={onBasemapChange}
+        down={downBasemaps}
         online={online}
       />
     ),
@@ -259,17 +267,33 @@ export function MapLayersSheet({
 function BasemapTab({
   basemapId,
   onBasemapChange,
+  down,
   online,
 }: {
   basemapId: BasemapId;
   onBasemapChange: (id: BasemapId) => void;
+  down: ReadonlySet<BasemapId>;
   online: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  // The map draws the fallback while the pick's server is down (MapScreen);
+  // the pick itself stays, so it comes back with the server.
+  const shown = basemapToShow(
+    basemapId,
+    down,
+    basemapFallbackFor(basemapId, down),
+  );
+  const name = (id: string) =>
+    BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
+  const notice =
+    shown === basemapId
+      ? null
+      : basemapFallbackNotice(name(basemapId), name(shown));
 
   return (
     <View style={styles.body}>
+      {notice != null && <Text style={styles.legend}>{notice}</Text>}
       {/* Order and membership are MOBILE_BASEMAPS', not the catalog's — see
           basemapMeta.ts (the catalog also carries the Logjam Web-only "osm"
           raster). */}
@@ -280,18 +304,26 @@ function BasemapTab({
         // Online-only sources are unavailable offline BY POLICY (their tile
         // usage terms), which is a different thing from "not downloaded" — the
         // subtitle says which.
-        const unavailable = !online && !entry.offlineCapable;
+        const offline = !online && !entry.offlineCapable;
+        const serverDown = down.has(id);
+        const unavailable = offline || serverDown;
         const active = basemapId === id;
         return (
           <Fragment key={entry.id}>
             <Row
-              leading={<BasemapThumb basemapId={id} />}
+              leading={<BasemapThumb basemapId={id} unavailable={serverDown} />}
               title={entry.name}
               // Name + sample tile only. The thumbnail already shows what the
               // map looks like without long text blurbs. The subtitle carries
               // STATE and nothing else — the offline reason when unavailable
               // (DESIGN.md).
-              subtitle={unavailable ? "Needs a connection" : undefined}
+              subtitle={
+                serverDown
+                  ? BASEMAP_UNAVAILABLE_LABEL
+                  : offline
+                    ? "Needs a connection"
+                    : undefined
+              }
               disabled={unavailable}
               onPress={() => onBasemapChange(id)}
               // No "Showing" pill: the selection is a state of the row, not a
@@ -531,6 +563,7 @@ function LayersTab({
       />
     ),
     gauges: () => entryRow("gauges"),
+    mgaGrid: () => entryRow("mgaGrid"),
     geoPdfs: () => entryRow("geoPdfs"),
     importFile: () => (
       <Row

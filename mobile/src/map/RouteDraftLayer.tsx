@@ -22,6 +22,7 @@ import {
   moveAnchor,
   type RouteDraft,
   type RoutePoint,
+  DRAFT_LINE,
   MAP_INK,
 } from "@logjam/shared";
 
@@ -207,16 +208,33 @@ export function RouteDraftLayer({
     <>
       <GeoJSONSource id={`${idPrefix}-line`} data={lineData}>
         <Layer
+          key={`${idPrefix}-line-casing`}
+          type="line"
+          id={`${idPrefix}-line-casing`}
+          filter={ROUTE_LAYER_FILTER}
+          style={{
+            lineColor: DRAFT_LINE.casingColor,
+            lineCap: "round",
+            lineJoin: "round",
+            ...(dotted
+              ? {
+                  lineWidth: DRAFT_LINE.measureCasingWidth,
+                  lineDasharray: [...DRAFT_LINE.measureCasingDash],
+                }
+              : { lineWidth: DRAFT_LINE.casingWidth }),
+          }}
+        />
+        <Layer
           key={`${idPrefix}-line-stroke`}
           type="line"
           id={`${idPrefix}-line-stroke`}
           filter={ROUTE_LAYER_FILTER}
           style={{
             lineColor: color,
-            lineWidth: 3,
+            lineWidth: DRAFT_LINE.coreWidth,
             lineCap: "round",
             lineJoin: "round",
-            ...(dotted ? { lineDasharray: [1, 1.5] } : {}),
+            ...(dotted ? { lineDasharray: [...DRAFT_LINE.measureDash] } : {}),
           }}
         />
         <Layer

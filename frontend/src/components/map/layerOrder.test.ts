@@ -11,8 +11,11 @@ import { describe, expect, it } from "vitest";
 import {
   GAUGE_BELOW,
   GAUGE_LAYER,
+  GRID_LABELS,
+  GRID_LINES,
   LAND_FILL_LAYER,
   landClassAt,
+  PRESSABLE_LAYERS,
   pressClosedGauge,
   moveTerrainIntoBasemap,
   pressedGaugeId,
@@ -224,5 +227,48 @@ describe("GAUGE_LAYER", () => {
     expect(pressable).toContain("GAUGE_LAYER");
     expect(pressable).toContain("PRESSABLE_LAYERS");
     expect(GAUGE_LAYER).toBe("gauge-drops");
+  });
+});
+
+// Mutation: add the grid layers without a `GAUGE_BELOW` anchor, or drop the
+// ids, and the grid lines draw over every pin; or rename an id on one client
+// only and the two layerOrder files disagree.
+describe("MGA grid layers", () => {
+  const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
+  const mobile = readFileSync(
+    join(__dirname, "../../../../mobile/src/map/layerOrder.ts"),
+    "utf8",
+  );
+
+  it("are added under the pins, at the gauges' height", () => {
+    for (const id of ["GRID_LINES", "GRID_LABELS"]) {
+      const at = source.indexOf(`id: ${id}`);
+      expect(at).toBeGreaterThan(source.indexOf(`id: "${TOPO_CEILING}"`));
+      expect(source.slice(at, at + 700)).toContain("GAUGE_BELOW,\n      );");
+    }
+  });
+
+  it("have the ids Logjam GPS uses", () => {
+    expect(mobile).toContain(`GRID_LINES = "${GRID_LINES}"`);
+    expect(mobile).toContain(`GRID_LABELS = "${GRID_LABELS}"`);
+  });
+});
+
+// Mutation: drop "visited-place-badges" from PRESSABLE_LAYERS, the click and
+// mouseenter registrations, or the showPlaces visibility effect in Map.tsx,
+// and the badge on a visited pin asks "What is here?", shows no pointer, or
+// stays green with Places hidden.
+describe("visited-place-badges", () => {
+  const source = readFileSync(join(__dirname, "Map.tsx"), "utf8");
+  it("is pressable and follows the Places toggle like its pin", () => {
+    expect(PRESSABLE_LAYERS).toContain("visited-place-badges");
+    for (const ev of ["click", "mouseenter", "mouseleave"]) {
+      expect(source).toContain(
+        `map.on("${ev}", ["place-circles", "visited-place-badges"]`,
+      );
+    }
+    expect(source).toMatch(
+      /setLayoutProperty\(\s*"visited-place-badges",\s*"visibility"/,
+    );
   });
 });

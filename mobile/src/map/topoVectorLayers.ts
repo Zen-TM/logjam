@@ -9,10 +9,14 @@
 // Width/colour/size math comes from @logjam/shared so live map, Logjam Web, and baked
 // exports stay in lockstep.
 import {
+  CONTOUR_LABELS_MIN_ZOOM,
+  CONTOURS_MIN_ZOOM,
+  CONTOURS_MINOR_MIN_ZOOM,
   contourLabelHalo,
   contourWidthStops,
   rgbaCssFromHex,
   type VectorStyleSettings,
+  zoomFadeIn,
 } from "@logjam/shared";
 
 import { topoLabelText } from "./mapLabelText";
@@ -52,8 +56,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "line",
       sourceLayer: "contours",
       filter: CONTOUR_MINOR_FILTER,
-      minzoom: 14,
+      minzoom: CONTOURS_MINOR_MIN_ZOOM,
       style: {
+        lineOpacity: zoomFadeIn(CONTOURS_MINOR_MIN_ZOOM),
         lineColor: rgbaCssFromHex(vs.contours.minorColour),
         lineWidth: contourPixelWidth(vs.contours.minorWidthM),
       },
@@ -63,7 +68,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "line",
       sourceLayer: "contours",
       filter: CONTOUR_MAJOR_FILTER,
+      minzoom: CONTOURS_MIN_ZOOM,
       style: {
+        lineOpacity: zoomFadeIn(CONTOURS_MIN_ZOOM),
         lineColor: rgbaCssFromHex(vs.contours.majorColour),
         lineWidth: contourPixelWidth(vs.contours.majorWidthM),
       },
@@ -73,8 +80,9 @@ function contourLayerDefs(vs: VectorStyleSettings): TopoVectorLayerDef[] {
       type: "symbol",
       sourceLayer: "contours",
       filter: CONTOUR_MAJOR_FILTER,
-      minzoom: 12,
+      minzoom: CONTOUR_LABELS_MIN_ZOOM,
       style: {
+        textOpacity: zoomFadeIn(CONTOUR_LABELS_MIN_ZOOM),
         textField: ["concat", ["to-string", ["get", "elev"]], "m"],
         ...labelText,
         symbolPlacement: "line",

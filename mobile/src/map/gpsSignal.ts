@@ -82,3 +82,34 @@ export function fixQuality(fix: FixLiveness | null, nowMs: number): FixQuality {
   if (fix.accuracyM != null && fix.accuracyM > FIX_COARSE_M) return "coarse";
   return "live";
 }
+
+/**
+ * The liveness a watcher delivery proves.
+ *
+ * A delivery arriving NOW is the evidence of a live signal, so it is stamped
+ * with our clock: `Location.timestamp` is the platform's (on Android, often the
+ * GNSS time), and a phone whose clock has drifted from it past FIX_STALE_MS
+ * would otherwise read as stale on every single fix. Only the OS's cached
+ * `getLastKnownPositionAsync` fix keeps its own timestamp, because its age is
+ * the point.
+ */
+export function deliveredFix(
+  accuracyM: number | null,
+  nowMs: number,
+): FixLiveness {
+  return { atMs: nowMs, accuracyM };
+}
+
+/**
+ * Fold an arriving fix into the last one. A live delivery always wins; the OS's
+ * cached fix only fills an empty slot. No timestamps are compared: the cached
+ * fix keeps the platform's clock (often GNSS time) and live ones use ours, so
+ * comparing them would let a skewed device clock reject real fixes.
+ */
+export function nextFix(
+  previous: FixLiveness | null,
+  incoming: FixLiveness,
+  cached: boolean,
+): FixLiveness {
+  return cached && previous != null ? previous : incoming;
+}

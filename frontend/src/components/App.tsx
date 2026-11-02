@@ -124,6 +124,7 @@ import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
+import { useBasemapFallback } from "./map/useBasemapFallback";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
 
@@ -202,9 +203,14 @@ function App() {
   );
   // A basemap the picker no longer offers (the raster "Default", dropped for
   // the vector one) would otherwise hide every basemap layer and show nothing.
-  const activeLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
+  const pickedLayerId = BASE_LAYERS.some((layer) => layer.id === storedLayerId)
     ? storedLayerId
     : "protomaps";
+  const {
+    shownLayerId: activeLayerId,
+    down: downBasemaps,
+    setHealth: setBasemapHealth,
+  } = useBasemapFallback(pickedLayerId, BASE_LAYERS);
 
   // On the device, like the basemap choice; the slope bands are the account's.
   const [storedTerrainLayers, setStoredTerrainLayers] = useStoredState<unknown>(
@@ -244,6 +250,11 @@ function App() {
   // Off until asked for: the layer fetches a public file only while it is on.
   const [showGauges, setShowGauges] = useStoredState(
     "logjam.showGauges",
+    false,
+  );
+
+  const [showMgaGrid, setShowMgaGrid] = useStoredState(
+    "logjam.showMgaGrid",
     false,
   );
 
@@ -323,10 +334,9 @@ function App() {
   // The box an opening was given (a selection's, a topo's).
   const [exportAreaSeed, setExportAreaSeed] = useState<TBbox | null>(null);
   // A new key for every opening that is not a pick coming back
-  // (`freshExportDialog`), because a pick the dialog left for may never return:
-  // another product can take the box tool over it. e2e/export-area.spec.ts (run
-  // in CI; App has no render harness) holds the mechanism through its Map tools
-  // caller.
+  // (`freshExportDialog`), so an opening never starts on another's form. While a
+  // pick is out, Tools is off and the pages are dimmed, so the pick comes back
+  // or is cancelled back (e2e/export-area.spec.ts).
   const [exportDialogKey, setExportDialogKey] = useState(0);
   // Topo job tracking (lifted from TopoDialog so polling survives dialog close)
   const [activeTopoJobs, setActiveTopoJobs] = useState<TopoJob[]>([]);
@@ -1811,6 +1821,7 @@ function App() {
             showWays={showWays || !!planOnMap}
             showGauges={showGauges}
             onShowGauges={() => setShowGauges(true)}
+            showMgaGrid={showMgaGrid}
             placeTracks={!planOnMap || mineShown.ways ? placeTracks : []}
             standaloneTracks={
               !planOnMap || mineShown.ways ? standaloneTracks : []
@@ -1903,6 +1914,7 @@ function App() {
                   }
                 : undefined
             }
+            onBasemapHealth={setBasemapHealth}
             topoLayers={mapTopoLayers}
             sharpenedAreas={sharpenedAreas}
             slopeBands={slopeBands.drawn}
@@ -1973,12 +1985,16 @@ function App() {
           setShowWays={setShowWays}
           showGauges={showGauges}
           setShowGauges={setShowGauges}
+          showMgaGrid={showMgaGrid}
+          setShowMgaGrid={setShowMgaGrid}
           placeCount={places.length + sharedPlaces.length}
           wayCount={showWays ? wayCount : null}
           completedTopoJobs={completedTopoJobs}
           baseLayers={BASE_LAYERS}
           activeLayerId={activeLayerId}
           onActiveLayerChange={setActiveLayerId}
+          unavailableBasemaps={downBasemaps}
+          onBasemapHealth={setBasemapHealth}
           terrainLayers={terrainLayers}
           onTerrainLayerChange={setTerrainLayer}
           slopeBands={slopeBands.bands}

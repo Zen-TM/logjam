@@ -71,6 +71,7 @@ function renderBox(
       onSelectPlace={() => {}}
       onSelectGauge={() => {}}
       onSelectLocation={() => {}}
+      onSearchPin={() => {}}
       {...props}
     />,
   );
@@ -245,5 +246,70 @@ describe("MapSearchBox", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Location search isn't available right now. Try again in a few minutes.",
     );
+  });
+
+  // Mutation: drop `disabled={disabled}` from the input, or the early return
+  // that stops "/" focusing it.
+  it("is off while an area is selected, and the / shortcut leaves it alone", () => {
+    renderBox({ disabled: true });
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  // Mutation: drop parseCoordinates from the options, or choose() stop
+  // recording the pick, and these go red.
+  it("offers a typed coordinate first, flies to it and remembers it", async () => {
+    localStorage.clear();
+    const onSelectLocation = vi.fn();
+    const input = renderBox({ onSelectLocation });
+    type(input, "56 245000 6264000");
+    const row = screen.getAllByRole("option")[0];
+    expect(row.textContent).toContain("MGA 56 245000 6264000");
+    fireEvent.pointerDown(row);
+    expect(onSelectLocation).toHaveBeenCalledOnce();
+    expect(onSelectLocation.mock.calls[0][0]).toBeCloseTo(-33.7, 0);
+    expect(localStorage.getItem("logjam.recentSearches")).toContain("MGA 56");
+  });
+
+  it("lists recent picks on an empty focused box, with no clear row", async () => {
+    localStorage.clear();
+    const input = renderBox();
+    type(input, "-33.71, 150.31");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+
+    cleanup();
+    renderBox();
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "-33.71000, 150.31000",
+    ]);
+    expect(screen.queryByText("Clear")).toBeNull();
+  });
+
+  // Mutation: stop calling onSearchPin on a pick, or on emptying the box, and
+  // the pin is never dropped or never leaves.
+  it("drops a pin at a picked point and removes it when the box is emptied", async () => {
+    localStorage.clear();
+    const onSearchPin = vi.fn();
+    const input = renderBox({ onSearchPin });
+    type(input, "-33.71, 150.31");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    expect(onSearchPin).toHaveBeenLastCalledWith({ lat: -33.71, lon: 150.31 });
+
+    type(input, "abc");
+    type(input, "");
+    expect(onSearchPin).toHaveBeenLastCalledWith(null);
+  });
+
+  it("clears the pin when one of your own places is picked", async () => {
+    const onSearchPin = vi.fn();
+    const input = renderBox({
+      onSearchPin,
+      places: [{ id: "1", name: "Mine", altNames: [] } as unknown as TPlace],
+    });
+    type(input, "Mine");
+    fireEvent.pointerDown(screen.getAllByRole("option")[0]);
+    expect(onSearchPin).toHaveBeenLastCalledWith(null);
   });
 });

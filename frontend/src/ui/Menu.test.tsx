@@ -55,3 +55,35 @@ describe("a menu item offered but not yet runnable", () => {
     expect(screen.getByRole("menu")).toBeTruthy();
   });
 });
+
+describe("a press outside a floating element", () => {
+  function open() {
+    render(
+      <Menu
+        label="Actions"
+        entries={[{ id: "a", label: "A", onSelect: () => {} }]}
+        trigger={(props) => (
+          <button type="button" {...props}>
+            Actions
+          </button>
+        )}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+  }
+
+  // Mutation: drop the `dialog[open]` check in useOutsidePress, and a help
+  // Dialog opened from inside a popover closes it on the first press.
+  it("is not one when it lands in an open modal dialog portaled out of it", () => {
+    open();
+    const dialog = document.body.appendChild(document.createElement("dialog"));
+    dialog.setAttribute("open", "");
+    const inner = dialog.appendChild(document.createElement("button"));
+    fireEvent.pointerDown(inner);
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    dialog.remove();
+    fireEvent.pointerDown(document.body);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});

@@ -1,5 +1,11 @@
 import { Button, Checkbox, Notice } from "../../ui";
-import { useEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import * as maplibregl from "maplibre-gl";
 import { setWorkerUrl } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -13,9 +19,22 @@ import { PMTiles, Protocol } from "pmtiles";
 import {
   INK,
   MAP_INK,
+  mgaGrid,
+  MGA_GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
+  CONTOUR_LABELS_MIN_ZOOM,
+  CONTOURS_MIN_ZOOM,
+  CONTOURS_MINOR_MIN_ZOOM,
+  GAUGES_MIN_ZOOM,
+  SLOPE_MIN_ZOOM,
+  zoomFadeIn,
   PLACE_TYPE_COLORS,
-  SHARED_PLACE_COLOR,
+  PLACE_BADGE_OFFSET,
+  PLACE_BADGE_PIN_RADIUS,
+  PLACE_BADGE_SHARED_IMAGE,
+  PLACE_BADGE_SIZE,
+  PLACE_BADGE_URIS,
+  PLACE_BADGE_VISITED_IMAGE,
   type MapPointCoord,
   type RegionBbox,
   contourLabelHalo,
@@ -42,6 +61,8 @@ import {
   GAUGE_BELOW,
   GAUGE_LABELS,
   GAUGE_LAYER,
+  GRID_LABELS,
+  GRID_LINES,
   LAND_EDGE_LAYER,
   LAND_FILL_LAYER,
   PRESSABLE_LAYERS,
@@ -53,6 +74,7 @@ import type { RouteHoverChannel } from "./routeHover";
 import { layers as protomapsLayers, namedFlavor } from "@protomaps/basemaps";
 import {
   arrowSegmentFeatures,
+  DRAFT_LINE,
   draftAnchorIndices,
   draftPoints,
   fetchSnapLines,
@@ -152,6 +174,8 @@ import {
 import { messageFromError } from "../../errors/messageFromError";
 import {
   BASEMAP_CATALOG,
+  BASEMAP_FAIL_AFTER,
+  isServerFault,
   extentFromCentreAndSize,
   rgbaCssFromHex,
   contourWidthStops,
@@ -159,6 +183,8 @@ import {
   slopeReliefColor,
   isValidLatitude,
   isValidLongitude,
+  type SearchPin,
+  searchPinAfter,
   type SlopeBand,
   type VectorStyleSettings,
   metersPerPixel,
@@ -181,6 +207,9 @@ const INITIAL_CENTER: [number, number] = [151.2093, -33.8688];
 const INITIAL_ZOOM = 7;
 const NOTHING_MUTED: ReadonlySet<string> = new Set();
 
+/** Below this the pin's dot is under 13px across, no bigger than its badge. */
+const PLACE_BADGE_MIN_ZOOM = 10;
+
 /** A layer's opacity, lowered on a feature stamped `muted`: the user's own
  *  things beside an open plan's (`mutedIds`). */
 function dimmed(opacity: number): maplibregl.ExpressionSpecification {
@@ -197,7 +226,6 @@ function readCssVar(name: string, fallback: string): string {
 function applyPlaceThemePaint(map: maplibregl.Map) {
   // A place whose type has not loaded wears the palette's first colour.
   const fallback = PLACE_TYPE_COLORS[0];
-  const shared = SHARED_PLACE_COLOR;
   const ink = INK;
   // The accent is the scheme's own colour and follows it onto the map; a
   // label and its halo are drawn on the basemap, so they do not (MAP_INK).
@@ -226,9 +254,6 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
     ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
     map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
-  }
-  if (map.getLayer("shared-place-halos")) {
-    map.setPaintProperty("shared-place-halos", "circle-stroke-color", shared);
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
@@ -529,6 +554,7 @@ function Map({
   showWays,
   showGauges,
   onShowGauges,
+  showMgaGrid,
   placeTracks,
   standaloneTracks,
   routes,
@@ -557,6 +583,7 @@ function Map({
   onFilterAreaSelected,
   topoLayers,
   sharpenedAreas,
+  onBasemapHealth,
   slopeBands,
   activeLayerId,
   selectingGeoPdfExtent,
@@ -604,6 +631,7 @@ function Map({
   /** The river gauge drops, an optional layer (off until asked for). */
   showGauges: boolean;
   onShowGauges: () => void;
+  showMgaGrid: boolean;
   placeTracks: PlaceTrack[];
   // Standalone files (the user's own imports and recorded tracks), already
   // resolved to a presigned URL. Same fetch-and-parse treatment as placeTracks.
@@ -670,6 +698,8 @@ function Map({
   }[];
   /** The sharpened areas the user can see: 3D terrain reads them too. */
   sharpenedAreas?: readonly SharpenedOverlay[];
+  /** A basemap's tiles keep failing on a server fault (`down`), or load again. */
+  onBasemapHealth?: (id: string, down: boolean) => void;
   /** The bands every `slope` entry is coloured in. */
   slopeBands?: SlopeBand[];
   activeLayerId: string;
@@ -823,6 +853,7 @@ function Map({
   }, []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
+  const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
   const { file: gaugeFile, failed: gaugesFailed } = useGauges(showGauges);
   if (!showGauges && gaugeId) setGaugeId(null);
   const openGauge = gaugeFile?.gauges.find((g) => g.id === gaugeId);
@@ -936,6 +967,12 @@ function Map({
   // effect (never re-add a known-missing source — stops the per-load retry
   // spam).
   const failedTopoSourcesRef = useRef<Set<string>>(new Set());
+  // Consecutive failed tile loads per basemap; a tile that loads resets it.
+  const baseFailsRef = useRef<Record<string, number>>({});
+  const onBasemapHealthRef = useRef(onBasemapHealth);
+  useEffect(() => {
+    onBasemapHealthRef.current = onBasemapHealth;
+  }, [onBasemapHealth]);
   // Topo entries whose transient (non-terminal) load error was already logged
   // this session — one console line per source, not one per flaky tile.
   const transientTopoSourcesRef = useRef<Set<string>>(new Set());
@@ -1037,11 +1074,33 @@ function Map({
     // can flag it. A transient error (network blip, 5xx, per-tile miss) is left
     // in place so MapLibre retries; one blip must not blacklist a healthy
     // overlay for the whole session.
+    map.on("data", (event) => {
+      const { sourceId, tile } = event as { sourceId?: string; tile?: unknown };
+      if (tile && sourceId && baseFailsRef.current[sourceId]) {
+        baseFailsRef.current[sourceId] = 0;
+        onBasemapHealthRef.current?.(sourceId, false);
+      }
+    });
     map.on("error", (event) => {
       const { sourceId } = event as { sourceId?: unknown };
       // The router's way of saying "draw the parent": not an error at all,
       // for a Terrain layer and for the 3D terrain source alike.
       if (isAbsentTerrainTile(event.error)) return;
+      if (
+        typeof sourceId === "string" &&
+        BASE_LAYERS.some((layer) => layer.id === sourceId)
+      ) {
+        // A device with no signal is the offline notice's business, not an
+        // outage of this server.
+        const status = (event.error as { status?: number } | undefined)?.status;
+        if (navigator.onLine && isServerFault(status)) {
+          const fails = (baseFailsRef.current[sourceId] ?? 0) + 1;
+          baseFailsRef.current[sourceId] = fails;
+          if (fails >= BASEMAP_FAIL_AFTER)
+            onBasemapHealthRef.current?.(sourceId, true);
+        }
+        return;
+      }
       if (typeof sourceId !== "string" || !sourceId.startsWith("topo-src-")) {
         // Not ours — keep MapLibre's default behaviour of printing the error
         // (binding any "error" listener suppresses it otherwise).
@@ -1294,6 +1353,17 @@ function Map({
       // SOLID. A route is a thing you are making; the measure tool's dotted
       // line is a thing you are asking (the `measuring` effect below).
       map.addLayer({
+        id: "route-draft-casing",
+        type: "line",
+        source: "route-draft",
+        filter: ["!=", ["get", "kind"], ARROW_FEATURE_KIND],
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": DRAFT_LINE.casingColor,
+          "line-width": DRAFT_LINE.casingWidth,
+        },
+      });
+      map.addLayer({
         id: "route-draft-line",
         type: "line",
         source: "route-draft",
@@ -1304,7 +1374,7 @@ function Map({
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
           "line-color": initialDraftColor,
-          "line-width": 3,
+          "line-width": DRAFT_LINE.coreWidth,
         },
       });
       map.addLayer({
@@ -1399,30 +1469,6 @@ function Map({
         },
       });
 
-      // The ring around a shared place, 2px clear of its pin. Also what keeps a
-      // shared place reachable: your own copy of it sits on the SAME coordinate
-      // and draws on top, so without the ring nothing of it shows or takes a
-      // click. Transparent fill, so it adds no mass of its own.
-      map.addLayer({
-        id: "shared-place-halos",
-        type: "circle",
-        source: "shared-places",
-        paint: {
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            7,
-            7.5,
-            14,
-            13.5,
-          ],
-          "circle-opacity": 0,
-          "circle-stroke-color": SHARED_PLACE_COLOR,
-          "circle-stroke-width": 1.5,
-        },
-      });
-
       map.addLayer({
         id: "shared-place-circles",
         type: "circle",
@@ -1434,6 +1480,59 @@ function Map({
           "circle-stroke-width": 1.5,
         },
       });
+
+      // The status badge on a pin's upper-right rim: a person for a shared
+      // place, a tick for a visited one (never both, placeStatus). It sticks
+      // out past the dot, so it is still seen and pressed when your own copy
+      // of a shared place sits on the same coordinate and covers the dot. It
+      // scales with the pin (icon-size and its offset follow the dot's radius)
+      // and is hidden below PLACE_BADGE_MIN_ZOOM, where it would be no
+      // smaller than the pin it labels.
+      const badges: [
+        string,
+        string,
+        string,
+        maplibregl.FilterSpecification | undefined,
+      ][] = [
+        [
+          "shared-place-badges",
+          "shared-places",
+          PLACE_BADGE_SHARED_IMAGE,
+          undefined,
+        ],
+        [
+          "visited-place-badges",
+          "places",
+          PLACE_BADGE_VISITED_IMAGE,
+          ["==", ["get", "done"], true],
+        ],
+      ];
+      for (const [id, source, image, filter] of badges) {
+        map.addLayer({
+          id,
+          type: "symbol",
+          source,
+          minzoom: PLACE_BADGE_MIN_ZOOM,
+          ...(filter ? { filter } : {}),
+          layout: {
+            "icon-image": image,
+            "icon-size": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              7,
+              (PLACE_BADGE_SIZE * 4) / PLACE_BADGE_PIN_RADIUS,
+              14,
+              (PLACE_BADGE_SIZE * 10) / PLACE_BADGE_PIN_RADIUS,
+            ],
+            "icon-offset": PLACE_BADGE_OFFSET,
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+          },
+          paint:
+            id === "visited-place-badges" ? { "icon-opacity": dimmed(1) } : {},
+        });
+      }
 
       map.addLayer({
         id: "place-labels",
@@ -1476,6 +1575,47 @@ function Map({
 
       applyPlaceThemePaint(map);
 
+      map.addSource("mga-grid", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      map.addLayer(
+        {
+          id: GRID_LINES,
+          type: "line",
+          source: "mga-grid",
+          layout: { visibility: "none" },
+          paint: {
+            "line-color": MAP_INK.grid,
+            "line-width": MGA_GRID_STYLE.lineWidth,
+            "line-opacity": MGA_GRID_STYLE.lineOpacity,
+          },
+        },
+        GAUGE_BELOW,
+      );
+      map.addLayer(
+        {
+          id: GRID_LABELS,
+          type: "symbol",
+          source: "mga-grid",
+          layout: {
+            visibility: "none",
+            "symbol-placement": "line",
+            "symbol-spacing": MGA_GRID_STYLE.labelSpacing,
+            "text-rotation-alignment": "viewport",
+            "text-field": ["get", "text"],
+            "text-font": ["Noto Sans Medium"],
+            "text-size": 11,
+          },
+          paint: {
+            "text-color": MAP_INK.label,
+            "text-halo-color": MAP_INK.casing,
+            "text-halo-width": 1.5,
+          },
+        },
+        GAUGE_BELOW,
+      );
+
       map.addSource("gauges", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
@@ -1487,6 +1627,7 @@ function Map({
           id: GAUGE_LAYER,
           type: "symbol",
           source: "gauges",
+          minzoom: GAUGES_MIN_ZOOM,
           layout: {
             visibility: "none",
             "icon-image": GAUGE_ICON_IMAGE,
@@ -1496,7 +1637,12 @@ function Map({
           },
           paint: {
             "icon-color": MAP_INK.gauge,
-            "icon-opacity": ["case", ["get", "recent"], 1, 0.35],
+            "icon-opacity": zoomFadeIn(GAUGES_MIN_ZOOM, [
+              "case",
+              ["get", "recent"],
+              1,
+              0.35,
+            ]) as maplibregl.ExpressionSpecification,
             "icon-halo-color": MAP_INK.ring,
             "icon-halo-width": 1.5,
           },
@@ -1523,6 +1669,9 @@ function Map({
             "text-color": MAP_INK.label,
             "text-halo-color": MAP_INK.casing,
             "text-halo-width": 1.5,
+            "text-opacity": zoomFadeIn(
+              MAP_LABEL_MIN_ZOOM,
+            ) as maplibregl.ExpressionSpecification,
           },
         },
         GAUGE_BELOW,
@@ -1544,7 +1693,8 @@ function Map({
         map.getCanvas().style.cursor = "";
       });
 
-      map.on("click", "place-circles", (e) => {
+      // The status badges are part of the pin they sit on.
+      map.on("click", ["place-circles", "visited-place-badges"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1555,7 +1705,7 @@ function Map({
 
       // One registration over both layers, so a press on the pin (which is
       // inside the ring) selects once rather than once per layer.
-      map.on("click", ["shared-place-halos", "shared-place-circles"], (e) => {
+      map.on("click", ["shared-place-badges", "shared-place-circles"], (e) => {
         if (pickModeRef.current) return;
         if (!e.features?.length) return;
         const feature = e.features[0];
@@ -1564,16 +1714,16 @@ function Map({
         selectPlaceRef.current(id);
       });
 
-      map.on("mouseenter", "place-circles", () => {
+      map.on("mouseenter", ["place-circles", "visited-place-badges"], () => {
         if (pickModeRef.current) return;
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "place-circles", () => {
+      map.on("mouseleave", ["place-circles", "visited-place-badges"], () => {
         map.getCanvas().style.cursor = "";
       });
       map.on(
         "mouseenter",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           if (pickModeRef.current) return;
           map.getCanvas().style.cursor = "pointer";
@@ -1581,7 +1731,7 @@ function Map({
       );
       map.on(
         "mouseleave",
-        ["shared-place-halos", "shared-place-circles"],
+        ["shared-place-badges", "shared-place-circles"],
         () => {
           map.getCanvas().style.cursor = "";
         },
@@ -1979,12 +2129,17 @@ function Map({
       vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
+      "visited-place-badges",
+      "visibility",
+      vis(showPlaces),
+    );
+    mapRef.current.setLayoutProperty(
       "place-labels",
       "visibility",
       vis(showPlaces),
     );
     mapRef.current.setLayoutProperty(
-      "shared-place-halos",
+      "shared-place-badges",
       "visibility",
       vis(showPlaces),
     );
@@ -2042,6 +2197,34 @@ function Map({
       })),
     });
   }, [showGauges, gaugeFile, mapLoaded]);
+
+  // The MGA grid, rebuilt for the view each time the camera settles.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapLoaded || !map) return;
+    const vis = showMgaGrid ? "visible" : "none";
+    for (const id of [GRID_LINES, GRID_LABELS])
+      map.setLayoutProperty(id, "visibility", vis);
+    if (!showMgaGrid) return;
+    const draw = () => {
+      const b = map.getBounds();
+      const grid = mgaGrid(
+        {
+          west: b.getWest(),
+          south: b.getSouth(),
+          east: b.getEast(),
+          north: b.getNorth(),
+        },
+        map.getZoom(),
+      );
+      (map.getSource("mga-grid") as maplibregl.GeoJSONSource).setData(grid);
+    };
+    draw();
+    map.on("moveend", draw);
+    return () => {
+      map.off("moveend", draw);
+    };
+  }, [showMgaGrid, mapLoaded]);
 
   // Push saved routes to the map. No fetch/parse step: geometry is inline.
   useEffect(() => {
@@ -2120,9 +2303,9 @@ function Map({
     );
   }, [drawPoints, drawAnchorIndices, drawingRoute, mapLoaded]);
 
-  // A measurement is the same draft drawn DOTTED and without direction arrows:
-  // a route is a thing you are making, a measurement a thing you are asking,
-  // and it has no way it runs.
+  // A measurement is the same draft drawn DOTTED, arrows and all, as on Logjam
+  // GPS: a route is a thing you are making, a measurement a thing you are
+  // asking.
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const map = mapRef.current;
@@ -2130,13 +2313,17 @@ function Map({
     map.setPaintProperty(
       "route-draft-line",
       "line-dasharray",
-      // Round caps turn a near-zero dash into a dot.
-      measuring ? [0.1, 2] : undefined,
+      measuring ? [...DRAFT_LINE.measureDash] : undefined,
     );
-    map.setLayoutProperty(
-      "route-draft-direction",
-      "visibility",
-      measuring ? "none" : "visible",
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-dasharray",
+      measuring ? [...DRAFT_LINE.measureCasingDash] : undefined,
+    );
+    map.setPaintProperty(
+      "route-draft-casing",
+      "line-width",
+      measuring ? DRAFT_LINE.measureCasingWidth : DRAFT_LINE.casingWidth,
     );
   }, [measuring, mapLoaded]);
 
@@ -2480,6 +2667,27 @@ function Map({
     };
   }, [routeHover, mapLoaded]);
 
+  // The pin for a searched location. A DOM marker, so it sits over every pin
+  // layer, and pointer-events: none (Map.module.css) so a click goes through
+  // to the map, which is what removes it (searchPinAfter).
+  useEffect(() => {
+    if (!mapLoaded || !mapRef.current || !searchPin) return;
+    const map = mapRef.current;
+    const element = document.createElement("div");
+    element.className = classes.searchPin;
+    element.innerHTML =
+      '<svg viewBox="0 0 24 32" width="24" height="32" aria-hidden="true"><path d="M12 31C12 31 2 19.5 2 12a10 10 0 0 1 20 0c0 7.5-10 19-10 19z" fill="currentColor" stroke="#fff" stroke-width="2"/><circle cx="12" cy="12" r="3.5" fill="#fff"/></svg>';
+    const marker = new maplibregl.Marker({ element, anchor: "bottom" })
+      .setLngLat([searchPin.lon, searchPin.lat])
+      .addTo(map);
+    const onClick = () => setSearchPin(searchPinAfter("tap"));
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+      marker.remove();
+    };
+  }, [searchPin, mapLoaded]);
+
   // Toggle base layer visibility
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
@@ -2531,6 +2739,18 @@ function Map({
           : id === GAUGE_ICON_IMAGE
             ? GAUGE_ICON_SDF_URI
             : null;
+      // Badges are plain bitmaps, two colours and a rim, so there is no tint
+      // to protect and MapLibre can take the decoded element itself.
+      const badgeUri = (PLACE_BADGE_URIS as Record<string, string>)[id];
+      if (badgeUri) {
+        if (map.hasImage(id)) return;
+        const badge = new Image();
+        badge.onload = () => {
+          if (!map.hasImage(id)) map.addImage(id, badge);
+        };
+        badge.src = badgeUri;
+        return;
+      }
       if (sdfUri) {
         if (map.hasImage(id)) return;
         const arrow = new Image();
@@ -2686,7 +2906,11 @@ function Map({
                   id: layerId,
                   type: "color-relief",
                   source: srcId,
+                  minzoom: SLOPE_MIN_ZOOM,
                   paint: {
+                    "color-relief-opacity": zoomFadeIn(
+                      SLOPE_MIN_ZOOM,
+                    ) as maplibregl.ExpressionSpecification,
                     "color-relief-color": slopeReliefColor(
                       slopeBandsRef.current ?? [],
                     ) as maplibregl.ExpressionSpecification,
@@ -2770,7 +2994,12 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["!=", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            minzoom: 14,
+            minzoom: CONTOURS_MINOR_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MINOR_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
+            },
           });
         }
         // Major contours (50m): elevation divisible by 50
@@ -2782,9 +3011,15 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
+            minzoom: CONTOURS_MIN_ZOOM,
+            paint: {
+              "line-opacity": zoomFadeIn(
+                CONTOURS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
+            },
           });
         }
-        // Elevation labels on major contours at z12+
+        // Elevation labels on major contours
         const labelsId = `topo-${id}-labels`;
         if (!map.getLayer(labelsId)) {
           map.addLayer({
@@ -2793,7 +3028,7 @@ function Map({
             source: srcId,
             "source-layer": "contours",
             filter: ["==", ["%", ["to-number", ["get", "elev"]], 50], 0],
-            minzoom: 12,
+            minzoom: CONTOUR_LABELS_MIN_ZOOM,
             layout: {
               "text-field": ["concat", ["to-string", ["get", "elev"]], "m"],
               "text-font": ["Noto Sans Medium"],
@@ -2810,6 +3045,9 @@ function Map({
             paint: {
               "text-halo-color": "rgba(255, 255, 255, 0.8)",
               "text-halo-width": 1.5,
+              "text-opacity": zoomFadeIn(
+                CONTOUR_LABELS_MIN_ZOOM,
+              ) as maplibregl.ExpressionSpecification,
             },
           });
         }
@@ -3066,9 +3304,13 @@ function Map({
         metersPerPixel(targetCenter[1], 0) / (targetWidthM / framePxW),
       );
 
+      // North-up and flat too: this ease replaces the one that flattens the
+      // map for the selection (`flattenForSelection`).
       m.easeTo({
         center: targetCenter,
         zoom: targetZoom,
+        bearing: 0,
+        pitch: 0,
         duration: 600,
       });
 
@@ -3277,11 +3519,12 @@ function Map({
     const map = mapRef.current;
     if (map) applyTerrainNow(map, ++terrainToggleRef.current);
   });
-  const toggleTerrain = () => {
+  const toggleTerrain = () => setTerrainOn(!is3D);
+  const setTerrainOn = (on: boolean, quiet = false) => {
     const map = mapRef.current;
     if (!map) return;
     const toggle = ++terrainToggleRef.current;
-    if (is3D) {
+    if (!on) {
       // Turning off — nothing to wait for, flatten immediately
       pendingTiltRef.current = false;
       map.setTerrain(null);
@@ -3290,7 +3533,9 @@ function Map({
       map.easeTo({ pitch: 0, duration: 1000 });
     } else {
       // Toast to inform user about movement controls in 3D mode
-      if (window.matchMedia("(pointer: coarse)").matches) {
+      if (quiet) {
+        // Coming back after an area selection: they have seen it.
+      } else if (window.matchMedia("(pointer: coarse)").matches) {
         toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
         toast.info(
@@ -3303,8 +3548,36 @@ function Map({
       applyTerrainNow(map, toggle);
     }
 
-    setIs3D(!is3D);
+    setIs3D(on);
   };
+
+  // Picking an area turns the map north-up and flat: its extent is north, south, east and
+  // west (geoPdfExtent.ts, useBoxDraw) and the GeoPDF prints a north-up page,
+  // so a turned or tilted frame would get something other than what it framed.
+  // 3D comes back when the selection ends.
+  const selectingArea =
+    (selectingBbox ?? false) ||
+    (selectingGeoPdfExtent ?? false) ||
+    (selectingFilterArea ?? false);
+  const flattenForSelection = useEffectEvent(() => {
+    const map = mapRef.current;
+    if (!map) return () => {};
+    const was3D = is3D;
+    if (was3D) setTerrainOn(false);
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+    map.easeTo({ bearing: 0, pitch: 0, duration: 600 });
+    return () => {
+      map.dragRotate.enable();
+      map.touchZoomRotate.enableRotation();
+      map.keyboard.enableRotation();
+      if (was3D && mapRef.current === map) setTerrainOn(true, true);
+    };
+  });
+  useEffect(() => {
+    if (selectingArea && mapLoaded) return flattenForSelection();
+  }, [selectingArea, mapLoaded]);
 
   return (
     <div
@@ -3321,10 +3594,13 @@ function Map({
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
         tools={mapTools}
+        selectingArea={selectingArea}
         notices={notices}
         search={
-          // Always available, including during pick modes for a quick fly-to.
+          // Live during a point pick or a route draw (a quick fly-to), off
+          // while an area is selected: the frame holds the view the user set.
           <MapSearchBox
+            disabled={selectingArea}
             places={places}
             sharedPlaces={sharedPlaces}
             onSelectPlace={(place) => {
@@ -3353,6 +3629,7 @@ function Map({
                 duration: 1200,
               })
             }
+            onSearchPin={setSearchPin}
           />
         }
       />

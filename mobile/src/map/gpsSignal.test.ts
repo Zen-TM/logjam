@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { FIX_COARSE_M, FIX_STALE_MS, fixQuality } from "./gpsSignal";
+import {
+  deliveredFix,
+  FIX_COARSE_M,
+  FIX_STALE_MS,
+  fixQuality,
+  nextFix,
+} from "./gpsSignal";
 
 const NOW = 1_700_000_000_000;
 
@@ -53,5 +59,32 @@ describe("fixQuality", () => {
 
   it("has nothing to trust before the first fix", () => {
     expect(fixQuality(null, NOW)).toBe("stale");
+  });
+});
+
+describe("deliveredFix", () => {
+  // Mutation: return `{ atMs: <platform timestamp>, ... }` and a skewed device
+  // clock greys every live fix.
+  it("stamps a delivery with our clock, whatever the platform said", () => {
+    expect(fixQuality(deliveredFix(8, NOW), NOW + 1000)).toBe("live");
+  });
+});
+
+describe("nextFix", () => {
+  // Mutation: compare atMs (return the later of the two) and a device clock
+  // behind GNSS time rejects the live fix for a cached one stamped ahead.
+  it("a live delivery wins even when the cached fix reads as newer", () => {
+    const cachedAhead = { atMs: Date.now() + 600_000, accuracyM: 5 };
+    const live = deliveredFix(5, Date.now());
+    expect(nextFix(cachedAhead, live, false)).toBe(live);
+  });
+
+  // Mutation: return `incoming` always and a restarted watcher's cached fix
+  // overwrites the live one.
+  it("the cached fix only fills an empty slot", () => {
+    const live = { atMs: NOW, accuracyM: 5 };
+    const cached = { atMs: NOW - 600_000, accuracyM: 5 };
+    expect(nextFix(live, cached, true)).toBe(live);
+    expect(nextFix(null, cached, true)).toBe(cached);
   });
 });

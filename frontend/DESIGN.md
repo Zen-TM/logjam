@@ -100,8 +100,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 - **`ConfirmDialog`**: `destructive` when something is lost, `filled` when
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
-  caller's call: Layers stays open while the map is panned, a value picker
-  closes. More than a switch inside opens a sub-view, never a second popover
+  caller's call, and Layers and a value picker both close (so does the Tools
+  tray); a press on the map closes them too. More than a switch inside opens a sub-view, never a second popover
   or an accordion.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its

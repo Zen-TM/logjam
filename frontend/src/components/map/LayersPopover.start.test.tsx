@@ -25,13 +25,17 @@ afterEach(cleanup);
 
 type Start = { view: "sharpened" } | null;
 
-function popover(open: boolean, startView: Start) {
+function popover(
+  open: boolean,
+  startView: Start,
+  onClose: () => void = vi.fn(),
+) {
   const noop = vi.fn();
   return (
     <ToastProvider>
       <LayersPopover
         open={open}
-        onClose={noop}
+        onClose={onClose}
         anchorRef={createRef<HTMLElement>()}
         showPlaces
         setShowPlaces={noop}
@@ -39,6 +43,8 @@ function popover(open: boolean, startView: Start) {
         setShowWays={noop}
         showGauges={false}
         setShowGauges={noop}
+        showMgaGrid={false}
+        setShowMgaGrid={noop}
         placeCount={0}
         wayCount={0}
         completedTopoJobs={[]}
@@ -96,5 +102,17 @@ describe("the Layers popover's start view", () => {
     rerender(popover(false, start));
     rerender(popover(true, start));
     expect(onSharpened()).toBeNull();
+  });
+});
+
+describe("the Layers popover's light dismiss", () => {
+  // Mutation: drop `dismissOnOutsidePress` from the Popover in LayersPopover.
+  it("closes on a press outside it, not on one inside", () => {
+    const onClose = vi.fn();
+    render(popover(true, null, onClose));
+    fireEvent.pointerDown(screen.getByRole("dialog"));
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.pointerDown(document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

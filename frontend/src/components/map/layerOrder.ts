@@ -24,11 +24,19 @@ export const GAUGE_LAYER = "gauge-drops";
 export const GAUGE_LABELS = "gauge-labels";
 export const GAUGE_BELOW = "place-highlight";
 
+/**
+ * The MGA grid sits at the gauges' height, over the topo band and under every
+ * pin, as on Logjam GPS. Guard: `layerOrder.test.ts`.
+ */
+export const GRID_LINES = "mga-grid-lines";
+export const GRID_LABELS = "mga-grid-labels";
+
 /** Everything else on the map with a press of its own. A gauge drop under one
  *  of these is not the thing pressed. */
 export const PRESSABLE_LAYERS = [
   "place-circles",
-  "shared-place-halos",
+  "visited-place-badges",
+  "shared-place-badges",
   "shared-place-circles",
   "routes-hit",
   "place-tracks-hit",

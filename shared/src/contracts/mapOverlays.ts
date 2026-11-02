@@ -24,6 +24,7 @@ export const MAP_OVERLAYS = {
     },
     { key: "land" },
     { key: "gauges" },
+    { key: "mgaGrid" },
     { key: "importFile" },
   ],
   copy: {
@@ -31,6 +32,7 @@ export const MAP_OVERLAYS = {
     ways: MAP_LAYERS.copy.ways,
     land: MAP_TERRAIN.copy.land,
     gauges: GAUGES.copy.overlay,
+    mgaGrid: "MGA grid",
     geoPdfs: "GeoPDF maps",
     importFile: MAP_LAYERS.copy.importFile,
   },

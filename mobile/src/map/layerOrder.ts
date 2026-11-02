@@ -15,7 +15,11 @@
 import { TERRAIN_BASEMAP_ANCHORS } from "@logjam/shared";
 
 /** Lowest place-pin layer, always mounted: everything but the pins goes below it. Guard: mobile/src/map/layerOrder.test.ts. */
-export const PIN_FLOOR = "shared-place-halos";
+export const PIN_FLOOR = "shared-place-circles";
+
+/** The MGA grid, drawn at the gauges' height: over the ground band, under every pin. Agrees with frontend/src/components/map/layerOrder.ts (GRID_LINES, GRID_LABELS); guard: layerOrder.test.ts. */
+export const GRID_LINES = "mga-grid-lines";
+export const GRID_LABELS = "mga-grid-labels";
 
 /** Lowest saved-route layer, always mounted (RoutesLayer never unmounts). Guard: mobile/src/map/layerOrder.test.ts. */
 export const ROUTES_FLOOR = "saved-routes-casing";

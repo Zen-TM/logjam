@@ -3,19 +3,18 @@
 // far the scale bar may extend, and the search bar has to clear the status bar,
 // so the geometry lives here instead of being duplicated per component.
 
-// Circular floating buttons. The icon scales with the button so the glyph keeps
-// its proportion inside the circle.
-export const FAB_SIZE = 72;
-export const FAB_ICON = 32;
-
 /**
- * The search pill's height, and therefore its collapsed diameter. Smaller than
- * a control-column button on purpose: search is a thing you go looking for,
- * not one you reach for with a thumb mid-scramble, and the collapsed circle has
- * to be the same size as the bar it becomes for the expansion to read as one
- * shape growing (see MapSearchBar).
+ * The search pill's height, and therefore its collapsed diameter: the collapsed
+ * circle has to be the same size as the bar it becomes for the expansion to
+ * read as one shape growing (see MapSearchBar). The record button and every
+ * control-column button share it, so the corner controls read as one set.
  */
 export const SEARCH_SIZE = 52;
+
+// Circular floating buttons. The icon scales with the button so the glyph keeps
+// its proportion inside the circle.
+export const FAB_SIZE = SEARCH_SIZE;
+export const FAB_ICON = 24;
 
 // Secondary chrome that must not compete with the primary column: the
 // attribution (i) button.

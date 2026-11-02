@@ -3,8 +3,7 @@ import { test, expect, type Page } from "@playwright/test";
 // Export an area hides itself while a GIS format's box is drawn on the map,
 // and expects that box back. App holds the opening's own state (which format
 // it starts on, the box it was opened over), and this is the only test of
-// that wiring: App has no render harness (it pulls in maplibre). Red when an
-// abandoned pick leaks into the next opening, which then starts on GeoTIFF.
+// that wiring: App has no render harness (it pulls in maplibre).
 
 // Local only: it needs fake auth and a seeded API, as a11y.spec.ts does.
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
@@ -22,7 +21,7 @@ async function openApp(page: Page) {
 
 /** Map tools → Export an area → GeoTIFF → Pick on the map: the
  *  dialog hides and the box tool waits for the export's box. */
-async function abandonGisPick(page: Page) {
+async function startGisPick(page: Page) {
   await mapTool(page, ["Make a map", "Export an area"]);
   const dialog = page.locator("dialog[open]");
   await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
@@ -44,7 +43,7 @@ test("the pages hold still while an export's box is drawn", async ({
   page,
 }) => {
   await openApp(page);
-  await abandonGisPick(page);
+  await startGisPick(page);
   // Mutation: drop `boxPickDimsUI` from App's `dimUI`, and the rail takes the
   // click. Visible first, so a missing button can't pass as an inert one.
   const places = page.getByRole("button", { name: "Places", exact: true });
@@ -52,17 +51,19 @@ test("the pages hold still while an export's box is drawn", async ({
   await expect(places.click({ trial: true, timeout: 2_000 })).rejects.toThrow();
 });
 
-test("Map tools after an abandoned GIS pick opens a fresh GeoPDF form", async ({
+test("a GIS pick holds Tools off and returns to its own form", async ({
   page,
 }) => {
   await openApp(page);
-  await abandonGisPick(page);
-  // Mutation: let `freshExportDialog` skip its key bump, and the dialog keeps
-  // the GeoTIFF the abandoned opening chose.
-  await mapTool(page, ["Make a map", "Export an area"]);
-  const dialog = page.locator("dialog[open]");
-  await expect(dialog.getByRole("radio", { name: "GeoPDF" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  await startGisPick(page);
+  // Mutation: drop `disabled={selectingArea}` from MapChrome's Tools button,
+  // and a second product can take the box tool over this pick.
+  await expect(
+    page.getByRole("button", { name: "Tools", exact: true }),
+  ).toBeDisabled();
+  // Cancel hands the pick back to the dialog that left for it, as it was.
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.locator("dialog[open]").getByRole("radio", { name: "GeoTIFF" }),
+  ).toHaveAttribute("aria-checked", "true");
 });

@@ -21,7 +21,13 @@ export {
   TextField,
 } from "./TextField";
 export { ColourField } from "./ColourField";
-export { Menu, Popover, type MenuEntry, type MenuItem } from "./Menu";
+export {
+  Menu,
+  Popover,
+  useOutsidePress,
+  type MenuEntry,
+  type MenuItem,
+} from "./Menu";
 export { AttributeFilter } from "./AttributeFilter";
 export { DateRangeField } from "./DateRangeField";
 export { FilterField } from "./FilterField";

@@ -14,6 +14,7 @@ import {
   Menu,
   NorthNeedle,
   useEscape,
+  useOutsidePress,
   type MenuEntry,
   type Glyph,
 } from "../../ui";
@@ -57,6 +58,7 @@ export default function MapChrome({
   notices,
   layersButton,
   tools,
+  selectingArea = false,
 }: {
   /** Null until the map has loaded. */
   map: maplibregl.Map | null;
@@ -67,12 +69,16 @@ export default function MapChrome({
   notices?: ReactNode;
   layersButton?: ReactNode;
   tools: readonly MapTool[];
+  /** While an area is being selected: a second tool can't start over it, and
+   *  the map stays north-up and flat (Map.tsx), so 3D and the compass are off. */
+  selectingArea?: boolean;
 }) {
   const toast = useToast();
   const [bearing, setBearing] = useState(0);
   const [zoom, setZoom] = useState({ atMin: false, atMax: false });
   const [locate, setLocate] = useState<LocateState>("off");
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpenState, setToolsOpen] = useState(false);
+  const toolsOpen = toolsOpenState && !selectingArea;
   const trayId = useId();
   // The tray AND its button: opening the tray leaves focus on the button, so
   // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
@@ -126,6 +132,8 @@ export default function MapChrome({
     setToolsOpen(false);
     toolsButtonRef.current?.focus();
   });
+
+  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false));
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);
@@ -203,6 +211,7 @@ export default function MapChrome({
             label="Tools"
             expanded={toolsOpen}
             aria-controls={toolsOpen ? trayId : undefined}
+            disabled={selectingArea}
             onClick={() => setToolsOpen((current) => !current)}
           />
         </div>
@@ -211,7 +220,7 @@ export default function MapChrome({
           label="3D terrain"
           pressed={is3D}
           onClick={onToggle3D}
-          disabled={!map}
+          disabled={!map || selectingArea}
         />
         <MapButton
           icon="locate"
@@ -241,7 +250,7 @@ export default function MapChrome({
         <MapButton
           icon={NorthNeedle}
           label="Reset north"
-          disabled={!map}
+          disabled={!map || selectingArea}
           className={classes.compass}
           style={{ "--bearing": `${bearing}deg` } as CSSProperties}
           onClick={() => map?.resetNorthPitch()}

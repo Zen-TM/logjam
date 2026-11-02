@@ -62,7 +62,7 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
  *  and reopening in one click. */
-function useOutsidePress(
+export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
@@ -73,6 +73,15 @@ function useOutsidePress(
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (refs.some((ref) => ref.current?.contains(target))) return;
+      // A modal dialog opened from inside (a help button's Dialog) portals
+      // out of the floating element; pressing it is not pressing outside.
+      // One the floating element itself sits in is a different matter.
+      const modal = (target as Element).closest?.("dialog[open]");
+      if (
+        modal &&
+        !refs.some((ref) => ref.current && modal.contains(ref.current))
+      )
+        return;
       handleOutside();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -237,12 +246,10 @@ export function Menu({
  * A non-modal panel floating beside a control — the map's Layers. Escape or its
  * close button (top right) dismisses it and focus returns to the control.
  *
- * Whether a press OUTSIDE it dismisses depends on what it is for, so the caller
- * says. Layers must NOT: the whole point of it is to stay open while the user
- * pans the map behind it and watches overlays come and go. A popover that is a
- * FIELD's value — the colour palette — must, because every other way of
- * choosing a value in Logjam Web closes when you look away, and one that hangs
- * around reads as stuck.
+ * A press OUTSIDE it (the map included) dismisses it only when the caller
+ * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
+ * look away, and one that hangs around reads as stuck. The press is not
+ * swallowed, so focus goes where the user pressed.
  */
 export function Popover({
   open,
