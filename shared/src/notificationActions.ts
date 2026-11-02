@@ -1,9 +1,9 @@
 // What a notification lets you DO from the inbox row, as data.
 //
-// Two kinds of notification are a QUESTION rather than a report — a friend
-// request and a file a friend sent. Both are one accept/decline pair, so both
-// are the same widget, and this module is the one place that says which pair a
-// notification carries.
+// Four kinds of notification are a QUESTION rather than a report — a friend
+// request, a file a friend sent, an invite to a trip plan and a request to join
+// one. All are one accept/decline pair, so all are the same widget, and this
+// module is the one place that says which pair a notification carries.
 //
 // Shared by both inboxes, so Logjam GPS and Logjam Web offer the same answers
 // in the same words. Where a word names one client's surface ("find it in
@@ -21,6 +21,13 @@
 import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
 import type { ContractPlatform } from "./contracts/types.js";
+import {
+  TRIP_PLAN_JOIN,
+  TRIP_PLAN_PAGE,
+  TRIP_PLANS_LIST,
+  tripPlanLetInMessage,
+} from "./contracts/plans.js";
+import { planTurnDownConfirm } from "./contracts/planVerbs.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -54,9 +61,11 @@ export type NotificationInlineAction = {
 
 export type NotificationActions = {
   /** Which pair of API calls to run — the screen's discriminant. */
-  type: "friend_request" | "file_sent";
-  /** The one id those calls need: a friendshipId, or a fileSendId. */
+  type: "friend_request" | "file_sent" | "plan_invite" | "plan_join_request";
+  /** The one id those calls need: a friendshipId, a fileSendId or a planId. */
   targetId: string;
+  /** Who asked, for a join request (the call names them); null otherwise. */
+  requesterId: string | null;
   /** A trailing `StatusPill` label for a row that has a state, else null. */
   pill: string | null;
   /**
@@ -95,6 +104,7 @@ export function notificationActions(
     return {
       type: "friend_request",
       targetId: friendshipId,
+      requesterId: null,
       pill: null,
       sender: null,
       actions: [
@@ -119,6 +129,73 @@ export function notificationActions(
             body: `${username} won't be told, and can send another request later.`,
             confirmLabel: "Decline",
           },
+        },
+      ],
+    };
+  }
+
+  if (n.type === "plan_invited") {
+    const planId = str(payload, "planId");
+    if (!planId) return null;
+    return {
+      type: "plan_invite",
+      targetId: planId,
+      requesterId: null,
+      pill: null,
+      sender: null,
+      actions: [
+        {
+          kind: "accept",
+          label: "Accept",
+          confirm: null,
+          failure: TRIP_PLAN_JOIN.copy.joinFailed,
+          success: TRIP_PLAN_JOIN.copy.joined,
+        },
+        {
+          kind: "decline",
+          label: "Decline",
+          confirm: {
+            title: TRIP_PLAN_JOIN.copy.declineTitle,
+            body: TRIP_PLAN_JOIN.copy.declineBody,
+            confirmLabel: "Decline",
+          },
+          failure: TRIP_PLANS_LIST.copy.declineFailed,
+          success: TRIP_PLANS_LIST.copy.declined,
+        },
+      ],
+    };
+  }
+
+  if (n.type === "plan_join_request") {
+    const planId = str(payload, "planId");
+    const requesterId = str(payload, "requesterId");
+    if (!planId || !requesterId) return null;
+    const username = str(payload, "requesterUsername") ?? "them";
+    const turnDown = planTurnDownConfirm(username);
+    return {
+      type: "plan_join_request",
+      targetId: planId,
+      requesterId,
+      pill: null,
+      sender: null,
+      actions: [
+        {
+          kind: "accept",
+          label: "Accept",
+          confirm: null,
+          failure: TRIP_PLAN_PAGE.copy.letInFailed,
+          success: tripPlanLetInMessage(username),
+        },
+        {
+          kind: "decline",
+          label: "Decline",
+          confirm: {
+            title: turnDown.confirmTitle,
+            body: turnDown.confirmBody,
+            confirmLabel: turnDown.confirmLabel,
+          },
+          failure: TRIP_PLAN_PAGE.copy.turnDownFailed,
+          success: TRIP_PLAN_PAGE.copy.turnedDown,
         },
       ],
     };
@@ -150,6 +227,7 @@ export function notificationActions(
       return {
         type: "file_sent",
         targetId: fileSendId,
+        requesterId: null,
         pill: web ? "Downloaded" : "Saved",
         sender,
         actions: [
@@ -168,6 +246,7 @@ export function notificationActions(
     return {
       type: "file_sent",
       targetId: fileSendId,
+      requesterId: null,
       pill: null,
       sender,
       actions: [

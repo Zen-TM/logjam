@@ -16,6 +16,16 @@ import NotificationsPanel from "./NotificationsPanel";
 const api = vi.hoisted(() => ({
   markNotificationRead: vi.fn(async () => {}),
 }));
+const plans = vi.hoisted(() => ({
+  joinPlan: vi.fn(async () => {}),
+  leavePlan: vi.fn(async () => {}),
+  approveMember: vi.fn(async () => {}),
+  removeMember: vi.fn(async () => {}),
+}));
+vi.mock("../../../plansApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../plansApi")>()),
+  ...plans,
+}));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   ...api,
@@ -90,6 +100,7 @@ function Harness({ rows }: { rows: TNotification[] }) {
           })
         }
         onRefetchFriends={noop}
+        onRefetchPlans={noop}
         setSelectedPlaceID={noop}
         setActivePanel={noop}
         onShowSharpened={noop}
@@ -195,6 +206,55 @@ describe("NotificationsPanel: an announcement", () => {
     expect(api.markNotificationRead).toHaveBeenCalledWith("n1", true);
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: INBOX.title }),
+    );
+  });
+});
+
+const planRow = (type: string, payload: Record<string, unknown>) =>
+  ({
+    id: "n2",
+    type,
+    payload: { planId: "p1", planName: "Kanangra Walls loop", ...payload },
+    read: false,
+    createdAt: new Date().toISOString(),
+  }) as TNotification;
+
+// A plan's invite and a join request answer in the row, as a friend request
+// does. Mutation: return null for either kind in `notificationActions`, or
+// wire Accept on a join request to `joinPlan`.
+describe("NotificationsPanel: plan questions", () => {
+  it("accepts an invite from the row", async () => {
+    renderPanel([planRow("plan_invited", { invitedByUsername: "carol" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await vi.waitFor(() => expect(plans.joinPlan).toHaveBeenCalledWith("p1"));
+  });
+
+  it("accepts a join request from the row", async () => {
+    renderPanel([
+      planRow("plan_join_request", {
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await vi.waitFor(() =>
+      expect(plans.approveMember).toHaveBeenCalledWith("p1", "u2"),
+    );
+  });
+
+  it("declines a join request after asking", async () => {
+    renderPanel([
+      planRow("plan_join_request", {
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    expect(plans.removeMember).not.toHaveBeenCalled();
+    const ask = screen.getByRole("alertdialog", { name: "Decline carol?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Decline" }));
+    await vi.waitFor(() =>
+      expect(plans.removeMember).toHaveBeenCalledWith("p1", "u2", "requested"),
     );
   });
 });

@@ -18,6 +18,7 @@ import {
   isSystemFieldDef,
   isValidLatitude,
   isValidLongitude,
+  PLACE_PAGE,
 } from "@logjam/shared";
 import {
   numericFieldError,
@@ -867,14 +868,14 @@ function PlaceDialog({
           </section>
 
           <section className={classes.section}>
-            <SectionHeader title="Track" />
+            <SectionHeader title={PLACE_PAGE.copy.route} />
             {!mediaLoading && (
               <MediaGallery
                 media={media}
                 variant="tracks"
                 canDelete
                 onDeleted={handleMediaDeleted}
-                emptyText="No track yet."
+                emptyText={PLACE_PAGE.copy.routeEmpty}
               />
             )}
             <MediaUpload
@@ -887,7 +888,7 @@ function PlaceDialog({
               disabled={saving}
               disabledReason={
                 media.some((m) => mediaCategory(m.mediaType) === "track")
-                  ? "This place already has a track. Delete it to add another."
+                  ? "This place already has a route. Delete it to add another."
                   : undefined
               }
             />
