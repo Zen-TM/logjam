@@ -119,6 +119,8 @@ renumber.
   is left by the sheet's ×, and its footer holds only the submit. A root tab
   on Logjam GPS has neither. Never leave only a gesture, a system button or a
   second press on a nav icon.
+- **A dialog that asks nothing of the reader (a message, a rules list, a
+  summary) closes by its × and by a Close button** in its footer.
 - **A tab opens at its root**, not the sub-page the user was last on.
 - **The way out undoes one layer.** A sub-view inside a sheet or dialog backs
   out to its parent, and the title names the step. Escape, the back gesture
