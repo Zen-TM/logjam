@@ -193,3 +193,24 @@ describe("the leaderboard button on Friends", () => {
     expect(screen.getByRole("heading", { name: FRIENDS.title })).toBeTruthy();
   });
 });
+
+// Mutation that turns this red: show `searchHint` while the field is empty (it
+// says "Keep typing" to someone who has not typed).
+describe("the Add dialog's search hint", () => {
+  it("waits for a keystroke", () => {
+    render(
+      <AddFriendDialog
+        open
+        friends={[]}
+        onClose={() => {}}
+        onSent={() => {}}
+        onFriended={() => {}}
+      />,
+    );
+    expect(screen.queryByText(FRIENDS.copy.searchHint)).toBeNull();
+    fireEvent.change(screen.getByLabelText(FRIENDS.copy.searchField), {
+      target: { value: "ca" },
+    });
+    expect(screen.getByText(FRIENDS.copy.searchHint)).toBeTruthy();
+  });
+});
