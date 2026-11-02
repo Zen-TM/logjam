@@ -93,14 +93,6 @@
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
-.bandStart::before {
-  left: 50%;
-}
-
-.bandEnd::before {
-  right: 50%;
-}
-
 .pieceStart::before {
   border-top-left-radius: var(--radius-pill);
   border-bottom-left-radius: var(--radius-pill);
