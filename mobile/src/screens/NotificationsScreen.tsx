@@ -1366,7 +1366,7 @@ const NotificationRow = memo(function NotificationRow({
               label={notificationVerb("readMessage").label}
               variant="outlineAccent"
               disabled={selecting}
-              disabledReason={actionsDisabledReason(online, selecting)}
+              disabledReason="Finish picking first"
               onPress={() => onPress(item)}
             />
           </CardActions>

@@ -45,4 +45,22 @@ describe("a switch", () => {
     expect(toggle).toContain("trackOff: { backgroundColor: theme.lineStrong }");
     expect(toggle).toContain("thumbOn: { backgroundColor: theme.onFill");
   });
+
+  // Mutation: change the role to "button", drop `checked` from the state (the
+  // TalkBack "on/off"), or press without `onChange(!checked)`.
+  it("is a switch that announces and flips its state", () => {
+    const toggle = source("Toggle.tsx");
+    expect(toggle).toContain('accessibilityRole="switch"');
+    expect(toggle).toMatch(/accessibilityState=\{\{\s*checked/);
+    expect(toggle).toMatch(/onChange\(!checked\)/);
+  });
+});
+
+describe("a repeated disabled press", () => {
+  // Mutation: drop the `REPEAT_MS` check, and Android queues a toast per tap.
+  it("is not toasted again within a moment", () => {
+    expect(source("disabledReason.ts")).toMatch(
+      /reason === last\.reason && now - last\.at < REPEAT_MS/,
+    );
+  });
 });

@@ -68,14 +68,18 @@ export function Tooltip({
     setOpen(true);
   };
   const hideSoon = () => {
+    if (closeTimer.current != null) window.clearTimeout(closeTimer.current);
     closeTimer.current = window.setTimeout(
       () => setOpen(false),
       CLOSE_DELAY_MS,
     );
   };
 
+  // A touch screen has no pointer leaving to close it, so a press holds it for
+  // a while. A mouse still on the control keeps it open (WCAG 1.4.13).
   const press = () => {
     show();
+    if (!window.matchMedia?.("(hover: none)").matches) return;
     closeTimer.current = window.setTimeout(() => setOpen(false), PRESS_HOLD_MS);
   };
 
