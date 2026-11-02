@@ -68,6 +68,8 @@ import {
   Row,
   SearchField,
   SelectionBar,
+  SelectionVerb,
+  StatusPill,
   TileCheckbox,
   type Glyph,
   type MenuEntry,
@@ -92,15 +94,12 @@ const { copy } = PLACES_LIST;
 
 export type MapKind = "topo" | "geopdf";
 
-const STATUS_ICON: Record<PlaceStatus, Glyph> = {
+// The tile says what a place IS (its type); a state is a pill beside it, never
+// a glyph in the tile that reads as a ticked checkbox. "Not visited" is the
+// ordinary case and gets no pill.
+const STATUS_PILL: Partial<Record<PlaceStatus, Glyph>> = {
   done: "success",
-  todo: "place",
   shared: "friends",
-};
-const STATUS_HUE: Record<PlaceStatus, string> = {
-  done: "var(--color-accent)",
-  todo: "var(--hue-todo)",
-  shared: "var(--hue-shared)",
 };
 
 const ANY_TYPE = "any";
@@ -575,26 +574,24 @@ function PlacesPanel({
           countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
-          {/* An icon like its siblings: as a labelled filled button the bar ran
-              past one line at 380px. The menu it opens says what it makes. */}
+          {/* One word each, and the trash stays a glyph: "Make a map" and a
+              fourth word ran the count off the bar at 380px. */}
           <Menu
             label="Make a map"
             entries={makeMapEntries(selected)}
-            trigger={(props) => (
-              <IconButton {...props} icon="template" label="Make a map" />
-            )}
+            trigger={(props) => <SelectionVerb {...props}>Map</SelectionVerb>}
           />
-          <IconButton
-            icon="shareFriend"
-            label="Share or export"
+          <SelectionVerb
             onClick={() => onSharePlaces(selected.map((place) => place.id))}
-          />
+          >
+            Share
+          </SelectionVerb>
           <Menu
             label="Export as"
             placement="bottom-end"
             entries={exportEntries(selected)}
             trigger={(props) => (
-              <IconButton {...props} icon="export" label="Export" />
+              <SelectionVerb {...props}>Export</SelectionVerb>
             )}
           />
           <IconButton
@@ -712,7 +709,10 @@ function PlacesPanel({
           );
           const shareCount = owned ? (place._count?.shares ?? 0) : 0;
           const tile = (
-            <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} />
+            <IconTile
+              icon={type ? placeTypeLucideIcon(type.iconKey) : "place"}
+              hue={type?.color ?? "var(--hue-todo)"}
+            />
           );
           return (
             <Row
@@ -720,7 +720,6 @@ function PlacesPanel({
               data-place-id={place.id}
               title={place.name}
               subtitle={subtitle || undefined}
-              description={PLACE_STATUS_LABELS[status]}
               selected={isSelected}
               disabled={selecting && !owned}
               onOpen={() => openPlace(place)}
@@ -738,15 +737,18 @@ function PlacesPanel({
                     }
                   />
                 ) : (
-                  <IconTile
-                    icon={STATUS_ICON[status]}
-                    hue={STATUS_HUE[status]}
-                    label={PLACE_STATUS_LABELS[status]}
-                  />
+                  tile
                 )
               }
               trailing={
                 <>
+                  {STATUS_PILL[status] && (
+                    <StatusPill
+                      label={PLACE_STATUS_LABELS[status]}
+                      icon={STATUS_PILL[status]}
+                      tone={status === "done" ? "accent" : "outline"}
+                    />
+                  )}
                   {quality && (
                     <span
                       className={classes.meta}

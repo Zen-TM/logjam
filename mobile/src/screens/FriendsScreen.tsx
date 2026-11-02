@@ -378,9 +378,8 @@ export function FriendsScreen({
               />
             ) : null}
             <Button
-              label={copy.add}
+              label={copy.addTitle}
               icon="addFriend"
-              variant="outlineAccent"
               compact
               onPress={() => setAddOpen(true)}
             />
@@ -740,7 +739,9 @@ function EmptyPanel({
   onAdd: () => void;
 }) {
   if (kind === "noRequests") {
-    return <EmptyState title={copy.noRequestsTitle} />;
+    return (
+      <EmptyState title={copy.noRequestsTitle} hint={copy.noRequestsBody} />
+    );
   }
   return (
     <EmptyState

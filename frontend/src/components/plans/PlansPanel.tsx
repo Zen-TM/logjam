@@ -39,6 +39,7 @@ import {
   IconTile,
   ListEnd,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   LoadingState,
   Menu,
@@ -403,22 +404,22 @@ export default function PlansPanel({
             onClear={clear}
           >
             {offers.archive && archiveVerb && (
-              <IconButton
-                icon={archiveVerb.icon}
-                label={archiveVerb.label}
+              <SelectionVerb
                 disabled={busyId != null}
                 disabledReason="Working…"
                 onClick={() => runOrConfirm(archiveVerb.id, selected)}
-              />
+              >
+                {archiveVerb.label}
+              </SelectionVerb>
             )}
-            <IconButton
-              icon={offers.destructive ? "delete" : "leave"}
-              label={offers.deleteLabel}
-              tone={offers.destructive ? "danger" : undefined}
+            <SelectionVerb
+              danger={offers.destructive}
               disabled={busyId != null}
               disabledReason="Working…"
               onClick={() => ask(selected)}
-            />
+            >
+              {offers.deleteLabel}
+            </SelectionVerb>
           </SelectionBar>
         ) : (
           <ChipRail

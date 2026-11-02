@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 /**
  * A list whose empty state offers a button ends with that same button when it
  * has rows (UX §9): adding is where the eye lands after scrolling down. Each
- * panel names the button once and draws it in both places.
+ * panel names the button once and draws it in both places. Friends is the
+ * exception: its hero's add is already one plain button, so a second at the
+ * end of the rows would be a duplicate.
  *
  * Mutation that turns it red: delete a panel's `<ListEnd>` line, or put a
  * different button in the empty state than at the end.
@@ -16,7 +18,6 @@ const DIR = dirname(fileURLToPath(import.meta.url));
 const PANELS: [file: string, button: string][] = [
   ["PlacesPanel.tsx", "addPlaceButton"],
   ["TripLogsPanel.tsx", "addTripButtons"],
-  ["FriendsPanel.tsx", "addFriendButton"],
   ["RoutesPanel.tsx", "addWayButtons"],
   ["PlaceTypeSection.tsx", "addTypeButton"],
 ];

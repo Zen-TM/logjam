@@ -62,6 +62,7 @@ import {
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   Icon,
@@ -499,12 +500,12 @@ function TripLogsPanel({
           countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
-          <IconButton
-            icon="delete"
-            label="Delete"
-            tone="danger"
+          <SelectionVerb
+            danger
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
-          />
+          >
+            Delete
+          </SelectionVerb>
         </SelectionBar>
       ) : (
         tripLogs.length > 0 && (

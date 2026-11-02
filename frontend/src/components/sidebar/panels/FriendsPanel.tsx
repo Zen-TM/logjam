@@ -71,11 +71,11 @@ import {
   EmptyState,
   Hero,
   IconButton,
-  ListEnd,
   Menu,
   Row,
   SearchField,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   StatusPill,
   type ChipOption,
@@ -268,7 +268,8 @@ function FriendsPanel({
   const showRequests = bucket !== "friends";
   const showFriends = bucket !== "requests";
 
-  // The same button is the empty state's and the end of the list's.
+  // The hero's add, offered again where the page has nothing else; a list of
+  // friends does not end with a third.
   const addFriendButton = (
     <Button variant="filled" icon="addFriend" onClick={() => setAddOpen(true)}>
       {copy.addTitle}
@@ -310,11 +311,11 @@ function FriendsPanel({
             {leaderboardButton()}
             <Button
               compact
-              variant="outline"
+              variant="filled"
               icon="addFriend"
               onClick={() => setAddOpen(true)}
             >
-              {copy.add}
+              {copy.addTitle}
             </Button>
           </>
         }
@@ -329,12 +330,9 @@ function FriendsPanel({
             countLabel={`${selectedFriends.length} selected`}
             onClear={clear}
           >
-            <IconButton
-              icon={friendVerb("remove").icon}
-              label={friendVerb("remove").label}
-              tone="danger"
-              onClick={() => setRemovingSelected(true)}
-            />
+            <SelectionVerb danger onClick={() => setRemovingSelected(true)}>
+              {friendVerb("remove").label}
+            </SelectionVerb>
           </SelectionBar>
         ) : (
           <ChipRail
@@ -359,7 +357,11 @@ function FriendsPanel({
           </div>
         ) : emptyKind === "noRequests" ? (
           <div className={classes.emptyArea}>
-            <EmptyState icon="friends" title={copy.noRequestsTitle} />
+            <EmptyState
+              icon="friends"
+              title={copy.noRequestsTitle}
+              body={copy.noRequestsBody}
+            />
           </div>
         ) : (
           <div className={classes.list}>
@@ -463,7 +465,6 @@ function FriendsPanel({
                   }
                 />
               ))}
-            <ListEnd>{addFriendButton}</ListEnd>
           </div>
         )}
       </>

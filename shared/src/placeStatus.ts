@@ -47,6 +47,7 @@ export function placeStatus(
 /** Structural, so both a mirror row and an API place satisfy it. */
 export type PlaceSummaryFields = {
   fieldValues?: unknown;
+  notes?: string | null;
 };
 
 /**
@@ -61,13 +62,16 @@ const SUMMARY_FACTS = 3;
  * Grade first (the shorthand every canyoner reads first), then the two
  * logistics numbers that decide whether today is the day — how long, and
  * whether your rope reaches. Only states what is known: a place with no grades
- * gets a short line, or "", rather than a row of "—" placeholders.
+ * gets a short line rather than a row of "—" placeholders. A place with none
+ * of those facts (a campsite, a car park) shows the first line of its notes
+ * instead, so a list of them is not a list of identical type words; "" only
+ * when it has neither.
  */
 export function placeSummary(place: PlaceSummaryFields): string {
   const hours = numericFieldValue(place.fieldValues, "hours");
   const longest = numericFieldValue(place.fieldValues, "longest_abseil");
   const abseils = numericFieldValue(place.fieldValues, "num_abseils");
-  return [
+  const facts = [
     formatCanyonGrade(place.fieldValues),
     hours != null ? `${trimNumber(hours)} h` : null,
     longest != null ? `${trimNumber(longest)} m max` : null,
@@ -76,6 +80,16 @@ export function placeSummary(place: PlaceSummaryFields): string {
     .filter((part): part is string => Boolean(part))
     .slice(0, SUMMARY_FACTS)
     .join(" · ");
+  return facts || firstNotesLine(place.notes);
+}
+
+/** The first line with words in it, without the Markdown mark that opens it. */
+function firstNotesLine(notes: string | null | undefined): string {
+  for (const line of (notes ?? "").split("\n")) {
+    const text = line.replace(/^[\s#>*-]+/, "").trim();
+    if (text) return text;
+  }
+  return "";
 }
 
 /** Quality as a compact rating, e.g. "★ 4". Null when unrated — an absent

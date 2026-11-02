@@ -267,7 +267,9 @@ renumber.
   count, or absent.
 - **Two facts get two looks**: "shared with you" and "you shared this with 3"
   are never one word apart in the same slot.
-- **Labels wrap, never ellipsise**; a user's own title stops at two lines.
+- **Labels wrap, never ellipsise**; a user's own title stops at two lines. A
+  hero's title is the exception: one line, ellipsised, its full text in the
+  tooltip, so every hero stays one height.
 - **An inventory row is one thing the user asked for**, not one file the app
   wrote.
 

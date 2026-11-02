@@ -4,7 +4,7 @@ import {
   type ToastAction,
   type ToastTone,
 } from "@logjam/shared";
-import type { CSSProperties, ReactNode } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
 import { Button, IconButton } from "./Button";
 import classes from "./Feedback.module.css";
 import { Icon, type Glyph } from "./Icon";
@@ -183,9 +183,21 @@ export function ListBody({
 }
 
 /**
+ * One verb in a selection bar, named in words: four look-alike icons in 348px
+ * were a row of guesses. Keep the label to one short word so the bar stays on
+ * one line at 380px; `danger` puts the warning edge on a Delete.
+ */
+export function SelectionVerb({
+  danger = false,
+  ...props
+}: ComponentProps<typeof Button> & { danger?: boolean }) {
+  return <Button {...props} compact variant={danger ? "danger" : "plain"} />;
+}
+
+/**
  * The bar a multi-select swaps into a rail's slot: clear, the count, then the
- * group verbs the caller passes (Buttons and IconButtons). Same height as a
- * chip rail, so the list below does not jump when selection starts.
+ * group verbs the caller passes (`SelectionVerb`s). Same height as a chip
+ * rail, so the list below does not jump when selection starts.
  */
 export function SelectionBar({
   countLabel,

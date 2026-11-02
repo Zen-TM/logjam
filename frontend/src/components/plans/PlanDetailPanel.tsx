@@ -526,7 +526,8 @@ export default function PlanDetailPanel({
         {plan.sections.length === 0 ? (
           <EmptyState
             icon="notes"
-            title={copy.writeUpEmpty}
+            title={copy.writeUpEmptyTitle}
+            body={copy.writeUpEmptyBody}
             actions={
               canAddSection && (
                 <Button
@@ -608,7 +609,12 @@ export default function PlanDetailPanel({
         {plan.forms.length === 0 ? (
           <EmptyState
             icon="form"
-            title={role === "leader" ? copy.formsEmptyLeader : copy.formsEmpty}
+            title={copy.formsEmpty}
+            body={
+              role === "leader"
+                ? copy.formsEmptyBodyLeader
+                : copy.formsEmptyBody
+            }
             actions={
               canBuildForms && (
                 <Button

@@ -46,6 +46,7 @@ export {
   LoadingState,
   ProgressBar,
   SelectionBar,
+  SelectionVerb,
   StatusPill,
   Toast,
 } from "./Feedback";

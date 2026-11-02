@@ -107,7 +107,7 @@ function CustomFieldSection({
         actions={
           <Button
             compact
-            variant="outline"
+            variant="filled"
             icon="add"
             onClick={() => setEditing("new")}
           >

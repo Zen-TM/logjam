@@ -410,8 +410,8 @@ describe("stats presentation", () => {
     });
   });
 
-  it("files a tag-less trip under Untagged, and flags double-counted tags", () => {
-    expect(logbookActivityLabel(UNTAGGED_ACTIVITY)).toBe("Untagged");
+  it("files a tag-less trip under No type, and flags double-counted tags", () => {
+    expect(logbookActivityLabel(UNTAGGED_ACTIVITY)).toBe("No type");
     expect(logbookActivityLabel("canyoning")).toBe("Canyoning");
     expect(activityTalliesOverlap(base)).toBe(true);
   });

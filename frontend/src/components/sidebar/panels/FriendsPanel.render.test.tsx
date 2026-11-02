@@ -185,8 +185,9 @@ describe("the leaderboard button on Friends", () => {
 
     fireEvent.click(button);
     expect(
-      await screen.findByRole("heading", { name: "#2 of 2" }),
+      await screen.findByRole("heading", { name: "Leaderboard" }),
     ).toBeTruthy();
+    expect(screen.getByText(/^#2 of 2 · /)).toBeTruthy();
     expect(screen.queryByRole("heading", { name: FRIENDS.title })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Back to friends" }));

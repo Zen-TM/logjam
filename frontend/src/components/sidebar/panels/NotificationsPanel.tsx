@@ -76,6 +76,7 @@ import {
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   type Glyph,
@@ -876,12 +877,14 @@ function NotificationsPanel({
         <EmptyState
           icon="selectAll"
           title={copy.noUnreadTitle}
+          body={copy.noUnreadBody}
           actions={showEverything}
         />
       ) : (
         <EmptyState
           icon="notifications"
           title={copy.noReadTitle}
+          body={copy.noReadBody}
           actions={showEverything}
         />
       ),
@@ -930,18 +933,16 @@ function NotificationsPanel({
                       selection, and the count line says the unread tally that
                       decides it. */}
                 {readAction && (
-                  <IconButton
-                    icon={readAction.icon}
-                    label={readAction.label}
-                    onClick={() => void applyReadAction()}
-                  />
+                  <SelectionVerb onClick={() => void applyReadAction()}>
+                    {readAction.label}
+                  </SelectionVerb>
                 )}
-                <IconButton
-                  icon="delete"
-                  label="Delete"
-                  tone="danger"
+                <SelectionVerb
+                  danger
                   onClick={() => confirmDelete(selected.map((n) => n.id))}
-                />
+                >
+                  Delete
+                </SelectionVerb>
               </SelectionBar>
             ) : (
               <ChipRail

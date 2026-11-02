@@ -1551,6 +1551,7 @@ function EmptyPanel({
     return (
       <EmptyState
         title={bucket === "unread" ? copy.noUnreadTitle : copy.noReadTitle}
+        hint={bucket === "unread" ? copy.noUnreadBody : copy.noReadBody}
         action={{
           label: copy.showEverything,
           variant: "ghost",

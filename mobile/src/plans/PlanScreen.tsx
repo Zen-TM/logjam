@@ -732,7 +732,11 @@ function WriteUp({
     return (
       <>
         {dates}
-        <EmptyState icon="notes" title={copy.writeUpEmpty} />
+        <EmptyState
+          icon="notes"
+          title={copy.writeUpEmptyTitle}
+          hint={copy.writeUpEmptyBody}
+        />
         {add}
       </>
     );
@@ -1017,8 +1021,11 @@ function Forms({
     return (
       <EmptyState
         icon="form"
-        title={
-          plan.myRole === "leader" ? copy.formsEmptyLeader : copy.formsEmpty
+        title={copy.formsEmpty}
+        hint={
+          plan.myRole === "leader"
+            ? copy.formsEmptyBodyLeader
+            : copy.formsEmptyBody
         }
       />
     );

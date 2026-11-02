@@ -16,6 +16,11 @@ const SRC = dirname(fileURLToPath(import.meta.url));
 
 const ALLOWED: { file: string; reason: string }[] = [
   {
+    file: "ui/Hero.module.css",
+    reason:
+      "a hero is one height on every page, so its title takes one line and the tooltip holds the whole name",
+  },
+  {
     file: "ui/FilterField.module.css",
     reason:
       "the active filter's summary, not a name: the field opens to show it whole",
