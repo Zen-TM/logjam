@@ -159,6 +159,43 @@ const paper = (name: string) => screen.getByRole("radio", { name });
 const extent: TBbox = { north: -33.6, south: -33.7, east: 150.3, west: 150.2 };
 const posted = () => rendered().map((input) => input.config);
 
+// An area picked on the map is the dialog's own doing, so closing right after
+// it asks nothing; touching a setting does. Mutation: call `setDirty(true)`
+// where the picked extent is applied.
+describe("GeoPdfDialog, closing", () => {
+  const closeButton = () => screen.getByRole("button", { name: "Close" });
+
+  it("closes without asking when only the picked area is set", () => {
+    const onClose = vi.fn();
+    render(
+      dialog({
+        open: true,
+        onClose,
+        pendingExtent: extent,
+        pendingScale: 50000,
+      }),
+    );
+    fireEvent.click(closeButton());
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("asks once a setting has been touched", () => {
+    const onClose = vi.fn();
+    render(
+      dialog({
+        open: true,
+        onClose,
+        pendingExtent: extent,
+        pendingScale: 50000,
+      }),
+    );
+    fireEvent.click(paper("A3"));
+    fireEvent.click(closeButton());
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText("Discard this export?")).toBeTruthy();
+  });
+});
+
 // The last settings come back, and only they. Mutations: store the whole
 // config (the title and extent land in localStorage); stop reading it back on
 // open.

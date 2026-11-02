@@ -121,7 +121,7 @@ function readInUnread(title: string) {
   row.focus();
   fireEvent.click(row);
   const dialog = screen.getByRole("dialog", { name: title });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+  fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[1]!);
 }
 
 describe("NotificationsPanel: an announcement", () => {
@@ -141,7 +141,9 @@ describe("NotificationsPanel: an announcement", () => {
     expect(dialog.querySelector("strong")?.textContent).toBe("share a track");
     expect(api.markNotificationRead).not.toHaveBeenCalled();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    fireEvent.click(
+      within(dialog).getAllByRole("button", { name: "Close" })[1]!,
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(api.markNotificationRead).toHaveBeenCalledWith("n1", true);
   });

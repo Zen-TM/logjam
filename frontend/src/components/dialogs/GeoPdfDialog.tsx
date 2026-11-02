@@ -462,10 +462,8 @@ function GeoPdfDialog({
   }
 
   // Populate extent from map selection — always receives both extent and scale.
-  // This fires only when the user actually confirms a pick on the map (App
-  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
-  // open-time seed and settings-apply steps — it represents real user work
-  // and must mark the form dirty.
+  // A pick is not marked dirty: it is one tap to redo, and a form with nothing
+  // else touched closes without asking.
   const [pendingAppliedFor, setPendingAppliedFor] = useState({
     pendingExtent: null as TBbox | null,
     pendingScale: null as number | null,
@@ -484,11 +482,10 @@ function GeoPdfDialog({
         west: pendingExtent.west,
         scale: pendingScale,
       }));
-      setDirty(true);
     }
   }
 
-  // The box drawn for a GIS format, as the extent above: real user work.
+  // The box drawn for a GIS format, as the extent above.
   const [pendingAreaAppliedFor, setPendingAreaAppliedFor] = useState<
     TBbox | null | undefined
   >(null);
@@ -496,7 +493,6 @@ function GeoPdfDialog({
     setPendingAreaAppliedFor(pendingArea);
     if (pendingArea) {
       setGisBox(pendingArea);
-      setDirty(true);
     }
   }
 
