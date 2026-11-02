@@ -113,7 +113,7 @@ export function webScaleProperties(): [string, string][] {
     ]),
     ...Object.entries(SCRIM).map(([n, v]): [string, string] => [
       `--scrim-${n}`,
-      v.replaceAll(",", ", "),
+      v.replace(/,/g, ", "),
     ]),
   ];
 }
