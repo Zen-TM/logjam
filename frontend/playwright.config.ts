@@ -37,15 +37,28 @@ export default defineConfig({
     // Playwright ships no chromium for some hosts; drive system Chrome via the
     // chrome channel instead.
     channel: "chrome",
-    // Playwright's browser is light by default, and an account with no scheme
-    // pick follows the OS: dark keeps the suite on Sandstone, the default
-    // scheme. Ghost Gum is reached through a stored pick (a11y.spec.ts).
-    colorScheme: "dark",
   },
   projects: [
+    // An account with no scheme pick follows the OS, so the OS is part of the
+    // test: dark opens Sandstone (the whole suite), light opens Ghost Gum (the
+    // accessibility audit again, where a pair that only fails on a light page
+    // shows up).
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "dark",
+      },
+    },
+    {
+      name: "chromium-light",
+      testMatch: /a11y\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "light",
+      },
     },
   ],
   // Only auto-boot the frontend when targeting local; for prod we hit the

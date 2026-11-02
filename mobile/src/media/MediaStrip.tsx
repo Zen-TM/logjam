@@ -674,7 +674,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(0.25),
   },
   addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: { ...textRole.caption, color: theme.accent },
+  addTileLabel: { ...textRole.caption, color: theme.text },
   tileLoading: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
