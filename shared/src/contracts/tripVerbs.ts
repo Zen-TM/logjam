@@ -2,6 +2,7 @@
 // the logbook and its page. The lists differ by exactly one verb: Open, absent
 // on the page you are already on (shared/DESIGN.md §9).
 import type { IconIdea } from "../icons.js";
+import type { ConfirmCopy } from "./confirm.js";
 
 export type TripVerbSurface = "row" | "page";
 
@@ -56,13 +57,19 @@ export function tripVerbs(surface: TripVerbSurface): TripVerb[] {
  * What deleting trips costs, said once for every surface that offers Delete:
  * what goes, and what stays.
  */
-export function tripDeleteConfirm(count: number): {
-  confirmTitle: string;
-  confirmBody: string;
-} {
-  const one = count === 1;
+export function tripDeleteConfirm(
+  target: { title: string } | { count: number },
+): ConfirmCopy {
+  const one = "title" in target || target.count === 1;
   return {
-    confirmTitle: one ? "Delete this trip?" : `Delete ${count} trips?`,
+    confirmTitle:
+      "title" in target
+        ? `Delete ${target.title}?`
+        : one
+          ? "Delete this trip?"
+          : `Delete ${target.count} trips?`,
     confirmBody: `${one ? "Its" : "Their"} photos, videos and tracks go too. The ${one ? "places it links" : "places they link"} to stay. This can't be undone.`,
+    confirmLabel: "Delete",
+    tone: "destructive",
   };
 }

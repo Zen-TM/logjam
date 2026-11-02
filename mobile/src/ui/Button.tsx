@@ -18,7 +18,7 @@ export type { Disablable };
 // the 48pt minimum.
 const COMPACT_SLOP = slopTo(controlSize.md);
 
-type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost";
+type ButtonVariant = "filledAccent" | "outlineAccent" | "ghost" | "destructive";
 
 type ButtonProps = {
   label: string;
@@ -38,7 +38,9 @@ type ButtonProps = {
 } & Disablable;
 
 // Mirrors Logjam Web's button system (filled accent / outline accent / ghost);
-// other variants added as screens need them.
+// other variants added as screens need them. `destructive` is the verb of a
+// destructive confirm and nothing else: a warning fill with the ink label,
+// always wearing a glyph (`src/ConfirmHost.tsx`).
 // Buttons are pill-shaped: the one rounded family shared with chips and pills.
 export function Button({
   label,
@@ -61,7 +63,8 @@ export function Button({
   const inactive = loading;
   // Words are never an intent colour: an outline button's label is the text
   // colour and its EDGE is the accent, as on Logjam Web.
-  const tint = variant === "filledAccent" ? theme.onFill : theme.text;
+  const filled = variant === "filledAccent" || variant === "destructive";
+  const tint = filled ? theme.onFill : theme.text;
   return (
     <Pressable
       accessibilityRole="button"
@@ -89,7 +92,7 @@ export function Button({
         styles[variant],
         pressed &&
           !disabled &&
-          (variant === "filledAccent" ? styles.pressedFilled : styles.pressed),
+          (filled ? styles.pressedFilled : styles.pressed),
         // A button that is loading is working, not unavailable: it keeps its
         // colour, as on Logjam Web.
         disabled && styles.disabled,
@@ -145,6 +148,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   // interactive); the one primary of a surface overrides it with the accent. The
   // outline's edge is the accent and its label stays the text colour.
   filledAccent: { backgroundColor: theme.accent, borderColor: theme.accent },
+  destructive: { backgroundColor: theme.warning, borderColor: theme.warning },
   outlineAccent: { borderColor: theme.accent },
   ghost: {},
   pressed: { backgroundColor: theme.cardPressed },

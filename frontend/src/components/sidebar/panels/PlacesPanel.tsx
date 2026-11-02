@@ -874,7 +874,15 @@ function PlacesPanel({
     list,
   };
 
-  const deleteCopy = placeDeleteConfirm({ count: pendingDelete?.length ?? 0 });
+  const pendingPlace =
+    pendingDelete?.length === 1
+      ? places.find((place) => place.id === pendingDelete[0])
+      : undefined;
+  const deleteCopy = placeDeleteConfirm(
+    pendingPlace
+      ? { name: pendingPlace.name }
+      : { count: pendingDelete?.length ?? 0 },
+  );
 
   return (
     <div ref={rootRef} className={classes.root}>

@@ -124,7 +124,7 @@ export function placeTypeDeleteConfirm(name: string): ConfirmCopy {
   return {
     confirmTitle: `Delete ${name}?`,
     confirmBody:
-      "Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none.",
+      "Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none. This can't be undone.",
     confirmLabel: SETTINGS_LIST.copy.deleteType,
     tone: "destructive",
   };

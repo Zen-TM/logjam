@@ -125,10 +125,13 @@ handler or a camera write, read
   parks the target and opens it from `onClosed`**, or it never resolves.
 - **Content that can outgrow the sheet pins its primary action in
   `footer`.**
-- **`Alert` is raised only by `confirm()`** (`src/ui/confirm.ts`), which
-  draws Cancel and the verb (`confirm.test.ts`), bar the second step of removing a
-  member who has files ("Keep files"). A list of choices is a
-  sheet; an error is a toast.
+- **A confirm is raised only by `confirm()`** (`src/ui/confirm.ts`), which
+  `ConfirmHost` draws as a dialog in the current scheme, never a white OS
+  alert: Cancel on the left, the verb on the right, a warning fill and glyph
+  on a destructive one. It draws Cancel and the verb (`confirm.test.ts`), bar
+  the second step of removing a member who has files ("Keep files"). A list of
+  choices is a sheet; an error is a toast. Only the sign-out prompt in
+  `App.tsx` still calls `Alert.alert`, for its three choices.
 - **A form sheet guards its own exits.** `BottomSheet` takes `discard`
   (`abandonConfirm`): while it is non-null, ×, the back gesture, the backdrop
   and a drag all raise the confirm, and a drag springs back meanwhile. A

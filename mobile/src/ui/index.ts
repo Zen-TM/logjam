@@ -17,7 +17,12 @@ export {
   nextRange,
   type NumberRange,
 } from "@logjam/shared";
-export { confirm } from "./confirm";
+export {
+  answerConfirm,
+  confirm,
+  pendingConfirm,
+  subscribeConfirm,
+} from "./confirm";
 export { Hero } from "./Hero";
 export { tabBadgeLabel, tabBadgeStyle } from "./tabBadgeStyle";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";

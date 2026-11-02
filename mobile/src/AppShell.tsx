@@ -58,6 +58,7 @@ import { registerSavedGaugeHistoryRefresh } from "./gauges/savedPlaceHistories";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { canRunNow } from "./offline/networkPolicy";
 import { BackgroundToast } from "./BackgroundToast";
+import { ConfirmHost } from "./ConfirmHost";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
 import { notificationTapTarget } from "./notifications/tapTarget";
@@ -1625,6 +1626,7 @@ export function AppShell({
           </Tabs.Navigator>
         </NavigationContainer>
         <BackgroundToast />
+        <ConfirmHost />
         {/* Docked like BackgroundToast: clear of the tab bar. */}
         <View
           style={{

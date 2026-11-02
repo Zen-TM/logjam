@@ -289,8 +289,8 @@ export function planDeleteConfirm(
   const things = planCountsLabel(counts);
   return {
     confirmTitle: `Delete ${name}?`,
-    confirmBody: `Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.`,
-    confirmLabel: "Delete plan",
+    confirmBody: `Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.`,
+    confirmLabel: "Delete",
     tone: "destructive",
   };
 }
@@ -317,7 +317,8 @@ export function planLeaveDeleteAddedLabel(
 export function planSectionDeleteConfirm(title: string): ConfirmCopy {
   return {
     confirmTitle: `Delete ${title}?`,
-    confirmBody: "Its text goes, for everyone in the plan.",
+    confirmBody:
+      "Its text goes, for everyone in the plan. This can't be undone.",
     confirmLabel: "Delete",
     tone: "destructive",
   };
@@ -336,9 +337,9 @@ export function planFormDeleteConfirm(form: {
     confirmTitle: `Delete ${title}?`,
     confirmBody:
       answers > 0
-        ? `Its questions and ${plural(answers, "answer")} go, for everyone in the plan.`
-        : "Its questions go, for everyone in the plan.",
-    confirmLabel: "Delete form",
+        ? `Its questions and ${plural(answers, "answer")} go, for everyone in the plan. This can't be undone.`
+        : "Its questions go, for everyone in the plan. This can't be undone.",
+    confirmLabel: "Delete",
     tone: "destructive",
   };
 }
@@ -442,7 +443,7 @@ export function planItemDeleteConfirm(title: string, photos = 0): ConfirmCopy {
         : ` Its ${photos} photos go too.`;
   return {
     confirmTitle: `Delete ${title} from the plan?`,
-    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay.`,
+    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay. This can't be undone.`,
     confirmLabel: "Delete",
     tone: "destructive",
   };
