@@ -6,12 +6,14 @@ import {
   defsForType,
   PLACE_ROPEWIKI_OPTIONS as ROPEWIKI,
   PLACE_SORT_OPTIONS as SORTS,
+  PLACE_STATUS_FILTER_OPTIONS,
   PLACES_FILTER_SHEET,
   placesOnMapSummary,
   type CustomFieldFilter,
   type FieldDateRange,
   type PlaceFilters,
   type PlaceSortKey,
+  type PlaceStatus,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
 } from "@logjam/shared";
@@ -33,12 +35,11 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 const { copy } = PLACES_FILTER_SHEET;
 
 /**
- * Sort and filter for the Places screen — everything that isn't the rail.
+ * Sort and filter for the Places screen — everything but the type rail.
  *
  * What it holds, in what order and under what words is its contract
  * (`PLACES_FILTER_SHEET` in `@logjam/shared`), which Logjam Web's sheet renders
- * from too. Completion and ownership are NOT here: they are the rail's
- * buckets, and a second copy in this sheet would let the two disagree.
+ * from too.
  *
  * EVERY ATTRIBUTE IS DRAWN BY ITS DEFINITION'S SHAPE (the kit's
  * `AttributeFilter`), and which ones appear is decided by the type tab. A
@@ -70,6 +71,8 @@ type Props = {
   onClose: () => void;
   filters: PlaceFilters;
   onChangeFilters: (next: PlaceFilters) => void;
+  status: "all" | PlaceStatus;
+  onChangeStatus: (next: "all" | PlaceStatus) => void;
   sort: PlaceSortKey;
   onChangeSort: (next: PlaceSortKey) => void;
   onReset: () => void;
@@ -149,6 +152,22 @@ export const FILTER_SHEET_SECTIONS: Record<
             label={option.label}
             active={sort === option.key}
             onPress={() => onChangeSort(option.key)}
+          />
+        ))}
+      </View>
+    </>
+  ),
+
+  status: ({ status, onChangeStatus }) => (
+    <>
+      <SectionHeader title={copy.status} />
+      <View style={styles.chipRow}>
+        {PLACE_STATUS_FILTER_OPTIONS.map((option) => (
+          <Chip
+            key={option.value}
+            label={option.label}
+            active={status === option.value}
+            onPress={() => onChangeStatus(option.value)}
           />
         ))}
       </View>

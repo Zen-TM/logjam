@@ -582,9 +582,8 @@ test.describe("desktop", () => {
     // at 51.7s alone and over the 60s cap under any parallel load. Everything
     // the case is about survives the search: the hero, both chip rails, the
     // sort-and-filter button, a row and its menu.
-    await aside.getByRole("button", { name: /^Search/ }).click();
     await aside.getByRole("searchbox").first().fill("claustral");
-    await expect(aside.getByRole("radio", { name: /^Any type/ })).toBeVisible();
+    await expect(aside.getByRole("radio", { name: /^All/ })).toBeVisible();
     await expect
       .poll(() => aside.locator("[data-place-id]").count())
       .toBeLessThan(10);
@@ -805,9 +804,9 @@ test.describe("desktop", () => {
     await expect(form).toBeHidden();
     await expect(aside.getByRole("heading", { name: "Notes" })).toBeVisible();
 
-    // Back to the logbook, where Stats is the other view.
+    // Back to the logbook, where Stats opens from the hero.
     await aside.getByRole("button", { name: "Back to Logs" }).click();
-    await aside.getByRole("radio", { name: "Stats" }).click();
+    await aside.getByRole("button", { name: "Logbook stats" }).click();
     await expect(
       aside.getByRole("heading", { level: 2, name: /out$/ }),
     ).toBeVisible();

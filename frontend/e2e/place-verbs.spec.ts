@@ -20,11 +20,25 @@ async function openPlaces(page: Page) {
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
+// Mutation: point the chip back at `setActivePanel("settings")`.
+test("New type opens the form over Places, not the Settings page", async ({
+  page,
+}) => {
+  const aside = await openPlaces(page);
+  await aside.getByRole("button", { name: "New type" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "New place type" }),
+  ).toBeVisible();
+  await expect(aside.getByRole("heading", { name: "Places" })).toBeVisible();
+});
+
 test("an owned place's row has every verb, and Edit opens the form on its page", async ({
   page,
 }) => {
   const aside = await openPlaces(page);
-  await aside.getByRole("radio", { name: /^Visited/ }).click();
+  await aside.getByRole("button", { name: /^Sort and filter/ }).click();
+  await aside.getByRole("button", { name: /^Visited/ }).click();
+  await aside.getByRole("button", { name: "Done" }).click();
   await aside
     .getByRole("button", { name: /^Actions for / })
     .first()
@@ -52,7 +66,9 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
   page,
 }) => {
   const aside = await openPlaces(page);
-  await aside.getByRole("radio", { name: /^Shared/ }).click();
+  await aside.getByRole("button", { name: /^Sort and filter/ }).click();
+  await aside.getByRole("button", { name: /^Shared/ }).click();
+  await aside.getByRole("button", { name: "Done" }).click();
   await aside
     .getByRole("button", { name: /^Actions for / })
     .first()

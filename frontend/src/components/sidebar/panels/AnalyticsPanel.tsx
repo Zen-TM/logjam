@@ -1,4 +1,11 @@
-import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   activityTalliesOverlap,
   activityTallySubtitle,
@@ -18,6 +25,7 @@ import {
   statsTruncatedNote,
   statsUnderActivitiesNote,
   tripYear,
+  TRIPS_LIST,
   UNTAGGED_ACTIVITY,
   type FieldStat,
   type LogbookRange,
@@ -78,7 +86,7 @@ function namedBuckets(spark: StatsSpark): SparkBucket[] {
  * which Logjam Web does not have.
  */
 function AnalyticsPanel({
-  views,
+  onBack,
   tripLogs,
   tripLogsTotal,
   loaded,
@@ -87,8 +95,8 @@ function AnalyticsPanel({
   placeCustomFieldDefs,
   placeTypes,
 }: {
-  /** The Logs | Stats switch, drawn under the hero. */
-  views: ReactNode;
+  /** Back to the logbook this page opened from. */
+  onBack: () => void;
   tripLogs: TTripLog[];
   tripLogsTotal: number | null;
   loaded: boolean;
@@ -163,6 +171,9 @@ function AnalyticsPanel({
     lastOpened.current = index;
   };
   const lastOpened = useRef(0);
+  useEffect(() => {
+    rootRef.current?.querySelector<HTMLElement>("header button")?.focus();
+  }, []);
   const closeActivity = () => {
     setActivity(null);
     requestAnimationFrame(() =>
@@ -209,12 +220,13 @@ function AnalyticsPanel({
       <>
         <Hero
           title={title}
-          onBack={activity ? closeActivity : undefined}
-          backLabel={copy.backToActivities}
+          onBack={activity ? closeActivity : onBack}
+          backLabel={
+            activity ? copy.backToActivities : `Back to ${TRIPS_LIST.title}`
+          }
         />
-        <div className={classes.rails}>
-          {views}
-          {tripLogs.length > 0 && (
+        {tripLogs.length > 0 && (
+          <div className={classes.rails}>
             <ChipRail
               label="Period"
               options={ranges.map((entry) => ({
@@ -224,8 +236,8 @@ function AnalyticsPanel({
               value={range.label}
               onChange={setRangeLabel}
             />
-          )}
-        </div>
+          </div>
+        )}
       </>
     ),
     truncated: () =>

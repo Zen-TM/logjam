@@ -27,6 +27,8 @@ export const ICONS = {
   // — verbs: what a control does —
   add: { web: "plus", gps: "plus" },
   addPlace: { web: "map-pin-plus", gps: "mci:map-marker-plus-outline" },
+  addTrip: { web: "book-plus", gps: "mci:book-plus-outline" },
+  addSaved: { web: "folder-plus", gps: "folder-plus" },
   remove: { web: "minus", gps: "minus" }, // take out of a selection
   close: { web: "x", gps: "x" }, // close a surface, clear a field, cancel a job
   back: { web: "arrow-left", gps: "arrow-left" },
@@ -119,7 +121,7 @@ export const ICONS = {
   layers: { web: "layers", gps: "layers" }, // the layer picker
   template: { web: "layout-template", gps: "layout" },
   notes: { web: "align-left", gps: "align-left" },
-  stats: { web: "chart-column", gps: "bar-chart-2" },
+  stats: { web: "chart-no-axes-column", gps: "bar-chart-2" },
   friends: { web: "users", gps: "users" },
   leaderboard: { web: "award", gps: "award" }, // the friends leaderboard, a medal
   account: { web: "circle-user", gps: "user" },

@@ -128,6 +128,7 @@ describe("every screen contract", () => {
   it("hands a client its own sections, in order, and never the other's", () => {
     expect(contractSectionKeys(PLACES_FILTER_SHEET, "web")).toEqual([
       "sort",
+      "status",
       "attributes",
       "location",
       "source",
@@ -135,6 +136,7 @@ describe("every screen contract", () => {
     ]);
     expect(contractSectionKeys(PLACES_FILTER_SHEET, "gps")).toEqual([
       "sort",
+      "status",
       "attributes",
       "location",
       "source",
@@ -210,20 +212,9 @@ describe("the places list", () => {
     expect(placesFilterNote(0, "recent")).toBe("Recently added");
   });
 
-  it("tells an empty collection, a tight filter and an empty bucket apart", () => {
-    expect(placesEmptyKind({ total: 0, filtering: true, bucket: "done" })).toBe(
-      "firstRun",
-    );
-    expect(placesEmptyKind({ total: 5, filtering: true, bucket: "done" })).toBe(
-      "filtered",
-    );
-    expect(
-      placesEmptyKind({ total: 5, filtering: false, bucket: "done" }),
-    ).toBe("done");
-    // Only a type tab narrows: still "nothing matches", never "no places yet".
-    expect(placesEmptyKind({ total: 5, filtering: false, bucket: "all" })).toBe(
-      "filtered",
-    );
+  it("tells an empty collection from a tight filter", () => {
+    expect(placesEmptyKind({ total: 0 })).toBe("firstRun");
+    expect(placesEmptyKind({ total: 5 })).toBe("filtered");
   });
 
   it("never promises a guest an import or a sync", () => {

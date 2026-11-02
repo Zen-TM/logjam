@@ -111,7 +111,7 @@ import {
   SelectionMark,
   StatusPill,
   SyncStatusPills,
-  TextField,
+  SearchField,
   Toast,
   type MeterSegment,
   type ChipOption,
@@ -1667,7 +1667,7 @@ export function SavedScreen({
         actions={
           <Button
             label="Add"
-            icon="add"
+            icon="addSaved"
             compact
             onPress={() => setAddSheetOpen(true)}
           />
@@ -1723,7 +1723,7 @@ export function SavedScreen({
           // the category chips are meant to scroll off the edge, an input
           // running into it just looks clipped.
           <View style={styles.searchField}>
-            <TextField
+            <SearchField
               label={`Search ${searchNoun(filter)}`}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -1732,8 +1732,7 @@ export function SavedScreen({
               // same reason changing category clears the selection outright
               // (selectFilter). The field stays visible (so the bar's height
               // never differs from the rail's) but inert, rather than losing
-              // what was typed. It also GREYS OUT (TextField's own disabled
-              // treatment, `editable={false}`) — a live-looking field that
+              // what was typed. It also GREYS OUT — a live-looking field that
               // silently eats taps read as broken, not as "not now".
               editable={!selecting}
             />
@@ -2529,7 +2528,7 @@ function EmptyPanel({
         action
           ? {
               label: action.label,
-              icon: "add",
+              icon: "addSaved",
               onPress: action.onPress,
               disabledReason: action.disabledReason,
             }
@@ -2569,7 +2568,7 @@ function SavedAddButton({ action }: { action: SavedAction }) {
     <View style={styles.addButton}>
       <Button
         label={action.label}
-        icon="add"
+        icon="addSaved"
         compact
         disabled={action.disabledReason != null}
         onPress={action.onPress}

@@ -263,7 +263,7 @@ function ThresholdFilter({
           />
         ))}
       </View>
-      <View style={styles.pairField}>
+      <View style={styles.valueField}>
         <TextField
           label="Value"
           value={text}
@@ -322,4 +322,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing(1) },
   pair: { flexDirection: "row", gap: spacing(1) },
   pairField: { flex: 1, maxWidth: 200 },
+  // No `flex`: in this column it would mean a height of nothing, and the next
+  // row would draw over the field.
+  valueField: { maxWidth: 200 },
 }));

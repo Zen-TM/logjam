@@ -65,10 +65,16 @@ renumber.
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
 - **Between the hero and the list, only what narrows the list** (the rail, a
-  selection bar). A way elsewhere is a hero action; a number it carries is its
+  search bar, a selection bar). A way elsewhere is a hero action; a number it carries is its
   badge.
-- **One pinned filter axis per screen.** Finer filters are one press away and
-  say so while active ("3 filters active").
+- **One pinned filter axis per screen.** Finer filters are one press away, in
+  the sheet behind the hero's filter button, and say so while active ("3
+  filters active"). The rail is the axis people arrive with.
+- **A list you hunt through by name has a search bar under the rail**, always
+  there, not behind an icon. It is hidden with nothing to search and stays
+  mounted but disabled during a selection.
+- **A page's add button wears what it adds**, not a bare plus: `addPlace`,
+  `addTrip`, `addSaved`. A menu of several ways in keeps the plus.
 - **A list that grows without limit never shares a scroller with one that
   does not.** Give each a tab, with its count on the tab.
 - **The space above a section header is bigger than the gap between the rows

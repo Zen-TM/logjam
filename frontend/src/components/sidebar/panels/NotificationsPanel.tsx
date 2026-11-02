@@ -179,7 +179,6 @@ function NotificationsPanel({
   const dayIdPrefix = useId();
   const [bucket, setBucket] = useState<Bucket>("all");
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [expandedBatches, setExpandedBatches] =
     useState<ReadonlySet<string>>(NO_KEYS);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -802,73 +801,36 @@ function NotificationsPanel({
     );
   };
 
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
-
   const hero = (
     <Hero
       title={INBOX.title}
       actions={
-        searchOpen ? (
-          <IconButton
-            icon="close"
-            label={copy.closeSearch}
-            onClick={closeSearch}
-          />
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.searchField}
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            <Menu
-              label="Inbox actions"
-              placement="bottom-end"
-              entries={[
-                {
-                  id: "read-all",
-                  label: inboxVerb("markAllRead").label,
-                  icon: "selectAll",
-                  disabled: tally.unread === 0,
-                  onSelect: () => void markAllRead(),
-                },
-                {
-                  id: "clear-read",
-                  label: inboxVerb("clearRead").label,
-                  icon: "delete",
-                  danger: true,
-                  disabled: readCount === 0,
-                  onSelect: confirmClearRead,
-                },
-              ]}
-              trigger={(props) => (
-                <IconButton {...props} icon="overflow" label="Inbox actions" />
-              )}
-            />
-          </>
-        )
-      }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
+        <Menu
+          label="Inbox actions"
+          placement="bottom-end"
+          entries={[
+            {
+              id: "read-all",
+              label: inboxVerb("markAllRead").label,
+              icon: "selectAll",
+              disabled: tally.unread === 0,
+              onSelect: () => void markAllRead(),
+            },
+            {
+              id: "clear-read",
+              label: inboxVerb("clearRead").label,
+              icon: "delete",
+              danger: true,
+              disabled: readCount === 0,
+              onSelect: confirmClearRead,
+            },
+          ]}
+          trigger={(props) => (
+            <IconButton {...props} icon="overflow" label="Inbox actions" />
+          )}
         />
-      )}
-    </Hero>
+      }
+    />
   );
 
   const emptyArea = (children: ReactNode) => (
@@ -1007,6 +969,17 @@ function NotificationsPanel({
                 onChange={changeBucket}
               />
             )}
+            <SearchField
+              label={copy.searchField}
+              value={query}
+              disabled={selecting}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape" || query === "") return;
+                event.stopPropagation();
+                setQuery("");
+              }}
+            />
           </div>
         </>
       ) : null,

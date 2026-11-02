@@ -11,14 +11,14 @@ export const INBOX = {
   title: "Inbox",
   sections: [
     { key: "hero" },
-    // One rail: All / Unread / Read. The selection bar takes its place.
+    // One rail: All / Unread / Read, which the selection bar replaces, and
+    // the search bar under it.
     { key: "buckets" },
     { key: "truncated" },
     { key: "list" },
   ],
   copy: {
     searchField: "Search notifications",
-    closeSearch: "Close search",
     clearSearch: "Clear search",
     showEverything: "Show everything",
     markAllRead: "Mark all as read",

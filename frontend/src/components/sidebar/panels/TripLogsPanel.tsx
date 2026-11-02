@@ -82,13 +82,13 @@ const plural = (count: number, noun: string) =>
 
 /**
  * Logs: "what have I done?" (Logjam GPS's `LogsScreen`). The hero answers with
- * the trip count; one rail narrows by activity; search hides behind the hero's
- * icon and the date range in a sheet beside the list. The list runs newest
- * first in year sections. A row opens its trip; ⋯ opens, edits or deletes it;
+ * the trip count; one rail and the search bar under it narrow the list, and
+ * everything else is the sheet beside it. The list runs newest first in year
+ * sections. A row opens its trip; ⋯ opens, edits or deletes it;
  * its tile starts a selection that deletes in bulk.
  */
 function TripLogsPanel({
-  views,
+  onOpenStats,
   tripLogs,
   tripLogsTotal,
   loaded,
@@ -105,8 +105,7 @@ function TripLogsPanel({
   onFiltersOpenChange,
   onExpandSheet,
 }: {
-  /** The Logs | Stats switch, drawn under the hero. */
-  views: React.ReactNode;
+  onOpenStats: () => void;
   tripLogs: TTripLog[];
   // True trip-log total before the server's list cap; null until known.
   tripLogsTotal: number | null;
@@ -170,7 +169,6 @@ function TripLogsPanel({
     "logjam.tripSort",
     "newest",
   );
-  const [searchOpen, setSearchOpen] = useState(search !== "");
   const { sheetOpen, openSheet } = usePanelSheet({
     onOpenChange: onFiltersOpenChange,
     onExpandSheet,
@@ -427,17 +425,12 @@ function TripLogsPanel({
     clearSheetFilters();
   };
 
-  const closeSearch = () => {
-    setSearch("");
-    setSearchOpen(false);
-  };
-
   // ── Render ───────────────────────────────────────────────────────────
   const deleteCopy = tripDeleteConfirm(pendingDelete?.length ?? 1);
   const rangeText = rangeSet
     ? dateRangeLabel(dateFrom || null, dateTo || null)
     : null;
-  const dateButton = (
+  const filterButton = (
     <IconButton
       icon="filter"
       label={
@@ -467,71 +460,36 @@ function TripLogsPanel({
     <Hero
       title={TRIPS_LIST.title}
       actions={
-        searchOpen ? (
-          <>
-            {dateButton}
-            <IconButton
-              icon="close"
-              label={copy.closeSearch}
-              onClick={closeSearch}
-            />
-          </>
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.search}
-              tone={search ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            {dateButton}
-            <Menu
-              label={TRIPS_ADD.copy.menu}
-              placement="bottom-end"
-              entries={contractSectionKeys(TRIPS_ADD, "web").map((key) => ({
-                id: key,
-                icon: TRIPS_ADD_ICON[key],
-                ...addEntries[key],
-              }))}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  {TRIPS_ADD.title}
-                </Button>
-              )}
-            />
-          </>
-        )
+        <>
+          <IconButton icon="stats" label={copy.stats} onClick={onOpenStats} />
+          {filterButton}
+          <Menu
+            label={TRIPS_ADD.copy.menu}
+            placement="bottom-end"
+            entries={contractSectionKeys(TRIPS_ADD, "web").map((key) => ({
+              id: key,
+              icon: TRIPS_ADD_ICON[key],
+              ...addEntries[key],
+            }))}
+            trigger={(props) => (
+              <Button
+                {...props}
+                compact
+                variant="filled"
+                icon="add"
+                trailingIcon="expand"
+              >
+                {TRIPS_ADD.title}
+              </Button>
+            )}
+          />
+        </>
       }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={search}
-          autoFocus
-          onChange={(event) => setSearch(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
-        />
-      )}
-    </Hero>
+    />
   );
 
   const typeRail = (
     <div className={classes.rails}>
-      <div className={selecting ? classes.inert : undefined} inert={selecting}>
-        {views}
-      </div>
       {selecting ? (
         <SelectionBar
           countLabel={listSelectionLabel(selected.length)}
@@ -738,6 +696,21 @@ function TripLogsPanel({
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "web">, ReactNode> = {
     hero,
     typeRail,
+    search: tripLogs.length > 0 && (
+      <div className={classes.search}>
+        <SearchField
+          label={copy.search}
+          value={search}
+          disabled={selecting}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || search === "") return;
+            event.stopPropagation();
+            setSearch("");
+          }}
+        />
+      </div>
+    ),
     // The hidden filters, said out loud: the rail and the search box show
     // their own state where they stand, so this speaks only for what the
     // closed sheet is doing (DESIGN.md).

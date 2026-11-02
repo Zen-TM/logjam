@@ -122,7 +122,7 @@ import {
   SelectionBar,
   SelectionMark,
   StatusPill,
-  TextField,
+  SearchField,
   Toast,
   useBulkSelection,
   type ChipOption,
@@ -1074,7 +1074,7 @@ export function NotificationsScreen({
                 out of the list — and dims to say so, the treatment Saved's field
                 and the waypoint tag rail already use. */}
             <View style={styles.searchField}>
-              <TextField
+              <SearchField
                 label={INBOX.copy.searchField}
                 value={search}
                 onChangeText={setSearch}

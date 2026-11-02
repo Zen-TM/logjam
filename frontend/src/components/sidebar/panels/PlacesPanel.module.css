@@ -9,20 +9,15 @@
   flex-direction: column;
 }
 
-.typeRail,
-.statusRail {
+.typeRail {
   flex-shrink: 0;
-  padding: var(--space-1) var(--gutter) 0;
+  /* The rail's pad on Logs, Ways and Inbox, so the chips sit at one height. */
+  padding: 10px var(--gutter) var(--space-1);
 }
 
-.statusRail {
-  padding-bottom: var(--space-1);
-}
-
-/* Selection keeps the type rail mounted but out of reach, so the list below
-   does not jump when the status rail becomes the bar. */
-.inert {
-  opacity: 0.4;
+.search {
+  flex-shrink: 0;
+  padding: 0 var(--gutter) var(--space-1);
 }
 
 .strip {
@@ -30,10 +25,10 @@
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-1);
   min-height: var(--control-md);
   box-sizing: border-box;
-  margin: 0 var(--gutter) 8px;
+  margin: 0 var(--gutter) var(--space-1);
   /* The end pad centres the round clear button in the pill's end cap. */
   padding: 0 calc((var(--control-md) - var(--control-sm)) / 2) 0 12px;
   border-radius: var(--radius-pill);
