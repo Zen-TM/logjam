@@ -86,10 +86,10 @@
 
 ## Testing
 
-| Suite | Command | Needs |
-|---|---|---|
-| unit | `npm run test:unit` (`*.unit.test.ts`, colocated) | nothing; a unit test that needs a server is misfiled |
-| integration | `npm test` (`src/__tests__/*.test.ts`) | a running local API (`make dev`); it starts none |
+| Suite       | Command                                           | Needs                                                |
+| ----------- | ------------------------------------------------- | ---------------------------------------------------- |
+| unit        | `npm run test:unit` (`*.unit.test.ts`, colocated) | nothing; a unit test that needs a server is misfiled |
+| integration | `npm test` (`src/__tests__/*.test.ts`)            | a running local API (`make dev`); it starts none     |
 
 - Unit tests mock Prisma (`vi.mock("../services/prisma")`) and the `@aws-sdk/*`
   modules. Don't unit-test a thin Prisma/AWS pass-through; integration covers
