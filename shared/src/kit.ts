@@ -57,7 +57,7 @@ export const KIT_COMPONENTS = {
   Avatar: both,
   IconTile: both,
   TileCheckbox: web(
-    "a tile that ticks under a pointer; touch selects by press-and-hold",
+    "a card that ticks under a pointer; touch selects by press-and-hold",
   ),
   SelectionMark: gps(
     "the checkbox a row shows during a multi-select; Logjam Web uses TileCheckbox",
