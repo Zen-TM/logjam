@@ -30,6 +30,7 @@ export const WEATHER = {
     failed: "Couldn't get the forecast.",
     needsConnection: "Needs a connection",
     refresh: "Refresh",
+    hide: "Hide",
     tryAgain: "Try again",
     // Every day the forecast held is past: a stale forecast is never shown.
     outOfDate: "This forecast has run out.",
@@ -95,9 +96,9 @@ export type WeatherDayFacts = {
   /** "Today", or "Mon 20". */
   day: string;
   condition: WeatherCondition;
-  /** "4–17°" */
+  /** "4–17°C" */
   temperature: string;
-  /** "6 mm · 70%"; the chance is left out where there is none. */
+  /** "6 mm · 70% chance"; the chance is left out where there is none. */
   rain: string;
   /** "25 km/h" */
   wind: string;
@@ -110,10 +111,10 @@ export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
     date: day.date,
     day: day.date === localDate(now) ? WEATHER.copy.today : `${weekday} ${d}`,
     condition: weatherCondition(day.code),
-    temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°`,
+    temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°C`,
     rain:
       day.rainChance != null
-        ? `${formatRainMm(day.rainMm)} · ${day.rainChance}%`
+        ? `${formatRainMm(day.rainMm)} · ${day.rainChance}% chance`
         : formatRainMm(day.rainMm),
     wind: `${Math.round(day.windMaxKmh)} km/h`,
   };

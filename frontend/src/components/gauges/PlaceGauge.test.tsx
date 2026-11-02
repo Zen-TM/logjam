@@ -43,6 +43,20 @@ describe("a place's river gauge", () => {
     expect(onChange).toHaveBeenCalledWith("900002");
   });
 
+  // Mutation: drop the focus effect in PlaceGauge, and the keyboard is left on
+  // a row that has just gone.
+  it("scrolls the chooser into view and takes focus when it opens", async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    draw({});
+    fireEvent.click(screen.getByText(PLACE_PAGE.copy.chooseGauge));
+    await screen.findByText(PLACE_PAGE.copy.gaugePickerHint);
+    expect(scroll).toHaveBeenCalled();
+    expect(document.activeElement).toBe(
+      screen.getByText(PLACE_PAGE.copy.cancelPick).closest("[tabindex='-1']"),
+    );
+  });
+
   // Mutation: draw the picker row for a sharee.
   it("shows a sharee the reading and no way to change it", async () => {
     draw({ owned: false, gaugeId: "900001" });

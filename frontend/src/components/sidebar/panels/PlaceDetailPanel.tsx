@@ -32,12 +32,13 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
+  formatPlacePosition,
   placeAttributesTitle,
   placeSources,
   placeStatus,
   placeStatusLabel,
   placeVerbs,
-  systemFieldDef,
+  withFieldUnit,
   type SectionKeysOn,
   type MediaItem,
   type ScopedCustomFieldDef,
@@ -137,14 +138,10 @@ function formatCustomFieldValue(
   return String(value);
 }
 
-/** The value as it is READ: the stored answer plus the unit its definition
- *  declares ("15 m"). Only a built-in carries one, and only where the label
- *  does not already say it — "Hours" says hours. */
+/** The value as it is READ: the stored answer plus its unit ("15 m"). */
 function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
   const text = formatCustomFieldValue(raw, def.type);
-  if (text == null) return null;
-  const unit = systemFieldDef(def.key)?.unit;
-  return unit ? `${text} ${unit}` : text;
+  return text == null ? null : withFieldUnit(def.key, text);
 }
 
 /** A parked value as one line. Objects are stringified rather than dropped:
@@ -418,7 +415,7 @@ function PlaceDetailPanel({
   // the callbacks below don't each have to re-check it.
   const current = place;
 
-  const coordinates = `${current.latitude.toFixed(4)}, ${current.longitude.toFixed(4)}`;
+  const coordinates = formatPlacePosition(current.latitude, current.longitude);
 
   /** The one thing a coordinate is FOR: getting it into whatever the user is
    *  navigating with. The glyph answers for two seconds — a toast for a copy
@@ -728,6 +725,19 @@ function PlaceDetailPanel({
               onClick={() => void handleCopyCoordinates()}
             />
           }
+        />
+      </section>
+    ),
+
+    // A link, not a verb of ours: the browser hands the point to whatever the
+    // person uses for directions.
+    navigate: () => (
+      <section className={classes.section}>
+        <Row
+          leading={<IconTile icon="openExternal" hue="var(--color-accent)" />}
+          title={copy.openInMaps}
+          href={`https://www.openstreetmap.org/?mlat=${current.latitude}&mlon=${current.longitude}#map=16/${current.latitude}/${current.longitude}`}
+          external
         />
       </section>
     ),

@@ -35,3 +35,9 @@
   margin: 0;
   color: var(--color-text-muted);
 }
+
+/* The chooser takes focus when it opens; a ring on a whole block of rows is
+   noise, and the rows inside keep theirs. */
+.chooser:focus {
+  outline: none;
+}

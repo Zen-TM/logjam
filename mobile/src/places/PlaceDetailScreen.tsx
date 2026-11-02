@@ -27,13 +27,17 @@ import {
   isReservedFieldKey,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  formatFieldValue,
+  formatPlacePosition,
   placeAttributesTitle,
   placeSources,
   placeStatusLabel,
   placeVerbs,
+  type AttributeRow,
   type PlaceVerbIdOn,
   type SectionKeysOn,
   userFieldValues,
+  withFieldUnit,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
@@ -217,7 +221,7 @@ export function PlaceDetailScreen({
   );
   const status = placeStatus(place, linkedTrips.length);
   const statusMeta = placeStatusMeta(theme)[status];
-  const grade = formatCanyonGrade(place);
+  const grade = formatCanyonGrade(place.fieldValues);
 
   const photoCount = attachments.filter((item) => {
     const category = mediaCategory(item.mediaType);
@@ -268,11 +272,20 @@ export function PlaceDetailScreen({
       ?.name ?? "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
-  const customFields = attributeRows(labellingDefs, storedFields);
+  const customFields = attributeRows(labellingDefs, storedFields).map(
+    ([key, label, value, type]): AttributeRow => [
+      key,
+      label,
+      value == null || value === ""
+        ? value
+        : withFieldUnit(key, formatFieldValue(value, type)),
+      type,
+    ],
+  );
 
   // Position is what every place has. Type-specific attributes render in the
   // type's own attribute table below rather than in bespoke stat tiles.
-  const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
+  const position = formatPlacePosition(place.latitude, place.longitude);
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
     // native module — the same copy the waypoint and tapped-point sheets use.
@@ -393,7 +406,11 @@ export function PlaceDetailScreen({
     ),
 
     navigate: () => (
-      <Row icon="navigateTo" title={copy.openInMaps} onPress={openInMapsApp} />
+      <Row
+        icon="openExternal"
+        title={copy.openInMaps}
+        onPress={openInMapsApp}
+      />
     ),
 
     weather: () => <PlaceWeatherSection place={place} />,

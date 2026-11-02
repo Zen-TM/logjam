@@ -5,7 +5,7 @@
 // first sit on the page as buttons, every other one is behind the ⋯. A page
 // draws no verb of its own, so Delete and Remove are never a section.
 import { fieldValue } from "../fieldValues.js";
-import { SOURCES_FIELD_KEY } from "../placeTypes.js";
+import { SOURCES_FIELD_KEY, systemFieldDef } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
 import { PLACE_FORM } from "./placeForm.js";
@@ -21,20 +21,10 @@ export const PLACE_PAGE = {
     { key: "hero" },
     { key: "verbs" },
     { key: "position" },
-    {
-      key: "navigate",
-      on: "gps",
-      reason:
-        "A phone hands a position to its navigation app. A desktop browser has none to hand it to.",
-    },
-    // "Show the weather here": WEATHER's words and figures.
-    { key: "weather" },
-    // The owner's pick of a river gauge, read-only to a sharee, who sees the
-    // section only when one is set. The owner with none gets a quiet way to
-    // choose; Logjam never picks for them.
-    { key: "gauge" },
+    { key: "navigate" },
     // Only the attributes the place answered: a form asks every question, a
-    // page reports the answers.
+    // page reports the answers. They come before the forecast and the gauge:
+    // the place's own facts are what a trip day needs first.
     { key: "attributes" },
     { key: "doesntFit", ownerOnly: true },
     { key: "notes" },
@@ -42,6 +32,12 @@ export const PLACE_PAGE = {
     { key: "sources" },
     { key: "photos" },
     { key: "route" },
+    // "Show the weather here": WEATHER's words and figures.
+    { key: "weather" },
+    // The owner's pick of a river gauge, read-only to a sharee, who sees the
+    // section only when one is set. The owner with none gets a quiet way to
+    // choose; Logjam never picks for them.
+    { key: "gauge" },
     { key: "linkedPlaces", ownerOnly: true },
     { key: "trips" },
     { key: "sharedWith", ownerOnly: true },
@@ -100,6 +96,20 @@ export const PLACE_PAGE_PRIMARY_VERBS = [
   "show",
   "logTrip",
 ] as const satisfies readonly PlaceVerbId[];
+
+/** Decimals a position is written to: about a metre, on both clients. */
+const POSITION_DECIMALS = 5;
+
+export function formatPlacePosition(latitude: number, longitude: number) {
+  return `${latitude.toFixed(POSITION_DECIMALS)}, ${longitude.toFixed(POSITION_DECIMALS)}`;
+}
+
+/** A value as it is READ: the unit its definition declares ("15 m"). Only a
+ *  built-in carries one, and only where the label does not already say it. */
+export function withFieldUnit(key: string, text: string): string {
+  const unit = systemFieldDef(key)?.unit;
+  return unit ? `${text} ${unit}` : text;
+}
 
 /** "Canyon attributes": the heading of what this KIND of place records. */
 export function placeAttributesTitle(typeName: string | null): string {

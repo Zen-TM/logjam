@@ -159,6 +159,20 @@ describe("PlaceWeather", () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 
+  // Mutation that turns it red: drop `hidden` from the row's onOpen, and
+  // showing the forecast again asks Open-Meteo a second time.
+  it("hides the forecast to its row and shows it again without asking", async () => {
+    const fetch = stubFetch();
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await screen.findByText(WEATHER.copy.pastRain);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.hide }));
+    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("shows a failure as the contract's words and logs nothing", async () => {
     vi.stubGlobal(
       "fetch",

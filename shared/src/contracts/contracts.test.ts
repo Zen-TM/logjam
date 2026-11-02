@@ -77,8 +77,10 @@ import {
   NOTIFICATION_VERBS,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  formatPlacePosition,
   placeAttributesTitle,
   placeStatusLabel,
+  withFieldUnit,
   PLACE_VERBS,
   placeDeleteConfirm,
   PLACES_ADD,
@@ -365,10 +367,45 @@ describe("a place's page", () => {
     expect(contractSectionsFor(PLACE_PAGE, "web", true)).toContain(
       "sharedWith",
     );
-    expect(contractSectionsFor(PLACE_PAGE, "web", true)).not.toContain(
+  });
+
+  // Mutation: swap two keys in `PLACE_PAGE.sections` (say "weather" above
+  // "attributes") and both clients draw them in the new order, so this list is
+  // the only thing that notices the page stopped leading with its facts.
+  it("leads with the place's facts and puts the forecast and gauge after them", () => {
+    const order = [
+      "hero",
+      "verbs",
+      "position",
       "navigate",
+      "attributes",
+      "doesntFit",
+      "notes",
+      "sources",
+      "photos",
+      "route",
+      "weather",
+      "gauge",
+      "linkedPlaces",
+      "trips",
+      "sharedWith",
+    ];
+    expect(contractSectionsFor(PLACE_PAGE, "web", true)).toEqual(order);
+    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toEqual(order);
+    expect(contractSectionsFor(PLACE_PAGE, "gps", false)).toEqual(
+      order.filter(
+        (key) => !["doesntFit", "linkedPlaces", "sharedWith"].includes(key),
+      ),
     );
-    expect(contractSectionsFor(PLACE_PAGE, "gps", true)).toContain("navigate");
+  });
+
+  it("writes a position and a built-in's unit the same on both clients", () => {
+    expect(formatPlacePosition(-33.559541, 150.3995)).toBe(
+      "-33.55954, 150.39950",
+    );
+    expect(withFieldUnit("longest_abseil", "15")).toBe("15 m");
+    expect(withFieldUnit("num_abseils", "6")).toBe("6");
+    expect(withFieldUnit("my_own_field", "6")).toBe("6");
   });
 
   // Mutation: mark "gauge" ownerOnly, and a sharee loses the owner's pick.
