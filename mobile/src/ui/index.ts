@@ -32,6 +32,8 @@ export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
 export { MapBanner } from "./MapBanner";
+export { NavReadout } from "./NavReadout";
+export { holdTick } from "./holdTick";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
 export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";

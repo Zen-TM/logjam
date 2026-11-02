@@ -23,7 +23,7 @@
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { formatSpeedMps } from "@logjam/shared";
+import { formatSpeedMps, splitUnit } from "@logjam/shared";
 
 import {
   fontSize,
@@ -33,21 +33,23 @@ import {
   makeStyles,
   muted,
 } from "../theme";
-import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
+import { readoutFigures, useLiveReadout } from "./liveReadout";
 
 // The height of one line of each text, as the font draws it (the same estimate
 // the scale bar makes): the chip is a fixed box around them.
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
-const VALUE_LINE = Math.round(fontSize.sm * 1.35);
+const VALUE_LINE = Math.round(fontSize.xxl * 1.2);
 
-/** Its drawn height, exported for the same reason `SCALE_BAR_HEIGHT` is: the
+/** Its drawn height at the default text size (a larger system font grows the
+ *  chip past it), exported for the same reason `SCALE_BAR_HEIGHT` is: the
  *  native compass ornament is positioned by a NUMBER and has to clear the whole
  *  stack (see MapScreen's `ornamentMarginY`). */
 export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
 /** Wide enough for the longest pair either column produces ("12.5 km/h",
- *  "1234 m") without the columns touching, and never wider. */
-const CHIP_WIDTH = 168;
+ *  "1234 m") and the longest label ("12 min ago") without the
+ *  columns touching, and never wider. */
+const CHIP_WIDTH = 248;
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -74,24 +76,34 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
     return () => clearInterval(timer);
   }, [active]);
 
-  // A stale fix invalidates the SPEED but not the height: you have not moved,
-  // so the ground under you is still the ground under you.
-  const stale = readout == null || now - readout.atMs > READOUT_STALE_MS;
-  const speed =
-    readout == null || stale || readout.speedMps == null
+  const figures = readoutFigures(readout, now);
+  const speed = splitUnit(
+    figures.speedMps == null ? UNKNOWN : formatSpeedMps(figures.speedMps),
+  );
+  const elevation = splitUnit(
+    figures.elevationM == null
       ? UNKNOWN
-      : formatSpeedMps(readout.speedMps);
-  const elevation =
-    readout?.elevationM == null
-      ? UNKNOWN
-      : `${Math.round(readout.elevationM)} m`;
+      : `${Math.round(figures.elevationM)} m`,
+  );
+  // Every figure from the position says how far to trust it: its age once the
+  // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
+  // the label's place (over the figure, so "about" reads into it) because the
+  // name plus the age does not fit a column at a large system font.
+  const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
+  const grey = figures.quality === "stale";
 
   return (
     <View style={styles.chip} pointerEvents="none">
       <View style={styles.column}>
-        <Text style={styles.label}>Speed</Text>
-        <Text style={styles.value} accessibilityLabel={`Speed ${speed}`}>
-          {speed}
+        <Text style={styles.label} numberOfLines={1}>
+          {note && figures.speedMps != null ? note : "Speed"}
+        </Text>
+        <Text
+          style={[styles.value, grey && styles.grey]}
+          accessibilityLabel={`Speed ${speed.join(" ")}`}
+        >
+          {speed[0]}
+          <Text style={styles.unit}>{speed[1]}</Text>
         </Text>
       </View>
       <View style={styles.divider} />
@@ -101,12 +113,15 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
             two-word chip clutters the UI when the distinction only matters to
             someone already asking. The screen reader still gets it, on the
             value below. */}
-        <Text style={styles.label}>Elevation</Text>
+        <Text style={styles.label} numberOfLines={1}>
+          {note && figures.elevationM != null ? note : "Elevation"}
+        </Text>
         <Text
-          style={styles.value}
-          accessibilityLabel={`Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`}
+          style={[styles.value, grey && styles.grey]}
+          accessibilityLabel={`Elevation ${elevation.join(" ")}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
-          {elevation}
+          {elevation[0]}
+          <Text style={styles.unit}>{elevation[1]}</Text>
         </Text>
       </View>
     </View>
@@ -120,18 +135,16 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "center",
     width: CHIP_WIDTH,
-    height: READOUT_CHIP_HEIGHT,
+    minHeight: READOUT_CHIP_HEIGHT,
     backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
   column: { flex: 1, alignItems: "center" },
   label: { ...muted(theme, textRole.meta) },
-  value: {
-    ...textRole.control,
-    color: theme.text,
-    fontVariant: ["tabular-nums"],
-  },
+  value: { ...textRole.instrument, color: theme.text },
+  unit: { ...textRole.control },
+  grey: { color: theme.textMuted },
   // A hairline rather than a gap: two centred columns with nothing between them
   // read as one wrapped sentence at a glance.
   divider: {

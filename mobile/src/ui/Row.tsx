@@ -11,6 +11,7 @@ import {
   muted,
   useTheme,
 } from "../theme";
+import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
 
@@ -200,7 +201,14 @@ export function Row({
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={
+        onLongPress
+          ? () => {
+              holdTick();
+              onLongPress();
+            }
+          : undefined
+      }
       disabled={disabled}
       hitSlop={hitSlop}
       style={({ pressed }) => [

@@ -7,7 +7,7 @@
  * The search pill's height, and therefore its collapsed diameter: the collapsed
  * circle has to be the same size as the bar it becomes for the expansion to
  * read as one shape growing (see MapSearchBar). The record button and every
- * control-column button share it, so the corner controls read as one set.
+ * control-column button share it, so the controls read as one set.
  */
 export const SEARCH_SIZE = 52;
 
@@ -25,12 +25,19 @@ export const MINI_FAB_ICON = 18;
 export const CHROME_GAP = 16;
 
 /**
- * How far in from each screen edge a map banner sits: past the search button
- * (or record button) and its gap. An expanded search bar spans from its corner
- * to `reservedWidth` short of the other edge (`MapSearchBar`), which is this
- * far, so it covers a banner whatever side it grows from.
+ * How far in from the search pill's edge a map banner sits: past the pill and
+ * its gap. The top row has nothing in the other corner (the record button lives
+ * in the action column), so on that side a banner runs out to `CHROME_GAP`.
  */
 export const MAP_BANNER_INSET = SEARCH_SIZE + CHROME_GAP * 2;
+
+/** The banner column's left and right offsets, given the edge the search pill
+ *  collapses into. */
+export function mapBannerInsets(searchSide: "left" | "right") {
+  return searchSide === "left"
+    ? { left: MAP_BANNER_INSET, right: CHROME_GAP }
+    : { left: CHROME_GAP, right: MAP_BANNER_INSET };
+}
 
 /**
  * Bottom of the floating chrome, clearing the scale bar and the native compass
@@ -39,7 +46,9 @@ export const MAP_BANNER_INSET = SEARCH_SIZE + CHROME_GAP * 2;
  * It is a constant: dynamic lifting on recording HUD height relies on
  * `onLayout` which does not fire when unmounting, leaving chrome displaced.
  * The HUD lives in the top notice stack instead, where it competes with
- * nothing and this number cannot move.
+ * nothing and this number cannot move. The record button joins the action
+ * column's own flow, so the column grows upward from here and this number
+ * stays put.
  */
 export const CHROME_BOTTOM = CHROME_GAP + 32;
 

@@ -23,6 +23,7 @@ import {
   Button,
   confirm,
   ErrorBanner,
+  CardActions,
   FieldError,
   IconButton,
 } from "../ui";
@@ -198,15 +199,25 @@ export function RecordingSheet({
       title={recording ? "Recording" : "Recording paused"}
       footer={
         <View style={styles.actions}>
-          <Button
-            label={recording ? "Pause" : "Resume"}
-            icon={recording ? "pause" : "play"}
-            variant="outlineAccent"
-            compact
-            onPress={handlePauseResume}
-          />
-          <Button label="Finish" icon="done" compact onPress={handleFinish} />
-          <View style={styles.spacer} />
+          {/* Full size, never compact: these are the controls most likely to
+              be pressed with gloves on. */}
+          <View style={styles.verbs}>
+            <CardActions>
+              <Button
+                label={recording ? "Pause" : "Resume"}
+                icon={recording ? "pause" : "play"}
+                variant="outlineAccent"
+                compact={false}
+                onPress={handlePauseResume}
+              />
+              <Button
+                label="Finish"
+                icon="done"
+                compact={false}
+                onPress={handleFinish}
+              />
+            </CardActions>
+          </View>
           <IconButton
             icon="delete"
             color={theme.warning}
@@ -238,5 +249,5 @@ export function RecordingSheet({
 const styles = StyleSheet.create({
   body: { gap: spacing(1.5) },
   actions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  spacer: { flex: 1 },
+  verbs: { flex: 1 },
 });

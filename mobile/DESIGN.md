@@ -84,11 +84,26 @@ handler or a camera write, read
   offers what can go there.** The hold sheet and the Settings → Map
   long-press preference are one vocabulary.
 - **Only a one-finger drag stops following you.**
-- **A stale or coarse fix greys the location arrow** (`gpsSignal.ts`). No
-  accuracy halo.
-- **A running recording is a light**: the record button pulses, its numbers
-  are a sheet one tap away, and a recorder that is not saving points says so
-  on the map unasked.
+- **A figure from your position reads `fixQuality`** (`gpsSignal.ts`): the
+  arrow, the navigation readout, speed, anything new. Stale, it greys and says
+  its age ("2 min ago"); coarse, it says "about". It never shows a
+  fresh-looking number from an old fix. No accuracy halo. One constant,
+  `FIX_STALE_MS`, sets the cliff.
+- **A number read while moving is `instrument`** (28, bold, tabular):
+  distance, bearing, speed, elevation and a recording's time (`m:ss`). The
+  navigation readout is `NavReadout`, first in the notice stack after a
+  critical notice; a place's name is its second line.
+- **A running recording is a light, on screen in every map mode**: the record
+  button pulses (a steady halo under Remove animations), its numbers are a
+  sheet one tap away, and a recorder that is not saving points says so on the
+  map unasked, as a `critical` notice. The button sits in the action column
+  under Locate, on the edge Settings → Map picks, so a thumb reaches it. While a
+  tool is armed an idle button is hidden, so a map tap cannot start a
+  recording; a running one stays. Pause, Resume and Finish are full size
+  (48), share the footer (`CardActions`) and are never compact.
+- **A press-and-hold that commits ticks once** (`holdTick`: finishing a
+  recording, dropping a point on the map, selecting a row). Nothing else
+  vibrates.
 - **A tool is a mode with a panel in the notice stack.** Measure and route
   draw are one implementation (`useRouteDraft`, `DraftToolPanel`); what a
   tool lacks is an absent prop. A question asked once (measure) draws dotted

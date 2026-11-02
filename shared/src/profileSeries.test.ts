@@ -237,6 +237,13 @@ describe("trackStatRows", () => {
     ]);
   });
 
+  it("reads a live recording's time as a clock, a finished one's in words", () => {
+    const time = (options?: { elapsedMs: number }) =>
+      trackStatRows(timed, trackHeights(timed, null, false), options)[0]?.value;
+    expect(time({ elapsedMs: 42_000 })).toBe("0:42");
+    expect(time()).toBe("1 h 0 min");
+  });
+
   it("takes every height from the terrain when the chart does", () => {
     const rows = trackStatRows(timed, trackHeights(timed, profile, false));
     const value = (label: string) =>

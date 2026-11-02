@@ -63,6 +63,9 @@ export function MapButtonGroup({
  * right now (filtered, generating, selected). An optional trailing action.
  * The same component as Logjam GPS's `Notice`: its words are `text`, centred IN
  * the notice; the intent is the glyph, and `tone="warning"` adds the edge.
+ * `tone="critical"` is for data being lost right now: the warning fill with
+ * `onFill` words, first in the stack. It always carries a glyph (accent and
+ * warning share a luminance), so `icon` is required by type.
  */
 export function Notice({
   icon,
@@ -72,17 +75,18 @@ export function Notice({
   controls,
   twoLines = false,
 }: {
-  icon?: Glyph;
   children: ReactNode;
   action?: ReactNode;
-  tone?: "info" | "warning";
   /** Controls in a row under the words, for a notice that is a mode with
    *  ways out (a plan on the map), as Logjam GPS's `Notice` has. */
   controls?: ReactNode;
   /** Words with a user's own title in them stop at two lines
    *  (shared/DESIGN.md §9). */
   twoLines?: boolean;
-}) {
+} & (
+  | { tone?: "info" | "warning"; icon?: Glyph }
+  | { tone: "critical"; icon: Glyph }
+)) {
   const line = (
     <>
       {icon && <Icon idea={icon} size={16} className={classes.noticeGlyph} />}
@@ -104,7 +108,7 @@ export function Notice({
         controls ? classes.stacked : "",
       ].join(" ")}
       data-tone={tone}
-      role={tone === "warning" ? "alert" : undefined}
+      role={tone === "info" ? undefined : "alert"}
     >
       {controls ? (
         <>

@@ -84,6 +84,19 @@ export function fixQuality(fix: FixLiveness | null, nowMs: number): FixQuality {
 }
 
 /**
+ * How old a fix is, for the figure that greys with it: "45 s ago", "2 min ago".
+ * A figure that has gone stale says so in these words rather than staying
+ * confident, which is what makes it safe to leave on screen.
+ */
+export function fixAgeLabel(ageMs: number): string {
+  const seconds = Math.max(0, Math.round(ageMs / 1000));
+  if (seconds < 60) return `${seconds} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  return `${Math.floor(minutes / 60)} h ago`;
+}
+
+/**
  * The liveness a watcher delivery proves.
  *
  * A delivery arriving NOW is the evidence of a live signal, so it is stamped
@@ -98,6 +111,22 @@ export function deliveredFix(
   nowMs: number,
 ): FixLiveness {
   return { atMs: nowMs, accuracyM };
+}
+
+/**
+ * The liveness of a fix that just arrived, for the arrow and for every figure
+ * from the position: our clock for a live delivery, the platform's only for
+ * the OS's cached one (`deliveredFix`).
+ */
+export function arrivedFix(
+  accuracyM: number | null,
+  platformMs: number,
+  nowMs: number,
+  cached: boolean,
+): FixLiveness {
+  return cached
+    ? { atMs: platformMs, accuracyM }
+    : deliveredFix(accuracyM, nowMs);
 }
 
 /**

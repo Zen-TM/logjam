@@ -8,6 +8,8 @@ import {
   computeTrackDetail,
   computeTrackStats,
   formatDistanceM,
+  formatClockMs,
+  splitUnit,
   formatDurationMs,
   formatSpeedMps,
   initialBearingDegrees,
@@ -323,6 +325,20 @@ describe("formatters", () => {
     expect(formatDurationMs(47 * 60_000)).toBe("47 min");
     expect(formatDurationMs(192 * 60_000)).toBe("3 h 12 min");
     expect(formatDurationMs(-1)).toBe("—");
+  });
+
+  it("splits a figure from its unit", () => {
+    expect(splitUnit("3.4 km/h")).toEqual(["3.4", " km/h"]);
+    expect(splitUnit("—")).toEqual(["—", ""]);
+  });
+
+  // Mutation: return `formatDurationMs`'s words, and a recording's first
+  // minute reads "0 min" while the clock runs.
+  it("formats a running clock in seconds", () => {
+    expect(formatClockMs(7_900)).toBe("0:07");
+    expect(formatClockMs(12 * 60_000 + 3_000)).toBe("12:03");
+    expect(formatClockMs(3_723_000)).toBe("1:02:03");
+    expect(formatClockMs(-1)).toBe("—");
   });
 });
 

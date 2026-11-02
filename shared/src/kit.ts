@@ -84,6 +84,9 @@ export const KIT_COMPONENTS = {
   MapBanner: gps(
     "a mode in the map's top row at the search button's height; Logjam Web's Notice column has room for the whole sentence",
   ),
+  NavReadout: gps(
+    "the distance and bearing to a place as two figures at the head of the map's notice stack; Logjam Web is used at a desk and has no navigate-to-point (mapPoint contract)",
+  ),
   CardActions: gps(
     "a card footer's buttons share its width; Logjam Web's cards are wide enough that buttons keep their natural size (Row.module.css)",
   ),

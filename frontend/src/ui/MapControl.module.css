@@ -120,6 +120,17 @@
   color: var(--color-warning);
 }
 
+/* Data is being lost right now: the warning fill, its words `onFill`. Glyph and
+   words on the fill, never the glyph's accent. */
+.notice[data-tone="critical"] {
+  background: var(--color-warning);
+  color: var(--color-on-fill);
+}
+
+.notice[data-tone="critical"] .noticeGlyph {
+  color: var(--color-on-fill);
+}
+
 /* Centred means centred: a notice that wraps keeps its words in the middle of
    itself, not only itself in the middle of the screen. */
 .noticeText {

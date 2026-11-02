@@ -17,6 +17,7 @@ import type { ElevationProfile } from "./elevation.js";
 import { PAIRED_STAT_LABELS } from "./statPairs.js";
 import {
   formatDistanceM,
+  formatClockMs,
   formatDurationMs,
   formatSpeedMps,
   speedClockMs,
@@ -257,7 +258,10 @@ export function trackStatRows(
   if (timed || elapsedMs != null) {
     rows.push({
       label: "Time",
-      value: formatDurationMs(elapsedMs ?? detail.durationMs),
+      value:
+        elapsedMs != null
+          ? formatClockMs(elapsedMs)
+          : formatDurationMs(detail.durationMs),
     });
   }
   rows.push({ label: "Distance", value: formatDistanceM(detail.distanceM) });
