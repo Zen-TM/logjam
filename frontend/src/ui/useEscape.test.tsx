@@ -34,4 +34,16 @@ describe("useEscape", () => {
     fireEvent.keyDown(screen.getByRole("menuitem"), { key: "Escape" });
     expect(onEscape).not.toHaveBeenCalled();
   });
+
+  // Mutation: prevent and stop the key before asking the handler, and a layer
+  // with nothing to undo (a root page) still swallows Escape.
+  it("lets a declined press through", () => {
+    const outside = vi.fn();
+    document.addEventListener("keydown", outside);
+    render(<Layer onEscape={() => false} />);
+    fireEvent.keyDown(screen.getByText("inside"), { key: "Escape" });
+    document.removeEventListener("keydown", outside);
+    expect(outside).toHaveBeenCalledOnce();
+    expect(outside.mock.calls[0][0].defaultPrevented).toBe(false);
+  });
 });

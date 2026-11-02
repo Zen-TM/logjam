@@ -39,3 +39,8 @@
   display: flex;
   flex-direction: column;
 }
+
+/* Focused by the "Skip to panel" link; the page inside is what takes the eye. */
+.panel:focus-visible {
+  outline: none;
+}

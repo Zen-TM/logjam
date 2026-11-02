@@ -183,6 +183,7 @@ export function Row({
       data-selected={selected}
       data-accent-edge={String(accentEdge)}
       data-disabled={disabled}
+      data-row=""
       {...rest}
     >
       {leading != null && <div className={classes.leading}>{leading}</div>}
@@ -190,6 +191,7 @@ export function Row({
         {href ? (
           <a
             className={classes.open}
+            data-row-open=""
             href={href}
             download={download}
             {...(external
@@ -203,6 +205,7 @@ export function Row({
           <button
             type="button"
             className={classes.open}
+            data-row-open=""
             onClick={onOpen}
             disabled={disabled}
             aria-describedby={describedBy}

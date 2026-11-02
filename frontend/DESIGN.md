@@ -174,6 +174,14 @@ WCAG 2.2 AA is the floor.
   (`Tooltip.tsx`).
 - **Escape closes one layer per press** (`useEscape`); anything layered
   inside a dialog handles Escape on its own element.
+- **A list of `Row`s is one tab stop** (`useListKeys`, wired once in
+  `SidebarPanel`): Up/Down, Home and End move between rows, Enter opens, Space
+  ticks the tile (Shift+Space a range), Shift+F10 or the context-menu key opens
+  the row's actions. "Skip to panel" comes before "Skip to map".
+- **A page with a back arrow is left by Escape** (`usePanelFocus`): the same as
+  pressing the arrow, never from inside a text field. Focus goes to the arrow
+  on the way in and to the row that was opened on the way back (the next row
+  after a delete). Escape also lifts an armed Measure or Draw tool.
 - **Nothing interactive inside a `<label>`.** Exclusive choices are a named
   `radiogroup`.
 - **A badge is `aria-hidden`, its count in the name** ("Inbox, 9 unread").
