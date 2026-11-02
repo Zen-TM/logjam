@@ -1,6 +1,9 @@
-// OIDC auth hook: one button opens the provider's sign-in and sign-up page in
-// the system browser sheet (oidcSession.ts); Logjam GPS never handles a
-// password. The mobile offline-session semantics:
+// OIDC auth hook. Under a Cognito issuer the landing screen's own forms sign in
+// with a password sent straight to Cognito (passwordFlow.ts, ADR 0045); under
+// any other issuer, and whenever a form cannot finish, one button opens the
+// provider's page in the system browser sheet (oidcSession.ts). Both end in one
+// stored session, and a password lives only in the form's state. The mobile
+// offline-session semantics:
 //
 //  - Auth gates the API, not local data. After first successful login the
 //    local identity (sub/username) persists; the app cold-starts into that
@@ -38,6 +41,11 @@ import {
   signOutLocally,
 } from "./oidcSession";
 import { finishSignIn } from "./finishSignIn";
+import {
+  signInWithPasswordFlow,
+  usesOwnForms,
+  type FormAnswer,
+} from "./passwordFlow";
 import { classifySessionError } from "./sessionErrors";
 import type { AccountState } from "./capabilities";
 import {
@@ -172,6 +180,8 @@ export function useAuth() {
     return () => subscription.remove();
   }, []);
 
+  // The browser sheet: the way in under any other issuer, and the fallback when
+  // a form cannot finish.
   const handleSignIn = useCallback(async (): Promise<boolean> => {
     setError(null);
     if (config.authMode === "fake") {
@@ -196,6 +206,31 @@ export function useAuth() {
       return false;
     }
   }, []);
+
+  /**
+   * The landing screen's forms. Returns what the form shows, or `done` when the
+   * attempt ended in a state change or in the browser sheet (which sets `error`
+   * itself).
+   */
+  const handlePasswordSignIn = useCallback(
+    async (
+      email: string,
+      password: string,
+      newAccountUsername?: string,
+    ): Promise<FormAnswer | { type: "done" }> => {
+      setError(null);
+      const result = await signInWithPasswordFlow(
+        email,
+        password,
+        newAccountUsername,
+      );
+      if (result.type === "form") return result;
+      if (result.type === "signedIn") setState("authenticated");
+      else await handleSignIn();
+      return { type: "done" };
+    },
+    [handleSignIn],
+  );
 
   // Explicit sign-out is the one path that clears the local identity — the
   // privacy line, mirroring web's trip-draft clear. Tokens and identity go
@@ -280,7 +315,10 @@ export function useAuth() {
     accountState,
     offersGuestEntry,
     error,
+    /** The landing screen draws its own forms (Cognito issuer, real auth). */
+    ownForms: usesOwnForms(config.authMode, config.oidcIssuer),
     signIn: handleSignIn,
+    signInWithPassword: handlePasswordSignIn,
     signOut: handleSignOut,
     chooseGuest,
     linkAccount,

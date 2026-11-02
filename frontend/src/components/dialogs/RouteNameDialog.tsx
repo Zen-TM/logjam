@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
-import { ROUTE_NAME_MAX_LENGTH } from "@logjam/shared";
 import { Button, Dialog, TextField } from "../../ui";
+import { wayNameError } from "../sidebar/panels/waysModel";
 import classes from "./RouteNameDialog.module.css";
 
 type RouteNameDialogProps = {
@@ -35,9 +35,8 @@ function RouteNameForm({
   const formId = useId();
   const [name, setName] = useState(initialName);
 
-  const trimmed = name.trim();
-  const tooLong = trimmed.length > ROUTE_NAME_MAX_LENGTH;
-  const [blank, setBlank] = useState(false);
+  const [asked, setAsked] = useState(false);
+  const error = wayNameError(name, asked);
 
   return (
     <Dialog
@@ -62,9 +61,9 @@ function RouteNameForm({
         className={classes.form}
         onSubmit={(event) => {
           event.preventDefault();
-          if (busy || tooLong) return;
-          if (trimmed.length === 0) setBlank(true);
-          else onSave(trimmed);
+          if (busy) return;
+          setAsked(true);
+          if (!wayNameError(name, true)) onSave(name.trim());
         }}
       >
         <TextField
@@ -72,15 +71,9 @@ function RouteNameForm({
           value={name}
           onChange={(event) => {
             setName(event.target.value);
-            setBlank(false);
+            setAsked(false);
           }}
-          error={
-            tooLong
-              ? `Must be at most ${ROUTE_NAME_MAX_LENGTH} characters`
-              : blank
-                ? "Name is required"
-                : null
-          }
+          error={error}
           data-autofocus
         />
         {/* No colour here: it is a property of the DRAFT, chosen in the draw

@@ -8,7 +8,8 @@ import { IconButton } from "./IconButton";
  * Screen-opening hero — replaces the native stack header on screens that lead
  * with a headline metric or state (`headerShown: false` on the route).
  *
- * Anatomy, top to bottom: eyebrow (uppercase kicker) · title + optional
+ * Anatomy, top to bottom: back row (pushed screens: arrow + the destination's
+ * name) · eyebrow (uppercase kicker) · title + optional
  * trailing `actions` node on the same baseline · optional `value`/`valueSuffix`
  * display metric · optional `children` (meter, readiness pill, chips).
  *
@@ -24,6 +25,7 @@ export function Hero({
   valueSuffix,
   actions,
   onBack,
+  backLabel,
   children,
 }: {
   eyebrow?: string;
@@ -39,14 +41,18 @@ export function Hero({
   secondaryValue?: string;
   valueSuffix?: string;
   actions?: React.ReactNode;
-  /**
-   * Back affordance for a hero on a PUSHED screen. A hero replaces the native
-   * header, which means it also has to replace the back button it removed —
-   * a gesture is not a visible way out.
-   */
-  onBack?: () => void;
   children?: React.ReactNode;
-}) {
+} & (
+  | { onBack?: undefined; backLabel?: undefined }
+  | {
+      onBack: () => void;
+      /**
+       * Where back goes, by name (`backLabelOf`). Text beside a back arrow
+       * names its destination, so the eyebrow never shares that row.
+       */
+      backLabel: string;
+    }
+)) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -57,15 +63,16 @@ export function Hero({
         <View style={styles.backRow}>
           <IconButton
             icon="back"
-            accessibilityLabel="Back"
+            accessibilityLabel={`Back to ${backLabel}`}
             color={theme.text}
             onPress={onBack}
           />
-          {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
+          <Text style={styles.eyebrow} numberOfLines={1}>
+            {backLabel}
+          </Text>
         </View>
-      ) : eyebrow ? (
-        <Text style={styles.eyebrow}>{eyebrow}</Text>
       ) : null}
+      {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <View style={styles.titleRow}>
         <Text style={styles.title} numberOfLines={titleNumberOfLines}>
           {title}
@@ -100,7 +107,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     ...muted(theme, textRole.section),
     letterSpacing: 1,
   },
-  // The back button sits on the eyebrow line and hangs into the horizontal
+  // The back button sits beside the name of where it goes and hangs into the horizontal
   // padding, so the title still starts on the screen's text margin.
   backRow: {
     flexDirection: "row",

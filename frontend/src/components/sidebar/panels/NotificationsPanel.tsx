@@ -33,6 +33,8 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
+  type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
   selectionCountLabel,
@@ -91,6 +93,7 @@ const KIND_GLYPH: Record<NotificationKind, Glyph> = {
   people: "friends",
   topo: "lidar",
   export: "export",
+  plan: "plan",
   message: "info",
   problem: "warning",
 };
@@ -104,6 +107,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
   people: "var(--color-accent)",
   topo: "var(--hue-overlay)",
   export: "var(--hue-import)",
+  plan: "var(--hue-plan)",
   message: "var(--color-accent)",
   problem: "var(--color-warning)",
 };
@@ -152,6 +156,7 @@ function NotificationsPanel({
   setSelectedPlaceID,
   setActivePanel,
   onTopoFlyTarget,
+  onOpenPlan,
   onShowSharpened,
 }: {
   notifications: TNotification[];
@@ -166,6 +171,7 @@ function NotificationsPanel({
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
 }) {
@@ -368,6 +374,8 @@ function NotificationsPanel({
       setSelectedPlaceID(placeId);
       setActivePanel("place-detail");
     }
+    const plan = notificationPlanTarget(n);
+    if (plan) onOpenPlan(plan);
   };
 
   // In Unread, the read row leaves as the dialog closes and takes the focus
@@ -408,6 +416,7 @@ function NotificationsPanel({
       setActivePanel("place-detail");
       return;
     }
+    if (destination.kind === "plan") return onOpenPlan(destination.target);
     if (destination.kind === "sharpened") {
       onShowSharpened();
     } else {

@@ -93,6 +93,12 @@ vi.mock("../gauges/gaugeStorage", () => ({
     return Promise.resolve();
   },
 }));
+vi.mock("../plans/plansCache", () => ({
+  stopPlansForWipe: () => {
+    record("stop:plans");
+    return Promise.resolve();
+  },
+}));
 const resetDatabase = vi.hoisted(() => vi.fn());
 vi.mock("@maplibre/maplibre-react-native", () => ({
   OfflineManager: { resetDatabase: () => resetDatabase() },
@@ -151,6 +157,8 @@ describe("wipeAllLocalData", () => {
   // Red if the stop calls move after (or are removed from before) the first
   // delete: a live producer would re-create what the wipe just removed, and
   // the sharpened areas' transforms would keep their presigned URLs.
+  // Mutation: drop `stopPlansForWipe()` from the wipe, and a plan fetch
+  // landing after sign-out writes the departing user's plan back.
   it("stops every producer before deleting anything", async () => {
     await wipeAllLocalData();
     const firstDelete = events.findIndex((e) => /^(sql|delete):/.test(e));
@@ -162,6 +170,7 @@ describe("wipeAllLocalData", () => {
       "stop:gauges",
       "stop:sharpened",
       "stop:sharpened-areas",
+      "stop:plans",
     ]) {
       const at = events.indexOf(stop);
       expect(at).toBeGreaterThanOrEqual(0);

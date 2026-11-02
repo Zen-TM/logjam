@@ -307,7 +307,7 @@ describe("requireAuth — oidc mode, real tokens", () => {
 });
 
 describe("auth module-load fail-closed guards", () => {
-  // Mutation: delete the positive check, or let it accept only "cognito", or
+  // Mutation: delete the positive check, let it accept "cognito" again, or
   // drop the fake-refused guard, and the matching test goes red.
 
   it("refuses AUTH_MODE=fake in a production NODE_ENV", async () => {
@@ -344,20 +344,17 @@ describe("auth module-load fail-closed guards", () => {
     await expect(import("./auth")).rejects.toThrow(/refused/);
   });
 
-  it.each(["oidc", "cognito"])(
-    "accepts AUTH_MODE=%s in an AWS container runtime",
-    async (mode) => {
-      vi.resetModules();
-      process.env.AUTH_MODE = mode;
-      process.env.NODE_ENV = "test";
-      process.env.ECS_CONTAINER_METADATA_URI_V4 = "http://169.254.170.2/v4";
-      await expect(import("./auth")).resolves.toBeDefined();
-    },
-  );
+  it("accepts AUTH_MODE=oidc in an AWS container runtime", async () => {
+    vi.resetModules();
+    process.env.AUTH_MODE = "oidc";
+    process.env.NODE_ENV = "test";
+    process.env.ECS_CONTAINER_METADATA_URI_V4 = "http://169.254.170.2/v4";
+    await expect(import("./auth")).resolves.toBeDefined();
+  });
 
   it("refuses any other AUTH_MODE in an AWS container runtime", async () => {
     vi.resetModules();
-    process.env.AUTH_MODE = "bogus";
+    process.env.AUTH_MODE = "cognito";
     process.env.NODE_ENV = "test";
     process.env.ECS_CONTAINER_METADATA_URI_V4 = "http://169.254.170.2/v4";
     await expect(import("./auth")).rejects.toThrow(/must be "oidc"/);

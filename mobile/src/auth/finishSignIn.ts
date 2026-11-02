@@ -1,5 +1,6 @@
-// What happens between the browser sheet returning tokens and the app opening
-// on them: whose phone is this, and does anything on it have to go first.
+// What happens between a sign-in returning tokens (the browser sheet, or a
+// password sent to Cognito) and the app opening on them: whose phone is this,
+// and does anything on it have to go first.
 // Pulled out of `useAuth` so the order can be tested without a renderer.
 import { apiFetch } from "../api/apiFetch";
 import { wipeAllLocalData } from "../offline/wipeLocalData";
