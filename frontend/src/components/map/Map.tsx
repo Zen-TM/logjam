@@ -1058,6 +1058,24 @@ function Map({
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    // MapLibre opens a compact control when the first credit arrives and
+    // closes it on the first drag, which on a phone leaves a box over a quarter
+    // of the map until then. Close it as soon as it first opens: the (i) alone.
+    const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+    if (credits) {
+      const open = "maplibregl-compact-show";
+      const collapse = () => {
+        if (!credits.classList.contains(open)) return;
+        credits.classList.remove(open);
+        observer.disconnect();
+      };
+      const observer = new MutationObserver(collapse);
+      observer.observe(credits, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+      collapse();
+    }
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
