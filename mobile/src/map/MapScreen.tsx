@@ -1878,14 +1878,16 @@ export function MapScreen({
         setDraftColor(null);
         if (typeof then === "function") then();
       };
-      // Editing a saved route and leaving its points as they were loses
-      // nothing, so it never asks.
+      // Editing a saved route and leaving its points and colour as they were
+      // loses nothing, so it never asks.
       const stored = editingRouteId
         ? routes.data?.find((route) => route.id === editingRouteId)
         : undefined;
       if (
         routeDraft.points.length === 0 ||
-        (stored && samePoints(routeDraft.points, stored.points))
+        (stored &&
+          samePoints(routeDraft.points, stored.points) &&
+          (draftColor ?? null) === (stored.color ?? null))
       ) {
         discard();
         return;
@@ -1897,7 +1899,7 @@ export function MapScreen({
         (discarded) => discarded && discard(),
       );
     },
-    [editingRouteId, routeDraft, routes.data],
+    [draftColor, editingRouteId, routeDraft, routes.data],
   );
 
   /** Restore a draft the app was killed in the middle of.

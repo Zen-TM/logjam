@@ -690,7 +690,7 @@ export function NotificationsScreen({
           confirmTitle: action.confirm.title,
           confirmBody: action.confirm.body,
           confirmLabel: action.confirm.confirmLabel,
-          tone: "destructive",
+          tone: "filled",
         });
         if (!ok) return;
       }

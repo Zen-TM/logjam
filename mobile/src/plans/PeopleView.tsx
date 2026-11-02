@@ -114,16 +114,19 @@ export function PeopleView({
         copy.removeFailed,
       );
     if (!(await confirm(words))) return;
-    // Removing is one confirm; what happens to their files is a second, so
-    // Cancel there keeps the files and still removes them.
+    // Removing is one confirm; what happens to their files is a second. Its
+    // "Keep files" does not back out: the member is removed either way.
     const deleteFiles =
       files.count > 0 &&
-      (await confirm({
-        confirmTitle: `Delete ${member.user.username}'s files too?`,
-        confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. Cancel keeps them; ${member.user.username} is removed either way.`,
-        confirmLabel: "Delete files",
-        tone: "destructive",
-      }));
+      (await confirm(
+        {
+          confirmTitle: `Delete ${member.user.username}'s files too?`,
+          confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. ${member.user.username} is removed either way.`,
+          confirmLabel: "Delete files",
+          tone: "destructive",
+        },
+        { cancelLabel: "Keep files" },
+      ));
     go(deleteFiles);
   };
 

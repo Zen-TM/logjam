@@ -382,7 +382,7 @@ export function FriendSharesScreen({
         confirmTitle: ask.title,
         confirmBody: ask.body,
         confirmLabel: "Remove",
-        tone: "destructive",
+        tone: "filled",
       });
       if (!ok) return;
       setBusy(true);

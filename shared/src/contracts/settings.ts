@@ -125,7 +125,7 @@ export function placeTypeDeleteConfirm(name: string): ConfirmCopy {
     confirmTitle: `Delete ${name}?`,
     confirmBody:
       "Any attributes that belong only to this type are deleted with it. Places are not affected — this type has none.",
-    confirmLabel: "Delete",
+    confirmLabel: SETTINGS_LIST.copy.deleteType,
     tone: "destructive",
   };
 }
@@ -157,7 +157,7 @@ export function attributeDeleteConfirm(
     ]
       .filter(Boolean)
       .join(" "),
-    confirmLabel: "Delete",
+    confirmLabel: SETTINGS_LIST.copy.deleteAttribute,
     tone: "destructive",
   };
 }

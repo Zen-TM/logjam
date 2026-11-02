@@ -47,6 +47,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   MAP_TERRAIN,
   attributeDeleteConfirm,
+  SETTINGS_LIST,
   contractSectionKeys,
   deleteAccountPhrase,
   deleteAccountPhraseMatches,
@@ -713,6 +714,12 @@ describe("a way's verbs", () => {
     );
   });
 
+  // Mutation: word the delete item per client again.
+  it("words Delete once for both clients", () => {
+    expect(wayVerbLabel("delete", "web")).toBe("Delete way");
+    expect(wayVerbLabel("delete", "gps")).toBe("Delete way");
+  });
+
   // One verb, one word and one glyph on both clients, and the same word and
   // glyph a place's own "log a trip" wears (shared/DESIGN.md §6).
   it("declares Log a trip once, with the trip glyph", () => {
@@ -1082,25 +1089,35 @@ describe("abandonConfirm", () => {
       confirmBody: "Nothing you've entered is kept.",
       confirmLabel: "Discard",
       tone: "destructive",
+      icon: "close",
     });
     expect(abandonConfirm("trip", false)).toEqual({
       confirmTitle: "Discard your changes?",
       confirmBody: "The trip stays as it was.",
       confirmLabel: "Discard",
       tone: "destructive",
+      icon: "close",
     });
   });
 });
 
 describe("the delete confirms", () => {
-  // Mutation: drop `tone` or `confirmLabel` from any of the three.
-  it("each carry a Delete verb in the warning tone", () => {
-    for (const copy of [
-      placeDeleteConfirm({ name: "Claustral" }),
-      placeTypeDeleteConfirm("Canyon"),
-      attributeDeleteConfirm("Water level", 0, { one: "trip", many: "trips" }),
-    ]) {
-      expect(copy.confirmLabel).toBe("Delete");
+  // Mutation: drop `tone` or `confirmLabel` from any of the three, or word
+  // a label apart from the menu item that raises it.
+  it("each carry the menu's Delete verb in the warning tone", () => {
+    const copies = [
+      [placeDeleteConfirm({ name: "Claustral" }), "Delete"],
+      [placeTypeDeleteConfirm("Canyon"), SETTINGS_LIST.copy.deleteType],
+      [
+        attributeDeleteConfirm("Water level", 0, {
+          one: "trip",
+          many: "trips",
+        }),
+        SETTINGS_LIST.copy.deleteAttribute,
+      ],
+    ] as const;
+    for (const [copy, label] of copies) {
+      expect(copy.confirmLabel).toBe(label);
       expect(copy.tone).toBe("destructive");
     }
   });

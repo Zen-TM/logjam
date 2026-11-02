@@ -156,7 +156,7 @@ export function PlanPreview({
       confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
       confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
       confirmLabel: copy.decline,
-      tone: "destructive",
+      tone: "filled",
     });
     if (ok) void decline();
   };

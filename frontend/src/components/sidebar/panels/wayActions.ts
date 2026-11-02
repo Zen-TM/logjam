@@ -67,14 +67,10 @@ export type WayVerb = {
 /** Which surface is asking. The two differ by one verb, and only one. */
 export type WaySurface = "row" | "detail";
 
-// The words are the contract's (`WAY_VERBS`); Delete is the one verb
-// said here, because Logjam GPS words it on each sheet.
-const LABELS: Record<WayVerbId, string> = {
-  ...(Object.fromEntries(
-    WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
-  ) as Record<Exclude<WayVerbId, "delete">, string>),
-  delete: "Delete way",
-};
+// The words are the contract's (`WAY_VERBS`).
+const LABELS = Object.fromEntries(
+  WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
+) as Record<WayVerbId, string>;
 
 /** A route's geometry is inline, so the browser can write it out itself. A
  *  file's is an object in S3 that the page has not downloaded. */

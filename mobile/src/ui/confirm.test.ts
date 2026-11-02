@@ -49,6 +49,24 @@ describe("confirm", () => {
     expect(alert.mock.calls[1][2][1].style).toBe("default");
   });
 
+  // Mutation: ignore `cancelLabel`, or let any other screen pass it.
+  it("draws a second step's own Cancel word only when asked, and only PeopleView asks", () => {
+    confirm(copy, { cancelLabel: "Keep files" });
+    expect(alert.mock.calls.at(-1)![2][0].text).toBe("Keep files");
+    const askers = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return askers(path);
+        return /\.tsx?$/.test(entry.name) &&
+          !/\.test\./.test(entry.name) &&
+          relative(SRC, path) !== "ui/confirm.ts" &&
+          readFileSync(path, "utf8").includes("cancelLabel")
+          ? [relative(SRC, path)]
+          : [];
+      });
+    expect(askers(SRC)).toEqual(["plans/PeopleView.tsx"]);
+  });
+
   it("resolves true on the verb and false on Cancel or a dismissal", async () => {
     const press = (index: number) => {
       const done = confirm(copy);

@@ -22,8 +22,15 @@ export function alertPermissionDenied(input: {
   /** How to get it back once Android refuses to ask again. */
   settingsMessage: string;
   canAskAgain: boolean;
+  /** Where the ask-again notice goes instead of the toast: a caller inside a
+   *  sheet, whose modal would hide the toast. */
+  onMessage?: (text: string) => void;
 }): void {
   if (input.canAskAgain) {
+    if (input.onMessage) {
+      input.onMessage(input.askAgainMessage);
+      return;
+    }
     for (const listener of toastListeners)
       listener({ text: input.askAgainMessage, tone: "error" });
     return;

@@ -288,12 +288,7 @@ function PlaceTypeSection({
 
       <ConfirmDialog
         open={deleting !== null}
-        copy={
-          deleting && {
-            ...placeTypeDeleteConfirm(deleting.name),
-            confirmLabel: copy.deleteType,
-          }
-        }
+        copy={deleting && placeTypeDeleteConfirm(deleting.name)}
         busy={saving}
         onConfirm={async () => {
           const type = deleting;
@@ -323,6 +318,7 @@ function PlaceTypeSection({
             } has no attribute for are kept on each place, and can be added to it later.`,
             confirmLabel: "Merge",
             tone: "destructive",
+            icon: "merge",
           }
         }
         busy={saving}

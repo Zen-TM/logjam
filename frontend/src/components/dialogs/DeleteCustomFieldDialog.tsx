@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   attributeDeleteConfirm,
-  SETTINGS_LIST,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -88,10 +87,7 @@ function DeleteCustomFieldDialog({
   return (
     <ConfirmDialog
       open={def !== null}
-      copy={{
-        ...confirm,
-        confirmLabel: SETTINGS_LIST.copy.deleteAttribute,
-      }}
+      copy={confirm}
       busy={deleting}
       onConfirm={handleConfirm}
       onClose={handleClose}
