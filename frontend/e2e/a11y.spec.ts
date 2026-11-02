@@ -683,7 +683,7 @@ test.describe("desktop", () => {
     await list.getByRole("button", { name: "Delete", exact: true }).click();
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();
-    await expect(confirm).toContainText("stay in your logbook");
+    await expect(confirm).toContainText("stay, unlinked");
     await expectNoViolations(page, "[role='alertdialog']");
     await page.keyboard.press("Escape");
     await expect(confirm).toBeHidden();
@@ -1450,7 +1450,14 @@ test.describe("keyboard", () => {
 
   // Mutation: draw a page's rows in a plain `div` instead of a `RowList` (drop
   // it from PlacesPanel) and that page has no list, so its case goes red.
-  for (const panel of ["Places", "Logs", "Ways", "Plans", "Friends", "Inbox"]) {
+  for (const panel of [
+    "Places",
+    "Trips",
+    "Ways",
+    "Plans",
+    "Friends",
+    "Inbox",
+  ]) {
     test(`${panel}: its rows are a list with one tab stop`, async ({
       page,
     }) => {
