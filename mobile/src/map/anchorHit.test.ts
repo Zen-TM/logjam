@@ -6,6 +6,7 @@ import {
   anchorIndexAtPress,
   dragIsTap,
   pressIsOnAnchor,
+  pressIsOnFix,
 } from "./anchorHit";
 import { degreesPerDp } from "./scaleBar";
 
@@ -131,5 +132,22 @@ describe("dragIsTap", () => {
 
   it("is a tap when nothing moved at all", () => {
     expect(dragIsTap(anchor, [...anchor], DEGREES_PER_PIXEL)).toBe(true);
+  });
+});
+
+describe("pressIsOnFix", () => {
+  const drawn: [number, number] = [150.4033, -33.5603];
+  const near: [number, number] = [150.4033 + TOLERANCE / 2, -33.5603];
+  const far: [number, number] = [150.4033 + TOLERANCE * 2, -33.5603];
+
+  // Mutation: test the latest raw fix instead of the arrow as drawn, or drop
+  // the `suppressed` / `drawn !== null` checks: a press beside the arrow opens
+  // "Your position", a drawn tool or a double tap's second tap is hijacked, or
+  // a press with no arrow on the map reads as being on one.
+  it("is true on the drawn arrow only, with no tool armed", () => {
+    expect(pressIsOnFix(drawn, near, DEGREES_PER_PIXEL, false)).toBe(true);
+    expect(pressIsOnFix(drawn, far, DEGREES_PER_PIXEL, false)).toBe(false);
+    expect(pressIsOnFix(drawn, near, DEGREES_PER_PIXEL, true)).toBe(false);
+    expect(pressIsOnFix(null, near, DEGREES_PER_PIXEL, false)).toBe(false);
   });
 });

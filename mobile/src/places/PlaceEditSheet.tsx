@@ -1,11 +1,13 @@
 import {
   Fragment,
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { Text, View } from "react-native";
+import { Text, View, type TextInputInstance } from "react-native";
 import {
   abandonConfirm,
   ATTRIBUTE_NOUN,
@@ -117,6 +119,7 @@ export function PlaceEditSheet({
   onPickOnMap,
   pickedCoords,
   resuming = false,
+  focusName = false,
   onSaved,
 }: {
   visible: boolean;
@@ -147,12 +150,22 @@ export function PlaceEditSheet({
    * intact; this flag is only what stops the seed from wiping it.
    */
   resuming?: boolean;
+  /** Opens with the keyboard on Name: the one thing a quick drop left out. */
+  focusName?: boolean;
   onSaved: (message: string) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
 
   const editing = place != null;
+  const nameRef = useRef<TextInputInstance>(null);
+  useEffect(() => {
+    if (!visible || !focusName) return;
+    // `autoFocus` fails in a modal that is still sliding in (TextField), so
+    // focus once it has settled.
+    const timer = setTimeout(() => nameRef.current?.focus(), 400);
+    return () => clearTimeout(timer);
+  }, [visible, focusName]);
   const [name, setName] = useState("");
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -551,6 +564,7 @@ export function PlaceEditSheet({
           }}
           error={nameError}
           autoCapitalize="words"
+          inputRef={nameRef}
         />
       </>
     ),

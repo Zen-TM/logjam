@@ -53,6 +53,7 @@ import {
 import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
+import MapHoldMenu from "./MapHoldMenu";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
@@ -850,6 +851,13 @@ function Map({
   const closeAsked = useCallback(() => {
     askedClosedAt.current = Date.now();
     setAsked(null);
+  }, []);
+  // "What goes here?": a right-click or long-press, which commits where a
+  // press only asks. Closing it counts as closing the question too.
+  const [held, setHeld] = useState<MapPointCoord | null>(null);
+  const closeHeld = useCallback(() => {
+    askedClosedAt.current = Date.now();
+    setHeld(null);
   }, []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
@@ -2026,9 +2034,10 @@ function Map({
   }, [standaloneTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
-  // or feature under it), a right-click asks wherever it lands, and Enter on
-  // the focused map asks about the middle of what is visible. The panel is
-  // drawn by `MapPointPopover`; this only decides when it is asked.
+  // or feature under it), and Enter on the focused map asks about the middle of
+  // what is visible. The panel is drawn by `MapPointPopover`; this only decides
+  // when it is asked. A right-click or long-press is the hold: it offers what
+  // can go there (`MapHoldMenu`), wherever it lands.
   //
   // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
   // here writes anything: its verbs hand off to flows that confirm for
@@ -2070,7 +2079,8 @@ function Map({
       if (armed()) return;
       e.originalEvent.preventDefault();
       cancel();
-      ask(e.lngLat.lat, e.lngLat.lng);
+      setAsked(null);
+      setHeld({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
     };
     // Enter on the focused map is a press on the middle of it: it asks what is
     // there, or, with a drawing tool armed, places the next point there. With
@@ -3660,6 +3670,15 @@ function Map({
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
+        />
+      )}
+      {held && drawableMap && (
+        <MapHoldMenu
+          key={`${held.latitude},${held.longitude}`}
+          map={drawableMap}
+          point={held}
+          onClose={closeHeld}
+          run={{ addPlace: onAddPlaceAt, measure: onMeasureFrom }}
         />
       )}
       {openGauge && gaugeFile && drawableMap && showGauges && (

@@ -20,6 +20,7 @@ import {
   type Gauge,
   type GeocodeResult,
   type PlaceResult,
+  MAP_SEARCH_PLACEHOLDER,
 } from "@logjam/shared";
 import { searchPlaceRegistry, type TPlace } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
@@ -318,7 +319,7 @@ export default function MapSearchBox({
               ? `${listId}-${options[activeIndex]?.id}`
               : undefined
           }
-          placeholder="Search places and locations"
+          placeholder={MAP_SEARCH_PLACEHOLDER}
           value={query}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}

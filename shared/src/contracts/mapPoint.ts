@@ -15,6 +15,7 @@
 // spot. Nothing here is logged, toasted or persisted; the point lives in the
 // map's state until the panel is dismissed.
 import { haversineMeters } from "../placeGeo.js";
+import { gaugeAgo } from "./gauges.js";
 import {
   compassPointFor,
   formatDistanceM,
@@ -32,6 +33,18 @@ export const MAP_POINT = {
   sections: [
     { key: "position" },
     { key: "elevation" },
+    // The fix itself, when the point IS the viewer's own position (a press on
+    // the location arrow on Logjam GPS).
+    {
+      key: "accuracy",
+      on: "gps",
+      reason: "a call for help is made from the field",
+    },
+    {
+      key: "fixAge",
+      on: "gps",
+      reason: "a call for help is made from the field",
+    },
     // Both need a location fix the device ALREADY has: neither client asks for
     // one to show them.
     { key: "distance" },
@@ -50,6 +63,15 @@ export const MAP_POINT = {
     bearing: "Bearing",
     slope: "Slope",
     land: "Land tenure",
+    accuracy: "Accuracy",
+    fixAge: "Updated",
+    // The title when the point is the viewer's own fix.
+    fixTitle: "Your position",
+    // The press-and-hold sheet's title: what can go at the point.
+    holdTitle: "What goes here?",
+    notReported: "Not reported",
+    // The receiver's own height, when no terrain figure arrives for a fix.
+    gpsAltitude: "GPS altitude",
     elevationChecking: "Checking…",
     // Says which of the reasons it is: a "—" opened in a gorge reads as a bug
     // rather than as the terrain being a connection away.
@@ -58,17 +80,31 @@ export const MAP_POINT = {
   },
 } as const satisfies ScreenContract;
 
+/** Location search has one placeholder on both clients. */
+export const MAP_SEARCH_PLACEHOLDER = "Search places and locations";
+
 /** The words that differ only by how each medium presses. */
 export const MAP_POINT_NO_FIX_NOTE: Record<ContractPlatform, string> = {
   web: "Press the locate button to see the distance.",
   gps: "Tap the locate button to see the distance.",
 };
 
+/** The gestures a verb can be offered from: a tap asks, a hold commits. */
+type VerbWhere = ContractPlatform | "both";
+
 type PointVerbDeclaration = {
   id: string;
   icon: IconIdea;
   label: string;
   subtitle?: string;
+  /**
+   * Offered from the press-and-hold sheet (Logjam GPS) and the right-click or
+   * long-press menu (Logjam Web) on these clients. `on` and its reason or gap
+   * describe the tap panel; a verb with no `tap: false` is on it.
+   */
+  hold?: VerbWhere;
+  /** False: only the hold offers it. */
+  tap?: false;
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
@@ -84,6 +120,7 @@ export const MAP_POINT_VERBS = [
     icon: "navigateTo",
     label: "Navigate to this point",
     subtitle: "Live distance and bearing — nothing saved",
+    hold: "gps",
     on: "gps",
     reason:
       "Logjam Web is used at a desk, and a browser on a desk has nowhere to navigate to. Measure from here is its stand-in: the same distance, asked once.",
@@ -93,25 +130,37 @@ export const MAP_POINT_VERBS = [
     icon: "flag",
     label: "Drop a marker here",
     subtitle: "Saved, and synced",
+    hold: "gps",
     on: "gps",
     reason:
       "A marker is a quick pin with no form. Logjam Web's place form takes a name and a type, so its verb is Add a place here.",
   },
   {
+    id: "drawRoute",
+    icon: "draw",
+    label: "Draw a route from here",
+    hold: "gps",
+    tap: false,
+    on: "gps",
+    gap: "Logjam Web starts a route from its Routes tool, not from a point on the map.",
+  },
+  {
     id: "addPlace",
     icon: "addPlace",
     label: "Add a place here",
+    hold: "both",
     on: "web",
     reason:
-      "Logjam GPS puts a place here from a press-and-hold, and drops a marker from this sheet.",
+      "Logjam Web keeps it on the tap panel too, for a browser without a right-click. Logjam GPS puts it on the hold sheet only and drops a marker from the tap.",
   },
   {
     id: "measure",
     icon: MAP_MEASURE_ICON,
     label: MAP_MEASURE.copy.fromHere,
+    hold: "both",
     on: "web",
     reason:
-      "On Logjam GPS the same words are on the press-and-hold sheet, beside Navigate here.",
+      "Logjam Web keeps it on the tap panel too, for a browser without a right-click. Logjam GPS has it on the hold sheet only.",
   },
   {
     id: "copy",
@@ -125,7 +174,22 @@ export const MAP_POINT_VERBS = [
   { id: "weather", icon: "weather", label: WEATHER.copy.show },
 ] as const satisfies readonly PointVerbDeclaration[];
 
+/**
+ * Following a route (distance left, off-route) is not built on either client,
+ * and Navigate to this point is not it: that gives a live distance and bearing
+ * to one point, nothing along a line. Recorded so nobody fakes it with that.
+ */
+export const MAP_POINT_GAPS = {
+  routeFollowing: "Distance remaining and off-route warnings along a route.",
+} as const;
+
 export type MapPointVerbId = (typeof MAP_POINT_VERBS)[number]["id"];
+
+/** The ids one client's hold draws: a `Record` over them is its parity check. */
+export type MapHoldVerbId<P extends ContractPlatform> = Extract<
+  (typeof MAP_POINT_VERBS)[number],
+  { hold: P | "both" }
+>["id"];
 
 export type MapPointVerb = {
   id: MapPointVerbId;
@@ -134,16 +198,34 @@ export type MapPointVerb = {
   subtitle: string | null;
 };
 
-/** The verbs one client has, in the order it draws them. */
+const asVerb = (verb: PointVerbDeclaration): MapPointVerb => ({
+  id: verb.id as MapPointVerbId,
+  icon: verb.icon,
+  label: verb.label,
+  subtitle: verb.subtitle ?? null,
+});
+
+/** The verbs one client's tap panel has, in the order it draws them. */
 export function mapPointVerbs(platform: ContractPlatform): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
-    .filter((verb) => verb.on == null || verb.on === platform)
-    .map((verb) => ({
-      id: verb.id as MapPointVerbId,
-      icon: verb.icon,
-      label: verb.label,
-      subtitle: verb.subtitle ?? null,
-    }));
+    .filter(
+      (verb) => verb.tap !== false && (verb.on == null || verb.on === platform),
+    )
+    .map(asVerb);
+}
+
+/**
+ * What can go at a spot, from the gesture that commits: Logjam GPS's
+ * press-and-hold sheet and Logjam Web's right-click or long-press menu draw
+ * exactly these, in this order.
+ */
+export function mapHoldVerbs(platform: ContractPlatform): MapPointVerb[] {
+  return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
+    .filter(
+      (verb) =>
+        verb.hold != null && (verb.hold === "both" || verb.hold === platform),
+    )
+    .map(asVerb);
 }
 
 /** A bare lat/lng, as a map hands one back from a press. */
@@ -151,11 +233,21 @@ export type MapPointCoord = { latitude: number; longitude: number };
 
 export type MapPointElevation =
   | { state: "known"; metres: number }
+  /** The receiver's altitude, labelled as such: it is not the terrain's height. */
+  | { state: "receiver"; metres: number }
   | { state: "checking" }
   | { state: "unavailable" };
 
 export type MapPointFact = {
-  key: "position" | "elevation" | "distance" | "bearing" | "slope" | "land";
+  key:
+    | "position"
+    | "elevation"
+    | "accuracy"
+    | "fixAge"
+    | "distance"
+    | "bearing"
+    | "slope"
+    | "land";
   label: string;
   value: string;
   /** Takes the whole line. */
@@ -168,6 +260,21 @@ export type MapPointFact = {
 export function mapPointPosition(point: MapPointCoord): string {
   return `${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`;
 }
+
+/** "12 s ago": how old a fix is, to the second while that matters. */
+export function fixAgeLabel(ageMs: number): string {
+  const seconds = Math.max(0, Math.round(ageMs / 1000));
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds} s ago`;
+  return gaugeAgo(0, ageMs);
+}
+
+/** A position fix's own figures: the platform's timestamp and radius. */
+export type MapPointFix = {
+  atMs: number;
+  accuracyM: number | null;
+  nowMs: number;
+};
 
 /**
  * The figures for a point, in order. `from` is the viewer's own fix, or null
@@ -183,8 +290,10 @@ export function mapPointFacts(input: {
   from: MapPointCoord | null;
   slopeDegrees?: number | null;
   land?: string | null;
+  /** Given when the point IS the viewer's fix: how good and how old it is. */
+  fix?: MapPointFix;
 }): MapPointFact[] {
-  const { point, elevation, from, slopeDegrees, land } = input;
+  const { point, elevation, from, slopeDegrees, land, fix } = input;
   const copy = MAP_POINT.copy;
   const facts: MapPointFact[] = [
     {
@@ -196,15 +305,31 @@ export function mapPointFacts(input: {
     },
     {
       key: "elevation",
-      label: copy.elevation,
+      label: elevation.state === "receiver" ? copy.gpsAltitude : copy.elevation,
       value:
-        elevation.state === "known"
+        elevation.state === "known" || elevation.state === "receiver"
           ? `${Math.round(elevation.metres)} m`
           : elevation.state === "checking"
             ? copy.elevationChecking
             : copy.elevationNeedsConnection,
     },
   ];
+  if (fix)
+    facts.push(
+      {
+        key: "accuracy",
+        label: copy.accuracy,
+        value:
+          fix.accuracyM == null
+            ? copy.notReported
+            : `± ${Math.round(fix.accuracyM)} m`,
+      },
+      {
+        key: "fixAge",
+        label: copy.fixAge,
+        value: fixAgeLabel(fix.nowMs - fix.atMs),
+      },
+    );
   if (from) {
     const bearing = initialBearingDegrees(
       from.latitude,

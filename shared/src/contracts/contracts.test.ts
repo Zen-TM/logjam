@@ -39,7 +39,10 @@ import {
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
   mapPointFacts,
+  mapHoldVerbs,
   mapPointVerbs,
+  fixAgeLabel,
+  MAP_SEARCH_PLACEHOLDER,
   MAP_POINT,
   MAP_POINT_NO_FIX_NOTE,
   MAP_POINT_VERBS,
@@ -935,6 +938,102 @@ describe("the map point panel", () => {
     ]);
   });
 
+  // Mutation: give a verb `hold: "gps"` that Logjam GPS's sheet does not draw
+  // (or the reverse): `MapHoldSheet` and `MapHoldMenu` draw `mapHoldVerbs`, so
+  // this list is what each client's hold offers.
+  it("gives the hold the same verbs on both clients where it can, each with one label", () => {
+    expect(mapHoldVerbs("gps").map((verb) => verb.id)).toEqual([
+      "navigate",
+      "dropMarker",
+      "drawRoute",
+      "addPlace",
+      "measure",
+    ]);
+    expect(mapHoldVerbs("web").map((verb) => verb.id)).toEqual([
+      "addPlace",
+      "measure",
+    ]);
+    // A verb the hold shares with the tap panel is one label in both.
+    const labels = new Map<string, string>();
+    for (const verb of [...mapPointVerbs("gps"), ...mapHoldVerbs("gps")]) {
+      expect(labels.get(verb.id) ?? verb.label).toBe(verb.label);
+      labels.set(verb.id, verb.label);
+    }
+    // The hold-only verb stays off the tap panel; the shared ones keep their place.
+    expect(mapPointVerbs("gps").map((verb) => verb.id)).not.toContain(
+      "drawRoute",
+    );
+    // A hold verb only one client draws says why or what is missing.
+    for (const verb of MAP_POINT_VERBS)
+      if ("hold" in verb && verb.hold !== "both")
+        expect("reason" in verb || "gap" in verb).toBe(true);
+  });
+
+  // Mutation: give the fix's figures to every point, and a tapped spot reads
+  // "Updated just now" about a position nobody measured.
+  it("adds the fix's accuracy and age only for the viewer's own position", () => {
+    const fix = { atMs: 1_000, accuracyM: 7.6, nowMs: 13_000 };
+    const keys = (f: ReturnType<typeof mapPointFacts>) => f.map((x) => x.key);
+    const facts = mapPointFacts({
+      point,
+      elevation: { state: "known", metres: 412 },
+      from: null,
+      fix,
+    });
+    expect(keys(facts)).toEqual([
+      "position",
+      "elevation",
+      "accuracy",
+      "fixAge",
+    ]);
+    expect(facts[2].value).toBe("± 8 m");
+    expect(facts[3].value).toBe("12 s ago");
+    expect(
+      mapPointFacts({
+        point,
+        elevation: { state: "known", metres: 412 },
+        from: null,
+        fix: { ...fix, accuracyM: null },
+      })[2].value,
+    ).toBe("Not reported");
+    expect(
+      keys(
+        mapPointFacts({
+          point,
+          elevation: { state: "known", metres: 412 },
+          from: null,
+        }),
+      ),
+    ).not.toContain("accuracy");
+    // Mutation: label the receiver's height "Elevation", and a height that can
+    // be tens of metres off the terrain's reads as the terrain's.
+    const receiver = mapPointFacts({
+      point,
+      elevation: { state: "receiver", metres: 1021.6 },
+      from: null,
+    })[1];
+    expect([receiver.label, receiver.value]).toEqual([
+      "GPS altitude",
+      "1022 m",
+    ]);
+    expect(fixAgeLabel(2_000)).toBe("just now");
+    expect(fixAgeLabel(150_000)).toBe("2 min ago");
+  });
+
+  it("puts the fix's figures on Logjam GPS only, with the reason", () => {
+    expect(contractSectionsFor(MAP_POINT, "gps", false)).toContain("accuracy");
+    expect(contractSectionsFor(MAP_POINT, "web", false)).not.toContain(
+      "accuracy",
+    );
+    for (const section of MAP_POINT.sections)
+      if ("on" in section) expect(section.reason ?? "").not.toBe("");
+  });
+
+  // Mutation: change either client's placeholder away from this one.
+  it("declares one search placeholder", () => {
+    expect(MAP_SEARCH_PLACEHOLDER).toBe("Search places and locations");
+  });
+
   // Mutation: push the land fact whatever `land` is, and with the overlay off
   // the panel has a Land figure with nothing in it.
   it("has no land figure with the overlay off or nothing drawn there", () => {
@@ -957,6 +1056,7 @@ describe("the map point panel", () => {
       from: { latitude: -33.66, longitude: 150.34 },
       slopeDegrees: 12,
       land: "Private land",
+      fix: { atMs: 0, accuracyM: 5, nowMs: 1_000 },
     });
     expect(facts.map((fact) => fact.key)).toEqual(keys);
     expect(MAP_POINT_NO_FIX_NOTE.web).toContain("locate button");

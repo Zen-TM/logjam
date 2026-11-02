@@ -20,6 +20,7 @@ import {
   mapPointPosition,
   mapPointVerbs,
   type MapPointCoord,
+  type MapPointElevation,
   type MapPointVerbId,
 } from "@logjam/shared";
 
@@ -34,6 +35,14 @@ import { WeatherView } from "../weather/WeatherView";
 /** A bare lat/lng, as the map hands one back from a tap. */
 export type MapPoint = MapPointCoord;
 
+/** The viewer's own fix, when the point is it: the platform's own figures. */
+export type OwnFix = {
+  atMs: number;
+  accuracyM: number | null;
+  /** What the receiver reported; the terrain's height is asked for first. */
+  altitudeM: number | null;
+};
+
 export function MapPointSheet({
   point,
   userCoord,
@@ -43,8 +52,12 @@ export function MapPointSheet({
   onDropMarker,
   onInfo,
   allowNetwork,
+  fix,
 }: {
   point: MapPoint | null;
+  /** Set when the point is the viewer's own position (a press on the arrow):
+   *  then the sheet is about the fix, and offers nothing to do with it. */
+  fix?: OwnFix | null;
   /** The land class drawn at the point, or null: the Land overlay off or empty there. */
   land: string | null;
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
@@ -69,13 +82,27 @@ export function MapPointSheet({
     <BottomSheet
       visible={point !== null}
       onClose={weatherOpen ? closeWeather : onClose}
-      title={weatherOpen ? WEATHER.title : MAP_POINT.title}
+      title={
+        weatherOpen
+          ? WEATHER.title
+          : fix
+            ? MAP_POINT.copy.fixTitle
+            : MAP_POINT.title
+      }
       onBack={weatherOpen ? closeWeather : undefined}
     >
       {/* Mounted only with a point, so the elevation request inside is tied to
           the sheet being open rather than firing for a stale coordinate every
           time the map re-renders. */}
-      {point ? (
+      {point && fix ? (
+        <FixDetail
+          key={`${point.latitude},${point.longitude}`}
+          point={point}
+          fix={fix}
+          allowNetwork={allowNetwork}
+          onInfo={onInfo}
+        />
+      ) : point ? (
         <PointDetail
           // A new point starts clean: its height must not be the last one's.
           key={`${point.latitude},${point.longitude}`}
@@ -92,6 +119,71 @@ export function MapPointSheet({
         />
       ) : null}
     </BottomSheet>
+  );
+}
+
+/**
+ * The viewer's own position, as the receiver last gave it. Nothing to do with
+ * it, so no verbs, no slope and no forecast: only the figures, and none of them
+ * asks anyone anything but the terrain tiles the map already reads.
+ */
+function FixDetail({
+  point,
+  fix,
+  allowNetwork = true,
+  onInfo,
+}: {
+  point: MapPoint;
+  fix: OwnFix;
+  allowNetwork?: boolean;
+  onInfo: (message: string) => void;
+}) {
+  const styles = useStyles();
+  // The sheet is mounted per point, so this is when the fix was asked about.
+  const [openedAt] = useState(() => Date.now());
+  const profilePoints = useMemo<[number, number][]>(
+    () => [
+      [point.longitude, point.latitude],
+      [point.longitude + 0.00001, point.latitude],
+    ],
+    [point.latitude, point.longitude],
+  );
+  const { profile, loading } = useElevationProfile([profilePoints], {
+    allowNetwork,
+  });
+  const terrainM = profile?.samples[0]?.elevationM ?? null;
+  // The terrain's height only; the receiver's own, labelled as that, once no
+  // terrain figure is coming (offline, which is when a fix is wanted most).
+  const elevation: MapPointElevation =
+    terrainM != null
+      ? { state: "known", metres: terrainM }
+      : loading
+        ? { state: "checking" }
+        : fix.altitudeM != null
+          ? { state: "receiver", metres: fix.altitudeM }
+          : { state: "unavailable" };
+  const stats: Stat[] = mapPointFacts({
+    point,
+    elevation,
+    from: null,
+    fix: { atMs: fix.atMs, accuracyM: fix.accuracyM, nowMs: openedAt },
+  }).map((fact) => ({
+    label: fact.label,
+    value: fact.value,
+    ...(fact.span ? { span: true } : {}),
+    ...(fact.copyable
+      ? {
+          onCopy: () => {
+            Clipboard.setString(mapPointPosition(point));
+            onInfo(MAP_POINT.copy.coordinatesCopied);
+          },
+        }
+      : {}),
+  }));
+  return (
+    <View style={styles.body}>
+      <StatGrid stats={stats} />
+    </View>
   );
 }
 
