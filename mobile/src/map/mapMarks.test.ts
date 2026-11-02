@@ -43,8 +43,25 @@ describe("the map's marks and chrome", () => {
   });
 
   // Mutation: delete the `statusScrim` View from MapScreen, and the clock
-  // and icons sit straight on the basemap again.
-  it("veils the status bar", () => {
-    expect(read("MapScreen.tsx")).toContain("styles.statusScrim");
+  // and icons sit straight on the basemap again; drop its
+  // `pointerEvents="none"`, and the top of the map stops taking taps.
+  it("veils the status bar without taking its touches", () => {
+    expect(read("MapScreen.tsx")).toMatch(
+      /pointerEvents="none"\s+style=\{\[styles\.statusScrim/,
+    );
+  });
+
+  // Mutation: swap the halo `<Layer>` below its pin, and a white disc covers
+  // every pin of that source.
+  it("draws each pin's halo before the pin", () => {
+    const src = read("PlacePinsLayer.tsx");
+    for (const [halo, pin] of [
+      ["shared-place-halo", "shared-place-circles"],
+      ["place-halo", "place-circles"],
+    ]) {
+      const at = (id: string) => src.indexOf(`id={\`\${idPrefix}${id}\`}`);
+      expect(at(halo), halo).toBeGreaterThan(-1);
+      expect(at(halo), halo).toBeLessThan(at(pin));
+    }
   });
 });
