@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
 // Gated on env so nothing runs (and no credentials are committed — privacy
 // rule) unless an operator points it at a staging pool with a pre-provisioned,
 // already-confirmed test account:
-//   E2E_AUTH_BASE_URL   a deployment using AUTH_MODE=cognito (staging, NOT prod)
+//   E2E_AUTH_BASE_URL   a deployment on a Cognito issuer (staging, NOT prod)
 //   E2E_TEST_EMAIL      a confirmed Cognito test user
 //   E2E_TEST_PASSWORD   that user's password
 //
