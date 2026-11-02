@@ -15,14 +15,14 @@ token, a kit prop, a contract or a test can hold lives there and is not
 written here. Prose is only for what code cannot hold. Before adding a line,
 try to make it code; when you convert a rule to code, delete its line.
 
-| Decision | Declared in |
-|---|---|
-| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes | `designTokens.ts`, `themeSchemes.ts` |
-| Which glyph stands for an idea | `icons.ts` |
-| Which components the kit has, on which client | `KIT_COMPONENTS` in `kit.ts` |
-| A shared screen's sections, order, words, verbs and empty states | `contracts/` |
-| Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts` |
-| How long a switch's label and hint may be: about two lines on a phone | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
+| Decision                                                                                   | Declared in                                                                      |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes    | `designTokens.ts`, `themeSchemes.ts`                                             |
+| Which glyph stands for an idea                                                             | `icons.ts`                                                                       |
+| Which components the kit has, on which client                                              | `KIT_COMPONENTS` in `kit.ts`                                                     |
+| A shared screen's sections, order, words, verbs and empty states                           | `contracts/`                                                                     |
+| Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
+| How long a switch's label and hint may be: about two lines on a phone                      | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
