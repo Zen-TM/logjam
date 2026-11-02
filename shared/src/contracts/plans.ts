@@ -256,6 +256,13 @@ export function tripPlanPrintFooter(printed: string): string {
   return `From Logjam Web, ${printed}. Correct when printed; the plan may have changed since.`;
 }
 
+/** Above Send when required questions are empty: how many are owed. */
+export function tripPlanRequiredSummary(count: number): string {
+  return count === 1
+    ? "Answer the question marked required."
+    : `Answer the ${count} questions marked required.`;
+}
+
 /** A role, as a word: "Leader", "Editor", "Member". */
 export function tripPlanRoleWord(role: TripPlanRole): string {
   const copy = TRIP_PLANS_LIST.copy;
@@ -682,7 +689,7 @@ export const TRIP_PLAN_PREVIEW = {
   copy: {
     invited: "You're invited",
     joinHint: "Joining lets everyone in the plan see you're going.",
-    writeUpEmpty: "Nothing is written yet.",
+    writeUpEmpty: TRIP_PLAN_PAGE.copy.writeUpEmpty,
     gone: "This invite is gone: it was withdrawn, or the plan was deleted.",
     join: TRIP_PLAN_JOIN.copy.join,
     decline: TRIP_PLAN_JOIN.copy.decline,
@@ -882,6 +889,8 @@ export const TRIP_PLAN_FORMS = {
     asking: "Asking to join",
     save: "Send",
     saveFailed: "Couldn't send your answer.",
+    // Under one empty required question; `tripPlanRequiredSummary` is above Send.
+    required: "Required.",
     saved: "Answer sent.",
     deleteFailed: "Couldn't delete the form.",
     deleted: "Form deleted.",
@@ -1202,7 +1211,11 @@ export function tripPlanFormTally(
   };
 }
 
-/** "3 of 5 answered", and "Not answered yet: bob, carol" when anyone is left. */
+/** "3 of 5 answered", and "Not answered yet: bob, carol" when anyone is left.
+ *  Where the viewer's own "Not answered" pill is on the same card
+ *  (`viewerPill`), they are left out of the names, and the line with them
+ *  when nobody else is left: the pill already says it.
+ *  Guard: plans.test.ts ("form tally"). */
 export function tripPlanFormTallyLines(
   tally: {
     answered: number;
@@ -1211,12 +1224,16 @@ export function tripPlanFormTallyLines(
   },
   /** The viewer's id: their own name reads "you". */
   me?: string,
+  viewerPill = false,
 ): string[] {
+  const missing = viewerPill
+    ? tally.missing.filter((user) => user.id !== me)
+    : tally.missing;
   return [
     `${tally.answered} of ${tally.total} answered`,
-    ...(tally.missing.length > 0
+    ...(missing.length > 0
       ? [
-          `Not answered yet: ${tally.missing.map((user) => (user.id === me ? "you" : user.username)).join(", ")}`,
+          `Not answered yet: ${missing.map((user) => (user.id === me ? "you" : user.username)).join(", ")}`,
         ]
       : []),
   ];

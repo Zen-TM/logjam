@@ -23,6 +23,23 @@ function notification(
 }
 
 describe("notificationLabel", () => {
+  // Mutation: return the username uncut. A 32-character name fills the row
+  // and the verb is clamped away (UAT 2026-11-02).
+  it("cuts a long username with an ellipsis and keeps the verb", () => {
+    const { text } = notificationLabel(
+      notification("plan_member_joined", {
+        memberUsername: "maximilian_bartholomew_featherst",
+        planName: "Wollangambe weekend",
+      }),
+    );
+    expect(text).toBe("maximilian_bart… joined Wollangambe weekend");
+    expect(
+      notificationLabel(
+        notification("plan_member_joined", { memberUsername: "a".repeat(16) }),
+      ).text,
+    ).toBe(`${"a".repeat(16)} joined your trip plan`);
+  });
+
   it("labels friend requests with the requester username", () => {
     expect(
       notificationLabel(

@@ -37,7 +37,7 @@ const DRAW_ON_GPS =
 
 /** The plan's ⋯, in menu order. */
 export const PLAN_VERBS = [
-  { id: "edit", icon: "edit", label: "Edit name and dates", roles: WRITERS },
+  { id: "edit", icon: "edit", label: "Edit plan", roles: WRITERS },
   {
     id: "print",
     icon: "print",

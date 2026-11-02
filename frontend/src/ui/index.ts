@@ -30,6 +30,7 @@ export { Tooltip } from "./Tooltip";
 export { SectionHeader, SheetSection, SideSheet } from "./SideSheet";
 export { InfoTip, SettingsRow } from "./SettingsRow";
 export { Dialog } from "./Dialog";
+export { DataTable, type DataTableRow } from "./DataTable";
 export { ErrorBanner } from "./ErrorBanner";
 export { FieldError } from "./FieldError";
 export {

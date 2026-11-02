@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   cleanup,
   fireEvent,
@@ -15,6 +17,7 @@ import {
   TRIP_PLACES_CAP_SENTENCE,
   todayDateKey,
   TRIP_PLAN_FORMS,
+  tripPlanRequiredSummary,
   TRIP_PLAN_INVITE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
@@ -23,6 +26,7 @@ import {
   TRIP_PLANS_LIST,
   type TripPlanFormView,
   type TripPlanItem,
+  SYSTEM_PLACE_TYPE_IDS,
   type TripPlanPlace,
   type TripPlanView,
 } from "@logjam/shared";
@@ -145,7 +149,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("Edit name and dates over someone else's change", () => {
+describe("Edit plan over someone else's change", () => {
   // Mutation: drop `setValues(next.values)` in PlanDetailsDialog, and the
   // save sends the opened dates back over the other member's.
   it("sends only the user's own field after the plan was fetched again", async () => {
@@ -1021,9 +1025,8 @@ describe("sending an answer with a required question empty", () => {
     );
     const field = screen.getByRole("textbox", { name: /^Name/ });
     expect(field.getAttribute("aria-invalid")).toBe("true");
-    expect(
-      screen.getByText("Answer every question marked required."),
-    ).toBeTruthy();
+    expect(screen.getByText(TRIP_PLAN_FORMS.copy.required)).toBeTruthy();
+    expect(screen.getByText(tripPlanRequiredSummary(1))).toBeTruthy();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
@@ -1046,5 +1049,95 @@ describe("Escape on a step inside the plan's page", () => {
       screen.queryByRole("region", { name: TRIP_PLAN_FORMS.copy.answers }),
     ).toBeNull();
     expect(screen.getByRole("button", { name: contacts.title })).toBeTruthy();
+  });
+
+  // Mutation: drop `openPlacePage`'s focus move, and the clicked row unmounts
+  // with focus on <body>, where Escape is not heard.
+  it("moves focus to a place page's back arrow, so Escape is heard there", async () => {
+    const claustral = {
+      kind: "place",
+      id: "pl1",
+      name: "Claustral",
+      altNames: [],
+      latitude: -33.5,
+      longitude: 150.25,
+      elevation: null,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      notes: null,
+      fieldValues: {},
+      addedBy: null,
+      media: [],
+    } as unknown as TripPlanPlace;
+    renderPanel({ view: { ...plan, places: [claustral] } });
+    fireEvent.click(screen.getByRole("radio", { name: /^Map/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Claustral" }));
+    const back = screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.back });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "Claustral" })).toBeTruthy();
+  });
+});
+
+describe("a form's answers table on a narrow panel", () => {
+  const longLabel = "What size wetsuit do you wear in cold water, and why?";
+  const wide: TripPlanFormView = {
+    ...contacts,
+    questions: [
+      { id: "a", kind: "text", label: longLabel, required: false },
+      { id: "b", kind: "text", label: "Car", required: false },
+    ],
+    answers: [
+      {
+        user: { id: "u2", username: "bob" },
+        answers: { a: "Large, because the water is cold", b: "Subaru" },
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      },
+    ],
+  };
+  const renderTable = () =>
+    render(
+      <PlanFormPage
+        form={wide}
+        role={plan.myRole}
+        archived={false}
+        tally={[]}
+        members={plan.members}
+        onBack={() => {}}
+        onAnswer={() => {}}
+        onVerb={() => {}}
+      />,
+    );
+
+  // Mutation: drop the clamp from `.cellButton`, or the fixed `.table` layout,
+  // and 12-line headers return at 340px.
+  it("clamps a header and a cell at two lines in fixed-width columns", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/ui/DataTable.module.css"),
+      "utf8",
+    );
+    expect(/\.cell\s*\{[^}]*-webkit-line-clamp:\s*2/.test(css)).toBe(true);
+    expect(/\.table\s*\{[^}]*table-layout:\s*fixed/.test(css)).toBe(true);
+    expect(/\.table th:first-child\s*\{[^}]*position:\s*sticky/.test(css)).toBe(
+      true,
+    );
+  });
+
+  // Mutation: render the header as plain text and a pressed header says nothing.
+  it("says a header whole when pressed, in a semantic table", () => {
+    renderTable();
+    expect(screen.getByRole("table")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: longLabel }));
+    expect(screen.getByRole("dialog", { name: longLabel })).toBeTruthy();
+  });
+
+  // Mutation: render the cell as plain text and a pressed cell says nothing.
+  it("says a cell whole, naming the person and the question", () => {
+    renderTable();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Large, because the water is cold" }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: `bob · ${longLabel}` }),
+    ).toBeTruthy();
   });
 });

@@ -49,7 +49,13 @@ import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useRowSelection } from "../sidebar/panels/useRowSelection";
-import { archivePlan, createPlan, deletePlan, leavePlan } from "../../plansApi";
+import {
+  archivePlan,
+  createPlan,
+  deletePlan,
+  joinPlan,
+  leavePlan,
+} from "../../plansApi";
 import { listVerbs, type ListVerbId } from "./planListVerbs";
 import { menuEntries } from "./planMenu";
 import PlanDetailsDialog from "./PlanDetailsDialog";
@@ -207,6 +213,21 @@ export default function PlansPanel({
       ? ask(plans)
       : void run(plans.map((plan) => ({ plan, verb })));
 
+  // Join an invite at once, as the invite page does.
+  async function join(plan: TripPlanSummary) {
+    setBusyId(plan.id);
+    try {
+      await joinPlan(plan.id);
+      toast.success(TRIP_PLAN_JOIN.copy.joined);
+      onRefetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, TRIP_PLAN_JOIN.copy.joinFailed));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   // Decline an invite, withdraw a request: the same call, by status.
   async function dropMembership(plan: TripPlanSummary) {
     const declining = plan.status === "invited";
@@ -329,8 +350,13 @@ export default function PlansPanel({
         footer={
           plan.status === "invited" ? (
             <>
-              <Button compact onClick={() => onOpenPlan(plan.id, true)}>
-                {copy.open}
+              <Button
+                compact
+                variant="filled"
+                busy={busyId === plan.id}
+                onClick={() => void join(plan)}
+              >
+                {TRIP_PLAN_JOIN.copy.join}
               </Button>
               <Button
                 compact

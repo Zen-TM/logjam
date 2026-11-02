@@ -31,7 +31,7 @@ export type PlanPersonAction = PlanVerb<PlanPersonActionId>;
 
 export type PlanPersonView = {
   name: string;
-  /** "Leader" or "Editor"; null for a member, and for anyone not yet going. */
+  /** "Leader", "Editor" or "Member"; null for anyone not yet going. */
   role: string | null;
   /** "Going", "Asking to join" or "Invited". */
   status: string;
@@ -109,10 +109,7 @@ export function tripPlanPerson(
 
   return {
     name: member.user.username,
-    role:
-      member.status === "active" && member.role !== "member"
-        ? tripPlanRoleWord(member.role)
-        : null,
+    role: member.status === "active" ? tripPlanRoleWord(member.role) : null,
     status:
       member.status === "requested"
         ? copy.peopleAsking

@@ -182,25 +182,6 @@
 
 /* Everyone's answers: a column per question, scrolled sideways on its own
    when the questions outgrow the panel. */
-.tableScroll {
-  overflow-x: auto;
-}
-
-.table {
-  composes: detail from "../../textRoles.generated.module.css";
-  border-collapse: collapse;
-  min-width: 100%;
-  color: var(--color-text);
-}
-
-.table th,
-.table td {
-  padding: var(--space-0-5) var(--space-1);
-  border-bottom: 1px solid var(--color-line);
-  text-align: left;
-  vertical-align: top;
-}
-
 /* A place's attributes: label left, answer right, as the place page's table. */
 .facts {
   margin: 0;

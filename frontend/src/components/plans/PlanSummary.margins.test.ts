@@ -26,4 +26,14 @@ describe("the printed summary's margins", () => {
     expect(css).not.toMatch(/position:\s*(fixed|absolute)/);
     expect(css).not.toMatch(/@(top|bottom|left|right)-[a-z-]+\s*\{/);
   });
+
+  // Mutation: drop the `html` rule and the 15 mm margin prints near-black
+  // in a dark scheme with "Background graphics" on.
+  it("makes the whole document light, not only body", () => {
+    const index = readFileSync(join(process.cwd(), "src/index.css"), "utf8");
+    const rule = /html:has\(> body > #plan-print\)\s*\{([^}]*)\}/.exec(index);
+    expect(rule, "an html rule while the summary is mounted").not.toBeNull();
+    expect(rule![1]).toMatch(/color-scheme:\s*light/);
+    expect(rule![1]).toMatch(/background:\s*#fff/);
+  });
 });

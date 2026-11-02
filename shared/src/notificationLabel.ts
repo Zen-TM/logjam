@@ -17,6 +17,19 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** The longest a person's name runs in a row's sentence. A longer one is cut
+ *  with an ellipsis, so the verb after it (a row clamps its lines) still shows.
+ *  Guard: notificationLabel.test.ts ("a long username"). */
+export const NOTIFICATION_NAME_MAX = 16;
+
+function who(value: unknown, fallback: string): string {
+  const name = str(value);
+  if (!name) return fallback;
+  return name.length > NOTIFICATION_NAME_MAX
+    ? `${name.slice(0, NOTIFICATION_NAME_MAX - 1)}…`
+    : name;
+}
+
 /**
  * What a shared entity is CALLED in a sentence, by its `entityType`.
  *
@@ -63,7 +76,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
   switch (n.type) {
     case "friend_request":
       return {
-        text: `${str(p.requesterUsername) ?? "Someone"} sent you a friend request`,
+        text: `${who(p.requesterUsername, "Someone")} sent you a friend request`,
       };
     case "friend_request_accepted":
       // An invite link redeemed writes this type too, flagged, because the
@@ -71,12 +84,12 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       return {
         text:
           p.viaInvite === true
-            ? `${str(p.acceptedByUsername) ?? "Someone"} used your invite link and is now a friend`
-            : `${str(p.acceptedByUsername) ?? "Someone"} accepted your friend request`,
+            ? `${who(p.acceptedByUsername, "Someone")} used your invite link and is now a friend`
+            : `${who(p.acceptedByUsername, "Someone")} accepted your friend request`,
       };
     case "place_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${str(p.placeName) ?? "a place"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${str(p.placeName) ?? "a place"} with you`,
       };
     // A directly-shared saved item. The payload carries the entity's TYPE and
     // its id, and deliberately no name: the recipient already holds the row
@@ -87,7 +100,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // what shows which one.
     case "item_shared":
       return {
-        text: `${str(p.sharedByUsername) ?? "Someone"} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
+        text: `${who(p.sharedByUsername, "Someone")} shared ${SHARED_ITEM_NOUN[String(p.entityType)] ?? "an item"} with you`,
       };
     // The filename is deliberately IN the label: the row carries Accept and
     // Turn down, and nobody can answer that without knowing what is on offer.
@@ -95,14 +108,14 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // read time — rendered here, never logged.
     case "file_sent":
       return {
-        text: `${str(p.sentByUsername) ?? "Someone"} sent you ${str(p.filename) ?? "a file"}`,
+        text: `${who(p.sentByUsername, "Someone")} sent you ${str(p.filename) ?? "a file"}`,
         // A send that lapsed before it was saved keeps its row and loses its
         // buttons, so the row has to say why it can no longer be answered —
         // otherwise the offer just disappears and the user is left looking for
         // something a friend told them they had sent. Only ever shown for a
         // send they never took: an accepted one is dropped server-side.
         ...(p.fileSendStatus === "expired" && {
-          detail: `This file expired. Ask ${str(p.sentByUsername) ?? "them"} to send it again.`,
+          detail: `This file expired. Ask ${who(p.sentByUsername, "them")} to send it again.`,
         }),
       };
     case "topo_complete":
@@ -163,19 +176,19 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     // this person, and they are owed which one (api/src/routes/notifications.ts).
     case "plan_invited":
       return {
-        text: `${str(p.invitedByUsername) ?? "Someone"} invited you to ${str(p.planName) ?? "a trip plan"}`,
+        text: `${who(p.invitedByUsername, "Someone")} invited you to ${str(p.planName) ?? "a trip plan"}`,
       };
     case "plan_join_request":
       return {
-        text: `${str(p.requesterUsername) ?? "Someone"} asked to join ${str(p.planName) ?? "your trip plan"}`,
+        text: `${who(p.requesterUsername, "Someone")} asked to join ${str(p.planName) ?? "your trip plan"}`,
       };
     case "plan_join_approved":
       return {
-        text: `${str(p.approvedByUsername) ?? "A leader"} let you into ${str(p.planName) ?? "a trip plan"}`,
+        text: `${who(p.approvedByUsername, "A leader")} let you into ${str(p.planName) ?? "a trip plan"}`,
       };
     case "plan_member_joined":
       return {
-        text: `${str(p.memberUsername) ?? "Someone"} joined ${str(p.planName) ?? "your trip plan"}`,
+        text: `${who(p.memberUsername, "Someone")} joined ${str(p.planName) ?? "your trip plan"}`,
       };
     case "plan_access_ended": {
       const plan = str(p.planName);
