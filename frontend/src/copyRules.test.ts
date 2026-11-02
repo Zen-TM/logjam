@@ -111,7 +111,7 @@ function childExpressionStrings(
   return found;
 }
 
-// Rewritten by the copy sweep; delete an entry with its string.
+// Strings still to reword to the glossary; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
     file: "components/App.tsx",

@@ -169,9 +169,9 @@ const IDENTITY_FILLS = [
  * Adding to it is a decision to ship an inaccessible pair, and needs saying.
  */
 const KNOWN_FAILURES = new Map([
-  ["line on page (separation: a card's edge)", "retuned by the look-retune PR"],
-  ["textMuted on page", "retuned by the look-retune PR"],
-  ["textMuted on cardPressed", "retuned by the look-retune PR"],
+  ["line on page (separation: a card's edge)", "every scheme's line is under 1.5:1 on its page"],
+  ["textMuted on page", "Ghost Gum's muted text is under 7:1"],
+  ["textMuted on cardPressed", "Ghost Gum's muted text is under 7:1"],
 ]);
 
 // Reference basemap grounds a point mark is drawn on, not tokens: the OSM Topo

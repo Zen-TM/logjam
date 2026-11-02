@@ -9,7 +9,7 @@ const { confirm } = await import("./confirm");
 
 const SRC = join(import.meta.dirname, "..");
 
-// migrated by the confirm PR
+// Files still to move to confirm(); delete an entry when its file moves.
 const BASELINE: string[] = [
   "AppShell.tsx",
   "customFields/CustomFieldsEditor.tsx",
