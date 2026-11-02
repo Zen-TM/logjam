@@ -4,9 +4,8 @@
 // scrolling list + one sheet), same as Saved.
 //
 // The four filter axes match Logjam Web's Trip Logs panel and share its
-// predicate (`filterTrips` in shared/). Type is the rail — the axis you flick
-// between — while text and date range live in a "find" row that stays collapsed
-// until asked for, so the resting screen is a logbook and not a search console.
+// predicate (`filterTrips` in shared/). Type is the rail, the axis you flick
+// between; text is the bar under it; the rest is the filter sheet.
 //
 // PRIVACY: rows carry place names, dates and user notes — data the mirror
 // already holds on this device. None of it is logged, and the failure paths
@@ -16,7 +15,6 @@ import {
   Fragment,
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -28,9 +26,7 @@ import {
   RefreshControl,
   SectionList,
   Text,
-  TextInput,
   View,
-  type TextInputInstance,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -71,7 +67,6 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
-  controlSize,
   muted,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
@@ -96,6 +91,7 @@ import {
   Row,
   ChipRail,
   SelectionBar,
+  SearchField,
   SyncStatusPills,
   Toast,
   useBulkSelection,
@@ -134,15 +130,6 @@ export function LogsScreen({
   const trips = useMemo(() => query.data ?? [], [query.data]);
 
   const [typeFilter, setTypeFilter] = useState<string>(ALL_TYPES);
-  const [findOpen, setFindOpen] = useState(false);
-  const searchInputRef = useRef<TextInputInstance>(null);
-  // Focused on the next frame, once the row has mounted: `autoFocus` runs
-  // before the field is attached (mobile/DESIGN.md §4).
-  useEffect(() => {
-    if (!findOpen) return;
-    const frame = requestAnimationFrame(() => searchInputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [findOpen]);
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
@@ -385,15 +372,6 @@ export function LogsScreen({
     [styles],
   );
 
-  const clearFind = useCallback(() => {
-    setSearch("");
-    setDateFrom(null);
-    setDateTo(null);
-    setCustomFilters({});
-    setIncludeUnknowns(false);
-    setFindOpen(false);
-  }, []);
-
   /** Everything the sheet owns. The sort is a preference, not a filter, so it
    *  survives a Reset — clearing it would move the list for someone who only
    *  asked to see all their trips again. */
@@ -434,51 +412,13 @@ export function LogsScreen({
             {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
-                (shared/DESIGN.md §2). It sits beside search because both are ways of
-                asking the logbook something, rather than adding to it. */}
+                (shared/DESIGN.md §2). */}
             <IconButton
               icon="stats"
-              accessibilityLabel="Logbook stats"
+              accessibilityLabel={copy.stats}
               color={theme.textMuted}
               onPress={onOpenStats}
             />
-            <IconButton
-              icon="search"
-              accessibilityLabel={findOpen ? copy.closeSearch : copy.search}
-              color={filtering ? theme.accent : theme.textMuted}
-              filled={filtering}
-              onPress={() => (findOpen ? clearFind() : setFindOpen(true))}
-            />
-            {/* One way in, so a button: Logjam Web's menu holds this and an
-                import (`TRIPS_ADD`). */}
-            <Button
-              label={TRIPS_ADD.copy.add}
-              icon={TRIPS_ADD_ICON.add}
-              compact
-              onPress={() => setEditing({ trip: null })}
-            />
-          </View>
-        }
-      >
-        {/* One slot, two uses: the spark is retrospective decoration you don't
-            need while hunting for a trip, and swapping in place keeps the hero
-            a constant height instead of shoving the list down. */}
-        {findOpen ? (
-          <View style={styles.findRow}>
-            <View style={styles.searchWrap}>
-              <Icon idea="search" size={16} color={theme.textMuted} />
-              <TextInput
-                style={styles.searchInput}
-                value={search}
-                onChangeText={setSearch}
-                placeholder={copy.searchPlaceholder}
-                placeholderTextColor={theme.textMuted}
-                accessibilityLabel={copy.searchField}
-                ref={searchInputRef}
-                autoCapitalize="none"
-                returnKeyType="search"
-              />
-            </View>
             <IconButton
               icon="filter"
               accessibilityLabel={TRIPS_FILTER_SHEET.title}
@@ -493,20 +433,23 @@ export function LogsScreen({
                 setSheetOpen(true);
               }}
             />
-            <IconButton
-              icon="close"
-              accessibilityLabel={copy.closeSearch}
-              onPress={clearFind}
+            {/* One way in, so a button: Logjam Web's menu holds this and an
+                import (`TRIPS_ADD`). */}
+            <Button
+              label={TRIPS_ADD.copy.add}
+              icon={TRIPS_ADD_ICON.add}
+              compact
+              onPress={() => setEditing({ trip: null })}
             />
           </View>
-        ) : (
-          <ActivitySpark
-            buckets={spark}
-            caption={`${recentCount} in the last 12 months · ${placeCount} ${
-              placeCount === 1 ? "place" : "places"
-            }`}
-          />
-        )}
+        }
+      >
+        <ActivitySpark
+          buckets={spark}
+          caption={`${recentCount} in the last 12 months · ${placeCount} ${
+            placeCount === 1 ? "place" : "places"
+          }`}
+        />
 
         {/* State of the world, once, where it can be read at a glance. Offline
             is not an error here — logging, editing and attaching all work — so
@@ -536,6 +479,19 @@ export function LogsScreen({
       </View>
     ),
 
+    search:
+      trips.length > 0 ? (
+        <View style={styles.search}>
+          <SearchField
+            label={copy.search}
+            value={search}
+            onChangeText={setSearch}
+            // As on Saved: narrowing mid-selection would drop a picked row.
+            editable={!selecting}
+          />
+        </View>
+      ) : null,
+
     // The hidden filters, said out loud: the rail and the search box show
     // their own state where they stand, so this speaks only for what the
     // closed sheet is doing (DESIGN.md).
@@ -562,6 +518,7 @@ export function LogsScreen({
         contentContainerStyle={styles.listContent}
         sections={yearSections}
         keyExtractor={keyExtractor}
+        keyboardShouldPersistTaps="handled"
         // A logbook is append-only and long. The defaults keep roughly 21
         // screens of rows mounted, which for a few hundred trips means EVERY
         // row re-renders on any state change — tapping the search icon was
@@ -603,7 +560,8 @@ export function LogsScreen({
             filtering={filtering}
             onLogTrip={() => setEditing({ trip: null })}
             onClear={() => {
-              clearFind();
+              setSearch("");
+              clearSheetFilters();
               setTypeFilter(ALL_TYPES);
             }}
           />
@@ -800,26 +758,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(0.5),
   },
-  findRow: { flexDirection: "row", alignItems: "center", gap: spacing(0.5) },
-  searchWrap: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.4),
-    backgroundColor: withAlpha(theme.page, 0.5),
-    paddingHorizontal: spacing(1.5),
-    minHeight: controlSize.md,
-  },
-  searchInput: { ...textRole.body, flex: 1, color: theme.text },
   // The rail's bottom pad is the gap the list scrolls against (DESIGN.md).
   rail: {
     paddingLeft: spacing(2),
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
+  search: { paddingHorizontal: spacing(2), paddingBottom: spacing(1.5) },
   rangeNote: {
     flexDirection: "row",
     alignItems: "center",

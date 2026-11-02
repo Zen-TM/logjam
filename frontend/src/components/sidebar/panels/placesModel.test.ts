@@ -27,7 +27,7 @@ describe("status buckets", () => {
     }
   });
 
-  it("normalises a combination the rail cannot show, so no hidden axis narrows the list", () => {
+  it("normalises a combination the sheet cannot show, so no hidden axis narrows the list", () => {
     const legacy = filters({ ownership: "owned", completion: "any" });
     expect(normaliseBucket(legacy)).toMatchObject({
       ownership: "all",
@@ -39,19 +39,21 @@ describe("status buckets", () => {
 });
 
 describe("the sheet's filters", () => {
-  it("does not count what the rails show", () => {
-    const railsOnly = withBucket(filters({ placeTypeId: "t" }), "todo");
-    expect(sheetFilterCount(railsOnly)).toBe(0);
+  // Mutation: count `ownership` and `completion` apart, and Visited reads as 2.
+  it("counts the status once and not the type rail", () => {
+    const statusOnly = withBucket(filters({ placeTypeId: "t" }), "todo");
+    expect(sheetFilterCount(statusOnly)).toBe(1);
+    expect(sheetFilterCount(filters({ placeTypeId: "t" }))).toBe(0);
     expect(
       sheetFilterCount({
-        ...railsOnly,
+        ...statusOnly,
         ropewiki: "linked",
         shared_by_me: true,
       }),
-    ).toBe(2);
+    ).toBe(3);
   });
 
-  it("clears its own filters and keeps the rails", () => {
+  it("clears its own filters, the status with them, and keeps the rail", () => {
     const set = withBucket(
       filters({
         placeTypeId: "t",
@@ -60,9 +62,7 @@ describe("the sheet's filters", () => {
       }),
       "shared",
     );
-    expect(clearSheetFilters(set)).toEqual(
-      withBucket(filters({ placeTypeId: "t" }), "shared"),
-    );
+    expect(clearSheetFilters(set)).toEqual(filters({ placeTypeId: "t" }));
   });
 });
 

@@ -92,7 +92,6 @@ function PlaceTypeSection({
   onBack: () => void;
 }) {
   const [editing, setEditing] = useState<TPlaceType | "new" | null>(null);
-  const [attributesFor, setAttributesFor] = useState<TPlaceType | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
@@ -256,9 +255,19 @@ function PlaceTypeSection({
         )}
       </div>
 
-      {editing !== null && (
+      {editing === "new" && (
+        <NewPlaceTypeFlow
+          types={types}
+          onTypesChange={onTypesChange}
+          placeDefs={placeDefs}
+          onPlaceDefsChange={onPlaceDefsChange}
+          onClose={() => setEditing(null)}
+        />
+      )}
+
+      {editing !== null && editing !== "new" && (
         <PlaceTypeDialog
-          editing={editing === "new" ? null : editing}
+          editing={editing}
           types={types}
           saving={saving}
           error={error}
@@ -268,34 +277,12 @@ function PlaceTypeSection({
             setError(null);
           }}
           onSave={async (draft) => {
-            // Held in an object: the assignment happens inside `run`'s
-            // callback, which the compiler cannot follow for a `let`.
-            const made: { type: TPlaceType | null } = { type: null };
-            const ok =
-              editing === "new"
-                ? await run(async () => {
-                    made.type = await createPlaceType(draft);
-                  }, "Couldn't create that type.")
-                : await run(
-                    () => updatePlaceType(editing.id, draft),
-                    "Couldn't save that type.",
-                  );
-            if (!ok) return;
-            setEditing(null);
-            if (stepAfterPlaceTypeSave(made.type !== null) === "attributes") {
-              setAttributesFor(made.type);
-            }
+            const ok = await run(
+              () => updatePlaceType(editing.id, draft),
+              "Couldn't save that type.",
+            );
+            if (ok) setEditing(null);
           }}
-        />
-      )}
-
-      {attributesFor && (
-        <TypeAttributesDialog
-          type={attributesFor}
-          placeTypes={types}
-          defs={placeDefs}
-          onDefsChange={onPlaceDefsChange}
-          onClose={() => setAttributesFor(null)}
         />
       )}
 
@@ -367,6 +354,63 @@ function PlaceTypeSection({
         }}
       />
     </div>
+  );
+}
+
+/** Making a type, from Settings or from the Places rail's New type chip: the
+ *  form, then the attributes step (`stepAfterPlaceTypeSave`). */
+export function NewPlaceTypeFlow({
+  types,
+  onTypesChange,
+  placeDefs,
+  onPlaceDefsChange,
+  onClose,
+}: {
+  types: TPlaceType[];
+  onTypesChange: (types: TPlaceType[]) => void;
+  placeDefs: ScopedCustomFieldDef[];
+  onPlaceDefsChange: (defs: ScopedCustomFieldDef[]) => void;
+  onClose: () => void;
+}) {
+  const [made, setMade] = useState<TPlaceType | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (made)
+    return (
+      <TypeAttributesDialog
+        type={made}
+        placeTypes={types}
+        defs={placeDefs}
+        onDefsChange={onPlaceDefsChange}
+        onClose={onClose}
+      />
+    );
+
+  return (
+    <PlaceTypeDialog
+      editing={null}
+      types={types}
+      saving={saving}
+      error={error}
+      onDismissError={() => setError(null)}
+      onClose={onClose}
+      onSave={async (draft) => {
+        setSaving(true);
+        setError(null);
+        try {
+          const type = await createPlaceType(draft);
+          onTypesChange(await getPlaceTypes());
+          if (stepAfterPlaceTypeSave(true) === "attributes") setMade(type);
+          else onClose();
+        } catch (err) {
+          console.error(err);
+          setError(messageFromError(err, "Couldn't create that type."));
+        } finally {
+          setSaving(false);
+        }
+      }}
+    />
   );
 }
 

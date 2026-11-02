@@ -10,7 +10,7 @@
 // full list and hands the ones needing a form (share, rename, delete) to the
 // page with that verb armed, so the two surfaces can never offer different
 // things.
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   exportFilename,
   formatDistanceM,
@@ -141,7 +141,6 @@ export default function RoutesPanel({
     "",
     sessionStorage,
   );
-  const [searchOpen, setSearchOpen] = useState(query !== "");
   const [kind, setKind] = useStoredState<WayKind | typeof ANY_KIND>(
     "logjam.wayKind",
     ANY_KIND,
@@ -188,11 +187,6 @@ export default function RoutesPanel({
   // Counts apply every axis but the rail's own, so a chip answers "how many
   // would I get if I pressed this" (shared/DESIGN.md §8).
   const counts = useMemo(() => wayKindCounts(searched), [searched]);
-
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
 
   /** What a row says under its title: how long it is, then where it lives. */
   const subtitleOf = (way: WayItem): string | undefined => {
@@ -266,64 +260,37 @@ export default function RoutesPanel({
     <Hero
       title="Ways"
       actions={
-        searchOpen ? (
-          <IconButton icon="close" label="Close search" onClick={closeSearch} />
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label="Search ways"
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            <Menu
-              label="Add a way"
-              placement="bottom-end"
-              entries={[
-                {
-                  id: "draw",
-                  label: "Draw a route",
-                  icon: "draw",
-                  onSelect: onStartDrawingRoute,
-                },
-                {
-                  id: "import",
-                  label: "Import from file",
-                  icon: "upload",
-                  onSelect: onOpenUnifiedImport,
-                },
-              ]}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  Add
-                </Button>
-              )}
-            />
-          </>
-        )
-      }
-    >
-      {searchOpen && (
-        <SearchField
-          label="Search by name"
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
+        <Menu
+          label="Add a way"
+          placement="bottom-end"
+          entries={[
+            {
+              id: "draw",
+              label: "Draw a route",
+              icon: "draw",
+              onSelect: onStartDrawingRoute,
+            },
+            {
+              id: "import",
+              label: "Import from file",
+              icon: "upload",
+              onSelect: onOpenUnifiedImport,
+            },
+          ]}
+          trigger={(props) => (
+            <Button
+              {...props}
+              compact
+              variant="filled"
+              icon="add"
+              trailingIcon="expand"
+            >
+              Add
+            </Button>
+          )}
         />
-      )}
-    </Hero>
+      }
+    />
   );
 
   const rails = (
@@ -344,6 +311,18 @@ export default function RoutesPanel({
         value={kind}
         onChange={(next) => setKind(next as WayKind | typeof ANY_KIND)}
       />
+      {ways.length > 0 && (
+        <SearchField
+          label="Search ways"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || query === "") return;
+            event.stopPropagation();
+            setQuery("");
+          }}
+        />
+      )}
     </div>
   );
 

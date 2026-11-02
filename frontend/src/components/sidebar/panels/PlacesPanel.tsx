@@ -15,7 +15,6 @@ import {
   numericFieldValue,
   passesPlaceFilters,
   PLACE_STATUS_LABELS,
-  PLACE_STATUS_ORDER,
   PLACES_ADD,
   PLACES_ADD_ICON,
   PLACES_FILTER_SHEET,
@@ -74,6 +73,7 @@ import {
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import PlaceFilterSheet from "./PlaceFilterSheet";
+import { NewPlaceTypeFlow } from "./PlaceTypeSection";
 import { usePanelSheet } from "./usePanelSheet";
 import {
   bucketOf,
@@ -83,7 +83,6 @@ import {
   placesBounds,
   sheetFilterCount,
   withBucket,
-  type StatusBucket,
 } from "./placesModel";
 import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
 import classes from "./PlacesPanel.module.css";
@@ -121,10 +120,10 @@ function download(blob: Blob, filename: string) {
 
 /**
  * Places: a tick list. The hero answers "how far through my list am I?" over the
- * whole collection; two rails narrow the list (the user's own types, then the
- * status partition); everything else is the sheet beside it. Rows are cards
- * whose tile is their status, and whose ⋯ holds the same verbs a pin opens.
- * Selecting starts from a row's tile and swaps the status rail for the bar.
+ * whole collection; the type rail and the search bar under it narrow the list;
+ * everything else is the sheet beside it. Rows are cards whose tile is their
+ * status, and whose ⋯ holds the same verbs a pin opens. Selecting starts from a
+ * row's tile and swaps the type rail for the bar.
  */
 function PlacesPanel({
   places,
@@ -132,7 +131,9 @@ function PlacesPanel({
   placesTotal,
   sharedPlaces,
   placeTypes,
+  onPlaceTypesChange,
   placeCustomFieldDefs,
+  onPlaceCustomFieldDefsChange,
   filters,
   onChangeFilters,
   onAddPlace,
@@ -161,7 +162,9 @@ function PlacesPanel({
   sharedPlaces: TPlace[];
   /** Every type the user has. The rail shows only those with places. */
   placeTypes: TPlaceType[];
+  onPlaceTypesChange: (types: TPlaceType[]) => void;
   placeCustomFieldDefs: ScopedCustomFieldDef[];
+  onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   filters: TFilters;
   onChangeFilters: (next: TFilters) => void;
   onAddPlace: () => void;
@@ -202,18 +205,18 @@ function PlacesPanel({
     "logjam.placeSort",
     "name",
   );
-  const [searchOpen, setSearchOpen] = useState(query !== "");
   const { sheetOpen, openSheet } = usePanelSheet({
     onOpenChange: onFiltersOpenChange,
     onExpandSheet,
   });
+  const [addingType, setAddingType] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Status axes set by an older build that the rail cannot show are rewritten
+  // Status axes set by an older build that the sheet cannot show are rewritten
   // to the chip they are nearest, so nothing narrows the list with no chip lit.
   useEffect(() => {
     const normalised = normaliseBucket(filters);
@@ -266,22 +269,6 @@ function PlacesPanel({
       matching(filters).sort((a, b) => comparePlaces(a.place, b.place, sort)),
     [matching, filters, sort],
   );
-
-  // Tallies come from the OTHER axes only, so a chip's count answers "how many
-  // would I get if I pressed this" rather than restating the current view.
-  const statusCounts = useMemo(() => {
-    const counts: Record<StatusBucket, number> = {
-      all: 0,
-      done: 0,
-      todo: 0,
-      shared: 0,
-    };
-    for (const { status } of matching(withBucket(filters, "all"))) {
-      counts[status] += 1;
-      counts.all += 1;
-    }
-    return counts;
-  }, [matching, filters]);
 
   const typeCounts = useMemo(() => {
     const withoutType = matching({ ...filters, placeTypeId: null });
@@ -528,11 +515,6 @@ function PlacesPanel({
     />
   );
 
-  const closeSearch = () => {
-    setQuery("");
-    setSearchOpen(false);
-  };
-
   const addEntries: Record<
     SectionKeysOn<typeof PLACES_ADD, "web">,
     { label: string; onSelect: () => void; disabled?: boolean }
@@ -551,113 +533,39 @@ function PlacesPanel({
     },
   };
 
-  // No meter: the status rail's counts already say how many are visited, not
-  // visited and shared, and the bar beside them was the same numbers again.
   const hero = (
     <Hero
       title={PLACES_LIST.title}
       actions={
-        searchOpen ? (
-          <>
-            {filterButton}
-            <IconButton
-              icon="close"
-              label={copy.closeSearch}
-              onClick={closeSearch}
-            />
-          </>
-        ) : (
-          <>
-            <IconButton
-              icon="search"
-              label={copy.search}
-              tone={query ? "filled" : "default"}
-              aria-expanded={false}
-              onClick={() => setSearchOpen(true)}
-            />
-            {filterButton}
-            <Menu
-              label={PLACES_ADD.copy.menu}
-              placement="bottom-end"
-              entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
-                id: key,
-                icon: PLACES_ADD_ICON[key],
-                ...addEntries[key],
-              }))}
-              trigger={(props) => (
-                <Button
-                  {...props}
-                  compact
-                  variant="filled"
-                  icon="add"
-                  trailingIcon="expand"
-                >
-                  {PLACES_ADD.title}
-                </Button>
-              )}
-            />
-          </>
-        )
+        <>
+          {filterButton}
+          <Menu
+            label={PLACES_ADD.copy.menu}
+            placement="bottom-end"
+            entries={contractSectionKeys(PLACES_ADD, "web").map((key) => ({
+              id: key,
+              icon: PLACES_ADD_ICON[key],
+              ...addEntries[key],
+            }))}
+            trigger={(props) => (
+              <Button
+                {...props}
+                compact
+                variant="filled"
+                icon="add"
+                trailingIcon="expand"
+              >
+                {PLACES_ADD.title}
+              </Button>
+            )}
+          />
+        </>
       }
-    >
-      {/* The search box takes the title's place on the same line, so opening it moves nothing. */}
-      {searchOpen && (
-        <SearchField
-          label={copy.searchField}
-          value={query}
-          autoFocus
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.stopPropagation();
-            closeSearch();
-          }}
-        />
-      )}
-    </Hero>
+    />
   );
 
   const typeRail = (
     <div className={classes.typeRail}>
-      <div className={selecting ? classes.inert : undefined} inert={selecting}>
-        <ChipRail
-          label={copy.typeRail}
-          options={[
-            { value: ANY_TYPE, label: copy.anyType, count: typeCounts.any },
-            ...railTypes.map((type) => {
-              const count = typeCounts.byType.get(type.id) ?? 0;
-              return {
-                value: type.id,
-                label: type.name,
-                count,
-                icon: placeTypeLucideIcon(type.iconKey),
-                hue: type.color,
-                disabled: count === 0 && filters.placeTypeId !== type.id,
-              };
-            }),
-          ]}
-          value={filters.placeTypeId ?? ANY_TYPE}
-          onChange={(next) =>
-            onChangeFilters({
-              ...filters,
-              placeTypeId: next === ANY_TYPE ? null : next,
-            })
-          }
-          trailing={
-            <Chip
-              label={copy.newType}
-              icon="add"
-              dashed
-              onClick={() => setActivePanel("settings")}
-            />
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const statusRail = (
-    <div className={classes.statusRail}>
       {selecting ? (
         <SelectionBar
           countLabel={listSelectionLabel(selected.length)}
@@ -694,20 +602,36 @@ function PlacesPanel({
         </SelectionBar>
       ) : (
         <ChipRail
-          label={copy.statusRail}
+          label={copy.typeRail}
           options={[
-            { value: "all", label: copy.allStatuses, count: statusCounts.all },
-            ...PLACE_STATUS_ORDER.map((status) => ({
-              value: status,
-              label: PLACE_STATUS_LABELS[status],
-              count: statusCounts[status],
-              icon: STATUS_ICON[status],
-              hue: STATUS_HUE[status],
-              disabled: statusCounts[status] === 0 && bucket !== status,
-            })),
+            { value: ANY_TYPE, label: copy.anyType, count: typeCounts.any },
+            ...railTypes.map((type) => {
+              const count = typeCounts.byType.get(type.id) ?? 0;
+              return {
+                value: type.id,
+                label: type.name,
+                count,
+                icon: placeTypeLucideIcon(type.iconKey),
+                hue: type.color,
+                disabled: count === 0 && filters.placeTypeId !== type.id,
+              };
+            }),
           ]}
-          value={bucket}
-          onChange={(next) => onChangeFilters(withBucket(filters, next))}
+          value={filters.placeTypeId ?? ANY_TYPE}
+          onChange={(next) =>
+            onChangeFilters({
+              ...filters,
+              placeTypeId: next === ANY_TYPE ? null : next,
+            })
+          }
+          trailing={
+            <Chip
+              label={copy.newType}
+              icon="add"
+              dashed
+              onClick={() => setAddingType(true)}
+            />
+          }
         />
       )}
     </div>
@@ -715,17 +639,18 @@ function PlacesPanel({
 
   const empty =
     placesLoaded && visible.length === 0
-      ? placesEmptyKind({
-          total: collection.length,
-          filtering: query.trim() !== "" || sheetCount > 0,
-          bucket,
-        })
+      ? placesEmptyKind({ total: collection.length })
       : null;
   const emptyState = empty && placesEmptyState(empty, { platform: "web" });
 
   // The same button is the empty state's and the end of the list's.
   const addPlaceButton = (
-    <Button compact variant="filled" icon="add" onClick={onAddPlace}>
+    <Button
+      compact
+      variant="filled"
+      icon={PLACES_ADD_ICON.add}
+      onClick={onAddPlace}
+    >
       {PLACES_ADD.copy.add}
     </Button>
   );
@@ -745,7 +670,7 @@ function PlacesPanel({
             <Button compact variant="outline" onClick={clearEverything}>
               {copy.clearFilters}
             </Button>
-          ) : emptyState.action === "add" ? (
+          ) : (
             <>
               {addPlaceButton}
               {empty === "firstRun" && (
@@ -759,7 +684,7 @@ function PlacesPanel({
                 </Button>
               )}
             </>
-          ) : undefined
+          )
         }
       />
     </div>
@@ -862,6 +787,8 @@ function PlacesPanel({
     <PlaceFilterSheet
       filters={filters}
       onChangeFilters={onChangeFilters}
+      status={bucket}
+      onChangeStatus={(next) => onChangeFilters(withBucket(filters, next))}
       sort={sort}
       onChangeSort={setSort}
       placeCustomFieldDefs={placeCustomFieldDefs}
@@ -885,7 +812,21 @@ function PlacesPanel({
   > = {
     hero,
     typeRail,
-    statusRail,
+    search: collection.length > 0 && (
+      <div className={classes.search}>
+        <SearchField
+          label={copy.search}
+          value={query}
+          disabled={selecting}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || query === "") return;
+            event.stopPropagation();
+            setQuery("");
+          }}
+        />
+      </div>
+    ),
     filterNote: sheetCount > 0 && !sheetOpen && !selecting && (
       <div className={classes.strip}>
         <span className={classes.stripText}>{note}</span>
@@ -934,6 +875,15 @@ function PlacesPanel({
         </>
       )}
 
+      {addingType && (
+        <NewPlaceTypeFlow
+          types={placeTypes}
+          onTypesChange={onPlaceTypesChange}
+          placeDefs={placeCustomFieldDefs}
+          onPlaceDefsChange={onPlaceCustomFieldDefsChange}
+          onClose={() => setAddingType(false)}
+        />
+      )}
       <ConfirmDialog
         open={pendingDelete != null}
         title={deleteCopy.confirmTitle}

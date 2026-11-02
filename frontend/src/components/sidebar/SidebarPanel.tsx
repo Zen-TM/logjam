@@ -27,8 +27,7 @@ import type {
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import type { NotificationPlanTarget } from "@logjam/shared";
-import { ChipRail } from "../../ui";
+import { TRIPS_LIST, type NotificationPlanTarget } from "@logjam/shared";
 import { PanelCloseContext } from "../../ui/Hero";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
@@ -45,11 +44,6 @@ import AccountPanel from "./panels/AccountPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
-
-const LOGS_VIEWS = [
-  { value: "logs", label: "Logs" },
-  { value: "stats", label: "Stats" },
-] as const;
 
 function SidebarPanel({
   activePanel,
@@ -315,16 +309,18 @@ function SidebarPanel({
       ? place.name
       : PANEL_TITLES[activePanel];
 
-  // A page with two views draws its switch under its own hero, so the hero
-  // stays the page's first line (DESIGN.md).
-  const logsViewRail = (
-    <ChipRail
-      label="Logs view"
-      options={LOGS_VIEWS}
-      value={logsView}
-      onChange={onLogsViewChange}
-    />
-  );
+  // Focus follows the step: back out of Stats, onto the button that opened it
+  // (DESIGN.md).
+  const backToLogs = () => {
+    onLogsViewChange("logs");
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          `aside button[aria-label="${TRIPS_LIST.copy.stats}"]`,
+        )
+        ?.focus(),
+    );
+  };
 
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
@@ -337,7 +333,9 @@ function SidebarPanel({
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
             placeTypes={placeTypes}
+            onPlaceTypesChange={onPlaceTypesChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
+            onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             filters={filters}
             onChangeFilters={onChangeFilters}
             onAddPlace={onAddPlace}
@@ -388,7 +386,7 @@ function SidebarPanel({
         )}
         {activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
-            views={logsViewRail}
+            onBack={backToLogs}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
             loaded={tripLogsLoaded}
@@ -400,7 +398,7 @@ function SidebarPanel({
         )}
         {activePanel === "logs" && logsView === "logs" && (
           <TripLogsPanel
-            views={logsViewRail}
+            onOpenStats={() => onLogsViewChange("stats")}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
             loaded={tripLogsLoaded}

@@ -43,6 +43,7 @@ anything text-shaped that is not a card; `sm` swatch.
 ```
 Hero            pinned · the answer + the one "add"
 filter rail     pinned · ChipRail, tallies on the chips
+search bar      pinned · `SearchField`, on a list you hunt through
 list            the only thing that scrolls
 BottomSheet     acquisition, per-item verbs, forms
 ```

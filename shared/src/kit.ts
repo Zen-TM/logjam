@@ -99,7 +99,7 @@ export const KIT_COMPONENTS = {
   TextArea: web("Logjam GPS's TextField takes multiline"),
   NumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
   LiveNumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
-  SearchField: web("Logjam GPS's TextField with a search keyboard"),
+  SearchField: both,
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),
   // One colour picker, a floating palette: Logjam GPS draws the closed-palette

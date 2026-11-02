@@ -1,13 +1,11 @@
 // Places, the tick list: Logjam Web's `PlacesPanel.tsx` and Logjam GPS's
 // `places/PlacesScreen.tsx`.
 //
-// Declared elsewhere and read by both, not copied here: the status buckets
-// and their order (`PLACE_STATUS_ORDER`, `PLACE_STATUS_LABELS`), the sorts
+// Declared elsewhere and read by both, not copied here: the sorts
 // (`PLACE_SORT_OPTIONS`), a row's second line (`placeSummary`).
 import type { IconIdea } from "../icons.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
-import type { PlaceStatus } from "../placeStatus.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 
 export const PLACES_LIST = {
@@ -16,10 +14,10 @@ export const PLACES_LIST = {
   title: "Places",
   sections: [
     { key: "hero" },
-    // Two rails, in this order: what kind of place, then where it is in the
-    // tick list. Only the status rail gives way to the selection bar.
+    // One rail: what kind of place. The selection bar takes its place.
     { key: "typeRail" },
-    { key: "statusRail" },
+    // Hidden with nothing to search, and disabled during a selection.
+    { key: "search" },
     // Filters the user cannot see announce themselves, with the way out.
     { key: "filterNote" },
     {
@@ -38,16 +36,10 @@ export const PLACES_LIST = {
   ],
   copy: {
     typeRail: "Place type",
-    statusRail: "Status",
-    // "Any type", not "All": the status rail under it has its own "All".
-    anyType: "Any type",
+    anyType: "All",
     newType: "New type",
-    allStatuses: "All",
 
     search: "Search places",
-    searchField: "Search by name or alternative name",
-    searchPlaceholder: "Name or alternative name",
-    closeSearch: "Close search",
     clearFilters: "Clear filters",
     sortByNameAgain: "Sort by name again",
     loading: "Loading your places…",
@@ -64,14 +56,6 @@ export const PLACES_LIST = {
     filteredTitle: "No places match",
     filteredBody:
       "Nothing matches your search and filters. Clear them to see the rest.",
-    todoTitle: "Your list is clear",
-    todoBody:
-      "You've logged a trip for every place. Add a new place and it appears here.",
-    doneTitle: "Nothing visited yet",
-    doneBody: "Log a trip at a place and it moves here.",
-    sharedTitle: "Nothing shared with you",
-    sharedBody:
-      "Places a friend shares appear here with notes and photos. Share your own from a place's page.",
   },
 } as const satisfies ScreenContract;
 
@@ -125,7 +109,7 @@ export function placesCountLabel(count: number): string {
 
 /**
  * Logjam GPS's hero: the size of the whole collection, whatever is filtered.
- * Logjam Web's hero is `PLACES_LIST.title`: its chips already show the counts.
+ * Logjam Web's hero is `PLACES_LIST.title`.
  */
 export function placesHeroTitle(count: number): string {
   return count === 0 ? PLACES_LIST.copy.firstRunTitle : placesCountLabel(count);
@@ -164,28 +148,16 @@ export function placeTypeHasTab(type: {
   return !type.builtIn || type.places > 0;
 }
 
-export type PlacesEmptyKind = "firstRun" | "filtered" | PlaceStatus;
+export type PlacesEmptyKind = "firstRun" | "filtered";
 
-/**
- * Which empty state an empty list is. An empty collection, an over-tight
- * filter and an exhausted bucket are different problems with different ways
- * out. A type tab with nothing behind it is "filtered": the user is looking
- * at nothing and Clear filters is the way back to everything.
- */
-export function placesEmptyKind(args: {
-  /** Places in the whole collection, shared ones included. */
-  total: number;
-  /** A search or a filter the sheet owns is set. */
-  filtering: boolean;
-  bucket: "all" | PlaceStatus;
-}): PlacesEmptyKind {
-  if (args.total === 0) return "firstRun";
-  if (args.filtering || args.bucket === "all") return "filtered";
-  return args.bucket;
+/** An empty collection and an over-tight filter are different problems with
+ *  different ways out. A type tab with nothing behind it is "filtered". */
+export function placesEmptyKind(args: { total: number }): PlacesEmptyKind {
+  return args.total === 0 ? "firstRun" : "filtered";
 }
 
-/** The way out an empty state offers: add a place, clear the filters, or none. */
-export type PlacesEmptyAction = "add" | "clear" | null;
+/** The way out an empty state offers: add a place, clear the filters. */
+export type PlacesEmptyAction = "add" | "clear";
 
 export function placesEmptyState(
   kind: PlacesEmptyKind,
@@ -197,46 +169,22 @@ export function placesEmptyState(
   action: PlacesEmptyAction;
 } {
   const copy = PLACES_LIST.copy;
-  switch (kind) {
-    case "firstRun":
-      return {
-        icon: "place",
-        title: copy.firstRunTitle,
-        body:
-          viewer.platform === "web"
-            ? copy.firstRunBodyWeb
-            : viewer.guest
-              ? copy.firstRunBodyGuest
-              : copy.firstRunBodyGps,
-        action: "add",
-      };
-    case "filtered":
-      return {
-        icon: "filter",
-        title: copy.filteredTitle,
-        body: copy.filteredBody,
-        action: "clear",
-      };
-    case "todo":
-      return {
-        icon: "place",
-        title: copy.todoTitle,
-        body: copy.todoBody,
-        action: "add",
-      };
-    case "done":
-      return {
-        icon: "success",
-        title: copy.doneTitle,
-        body: copy.doneBody,
-        action: null,
-      };
-    case "shared":
-      return {
-        icon: "friends",
-        title: copy.sharedTitle,
-        body: copy.sharedBody,
-        action: null,
-      };
-  }
+  if (kind === "filtered")
+    return {
+      icon: "filter",
+      title: copy.filteredTitle,
+      body: copy.filteredBody,
+      action: "clear",
+    };
+  return {
+    icon: "place",
+    title: copy.firstRunTitle,
+    body:
+      viewer.platform === "web"
+        ? copy.firstRunBodyWeb
+        : viewer.guest
+          ? copy.firstRunBodyGuest
+          : copy.firstRunBodyGps,
+    action: "add",
+  };
 }

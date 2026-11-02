@@ -22,6 +22,19 @@ describe("BottomSheet", () => {
   });
 });
 
+// Mutation: give `valueField` a `flex: 1`, and in the threshold filter's column
+// the Value field collapses to no height under the next row.
+describe("AttributeFilter", () => {
+  it("lets the threshold's Value field keep its height", () => {
+    const source = readFileSync(
+      new URL("./AttributeFilter.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("<View style={styles.valueField}>");
+    expect(source).toMatch(/\n {2}valueField: \{ maxWidth: \d+ \},/);
+  });
+});
+
 describe("the Logjam GPS kit barrel", () => {
   it("exports exactly the declared components", () => {
     const barrel = readFileSync(new URL("./index.ts", import.meta.url), "utf8");

@@ -21,10 +21,6 @@ export const PanelCloseContext = createContext<(() => void) | null>(null);
  * the rail's lit pill already says where you are, and a title that answers the
  * question names the page as well.
  *
- * `children`, when given, takes the title's place on the same line (a search
- * box), so opening it moves nothing. The title stays in the document as the
- * page's heading for assistive tech.
- *
  * No fill: a filled hero failed AA under its own text in two schemes, so it
  * separates with a hairline instead (Logjam GPS's hero does the same).
  */
@@ -35,7 +31,6 @@ export function Hero({
   backLabel = "Back",
   onClose,
   closeDisabled = false,
-  children,
 }: {
   title: string;
   actions?: ReactNode;
@@ -47,20 +42,15 @@ export function Hero({
    *  ×. By default it closes the open panel. */
   onClose?: (() => void) | null;
   closeDisabled?: boolean;
-  children?: ReactNode;
 }) {
   const closePanel = useContext(PanelCloseContext);
   const close = onClose === undefined ? closePanel : onClose;
   return (
     <header className={classes.hero} data-back={onBack ? true : undefined}>
       {onBack && <IconButton icon="back" label={backLabel} onClick={onBack} />}
-      <h2
-        className={children ? "visually-hidden" : classes.title}
-        title={title}
-      >
+      <h2 className={classes.title} title={title}>
         {title}
       </h2>
-      {children}
       {actions}
       {close && (
         <IconButton

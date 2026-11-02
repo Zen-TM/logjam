@@ -17,6 +17,8 @@ export const TRIPS_LIST = {
     { key: "hero" },
     // One rail: what kind of trip. The selection bar takes its place.
     { key: "typeRail" },
+    // Hidden with nothing to search, and disabled during a selection.
+    { key: "search" },
     // Filters the user cannot see announce themselves, with the way out.
     { key: "filterNote" },
     {
@@ -33,9 +35,7 @@ export const TRIPS_LIST = {
     noType: "No type",
 
     search: "Search trips",
-    searchField: "Search by place or trip name",
-    searchPlaceholder: "Place or trip name",
-    closeSearch: "Close search",
+    stats: "Logbook stats",
     clearFilters: "Clear filters",
     loading: "Loading your logbook…",
 
@@ -81,7 +81,7 @@ export const TRIPS_ADD_ICON: Record<
   (typeof TRIPS_ADD)["sections"][number]["key"],
   IconIdea
 > = {
-  add: "add",
+  add: "addTrip",
   importFile: "upload",
 };
 
