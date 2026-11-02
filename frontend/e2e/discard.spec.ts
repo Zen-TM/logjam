@@ -77,7 +77,7 @@ test("editing a trip asks about the changes, and Cancel is Cancel", async ({
   await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
     timeout: 15_000,
   });
-  await page.getByRole("button", { name: "Logs", exact: true }).click();
+  await page.getByRole("button", { name: "Trips", exact: true }).click();
   const aside = page.locator("aside");
   await aside
     .getByRole("button", { name: /^Actions for / })
