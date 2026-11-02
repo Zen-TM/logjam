@@ -33,6 +33,8 @@ import {
   tripPlanDatesLine,
   tripPlanGoing,
   tripPlanInPlanNow,
+  tripPlanInviteLists,
+  TRIP_PLAN_ROLE_ABOUT,
   tripPlanIsDated,
   tripPlanIsOver,
   tripPlanLeaveState,
@@ -1376,6 +1378,45 @@ describe("invite role order", () => {
     expect([...TRIP_PLAN_ROLES_PICK_ORDER].sort()).toEqual(
       [...TRIP_PLAN_ROLES].sort(),
     );
+  });
+});
+
+describe("who Invite people offers", () => {
+  const bob = { id: "u2", username: "bob" };
+  const carol = { id: "u3", username: "carol" };
+  const bobby = { id: "u4", username: "bobby" };
+
+  // Mutation: list friends only once a search has run, and the friend a
+  // leader came to invite is not there until they type three letters.
+  it("lists every friend before anything is typed", () => {
+    expect(tripPlanInviteLists([bob, carol], [], "")).toEqual({
+      friends: [bob, carol],
+      others: [],
+    });
+  });
+
+  // Mutation: skip the friend filter, and a short query hides the friend.
+  it("narrows the friends by what is typed, however short", () => {
+    expect(tripPlanInviteLists([bob, carol], [], " BO ").friends).toEqual([
+      bob,
+    ]);
+  });
+
+  // Mutation: drop the id check, and a friend the search also found is
+  // offered twice, once under each heading.
+  it("leaves a friend out of the other people the search found", () => {
+    expect(tripPlanInviteLists([bob], [bob, bobby], "bob")).toEqual({
+      friends: [bob],
+      others: [bobby],
+    });
+  });
+
+  // Mutation: delete a role's sentence, and Invite people names a role
+  // without saying what it can do.
+  it("says what every role can do, in a sentence each", () => {
+    const about = TRIP_PLAN_ROLES.map((role) => TRIP_PLAN_ROLE_ABOUT[role]);
+    expect(about.every((line) => line.trim().length > 0)).toBe(true);
+    expect(new Set(about).size).toBe(TRIP_PLAN_ROLES.length);
   });
 });
 

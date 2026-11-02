@@ -19,6 +19,7 @@ import {
   TRIP_PLAN_FORMS,
   tripPlanRequiredSummary,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
@@ -111,6 +112,11 @@ vi.mock("../../plansApi", async (importOriginal) => ({
 }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
+  getFriends: async () => [
+    { id: "u2", username: "bob", friendshipId: "f1" },
+    { id: "u5", username: "erin", friendshipId: "f2" },
+    { id: "u6", username: "frank", friendshipId: "f3" },
+  ],
   searchUsers: async () => ({
     data: [
       { id: "u3", username: "carol" },
@@ -417,6 +423,37 @@ describe("answering a form whose audience changes", () => {
     expect(
       screen.getByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
     ).toBeTruthy();
+  });
+});
+
+describe("Invite people offers friends", () => {
+  // Mutation: draw only the username search, and a friend accepted a minute
+  // ago cannot be found without knowing their exact username.
+  it("lists friends before anything is typed, and narrows them", async () => {
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={() => {}} />,
+    );
+    expect(await screen.findByText("erin")).toBeTruthy();
+    expect(screen.getByText("frank")).toBeTruthy();
+    // bob is in the plan already: a pill, not an Invite.
+    expect(screen.getByText(TRIP_PLAN_INVITE.copy.inPlan)).toBeTruthy();
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: TRIP_PLAN_INVITE.copy.searchField,
+      }),
+      { target: { value: "er" } },
+    );
+    expect(screen.queryByText("frank")).toBeNull();
+    expect(screen.getByText("erin")).toBeTruthy();
+  });
+
+  // Mutation: delete a role's sentence from the screen.
+  it("says what each role can do", async () => {
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={() => {}} />,
+    );
+    for (const about of Object.values(TRIP_PLAN_ROLE_ABOUT))
+      expect(await screen.findByText(about)).toBeTruthy();
   });
 });
 

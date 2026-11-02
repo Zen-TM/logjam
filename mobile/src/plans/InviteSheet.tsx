@@ -10,10 +10,12 @@ import {
   messageFromError,
   planInviteUrl,
   tripPlanInviteLinkLine,
+  tripPlanInviteLists,
   tripPlanInviteMessage,
   tripPlanInviteePill,
   tripPlanRoleWord,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_ROLES_PICK_ORDER,
   type SectionKeysOn,
   type TripPlanInviteView,
@@ -21,6 +23,7 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
+import { getFriends, type Friend } from "../api/friends";
 import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
 import { UserSearch } from "../screens/UserSearch";
@@ -81,12 +84,17 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
   // The user or link a write is running for: only its button waits.
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [query, setQuery] = useState("");
+
   const refreshLinks = () =>
     getInviteLinks(plan.id)
       .then(({ invites }) => setLinks(invites))
       // The list is a courtesy; inviting works without it.
       .catch(console.error);
   useEffect(() => {
+    // A courtesy, like the links: the username search works without it.
+    if (online) getFriends().then(setFriends).catch(console.error);
     void refreshLinks();
     // Once per opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,6 +161,24 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
   const statusOf = new Map(
     plan.members.map((member) => [member.user.id, member.status]),
   );
+  const lists = tripPlanInviteLists(friends, [], query);
+  const action = (user: { id: string; username: string }) => {
+    const pill = invitedIds.includes(user.id)
+      ? copy.invited
+      : tripPlanInviteePill(statusOf.get(user.id));
+    return pill ? (
+      <StatusPill label={pill} tone="outline" />
+    ) : (
+      <Button
+        label={copy.inviteSend}
+        compact
+        loading={busyId === user.id}
+        disabled={!online}
+        disabledReason={OFFLINE}
+        onPress={() => invite(user.id, user.username)}
+      />
+    );
+  };
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_INVITE, "gps">,
     React.ReactNode
@@ -168,29 +194,44 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           value={role}
           onChange={setRole}
         />
+        {TRIP_PLAN_ROLES_PICK_ORDER.map((value) => (
+          <Text key={value} style={styles.hint}>
+            <Text style={styles.bold}>{tripPlanRoleWord(value)}</Text>{" "}
+            {TRIP_PLAN_ROLE_ABOUT[value]}
+          </Text>
+        ))}
         <UserSearch
           label={copy.searchField}
           failed={copy.searchFailed}
           offline={online ? undefined : OFFLINE}
-          onChange={() => setError(null)}
-          right={(user) => {
-            const pill = invitedIds.includes(user.id)
-              ? copy.invited
-              : tripPlanInviteePill(statusOf.get(user.id));
-            return pill ? (
-              <StatusPill label={pill} tone="outline" />
-            ) : (
-              <Button
-                label={copy.inviteSend}
-                compact
-                loading={busyId === user.id}
-                disabled={!online}
-                disabledReason={OFFLINE}
-                onPress={() => invite(user.id, user.username)}
-              />
-            );
+          onChange={(next) => {
+            setError(null);
+            setQuery(next);
           }}
+          only={(found) => tripPlanInviteLists(friends, found, query).others}
+          quietEmpty={lists.friends.length > 0}
+          resultsTitle={copy.others}
+          belowField={
+            lists.friends.length > 0 ? (
+              <>
+                <SectionHeader
+                  title={copy.friends}
+                  count={lists.friends.length}
+                />
+                {lists.friends.map((friend) => (
+                  <Row
+                    key={friend.id}
+                    icon="account"
+                    title={friend.username}
+                    right={action(friend)}
+                  />
+                ))}
+              </>
+            ) : null
+          }
+          right={action}
         />
+        <Text style={styles.hint}>{copy.othersHint}</Text>
       </>
     ),
     link: (
@@ -256,4 +297,5 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
 const useStyles = makeStyles((theme, textRole) => ({
   label: { ...muted(theme, textRole.detail) },
   hint: { ...muted(theme, textRole.detail), marginTop: spacing(1) },
+  bold: { ...muted(theme, textRole.control) },
 }));

@@ -1,5 +1,5 @@
-// Invite people, one step inside a plan's People view: find
-// someone by username and pick their role, or send a link. A link is shown
+// Invite people, one step inside a plan's People view: pick a friend, or find
+// someone else by username, and pick their role; or send a link. A link is shown
 // only when the clipboard refuses it, as Friends' is: it exists only in the
 // reply that made it. Live links are listed, each with Turn off.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
@@ -8,8 +8,10 @@ import {
   FRIENDS,
   planInviteUrl,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_ROLES_PICK_ORDER,
   tripPlanInviteLinkLine,
+  tripPlanInviteLists,
   tripPlanInviteePill,
   tripPlanInviteMessage,
   tripPlanRoleWord,
@@ -32,6 +34,7 @@ import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TSearchUser } from "../../placeUtils";
 import { useBusyIds } from "../../useBusyIds";
+import { getFriends, type TFriend } from "../../placeUtils";
 import { useUserSearch } from "../../useUserSearch";
 import {
   createInviteLink,
@@ -56,6 +59,8 @@ export default function PlanInvitePage({
   const toast = useToast();
   const [query, setQuery] = useState("");
   const { short, results } = useUserSearch(query, true, copy.searchFailed);
+  // A courtesy, like the links: the username search works without it.
+  const [friends, setFriends] = useState<TFriend[]>([]);
   const [role, setRole] = useState<TripPlanRole>("member");
   const [links, setLinks] = useState<TripPlanInviteView[]>([]);
   const [shown, setShown] = useState<string | null>(null);
@@ -72,6 +77,9 @@ export default function PlanInvitePage({
       // The list is a courtesy; the buttons work without it.
       .catch((err) => console.error(err));
   useEffect(() => {
+    getFriends()
+      .then(setFriends)
+      .catch((err) => console.error(err));
     void loadLinks();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan.id]);
@@ -143,6 +151,32 @@ export default function PlanInvitePage({
     }
   }
 
+  const lists = tripPlanInviteLists(friends, results, query);
+  const personRow = (user: TSearchUser) => {
+    const pill = tripPlanInviteePill(statusOf.get(user.id));
+    return (
+      <Row
+        key={user.id}
+        leading={<Avatar username={user.username} />}
+        title={user.username}
+        trailing={
+          pill ? (
+            <StatusPill label={pill} tone="muted" />
+          ) : (
+            <Button
+              compact
+              variant="outline"
+              busy={busy.isBusy(user.id)}
+              onClick={() => void invite(user)}
+            >
+              {copy.inviteSend}
+            </Button>
+          )
+        }
+      />
+    );
+  };
+
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_INVITE, "web">,
     ReactNode
@@ -172,36 +206,33 @@ export default function PlanInvitePage({
             }))}
           />
         </div>
+        {TRIP_PLAN_ROLES_PICK_ORDER.map((value) => (
+          <p key={value} className={classes.note}>
+            <strong>{tripPlanRoleWord(value)}</strong>{" "}
+            <span>{TRIP_PLAN_ROLE_ABOUT[value]}</span>
+          </p>
+        ))}
+        {lists.friends.length > 0 && (
+          <SectionHeader title={copy.friends} count={lists.friends.length} />
+        )}
+        {lists.friends.map(personRow)}
         {query.trim() !== "" && short ? (
-          <p className={classes.note}>{FRIENDS.copy.searchHint}</p>
-        ) : !short && results.length === 0 ? (
+          lists.friends.length === 0 && (
+            <p className={classes.note}>{FRIENDS.copy.searchHint}</p>
+          )
+        ) : !short &&
+          lists.friends.length === 0 &&
+          lists.others.length === 0 ? (
           <p className={classes.note}>{FRIENDS.copy.searchEmpty}</p>
         ) : (
-          results.map((user) => {
-            const pill = tripPlanInviteePill(statusOf.get(user.id));
-            return (
-              <Row
-                key={user.id}
-                leading={<Avatar username={user.username} />}
-                title={user.username}
-                trailing={
-                  pill ? (
-                    <StatusPill label={pill} tone="muted" />
-                  ) : (
-                    <Button
-                      compact
-                      variant="outline"
-                      busy={busy.isBusy(user.id)}
-                      onClick={() => void invite(user)}
-                    >
-                      {copy.inviteSend}
-                    </Button>
-                  )
-                }
-              />
-            );
-          })
+          lists.others.length > 0 && (
+            <>
+              <SectionHeader title={copy.others} />
+              {lists.others.map(personRow)}
+            </>
+          )
         )}
+        <p className={classes.note}>{copy.othersHint}</p>
       </>
     ),
     link: (

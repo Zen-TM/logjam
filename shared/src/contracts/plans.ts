@@ -28,6 +28,7 @@ import {
 import { SYSTEM_PLACE_TYPES } from "../placeTypes.js";
 import type { ScreenContract } from "./types.js";
 import { formatBytes } from "../format.js";
+import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
 
@@ -760,7 +761,11 @@ export const TRIP_PLAN_INVITE = {
   ],
   copy: {
     back: "Back to people",
-    searchField: "Search by username",
+    searchField: "Search friends or usernames",
+    friends: "Friends",
+    others: "Other people",
+    othersHint:
+      "Not a friend yet? Type their username to find them. People you invite need not be friends.",
     role: "Role",
     inviteSend: "Invite",
     invited: "Invited.",
@@ -779,6 +784,30 @@ export const TRIP_PLAN_INVITE = {
     searchFailed: "Couldn't search users.",
   },
 } as const satisfies ScreenContract;
+
+/** What each role can do, as Invite people tells it before a leader picks.
+ *  Which verbs a role runs is `PLAN_VERBS` and the lists beside it. */
+export const TRIP_PLAN_ROLE_ABOUT: Record<TripPlanRole, string> = {
+  member: "sees the plan, adds places and ways, answers forms and can leave.",
+  editor: "also edits the plan and its write-up.",
+  leader:
+    "also invites people, sets roles, runs forms, archives and deletes the plan.",
+};
+
+/** Invite people's two lists: friends matching what is typed (all of them
+ *  when nothing is), then the people the username search found who are not
+ *  friends. */
+export function tripPlanInviteLists<P extends { id: string; username: string }>(
+  friends: readonly P[],
+  found: readonly P[],
+  query: string,
+): { friends: P[]; others: P[] } {
+  const ids = new Set(friends.map((friend) => friend.id));
+  return {
+    friends: friends.filter((friend) => friendMatches(friend.username, query)),
+    others: found.filter((person) => !ids.has(person.id)),
+  };
+}
 
 /** A live invite link's row: "Made Mon 19 Oct, works until Mon 26 Oct",
  *  each the day it is where the reader is. */
