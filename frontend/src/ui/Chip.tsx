@@ -235,8 +235,6 @@ export function ChipPicker({
  *  rail is a few hundred pixels wide, and a full notch skipped most of it. */
 // One fixed factor; tune here if a mouse or trackpad feels wrong.
 const WHEEL_SPEED = 0.5;
-// Keep with `--fade` in Chip.module.css: how far a chip is kept from a rail edge.
-const FADE_PX = 48;
 
 export type ChipOption<T extends string> = {
   value: T;
@@ -346,7 +344,9 @@ export function ChipRail<T extends string>({
     if (!scroller || !chip) return;
     const fade = scroller.getBoundingClientRect();
     const box = chip.getBoundingClientRect();
-    const margin = FADE_PX;
+    // The stylesheet's own `--fade`, so the two cannot drift apart.
+    const margin =
+      parseFloat(getComputedStyle(scroller).getPropertyValue("--fade")) || 0;
     if (box.left < fade.left + margin)
       scroller.scrollLeft -= fade.left + margin - box.left;
     else if (box.right > fade.right - margin)

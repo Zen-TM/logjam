@@ -78,12 +78,10 @@ function OpenDialog({
     if (!dialog) return;
     const opener = document.activeElement as HTMLElement | null;
     dialog.showModal();
-    // preventScroll: focusing a field far down a long form would otherwise open
-    // the dialog scrolled past its own title.
     (
       dialog.querySelector<HTMLElement>("[data-autofocus]") ??
       headingRef.current
-    )?.focus({ preventScroll: true });
+    )?.focus();
 
     const requestClose = () => {
       closeIfDismissible();

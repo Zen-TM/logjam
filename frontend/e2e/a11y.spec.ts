@@ -1297,8 +1297,8 @@ test.describe("desktop", () => {
  * a phone). Nothing here is a contrast or a name, so axe cannot see it.
  */
 test.describe("fits", () => {
-  // Mutation: drop `preventScroll` from Dialog's focus, or put the rail's
-  // `scrollIntoView` back, and the form opens scrolled to its rail.
+  // Mutation: put the rail's `scrollIntoView` back in Chip.tsx and the form
+  // opens scrolled to its rail.
   test("a long form opens at its title, not scrolled to its rail", async ({
     page,
   }) => {
@@ -1332,7 +1332,7 @@ test.describe("fits", () => {
     );
   });
 
-  // Mutation: remove the SHORT_VIEWPORT_PX branch in BottomSheet.tsx and the
+  // Mutation: remove the short-window branch of BottomSheet.tsx and the
   // sheet shows its hero, rail and about one row at 200% zoom.
   test("the phone sheet shows several rows at 200% zoom", async ({ page }) => {
     await page.setViewportSize({ width: 720, height: 450 });
