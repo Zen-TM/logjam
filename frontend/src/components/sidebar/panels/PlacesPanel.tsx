@@ -722,6 +722,7 @@ function PlacesPanel({
               subtitle={subtitle || undefined}
               selected={isSelected}
               disabled={selecting && !owned}
+              disabledReason="Shared with you, so you can't select it"
               onOpen={() => openPlace(place)}
               onPointerEnter={() => onHoverPlace(place.id)}
               onPointerLeave={() => onHoverPlace(null)}

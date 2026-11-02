@@ -374,6 +374,8 @@ export default function PlansPanel({
     );
   };
 
+  // A new plan lands under Upcoming, so Past and Archived don't offer one.
+  const offersNewPlan = plans.length === 0 || bucket === "upcoming";
   const empty =
     loaded && rows.length === 0 && tripPlansEmpty(plans.length, bucket);
 
@@ -455,13 +457,13 @@ export default function PlansPanel({
           icon={empty.icon}
           title={empty.title}
           body={empty.body}
-          actions={newPlanButton}
+          actions={offersNewPlan ? newPlanButton : undefined}
         />
       </div>
     ) : (
       <div className={classes.list}>
         {rows.map(renderRow)}
-        <ListEnd>{newPlanButton}</ListEnd>
+        {offersNewPlan && <ListEnd>{newPlanButton}</ListEnd>}
       </div>
     ),
   };

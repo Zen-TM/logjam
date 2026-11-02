@@ -200,6 +200,9 @@ describe("the plans list", () => {
     expect(tripPlansEmpty(0, "past").title).toBe("No plans yet");
     expect(tripPlansEmpty(2, "past").title).toBe("No past plans");
     expect(tripPlansEmpty(2, "archived").title).toBe("Nothing archived");
+    // Past says where plans arrive; no other bucket needs the line.
+    expect(tripPlansEmpty(2, "past").body).toMatch(/dates have passed/);
+    expect(tripPlansEmpty(2, "upcoming").body).toBeUndefined();
   });
 });
 

@@ -411,6 +411,7 @@ export default function RoutesPanel({
                 {way.shared && (
                   <StatusPill
                     label={owner ? `From ${owner}` : "Shared"}
+                    icon="friends"
                     tone="outline"
                   />
                 )}

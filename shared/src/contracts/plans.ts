@@ -55,6 +55,7 @@ export const TRIP_PLANS_LIST = {
       "A plan is where a group gets ready for a trip: the write-up, the places and ways, who's coming and their details.",
     noUpcomingTitle: "Nothing coming up",
     noPastTitle: "No past plans",
+    noPastBody: "A plan moves here once its dates have passed.",
     noArchivedTitle: "Nothing archived",
     // The hero's line and Logjam GPS's More row, when nothing is coming up.
     nothingPlanned: "Nothing planned",
@@ -180,6 +181,9 @@ export function tripPlansEmpty(
         : bucket === "past"
           ? copy.noPastTitle
           : copy.noArchivedTitle,
+    // A new plan would not land here, so the state says where plans arrive
+    // instead of offering one.
+    body: bucket === "past" ? copy.noPastBody : undefined,
   };
 }
 
