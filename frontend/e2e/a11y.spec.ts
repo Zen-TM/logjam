@@ -1140,9 +1140,20 @@ test.describe("desktop", () => {
           ? route.fulfill({ json: [] })
           : route.continue(),
     );
-    await page.addInitScript(() =>
-      localStorage.setItem("logjam.showGauges", "true"),
-    );
+    // Open on the gauge, past GAUGES_MIN_ZOOM: the start view (z7) draws none.
+    await page.addInitScript(() => {
+      localStorage.setItem("logjam.showGauges", "true");
+      localStorage.setItem(
+        "logjam.mapView",
+        JSON.stringify({
+          lat: -33.8688,
+          lng: 151.2093,
+          zoom: 9,
+          bearing: 0,
+          pitch: 0,
+        }),
+      );
+    });
     await openApp(page);
     // The canvas is on screen before the map has loaded and its handlers are
     // attached; the zoom buttons are enabled once it has.
