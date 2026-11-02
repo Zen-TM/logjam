@@ -80,7 +80,7 @@ export default function PlanPeople({
     busy.start(id);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       onChanged();
     } catch (err) {
       console.error(err);

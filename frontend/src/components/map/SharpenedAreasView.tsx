@@ -169,7 +169,7 @@ export default function SharpenedAreasView({
             run: async () => {
               try {
                 await unshareEntityWith("topoJob", job.jobId, "me");
-                toast.success(`${label} removed.`);
+                toast.done(`${label} removed.`);
                 onRefetchCompletedTopoJobs();
               } catch (err) {
                 console.error(err);

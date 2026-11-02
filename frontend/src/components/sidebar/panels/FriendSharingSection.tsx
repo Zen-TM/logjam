@@ -259,7 +259,7 @@ function FriendSharingSection({
     setBusy(true);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       setPendingBulk(null);
       clearSelection();
       load();
@@ -282,7 +282,7 @@ function FriendSharingSection({
         friend.friendshipId,
         picked.map(shareCardItem),
       );
-      toast.success(
+      toast.done(
         unshareOutcomeMessage({ revokedCount, friendName: friend.username }),
       );
     }, copy.unshareFailed);
@@ -307,7 +307,7 @@ function FriendSharingSection({
     }
     const outcome = removeOutcomeMessage({ removed, failed });
     if (outcome.tone === "error") toast.error(outcome.text);
-    else toast.success(outcome.text);
+    else toast.done(outcome.text);
     setPendingBulk(null);
     clearSelection();
     load();

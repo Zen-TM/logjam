@@ -36,6 +36,7 @@ import {
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   LIDAR_JOB_COPY,
+  type LoadState,
 } from "@logjam/shared";
 import type {
   TFilters,
@@ -62,7 +63,7 @@ import {
   IconButton,
   IconTile,
   ListEnd,
-  LoadingState,
+  ListBody,
   Menu,
   Row,
   SearchField,
@@ -127,7 +128,8 @@ function download(blob: Blob, filename: string) {
  */
 function PlacesPanel({
   places,
-  placesLoaded,
+  placesState,
+  placesError,
   placesTotal,
   sharedPlaces,
   placeTypes,
@@ -156,7 +158,9 @@ function PlacesPanel({
   places: TPlace[];
   /** False until the first fetch lands — an empty list before then is not "no
    *  places yet", and saying so flashes a first-run screen at every user. */
-  placesLoaded: boolean;
+  placesState: LoadState;
+  /** Our sentence for a first load that failed. */
+  placesError: string | null;
   /** The true owned-place total before the server's list cap; null until known. */
   placesTotal: number | null;
   sharedPlaces: TPlace[];
@@ -433,7 +437,7 @@ function PlacesPanel({
     setDeleting(true);
     try {
       await bulkDeletePlaces(pendingDelete);
-      toast.success(`Deleted ${placesCountLabel(count)}.`);
+      toast.done(`Deleted ${placesCountLabel(count)}.`);
       setPendingDelete(null);
       clearSelection();
       onQuotaChanged();
@@ -484,7 +488,7 @@ function PlacesPanel({
       const source = result.sourceUpdatedAt
         ? ` · source ${new Date(result.sourceUpdatedAt).toLocaleDateString()}`
         : "";
-      toast.success(
+      toast.done(
         `RopeWiki import: ${done.length > 0 ? done.join(", ") : "no new places"}${review}${source}`,
       );
     } catch (err) {
@@ -638,7 +642,7 @@ function PlacesPanel({
   );
 
   const empty =
-    placesLoaded && visible.length === 0
+    placesState === "ready" && visible.length === 0
       ? placesEmptyKind({ total: collection.length })
       : null;
   const emptyState = empty && placesEmptyState(empty, { platform: "web" });
@@ -655,132 +659,136 @@ function PlacesPanel({
     </Button>
   );
 
-  const list = !placesLoaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : empty && emptyState ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon={emptyState.icon}
-        title={emptyState.title}
-        body={emptyState.body}
-        actions={
-          emptyState.action === "clear" ? (
-            <Button compact variant="outline" onClick={clearEverything}>
-              {copy.clearFilters}
-            </Button>
-          ) : (
-            <>
-              {addPlaceButton}
-              {empty === "firstRun" && (
-                <Button
-                  compact
-                  variant="outline"
-                  icon={PLACES_ADD_ICON.importFile}
-                  onClick={onOpenUnifiedImport}
-                >
-                  {PLACES_ADD.copy.importFile}
+  const list = (
+    <ListBody
+      state={placesState}
+      loadingLabel={copy.loading}
+      error={placesError}
+      onRetry={onRefetch}
+      empty={
+        empty && emptyState ? (
+          <EmptyState
+            icon={emptyState.icon}
+            title={emptyState.title}
+            body={emptyState.body}
+            actions={
+              emptyState.action === "clear" ? (
+                <Button compact variant="outline" onClick={clearEverything}>
+                  {copy.clearFilters}
                 </Button>
-              )}
-            </>
-          )
-        }
-      />
-    </div>
-  ) : (
-    <div className={classes.list}>
-      {visible.map((row) => {
-        const { place, owned, status } = row;
-        const isSelected = selectedIds.includes(place.id);
-        const type = typeById.get(place.placeTypeId);
-        const subtitle = [
-          filters.placeTypeId == null ? type?.name : null,
-          placeSummary(place),
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const quality = qualityLabel(
-          numericFieldValue(place.fieldValues, "quality"),
-        );
-        const shareCount = owned ? (place._count?.shares ?? 0) : 0;
-        const tile = (
-          <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} />
-        );
-        return (
-          <Row
-            key={`${owned ? "o" : "s"}-${place.id}`}
-            data-place-id={place.id}
-            title={place.name}
-            subtitle={subtitle || undefined}
-            description={PLACE_STATUS_LABELS[status]}
-            selected={isSelected}
-            disabled={selecting && !owned}
-            onOpen={() => openPlace(place)}
-            onPointerEnter={() => onHoverPlace(place.id)}
-            onPointerLeave={() => onHoverPlace(null)}
-            leading={
-              owned ? (
-                <TileCheckbox
-                  tile={tile}
-                  label={`Select ${place.name}`}
-                  checked={isSelected}
-                  selecting={selecting}
-                  onToggle={(extendRange) =>
-                    toggleSelected(place.id, extendRange)
-                  }
-                />
               ) : (
-                <IconTile
-                  icon={STATUS_ICON[status]}
-                  hue={STATUS_HUE[status]}
-                  label={PLACE_STATUS_LABELS[status]}
-                />
+                <>
+                  {addPlaceButton}
+                  {empty === "firstRun" && (
+                    <Button
+                      compact
+                      variant="outline"
+                      icon={PLACES_ADD_ICON.importFile}
+                      onClick={onOpenUnifiedImport}
+                    >
+                      {PLACES_ADD.copy.importFile}
+                    </Button>
+                  )}
+                </>
               )
             }
-            trailing={
-              <>
-                {quality && (
-                  <span
-                    className={classes.meta}
-                    aria-label={`Rated ${quality.replace("★ ", "")}`}
-                  >
-                    <Icon idea="favourite" size={12} aria-hidden />
-                    {quality.replace("★ ", "")}
-                  </span>
-                )}
-                {shareCount > 0 && (
-                  <span
-                    className={classes.meta}
-                    title={`Shared with ${plural(shareCount, "friend")}`}
-                    aria-label={`Shared with ${plural(shareCount, "friend")}`}
-                  >
-                    <Icon idea="friends" size={12} aria-hidden />
-                    {shareCount}
-                  </span>
-                )}
-                {!selecting && (
-                  <Menu
-                    label={`Actions for ${place.name}`}
-                    title={place.name}
-                    placement="right-start"
-                    entries={rowEntries(row)}
-                    trigger={(props) => (
-                      <IconButton
-                        {...props}
-                        icon="overflow"
-                        label={`Actions for ${place.name}`}
-                      />
-                    )}
-                  />
-                )}
-              </>
-            }
           />
-        );
-      })}
-      <ListEnd>{addPlaceButton}</ListEnd>
-    </div>
+        ) : null
+      }
+    >
+      <div className={classes.list}>
+        {visible.map((row) => {
+          const { place, owned, status } = row;
+          const isSelected = selectedIds.includes(place.id);
+          const type = typeById.get(place.placeTypeId);
+          const subtitle = [
+            filters.placeTypeId == null ? type?.name : null,
+            placeSummary(place),
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const quality = qualityLabel(
+            numericFieldValue(place.fieldValues, "quality"),
+          );
+          const shareCount = owned ? (place._count?.shares ?? 0) : 0;
+          const tile = (
+            <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} />
+          );
+          return (
+            <Row
+              key={`${owned ? "o" : "s"}-${place.id}`}
+              data-place-id={place.id}
+              title={place.name}
+              subtitle={subtitle || undefined}
+              description={PLACE_STATUS_LABELS[status]}
+              selected={isSelected}
+              disabled={selecting && !owned}
+              onOpen={() => openPlace(place)}
+              onPointerEnter={() => onHoverPlace(place.id)}
+              onPointerLeave={() => onHoverPlace(null)}
+              leading={
+                owned ? (
+                  <TileCheckbox
+                    tile={tile}
+                    label={`Select ${place.name}`}
+                    checked={isSelected}
+                    selecting={selecting}
+                    onToggle={(extendRange) =>
+                      toggleSelected(place.id, extendRange)
+                    }
+                  />
+                ) : (
+                  <IconTile
+                    icon={STATUS_ICON[status]}
+                    hue={STATUS_HUE[status]}
+                    label={PLACE_STATUS_LABELS[status]}
+                  />
+                )
+              }
+              trailing={
+                <>
+                  {quality && (
+                    <span
+                      className={classes.meta}
+                      aria-label={`Rated ${quality.replace("★ ", "")}`}
+                    >
+                      <Icon idea="favourite" size={12} aria-hidden />
+                      {quality.replace("★ ", "")}
+                    </span>
+                  )}
+                  {shareCount > 0 && (
+                    <span
+                      className={classes.meta}
+                      title={`Shared with ${plural(shareCount, "friend")}`}
+                      aria-label={`Shared with ${plural(shareCount, "friend")}`}
+                    >
+                      <Icon idea="friends" size={12} aria-hidden />
+                      {shareCount}
+                    </span>
+                  )}
+                  {!selecting && (
+                    <Menu
+                      label={`Actions for ${place.name}`}
+                      title={place.name}
+                      placement="right-start"
+                      entries={rowEntries(row)}
+                      trigger={(props) => (
+                        <IconButton
+                          {...props}
+                          icon="overflow"
+                          label={`Actions for ${place.name}`}
+                        />
+                      )}
+                    />
+                  )}
+                </>
+              }
+            />
+          );
+        })}
+        <ListEnd>{addPlaceButton}</ListEnd>
+      </div>
+    </ListBody>
   );
 
   const sheet = sheetOpen && (

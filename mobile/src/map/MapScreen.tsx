@@ -2726,7 +2726,7 @@ export function MapScreen({
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
   // and a subtitle (DESIGN.md).
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
@@ -2736,7 +2736,7 @@ export function MapScreen({
       BASEMAP_CATALOG.find((e) => e.id === id)?.name ?? id;
     notify(
       basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
-      "info",
+      "done",
     );
   }, [shownBasemapId, basemapId, notify]);
 
@@ -3621,7 +3621,7 @@ export function MapScreen({
         gpsQuality === "coarse"
           ? "Weak GPS signal — your position could be out by hundreds of metres."
           : "No GPS signal — the grey arrow is where you last had one.",
-        "info",
+        "done",
       );
     }, GPS_TOAST_DELAY_MS);
     return () => clearTimeout(timer);
@@ -4216,7 +4216,7 @@ export function MapScreen({
       if (!dotWanted) handleLocateMe();
       // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
-      notify("Recording — tap your location dot for stats.", "info");
+      notify("Recording — tap your location dot for stats.", "done");
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
@@ -4237,7 +4237,7 @@ export function MapScreen({
       try {
         await continueTrackRecording(track);
         if (!dotWanted) handleLocateMe();
-        notify(`Recording again — “${track.name}” continues.`, "info");
+        notify(`Recording again — “${track.name}” continues.`, "done");
       } catch (err) {
         console.error(err);
         Alert.alert(
@@ -4591,7 +4591,7 @@ export function MapScreen({
         fullText={`${navTarget.name} · ${navText}`}
         dismissLabel="Stop navigating"
         onDismiss={() => setNavTarget(null)}
-        onPress={() => notify(`${navTarget.name} · ${navText}`, "info")}
+        onPress={() => notify(`${navTarget.name} · ${navText}`, "done")}
       />
     ) : null,
     // A map that quietly hides pins is a map you can't trust. Says how many
@@ -4608,7 +4608,7 @@ export function MapScreen({
         onPress={() =>
           notify(
             `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
-            "info",
+            "done",
           )
         }
       />
@@ -5709,7 +5709,7 @@ export function MapScreen({
         onClose={() => setTappedPoint(null)}
         onNavigate={navigateToPoint}
         onDropMarker={dropMarkerAt}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
       />
 
       {/* Press-and-hold: a marker is a scratch mark, a canyon is a record —
@@ -5796,7 +5796,7 @@ export function MapScreen({
           setAddPlaceAt(null);
           setEditingPlace(null);
         }}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       {/* One place's verbs, from the pin the user tapped — the same sheet the
@@ -5815,7 +5815,7 @@ export function MapScreen({
           setAddPlaceAt(null);
           setEditingPlace(place);
         }}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 
@@ -5832,7 +5832,7 @@ export function MapScreen({
         }
         existingTypes={tripTypes}
         onClose={() => setLoggingPlace(null)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <PlanPlaceSheet
@@ -5842,7 +5842,7 @@ export function MapScreen({
         }
         online={connectivity === "online"}
         onClose={() => setPlanPlaceId(null)}
-        onInfo={(text, tone) => notify(text, tone ?? "info")}
+        onInfo={(text, tone) => notify(text, tone ?? "done")}
       />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at
@@ -5858,7 +5858,7 @@ export function MapScreen({
           if (target) openRouteForEditing(target);
         }}
         onOpenPlace={onOpenPlace}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 
@@ -5886,14 +5886,14 @@ export function MapScreen({
         allowNetwork={!offlineOnly}
         onContinueRecording={(track) => void handleContinueRecording(track)}
         onLogTrip={setLoggingTrack}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 
       <LogTripFromTrackSheet
         track={loggingTrack}
         onClose={() => setLoggingTrack(null)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       {/* An imported file's verbs, from the features the user tapped. Same
@@ -5903,7 +5903,7 @@ export function MapScreen({
         visible={optionsImportId !== null}
         onClose={() => setOptionsImportId(null)}
         allowNetwork={!offlineOnly}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 

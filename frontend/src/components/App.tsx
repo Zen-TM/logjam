@@ -616,6 +616,7 @@ function App() {
     places,
     total: placesTotal,
     loaded: placesLoaded,
+    state: placesState,
     error: placesError,
     refetch,
   } = usePlaces(loadsUserData);
@@ -808,7 +809,7 @@ function App() {
   const {
     tripLogs,
     total: tripLogsTotal,
-    loaded: tripLogsLoaded,
+    state: tripLogsState,
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(loadsUserData);
@@ -838,10 +839,13 @@ function App() {
   // dialog must offer every one or a user could never make their first canyon.
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
-  // Surface background data-load errors as toasts
+  // Surface background data-load errors as toasts. A first load that fails is
+  // said in place by Places and Trips (their ErrorState); only a refetch that
+  // fails under a list already shown is a toast.
+  const placesBackgroundError = placesState === "ready" ? placesError : null;
   useEffect(() => {
-    if (placesError) toast.error(placesError);
-  }, [placesError, toast]);
+    if (placesBackgroundError) toast.error(placesBackgroundError);
+  }, [placesBackgroundError, toast]);
   useEffect(() => {
     if (currentUserError) toast.error(currentUserError);
   }, [currentUserError, toast]);
@@ -854,9 +858,11 @@ function App() {
   useEffect(() => {
     if (notificationsError) toast.error(notificationsError);
   }, [notificationsError, toast]);
+  const tripLogsBackgroundError =
+    tripLogsState === "ready" ? tripLogsError : null;
   useEffect(() => {
-    if (tripLogsError) toast.error(tripLogsError);
-  }, [tripLogsError, toast]);
+    if (tripLogsBackgroundError) toast.error(tripLogsBackgroundError);
+  }, [tripLogsBackgroundError, toast]);
   // A first load that fails is said by Plans itself (its ErrorState); only
   // a later refetch's failure, under a list already shown, is a toast.
   const plansBackgroundError = plans.length > 0 ? plansError : null;
@@ -1746,7 +1752,8 @@ function App() {
               ) : null
             }
             places={places}
-            placesLoaded={placesLoaded}
+            placesState={placesState}
+            placesError={placesError}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
             onAddPlace={() => setShowAdd(true)}
@@ -1791,7 +1798,8 @@ function App() {
             selectedTripLogId={selectedTripLogId}
             setSelectedTripLogId={setSelectedTripLogId}
             tripLogsTotal={tripLogsTotal}
-            tripLogsLoaded={tripLogsLoaded}
+            tripLogsState={tripLogsState}
+            tripLogsError={tripLogsError}
             onRefetchTripLogs={refetchAfterTripWrite}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={setCustomFieldDefs}

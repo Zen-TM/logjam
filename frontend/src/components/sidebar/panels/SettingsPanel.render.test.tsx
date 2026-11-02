@@ -15,7 +15,7 @@ import {
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
 import SettingsPanel from "./SettingsPanel";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("./ThemeChooser", () => ({ default: () => null }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
@@ -37,6 +37,8 @@ function show(onCurrentUserChange = vi.fn()) {
   render(
     <SettingsPanel
       currentUser={user}
+      currentUserError={null}
+      onRetryCurrentUser={() => {}}
       customFieldDefs={[]}
       onCustomFieldDefsChange={() => {}}
       placeCustomFieldDefs={[]}
@@ -62,7 +64,7 @@ describe("the leaderboard switch", () => {
     fireEvent.click(toggle);
 
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(LEADERBOARD_SETTING.joined),
+      expect(toast.done).toHaveBeenCalledWith(LEADERBOARD_SETTING.joined),
     );
     expect(updateUserPreferences).toHaveBeenCalledWith({
       leaderboardOptIn: true,

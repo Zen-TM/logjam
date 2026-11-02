@@ -43,7 +43,7 @@ export function PlanPlaceSheet({
   place: TripPlanPlace | null;
   online: boolean;
   onClose: () => void;
-  onInfo: (message: string, tone?: "info" | "error") => void;
+  onInfo: (message: string, tone?: "done" | "error") => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();

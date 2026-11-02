@@ -68,7 +68,7 @@ export default function PlanInviteLinkDialog({
         setInvite(null);
         if (result.status === "active") onOpenPlan(result.planId, false);
         else {
-          toast.success(tripPlanAskedMessage(result.waitingFor.username));
+          toast.done(tripPlanAskedMessage(result.waitingFor.username));
           onShowPlans();
         }
       }}

@@ -22,6 +22,7 @@ export const INBOX = {
     clearSearch: "Clear search",
     showEverything: "Show everything",
     markAllRead: "Mark all as read",
+    markedAllRead: "All marked as read.",
 
     bucketAll: "All",
     bucketUnread: "Unread",

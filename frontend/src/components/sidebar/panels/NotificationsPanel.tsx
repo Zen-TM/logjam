@@ -449,7 +449,7 @@ function NotificationsPanel({
     hide(ids);
     try {
       await Promise.all(ids.map((id) => deleteNotification(id)));
-      toast.success(
+      toast.done(
         ids.length === 1
           ? "Notification deleted."
           : `Deleted ${ids.length} notifications.`,
@@ -481,7 +481,7 @@ function NotificationsPanel({
   const applyReadAction = async () => {
     if (!readAction) return;
     if (await setRead(readAction.ids, readAction.read))
-      toast.success(readAction.success);
+      toast.done(readAction.success);
   };
 
   const markAllRead = async () => {
@@ -489,6 +489,7 @@ function NotificationsPanel({
     onOverrideRead(unreadIds, true);
     try {
       await markAllNotificationsRead();
+      toast.done(INBOX.copy.markedAllRead);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't mark notifications read."));
@@ -541,7 +542,7 @@ function NotificationsPanel({
           triggerDownload(downloadUrl);
           // Logjam Web has no Saved: accepting a copy here IS the download, so
           // the phone's "find it in Saved" would send the user looking for nothing.
-          toast.success(`Downloading ${filename}.`);
+          toast.done(`Downloading ${filename}.`);
         } else {
           await declineFileSend(target.targetId);
         }
@@ -550,7 +551,7 @@ function NotificationsPanel({
           if (!n.read) void setRead([n.id], true);
         } else {
           hide([n.id]);
-          toast.success(action.success);
+          toast.done(action.success);
         }
       } catch (err) {
         console.error(err);

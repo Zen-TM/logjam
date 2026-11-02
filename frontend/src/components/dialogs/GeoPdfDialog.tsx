@@ -668,7 +668,7 @@ function GeoPdfDialog({
         method: "POST",
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
-      toast.success(
+      toast.done(
         "Making your export. It comes to your Inbox, and downloads itself if this tab is still open.",
       );
       onExportQueued?.();
@@ -831,7 +831,7 @@ function GeoPdfDialog({
             terrainPinned: !terrainFollowsMap,
           }),
         );
-        toast.success("Your GeoPDF is downloading.");
+        toast.done("Your GeoPDF is downloading.");
         onClose();
       } else if (result.reason === "too-large") {
         setError(GEOPDF_TOO_LARGE);

@@ -82,7 +82,7 @@ export async function runBatchFileAction({
  */
 export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
   text: string;
-  tone: "info" | "error";
+  tone: "done" | "error";
 } {
   const { kind, done, failed, total } = outcome;
   if (done === 0) {
@@ -108,7 +108,7 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
       kind === "accept"
         ? `Saved ${countOf(done, "file")} — find ${done === 1 ? "it" : "them"} in Saved.`
         : `Turned down ${countOf(done, "file")}.`,
-    tone: "info",
+    tone: "done",
   };
 }
 

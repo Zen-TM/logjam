@@ -11,7 +11,7 @@ import { FRIENDS } from "@logjam/shared";
 import { getLeaderboard, sendFriendRequest } from "../../../placeUtils";
 import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
@@ -93,7 +93,7 @@ describe("the invite link in the Add dialog", () => {
     );
 
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
+      expect(toast.done).toHaveBeenCalledWith(FRIENDS.copy.inviteCopied),
     );
     expect(screen.queryByText(/A{43}/)).toBeNull();
   });
@@ -128,7 +128,7 @@ describe("sending a request from the Add dialog", () => {
 
     expect(await screen.findByText(FRIENDS.copy.pillFriend)).toBeTruthy();
     expect(screen.queryByText(FRIENDS.copy.pillRequested)).toBeNull();
-    expect(toast.success).toHaveBeenCalledWith("carol is now a friend.");
+    expect(toast.done).toHaveBeenCalledWith("carol is now a friend.");
     // Their request's prompt has gone from the inbox.
     expect(onFriended).toHaveBeenCalled();
   });
@@ -138,7 +138,7 @@ describe("sending a request from the Add dialog", () => {
 
     expect(await screen.findByText(FRIENDS.copy.pillRequested)).toBeTruthy();
     expect(onFriended).not.toHaveBeenCalled();
-    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.done).not.toHaveBeenCalled();
   });
 });
 

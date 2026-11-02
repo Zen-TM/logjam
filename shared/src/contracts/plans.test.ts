@@ -1068,7 +1068,7 @@ describe("Add a place or way's footer and outcome", () => {
     expect(tripPlanAddOutcome({ ...base, added: 0, why: "No." })).toBeNull();
     expect(tripPlanAddOutcome({ ...base, added: 2 })).toEqual({
       message: "Added 2 places or ways.",
-      tone: "info",
+      tone: "done",
     });
     expect(tripPlanAddOutcome({ ...base, added: 1, why: "No." })).toEqual({
       message: "Added 1 of 2. No.",

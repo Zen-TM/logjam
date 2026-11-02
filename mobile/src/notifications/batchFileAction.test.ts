@@ -52,7 +52,7 @@ describe("batchFileActionMessage", () => {
   it("reports a clean run plainly, and says where the files went", () => {
     expect(
       batchFileActionMessage({ kind: "accept", done: 8, failed: 0, total: 8 }),
-    ).toEqual({ text: "Saved 8 files — find them in Saved.", tone: "info" });
+    ).toEqual({ text: "Saved 8 files — find them in Saved.", tone: "done" });
   });
 
   it("reports a PARTIAL run as an error, because the rest is the user's problem now", () => {

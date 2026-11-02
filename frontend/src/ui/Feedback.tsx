@@ -1,3 +1,4 @@
+import type { LoadState, ToastAction, ToastTone } from "@logjam/shared";
 import type { CSSProperties, ReactNode } from "react";
 import { Button, IconButton } from "./Button";
 import classes from "./Feedback.module.css";
@@ -135,6 +136,48 @@ export function ErrorState({
 }
 
 /**
+ * What a list's body is while its data is `state`: the loading line, the
+ * failure with Try again, the `empty` state when there is one, or `children`.
+ * A failed load never reaches `empty` (shared/DESIGN.md §11), so the one place
+ * that chooses is here, not in each panel.
+ */
+export function ListBody({
+  state,
+  loadingLabel,
+  error,
+  onRetry,
+  empty,
+  children,
+}: {
+  state: LoadState;
+  loadingLabel?: string;
+  /** Our sentence for a load that failed ("Couldn't load places."). */
+  error: string | null;
+  onRetry?: () => void;
+  /** Drawn instead of `children` when the data is in hand and there is nothing to list. */
+  empty?: ReactNode;
+  children: ReactNode;
+}) {
+  if (state === "loading")
+    return (
+      <div className={classes.listArea}>
+        <LoadingState label={loadingLabel} />
+      </div>
+    );
+  if (state === "failed")
+    return (
+      <div className={classes.listArea}>
+        <ErrorState
+          message={error ?? "Couldn't load this."}
+          onRetry={onRetry}
+        />
+      </div>
+    );
+  if (empty) return <div className={classes.listArea}>{empty}</div>;
+  return <>{children}</>;
+}
+
+/**
  * The bar a multi-select swaps into a rail's slot: clear, the count, then the
  * group verbs the caller passes (Buttons and IconButtons). Same height as a
  * chip rail, so the list below does not jump when selection starts.
@@ -163,26 +206,36 @@ export function SelectionBar({
   );
 }
 
-export type ToastSeverity = "success" | "error" | "info";
-
 /** One transient message. The dismiss button sits at the far right edge. */
 export function Toast({
   message,
-  severity,
+  tone,
+  action,
   onDismiss,
 }: {
   message: string;
-  severity: ToastSeverity;
+  tone: ToastTone;
+  /** The one thing the outcome offers ("Undo", "Open"); pressing it dismisses. */
+  action?: ToastAction;
   onDismiss: () => void;
 }) {
-  const icon = severity === "error" ? "warning" : "success";
+  const icon = tone === "error" ? "warning" : "success";
   return (
-    <div
-      className={classes.toast}
-      role={severity === "error" ? "alert" : "status"}
-    >
+    <div className={classes.toast} role={tone === "error" ? "alert" : "status"}>
       <Icon idea={icon} size={16} className={classes.toastGlyph} />
       <span className={classes.toastText}>{message}</span>
+      {action && (
+        <button
+          type="button"
+          className={classes.toastAction}
+          onClick={() => {
+            action.onPress();
+            onDismiss();
+          }}
+        >
+          {action.label}
+        </button>
+      )}
       <IconButton
         icon="close"
         label="Dismiss"

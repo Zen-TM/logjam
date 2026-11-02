@@ -18,7 +18,7 @@ import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanPlacePage from "./PlanPlacePage";
 import type { TPlace } from "../../placeUtils";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../plansApi", () => ({
   patchPlanItem: vi.fn(async () => undefined),

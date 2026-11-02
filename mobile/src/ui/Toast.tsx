@@ -1,3 +1,4 @@
+import { toastMs, type ToastAction, type ToastTone } from "@logjam/shared";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
@@ -7,12 +8,12 @@ import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
 export type ToastMessage = {
   text: string;
-  tone: "info" | "error";
+  tone: ToastTone;
+  /** The one thing the outcome offers ("Undo", "Open"); pressing it dismisses. */
+  action?: ToastAction;
   /** Bump on every new message so a repeat of the same text re-shows + re-times. */
   nonce: number;
 };
-
-const VISIBLE_MS = { info: 2600, error: 4200 } as const;
 
 /**
  * Transient status, floating above the screen's content — the outcome of an
@@ -92,15 +93,18 @@ export function Toast({
       }),
     ]);
     show.start();
-    const timer = setTimeout(() => {
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) dismissed();
-      });
-    }, VISIBLE_MS[message.tone]);
+    const timer = setTimeout(
+      () => {
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          if (finished) dismissed();
+        });
+      },
+      toastMs(message.tone, message.action),
+    );
     return () => {
       show.stop();
       clearTimeout(timer);
@@ -129,6 +133,18 @@ export function Toast({
           color={theme.onInverse}
         />
         <Text style={styles.text}>{message.text}</Text>
+        {message.action ? (
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={() => {
+              message.action?.onPress();
+              onDismissed();
+            }}
+          >
+            <Text style={styles.action}>{message.action.label}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
@@ -167,4 +183,9 @@ const useStyles = makeStyles((theme, textRole) => ({
   toastError: { backgroundColor: theme.inverse, borderColor: theme.inverse },
   close: { marginLeft: spacing(0.5) },
   text: { ...textRole.control, flexShrink: 1, color: theme.onInverse },
+  action: {
+    ...textRole.control,
+    color: theme.onInverse,
+    textDecorationLine: "underline",
+  },
 }));

@@ -362,7 +362,7 @@ export default function WayDetailPanel({
     void run(async () => {
       const copy = await copyRoute(route.id);
       if (alsoRemove) await unshareEntityWith("route", route.id, "me");
-      toast.success(
+      toast.done(
         alsoRemove
           ? `"${copy.name}" is yours now, and ${ownerName ?? "their"} share is removed.`
           : `"${copy.name}" is yours now.`,
@@ -407,7 +407,7 @@ export default function WayDetailPanel({
     setEnding(null);
     void run(async () => {
       await unshareEntityWith("route", route.id, "me");
-      toast.success(`${way.title} removed.`);
+      toast.done(`${way.title} removed.`);
       onBack();
     }, "Couldn't remove that route.");
   };
@@ -505,7 +505,7 @@ export default function WayDetailPanel({
     const from = linkedPlace?.name;
     void run(async () => {
       await updateRoute(route.id, { placeId: null });
-      toast.success(from ? `Unlinked from ${from}.` : "Unlinked.");
+      toast.done(from ? `Unlinked from ${from}.` : "Unlinked.");
     }, "Couldn't unlink the route.");
   };
 
@@ -517,9 +517,9 @@ export default function WayDetailPanel({
       // Say it worked. The panel showing the place afterwards is the real
       // confirmation, but it was silent even once that started working, and a
       // write with no acknowledgement reads as a write that did not happen.
-      toast.success(name ? `Linked to ${name}.` : "Linked to a place.");
+      toast.done(name ? `Linked to ${name}.` : "Linked to a place.");
       if (result.displacedRoute) {
-        toast.info(
+        toast.done(
           `"${result.displacedRoute.name}" was unlinked and kept as a standalone route.`,
         );
       }
@@ -761,7 +761,7 @@ export default function WayDetailPanel({
           send={async (recipientIds) => {
             const { filename } = await sendCopyOfMedia(file.id, recipientIds);
             setShowSendCopy(false);
-            toast.success(
+            toast.done(
               recipientIds.length === 1
                 ? `Sent ${filename}.`
                 : `Sent ${filename} to ${recipientIds.length} friends.`,

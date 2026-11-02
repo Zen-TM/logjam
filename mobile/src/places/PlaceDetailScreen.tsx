@@ -180,7 +180,7 @@ export function PlaceDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     setToast((prev) => ({ text, tone, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
 
@@ -277,7 +277,7 @@ export function PlaceDetailScreen({
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
     // native module — the same copy the waypoint and tapped-point sheets use.
     Clipboard.setString(position);
-    notify(PLACE_PAGE.copy.copyPosition, "info");
+    notify(PLACE_PAGE.copy.copyPosition, "done");
   };
 
   /**
@@ -299,7 +299,7 @@ export function PlaceDetailScreen({
             : action === "notes"
               ? "Added to the notes."
               : "Discarded.",
-          "info",
+          "done",
         );
       })
       .catch((err: unknown) => {
@@ -714,7 +714,7 @@ export function PlaceDetailScreen({
         onShowOnMap={onShowOnMap}
         onLogTrip={() => setLogging(true)}
         onEdit={() => setEditing(true)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
         onGone={onDeleted}
       />
@@ -723,7 +723,7 @@ export function PlaceDetailScreen({
         visible={editing}
         place={place}
         onClose={() => setEditing(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <TripEditSheet
@@ -733,7 +733,7 @@ export function PlaceDetailScreen({
         initialPlaces={[{ id: place.id, name: place.name }]}
         existingTypes={distinctTripTypes(trips.data ?? [])}
         onClose={() => setLogging(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       {/* Changing what fills the route slot, from the place it belongs to —
@@ -784,7 +784,7 @@ export function PlaceDetailScreen({
                     onPress={() => {
                       setLinking(false);
                       createPlaceLinkLocal(placeId, row.id)
-                        .then(() => notify(`Linked to ${row.name}.`, "info"))
+                        .then(() => notify(`Linked to ${row.name}.`, "done"))
                         .catch((err: unknown) => {
                           console.error(err);
                           notify("Couldn't link that place.", "error");
@@ -825,7 +825,7 @@ export function PlaceDetailScreen({
               setLinkMenuId(null);
               if (!target) return;
               deletePlaceLinkLocal(target.id)
-                .then(() => notify("Unlinked.", "info"))
+                .then(() => notify("Unlinked.", "done"))
                 .catch((err: unknown) => {
                   console.error(err);
                   notify("Couldn't unlink that place.", "error");
@@ -937,7 +937,7 @@ export function PlaceDetailScreen({
               setRouteSlotMenu(false);
               if (!target) return;
               updateRouteLocal(target.id, { placeId: null })
-                .then(() => notify("Route unlinked.", "info"))
+                .then(() => notify("Route unlinked.", "done"))
                 .catch((err: unknown) => {
                   console.error(err);
                   notify(
@@ -960,7 +960,7 @@ export function PlaceDetailScreen({
         visible={addingWay}
         onClose={() => setAddingWay(false)}
         onDrawRoute={onDrawRoute ? () => onDrawRoute(placeId) : undefined}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 

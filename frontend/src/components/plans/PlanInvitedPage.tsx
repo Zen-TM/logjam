@@ -72,7 +72,7 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await joinPlan(planId);
-      toast.success(TRIP_PLAN_JOIN.copy.joined);
+      toast.done(TRIP_PLAN_JOIN.copy.joined);
       onJoined();
     } catch (err) {
       console.error(err);
@@ -86,7 +86,7 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await leavePlan(planId);
-      toast.success(TRIP_PLAN_PREVIEW.copy.declined);
+      toast.done(TRIP_PLAN_PREVIEW.copy.declined);
       onDeclined();
     } catch (err) {
       console.error(err);

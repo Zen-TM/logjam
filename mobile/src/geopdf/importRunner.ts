@@ -235,13 +235,13 @@ export async function runGeoPdfImport(
     const named = current?.label ?? label;
     switch (outcome.status) {
       case "imported":
-        emitToast(`${named} imported.`, "info");
+        emitToast(`${named} imported.`, "done");
         break;
       case "existing":
-        emitToast(`${named} was already imported.`, "info");
+        emitToast(`${named} was already imported.`, "done");
         break;
       case "paused":
-        emitToast("Import paused — resume it from Saved.", "info");
+        emitToast("Import paused — resume it from Saved.", "done");
         break;
       case "cancelled":
         break;

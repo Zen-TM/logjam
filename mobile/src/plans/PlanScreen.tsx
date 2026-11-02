@@ -366,10 +366,10 @@ function PlanPage({
   const [formBuilder, setFormBuilder] = useState<FormBuilderState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(
     joined
-      ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "info", nonce: 1 }
+      ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "done", nonce: 1 }
       : null,
   );
-  const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
+  const notify = (text: string, tone: ToastMessage["tone"] = "done") =>
     setToast({ text, tone, nonce: Date.now() });
   // Stable: FormSheet hands a refusal over from an effect.
   const notifyError = useCallback(
@@ -783,7 +783,7 @@ function Items({
   canAdd: boolean;
   /** The caller's user id: a member changes only what they added. */
   me: string | null;
-  onInfo: (message: string, tone?: "info" | "error") => void;
+  onInfo: (message: string, tone?: "done" | "error") => void;
   onError: (message: string) => void;
   onDrawRoute: () => void;
 }) {

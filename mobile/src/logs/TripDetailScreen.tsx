@@ -85,7 +85,7 @@ export function TripDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
@@ -267,7 +267,7 @@ export function TripDetailScreen({
         surface="page"
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditing(true)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
         onGone={onBack}
       />
@@ -279,7 +279,7 @@ export function TripDetailScreen({
         places={placesQuery.data ?? []}
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />

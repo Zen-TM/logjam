@@ -264,7 +264,7 @@ export function PlacesScreen({
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
-    setToast({ text, tone: "info", nonce: toastNonce.current });
+    setToast({ text, tone: "done", nonce: toastNonce.current });
   }, []);
   const fail = useCallback((text: string) => {
     toastNonce.current += 1;

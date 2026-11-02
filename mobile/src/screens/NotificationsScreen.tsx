@@ -75,6 +75,7 @@ import {
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationPlanTarget,
+  loadStateOf,
 } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -113,10 +114,9 @@ import {
   Button,
   CardActions,
   EmptyState,
-  ErrorState,
   Hero,
   IconButton,
-  LoadingState,
+  ListBody,
   Row,
   ChipRail,
   SelectionBar,
@@ -281,7 +281,7 @@ export function NotificationsScreen({
   // on a scrolled list it lands off screen entirely.
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -579,6 +579,7 @@ export function NotificationsScreen({
       await patchCachedRead("all");
       await enqueueNotificationRead(unreadIds);
       onUnreadChanged?.();
+      notify(INBOX.copy.markedAllRead, "done");
     } catch (err) {
       console.error(err);
       notify(messageFromError(err, "Couldn't mark those as read."), "error");
@@ -1004,10 +1005,22 @@ export function NotificationsScreen({
       </View>
     );
   }
-  if (query.loading && notifications.length === 0)
-    return <LoadingState label={INBOX.copy.loading} />;
-  if (query.error && notifications.length === 0) {
-    return <ErrorState message={query.error} onRetry={query.refetch} />;
+  const nothingYet = notifications.length === 0;
+  if (nothingYet && (query.loading || query.error)) {
+    // With the Hero kept: a failed load must leave the way back.
+    return (
+      <View style={styles.root}>
+        <Hero title={INBOX.title} onBack={onBack} backLabel={backLabel} />
+        <ListBody
+          state={loadStateOf(false, query.loading ? null : query.error)}
+          loadingLabel={INBOX.copy.loading}
+          error={query.error}
+          onRetry={query.refetch}
+        >
+          {null}
+        </ListBody>
+      </View>
+    );
   }
 
   // Exhaustive by type: a section the contract names and this screen does not

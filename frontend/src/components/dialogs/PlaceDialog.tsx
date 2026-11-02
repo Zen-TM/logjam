@@ -524,7 +524,7 @@ function PlaceDialog({
       }
       committedRef.current = true;
       onSaved();
-      toast.success("Place saved.");
+      toast.done("Place saved.");
       onClose();
     } catch (err) {
       console.error(err);

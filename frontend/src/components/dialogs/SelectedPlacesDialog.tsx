@@ -173,7 +173,7 @@ function SelectedPlacesDialog({
       onQuotaChanged?.();
       onDeleted();
       onClose();
-      toast.success(`Deleted ${plural(ownedPlaces.length, "place")}.`);
+      toast.done(`Deleted ${plural(ownedPlaces.length, "place")}.`);
     } catch (err) {
       console.error(err);
       toast.error(

@@ -41,7 +41,7 @@ function FriendInviteDialog({
     friendInvite.clear();
     previewFriendInvite(token)
       .then(({ inviter, alreadyFriends }) => {
-        if (alreadyFriends) toast.info(alreadyFriendsMessage(inviter.username));
+        if (alreadyFriends) toast.done(alreadyFriendsMessage(inviter.username));
         else setInvite({ token, username: inviter.username });
       })
       .catch((err) => {
@@ -55,7 +55,7 @@ function FriendInviteDialog({
     setBusy(true);
     try {
       await redeemFriendInvite(invite.token);
-      toast.success(friendAcceptedMessage(invite.username));
+      toast.done(friendAcceptedMessage(invite.username));
       onFriended();
     } catch (err) {
       console.error(err);

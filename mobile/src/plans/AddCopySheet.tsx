@@ -89,7 +89,7 @@ export function AddCopySheet({
   me: string | null;
   online: boolean;
   onClose: () => void;
-  onDone: (message: string, tone: "info" | "error") => void;
+  onDone: (message: string, tone: "done" | "error") => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();

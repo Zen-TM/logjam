@@ -5,7 +5,7 @@
 // — the same `cancelled` guard is applied identically to all eight hooks.
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { usePlaces } from "./placeUtils";
+import { usePlaces, useTripLogs } from "./placeUtils";
 
 vi.mock("./auth/oidc", () => ({
   loadSession: vi.fn().mockResolvedValue({ id_token: "test-token" }),
@@ -67,5 +67,30 @@ describe("usePlaces stale-response race", () => {
     });
 
     expect(result.current.places).toEqual([{ id: "fresh" }]);
+  });
+});
+
+// A failed first load is `failed`, never a loaded empty list (which the Places
+// panel reads as "add your first place"). Mutation that turns it red: call
+// `setLoaded(true)` in the hook's `.finally`, as it did before.
+describe.each([
+  ["usePlaces", usePlaces],
+  ["useTripLogs", useTripLogs],
+])("%s when the first load fails", (_name, useHook) => {
+  it("is failed until a retry succeeds, then ready", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockResolvedValueOnce(fakeResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { result } = renderHook(() => useHook(true));
+    await waitFor(() => expect(result.current.state).toBe("failed"));
+    expect(result.current.loaded).toBe(false);
+
+    act(() => result.current.refetch());
+    await waitFor(() => expect(result.current.state).toBe("ready"));
+    expect(result.current.error).toBeNull();
   });
 });

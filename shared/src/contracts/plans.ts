@@ -1517,14 +1517,14 @@ export function tripPlanAddOutcome(args: {
   outOfSpace: boolean;
   /** The stop's reason, when one stopped the run. */
   why: string | null;
-}): { message: string; tone: "info" | "error" } | null {
+}): { message: string; tone: "done" | "error" } | null {
   if (args.added === 0) return null;
   const photos = mediaSkippedSentence(args.skipped, args.outOfSpace);
   return {
     message: [tripPlanAddedMessage(args.added, args.asked), photos, args.why]
       .filter(Boolean)
       .join(" "),
-    tone: photos || args.why ? "error" : "info",
+    tone: photos || args.why ? "error" : "done",
   };
 }
 

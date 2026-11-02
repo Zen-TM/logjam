@@ -235,7 +235,7 @@ export default function PlanItems({
             );
             const saved = tripPlanSavedMessage(item.kind);
             if (skipped) toast.error(`${saved} ${skipped}`);
-            else toast.success(saved);
+            else toast.done(saved);
             onSaved();
           });
         }}
@@ -256,7 +256,7 @@ export default function PlanItems({
           ).then((done) => {
             setDeleting(null);
             if (done) {
-              toast.success(copy.itemDeleted);
+              toast.done(copy.itemDeleted);
               onSaved();
             }
             onChanged(done ? undefined : { quiet: true });

@@ -1029,7 +1029,7 @@ function TripLogDialog({
       // draft that this save says nothing about.
       if (!tripLog) clearTripDraft();
       onSaved();
-      toast.success(tripLog ? "Trip updated." : "Trip logged.");
+      toast.done(tripLog ? "Trip updated." : "Trip logged.");
       onClose();
     } catch (err) {
       console.error(err);

@@ -80,7 +80,7 @@ export default function PlanInvitePage({
     busy.start(user.id);
     try {
       await inviteMember(plan.id, user.username, role);
-      toast.success(copy.invited);
+      toast.done(copy.invited);
       onInvited();
     } catch (err) {
       console.error(err);
@@ -113,7 +113,7 @@ export default function PlanInvitePage({
         await navigator.share({ text: tripPlanInviteMessage(plan.name, url) });
       } else {
         await navigator.clipboard.writeText(url);
-        toast.success(copy.linkCopied);
+        toast.done(copy.linkCopied);
       }
     } catch (err) {
       // A dismissed share sheet is not a failure, but the link was made, so
@@ -132,7 +132,7 @@ export default function PlanInvitePage({
     setShown(null);
     try {
       await revokeInviteLink(plan.id, id);
-      toast.success(copy.linkRevoked);
+      toast.done(copy.linkRevoked);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, copy.linkRevokeFailed));

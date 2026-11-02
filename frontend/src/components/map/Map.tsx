@@ -3536,9 +3536,9 @@ function Map({
       if (quiet) {
         // Coming back after an area selection: they have seen it.
       } else if (window.matchMedia("(pointer: coarse)").matches) {
-        toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
+        toast.done("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
-        toast.info(
+        toast.done(
           "Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.",
         );
       }

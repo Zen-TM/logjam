@@ -78,3 +78,16 @@ export function contractSectionKeys<
     .filter((section) => section.on == null || section.on === platform)
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
+
+/** What a list's data is: still coming, could not be had, or in hand. */
+export type LoadState = "loading" | "failed" | "ready";
+
+/**
+ * `loaded` is "a successful result is in hand", so a failed first load is
+ * `failed` and never `ready` with nothing in it: a list read as empty says
+ * "add your first place" over an error. A refetch that fails under a list
+ * already shown stays `ready`; its error is a toast.
+ */
+export function loadStateOf(loaded: boolean, error: string | null): LoadState {
+  return loaded ? "ready" : error ? "failed" : "loading";
+}

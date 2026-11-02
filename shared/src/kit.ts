@@ -134,6 +134,7 @@ export const KIT_COMPONENTS = {
   EmptyState: both,
   LoadingState: both,
   ErrorState: both,
+  ListBody: both,
   ErrorBanner: both,
   FieldError: both,
 

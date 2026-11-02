@@ -29,6 +29,7 @@ import {
   SectionHeader,
   SwitchRow,
   Icon,
+  ErrorState,
   LoadingState,
 } from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
@@ -55,6 +56,8 @@ type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
  */
 function SettingsPanel({
   currentUser,
+  currentUserError,
+  onRetryCurrentUser,
   customFieldDefs,
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
@@ -64,6 +67,9 @@ function SettingsPanel({
   onCurrentUserChange,
 }: {
   currentUser: TUser | null;
+  /** Our sentence for an account load that failed; settings have nothing to show without it. */
+  currentUserError: string | null;
+  onRetryCurrentUser: () => void;
   /** The saved user, so what reads it elsewhere (Friends' leaderboard button)
    *  follows a switch here without a reload. */
   onCurrentUserChange: (user: TUser) => void;
@@ -146,9 +152,7 @@ function SettingsPanel({
       onCurrentUserChange(
         await updateUserPreferences({ leaderboardOptIn: next }),
       );
-      toast.success(
-        next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left,
-      );
+      toast.done(next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left);
     } catch (err) {
       console.error(err);
       setLeaderboardOptIn(previous);
@@ -199,44 +203,50 @@ function SettingsPanel({
       <>
         <ThemeChooser />
 
-        {/* A heading per group, as Logjam GPS draws them: the heading is the
+        {!currentUser && currentUserError ? (
+          <ErrorState message={currentUserError} onRetry={onRetryCurrentUser} />
+        ) : (
+          <>
+            {/* A heading per group, as Logjam GPS draws them: the heading is the
             sentence's start, so each switch's label stays short. */}
-        {notifPrefs === null ? (
-          <LoadingState />
-        ) : (
-          NOTIFICATION_GROUPS.map((group) => (
-            <Fragment key={group}>
-              <SectionHeader
-                title={notificationGroupLead(group, "Logjam Web")}
-              />
-              {NOTIFICATION_PREFERENCES.filter(
-                (row) => row.group === group,
-              ).map(({ key, label }) => (
-                <SwitchRow
-                  key={key}
-                  title={label}
-                  checked={notifPrefs[key]}
-                  disabled={notifSavingKey === key}
-                  disabledReason="Saving…"
-                  onChange={() => handleToggleNotif(key)}
-                />
-              ))}
-            </Fragment>
-          ))
-        )}
+            {notifPrefs === null ? (
+              <LoadingState />
+            ) : (
+              NOTIFICATION_GROUPS.map((group) => (
+                <Fragment key={group}>
+                  <SectionHeader
+                    title={notificationGroupLead(group, "Logjam Web")}
+                  />
+                  {NOTIFICATION_PREFERENCES.filter(
+                    (row) => row.group === group,
+                  ).map(({ key, label }) => (
+                    <SwitchRow
+                      key={key}
+                      title={label}
+                      checked={notifPrefs[key]}
+                      disabled={notifSavingKey === key}
+                      disabledReason="Saving…"
+                      onChange={() => handleToggleNotif(key)}
+                    />
+                  ))}
+                </Fragment>
+              ))
+            )}
 
-        <SectionHeader title="Friends" />
-        {leaderboardOptIn === null ? (
-          <LoadingState />
-        ) : (
-          <SwitchRow
-            title={LEADERBOARD_SETTING.label}
-            description={LEADERBOARD_SETTING.hint}
-            checked={leaderboardOptIn}
-            disabled={leaderboardSaving}
-            disabledReason="Saving…"
-            onChange={handleToggleLeaderboard}
-          />
+            <SectionHeader title="Friends" />
+            {leaderboardOptIn === null ? (
+              <LoadingState />
+            ) : (
+              <SwitchRow
+                title={LEADERBOARD_SETTING.label}
+                description={LEADERBOARD_SETTING.hint}
+                checked={leaderboardOptIn}
+                disabled={leaderboardSaving}
+                disabledReason="Saving…"
+                onChange={handleToggleLeaderboard}
+              />
+            )}
+          </>
         )}
       </>
     ),
