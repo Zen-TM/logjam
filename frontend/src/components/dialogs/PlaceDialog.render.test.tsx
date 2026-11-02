@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import { PLACE_PAGE, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import PlaceDialog from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -97,5 +97,18 @@ describe("PlaceDialog, while open", () => {
     rerender(dialog(place("p2", "Bravo Chasm")));
 
     expect(nameBox().value).toBe("Bravo Chasm");
+  });
+});
+
+// The form names its route section and its empty slot with the words the place
+// page uses. Mutation: write either back as a literal ("Track", "No track yet.").
+describe("PlaceDialog, route section", () => {
+  it("says route where the place page does", async () => {
+    render(dialog(place("p1", "Claustral")));
+    expect(
+      (await screen.findByRole("heading", { name: PLACE_PAGE.copy.route }))
+        .textContent,
+    ).toBe("Route");
+    expect(await screen.findByText(PLACE_PAGE.copy.routeEmpty)).toBeTruthy();
   });
 });

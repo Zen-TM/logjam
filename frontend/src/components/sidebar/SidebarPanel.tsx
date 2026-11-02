@@ -82,6 +82,7 @@ function SidebarPanel({
   friends,
   friendRequests,
   onRefetchFriends,
+  onRefetchPlans,
   onRefetchShared,
   // Notifications
   notifications,
@@ -170,6 +171,7 @@ function SidebarPanel({
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
+  onRefetchPlans: () => void;
   onRefetchShared: () => void;
   // Notifications
   notifications: TNotification[];
@@ -377,6 +379,7 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
             onOverrideRead={onOverrideNotificationRead}
             onRefetchFriends={onRefetchFriends}
+            onRefetchPlans={onRefetchPlans}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onTopoFlyTarget={onTopoFlyTarget}

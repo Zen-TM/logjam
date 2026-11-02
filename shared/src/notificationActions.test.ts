@@ -49,6 +49,40 @@ describe("notificationActions", () => {
     expect(actions?.actions.map((a) => a.kind)).toEqual(["accept", "decline"]);
   });
 
+  // Mutation: return null for either plan kind, or give the join request the
+  // invite's words (the leader would read "You joined the plan.").
+  it("offers accept + decline on a plan invite and on a join request", () => {
+    const invite = notificationActions(
+      notification("plan_invited", { planId: "p1" }),
+    );
+    expect(invite?.type).toBe("plan_invite");
+    expect(invite?.targetId).toBe("p1");
+    expect(invite?.actions.map((a) => [a.kind, a.label])).toEqual([
+      ["accept", "Accept"],
+      ["decline", "Decline"],
+    ]);
+    expect(invite?.actions[0]?.success).toBe("You joined the plan.");
+
+    const request = notificationActions(
+      notification("plan_join_request", {
+        planId: "p1",
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    );
+    expect(request?.type).toBe("plan_join_request");
+    expect([request?.targetId, request?.requesterId]).toEqual(["p1", "u2"]);
+    expect(request?.actions[0]?.success).toBe("carol is in.");
+    expect(request?.actions[1]?.confirm?.title).toBe("Decline carol?");
+  });
+
+  it("offers nothing on a plan notification missing the ids its calls need", () => {
+    expect(notificationActions(notification("plan_invited", {}))).toBeNull();
+    expect(
+      notificationActions(notification("plan_join_request", { planId: "p1" })),
+    ).toBeNull();
+  });
+
   it("offers save + decline on a pending file send", () => {
     const actions = notificationActions(
       notification("file_sent", {

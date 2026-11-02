@@ -85,6 +85,12 @@ import { capabilityScreenBlock } from "../auth/capabilities";
 import { acceptReceivedFile } from "../imports/acceptReceivedFile";
 import { useConnectivity } from "../map/connectivity";
 import {
+  approveMember,
+  joinPlan,
+  leavePlan,
+  removeMember,
+} from "../plans/plansApi";
+import {
   batchFileActionMessage,
   runBatchFileAction,
   type BatchFileActionKind,
@@ -652,6 +658,16 @@ export function NotificationsScreen({
           await (action.kind === "accept"
             ? acceptFriendRequest
             : declineFriendRequest)(target.targetId);
+        } else if (target.type === "plan_invite") {
+          await (action.kind === "accept" ? joinPlan : leavePlan)(
+            target.targetId,
+          );
+        } else if (target.type === "plan_join_request") {
+          // Told the status the leader saw, so it acts on no one who has since
+          // moved on (a 409, which clears the row below).
+          await (action.kind === "accept"
+            ? approveMember(target.targetId, target.requesterId!)
+            : removeMember(target.targetId, target.requesterId!, "requested"));
         } else if (action.kind === "accept") {
           await acceptReceivedFile(target.targetId, target.sender);
         } else {

@@ -57,6 +57,12 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../placeUtils";
+import {
+  approveMember,
+  joinPlan,
+  leavePlan,
+  removeMember,
+} from "../../../plansApi";
 import { triggerDownload } from "../../../download";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
@@ -153,6 +159,7 @@ function NotificationsPanel({
   onRefetchNotifications,
   onOverrideRead,
   onRefetchFriends,
+  onRefetchPlans,
   setSelectedPlaceID,
   setActivePanel,
   onTopoFlyTarget,
@@ -168,6 +175,7 @@ function NotificationsPanel({
   /** Show a read state now, ahead of its write (`null` takes it back). */
   onOverrideRead: (ids: string[], read: boolean | null) => void;
   onRefetchFriends: () => void;
+  onRefetchPlans: () => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
@@ -534,6 +542,18 @@ function NotificationsPanel({
             ? acceptFriendRequest
             : declineFriendRequest)(target.targetId);
           onRefetchFriends();
+        } else if (target.type === "plan_invite") {
+          await (action.kind === "accept" ? joinPlan : leavePlan)(
+            target.targetId,
+          );
+          onRefetchPlans();
+        } else if (target.type === "plan_join_request") {
+          // Told the status the leader saw, so it acts on no one who has since
+          // moved on (a 409, which clears the row below).
+          await (action.kind === "accept"
+            ? approveMember(target.targetId, target.requesterId!)
+            : removeMember(target.targetId, target.requesterId!, "requested"));
+          onRefetchPlans();
         } else if (action.kind === "accept") {
           const { downloadUrl, filename } = await acceptFileSend(
             target.targetId,
