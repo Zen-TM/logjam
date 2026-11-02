@@ -20,6 +20,13 @@ const plan = {
 };
 
 describe("an edit sends only what changed, with what it last saw", () => {
+  // Mutation: compare endDate raw, and Done on an untouched one-day plan
+  // sends a dates edit that changes nothing.
+  it("a start alone and a same-day end are the same trip", () => {
+    const one = { ...plan, endDate: null };
+    expect(tripPlanPatch(one, { ...one, endDate: one.startDate })).toEqual({});
+  });
+
   // Mutation: send every field (`patch = { name: …, dates: …, tripTypes: … }`
   // always) and a save over someone else's change of another field is refused.
   it("a plan's fields", () => {

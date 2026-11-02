@@ -48,6 +48,11 @@
   color: var(--color-text-muted);
 }
 
+.writeUpDates {
+  composes: datesLine;
+  margin: 0;
+}
+
 /* A write-up section: read on the page, its title an h3. The space above it
    is bigger than the gap inside it (shared/DESIGN.md §2). */
 .section {

@@ -1,21 +1,24 @@
-// A plan a leader invited the user to by username: what they
-// would join (the write-up and who's going) with
-// Join and Decline. Joining is theirs to choose, so nothing happens
-// until they press Join, which joins at once.
+// A plan a leader invited the user to by username: who invited them, what
+// they would join (the write-up and who's going), with Join and Decline.
+// Joining is theirs to choose, so nothing happens until they press Join,
+// which joins at once. What the page says and in what order is
+// `tripPlanInvitePage` and `TRIP_PLAN_PREVIEW`, shared with Logjam GPS.
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import {
+  ApiError,
   contractSectionKeys,
+  tripTypeLabel,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_PREVIEW,
-  tripPlanInvitedLine,
-  tripPlanPreviewHeaded,
+  tripPlanInvitePage,
   type SectionKeysOn,
   type TripPlanInvitedPreview,
 } from "@logjam/shared";
 import {
   Avatar,
   Button,
+  EmptyState,
   ErrorState,
   Hero,
   IconTile,
@@ -27,6 +30,7 @@ import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import { getInvitedPreview, joinPlan, leavePlan } from "../../plansApi";
+import WriteUpBody from "./WriteUpBody";
 import classes from "./plans.module.css";
 
 export default function PlanInvitedPage({
@@ -43,6 +47,7 @@ export default function PlanInvitedPage({
   const toast = useToast();
   const [preview, setPreview] = useState<TripPlanInvitedPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState(false);
@@ -52,9 +57,11 @@ export default function PlanInvitedPage({
     getInvitedPreview(planId)
       .then((data) => !cancelled && setPreview(data))
       .catch((err) => {
+        if (cancelled) return;
+        // Withdrawn, joined elsewhere or deleted: the server says 404 for all.
+        if (err instanceof ApiError && err.status === 404) return setGone(true);
         console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, TRIP_PLAN_PREVIEW.copy.loadFailed));
+        setError(messageFromError(err, TRIP_PLAN_PREVIEW.copy.loadFailed));
       });
     return () => {
       cancelled = true;
@@ -98,7 +105,9 @@ export default function PlanInvitedPage({
           backLabel={TRIP_PLAN_PAGE.copy.back}
         />
         <div className={classes.emptyArea} role="status">
-          {error ? (
+          {gone ? (
+            <EmptyState icon="plan" title={TRIP_PLAN_PREVIEW.copy.gone} />
+          ) : error ? (
             <ErrorState
               message={error}
               onRetry={() => setFetchCount((n) => n + 1)}
@@ -111,8 +120,7 @@ export default function PlanInvitedPage({
     );
 
   const copy = TRIP_PLAN_PREVIEW.copy;
-  // A heading needs a second group to divide from: the write-up.
-  const headed = tripPlanPreviewHeaded(preview);
+  const page = tripPlanInvitePage(preview, tripTypeLabel);
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_PREVIEW, "web">,
     ReactNode
@@ -124,14 +132,15 @@ export default function PlanInvitedPage({
           onBack={onBack}
           backLabel={TRIP_PLAN_PAGE.copy.back}
         />
-        <p className={classes.datesLine}>{tripPlanInvitedLine(preview)}</p>
+        <p className={classes.datesLine}>{page.facts}</p>
       </>
     ),
     notice: (
       <div className={classes.noticeCard}>
         <Row
           leading={<IconTile icon="plan" hue="var(--hue-plan)" />}
-          title={copy.invited}
+          title={page.inviteTitle}
+          subtitle={page.inviteHint}
           footer={
             <>
               <Button
@@ -150,17 +159,21 @@ export default function PlanInvitedPage({
         />
       </div>
     ),
-    writeUp: preview.sections.map((section) => (
-      <section key={section.id} className={classes.section}>
-        <h3 className={classes.sectionTitle}>{section.title}</h3>
-        {section.body && <p className={classes.body}>{section.body}</p>}
-      </section>
-    )),
+    writeUp: page.writeUpEmpty ? (
+      <p className={classes.note}>{page.writeUpEmpty}</p>
+    ) : (
+      page.sections.map((section) => (
+        <section key={section.id} className={classes.section}>
+          <h3 className={classes.sectionTitle}>{section.title}</h3>
+          {section.body && (
+            <WriteUpBody title={section.title} body={section.body} />
+          )}
+        </section>
+      ))
+    ),
     people: (
       <>
-        {headed && (
-          <SectionHeader title={copy.people} count={preview.members.length} />
-        )}
+        <SectionHeader title={page.going.title} count={page.going.count} />
         {preview.members.map((member) => (
           <Row
             key={member.id}

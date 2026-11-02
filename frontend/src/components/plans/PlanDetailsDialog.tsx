@@ -8,6 +8,7 @@
 import { useId, useMemo, useState } from "react";
 import {
   parseTripPlanCreate,
+  settleDayRange,
   TRIP_PLAN_NAME_MAX_LENGTH,
   TRIP_PLAN_PAGE,
   TRIP_PLANS_LIST,
@@ -124,7 +125,16 @@ function PlanDetailsForm({
     const name = parseTripPlanCreate({ name: values.name });
     if (!("value" in name))
       return setNameError("sentence" in name ? name.sentence : failed);
-    const parsed = parseTripPlanCreate(values);
+    // A start alone is saved as a one-day trip.
+    const days = settleDayRange({
+      start: values.startDate,
+      end: values.endDate,
+    });
+    const parsed = parseTripPlanCreate({
+      ...values,
+      startDate: days.start,
+      endDate: days.end,
+    });
     if (!("value" in parsed))
       return setError("sentence" in parsed ? parsed.sentence : failed);
     const patch = tripPlanPatch(seen, parsed.value);
@@ -193,7 +203,6 @@ function PlanDetailsForm({
               prevMonth: TRIP_PLAN_PAGE.copy.datesPrevMonth,
               nextMonth: TRIP_PLAN_PAGE.copy.datesNextMonth,
             }}
-            tapHint={TRIP_PLAN_PAGE.copy.datesHintClick}
             start={values.startDate}
             end={values.endDate}
             onChange={(startDate, endDate) => set({ startDate, endDate })}

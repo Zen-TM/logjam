@@ -58,23 +58,72 @@
   min-height: var(--control-md);
 }
 
-/* The days between the ends are a band; the ends are the accent fill. */
-.inRange {
+/* Two layers under the number: ::before is the band, one continuous strip per
+   week row (rounded at the row's ends, and under the start and end days from
+   their centre); ::after is the circle behind the selected, today and
+   hovered day. */
+.cell {
+  position: relative;
+  isolation: isolate;
+}
+
+.cell::before,
+.cell::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.cell::after {
+  top: 50%;
+  left: 50%;
+  width: var(--control-md);
+  height: var(--control-md);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.inRange::before {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: var(--control-md);
+  transform: translateY(-50%);
   background: color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
+.bandStart::before {
+  left: 50%;
+}
+
+.bandEnd::before {
+  right: 50%;
+}
+
+.pieceStart::before {
+  border-top-left-radius: var(--radius-pill);
+  border-bottom-left-radius: var(--radius-pill);
+}
+
+.pieceEnd::before {
+  border-top-right-radius: var(--radius-pill);
+  border-bottom-right-radius: var(--radius-pill);
+}
+
 .end {
-  background: var(--color-accent);
   color: var(--color-on-fill);
-  border-radius: var(--radius-pill);
 }
 
-.today:not(.end) {
+.end::after {
+  background: var(--color-accent);
+}
+
+.today:not(.end)::after {
   box-shadow: inset 0 0 0 1px var(--color-accent);
-  border-radius: var(--radius-pill);
 }
 
-.cell:hover:not(.end) {
+.cell:hover:not(.end)::after {
   background: var(--color-card-pressed);
 }
 

@@ -99,6 +99,7 @@ import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace, TRoute, TUser } from "../../placeUtils";
 import { addedBy } from "./plansModel";
 import { menuEntries } from "./planMenu";
+import WriteUpBody from "./WriteUpBody";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -503,11 +504,6 @@ export default function PlanDetailPanel({
           )}
       </>
     ),
-    dates: (
-      <p className={classes.datesLine}>
-        {tripPlanDatesLine(plan, role, tripTypeLabel)}
-      </p>
-    ),
     views: (
       <div className={classes.rails}>
         <ChipRail
@@ -520,6 +516,9 @@ export default function PlanDetailPanel({
     ),
     writeUp: tab === "writeUp" && (
       <div className={classes.list}>
+        <p className={classes.writeUpDates}>
+          {tripPlanDatesLine(plan, role, tripTypeLabel)}
+        </p>
         {plan.sections.length === 0 ? (
           <EmptyState
             icon="notes"
@@ -569,7 +568,7 @@ export default function PlanDetailPanel({
                 )}
               </div>
               {section.body ? (
-                <p className={classes.body}>{section.body}</p>
+                <WriteUpBody title={section.title} body={section.body} />
               ) : (
                 <p className={classes.note}>{copy.sectionEmpty}</p>
               )}
