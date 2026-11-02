@@ -162,6 +162,8 @@ function OpenDialog({
     };
   }, []);
 
+  const foot = typeof footer === "function" ? footer(requestClose) : footer;
+
   return (
     <>
       <dialog
@@ -194,11 +196,7 @@ function OpenDialog({
         <div id={bodyId} className={classes.body}>
           {children}
         </div>
-        {footer && (
-          <footer className={classes.foot}>
-            {typeof footer === "function" ? footer(requestClose) : footer}
-          </footer>
-        )}
+        {foot && <footer className={classes.foot}>{foot}</footer>}
       </dialog>
       {discard && (
         <Dialog

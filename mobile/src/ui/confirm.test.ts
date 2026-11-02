@@ -9,6 +9,9 @@ const { confirm } = await import("./confirm");
 
 const SRC = join(import.meta.dirname, "..");
 
+// Files still to move to confirm(); delete an entry when its file moves.
+// App.tsx's three-way sign-out prompt has no confirm() equivalent yet.
+const BASELINE: string[] = ["../App.tsx"];
 const callers = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -20,6 +23,11 @@ const callers = (dir: string): string[] =>
       ? [relative(SRC, path)]
       : [];
   });
+
+const appCallers = () =>
+  readFileSync(join(SRC, "..", "App.tsx"), "utf8").includes("Alert.alert(")
+    ? ["../App.tsx"]
+    : [];
 
 describe("confirm", () => {
   beforeEach(() => alert.mockReset());
@@ -84,7 +92,13 @@ describe("confirm", () => {
 // Every Alert goes through confirm(), so Cancel is always "Cancel"
 // (mobile/DESIGN.md §4). Mutation: add `Alert.alert(` to any screen.
 describe("Alert.alert is called only by confirm()", () => {
-  it("is not called by any other file", () => {
-    expect(callers(SRC).sort()).toEqual([]);
+  const found = [...callers(SRC), ...appCallers()].sort();
+
+  it("is not called by a file the baseline does not list", () => {
+    expect(found.filter((file) => !BASELINE.includes(file))).toEqual([]);
+  });
+
+  it("lists only files that still call it — the list only shrinks", () => {
+    expect(BASELINE.filter((file) => !found.includes(file))).toEqual([]);
   });
 });

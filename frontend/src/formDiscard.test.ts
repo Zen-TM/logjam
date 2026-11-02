@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 // `Dialog` does the asking when it is given `discard`. A form dialog is a
 // `<Dialog` whose footer submits a form (`form={`); it passes `discard=`.
 //
-// Mutation: delete the `discard=` line from `PlaceDialog.tsx`.
+// Mutation: delete the `discard=` line from `PlaceDialog.tsx` or `TopoDialog.tsx`.
 //
 // These raise no confirm: a single field or a pick from a list, where leaving
 // loses a few seconds, not work. A new form dialog does not join this list.
@@ -18,6 +18,13 @@ const NO_WORK_TO_LOSE = [
   "components/plans/PlanPrintDialog.tsx",
   "components/plans/PlanTripLogPlacesDialog.tsx",
   "components/sidebar/panels/AccountPanel.tsx",
+];
+
+// Form dialogs that submit with an onClick, so carry no `form={`.
+const ALSO_FORMS = [
+  "components/dialogs/GeoPdfDialog.tsx",
+  "components/dialogs/TopoDialog.tsx",
+  "components/dialogs/UnifiedImportDialog.tsx",
 ];
 
 function sources(dir: string, out: string[] = []): string[] {
@@ -36,7 +43,11 @@ describe("form dialogs", () => {
       rel: path.slice(root.length + 1),
       code: readFileSync(path, "utf8"),
     }))
-    .filter(({ code }) => /<Dialog\b/.test(code) && /\bform=\{/.test(code));
+    .filter(
+      ({ rel, code }) =>
+        /<Dialog\b/.test(code) &&
+        (/\bform=\{/.test(code) || ALSO_FORMS.includes(rel)),
+    );
 
   it("each passes discard= to Dialog", () => {
     const missing = forms

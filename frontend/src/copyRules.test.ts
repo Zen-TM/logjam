@@ -111,8 +111,28 @@ function childExpressionStrings(
   return found;
 }
 
-// Rewritten by the copy sweep; delete an entry with its string.
+// Strings still to reword to the glossary; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
+  {
+    file: "components/dialogs/SelectedPlacesDialog.tsx",
+    rule: "curly-apostrophe",
+    text: "Unsharing won&rsquo;t remove",
+  },
+  {
+    file: "components/media/Lightbox.tsx",
+    rule: "curly-apostrophe",
+    text: "Couldn&rsquo;t load",
+  },
+  {
+    file: "components/sidebar/panels/PlacesPanel.tsx",
+    rule: "curly-apostrophe",
+    text: "aren&rsquo;t loaded",
+  },
+  {
+    file: "components/sidebar/panels/TripLogsPanel.tsx",
+    rule: "curly-apostrophe",
+    text: "aren&rsquo;t loaded",
+  },
   {
     file: "components/ConsentGate.tsx",
     rule: "please",

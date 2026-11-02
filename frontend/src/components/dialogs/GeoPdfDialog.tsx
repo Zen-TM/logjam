@@ -888,11 +888,6 @@ function GeoPdfDialog({
     [overlays],
   );
 
-  // A dirty form's Esc / backdrop / X / Cancel prompt (`discard` below).
-  // "Select on map" bypasses it entirely (it calls onSelectOnMap, never
-  // onClose — App flips `open` to false itself for that round trip). A successful Generate also bypasses it by
-  // calling the raw onClose directly.
-
   // The renderer is its own chunk: start fetching it on open, so Make it
   // doesn't wait. A failure here resurfaces when Make it imports it again.
   useEffect(() => {
@@ -916,6 +911,8 @@ function GeoPdfDialog({
         size="large"
         dismissible={!generating || progress !== null}
         onClose={onClose}
+        // "Select on map" and a successful Generate call onClose directly, so
+        // neither asks.
         discard={dirty ? abandonConfirm("export", true) : null}
         footer={(requestClose) => (
           <>
