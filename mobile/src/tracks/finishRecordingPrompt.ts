@@ -50,7 +50,7 @@ function announceSavedOnce(): void {
   if (readEntryChoice() === "guest") return;
   if (!needsTrackBackupNotice()) return;
   markTrackBackupNoticeShown();
-  toast(SAVED_NOTICE, "info");
+  toast(SAVED_NOTICE, "done");
 }
 
 /**

@@ -906,7 +906,7 @@ function PlaceDetailPanel({
                       updateRoute(drawnRoute.id, { placeId: null })
                         .then(() => {
                           onRoutesChanged();
-                          toast.success("Route unlinked.");
+                          toast.done("Route unlinked.");
                         })
                         .catch((err: unknown) =>
                           toast.error(

@@ -132,7 +132,7 @@ function SelectedPlacesDialog({
         shareFriendIds,
       );
       onClose();
-      toast.success(
+      toast.done(
         result.granted > 0
           ? `Shared ${plural(ownedPlaces.length, "place")} with ${plural(shareFriendIds.length, "friend")}.`
           : "They already have these.",
