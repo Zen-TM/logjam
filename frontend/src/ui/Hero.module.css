@@ -20,6 +20,11 @@
   padding-left: calc(var(--gutter) / 2);
 }
 
+/* The arrow's 2px focus ring needs air before the title. */
+.hero[data-back] .title {
+  margin-inline-start: var(--space-0-5);
+}
+
 .title {
   composes: title from "../textRoles.generated.module.css";
   flex: 1;

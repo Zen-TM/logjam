@@ -1,4 +1,4 @@
-import { Fragment, type Ref } from "react";
+import { Fragment, type MouseEvent, type Ref } from "react";
 import { labelWithBadge } from "@logjam/shared";
 import type { PanelId } from "./panels";
 import {
@@ -30,7 +30,7 @@ function NavButton({
   active: boolean;
   count: number;
   badgeNoun?: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   ref?: Ref<HTMLButtonElement>;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">) {
   return (
@@ -79,7 +79,13 @@ function NavRail({
   const { railItems, moreItems, spacerAfterIndex } =
     partitionNavItems(isNarrow);
 
-  const toggle = (id: PanelId) => onPanelChange(activePanel === id ? null : id);
+  const toggle = (id: PanelId, event?: MouseEvent) => {
+    onPanelChange(activePanel === id ? null : id);
+    // Opened from the keyboard (a click event's detail is 0 then): carry focus
+    // into the panel, so its controls are one Tab away, not past every rail stop.
+    if (activePanel !== id && event?.detail === 0)
+      requestAnimationFrame(() => document.getElementById("panel")?.focus());
+  };
 
   const items = railItems.map((item, index) => (
     <Fragment key={item.id}>
@@ -90,7 +96,7 @@ function NavRail({
         aria-current={activePanel === item.id ? "page" : undefined}
         count={badgeCounts[item.id] ?? 0}
         badgeNoun={item.badgeNoun}
-        onClick={() => toggle(item.id)}
+        onClick={(event) => toggle(item.id, event)}
       />
       {index === spacerAfterIndex && <div className={classes.spacer} />}
     </Fragment>
