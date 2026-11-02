@@ -197,28 +197,29 @@ function AnalyticsPanel({
       ? logbookActivityLabel(activity)
       : statsHeroTitle(stats.days);
 
-  const status = !loaded ? (
+  const status = (
     <ListBody
       state={state}
       loadingLabel={copy.loading}
       error={error}
       onRetry={onRetry}
+      empty={
+        stats.trips === 0 ? (
+          <EmptyState
+            icon="stats"
+            title={copy.emptyTitle}
+            body={
+              activity
+                ? statsEmptyActivityBody(logbookActivityLabel(activity))
+                : copy.emptyBody
+            }
+          />
+        ) : null
+      }
     >
       {null}
     </ListBody>
-  ) : stats.trips === 0 ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon="stats"
-        title={copy.emptyTitle}
-        body={
-          activity
-            ? statsEmptyActivityBody(logbookActivityLabel(activity))
-            : copy.emptyBody
-        }
-      />
-    </div>
-  ) : null;
+  );
 
   const showing = loaded && stats.trips > 0;
   // Exhaustive by type: a section the contract names and this panel does not

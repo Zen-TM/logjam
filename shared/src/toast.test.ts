@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TOAST_MS } from "./designTokens.js";
 import { loadStateOf } from "./contracts/index.js";
-import { toastMs } from "./toast.js";
+import { runToastAction, toastMs } from "./toast.js";
 
 describe("toastMs", () => {
   // Mutation that turns it red: return `TOAST_MS.done` for a toast with an action.
@@ -10,6 +10,17 @@ describe("toastMs", () => {
     expect(toastMs("done")).toBe(TOAST_MS.done);
     expect(toastMs("error")).toBe(TOAST_MS.error);
     expect(toastMs("done", action)).toBe(TOAST_MS.error);
+  });
+});
+
+describe("runToastAction", () => {
+  // Mutation that turns it red: drop the `dismiss()` call.
+  it("does the action, then dismisses the toast", () => {
+    const calls: string[] = [];
+    runToastAction({ label: "Open", onPress: () => calls.push("press") }, () =>
+      calls.push("dismiss"),
+    );
+    expect(calls).toEqual(["press", "dismiss"]);
   });
 });
 

@@ -1,4 +1,9 @@
-import { toastMs, type ToastAction, type ToastTone } from "@logjam/shared";
+import {
+  runToastAction,
+  toastMs,
+  type ToastAction,
+  type ToastTone,
+} from "@logjam/shared";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
@@ -32,9 +37,13 @@ export type ToastMessage = {
 export function Toast({
   message,
   onDismissed,
+  bottom,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
+  /** How far up from the host's bottom edge the toast docks, for a host that
+   *  keeps its own instruments there (the map's scale bar). */
+  bottom?: number;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -116,7 +125,10 @@ export function Toast({
   const error = message.tone === "error";
 
   return (
-    <View style={styles.dock} pointerEvents="box-none">
+    <View
+      style={[styles.dock, bottom != null && { bottom }]}
+      pointerEvents="box-none"
+    >
       <Animated.View
         accessibilityRole="alert"
         accessibilityLiveRegion="polite"
@@ -138,8 +150,7 @@ export function Toast({
             accessibilityRole="button"
             hitSlop={8}
             onPress={() => {
-              message.action?.onPress();
-              onDismissed();
+              if (message.action) runToastAction(message.action, onDismissed);
             }}
           >
             <Text style={styles.action}>{message.action.label}</Text>

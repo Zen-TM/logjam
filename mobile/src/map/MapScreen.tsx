@@ -504,6 +504,9 @@ async function currentHeading(): Promise<number | null> {
 /** Gap between the stacked instruments, and the same value their container uses. */
 const INSTRUMENT_GAP = spacing(1);
 
+/** A toast over the map docks above the compass strip and scale bar, bottom-left. */
+const MAP_TOAST_CLEARANCE = spacing(6) + spacing(2);
+
 /**
  * How long to wait for a `rotation` reading before deciding the device has no
  * rotation vector. Generous next to the ~133 ms the sensor actually reports at:
@@ -5907,7 +5910,11 @@ export function MapScreen({
         onError={(text) => notify(text, "error")}
       />
 
-      <Toast message={toast} onDismissed={() => setToast(null)} />
+      <Toast
+        message={toast}
+        onDismissed={() => setToast(null)}
+        bottom={MAP_TOAST_CLEARANCE}
+      />
 
       <MapLayersSheet
         visible={pickerOpen}

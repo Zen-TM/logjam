@@ -124,6 +124,7 @@ import { useStoredState } from "../useStoredState";
 import { useSlopeBands } from "../slopeBandsPreference";
 import { useThemePreferences } from "../themePreferences";
 import { useToast } from "./feedback/ToastProvider";
+import { useToastOnce } from "./feedback/useToastOnce";
 import { useBasemapFallback } from "./map/useBasemapFallback";
 import { messageFromError } from "../errors/messageFromError";
 import { triggerDownload } from "../download";
@@ -839,16 +840,19 @@ function App() {
   // dialog must offer every one or a user could never make their first canyon.
   const [placeTypes, setPlaceTypes] = useState<TPlaceType[]>([]);
 
-  // Surface background data-load errors as toasts. A first load that fails is
-  // said in place by Places and Trips (their ErrorState); only a refetch that
-  // fails under a list already shown is a toast.
-  const placesBackgroundError = placesState === "ready" ? placesError : null;
-  useEffect(() => {
-    if (placesBackgroundError) toast.error(placesBackgroundError);
-  }, [placesBackgroundError, toast]);
-  useEffect(() => {
-    if (currentUserError) toast.error(currentUserError);
-  }, [currentUserError, toast]);
+  // Surface background data-load errors as toasts. A failure the open panel
+  // says in place (Places and Trips on a first load, Settings and Account for
+  // the account) is not also a toast.
+  useToastOnce(
+    placesError,
+    placesState === "failed" && activePanel === "places",
+    toast,
+  );
+  useToastOnce(
+    currentUserError,
+    activePanel === "settings" || activePanel === "account",
+    toast,
+  );
   useEffect(() => {
     if (sharedError) toast.error(sharedError);
   }, [sharedError, toast]);
@@ -858,11 +862,11 @@ function App() {
   useEffect(() => {
     if (notificationsError) toast.error(notificationsError);
   }, [notificationsError, toast]);
-  const tripLogsBackgroundError =
-    tripLogsState === "ready" ? tripLogsError : null;
-  useEffect(() => {
-    if (tripLogsBackgroundError) toast.error(tripLogsBackgroundError);
-  }, [tripLogsBackgroundError, toast]);
+  useToastOnce(
+    tripLogsError,
+    tripLogsState === "failed" && activePanel === "logs",
+    toast,
+  );
   // A first load that fails is said by Plans itself (its ErrorState); only
   // a later refetch's failure, under a list already shown, is a toast.
   const plansBackgroundError = plans.length > 0 ? plansError : null;

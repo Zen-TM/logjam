@@ -8,6 +8,7 @@ import {
   Row,
   StatGrid,
   SwitchRow,
+  Toast,
 } from ".";
 
 afterEach(cleanup);
@@ -204,5 +205,24 @@ describe("ListBody", () => {
       </ListBody>,
     );
     expect(screen.getByText("the list")).toBeTruthy();
+  });
+});
+
+describe("Toast action", () => {
+  // Mutation that turns it red: drop the dismiss after the action.
+  it("does the action, then dismisses", () => {
+    const onPress = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <Toast
+        message="Saved."
+        tone="done"
+        action={{ label: "Open", onPress }}
+        onDismiss={onDismiss}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

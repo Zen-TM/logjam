@@ -1,4 +1,9 @@
-import type { LoadState, ToastAction, ToastTone } from "@logjam/shared";
+import {
+  runToastAction,
+  type LoadState,
+  type ToastAction,
+  type ToastTone,
+} from "@logjam/shared";
 import type { CSSProperties, ReactNode } from "react";
 import { Button, IconButton } from "./Button";
 import classes from "./Feedback.module.css";
@@ -228,10 +233,7 @@ export function Toast({
         <button
           type="button"
           className={classes.toastAction}
-          onClick={() => {
-            action.onPress();
-            onDismiss();
-          }}
+          onClick={() => runToastAction(action, onDismiss)}
         >
           {action.label}
         </button>
