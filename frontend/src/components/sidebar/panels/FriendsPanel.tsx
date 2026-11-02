@@ -606,7 +606,10 @@ export function AddFriendDialog({
           onChange={(event) => setQuery(event.target.value)}
         />
         {short ? (
-          <p className={classes.note}>{copy.searchHint}</p>
+          // An empty field has nothing to keep typing: the hint waits for a key.
+          query.trim() !== "" && (
+            <p className={classes.note}>{copy.searchHint}</p>
+          )
         ) : results.length === 0 ? (
           <p className={classes.note}>{copy.searchEmpty}</p>
         ) : (
