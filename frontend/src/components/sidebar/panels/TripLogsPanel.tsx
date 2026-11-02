@@ -18,7 +18,10 @@ import {
   groupTripsByYear,
   hasActiveTripFilter,
   NO_TYPE_FILTER_VALUE,
+  mediaDisplayName,
   primaryTripType,
+  recordingsToLog,
+  recordingsToLogLabel,
   reconcileCustomFieldFilters,
   listSelectionLabel,
   sortTrips,
@@ -31,12 +34,15 @@ import {
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
   TRIPS_LIST,
+  TRIPS_TO_LOG,
+  trackDayLabel,
   tripTypeLabel,
   tripVerbs,
   type CustomFieldFilter,
   type LoadState,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
+  type StandaloneFile,
   type TripSortKey,
   type TripVerbId,
   tripTitle,
@@ -45,7 +51,7 @@ import type { TPlace, TTripLog } from "../../../placeUtils";
 import { bulkDeleteTripLogs, deleteTripLog } from "../../../placeUtils";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
-import TripLogDialog from "../../dialogs/TripLogDialog";
+import TripLogDialog, { type TripLogTrack } from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
@@ -108,6 +114,7 @@ function TripLogsPanel({
   onOpenTrip,
   onFiltersOpenChange,
   onExpandSheet,
+  recordings,
 }: {
   onOpenStats: () => void;
   tripLogs: TTripLog[];
@@ -133,6 +140,9 @@ function TripLogsPanel({
   onFiltersOpenChange: (open: boolean) => void;
   /** Narrow web: grow the bottom sheet to full. */
   onExpandSheet?: () => void;
+  /** The account's standalone files; the recorded tracks among them with no
+   *  trip on their day are what the hero offers to log. */
+  recordings: StandaloneFile[];
 }) {
   const toast = useToast();
   const isNarrow = useIsMobile();
@@ -185,7 +195,25 @@ function TripLogsPanel({
   const [deleting, setDeleting] = useState(false);
   const [editingTripLog, setEditingTripLog] = useState<TTripLog | null>(null);
   const [creatingTrip, setCreatingTrip] = useState(false);
+  const [showingToLog, setShowingToLog] = useState(false);
+  const [loggingTrack, setLoggingTrack] = useState<TripLogTrack | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const toLog = useMemo(
+    () =>
+      loaded
+        ? recordingsToLog(
+            recordings
+              .filter((file) => file.origin === "track")
+              .map((file) => ({
+                file,
+                startedAt: file.metadata.startedAt ?? null,
+              })),
+            tripLogs,
+          )
+        : [],
+    [loaded, recordings, tripLogs],
+  );
 
   // ── The list ─────────────────────────────────────────────────────────
   const criteria = useMemo(
@@ -712,7 +740,23 @@ function TripLogsPanel({
   // by type: a section the contract names cannot be left out, and one it does
   // not name cannot be drawn.
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "web">, ReactNode> = {
-    hero,
+    hero: (
+      <>
+        {hero}
+        {toLog.length > 0 && (
+          <div className={classes.toLog}>
+            <Button
+              compact
+              variant="outline"
+              icon="track"
+              onClick={() => setShowingToLog(true)}
+            >
+              {recordingsToLogLabel(toLog.length)}
+            </Button>
+          </div>
+        )}
+      </>
+    ),
     typeRail,
     search: tripLogs.length > 0 && (
       <div className={classes.search}>
@@ -757,9 +801,62 @@ function TripLogsPanel({
     list,
   };
 
+  // The recordings with no trip on their day: one step inside the page, with
+  // the way back out, each row opening the trip form on the recording.
+  const toLogSections: Record<
+    SectionKeysOn<typeof TRIPS_TO_LOG, "web">,
+    ReactNode
+  > = {
+    note: (
+      <p className={classes.note}>
+        {toLog.length === 0 ? TRIPS_TO_LOG.copy.empty : TRIPS_TO_LOG.copy.note}
+      </p>
+    ),
+    list: toLog.map(({ file }) => (
+      <Row
+        key={file.id}
+        title={mediaDisplayName(file)}
+        subtitle={trackDayLabel(file.metadata.startedAt ?? null)}
+        leading={<IconTile icon="track" hue="var(--color-accent)" />}
+        trailing={
+          <Button
+            compact
+            variant="outline"
+            onClick={() =>
+              setLoggingTrack({
+                mediaId: file.id,
+                filename: file.filename,
+                startedAt: file.metadata.startedAt ?? null,
+                placeId: file.linkedPlaceId,
+              })
+            }
+          >
+            {TRIPS_TO_LOG.copy.verb}
+          </Button>
+        }
+      />
+    )),
+  };
+  const toLogView = (
+    <>
+      <Hero
+        title={TRIPS_TO_LOG.title}
+        onBack={() => setShowingToLog(false)}
+        backLabel={`Back to ${TRIPS_LIST.title}`}
+      />
+      <div className={classes.list}>
+        {contractSectionKeys(TRIPS_TO_LOG, "web").map((key) => (
+          <Fragment key={key}>{toLogSections[key]}</Fragment>
+        ))}
+      </div>
+    </>
+  );
+
   return (
     <div ref={rootRef} className={classes.root}>
-      {isNarrow && sheet ? (
+      {showingToLog ? (
+        toLogView
+      ) : isNarrow && sheet ? (
         sheet
       ) : (
         <>
@@ -805,6 +902,26 @@ function TripLogsPanel({
         onPickCoords={onPickCoords}
         onPlaceCreated={onRefetchPlaces}
       />
+
+      {/* Mounted only while open, so each open starts from its recording. */}
+      {loggingTrack && (
+        <TripLogDialog
+          open={!pickingCoords}
+          onClose={() => setLoggingTrack(null)}
+          onSaved={() => {
+            setLoggingTrack(null);
+            onRefetchTripLogs();
+            onQuotaChanged();
+          }}
+          places={places}
+          fromTrack={loggingTrack}
+          customFieldDefs={customFieldDefs}
+          onCustomFieldDefsChange={onCustomFieldDefsChange}
+          existingTripTypes={existingTripTypes}
+          onPickCoords={onPickCoords}
+          onPlaceCreated={onRefetchPlaces}
+        />
+      )}
 
       <ConfirmDialog
         open={pendingDelete != null}

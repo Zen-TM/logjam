@@ -21,6 +21,8 @@ import {
 } from "./recordingPreferences";
 import { retryTrackBackup, TrackBackupError } from "./trackBackup";
 import { finishTrackRecording } from "./trackRecorder";
+import { getTrack } from "./tracksDb";
+import { recordedTrackSource, type TripTrackSource } from "./tripTrackSource";
 
 type Listener = (message: Omit<ToastMessage, "nonce">) => void;
 const listeners = new Set<Listener>();
@@ -31,8 +33,21 @@ export function onRecordingToast(listener: Listener): () => void {
   return () => listeners.delete(listener);
 }
 
-function toast(text: string, tone: ToastMessage["tone"]) {
-  for (const listener of listeners) listener({ text, tone });
+function toast(
+  text: string,
+  tone: ToastMessage["tone"],
+  action?: ToastMessage["action"],
+) {
+  for (const listener of listeners) listener({ text, tone, action });
+}
+
+type LogTripListener = (track: TripTrackSource) => void;
+const logTripListeners = new Set<LogTripListener>();
+
+/** Subscribe to "Log a trip" on the finish toast: BackgroundToast opens the form. */
+export function onLogTripRequest(listener: LogTripListener): () => void {
+  logTripListeners.add(listener);
+  return () => logTripListeners.delete(listener);
 }
 
 /**
@@ -46,11 +61,38 @@ function toast(text: string, tone: ToastMessage["tone"]) {
  */
 const SAVED_NOTICE = "Saved on this phone. It goes up when you have signal.";
 
+const isGuest = () => readEntryChoice() === "guest";
+
 function announceSavedOnce(): void {
-  if (readEntryChoice() === "guest") return;
+  if (isGuest()) return;
   if (!needsTrackBackupNotice()) return;
   markTrackBackupNoticeShown();
   toast(SAVED_NOTICE, "done");
+}
+
+/**
+ * A finished recording says so, and offers the next step: logging the trip.
+ * The first one that reaches the outbox says where it went instead, and keeps
+ * the offer. A track with no line has nothing to attach, so no offer.
+ */
+async function announceFinished(trackId: string, queued: boolean) {
+  const notice = queued && !isGuest() && needsTrackBackupNotice();
+  if (notice) markTrackBackupNoticeShown();
+  const track = await getTrack(trackId).catch(() => null);
+  const source =
+    track && track.pointCount >= 2 ? recordedTrackSource(track) : null;
+  toast(
+    notice ? SAVED_NOTICE : "Recording saved.",
+    "info",
+    source
+      ? {
+          label: "Log a trip",
+          onPress: () => {
+            for (const listener of logTripListeners) listener(source);
+          },
+        }
+      : undefined,
+  );
 }
 
 /**
@@ -99,7 +141,7 @@ export function confirmFinishRecording(
     finishTrackRecording(trackId).then(
       (mediaId) => {
         onFinished?.();
-        if (mediaId !== null) announceSavedOnce();
+        void announceFinished(trackId, mediaId !== null);
       },
       (err: unknown) => {
         if (err instanceof TrackBackupError) {
