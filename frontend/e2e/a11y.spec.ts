@@ -759,7 +759,7 @@ test.describe("desktop", () => {
     // also be the close request that dismisses it.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this place?",
     });
     await expect(confirm).toBeVisible();
     await page.waitForTimeout(300);
@@ -965,7 +965,7 @@ test.describe("desktop", () => {
 
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this place?",
     });
     await confirm.getByRole("button", { name: "Discard" }).click();
     await expect(dialog).toHaveCount(0);
@@ -1022,7 +1022,7 @@ test.describe("desktop", () => {
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this place?",
     });
     await expect(confirm).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
