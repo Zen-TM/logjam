@@ -111,7 +111,7 @@ export function AccountForms({
 
   const sendCode = (to: string) =>
     accountCalls.resendSignUpCode(to).then(
-      () => setNotice("We sent a new code. Check your email, spam included."),
+      () => setNotice("We sent a new code."),
       (err: unknown) =>
         setError(messageFromError(err, "Couldn't send a code. Try again.")),
     );
