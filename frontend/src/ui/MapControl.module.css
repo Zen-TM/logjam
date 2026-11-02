@@ -136,6 +136,23 @@
   border: 2px solid var(--color-page);
   border-radius: var(--radius-full);
   background: var(--color-accent);
-  box-shadow: var(--shadow-map-card);
+  box-shadow: var(--shadow-float);
   pointer-events: none;
+}
+
+/* MapLibre draws the (i) as a fixed black data-URI icon, which a dark scheme
+   inverted and Ghost Gum's light card swallowed. Drawn instead as a mask in the
+   text colour, so it follows every scheme. */
+:global(#map .maplibregl-ctrl-attrib-button) {
+  background-image: none;
+}
+
+:global(#map .maplibregl-ctrl-attrib-button)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-text);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E")
+    center / 80% no-repeat;
 }
