@@ -1,7 +1,7 @@
 // A trip's page: Logjam Web's `TripDetailPanel.tsx` and Logjam GPS's
 // `logs/TripDetailScreen.tsx`. Its verbs are `TRIP_VERBS` (surface "page"),
 // all behind the ⋯: the page has no verb it puts first.
-import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
+import { TRIP_FORM } from "./tripForm.js";
 import type { ScreenContract } from "./types.js";
 
 export const TRIP_PAGE = {
@@ -22,10 +22,10 @@ export const TRIP_PAGE = {
   copy: {
     places: "Places",
     gauge: "River gauge",
-    photos: "Photos & videos",
-    routes: "Routes",
-    notes: "Notes",
-    attributes: `Trip ${ATTRIBUTE_NOUN.many}`,
+    photos: TRIP_FORM.copy.photos,
+    routes: TRIP_FORM.copy.routes,
+    notes: TRIP_FORM.copy.notes,
+    attributes: TRIP_FORM.copy.attributes,
 
     noType: "No type set",
     // An empty slot gets a short label, not a lesson (UX §11).

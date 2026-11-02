@@ -333,9 +333,9 @@ export function PlanItemSheet({
           {item.kind === "place" ? (
             <>
               <TextField
-                label={copy.itemOtherNames}
+                label={copy.itemAlsoKnownAs}
                 value={values.altNames}
-                hint={theirs("altNames") ?? copy.itemOtherNamesHint}
+                hint={theirs("altNames") ?? copy.itemAlsoKnownAsHint}
                 autoCapitalize="words"
                 onChangeText={(altNames) => set({ altNames })}
               />

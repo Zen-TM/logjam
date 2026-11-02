@@ -15,6 +15,7 @@ import {
   sanitizeDecimalInput,
   type NumericFieldConstraints,
 } from "../numberInput";
+import { FORM_REQUIRED } from "@logjam/shared";
 import classes from "./TextField.module.css";
 import { Icon } from "./Icon";
 
@@ -25,6 +26,12 @@ type FieldLabelling = {
    *  and read with the control, where a tooltip would be neither. */
   hint?: string;
   error?: string | null;
+  /** Draws "Required" beside the label. The input's own `required` is what
+   *  assistive technology reads; the mark is for the eye, and a form where
+   *  nearly everything is required (sign-in) leaves it off. */
+  requiredMark?: boolean;
+  /** Keeps the error line's height when empty, so a submit does not move the form. */
+  reserveError?: boolean;
 };
 
 /** The anatomy every labelled control shares: label, control, hint, error. */
@@ -34,6 +41,8 @@ function Field({
   hideLabel = false,
   hint,
   error,
+  requiredMark,
+  reserveError,
   className,
   children,
 }: FieldLabelling & {
@@ -43,19 +52,34 @@ function Field({
 }) {
   return (
     <div className={[classes.field, className].filter(Boolean).join(" ")}>
-      <label
-        htmlFor={inputId}
-        className={hideLabel ? "visually-hidden" : classes.label}
-      >
-        {label}
-      </label>
+      {requiredMark && !hideLabel ? (
+        <div className={classes.labelRow}>
+          <label htmlFor={inputId} className={classes.label}>
+            {label}
+          </label>
+          <span className={classes.required} aria-hidden>
+            {FORM_REQUIRED}
+          </span>
+        </div>
+      ) : (
+        <label
+          htmlFor={inputId}
+          className={hideLabel ? "visually-hidden" : classes.label}
+        >
+          {label}
+        </label>
+      )}
       {children}
       {hint && (
         <p id={`${inputId}-hint`} className={classes.hint}>
           {hint}
         </p>
       )}
-      <FieldError id={`${inputId}-error`} message={error ?? null} />
+      <FieldError
+        id={`${inputId}-error`}
+        message={error ?? null}
+        reserve={reserveError}
+      />
     </div>
   );
 }
@@ -76,6 +100,8 @@ export function TextField({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   ref,
@@ -91,6 +117,8 @@ export function TextField({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <input
@@ -121,6 +149,8 @@ export function NumberField({
   onChange,
   constraints,
   showError = false,
+  emptyError,
+  invalidError,
   onBlur,
   ...fieldProps
 }: Omit<
@@ -131,9 +161,18 @@ export function NumberField({
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
   showError?: boolean;
+  /** What an empty field says once it is shown: for a field that must be filled. */
+  emptyError?: string;
+  /** Replaces the range or format message (the caller's words, one voice for
+   *  both clients). */
+  invalidError?: string;
 }) {
   const [touched, setTouched] = useState(false);
-  const error = numericFieldError(value, constraints);
+  const rangeError = numericFieldError(value, constraints);
+  const error =
+    emptyError && value.trim() === ""
+      ? emptyError
+      : rangeError && (invalidError ?? rangeError);
   return (
     <TextField
       {...fieldProps}
@@ -215,6 +254,8 @@ export function TextArea({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   minRows = 4,
@@ -237,6 +278,8 @@ export function TextArea({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <textarea
@@ -267,6 +310,8 @@ export function Select({
   hideLabel,
   hint,
   error,
+  requiredMark,
+  reserveError,
   id,
   className,
   ref,
@@ -283,6 +328,8 @@ export function Select({
       hideLabel={hideLabel}
       hint={hint}
       error={error}
+      requiredMark={requiredMark}
+      reserveError={reserveError}
       className={className}
     >
       <div className={classes.selectBox}>

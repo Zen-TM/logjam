@@ -65,11 +65,6 @@ const BASELINE: { file: string; text: string; rule: string }[] = [
     text: "Attach to a place",
   },
   {
-    file: "places/PlaceEditSheet.tsx",
-    rule: "curly-apostrophe",
-    text: "Separate alternative names with commas — they’re searchable too.",
-  },
-  {
     file: "saved/SavedScreen.tsx",
     rule: "region",
     text: "Download a map region",

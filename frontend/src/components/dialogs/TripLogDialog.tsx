@@ -1,8 +1,22 @@
-import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
   abandonConfirm,
   buildCustomFieldDef,
+  contractSectionKeys,
+  PLACE_FORM,
+  TRIP_FORM,
+  tripTitleHint,
+  type SectionKeysOn,
   CANYONING_TRIP_TYPE,
   coerceFieldValue,
   formatFieldValue,
@@ -942,12 +956,8 @@ function TripLogDialog({
 
   const typesHint =
     [
-      linkedCanyon
-        ? "Trips with a linked canyon are always tagged canyoning."
-        : null,
-      selectedTypes.length > 1
-        ? "The starred type sets the trip’s icon."
-        : null,
+      linkedCanyon ? TRIP_FORM.copy.typeCanyoningHint : null,
+      selectedTypes.length > 1 ? TRIP_FORM.copy.typeStarHint : null,
     ]
       .filter(Boolean)
       .join(" ") || undefined;
@@ -966,18 +976,15 @@ function TripLogDialog({
   }
 
   async function handleSave() {
-    if (!date) {
-      setError("Date is required.");
-      return;
-    }
-    // Block save if any custom numeric field is invalid (e.g. "5.5" in an
-    // integer field) so it can't be silently mangled on save.
+    // Every check runs, so one press lights every bad field. Blocks save if any
+    // custom numeric field is invalid (e.g. "5.5" in an integer field) so it
+    // can't be silently mangled on save.
+    setShowFieldErrors(true);
     const customFieldInvalid = visibleFieldDefs.some(
       (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
     );
-    if (customFieldInvalid) {
-      setShowFieldErrors(true);
-      setError("Please fix the highlighted fields.");
+    if (!date || customFieldInvalid) {
+      setError(TRIP_FORM.copy.fixFields);
       return;
     }
     setSaving(true);
@@ -1032,13 +1039,11 @@ function TripLogDialog({
       // draft that this save says nothing about.
       if (!tripLog) clearTripDraft();
       onSaved();
-      toast.success(tripLog ? "Trip updated." : "Trip logged.");
+      toast.success(tripLog ? TRIP_FORM.copy.saved : TRIP_FORM.copy.logged);
       onClose();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't save this trip. Please try again."),
-      );
+      setError(messageFromError(err, TRIP_FORM.copy.saveFailed));
     } finally {
       setSaving(false);
     }
@@ -1092,6 +1097,297 @@ function TripLogDialog({
 
   const derivedTitle = formatTripPlaceNames(selectedPlaceNames);
 
+  const sections: Record<SectionKeysOn<typeof TRIP_FORM, "web">, ReactNode> = {
+    date: (
+      <>
+        <TextField
+          data-autofocus={focusDateOnOpen || undefined}
+          label={TRIP_FORM.copy.date}
+          type="date"
+          required
+          requiredMark
+          reserveError
+          value={date}
+          onChange={(event) => setDate(event.target.value)}
+          error={showFieldErrors && !date ? TRIP_FORM.copy.dateMissing : null}
+          // Non-blocking — a future date is allowed (trip planning), it is
+          // only flagged so an accidental typo doesn't pass unnoticed.
+          hint={isFutureDate(date) ? TRIP_FORM.copy.futureDate : undefined}
+        />
+      </>
+    ),
+    places: (
+      <>
+        <div ref={placesFieldRef} className={classes.field}>
+          <span className={classes.fieldLabel} aria-hidden>
+            {TRIP_FORM.copy.places}
+          </span>
+          <Row
+            className={classes.row}
+            title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
+            subtitle={
+              selectedCount === 1 ? "1 place" : `${selectedCount} places`
+            }
+            description="Places on this trip. Press to choose."
+            leading={<IconTile icon="place" hue="var(--color-accent)" />}
+            trailing={
+              <Icon
+                idea="disclosure"
+                size={18}
+                aria-hidden
+                className={classes.chevron}
+              />
+            }
+            onOpen={openPlacesPicker}
+          />
+          {/* The new place's position: typed, or picked on the map. The name
+                is what was typed in the picker. */}
+          {creating && (
+            <div className={classes.createPlace}>
+              <p className={classes.muted}>
+                Where is{" "}
+                {creating.name ? `“${creating.name}”` : "the new place"}?
+              </p>
+              <div className={classes.coordinates}>
+                <TextField
+                  label={PLACE_FORM.copy.latitude}
+                  className={classes.grow}
+                  inputMode="decimal"
+                  placeholder="-33.123456"
+                  value={creating.latitude}
+                  onChange={(event) =>
+                    setCreating((prev) =>
+                      prev ? { ...prev, latitude: event.target.value } : prev,
+                    )
+                  }
+                />
+                <TextField
+                  label={PLACE_FORM.copy.longitude}
+                  className={classes.grow}
+                  inputMode="decimal"
+                  placeholder="150.123456"
+                  value={creating.longitude}
+                  onChange={(event) =>
+                    setCreating((prev) =>
+                      prev ? { ...prev, longitude: event.target.value } : prev,
+                    )
+                  }
+                />
+                {onPickCoords && (
+                  <Button
+                    variant="outline"
+                    icon="addPlace"
+                    onClick={handlePickCoords}
+                  >
+                    {PLACE_FORM.copy.selectOnMap}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    ),
+    title: (
+      <>
+        {/* Overrides the derived title (the joined place names). */}
+        <TextField
+          label={TRIP_FORM.copy.title}
+          value={displayNameInput}
+          onChange={(event) => setDisplayNameInput(event.target.value)}
+          hint={
+            displayNameInput.trim() ? undefined : tripTitleHint(derivedTitle)
+          }
+        />
+      </>
+    ),
+    type: (
+      <>
+        <ChipPicker
+          label={TRIP_FORM.copy.type}
+          options={typeOptions}
+          selected={selectedTypes}
+          onToggle={toggleType}
+          onAdd={addType}
+          addLabel="Add a type"
+          lockedValues={lockedTypes}
+          primaryValue={
+            selectedTypes.length > 1
+              ? (primaryTripType(selectedTypes) ?? undefined)
+              : undefined
+          }
+          hint={typesHint}
+          error={typesError}
+        />
+      </>
+    ),
+    notes: (
+      <>
+        <TextArea
+          label={TRIP_FORM.copy.notes}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          placeholder={TRIP_FORM.copy.notesPlaceholder}
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.attributes} />
+          {askedFieldDefs.map((def) => (
+            <div key={def.key} className={classes.attribute}>
+              <div className={classes.grow}>
+                <CustomFieldInput
+                  def={def}
+                  value={getFieldValue(def.key)}
+                  onChange={(value) => setFieldValue(def.key, value)}
+                  showError={showFieldErrors}
+                />
+              </div>
+              <IconButton
+                icon="delete"
+                label={`Delete the attribute ${def.label}`}
+                tone="danger"
+                onClick={() => setFieldToDelete(def)}
+              />
+            </div>
+          ))}
+          {showAddField ? (
+            <AddCustomFieldForm
+              label={newFieldLabel}
+              onLabelChange={setNewFieldLabel}
+              type={newFieldType}
+              onTypeChange={setNewFieldType}
+              onAdd={handleAddField}
+              onCancel={() => {
+                setShowAddField(false);
+                setNewFieldLabel("");
+                setNewFieldBounded(false);
+                setNewFieldMin("");
+                setNewFieldMax("");
+                setAddFieldError(null);
+              }}
+              adding={addingField}
+              error={addFieldError}
+              bounds={{
+                bounded: newFieldBounded,
+                onBoundedChange: setNewFieldBounded,
+                min: newFieldMin,
+                onMinChange: setNewFieldMin,
+                max: newFieldMax,
+                onMaxChange: setNewFieldMax,
+              }}
+            />
+          ) : (
+            <Button
+              compact
+              icon="add"
+              className={classes.addAttribute}
+              onClick={() => setShowAddField(true)}
+            >
+              Add an attribute
+            </Button>
+          )}
+        </section>
+      </>
+    ),
+    leftover: (
+      <>
+        {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. The same card row, though, so the
+              two read as the same kind of thing. */}
+        {leftoverFieldDefs.length > 0 && (
+          <section className={classes.section}>
+            <SectionHeader
+              title={TRIP_FORM.copy.leftover}
+              count={leftoverFieldDefs.length}
+            />
+            <p className={classes.muted}>{TRIP_FORM.copy.leftoverNote}</p>
+            {leftoverFieldDefs.map((def) => (
+              <Row
+                key={def.key}
+                leading={<IconTile icon="help" hue="var(--color-accent)" />}
+                title={def.label}
+                subtitle={formatFieldValue(
+                  coerceFieldValue(getFieldValue(def.key), def.type),
+                  def.type,
+                )}
+                trailing={
+                  <IconButton
+                    icon="close"
+                    label={`Remove ${def.label} from this trip`}
+                    onClick={() => removeLeftoverField(def.key)}
+                  />
+                }
+              />
+            ))}
+          </section>
+        )}
+      </>
+    ),
+    photos: (
+      <>
+        {/* Media. In create mode the first upload lazily creates a draft trip
+              to link files to; discarding deletes it (and its files). */}
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.photos} />
+          {mediaLoading ? (
+            <p className={classes.muted} role="status">
+              Loading files…
+            </p>
+          ) : (
+            <MediaGallery
+              media={media}
+              variant="visual"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText="No photos or videos yet."
+            />
+          )}
+          <MediaUpload
+            category="visual"
+            linkedType="tripLog"
+            linkedId={tripLog ? tripLog.id : ""}
+            resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
+            onUploaded={handleMediaUploaded}
+            disabled={saving}
+          />
+        </section>
+      </>
+    ),
+    routes: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={TRIP_FORM.copy.routes} />
+          {attachingTrack && (
+            <p className={classes.muted} role="status">
+              Adding the track…
+            </p>
+          )}
+          {!mediaLoading && (
+            <MediaGallery
+              media={media}
+              variant="tracks"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText="No tracks yet."
+            />
+          )}
+          <MediaUpload
+            category="track"
+            linkedType="tripLog"
+            linkedId={tripLog ? tripLog.id : ""}
+            resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
+            onUploaded={handleMediaUploaded}
+            disabled={saving}
+          />
+        </section>
+      </>
+    ),
+  };
+
   return (
     <>
       <Dialog
@@ -1100,8 +1396,8 @@ function TripLogDialog({
           mode === "places"
             ? "Places on this trip"
             : tripLog
-              ? "Edit trip"
-              : "Log a trip"
+              ? TRIP_FORM.copy.editTitle
+              : TRIP_FORM.copy.addTitle
         }
         size="large"
         dismissible={!saving}
@@ -1133,7 +1429,7 @@ function TripLogDialog({
                 variant="filled"
                 busy={saving || attachingTrack}
               >
-                {tripLog ? "Save changes" : "Log trip"}
+                {tripLog ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit}
               </Button>
             </>
           )
@@ -1259,274 +1555,9 @@ function TripLogDialog({
             </div>
           )}
 
-          <TextField
-            data-autofocus={focusDateOnOpen || undefined}
-            label="Date"
-            type="date"
-            required
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            error={date ? null : "Date is required."}
-            // Non-blocking — a future date is allowed (trip planning), it is
-            // only flagged so an accidental typo doesn't pass unnoticed.
-            hint={
-              isFutureDate(date) ? "This date is in the future." : undefined
-            }
-          />
-
-          <div ref={placesFieldRef} className={classes.field}>
-            <span className={classes.fieldLabel} aria-hidden>
-              Places
-            </span>
-            <Row
-              className={classes.row}
-              title={derivedTitle ?? "No places linked"}
-              subtitle={
-                selectedCount === 1 ? "1 place" : `${selectedCount} places`
-              }
-              description="Places on this trip. Press to choose."
-              leading={<IconTile icon="place" hue="var(--color-accent)" />}
-              trailing={
-                <Icon
-                  idea="disclosure"
-                  size={18}
-                  aria-hidden
-                  className={classes.chevron}
-                />
-              }
-              onOpen={openPlacesPicker}
-            />
-            {/* The new place's position: typed, or picked on the map. The name
-                is what was typed in the picker. */}
-            {creating && (
-              <div className={classes.createPlace}>
-                <p className={classes.muted}>
-                  Where is{" "}
-                  {creating.name ? `“${creating.name}”` : "the new place"}?
-                </p>
-                <div className={classes.coordinates}>
-                  <TextField
-                    label="Latitude"
-                    className={classes.grow}
-                    inputMode="decimal"
-                    placeholder="-33.123456"
-                    value={creating.latitude}
-                    onChange={(event) =>
-                      setCreating((prev) =>
-                        prev ? { ...prev, latitude: event.target.value } : prev,
-                      )
-                    }
-                  />
-                  <TextField
-                    label="Longitude"
-                    className={classes.grow}
-                    inputMode="decimal"
-                    placeholder="150.123456"
-                    value={creating.longitude}
-                    onChange={(event) =>
-                      setCreating((prev) =>
-                        prev
-                          ? { ...prev, longitude: event.target.value }
-                          : prev,
-                      )
-                    }
-                  />
-                  {onPickCoords && (
-                    <Button
-                      variant="outline"
-                      icon="addPlace"
-                      onClick={handlePickCoords}
-                    >
-                      Pick on map
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Overrides the derived title (the joined place names). */}
-          <TextField
-            label="Title"
-            value={displayNameInput}
-            onChange={(event) => setDisplayNameInput(event.target.value)}
-            hint={
-              displayNameInput.trim()
-                ? undefined
-                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
-            }
-          />
-
-          <ChipPicker
-            label="Type"
-            options={typeOptions}
-            selected={selectedTypes}
-            onToggle={toggleType}
-            onAdd={addType}
-            addLabel="Add a type"
-            lockedValues={lockedTypes}
-            primaryValue={
-              selectedTypes.length > 1
-                ? (primaryTripType(selectedTypes) ?? undefined)
-                : undefined
-            }
-            hint={typesHint}
-            error={typesError}
-          />
-
-          <TextArea
-            label="Notes"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Conditions, observations…"
-          />
-
-          <section className={classes.section}>
-            <SectionHeader title="Trip attributes" />
-            {askedFieldDefs.map((def) => (
-              <div key={def.key} className={classes.attribute}>
-                <div className={classes.grow}>
-                  <CustomFieldInput
-                    def={def}
-                    value={getFieldValue(def.key)}
-                    onChange={(value) => setFieldValue(def.key, value)}
-                    showError={showFieldErrors}
-                  />
-                </div>
-                <IconButton
-                  icon="delete"
-                  label={`Delete the attribute ${def.label}`}
-                  tone="danger"
-                  onClick={() => setFieldToDelete(def)}
-                />
-              </div>
-            ))}
-            {showAddField ? (
-              <AddCustomFieldForm
-                label={newFieldLabel}
-                onLabelChange={setNewFieldLabel}
-                type={newFieldType}
-                onTypeChange={setNewFieldType}
-                onAdd={handleAddField}
-                onCancel={() => {
-                  setShowAddField(false);
-                  setNewFieldLabel("");
-                  setNewFieldBounded(false);
-                  setNewFieldMin("");
-                  setNewFieldMax("");
-                  setAddFieldError(null);
-                }}
-                adding={addingField}
-                error={addFieldError}
-                bounds={{
-                  bounded: newFieldBounded,
-                  onBoundedChange: setNewFieldBounded,
-                  min: newFieldMin,
-                  onMinChange: setNewFieldMin,
-                  max: newFieldMax,
-                  onMaxChange: setNewFieldMax,
-                }}
-              />
-            ) : (
-              <Button
-                compact
-                icon="add"
-                className={classes.addAttribute}
-                onClick={() => setShowAddField(true)}
-              >
-                Add an attribute
-              </Button>
-            )}
-          </section>
-
-          {/* Not a place's "Doesn't fit this type" and its three actions:
-              these are the user's own definitions, so there is nothing to
-              adopt — only keep or remove. The same card row, though, so the
-              two read as the same kind of thing. */}
-          {leftoverFieldDefs.length > 0 && (
-            <section className={classes.section}>
-              <SectionHeader
-                title="Leftover attributes"
-                count={leftoverFieldDefs.length}
-              />
-              <p className={classes.muted}>
-                These attributes are left over from when this trip was saved as
-                a different type.
-              </p>
-              {leftoverFieldDefs.map((def) => (
-                <Row
-                  key={def.key}
-                  leading={<IconTile icon="help" hue="var(--color-accent)" />}
-                  title={def.label}
-                  subtitle={formatFieldValue(
-                    coerceFieldValue(getFieldValue(def.key), def.type),
-                    def.type,
-                  )}
-                  trailing={
-                    <IconButton
-                      icon="close"
-                      label={`Remove ${def.label} from this trip`}
-                      onClick={() => removeLeftoverField(def.key)}
-                    />
-                  }
-                />
-              ))}
-            </section>
-          )}
-
-          {/* Media. In create mode the first upload lazily creates a draft trip
-              to link files to; discarding deletes it (and its files). */}
-          <section className={classes.section}>
-            <SectionHeader title="Photos & videos" />
-            {mediaLoading ? (
-              <p className={classes.muted} role="status">
-                Loading files…
-              </p>
-            ) : (
-              <MediaGallery
-                media={media}
-                variant="visual"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No photos or videos yet."
-              />
-            )}
-            <MediaUpload
-              category="visual"
-              linkedType="tripLog"
-              linkedId={tripLog ? tripLog.id : ""}
-              resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-            />
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Tracks" />
-            {attachingTrack && (
-              <p className={classes.muted} role="status">
-                Adding the track…
-              </p>
-            )}
-            {!mediaLoading && (
-              <MediaGallery
-                media={media}
-                variant="tracks"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No tracks yet."
-              />
-            )}
-            <MediaUpload
-              category="track"
-              linkedType="tripLog"
-              linkedId={tripLog ? tripLog.id : ""}
-              resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-            />
-          </section>
-
+          {contractSectionKeys(TRIP_FORM, "web").map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>

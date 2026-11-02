@@ -30,6 +30,7 @@ import type { ScreenContract } from "./types.js";
 import { formatBytes } from "../format.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
+import { PLACE_FORM } from "./placeForm.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
@@ -444,8 +445,8 @@ export const TRIP_PLAN_PAGE = {
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
-    itemOtherNames: "Other names",
-    itemOtherNamesHint: "Separate them with commas.",
+    itemAlsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
+    itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
     itemLatitude: "Latitude",
     itemLongitude: "Longitude",
     itemElevation: "Elevation (m)",

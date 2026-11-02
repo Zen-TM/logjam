@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
+import { validatePlacePayload } from "../placeValidation.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
 import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
@@ -89,6 +90,8 @@ import {
   placeVerbIds,
   placeVerbs,
   SCREEN_CONTRACTS,
+  PLACE_FORM,
+  TRIP_FORM,
   listSelectionLabel,
   tripDeleteConfirm,
   tripsEmptyKind,
@@ -1103,5 +1106,41 @@ describe("the delete confirms", () => {
       expect(copy.confirmLabel).toBe("Delete");
       expect(copy.tone).toBe("destructive");
     }
+  });
+});
+
+describe("the place form and the trip form", () => {
+  // Mutation: change LATITUDE_RANGE, or reword `latitudeInvalid`, alone.
+  it("says what the validator says under a bad coordinate", () => {
+    expect(
+      validatePlacePayload(
+        { latitude: 91, longitude: 0 },
+        { requireCoords: true },
+      ),
+    ).toBe(PLACE_FORM.copy.latitudeInvalid);
+    expect(
+      validatePlacePayload(
+        { latitude: 0, longitude: 181 },
+        { requireCoords: true },
+      ),
+    ).toBe(PLACE_FORM.copy.longitudeInvalid);
+  });
+
+  // Mutation: type "Other names" back into the plan item's label.
+  it("is the one source of the words the place page and a plan's place use", () => {
+    const place = SCREEN_CONTRACTS.find((c) => c.id === "places.page");
+    const plan = SCREEN_CONTRACTS.find((c) => c.id === "plans.page");
+    for (const key of ["alsoKnownAs", "route", "notes", "sources"] as const) {
+      expect(place?.copy[key]).toBe(PLACE_FORM.copy[key]);
+    }
+    expect(plan?.copy.itemAlsoKnownAs).toBe(PLACE_FORM.copy.alsoKnownAs);
+  });
+
+  // Mutation: "Place updated." as `saved`.
+  it("ends a done toast with a full stop and says the same for add and save", () => {
+    expect(PLACE_FORM.copy.added).toBe("Place added.");
+    expect(PLACE_FORM.copy.saved).toBe("Place saved.");
+    expect(TRIP_FORM.copy.logged).toBe("Trip logged.");
+    expect(TRIP_FORM.copy.saved).toBe("Trip saved.");
   });
 });

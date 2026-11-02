@@ -78,3 +78,7 @@ export function contractSectionKeys<
     .filter((section) => section.on == null || section.on === platform)
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
+
+/** The mark on a form field that cannot be left empty: both clients' text
+ *  fields draw it beside the label when told the field is `required`. */
+export const FORM_REQUIRED = "Required";

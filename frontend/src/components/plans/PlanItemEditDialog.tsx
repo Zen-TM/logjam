@@ -185,10 +185,10 @@ export default function PlanItemEditDialog({
           {place && (
             <>
               <TextField
-                label={copy.itemOtherNames}
+                label={copy.itemAlsoKnownAs}
                 value={values.altNames}
                 onChange={(event) => set({ altNames: event.target.value })}
-                hint={theirsHint("altNames") ?? copy.itemOtherNamesHint}
+                hint={theirsHint("altNames") ?? copy.itemAlsoKnownAsHint}
               />
               <div className={classes.pair}>
                 <NumberField

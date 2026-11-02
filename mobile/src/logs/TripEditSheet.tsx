@@ -1,9 +1,19 @@
-import { useCallback, useMemo, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { Text, TextInput, View } from "react-native";
 import {
   abandonConfirm,
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
+  contractSectionKeys,
+  tripTitleHint,
+  TRIP_FORM,
+  type SectionKeysOn,
   enforceCanyoningTag,
   formatTripPlaceNames,
   linksCanyon,
@@ -436,7 +446,7 @@ export function TripEditSheet({
           return;
         }
         await updateTripLocal(trip.id, changes);
-        onSaved("Trip updated.");
+        onSaved(TRIP_FORM.copy.saved);
       } else {
         const tripId = await createTripLocal({
           date: isoDate,
@@ -456,8 +466,8 @@ export function TripEditSheet({
           }));
         onSaved(
           attached
-            ? "Trip logged."
-            : "Trip logged. The track couldn't be attached.",
+            ? TRIP_FORM.copy.logged
+            : `${TRIP_FORM.copy.logged} The track couldn't be attached.`,
         );
       }
       onClose();
@@ -467,7 +477,7 @@ export function TripEditSheet({
       // stays open on a failed save, so this reports in its own banner above
       // Save rather than a toast, which is drawn under the sheet.
       console.error(err);
-      setSaveError("Couldn't save this trip.");
+      setSaveError(TRIP_FORM.copy.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -505,7 +515,7 @@ export function TripEditSheet({
       ? dateTarget.kind === "trip"
         ? "Trip date"
         : (visibleFieldDefs.find((def) => def.key === dateTarget.key)?.label ??
-          "Date")
+          TRIP_FORM.copy.date)
       : mode === "places"
         ? "Places on this trip"
         : mode === "fields"
@@ -515,12 +525,151 @@ export function TripEditSheet({
               ? editingField.label
               : `New trip ${ATTRIBUTE_NOUN.one}`
             : editing
-              ? "Edit trip"
-              : "Log a trip";
+              ? TRIP_FORM.copy.editTitle
+              : TRIP_FORM.copy.addTitle;
 
   const pickFieldDate = (key: string) => {
     setDateTarget({ kind: "field", key });
     setMode("date");
+  };
+
+  const sections: Record<SectionKeysOn<typeof TRIP_FORM, "gps">, ReactNode> = {
+    date: (
+      <>
+        <Row
+          icon="date"
+          title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
+          subtitle={TRIP_FORM.copy.date}
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          onPress={() => setMode("date")}
+        />
+      </>
+    ),
+    places: (
+      <>
+        <Row
+          icon="place"
+          title={derivedTitle ?? TRIP_FORM.copy.noPlaces}
+          subtitle={
+            selected.length === 1 ? "1 place" : `${selected.length} places`
+          }
+          titleNumberOfLines={2}
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          onPress={() => setMode("places")}
+        />
+
+        {/* Read-only: the recording goes with the trip when it is saved. A row
+              with nothing to press is not pressable (shared/DESIGN.md §4). */}
+        {!editing && fromTrack ? (
+          <Row
+            icon="track"
+            title={fromTrack.name}
+            subtitle="Track · attached when you log the trip"
+            titleNumberOfLines={2}
+          />
+        ) : null}
+      </>
+    ),
+    title: (
+      <>
+        <TextField
+          label={TRIP_FORM.copy.title}
+          value={displayName}
+          onChangeText={setDisplayName}
+          autoCapitalize="sentences"
+          hint={displayName.trim() ? undefined : tripTitleHint(derivedTitle)}
+        />
+      </>
+    ),
+    type: (
+      <>
+        <ChipPicker
+          label={TRIP_FORM.copy.type}
+          options={typeOptions}
+          selected={types}
+          onToggle={toggleType}
+          onAdd={addType}
+          addPlaceholder="Other"
+          disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
+          // Chips stay in stable order rather than moving to show which type
+          // leads, so the one that picks the trip's glyph and hue is starred —
+          // only once there is a choice between two, when it stops being
+          // obvious.
+          primaryValue={
+            types.length > 1 ? (primaryTripType(types) ?? undefined) : undefined
+          }
+          hint={
+            [
+              linkedCanyon ? TRIP_FORM.copy.typeCanyoningHint : null,
+              types.length > 1 ? TRIP_FORM.copy.typeStarHint : null,
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+        />
+      </>
+    ),
+    notes: (
+      <>
+        <TextField
+          label={TRIP_FORM.copy.notes}
+          placeholder={TRIP_FORM.copy.notesPlaceholder}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+          autoCapitalize="sentences"
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        {askedFieldDefs.length > 0 ? (
+          <SectionHeader title={TRIP_FORM.copy.attributes} />
+        ) : null}
+        <CustomFieldValueInputs
+          defs={askedFieldDefs}
+          values={fieldValues}
+          onChange={setFieldValue}
+          onPickDate={pickFieldDate}
+        />
+
+        {/* Definitions are local rows written through the outbox, so this
+              door is open with no account and no signal, for everyone. */}
+        <Row
+          icon="tag"
+          title={`Your trip ${ATTRIBUTE_NOUN.many}`}
+          subtitle={
+            customFieldDefs.length === 0
+              ? "Add your own — water level, party size, anything"
+              : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
+          }
+          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          onPress={() => setMode("fields")}
+        />
+      </>
+    ),
+    leftover: (
+      <>
+        {/* Not a place's "Doesn't fit this type" and its three actions:
+              these are the user's own definitions, so there is nothing to
+              adopt — only keep or remove. */}
+        {keptOnlyFieldDefs.length > 0 ? (
+          <>
+            <SectionHeader
+              title={`${TRIP_FORM.copy.leftover} · ${keptOnlyFieldDefs.length}`}
+            />
+            <Text style={styles.hint}>{TRIP_FORM.copy.leftoverNote}</Text>
+            <CustomFieldValueInputs
+              defs={keptOnlyFieldDefs}
+              values={fieldValues}
+              onChange={setFieldValue}
+              onPickDate={pickFieldDate}
+              onRemove={removeField}
+            />
+          </>
+        ) : null}
+      </>
+    ),
   };
 
   return (
@@ -550,7 +699,9 @@ export function TripEditSheet({
                 banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
             {saveError ? <ErrorBanner message={saveError} /> : null}
             <Button
-              label={editing ? "Save changes" : "Log trip"}
+              label={
+                editing ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit
+              }
               icon="done"
               loading={saving}
               onPress={() => void save()}
@@ -636,121 +787,9 @@ export function TripEditSheet({
 
       {mode === "form" ? (
         <FormStack>
-          <Row
-            icon="date"
-            title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
-            subtitle="Date"
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("date")}
-          />
-          <Row
-            icon="place"
-            title={derivedTitle ?? "No places linked"}
-            subtitle={
-              selected.length === 1 ? "1 place" : `${selected.length} places`
-            }
-            titleNumberOfLines={2}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("places")}
-          />
-
-          {/* Read-only: the recording goes with the trip when it is saved. A row
-              with nothing to press is not pressable (shared/DESIGN.md §4). */}
-          {!editing && fromTrack ? (
-            <Row
-              icon="track"
-              title={fromTrack.name}
-              subtitle="Track · attached when you log the trip"
-              titleNumberOfLines={2}
-            />
-          ) : null}
-
-          <TextField
-            label="Title"
-            value={displayName}
-            onChangeText={setDisplayName}
-            autoCapitalize="sentences"
-            hint={
-              displayName.trim()
-                ? undefined
-                : `Defaults to ${derivedTitle ?? "“Untitled trip”"}`
-            }
-          />
-
-          <ChipPicker
-            label="Type"
-            options={typeOptions}
-            selected={types}
-            onToggle={toggleType}
-            onAdd={addType}
-            addPlaceholder="Other"
-            disabledValues={linkedCanyon ? CANYONING_LOCKED : undefined}
-            // Chips stay in stable order rather than moving to show which type
-            // leads, so the one that picks the trip's glyph and hue is starred —
-            // only once there is a choice between two, when it stops being
-            // obvious.
-            primaryValue={
-              types.length > 1
-                ? (primaryTripType(types) ?? undefined)
-                : undefined
-            }
-            hint={
-              types.length > 1
-                ? "The starred type sets the trip’s icon."
-                : undefined
-            }
-          />
-
-          <TextField
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            autoCapitalize="sentences"
-          />
-
-          <CustomFieldValueInputs
-            defs={askedFieldDefs}
-            values={fieldValues}
-            onChange={setFieldValue}
-            onPickDate={pickFieldDate}
-          />
-
-          {/* Not a place's "Doesn't fit this type" and its three actions:
-              these are the user's own definitions, so there is nothing to
-              adopt — only keep or remove. */}
-          {keptOnlyFieldDefs.length > 0 ? (
-            <>
-              <SectionHeader
-                title={`Leftover ${ATTRIBUTE_NOUN.many} · ${keptOnlyFieldDefs.length}`}
-              />
-              <Text style={styles.hint}>
-                These {ATTRIBUTE_NOUN.many} are left over from when this trip
-                was saved as a different type.
-              </Text>
-              <CustomFieldValueInputs
-                defs={keptOnlyFieldDefs}
-                values={fieldValues}
-                onChange={setFieldValue}
-                onPickDate={pickFieldDate}
-                onRemove={removeField}
-              />
-            </>
-          ) : null}
-
-          {/* Definitions are local rows written through the outbox, so this
-              door is open with no account and no signal, for everyone. */}
-          <Row
-            icon="tag"
-            title={`Your trip ${ATTRIBUTE_NOUN.many}`}
-            subtitle={
-              customFieldDefs.length === 0
-                ? "Add your own — water level, party size, anything"
-                : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
-            }
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-            onPress={() => setMode("fields")}
-          />
+          {contractSectionKeys(TRIP_FORM, "gps").map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
         </FormStack>
       ) : null}
     </BottomSheet>

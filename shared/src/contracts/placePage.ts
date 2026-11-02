@@ -8,6 +8,7 @@ import { fieldValue } from "../fieldValues.js";
 import { SOURCES_FIELD_KEY } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
+import { PLACE_FORM } from "./placeForm.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
 import type { ScreenContract } from "./types.js";
 
@@ -47,14 +48,14 @@ export const PLACE_PAGE = {
   ],
   copy: {
     // A section's title is the copy under its own key, where it is constant.
-    position: "Position",
+    position: PLACE_FORM.copy.position,
     gauge: "River gauge",
     doesntFit: "Doesn't fit this type",
-    notes: "Notes",
-    sources: "Sources",
-    alsoKnownAs: "Also known as",
-    photos: "Photos & videos",
-    route: "Route",
+    notes: PLACE_FORM.copy.notes,
+    sources: PLACE_FORM.copy.sources,
+    alsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
+    photos: PLACE_FORM.copy.photos,
+    route: PLACE_FORM.copy.route,
     linkedPlaces: "Linked places",
     trips: "Your trips",
     sharedWith: "Shared with",
