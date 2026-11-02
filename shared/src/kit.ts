@@ -77,6 +77,9 @@ export const KIT_COMPONENTS = {
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,
   Notice: both,
+  MapBanner: gps(
+    "a mode in the map's top row at the search button's height; Logjam Web's Notice column has room for the whole sentence",
+  ),
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
   ),
