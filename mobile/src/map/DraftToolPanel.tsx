@@ -9,6 +9,8 @@
 // at the top of the screen — search is not reachable mid-draw anyway, and on a
 // phone the map is the thing being worked in, so the chrome should not eat a
 // third of it. Compact rows: what you have drawn, then what you can do about it.
+// Snapping is a disclosure from the action row, like the colour palette: a
+// setting set once, not a block kept on screen.
 //
 // The route tool also carries the two properties of the LINE it is making —
 // direction and colour. They live here rather than in the route's options sheet
@@ -32,11 +34,12 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
+  MAP_MEASURE,
   mapMeasurePointsLabel,
   mapMeasureVerbs,
   type MapMeasureVerb,
@@ -121,6 +124,7 @@ export function DraftToolPanel({
 
   const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
+  const [snapOpen, setSnapOpen] = useState(false);
 
   return (
     <View style={styles.bar}>
@@ -156,11 +160,13 @@ export function DraftToolPanel({
         />
       ) : null}
 
-      <SnapPicker
-        mode={snapMode}
-        onChange={onSnapModeChange}
-        disabled={saving}
-      />
+      {snapOpen ? (
+        <SnapPicker
+          mode={snapMode}
+          onChange={onSnapModeChange}
+          disabled={saving}
+        />
+      ) : null}
 
       {/* Two groups in one row: what you do to the line on the left, what the
           line is and how you leave it on the right. The picked point's delete
@@ -180,6 +186,14 @@ export function DraftToolPanel({
             compact
             disabled={points.length === 0 || saving}
             onPress={onClear}
+          />
+          <Button
+            label={MAP_MEASURE.copy.snap}
+            icon={snapOpen ? "collapse" : "expand"}
+            variant="ghost"
+            compact
+            disabled={saving}
+            onPress={() => setSnapOpen((open) => !open)}
           />
         </View>
         <View style={styles.group}>
