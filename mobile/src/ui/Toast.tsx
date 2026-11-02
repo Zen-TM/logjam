@@ -40,13 +40,14 @@ export type ToastMessage = {
 export function Toast({
   message,
   onDismissed,
-  bottom,
+  clear,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
-  /** How far up from the host's bottom edge the toast docks, for a host that
-   *  keeps its own instruments there (the map's scale bar). */
-  bottom?: number;
+  /** Extra room from the host's edges, for a host that keeps its own controls
+   *  there (the map's action column and instruments): the toast docks clear of
+   *  them rather than over them. Added to the default margin. */
+  clear?: { bottom?: number; left?: number; right?: number };
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -129,7 +130,14 @@ export function Toast({
 
   return (
     <View
-      style={[styles.dock, bottom != null && { bottom }]}
+      style={[
+        styles.dock,
+        clear && {
+          bottom: spacing(2) + (clear.bottom ?? 0),
+          left: spacing(2) + (clear.left ?? 0),
+          right: spacing(2) + (clear.right ?? 0),
+        },
+      ]}
       pointerEvents="box-none"
     >
       <Animated.View
