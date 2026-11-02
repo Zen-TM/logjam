@@ -21,7 +21,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { radius, scrim, spacing, makeStyles, useTheme } from "../theme";
+import {
+  opacity,
+  radius,
+  scrim,
+  spacing,
+  makeStyles,
+  useTheme,
+} from "../theme";
 import { IconButton } from "./IconButton";
 import {
   DISMISS_DISTANCE,
@@ -634,6 +641,7 @@ export function BottomSheet({
                 accessibilityLabel="Close"
                 color={theme.text}
                 disabled={!closable}
+                disabledReason="Finish what is running first"
                 onPress={onClose}
               />
             </View>
@@ -730,7 +738,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: 5,
     borderRadius: radius.pill,
     backgroundColor: theme.lineStrong,
-    opacity: 0.5,
+    opacity: opacity.disabled,
   },
   // The row owns the bottom gap, so the arrow, the words and the × stay on a
   // single baseline. The × hangs into the sheet's padding to meet its corner.

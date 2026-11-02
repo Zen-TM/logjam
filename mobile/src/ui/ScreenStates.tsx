@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 
-import { spacing, makeStyles, useTheme, withAlpha, muted } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import { Button } from "./Button";
 import { Icon, type Glyph } from "./Icon";
 
@@ -52,13 +52,15 @@ export function EmptyState({
 
   return (
     <View style={styles.container}>
-      {icon ? (
-        <Icon idea={icon} size={28} color={withAlpha(theme.accent, 0.8)} />
-      ) : null}
+      {icon ? <Icon idea={icon} size={28} color={theme.accent} /> : null}
       <Text style={styles.title}>{title}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       {action ? (
-        <Button {...action} disabled={action.disabledReason != null} />
+        <Button
+          {...action}
+          disabled={action.disabledReason != null}
+          disabledReason={action.disabledReason ?? ""}
+        />
       ) : null}
       {action?.disabledReason ? (
         <Text style={styles.hint}>{action.disabledReason}</Text>

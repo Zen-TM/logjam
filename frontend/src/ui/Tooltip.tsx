@@ -13,20 +13,30 @@ import classes from "./Tooltip.module.css";
  *  move onto the tooltip itself (WCAG 1.4.13, hoverable). */
 const CLOSE_DELAY_MS = 150;
 
+/** How long a tooltip opened by a press stays: a touch screen has no hover to
+ *  keep it, and no pointer leaving to close it. */
+const PRESS_HOLD_MS = 4000;
+
 /**
  * Supplementary text for a control, on hover AND on keyboard focus, dismissable
  * with Escape without moving focus (WCAG 1.4.13). For what a label cannot say —
  * units, scale, consequence. Never the only place an essential instruction is.
+ *
+ * `openOnPress` also opens it on a press of the trigger, for a control that is
+ * disabled and stays pressable: a touch screen never hovers, so the press is
+ * where it asks why.
  *
  * `children` receives the id to put in the control's `aria-describedby`.
  */
 export function Tooltip({
   content,
   placement = "bottom-start",
+  openOnPress = false,
   children,
 }: {
   content: string;
   placement?: Placement;
+  openOnPress?: boolean;
   children: (describedById: string) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -64,7 +74,14 @@ export function Tooltip({
     );
   };
 
+  const press = () => {
+    show();
+    closeTimer.current = window.setTimeout(() => setOpen(false), PRESS_HOLD_MS);
+  };
+
   return (
+    // A press is a convenience over the trigger, which is itself the control.
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <span
       ref={anchorRef}
       className={classes.anchor}
@@ -72,6 +89,7 @@ export function Tooltip({
       onPointerLeave={hideSoon}
       onFocus={show}
       onBlur={() => setOpen(false)}
+      onClick={openOnPress ? press : undefined}
     >
       {children(id)}
       <span

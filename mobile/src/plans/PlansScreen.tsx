@@ -653,6 +653,7 @@ export function PlansScreen({
                   }
                   color={theme.accent}
                   disabled={!online}
+                  disabledReason={OFFLINE}
                   onPress={runBulkArchive}
                 />
               ) : null
@@ -662,7 +663,7 @@ export function PlansScreen({
             onDelete={runBulk}
             deleteIcon={bulk.destructive ? "delete" : "leave"}
             destructive={bulk.destructive}
-            deleteDisabled={!online}
+            deleteDisabledReason={online ? undefined : OFFLINE}
             deleteLabel={
               online ? bulk.deleteLabel : `${bulk.deleteLabel}. ${OFFLINE}`
             }
@@ -715,6 +716,7 @@ export function PlansScreen({
                   {...newPlan}
                   variant="outlineAccent"
                   disabled={!online}
+                  disabledReason={OFFLINE}
                 />
                 {/* Away from the hero's Offline pill, so the words go under
                     it (ui/Button.tsx). */}

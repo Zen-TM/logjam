@@ -46,6 +46,9 @@
   --motion-med: 200ms;
   --opacity-disabled: 0.5;
   --opacity-pressed: 0.7;
+  --scrim-light: rgba(0, 0, 0, 0.5);
+  --scrim-heavy: rgba(0, 0, 0, 0.6);
+  --scrim-photo: rgba(0, 0, 0, 0.92);
   color-scheme: dark;
   --color-page: #4e4944;
   --color-card: #61553f;

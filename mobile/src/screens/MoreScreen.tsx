@@ -30,7 +30,11 @@ import {
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
+import {
+  capabilityRowProps,
+  capabilityStatus,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { readPlansList } from "../plans/plansCache";
@@ -126,6 +130,7 @@ export function MoreScreen({
       setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
   }, []);
   const user = userQuery.data;
+  const syncNowStatus = capabilityStatus("syncNow", accountState, online);
 
   return (
     // Hero pinned, menu scrolls (DESIGN.md) — the menu is short today, but the rule is
@@ -153,9 +158,11 @@ export function MoreScreen({
               variant="outlineAccent"
               compact
               loading={syncStatus.state === "syncing"}
-              disabled={
-                capabilityStatus("syncNow", accountState, online).status !==
-                "available"
+              disabled={syncNowStatus.status !== "available"}
+              disabledReason={
+                syncNowStatus.status === "available"
+                  ? ""
+                  : unavailableReasonText(syncNowStatus.reason)
               }
               onPress={() => void syncNow()}
             />

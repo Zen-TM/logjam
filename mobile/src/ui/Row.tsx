@@ -6,6 +6,7 @@ import {
   opacity,
   radius,
   spacing,
+  wash,
   withAlpha,
   makeStyles,
   muted,
@@ -92,9 +93,10 @@ export function Row({
    */
   selected?: boolean;
   /**
-   * Unavailable right now, with the reason in the subtitle (UX §5): the row
-   * dims AND stops responding, and a screen reader hears the subtitle as the
-   * reason. Dropping `onPress` alone leaves a row that looks live and silently
+   * Unavailable right now, with the reason in the subtitle (UX §5): the tile,
+   * title and controls dim AND the row stops responding, while the subtitle
+   * stays at full strength (at the disabled opacity it falls under 3:1), and a
+   * screen reader hears it as the reason. Dropping `onPress` alone leaves a row that looks live and silently
    * does nothing, which is worse than a visibly dead one.
    */
   disabled?: boolean;
@@ -124,9 +126,16 @@ export function Row({
   const body = (
     <>
       <View style={styles.line}>
-        {lead != null ? <View style={styles.leading}>{lead}</View> : null}
+        {lead != null ? (
+          <View style={[styles.leading, disabled && styles.disabled]}>
+            {lead}
+          </View>
+        ) : null}
         <View style={styles.main}>
-          <Text style={styles.title} numberOfLines={titleNumberOfLines}>
+          <Text
+            style={[styles.title, disabled && styles.disabled]}
+            numberOfLines={titleNumberOfLines}
+          >
             {title}
           </Text>
           {subtitle ? (
@@ -135,9 +144,17 @@ export function Row({
             </Text>
           ) : null}
         </View>
-        {right != null ? <View style={styles.right}>{right}</View> : null}
+        {right != null ? (
+          <View style={[styles.right, disabled && styles.disabled]}>
+            {right}
+          </View>
+        ) : null}
       </View>
-      {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+      {footer != null ? (
+        <View style={[styles.footer, disabled && styles.disabled]}>
+          {footer}
+        </View>
+      ) : null}
       {progress != null ? (
         <View style={styles.progressTrack}>
           <View
@@ -165,7 +182,6 @@ export function Row({
           styles.row,
           styles.readOnly,
           selected && styles.selected,
-          disabled && styles.disabled,
           style,
         ]}
       >
@@ -189,7 +205,6 @@ export function Row({
         styles.row,
         selected && styles.selected,
         pressed && styles.pressed,
-        disabled && styles.disabled,
         style,
       ]}
     >
@@ -272,7 +287,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     right: 0,
     bottom: 0,
     height: 3,
-    backgroundColor: withAlpha(theme.text, 0.1),
+    backgroundColor: withAlpha(theme.text, wash.selected),
   },
   progressFill: { height: 3, borderRadius: radius.pill },
 }));

@@ -10,6 +10,9 @@ import {
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { showDisabledReason, type Disablable } from "./disabledReason";
+
+export type { Disablable };
 
 // A compact button is drawn at `controlSize.md`; the slop takes its target to
 // the 48pt minimum.
@@ -21,13 +24,6 @@ type ButtonProps = {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  disabled?: boolean;
-  /**
-   * Why it is disabled (UX §5): "Needs a connection", "Needs an account".
-   * Read by a screen reader as the hint, and what to show beside it. The button
-   * does not draw it — the screen puts the words where there is room.
-   */
-  disabledReason?: string;
   loading?: boolean;
   /** Optional leading glyph, tinted with the label. */
   icon?: Glyph;
@@ -39,7 +35,7 @@ type ButtonProps = {
    * rather than as a pair of tags floating at the left edge.
    */
   grow?: boolean;
-};
+} & Disablable;
 
 // Mirrors Logjam Web's button system (filled accent / outline accent / ghost);
 // other variants added as screens need them.
@@ -58,7 +54,10 @@ export function Button({
   const theme = useTheme();
   const styles = useStyles();
 
-  const inactive = disabled || loading;
+  // A disabled button stays pressable and says why (shared/DESIGN.md §5): the
+  // press shows `disabledReason` as a toast. A loading one is working, and a
+  // press has nothing to say.
+  const inactive = loading;
   // Words are never an intent colour: an outline button's label is the text
   // colour and its EDGE is the accent, as on Logjam Web.
   const tint = variant === "filledAccent" ? theme.onFill : theme.text;
@@ -67,8 +66,12 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={disabled ? disabledReason : undefined}
-      accessibilityState={{ disabled: inactive, busy: loading }}
-      onPress={onPress}
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      onPress={
+        disabled
+          ? () => disabledReason && showDisabledReason(disabledReason)
+          : onPress
+      }
       disabled={inactive}
       hitSlop={compact ? COMPACT_SLOP : undefined}
       style={({ pressed }) => [
@@ -77,6 +80,7 @@ export function Button({
         grow && styles.grow,
         styles[variant],
         pressed &&
+          !disabled &&
           (variant === "filledAccent" ? styles.pressedFilled : styles.pressed),
         // A button that is loading is working, not unavailable: it keeps its
         // colour, as on Logjam Web.
@@ -136,7 +140,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   outlineAccent: { borderColor: theme.accent },
   ghost: {},
   pressed: { backgroundColor: theme.cardPressed },
-  pressedFilled: { opacity: 0.85 },
+  pressedFilled: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.rowTitle },
   labelCompact: { ...textRole.control },

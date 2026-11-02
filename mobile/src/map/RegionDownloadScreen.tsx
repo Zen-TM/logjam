@@ -724,6 +724,7 @@ export function RegionDownloadScreen({
                     variant="outlineAccent"
                     onPress={() => handleSave(false)}
                     disabled={bbox == null || caps?.ok !== true || busy}
+                    disabledReason={busy ? "Saving…" : "Not ready yet"}
                   />
                 </View>
               }
@@ -810,6 +811,7 @@ export function RegionDownloadScreen({
             icon="saveOffline"
             onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
+            disabledReason={busy ? "Saving…" : "Not ready yet"}
           />
         </View>
       </View>

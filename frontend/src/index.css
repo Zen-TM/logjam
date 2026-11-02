@@ -25,8 +25,8 @@
   --gutter: var(--space-2);
 
   --hairline: 1px solid var(--color-line);
-  /* Behind a modal: the page dims rather than disappears. */
-  --scrim: color-mix(in srgb, black 40%, transparent);
+  /* The black veils (`--scrim-light`, `-heavy`, `-photo`) are generated from
+     the shared SCRIM: nothing else on Logjam Web is black with an alpha. */
 
   /* Shadows. Only things floating OVER THE MAP cast one; panels and sheets
      separate with a hairline. */

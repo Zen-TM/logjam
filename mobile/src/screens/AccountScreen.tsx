@@ -658,6 +658,7 @@ function DeleteAccountForm({
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}
+        disabledReason="Type the phrase above first"
         onPress={() => void run()}
       />
     </View>

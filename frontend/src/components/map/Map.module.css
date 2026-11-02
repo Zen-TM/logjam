@@ -225,7 +225,7 @@
      still apply and must not sit in the scrim. Above the canvas, which is
      unpositioned. */
   z-index: 0;
-  box-shadow: 0 0 0 9999px color-mix(in srgb, black 40%, transparent);
+  box-shadow: 0 0 0 9999px var(--scrim-light);
 }
 
 .geoPdfConfirmBar {

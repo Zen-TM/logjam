@@ -11,7 +11,14 @@
 import { forwardRef, useImperativeHandle, useState } from "react";
 import { Text, View } from "react-native";
 
-import { fontSize, radius, spacing, makeStyles, withAlpha } from "../theme";
+import {
+  fontSize,
+  radius,
+  spacing,
+  makeStyles,
+  withAlpha,
+  veil,
+} from "../theme";
 import { metersPerPixel } from "@logjam/shared";
 import { chooseScaleStep } from "./scaleBar";
 
@@ -79,7 +86,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   root: {
     alignSelf: "flex-start",
     alignItems: "flex-start",
-    backgroundColor: withAlpha(theme.page, 0.8),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(1),
     paddingTop: spacing(0.25),

@@ -30,7 +30,14 @@
 import { Image, View } from "react-native";
 
 import { Icon } from "../ui";
-import { radius, withAlpha, makeStyles, useHues, huesFor } from "../theme";
+import {
+  radius,
+  withAlpha,
+  makeStyles,
+  useHues,
+  huesFor,
+  wash,
+} from "../theme";
 import type { BasemapId } from "./sourceResolver";
 
 // The `require()` is what makes Metro bundle the file; a release build then
@@ -122,8 +129,8 @@ const useStyles = makeStyles((theme) => ({
     borderRadius: radius.md,
     // A hairline keeps a pale imagery tile from bleeding into the card.
     borderWidth: 1,
-    borderColor: withAlpha(huesFor(theme).assetHue.region, 0.35),
-    backgroundColor: withAlpha(huesFor(theme).assetHue.region, 0.16),
+    borderColor: huesFor(theme).assetHue.region,
+    backgroundColor: withAlpha(huesFor(theme).assetHue.region, wash.strong),
   },
   glyphTile: { alignItems: "center", justifyContent: "center" },
 }));

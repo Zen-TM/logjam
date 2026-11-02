@@ -9,6 +9,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  wash,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -144,7 +145,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     minWidth: CHIP_HEIGHT,
     justifyContent: "center",
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.control, color: theme.text },
   // `onFill`, not the page colour: text or a glyph on a colour fill needs
@@ -167,7 +168,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     minWidth: BADGE_SIZE,
     paddingHorizontal: spacing(0.5),
     borderRadius: halfRadius(BADGE_SIZE),
-    backgroundColor: withAlpha(theme.text, 0.12),
+    backgroundColor: withAlpha(theme.text, wash.selected),
     alignItems: "center",
     justifyContent: "center",
   },

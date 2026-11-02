@@ -1794,6 +1794,7 @@ export function SavedScreen({
                 accessibilityLabel="Cancel this import"
                 onPress={cancelGeoPdfImportRun}
                 disabled={!CANCELLABLE_PHASES.includes(importRun.phase)}
+                disabledReason="Can't be cancelled at this step"
               />
             }
           />
@@ -1979,6 +1980,7 @@ export function SavedScreen({
                         // but still rendered, because its absence would resize the
                         // row (see the note above).
                         disabled={selecting}
+                        disabledReason="Tap the row to pick it"
                         onPress={item.inlineAction.onPress}
                       />
                     ) : null}
@@ -2058,6 +2060,11 @@ export function SavedScreen({
                       accessibilityLabel={`Save ${job.label} for offline use`}
                       color={theme.accent}
                       disabled={!lidarReady || overlayBusyKey != null}
+                      disabledReason={
+                        lidarReady
+                          ? "Another download is running"
+                          : "Needs a connection"
+                      }
                       onPress={() => handleSaveOverlayJob(job)}
                     />
                   }
@@ -2571,6 +2578,7 @@ function SavedAddButton({ action }: { action: SavedAction }) {
         icon="addSaved"
         compact
         disabled={action.disabledReason != null}
+        disabledReason={action.disabledReason ?? ""}
         onPress={action.onPress}
       />
       {action.disabledReason ? (

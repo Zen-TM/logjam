@@ -48,6 +48,7 @@ import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
+const WORKING = "Working…";
 
 export function PeopleView({
   plan,
@@ -239,6 +240,7 @@ export function PeopleView({
                   color={theme.accent}
                   accessibilityLabel={copy.letIn}
                   disabled={!online || busyId === member.user.id}
+                  disabledReason={online ? WORKING : OFFLINE}
                   onPress={() => letIn(member)}
                 />
               )}
@@ -246,6 +248,7 @@ export function PeopleView({
                 icon="ignore"
                 accessibilityLabel={copy.turnDown}
                 disabled={!online || busyId === member.user.id}
+                disabledReason={online ? WORKING : OFFLINE}
                 onPress={() => turnDown(member)}
               />
             </View>
@@ -279,6 +282,7 @@ export function PeopleView({
                     )}
                     color={theme.textMuted}
                     disabled={busyId === member.user.id}
+                    disabledReason={WORKING}
                     onPress={() => setPersonId(member.user.id)}
                   />
                 ) : null}

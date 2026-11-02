@@ -4,11 +4,13 @@ import {
   hitSlop,
   opacity,
   radius,
+  wash,
   withAlpha,
   makeThemed,
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { showDisabledReason, type Disablable } from "./disabledReason";
 
 // An intent colour as a glyph on a wash of itself falls under 3:1 on
 // Ghost Gum's paper, so a filled button draws its glyph in the text colour and
@@ -28,6 +30,7 @@ export function IconButton({
   accessibilityLabel,
   color,
   disabled = false,
+  disabledReason,
   filled = false,
   size = 20,
 }: {
@@ -35,10 +38,9 @@ export function IconButton({
   onPress: () => void;
   accessibilityLabel: string;
   color?: string;
-  disabled?: boolean;
   filled?: boolean;
   size?: number;
-}) {
+} & Disablable) {
   const theme = useTheme();
   const INTENTS = useIntents();
   color ??= theme.textMuted;
@@ -47,14 +49,19 @@ export function IconButton({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={disabled ? disabledReason : undefined}
       accessibilityState={{ disabled }}
-      onPress={onPress}
-      disabled={disabled}
+      // Stays pressable, and says why (shared/DESIGN.md §5).
+      onPress={
+        disabled
+          ? () => disabledReason && showDisabledReason(disabledReason)
+          : onPress
+      }
       hitSlop={hitSlop}
       style={({ pressed }) => [
         styles.base,
-        filled && { backgroundColor: withAlpha(color, 0.16) },
-        pressed && styles.pressed,
+        filled && { backgroundColor: withAlpha(color, wash.strong) },
+        pressed && !disabled && styles.pressed,
         disabled && styles.disabled,
       ]}
     >
@@ -81,6 +88,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pressed: { opacity: 0.6 },
+  pressed: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
 });

@@ -697,6 +697,7 @@ function AddFriendBody({
         icon="link"
         variant="outlineAccent"
         disabled={inviting}
+        disabledReason="Making the link…"
         onPress={() => void shareInvite()}
       />
       {liveInvites === null ? (

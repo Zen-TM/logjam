@@ -551,6 +551,7 @@ const QuestionCard = memo(function QuestionCard({
           accessibilityLabel={`${copy.moveUp}: ${index + 1}`}
           color={theme.textMuted}
           disabled={index === 0}
+          disabledReason="Already the first question"
           onPress={() => onMove(question.id, -1)}
         />
         <IconButton
@@ -558,6 +559,7 @@ const QuestionCard = memo(function QuestionCard({
           accessibilityLabel={`${copy.moveDown}: ${index + 1}`}
           color={theme.textMuted}
           disabled={last}
+          disabledReason="Already the last question"
           onPress={() => onMove(question.id, 1)}
         />
         <IconButton

@@ -77,6 +77,7 @@ import {
   useTheme,
   useHues,
   muted,
+  wash,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
@@ -1096,7 +1097,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingLeft: spacing(1.5),
     paddingRight: spacing(0.5),
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(theme.accent, 0.12),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   filterText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },

@@ -322,6 +322,7 @@ export function PickAreaScreen({
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}
+            disabledReason="Waiting for the map"
             onPress={() => area && onConfirm(area)}
           />
         </View>

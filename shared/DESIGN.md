@@ -147,7 +147,9 @@ renumber.
 - **Things that look alike behave alike**; a thing that behaves differently
   looks different.
 - **A pressable thing answers the press at once** (pressed or hover state),
-  and nothing else answers a pointer: a chart or a read-only row stays still.
+  in one way: a glyph-only control or a fill dims to `OPACITY.pressed`, and
+  anything on a card takes the `cardPressed` fill. Nothing else answers a
+  pointer: a chart or a read-only row stays still.
   Decoration nobody could take for a control is the exception: the rain on
   Logjam Web's sign-in terrain.
 - **A control a hover reveals is always visible on a coarse pointer.**
@@ -160,7 +162,11 @@ renumber.
   shared).
 - **Disabled when it could apply but not now, and it says why** where the
   control is: "Needs a connection", "Needs an account", "Nothing to mark as
-  read". The reason reaches a screen reader.
+  read". The reason reaches a screen reader. A disabled button stays
+  pressable, and the press shows the reason (a toast on Logjam GPS, the
+  tooltip on Logjam Web, where a touch screen never hovers); `disabledReason`
+  is required by type. A disabled row dims its tile, title and controls, and
+  its reason line stays at full strength.
 - **"Needs an account" outranks "Needs a connection".**
 - **Submit is never disabled for validation**: pressing it is how the user
   learns what is missing. Disable it only while saving, for a capability the

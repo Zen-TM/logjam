@@ -14,6 +14,7 @@ import {
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
+  SCRIM,
   SPACE,
   TEXT_ROLES,
 } from "./designTokens.js";
@@ -109,6 +110,10 @@ export function webScaleProperties(): [string, string][] {
     ...Object.entries(OPACITY).map(([n, v]): [string, string] => [
       `--opacity-${n}`,
       String(v),
+    ]),
+    ...Object.entries(SCRIM).map(([n, v]): [string, string] => [
+      `--scrim-${n}`,
+      v.replaceAll(",", ", "),
     ]),
   ];
 }

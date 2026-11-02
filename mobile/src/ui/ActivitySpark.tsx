@@ -7,6 +7,8 @@ import {
   makeStyles,
   useTheme,
   muted,
+  veil,
+  wash,
 } from "../theme";
 
 export type ActivityBucket = {
@@ -53,7 +55,7 @@ export function ActivitySpark({
                       height: `${(bucket.count / peak) * 100}%`,
                       backgroundColor: bucket.current
                         ? theme.accent
-                        : withAlpha(theme.accent, 0.55),
+                        : withAlpha(theme.accent, veil.dim),
                     },
                   ]}
                 />
@@ -79,7 +81,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   track: {
     height: BAR_HEIGHT,
     justifyContent: "flex-end",
-    backgroundColor: withAlpha(theme.text, 0.08),
+    backgroundColor: withAlpha(theme.text, wash.subtle),
     borderRadius: radius.sm,
     overflow: "hidden",
   },

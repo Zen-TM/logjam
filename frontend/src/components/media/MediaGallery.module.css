@@ -66,7 +66,7 @@
   justify-content: center;
   padding: 2px;
   border-radius: var(--radius-sm);
-  background-color: rgba(0, 0, 0, 0.55);
+  background-color: var(--scrim-heavy);
   color: #fff;
   pointer-events: none;
 }
@@ -87,7 +87,7 @@
   border-radius: var(--radius-sm);
   /* Black, not a theme colour: this sits on the user's photograph, not on a
      surface, so there is no scheme for it to answer to. */
-  background-color: rgba(0, 0, 0, 0.55);
+  background-color: var(--scrim-heavy);
   color: #fff;
   cursor: pointer;
   opacity: 0;
