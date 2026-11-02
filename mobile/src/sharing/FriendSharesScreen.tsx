@@ -64,6 +64,7 @@ import {
   type FriendShares,
   type IconIdea,
   type SectionKeysOn,
+  friendSeesUnit,
 } from "@logjam/shared";
 
 import { getFriendShares, unshareWithFriend } from "../api/friends";
@@ -264,7 +265,7 @@ export function FriendSharesScreen({
       Alert.alert(confirm.title, confirm.body, [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Unshare",
+          text: "Stop sharing",
           style: "destructive",
           onPress: () => {
             setBusy(true);
@@ -475,9 +476,7 @@ export function FriendSharesScreen({
         onBack={onBack}
         backLabel={backLabel}
         value={String(theirCount)}
-        valueSuffix={
-          theirCount === 1 ? "item they can see" : "items they can see"
-        }
+        valueSuffix={friendSeesUnit(theirCount)}
       />
     ),
     directions: () => (

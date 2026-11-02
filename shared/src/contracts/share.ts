@@ -80,6 +80,31 @@ export function sharePromise(kind: SharePromiseKind | "selection"): string {
   }
 }
 
+/**
+ * The other sentences that say who can see something. Both clients read them
+ * from here, and `shareSentences.test.ts` in each fails on a client that types
+ * one of its own.
+ */
+export const SHARE_SENTENCES = {
+  notesHint:
+    "Visible to friends you share the place with. Per-trip notes stay private.",
+  linkedRoutes: "Friends you share a place with can see its linked routes.",
+  linkedFile:
+    "The file is linked to the place, so friends you share the place with can see it. It stays in Saved, and unlinking it later leaves it there.",
+} as const;
+
+/** What a way shared with you is to you, and what stops it showing. */
+export function sharedWayNote(viaPlaceName: string | null): string {
+  return viaPlaceName
+    ? `Shared with you as part of ${viaPlaceName} — you can see it, but not change it. Removing that place is what stops it showing here.`
+    : "Shared with you — you can see it, but not change it.";
+}
+
+/** The count's unit on a friend's sharing screen. */
+export function friendSeesUnit(count: number): string {
+  return count === 1 ? "item they can see" : "items they can see";
+}
+
 /** A friend picker with nobody to pick, and the way out of it. */
 export function noFriendsMessage(purpose: "share" | "copy"): {
   title: string;

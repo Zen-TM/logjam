@@ -143,7 +143,7 @@ export function useSharing({
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Unshare",
+            text: "Stop sharing",
             style: "destructive",
             onPress: () => {
               setBusyId(recipient.id);

@@ -122,7 +122,7 @@ export function ImportOptionsSheet({
       if (!actions?.attachToPlace)
         throw new Error("This import has no original file.");
       await actions.attachToPlace(placeId);
-      onInfo(`Attached a copy as ${placeName}'s route.`);
+      onInfo(`Linked a copy as ${placeName}'s route.`);
     },
     onDone: () => {
       setAttaching(false);
@@ -184,7 +184,7 @@ export function ImportOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a place"
+              ? "Link to a place"
               : imported.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -278,7 +278,7 @@ export function ImportOptionsSheet({
               nothing legal to upload (assetActions.ts withholds the verb). */}
           {actions.attachToPlace ? (
             <Row
-              title="Attach to a place"
+              title="Link to a place"
               subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}

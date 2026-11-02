@@ -352,7 +352,7 @@ export const PLAN_MEMBER_VERBS = [
   { id: "makeMember", icon: "account", label: "Make a member", roles: LEADERS },
   {
     id: "remove",
-    icon: "unshare",
+    icon: "removeFriend",
     label: "Remove from plan",
     roles: LEADERS,
     danger: true,

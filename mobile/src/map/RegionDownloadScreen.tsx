@@ -174,7 +174,7 @@ function regionLabelFor(basemapId: string): string {
   if (basemapId === NSW_SLOPE.id) return "Slope";
   if (basemapId === NSW_LAND.id) return MAP_TERRAIN.copy.land;
   const name = BASEMAP_CATALOG.find((entry) => entry.id === basemapId)?.name;
-  return `${name ?? "Map"} region`;
+  return name ?? "Map";
 }
 
 /** How far the map runs up behind the hero — one corner radius. */
@@ -282,7 +282,7 @@ export function RegionDownloadScreen({
   } | null>(null);
   const nameInputRef = useRef<TextInputInstance>(null);
 
-  // "Region 3", numbered off what this phone already holds plus what is still
+  // "Offline map 3", numbered off what this phone already holds plus what is still
   // downloading. Nothing in it needs the network or says where the area is
   // (see regionName.ts).
   const { artifacts } = useMapArtifacts();

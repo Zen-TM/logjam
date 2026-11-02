@@ -77,7 +77,7 @@ function Frame({ children }: { children: ReactNode }) {
 function Intro() {
   return (
     <p className={classes.intro}>
-      A private map and logbook for canyoning in New South Wales.
+      Your private map and trips for canyoning in New South Wales.
     </p>
   );
 }
@@ -194,9 +194,7 @@ function CognitoForms({
       setResendSuccess(true);
     } catch (err) {
       console.error(err);
-      setLocalError(
-        messageFromError(err, "Couldn't resend code. Please try again."),
-      );
+      setLocalError(messageFromError(err, "Couldn't resend code. Try again."));
       setResendCooldown(0);
     }
   }
@@ -244,17 +242,12 @@ function CognitoForms({
         await resendSignUpCode(email).catch((resendErr) => {
           console.error(resendErr);
           setLocalError(
-            messageFromError(
-              resendErr,
-              "Couldn't resend code. Please try again.",
-            ),
+            messageFromError(resendErr, "Couldn't resend code. Try again."),
           );
         });
       } else {
         console.error(err);
-        setLocalError(
-          messageFromError(err, "Sign in failed. Please try again."),
-        );
+        setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
       }
     }
     setSubmitting(false);
@@ -291,7 +284,7 @@ function CognitoForms({
       goTo("confirmSignUp");
     } catch (err) {
       console.error(err);
-      setLocalError(messageFromError(err, "Sign up failed. Please try again."));
+      setLocalError(messageFromError(err, "Couldn't sign up. Try again."));
     }
     setSubmitting(false);
   }
@@ -305,7 +298,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Confirmation failed. Please try again."),
+        messageFromError(err, "Couldn't confirm your code. Try again."),
       );
       setSubmitting(false);
       return;
@@ -319,7 +312,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       goTo("signIn");
-      setLocalError(messageFromError(err, "Sign in failed. Please try again."));
+      setLocalError(messageFromError(err, "Couldn't sign in. Try again."));
     }
     setSubmitting(false);
   }
@@ -339,7 +332,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Couldn't send reset code. Please try again."),
+        messageFromError(err, "Couldn't send reset code. Try again."),
       );
     }
     setSubmitting(false);
@@ -366,7 +359,7 @@ function CognitoForms({
     } catch (err) {
       console.error(err);
       setLocalError(
-        messageFromError(err, "Couldn't reset password. Please try again."),
+        messageFromError(err, "Couldn't reset password. Try again."),
       );
     }
     setSubmitting(false);
@@ -629,7 +622,7 @@ function CognitoForms({
         <InviteNote />
         {resetSuccess && (
           <p className={classes.successBanner} role="status">
-            Password reset — please sign in.
+            Password reset. Sign in to continue.
           </p>
         )}
         <TextField

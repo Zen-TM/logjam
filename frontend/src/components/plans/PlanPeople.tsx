@@ -1,5 +1,5 @@
 // A plan's People view: people asking to join first (leaders
-// only), let in or turned down on their row; then
+// only), accepted or declined on their row; then
 // who's going, leaders first; then who's invited (leaders only). A leader's ⋯
 // on someone going changes their role or removes them.
 import { useState } from "react";
@@ -188,21 +188,25 @@ export default function PlanPeople({
               trailing={
                 !archived && (
                   <>
-                    <IconButton
+                    <Button
+                      compact
+                      variant="filled"
                       icon="accept"
-                      tone="filled"
-                      label={copy.letIn}
-                      disabled={busy.isBusy(member.user.id)}
-                      disabledReason="Replying…"
+                      busy={busy.isBusy(member.user.id)}
                       onClick={() => letIn(member)}
-                    />
-                    <IconButton
+                    >
+                      {copy.letIn}
+                    </Button>
+                    <Button
+                      compact
+                      variant="outline"
                       icon="ignore"
-                      label={copy.turnDown}
                       disabled={busy.isBusy(member.user.id)}
                       disabledReason="Replying…"
                       onClick={() => setTurningDown(member)}
-                    />
+                    >
+                      {copy.turnDown}
+                    </Button>
                   </>
                 )
               }

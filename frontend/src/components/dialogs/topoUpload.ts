@@ -147,7 +147,7 @@ export function submitFailureMessage(error: unknown, uploaded: boolean) {
   if (!uploaded && !(error instanceof ApiError)) return UPLOAD_STOPPED;
   return messageFromError(
     error,
-    uploaded ? "Submission failed. Please try again." : UPLOAD_STOPPED,
+    uploaded ? "Couldn't submit. Try again." : UPLOAD_STOPPED,
   );
 }
 

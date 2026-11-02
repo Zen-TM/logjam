@@ -19,7 +19,7 @@ export const MAP_LAYERS = {
       key: "offline",
       on: "gps",
       reason:
-        "Saved maps and 'offline maps only' are phone features: Logjam Web is never used without a connection.",
+        "Saved maps and 'use only saved maps' are phone features: Logjam Web is never used without a connection.",
     },
   ],
   copy: {

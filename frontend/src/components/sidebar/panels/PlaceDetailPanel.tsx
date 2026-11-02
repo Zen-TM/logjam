@@ -33,6 +33,7 @@ import {
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
   placeAttributesTitle,
+  placeSectionTitle,
   placeSources,
   placeStatus,
   placeStatusLabel,
@@ -488,9 +489,7 @@ function PlaceDetailPanel({
       onAfterDelete();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't delete place. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't delete place. Try again."));
       setDeleting(false);
     }
   }
@@ -507,7 +506,7 @@ function PlaceDetailPanel({
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't remove that place. Please try again."),
+        messageFromError(err, "Couldn't remove that place. Try again."),
       );
     } finally {
       setRemoving(false);
@@ -550,9 +549,7 @@ function PlaceDetailPanel({
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't copy place. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't copy place. Try again."));
     } finally {
       setCopying(false);
       setConfirmCopyAndRemove(false);
@@ -597,9 +594,7 @@ function PlaceDetailPanel({
       onQuotaChanged();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't delete track. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't delete track. Try again."));
     } finally {
       setDeletingTrack(false);
     }
@@ -749,7 +744,12 @@ function PlaceDetailPanel({
     gauge: () =>
       current.gaugeId || isOwnedPlace ? (
         <section className={classes.section}>
-          <SectionHeader title={copy.gauge} />
+          <SectionHeader
+            title={placeSectionTitle("gauge", copy.gauge, {
+              owned: isOwnedPlace,
+              filled: Boolean(current.gaugeId),
+            })}
+          />
           <PlaceGauge
             latitude={current.latitude}
             longitude={current.longitude}
@@ -765,7 +765,11 @@ function PlaceDetailPanel({
       attributes.length > 0 ? (
         <section className={classes.section}>
           <SectionHeader
-            title={placeAttributesTitle(placeType?.name ?? null)}
+            title={placeSectionTitle(
+              "attributes",
+              placeAttributesTitle(placeType?.name ?? null),
+              { owned: isOwnedPlace, filled: true },
+            )}
           />
           <dl className={classes.table}>
             {attributes.map(({ def, text }) => (
@@ -811,7 +815,10 @@ function PlaceDetailPanel({
       return (
         <section className={classes.section}>
           <SectionHeader
-            title={hasNotes && isOwnedPlace ? copy.notesVisible : copy.notes}
+            title={placeSectionTitle("notes", copy.notes, {
+              owned: isOwnedPlace,
+              filled: hasNotes,
+            })}
           />
           <p className={hasNotes ? classes.notes : classes.muted}>
             {hasNotes ? current.notes : copy.notesEmpty}
@@ -823,7 +830,13 @@ function PlaceDetailPanel({
     sources: () =>
       sources.length > 0 ? (
         <section className={classes.section}>
-          <SectionHeader title={copy.sources} count={sources.length} />
+          <SectionHeader
+            title={placeSectionTitle("sources", copy.sources, {
+              owned: isOwnedPlace,
+              filled: true,
+            })}
+            count={sources.length}
+          />
           {sources.map((source, index) => (
             <Row
               key={index}
@@ -845,7 +858,10 @@ function PlaceDetailPanel({
     photos: () => (
       <section className={classes.section}>
         <SectionHeader
-          title={copy.photos}
+          title={placeSectionTitle("photos", copy.photos, {
+            owned: isOwnedPlace,
+            filled: visualMedia.length > 0,
+          })}
           count={visualMedia.length > 0 ? visualMedia.length : undefined}
         />
         {visualMedia.length > 0 ? (
@@ -862,7 +878,12 @@ function PlaceDetailPanel({
     // others.
     route: () => (
       <section className={classes.section}>
-        <SectionHeader title={copy.route} />
+        <SectionHeader
+          title={placeSectionTitle("route", copy.route, {
+            owned: isOwnedPlace,
+            filled: Boolean(track),
+          })}
+        />
         {track ? (
           <Row
             leading={<IconTile icon="track" hue="var(--hue-track)" />}
@@ -1088,7 +1109,7 @@ function PlaceDetailPanel({
         message={
           <>
             This permanently deletes the track <b>{trackToDelete?.filename}</b>.
-            This cannot be undone.
+            This can't be undone.
           </>
         }
         busy={deletingTrack}

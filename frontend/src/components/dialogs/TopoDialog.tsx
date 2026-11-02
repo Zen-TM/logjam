@@ -316,7 +316,7 @@ export default function TopoDialog({
 
   function onFilePicked(picked: File) {
     if (!picked.name.toLowerCase().endsWith(".zip")) {
-      setValidationError("Please select a .zip file.");
+      setValidationError("Select a .zip file.");
       return;
     }
     // A new ZIP is a new job: the stopped one is let go, and with it the lock

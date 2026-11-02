@@ -69,10 +69,7 @@ function DeleteCustomFieldDialog({
     } catch (err) {
       console.error(err);
       setError(
-        messageFromError(
-          err,
-          "Couldn't delete the attribute. Please try again.",
-        ),
+        messageFromError(err, "Couldn't delete the attribute. Try again."),
       );
     } finally {
       setDeleting(false);

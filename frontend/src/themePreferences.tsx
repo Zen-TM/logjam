@@ -89,9 +89,7 @@ export function ThemePreferencesProvider({
       } catch (err) {
         console.error(err);
         setSchemeId(previous);
-        setError(
-          messageFromError(err, "Couldn't save theme. Please try again."),
-        );
+        setError(messageFromError(err, "Couldn't save theme. Try again."));
       } finally {
         setIsSaving(false);
       }

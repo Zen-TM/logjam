@@ -84,7 +84,7 @@ export const PLACES_ADD = {
   ],
   copy: {
     add: "Add a place",
-    importFile: "Import from file",
+    importFile: "Import a file",
     importRopewiki: "Import from RopeWiki",
     importingRopewiki: "Importing from RopeWiki…",
     menu: "Add places",

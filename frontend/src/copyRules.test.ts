@@ -114,31 +114,6 @@ function childExpressionStrings(
 // Strings still to reword to the glossary; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
-    file: "components/App.tsx",
-    rule: "cannot",
-    text: "Your placed points will be lost. This cannot be undone.",
-  },
-  {
-    file: "components/ConsentGate.tsx",
-    rule: "please",
-    text: "Logjam's Terms of Use and Privacy Policy have changed (last updated ). Please review them and confirm your agreement to keep using Logjam.",
-  },
-  {
-    file: "components/SignIn.tsx",
-    rule: "logbook",
-    text: "A private map and logbook for canyoning in New South Wales.",
-  },
-  {
-    file: "components/SignIn.tsx",
-    rule: "please",
-    text: "Password reset — please sign in.",
-  },
-  {
-    file: "components/dialogs/OnboardingChoiceDialog.tsx",
-    rule: "logbook",
-    text: "A place list needs name, latitude and longitude. A logbook needs a place name and a date.",
-  },
-  {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
     rule: "cannot",
     text: ",\n            along with their photos, tracks and shares. Your trip logs are kept\n            — they&rsquo;ll be unlinked from these places but stay in your\n            logbook. This cannot be undone.",
@@ -162,66 +137,6 @@ const BASELINE: { file: string; text: string; rule: string }[] = [
     file: "components/dialogs/SelectedPlacesDialog.tsx",
     rule: "unshare",
     text: "Recipients can copy or export them while the share is active.\n                  Unsharing won&rsquo;t remove copies they&rsquo;ve already\n                  made.",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "custom-field",
-    text: "Custom field:",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "custom-field",
-    text: "Import as new custom field…",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "A place list needs a name, latitude and longitude (grades and notes\n          are optional). A logbook needs a place name and a date (notes\n          optional). Need a starting point?",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "A place name column and a date column are required for a logbook.",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "Drop a CSV here, or click to browse. You can add a place list and a\n            logbook together.",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "Logbook",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "Logbook columns",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "Logbook template",
-  },
-  {
-    file: "components/dialogs/UnifiedImportDialog.tsx",
-    rule: "logbook",
-    text: "You have no places yet. Importing a logbook works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later.",
-  },
-  {
-    file: "components/media/MediaGallery.tsx",
-    rule: "cannot",
-    text: ". This\n            cannot be undone.",
-  },
-  {
-    file: "components/sidebar/panels/PlaceDetailPanel.tsx",
-    rule: "cannot",
-    text: ".\n            This cannot be undone.",
-  },
-  {
-    file: "components/sidebar/panels/mapsModel.ts",
-    rule: "lidar-topo",
-    text: "LiDAR topo",
   },
 ];
 

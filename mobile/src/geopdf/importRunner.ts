@@ -59,7 +59,7 @@ export const GEOPDF_PHASE_LABEL: Record<GeoPdfImportState, string> = {
   overviews: "Building the zoomed-out levels",
   finalising: "Finishing up",
   ready: "Done",
-  failed: "That didn't work",
+  failed: "Couldn't import this PDF",
 };
 
 /**

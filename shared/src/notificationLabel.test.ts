@@ -339,7 +339,7 @@ describe("plan notifications", () => {
       ).text;
     expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
     expect(ended("declined")).toBe(
-      "Your request to join Wollangambe trip was turned down",
+      "Your request to join Wollangambe trip was declined",
     );
     expect(ended("deleted")).toBe("Wollangambe trip was deleted");
   });

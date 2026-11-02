@@ -488,7 +488,7 @@ export function RouteOptionsSheet({
           {actions.removeShare ? (
             <Row
               title={wayVerbLabel("removeShare", "gps")}
-              icon="unshare"
+              icon="hide"
               hue={theme.warning}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}

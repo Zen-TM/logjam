@@ -102,7 +102,7 @@ export const PLACE_VERBS = [
   },
   {
     id: "remove",
-    icon: "unshare",
+    icon: "hide",
     label: "Remove from my account",
     for: "sharee",
     separated: true,

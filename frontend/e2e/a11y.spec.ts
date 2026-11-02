@@ -1036,7 +1036,7 @@ test.describe("desktop", () => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
-    await page.getByRole("menuitem", { name: "Import from file" }).click();
+    await page.getByRole("menuitem", { name: "Import a file" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(

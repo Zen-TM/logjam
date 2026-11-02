@@ -394,10 +394,7 @@ function PlaceDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded media. Please try again.",
-          ),
+          messageFromError(err, "Couldn't discard uploaded media. Try again."),
         );
         return;
       }
@@ -461,7 +458,7 @@ function PlaceDialog({
       );
       if (numericInvalid || attributeInvalid) {
         setShowFieldErrors(true);
-        setError("Please fix the highlighted fields.");
+        setError("Fix the highlighted fields.");
         setSaving(false);
         return;
       }
@@ -528,7 +525,7 @@ function PlaceDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save place. Please try again."));
+      setError(messageFromError(err, "Couldn't save place. Try again."));
     } finally {
       setSaving(false);
     }
@@ -580,7 +577,7 @@ function PlaceDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save custom field. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);

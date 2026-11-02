@@ -438,7 +438,7 @@ export function MediaStrip({
           // the button unresponsive.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
-            fail("That action didn't work. Please try again.");
+            fail("Couldn't finish that. Try again.");
           });
         }}
         title={

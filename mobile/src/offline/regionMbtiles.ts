@@ -402,7 +402,7 @@ export async function listUnfinishedRegions(
       const [west, south, east, north] = bounds.split(",").map(Number);
       unfinished.push({
         id,
-        label: (await readRegionMetadata(db, "name")) ?? "Offline map region",
+        label: (await readRegionMetadata(db, "name")) ?? "Offline map",
         groupId: (await readRegionMetadata(db, "logjam:group")) ?? undefined,
         groupLabel:
           (await readRegionMetadata(db, "logjam:groupLabel")) ?? undefined,

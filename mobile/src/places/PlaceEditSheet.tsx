@@ -9,6 +9,7 @@ import {
   userFieldValues,
   validatePlacePayload,
   type ScopedCustomFieldDef,
+  SHARE_SENTENCES,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -526,7 +527,7 @@ export function PlaceEditSheet({
             value={altNames}
             onChangeText={setAltNames}
             autoCapitalize="words"
-            hint="Separate alternative names with commas — they’re searchable too."
+            hint="Separate alternative names with commas — they're searchable too."
           />
 
           <SectionHeader title="Position" />
@@ -590,7 +591,7 @@ export function PlaceEditSheet({
             onChangeText={setNotes}
             multiline
             autoCapitalize="sentences"
-            hint="Visible to anyone you share the place with. Per-trip notes stay private."
+            hint={SHARE_SENTENCES.notesHint}
           />
 
           {/* Named for the TYPE, not for the user: on a Campsite these are

@@ -35,7 +35,7 @@ async function openImportDialog(page: Page) {
   });
   await page.getByRole("button", { name: "Places", exact: true }).click();
   await page.getByRole("button", { name: /^Add/ }).first().click();
-  await page.getByRole("menuitem", { name: "Import from file" }).click();
+  await page.getByRole("menuitem", { name: "Import a file" }).click();
   // Not the Undo confirm: that one is an alertdialog.
   const dialog = page.getByRole("dialog");
   await expect(
@@ -133,7 +133,7 @@ test("a logbook: the match review, import, Undo", async ({ page }) => {
       .setInputFiles(corpus("logbooks/maintainer-logbook.csv"));
 
     await expect(
-      dialog.getByRole("heading", { name: /^Logbook columns/ }),
+      dialog.getByRole("heading", { name: /^Trip columns/ }),
     ).toBeVisible({ timeout: 15_000 });
     const roles = {
       Name: "name",

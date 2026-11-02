@@ -19,7 +19,11 @@
 //
 // PRIVACY: the place name and the attachment's filename appear only in a
 // confirm the user opened for that place — never in a log or an error string.
-import { mediaCategory, mediaDisplayName } from "@logjam/shared";
+import {
+  mediaCategory,
+  mediaDisplayName,
+  SHARE_SENTENCES,
+} from "@logjam/shared";
 
 import type { DeleteConfirmCopy } from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
@@ -47,8 +51,7 @@ export function waySourceWrites(source: WaySource): "route" | "media" {
  */
 export const TRACK_TO_ROUTE_PROMISE =
   "A route is created from the recording and linked to the place. The recording itself is left alone.";
-export const IMPORT_TO_PLACE_PROMISE =
-  "The file is linked to the place, so anyone you share it with can see it. It stays in Saved, and unlinking it later leaves it there.";
+export const IMPORT_TO_PLACE_PROMISE = SHARE_SENTENCES.linkedFile;
 
 export type RouteSlotOccupant =
   | { kind: "route"; id: string; name: string }

@@ -209,7 +209,7 @@ export function batchLabel(batch: NotificationBatch): string {
  *
  * Shares have no answer — a grant simply is — so only a file batch gets
  * buttons. `pending` is what those buttons would act on: a member already
- * accepted or expired is not offered again, so "Turn down all" on a batch where
+ * accepted or expired is not offered again, so "Decline all" on a batch where
  * six are already saved acts on two and says so.
  */
 export function batchPendingFileSends(

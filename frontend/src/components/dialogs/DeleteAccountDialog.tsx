@@ -67,9 +67,7 @@ function DeleteAccountForm({
       onDeleted();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't delete account. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't delete account. Try again."));
       setDeleting(false);
     }
   }

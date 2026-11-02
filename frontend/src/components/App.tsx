@@ -2031,7 +2031,7 @@ function App() {
           message={
             editingRouteId
               ? "Your changes to this route will be lost. The route itself is not deleted."
-              : "Your placed points will be lost. This cannot be undone."
+              : "Your placed points will be lost. This can't be undone."
           }
           confirmLabel="Discard"
           confirmColor="error"
@@ -2046,7 +2046,7 @@ function App() {
         <ConfirmDialog
           open={clearRouteGuard.guardOpen}
           title="Clear this route?"
-          message="Your placed points will be lost. This cannot be undone."
+          message="Your placed points will be lost. This can't be undone."
           confirmLabel="Clear"
           confirmColor="error"
           onConfirm={clearRouteGuard.confirmDiscard}

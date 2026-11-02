@@ -552,7 +552,7 @@ function PlaceNamesRow() {
     : stored
       ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(storedBytes)}`
       : offlineOnly
-        ? "Offline maps only is on"
+        ? "Use only saved maps is on"
         : online
           ? latest
             ? `About ${formatBytes(latest.bytes)}`

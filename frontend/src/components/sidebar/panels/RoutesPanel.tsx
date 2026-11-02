@@ -272,7 +272,7 @@ export default function RoutesPanel({
             },
             {
               id: "import",
-              label: "Import from file",
+              label: "Import a file",
               icon: "upload",
               onSelect: onOpenUnifiedImport,
             },
@@ -356,8 +356,8 @@ export default function RoutesPanel({
     <div className={classes.emptyArea}>
       <EmptyState
         icon="route"
-        title="No lines yet"
-        body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
+        title="No ways yet"
+        body="Draw a route on the map. Tracks you record in Logjam GPS appear here too."
         actions={addWayButtons}
       />
     </div>

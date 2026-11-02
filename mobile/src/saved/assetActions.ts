@@ -22,7 +22,7 @@
 //                                    everything that CAN be tapped on the map
 //                                    has one sheet, above.
 //
-// A verb whose panel needs a surface (Share, Send a copy, "Attach to a place")
+// A verb whose panel needs a surface (Share, Send a copy, "Link to a place")
 // is rendered INSIDE the sheet that owns the verb, never handed to the caller
 // as a callback: a callback is only as good as the caller that remembers to
 // pass it, which is the same asymmetry in a different shape. The place picker

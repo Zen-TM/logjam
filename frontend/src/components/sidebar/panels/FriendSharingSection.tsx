@@ -353,7 +353,7 @@ function FriendSharingSection({
               />
             )}
             {/* Neither verb is a bin: both end a grant, and the record outlives
-                  them. `user-minus` for "they stop seeing it", `eye-off` for "I
+                  them. `user-x` for "they stop seeing it", `eye-off` for "I
                   stop seeing it" — the same two glyphs Logjam GPS uses here. */}
             {direction === "theySee" ? (
               <IconButton
@@ -508,7 +508,7 @@ function FriendSharingSection({
             ),
           }).body
         }
-        confirmLabel={`Unshare ${selected.length}`}
+        confirmLabel={`Stop sharing ${selected.length}`}
         busy={busy}
         onConfirm={() => void unshareSelected()}
         onClose={() => setPendingBulk(null)}

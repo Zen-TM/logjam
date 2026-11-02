@@ -770,10 +770,7 @@ function TripLogDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded files. Please try again.",
-          ),
+          messageFromError(err, "Couldn't discard uploaded files. Try again."),
         );
         return;
       }
@@ -974,7 +971,7 @@ function TripLogDialog({
     );
     if (customFieldInvalid) {
       setShowFieldErrors(true);
-      setError("Please fix the highlighted fields.");
+      setError("Fix the highlighted fields.");
       return;
     }
     setSaving(true);
@@ -1033,9 +1030,7 @@ function TripLogDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't save this trip. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't save this trip. Try again."));
     } finally {
       setSaving(false);
     }
@@ -1080,7 +1075,7 @@ function TripLogDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save the attribute. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);

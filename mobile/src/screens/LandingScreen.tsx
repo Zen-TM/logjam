@@ -59,7 +59,7 @@ export function LandingScreen({ auth }: { auth: Auth }) {
           />
           <Text style={styles.appTitle}>Logjam</Text>
           <Text style={styles.tagline}>
-            Your canyoning logbook and offline maps.
+            Your canyoning trips and offline maps.
           </Text>
         </View>
 

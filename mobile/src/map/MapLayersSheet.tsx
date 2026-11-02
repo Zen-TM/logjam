@@ -648,7 +648,7 @@ function OfflineTab({
       <Row
         icon="saveOffline"
         hue={assetHue.region}
-        title="Save maps for offline use"
+        title="Save an offline map"
         subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
         disabled={!online}
         onPress={onSaveArea}
@@ -656,7 +656,7 @@ function OfflineTab({
       <SwitchRow
         icon="offline"
         hue={assetHue.region}
-        title="Offline maps only"
+        title="Use only saved maps"
         description="Even when you have signal"
         descriptionNumberOfLines={2}
         checked={offlineOnly}
@@ -669,12 +669,12 @@ function OfflineTab({
         hue={assetHue.region}
         title={
           savedRegions.length === 1
-            ? "1 saved area"
-            : `${savedRegions.length} saved areas`
+            ? "1 offline map"
+            : `${savedRegions.length} offline maps`
         }
         subtitle={
           savedRegions.length === 0
-            ? "Download an area to use maps offline"
+            ? "Save an offline map to use maps with no signal"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
         // Lands on Saved's Regions filter, not its everything-list: a pointer

@@ -85,7 +85,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <Icon idea="unshare" size={14} /> Remove
+              <Icon idea="hide" size={14} /> Remove
             </>
           )}
         </button>
@@ -93,7 +93,7 @@ export default function RemoveSharedButton({
         <Button
           compact
           variant="outline"
-          icon="unshare"
+          icon="hide"
           title={label}
           disabled={Boolean(off)}
           disabledReason={off ?? ""}

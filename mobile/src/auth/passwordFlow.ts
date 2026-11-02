@@ -70,7 +70,7 @@ export async function signInWithPasswordFlow(
       return {
         type: "form",
         message: online
-          ? messageFromError(err, "Sign in failed. Please try again.")
+          ? messageFromError(err, "Couldn't sign in. Try again.")
           : OFFLINE_SIGN_IN,
         unconfirmed:
           err instanceof Error && err.name === "UserNotConfirmedException",

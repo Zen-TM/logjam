@@ -45,7 +45,8 @@ export const ICONS = {
   moveCopy: { web: "archive", gps: "archive" }, // save a copy and remove the original
   send: { web: "send", gps: "send" },
   shareFriend: { web: "share-2", gps: "share-2" },
-  unshare: { web: "user-minus", gps: "user-minus" }, // unshare, remove a friend
+  unshare: { web: "user-x", gps: "user-x" }, // the owner stops sharing
+  removeFriend: { web: "user-minus", gps: "user-minus" }, // end a friendship, drop someone from a plan
   export: { web: "share", gps: "share" }, // write a new file
   download: { web: "download", gps: "download" }, // stored bytes
   saveOffline: { web: "cloud-download", gps: "download-cloud" },
@@ -75,7 +76,7 @@ export const ICONS = {
   pause: { web: "pause", gps: "pause" },
   signOut: { web: "log-out", gps: "log-out" },
   accept: { web: "user-check", gps: "user-check" },
-  ignore: { web: "user-x", gps: "user-x" },
+  ignore: { web: "circle-x", gps: "x-circle" }, // decline an offer
   addFriend: { web: "user-plus", gps: "user-plus" },
   loading: { web: "loader", gps: "loader" },
   dragHandle: { web: "grip-vertical", gps: "mci:drag-vertical" },

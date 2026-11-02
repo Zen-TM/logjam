@@ -26,6 +26,9 @@ export type ContractSection<K extends string = string> = {
   /** Drawn only on something the viewer owns: a page of a shared item has no
    *  such section, on either client. Not a platform difference, so no reason. */
   ownerOnly?: true;
+  /** A friend the item is shared with sees this section. The owner's page says
+   *  so in the section's title, so the owner knows what they hand over. */
+  shareeSees?: true;
 };
 
 export type ScreenContract<

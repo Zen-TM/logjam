@@ -450,7 +450,7 @@ export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
   updated: null,
   current: null,
   skipped: unavailableReasonText("needs-connection"),
-  "offline-only": "Turn off Offline maps only to download place names.",
+  "offline-only": "Turn off Use only saved maps to download place names.",
   unreadable:
     "The latest place names can't be read, so Logjam GPS waits for the next build.",
   failed: "Download didn't finish.",

@@ -127,7 +127,7 @@ describe("the words an API failure shows", () => {
 // The words in shared/src outside contracts/ (labels, notification text, the
 // error sentences) keep the same rules as the contracts and the clients, with
 // no allow-list: a hit is fixed here. Mutation that turns it red: put "Please"
-// back into `STATUS_MESSAGES[403]` in `apiErrors.ts`.
+// back into `STATUS_MESSAGES[401]` in `apiErrors.ts`.
 describe("shared copy outside contracts/", () => {
   const SRC = dirname(fileURLToPath(import.meta.url));
   const files = (dir: string): string[] =>

@@ -20,6 +20,7 @@
 // treats it.
 import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
+import type { ContractPlatform } from "./contracts/types.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -78,9 +79,13 @@ function str(payload: Record<string, unknown>, key: string): string | null {
  *
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
+ *
+ * `platform` names the one answer that is a different act per client: accepting
+ * a sent file saves it on the phone, but on Logjam Web it is a download.
  */
 export function notificationActions(
   n: TNotification,
+  platform: ContractPlatform,
 ): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
@@ -160,7 +165,7 @@ export function notificationActions(
       actions: [
         {
           kind: "accept",
-          label: "Save a copy",
+          label: platform === "web" ? "Download" : "Accept",
           confirm: null,
           failure: "Couldn't save that file.",
           success: "Saved — find it in Saved.",

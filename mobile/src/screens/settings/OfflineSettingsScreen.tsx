@@ -82,7 +82,7 @@ const METERED_ROWS: {
 }[] = [
   {
     job: "topoDownload",
-    title: "Topo auto-downloads",
+    title: "LiDAR map auto-downloads",
     subtitle: "Tens of megabytes each.",
     needs: "topo",
   },

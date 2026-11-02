@@ -119,7 +119,7 @@ function OnboardingChoiceDialog({
 
         <Row
           title="Import my own files"
-          subtitle="A place list needs name, latitude and longitude. A logbook needs a place name and a date."
+          subtitle="A place list needs name, latitude and longitude. A trip list needs a place name and a date."
           leading={<IconTile icon="upload" hue="var(--color-neutral)" />}
           onOpen={onImportFiles}
           disabled={loading}

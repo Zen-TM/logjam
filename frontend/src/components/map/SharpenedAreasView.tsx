@@ -137,7 +137,7 @@ export default function SharpenedAreasView({
                   toast.error(
                     messageFromError(
                       err,
-                      "Couldn't delete the sharpened area. Please try again.",
+                      "Couldn't delete the sharpened area. Try again.",
                     ),
                   );
                 }

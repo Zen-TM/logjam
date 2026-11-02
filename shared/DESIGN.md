@@ -174,6 +174,9 @@ renumber.
 
 - **An idea keeps its glyph everywhere, and a glyph never means two ideas.**
   Draw `<Icon idea=…>`; a new idea joins `icons.ts`.
+- **Ending a share is three ideas, each with its own glyph**: `unshare` (the
+  owner stops sharing), `hide` (a friend removes it from their account) and
+  `removeFriend` (end a friendship, drop someone from a plan).
 - **An icon-only control has a label**, which is its accessible name and its
   tooltip. If the glyph needs a sentence, the glyph is wrong.
 - **A menu item is a glyph and a verb.** A bulk bar may be glyphs alone.
@@ -353,8 +356,15 @@ renumber.
   another type").
 - **Name what failed**: "Couldn't save this place.", "Download didn't
   finish". Never "Please", "That didn't work" or "item".
-- **A sentence about what someone else can see or do is checked against the
-  API** before it ships.
+- **A sentence about what someone else can see or do is declared once**, in
+  `contracts/share.ts` (`sharePromise`, `SHARE_SENTENCES`), and read by both
+  clients; `shareSentences.test.ts` in each fails on one that types its own.
+  On the owner's place page a section a friend sees says so in its title
+  (`placeSectionTitle`). The sentence is checked against the API before it
+  ships.
+- **A caller's words beat a status's.** `messageFromError` returns the
+  API's sentence, then the caller's fallback; only 401, 429, 5xx and a lost
+  connection are worded by status.
 
 ## 13. Privacy in the UI
 

@@ -194,7 +194,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       const plan = str(p.planName);
       if (p.reason === "declined")
         return {
-          text: `Your request to join ${plan ?? "a trip plan"} was turned down`,
+          text: `Your request to join ${plan ?? "a trip plan"} was declined`,
         };
       if (p.reason === "deleted")
         return { text: `${plan ?? "A trip plan"} was deleted` };

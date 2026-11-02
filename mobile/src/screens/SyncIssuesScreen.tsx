@@ -206,7 +206,7 @@ export function SyncIssuesScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("That didn't work. Try again in a moment.", "error");
+          notify("Couldn't do that. Try again in a moment.", "error");
         });
     },
     [load, notify],
@@ -398,7 +398,7 @@ export function SyncIssuesScreen({
                 })
                 .catch((err: unknown) => {
                   console.error(err);
-                  notify("That didn't work. Try again in a moment.", "error");
+                  notify("Couldn't do that. Try again in a moment.", "error");
                 }),
           },
         ],

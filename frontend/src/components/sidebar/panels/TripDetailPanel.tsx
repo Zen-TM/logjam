@@ -128,7 +128,7 @@ function TripDetailPanel({
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete this trip. Please try again."),
+        messageFromError(err, "Couldn't delete this trip. Try again."),
       );
     } finally {
       setDeleting(false);

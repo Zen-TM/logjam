@@ -177,7 +177,7 @@ export default function MediaGallery({
         message={
           <>
             This permanently deletes <b>{pendingDelete?.filename}</b>. This
-            cannot be undone.
+            can't be undone.
             {/* Rendered inside the dialog (not the page behind it) — the
                 modal backdrop would otherwise hide a page-level ErrorBanner. */}
             {error && (

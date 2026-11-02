@@ -926,7 +926,7 @@ export function MapScreen({
   const { assetHue } = useHues();
   const styles = useStyles();
 
-  // "Offline maps only" forces the resolver to local artifacts even with
+  // "Use only saved maps" forces the resolver to local artifacts even with
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
@@ -5508,7 +5508,7 @@ export function MapScreen({
             pretending, and the user is the one who asked us to. */}
 
         {offlineOnly ? (
-          <Notice icon="offline">Offline mode — using only saved maps</Notice>
+          <Notice icon="offline">Using only saved maps</Notice>
         ) : null}
 
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
