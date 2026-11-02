@@ -1399,7 +1399,8 @@ function App() {
     boxPickDimsUI(boxPick);
 
   // A filter changes what the MAP shows too, so the map says so while the
-  // Places page is closed or scrolled away.
+  // Places page is closed or scrolled away, and on no other page: a trip or a
+  // way is not about the filter.
   // While a plan is open the map shows it, and says so first.
   const backToMyMap = () => {
     setSelectedPlanId(null);
@@ -1421,7 +1422,9 @@ function App() {
     >
       {`${TRIP_PLAN_PAGE.copy.barPrefix} ${planOnMap.name}`}
     </Notice>
-  ) : filtersActive && !dimUI ? (
+  ) : filtersActive &&
+    !dimUI &&
+    (activePanel === null || activePanel === "places") ? (
     <Notice
       icon="filter"
       action={
@@ -1434,7 +1437,7 @@ function App() {
         />
       }
     >
-      Showing {filteredPlaces.length} of {allPlaces.length} places
+      Places filter: {filteredPlaces.length} of {allPlaces.length} shown
     </Notice>
   ) : null;
 
