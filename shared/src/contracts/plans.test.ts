@@ -1217,6 +1217,23 @@ describe("form tally", () => {
       "2 of 3 answered",
       "Not answered yet: you",
     ]);
+
+    // Mutation: ignore viewerPill. The card says "Not answered" three times
+    // (the pill, the count, the names).
+    const cat = tally!.missing[0].id;
+    expect(tripPlanFormTallyLines(tally!, cat, true)).toEqual([
+      "2 of 3 answered",
+    ]);
+    const both = { answered: 1, total: 3, missing: [user("bob"), user("cat")] };
+    expect(tripPlanFormTallyLines(both, cat, true)).toEqual([
+      "1 of 3 answered",
+      "Not answered yet: bob",
+    ]);
+    // The pill is absent (the trip is over): the viewer stays named.
+    expect(tripPlanFormTallyLines(both, cat, false)).toEqual([
+      "1 of 3 answered",
+      "Not answered yet: bob, you",
+    ]);
   });
 
   // Mutation: drop the role check, and a member of a members-visible form

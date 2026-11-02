@@ -1075,6 +1075,8 @@ function answerValue(
   }
 }
 
+export const TRIP_PLAN_ANSWER_REQUIRED_SENTENCE = say`Answer every question marked required.`;
+
 /**
  * PUT …/answers/me, and the answers a joiner gives. An answer to a question
  * the form no longer has, or that no longer fits one, is a 409: the person
@@ -1096,8 +1098,7 @@ export function parseTripPlanAnswers(
           ? undefined
           : answerValue(question, raw);
       if (answer !== undefined) answers[question.id] = answer;
-      else if (question.required)
-        refuse(say`Answer every question marked required.`);
+      else if (question.required) refuse(TRIP_PLAN_ANSWER_REQUIRED_SENTENCE);
     }
     return answers;
   });
