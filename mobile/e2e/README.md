@@ -17,12 +17,12 @@ client and Metro, not a Play or preview build. Prereqs:
    (`npm run dev:android` does the reverses and the launch).
 4. `maestro test e2e/<flow>.yaml`.
 
-| Flow | Auth mode (`mobile/.env`) | Needs |
-|---|---|---|
-| `browse.yaml` | `fake` | seeded local API (alice) |
-| `map.yaml` | `fake` | seeded local API (alice) |
-| `signin.yaml` | `oidc` | `MAESTRO_TEST_EMAIL` / `MAESTRO_TEST_PASSWORD` — a confirmed **test** Cognito user (operator-provided; never a real account, never committed) |
-| `guest.yaml` | `oidc` | nothing — no credentials, no API. **Run `adb shell pm clear com.logjamnsw.mobile` first** |
+| Flow          | Auth mode (`mobile/.env`) | Needs                                                                                                                                         |
+| ------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `browse.yaml` | `fake`                    | seeded local API (alice)                                                                                                                      |
+| `map.yaml`    | `fake`                    | seeded local API (alice)                                                                                                                      |
+| `signin.yaml` | `oidc`                    | `MAESTRO_TEST_EMAIL` / `MAESTRO_TEST_PASSWORD` — a confirmed **test** Cognito user (operator-provided; never a real account, never committed) |
+| `guest.yaml`  | `oidc`                    | nothing — no credentials, no API. **Run `adb shell pm clear com.logjamnsw.mobile` first**                                                     |
 
 `guest.yaml` needs the clear because the entry choice is persisted: once an
 install has chosen guest or account, the chooser never appears again, and the
