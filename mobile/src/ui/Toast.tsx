@@ -31,9 +31,14 @@ const VISIBLE_MS = { info: 2600, error: 4200 } as const;
 export function Toast({
   message,
   onDismissed,
+  clear,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
+  /** Extra room from the host's edges, for a host that keeps its own controls
+   *  there (the map's action column and instruments): the toast docks clear of
+   *  them rather than over them. Added to the default margin. */
+  clear?: { bottom?: number; left?: number; right?: number };
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -112,7 +117,17 @@ export function Toast({
   const error = message.tone === "error";
 
   return (
-    <View style={styles.dock} pointerEvents="box-none">
+    <View
+      style={[
+        styles.dock,
+        clear && {
+          bottom: spacing(2) + (clear.bottom ?? 0),
+          left: spacing(2) + (clear.left ?? 0),
+          right: spacing(2) + (clear.right ?? 0),
+        },
+      ]}
+      pointerEvents="box-none"
+    >
       <Animated.View
         accessibilityRole="alert"
         accessibilityLiveRegion="polite"

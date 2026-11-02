@@ -5947,7 +5947,16 @@ export function MapScreen({
         onError={(text) => notify(text, "error")}
       />
 
-      <Toast message={toast} onDismissed={() => setToast(null)} />
+      {/* Clear of the action column (the record button is in it) and of the
+          instruments stack with the speed and elevation chip. */}
+      <Toast
+        message={toast}
+        onDismissed={() => setToast(null)}
+        clear={{
+          bottom: ornamentMarginY,
+          [controlsOnLeft ? "left" : "right"]: FAB_SIZE + CHROME_GAP,
+        }}
+      />
 
       <MapLayersSheet
         visible={pickerOpen}
