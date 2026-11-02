@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  friendMatches,
   noFriendsMatch,
   noFriendsMessage,
   sharePromise,
@@ -115,10 +116,10 @@ function SelectedPlacesDialog({
           .slice(0, 6)
       : [];
 
-  const friendMatches = friends.filter(
+  const matchingFriends = friends.filter(
     (friend) =>
       !shareFriendIds.includes(friend.id) &&
-      friend.username.toLowerCase().includes(shareSearch.trim().toLowerCase()),
+      friendMatches(friend.username, shareSearch),
   );
 
   async function handleShare() {
@@ -323,14 +324,14 @@ function SelectedPlacesDialog({
                   value={shareSearch}
                   onChange={(event) => setShareSearch(event.target.value)}
                 />
-                {friendMatches.length === 0 ? (
+                {matchingFriends.length === 0 ? (
                   <p className={classes.note}>
                     {shareSearch.trim()
                       ? noFriendsMatch(shareSearch)
                       : "Everyone you know is ticked."}
                   </p>
                 ) : (
-                  friendMatches.map((friend) => (
+                  matchingFriends.map((friend) => (
                     <Row
                       key={friend.id}
                       leading={<Avatar username={friend.username} />}
@@ -368,13 +369,6 @@ function SelectedPlacesDialog({
               </>
             )}
           </section>
-        )}
-
-        {mode === "share" && friends.length === 0 && ownedPlaces.length > 0 && (
-          <p className={classes.note} role="note">
-            <Icon idea="friends" size={14} aria-hidden /> Sharing needs a
-            friend.
-          </p>
         )}
       </div>
     </Dialog>
