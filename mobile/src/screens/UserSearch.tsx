@@ -23,7 +23,7 @@ export function UserSearch({
   offline,
   onChange,
   belowField,
-  omit,
+  only,
   quietEmpty,
   resultsTitle,
   right,
@@ -37,8 +37,9 @@ export function UserSearch({
   onChange?: (query: string) => void;
   /** Rows drawn between the field and the results: the caller's own matches. */
   belowField?: ReactNode;
-  /** People already listed in `belowField`: not repeated as results. */
-  omit?: ReadonlySet<string>;
+  /** Which of the found people to draw as results; the caller's own lists
+   *  (`belowField`) draw the rest. */
+  only?: (found: UserSearchResult[]) => UserSearchResult[];
   /** Something else answers the query: "no one by that name" would be wrong. */
   quietEmpty?: boolean;
   /** Heads the results, once there are some. */
@@ -92,8 +93,12 @@ export function UserSearch({
     };
   }, [trimmed, long, offline, failed]);
 
-  const shown = omit ? results.filter((user) => !omit.has(user.id)) : results;
-  const cutShort = friendSearchHint(results.length, total);
+  const shown = only ? only(results) : results;
+  const cutShort = friendSearchHint(
+    shown.length,
+    total,
+    results.length - shown.length,
+  );
   return (
     <View style={styles.body}>
       <TextField

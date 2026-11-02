@@ -35,3 +35,28 @@ describe("friendSearchHint", () => {
     );
   });
 });
+
+// A page of results with some drawn elsewhere (a plan's friends, listed above
+// the search results). Mutation that turns it red: pass `results.length`
+// instead of the rows drawn and leave `omitted` out of the sum, and the hint
+// counts rows that are not under it.
+describe("friendSearchHint, with results drawn elsewhere", () => {
+  it("counts only the rows under it", () => {
+    // 10 came back of 12 matches; 3 of the 10 are friends, listed above.
+    expect(friendSearchHint(7, 12, 3)).toBe(
+      "Showing 7 of 9 — keep typing to narrow it down.",
+    );
+    expect(friendSearchHint(7, 10, 3)).toBeNull();
+  });
+
+  it("says nothing when every result is drawn elsewhere", () => {
+    expect(friendSearchHint(0, 23, 10)).toBeNull();
+    expect(friendSearchHint(0, null, 10)).toBeNull();
+  });
+
+  it("still reads a full page when the API sent no total", () => {
+    expect(friendSearchHint(7, null, 3)).toBe(
+      "Showing the first 7 — keep typing to narrow it down.",
+    );
+  });
+});

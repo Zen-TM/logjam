@@ -208,7 +208,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
             setError(null);
             setQuery(next);
           }}
-          omit={new Set(friends.map((friend) => friend.id))}
+          only={(found) => tripPlanInviteLists(friends, found, query).others}
           quietEmpty={lists.friends.length > 0}
           resultsTitle={copy.others}
           belowField={
