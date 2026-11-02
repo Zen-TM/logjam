@@ -235,6 +235,8 @@ export function ChipPicker({
  *  rail is a few hundred pixels wide, and a full notch skipped most of it. */
 // One fixed factor; tune here if a mouse or trackpad feels wrong.
 const WHEEL_SPEED = 0.5;
+// Keep with `--fade` in Chip.module.css: how far a chip is kept from a rail edge.
+const FADE_PX = 48;
 
 export type ChipOption<T extends string> = {
   value: T;
@@ -268,6 +270,7 @@ export function ChipRail<T extends string>({
   trailing,
   className,
   hint,
+  wrap,
 }: {
   /** The group's accessible name — "Place type", "Status". */
   label: string;
@@ -280,6 +283,9 @@ export function ChipRail<T extends string>({
   /** One plain sentence under the rail about the choice made, read with the
    *  group (shared/DESIGN.md §12). */
   hint?: string;
+  /** Wrap onto a second line instead of scrolling, for a short rail whose
+   *  chips must all be visible at once (a scale beside its label). */
+  wrap?: boolean;
 }) {
   const hintId = useId();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -332,11 +338,19 @@ export function ChipRail<T extends string>({
   }, []);
 
   const selectedIndex = options.findIndex((option) => option.value === value);
+  // The rail's own scroll only: `scrollIntoView` also scrolls every ancestor,
+  // which opened a long form's dialog scrolled to wherever its rail sat.
   useEffect(() => {
-    chipRefs.current[selectedIndex]?.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-    });
+    const scroller = scrollerRef.current;
+    const chip = chipRefs.current[selectedIndex];
+    if (!scroller || !chip) return;
+    const fade = scroller.getBoundingClientRect();
+    const box = chip.getBoundingClientRect();
+    const margin = FADE_PX;
+    if (box.left < fade.left + margin)
+      scroller.scrollLeft -= fade.left + margin - box.left;
+    else if (box.right > fade.right - margin)
+      scroller.scrollLeft += box.right - (fade.right - margin);
   }, [selectedIndex]);
 
   const tabStop =
@@ -366,6 +380,7 @@ export function ChipRail<T extends string>({
         className={[classes.rail, className].filter(Boolean).join(" ")}
         data-fade-start={edges.start}
         data-fade-end={edges.end}
+        data-wrap={wrap || undefined}
       >
         <div
           ref={scrollerRef}

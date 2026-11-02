@@ -1293,6 +1293,77 @@ test.describe("desktop", () => {
 });
 
 /**
+ * What the layout does when the window is small (a laptop at 150% or 200% zoom,
+ * a phone). Nothing here is a contrast or a name, so axe cannot see it.
+ */
+test.describe("fits", () => {
+  // Mutation: drop `preventScroll` from Dialog's focus, or put the rail's
+  // `scrollIntoView` back, and the form opens scrolled to its rail.
+  test("a long form opens at its title, not scrolled to its rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await aside.getByRole("button", { name: /^Actions for / }).click();
+    await page.getByRole("menuitem", { name: "Edit place" }).click();
+    const form = page.getByRole("dialog", { name: "Edit place" });
+    await expect(form).toBeVisible();
+    await expect(
+      form.locator(":scope > div[id]").evaluate((body) => body.scrollTop),
+    ).resolves.toBe(0);
+  });
+
+  // Mutation: remove the `max-height` block from NavRail.module.css and the
+  // last item is cut off at 600px.
+  test("the nav rail's last item fits a 150% zoom window", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 600 });
+    await openApp(page);
+    const rail = page.getByRole("navigation", { name: "Pages" });
+    await expect(rail.getByRole("button", { name: "Settings" })).toBeInViewport(
+      { ratio: 1 },
+    );
+  });
+
+  // Mutation: remove the SHORT_VIEWPORT_PX branch in BottomSheet.tsx and the
+  // sheet shows its hero, rail and about one row at 200% zoom.
+  test("the phone sheet shows several rows at 200% zoom", async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 450 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const rows = page
+      .locator("aside, [role='region']")
+      .locator("[data-place-id]");
+    await expect(rows.nth(2)).toBeInViewport({ ratio: 1 });
+  });
+
+  // Mutation: drop `wrap` from the Scale rail and "Other" runs off the dialog.
+  test("Export an area's Scale chips all show at phone width", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Tools" })
+      .getByText("Make a map")
+      .click();
+    await page.getByRole("menuitem", { name: "Export an area" }).click();
+    const scale = page.getByRole("radiogroup", { name: "Scale" });
+    await expect(scale.getByRole("radio", { name: "Other" })).toBeInViewport({
+      ratio: 1,
+    });
+  });
+});
+
+/**
  * Ghost Gum, the one light scheme, on the surfaces most used outdoors. It is
  * reached the way a user's choice is: `/users/me` says so (rewriting only the
  * field the decision reads), and the generated `[data-scheme]` block repaints.

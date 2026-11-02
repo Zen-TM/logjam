@@ -21,6 +21,9 @@ const NAV_HEIGHT_PX = 68;
 // with pinned top-of-list chrome leave enough vertical space for the scrollable
 // list underneath while leaving the map reachable (unlike "full").
 const HALF_REVEAL_FRACTION = 0.68;
+// Under this height (200% zoom on a laptop) the same fraction shows about one
+// row under the page's own chrome, so "half" is as tall as "full".
+const SHORT_VIEWPORT_PX = 500;
 
 /** The sheet's own height — it fills the viewport above the bottom nav strip. */
 function sheetHeightPx(viewportHeight: number): number {
@@ -38,7 +41,9 @@ function snapTranslate(
     case "full":
       return 0;
     case "half":
-      return sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
+      return viewportHeight < SHORT_VIEWPORT_PX
+        ? 0
+        : sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
     case "peek":
       return sheetHeight - peekReveal;
   }
