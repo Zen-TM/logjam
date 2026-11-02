@@ -77,10 +77,11 @@ export async function resolvePlaceTypeId(
  * because there is nothing to add it to.
  *
  * System definitions (ownerId null) are visible to everyone, so they are
- * included alongside the user's own.
+ * included alongside the user's own. A null `userId` (a plan's place, which
+ * belongs to no one) gets the system definitions alone.
  */
 export async function defsForPlaceType(
-  userId: string,
+  userId: string | null,
   placeTypeId: string,
   entity: CustomFieldEntity = "place",
 ): Promise<TripLogCustomFieldDef[]> {

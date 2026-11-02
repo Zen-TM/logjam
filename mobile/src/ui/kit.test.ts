@@ -28,3 +28,22 @@ describe("the Logjam GPS kit barrel", () => {
     expect(barrelComponents(barrel)).toEqual(kitComponentsFor("gps"));
   });
 });
+
+// A kit container that takes `children` and can stack more than one owns the
+// gap between them (shared/DESIGN.md §10), so a screen never has to space what
+// it puts inside. Mutation: delete `gap` from one style below (`ListEnd`'s
+// `end`, say) and two buttons in it touch.
+describe("kit containers that stack children", () => {
+  const stacks: [file: string, style: string][] = [
+    ["ListEnd.tsx", "end"],
+    ["Field.tsx", "field"],
+    ["Field.tsx", "stack"],
+    ["Screen.tsx", "scrollContent"],
+    ["Hero.tsx", "hero"],
+    ["BottomSheet.tsx", "content"],
+  ];
+  it.each(stacks)("%s sets a gap on %s", (file, style) => {
+    const src = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+    expect(src).toMatch(new RegExp(`\\b${style}: \\{[^}]*\\bgap:`));
+  });
+});

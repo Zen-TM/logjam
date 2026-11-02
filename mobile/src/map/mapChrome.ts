@@ -26,6 +26,14 @@ export const MINI_FAB_ICON = 18;
 export const CHROME_GAP = 16;
 
 /**
+ * How far in from each screen edge a map banner sits: past the search button
+ * (or record button) and its gap. An expanded search bar spans from its corner
+ * to `reservedWidth` short of the other edge (`MapSearchBar`), which is this
+ * far, so it covers a banner whatever side it grows from.
+ */
+export const MAP_BANNER_INSET = SEARCH_SIZE + CHROME_GAP * 2;
+
+/**
  * Bottom of the floating chrome, clearing the scale bar and the native compass
  * that sit along the bottom edge.
  *

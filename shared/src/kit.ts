@@ -42,6 +42,9 @@ export const KIT_COMPONENTS = {
   DateRangeFilter: gps(
     "a date range as two bounds that open the sheet's DatePicker; Logjam Web uses two date inputs in a FilterField",
   ),
+  DateRangeField: web(
+    "a date range in one calendar; Logjam GPS's DatePicker takes the same range",
+  ),
   FilterField: web(
     "a filter's label, summary and clear; Logjam GPS's sheet lays its own",
   ),
@@ -74,6 +77,12 @@ export const KIT_COMPONENTS = {
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,
   Notice: both,
+  MapBanner: gps(
+    "a mode in the map's top row at the search button's height; Logjam Web's Notice column has room for the whole sentence",
+  ),
+  CardActions: gps(
+    "a card footer's buttons share its width; Logjam Web's cards are wide enough that buttons keep their natural size (Row.module.css)",
+  ),
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
   ),
@@ -96,11 +105,16 @@ export const KIT_COMPONENTS = {
   // One colour picker, a floating palette: Logjam GPS draws the closed-palette
   // mode (a `palette` prop); the free colour with opacity is a topo's cartography.
   ColourField: both,
-  DatePicker: gps("Logjam Web uses the browser's date input"),
+  DatePicker: gps(
+    "Logjam Web uses the browser's date input, and DateRangeField for a range",
+  ),
   RenameForm: gps("the phone's one-field rename sheet body"),
 
   // — surfaces —
   Hero: both,
+  DataTable: web(
+    "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",
+  ),
   Dialog: web("a modal over the page; Logjam GPS's equivalent is BottomSheet"),
   SideSheet: web(
     "a sheet beside the list; Logjam GPS's equivalent is BottomSheet",

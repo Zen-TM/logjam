@@ -2,6 +2,7 @@
 // individual files. Keep this the single public surface of the UI kit.
 export { ActivitySpark, type ActivityBucket } from "./ActivitySpark";
 export { Button } from "./Button";
+export { CardActions } from "./CardActions";
 export { Meter, type MeterSegment } from "./Meter";
 export { Avatar } from "./Avatar";
 export { Chip, type ChipOption } from "./Chip";
@@ -28,6 +29,7 @@ export { SyncStatusPills } from "./SyncStatusPills";
 export { Toggle } from "./Toggle";
 export { SwitchRow } from "./SwitchRow";
 export { Notice } from "./Notice";
+export { MapBanner } from "./MapBanner";
 export { ChipRail, CHIP_RAIL_HEIGHT } from "./ChipRail";
 export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
@@ -46,3 +48,5 @@ export { ForecastList, type ForecastRow } from "./ForecastList";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
 export { Toast, type ToastMessage } from "./Toast";
+export { backLabelOf } from "./backLabel";
+export { useNow } from "./useNow";

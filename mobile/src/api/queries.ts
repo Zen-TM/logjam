@@ -3,14 +3,25 @@
 // fetchCount + refetch, returning { data, loading, error, refetch } with
 // user-friendly error strings via messageFromError.
 import { useCallback, useEffect, useState } from "react";
-import { messageFromError, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  messageFromError,
+  usernameAvailable,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 
+import { CLIENT_VERSION, CLIENT_VERSION_HEADER, config } from "../config";
 import { apiFetch, apiFetchWithTotal } from "./apiFetch";
 import type { TNotification, TUser } from "./types";
 
 export function fetchCurrentUser(): Promise<TUser> {
   return apiFetch<TUser>("/users/me");
 }
+
+/** Before an account exists, so no token: the sign-up form's username check. */
+export const isUsernameFree = (username: string): Promise<boolean> =>
+  usernameAvailable(config.apiUrl, username, {
+    [CLIENT_VERSION_HEADER]: CLIENT_VERSION,
+  });
 
 /** A new account sends its chosen username in the same PATCH as its consent. */
 export function updateConsent(
