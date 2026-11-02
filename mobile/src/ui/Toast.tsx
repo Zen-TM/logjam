@@ -1,5 +1,6 @@
 import {
   runToastAction,
+  toastGlyph,
   toastMs,
   type ToastAction,
   type ToastTone,
@@ -14,6 +15,8 @@ import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 export type ToastMessage = {
   text: string;
   tone: ToastTone;
+  /** The toast reports no outcome (an instruction, a notice): no check glyph. */
+  informs?: boolean;
   /** The one thing the outcome offers ("Undo", "Open"); pressing it dismisses. */
   action?: ToastAction;
   /** Bump on every new message so a repeat of the same text re-shows + re-times. */
@@ -140,7 +143,7 @@ export function Toast({
         ]}
       >
         <Icon
-          idea={error ? "warning" : "success"}
+          idea={toastGlyph(message.tone, message.informs)}
           size={16}
           color={theme.onInverse}
         />

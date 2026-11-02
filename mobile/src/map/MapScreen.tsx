@@ -998,9 +998,14 @@ export function MapScreen({
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
   const notify = useCallback(
-    (text: string, tone: "done" | "error", action?: ToastMessage["action"]) => {
+    (
+      text: string,
+      tone: "done" | "error",
+      action?: ToastMessage["action"],
+      informs?: boolean,
+    ) => {
       toastNonce.current += 1;
-      setToast({ text, tone, nonce: toastNonce.current, action });
+      setToast({ text, tone, nonce: toastNonce.current, action, informs });
     },
     [],
   );
@@ -2729,6 +2734,7 @@ export function MapScreen({
     notify(
       basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
       "done",
+      true,
     );
   }, [shownBasemapId, basemapId, notify]);
 
@@ -3671,6 +3677,7 @@ export function MapScreen({
           ? "Weak GPS signal — your position could be out by hundreds of metres."
           : "No GPS signal — the grey arrow is where you last had one.",
         "done",
+        true,
       );
     }, GPS_TOAST_DELAY_MS);
     return () => clearTimeout(timer);
@@ -4290,7 +4297,12 @@ export function MapScreen({
       if (!dotWanted) handleLocateMe();
       // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
-      notify("Recording — tap the record button for stats.", "done");
+      notify(
+        "Recording — tap the record button for stats.",
+        "done",
+        undefined,
+        true,
+      );
     } catch (err) {
       console.error(err);
       notify("Couldn't start recording.", "error");
@@ -4664,6 +4676,7 @@ export function MapScreen({
           notify(
             `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
             "done",
+            true,
           )
         }
       />

@@ -339,6 +339,9 @@ renumber.
   "Open"). It floats clear of the map's scale bar and credits. An action with
   no other sign (Mark all as read) says so in a `done` toast; one the user
   watches happen (copying coordinates) swaps its glyph in place instead.
+  A check means an outcome that worked: a toast that reports none (an
+  instruction, a notice such as a fallback basemap) stays `done` but wears the
+  info glyph (`toastGlyph`).
 - **A toast reports an event; a condition that lasts is shown while it is
   true** (no fix, points not being saved), by a notice or by the figure it
   affects.
