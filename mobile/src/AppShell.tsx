@@ -10,7 +10,7 @@
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { Alert, useWindowDimensions, View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
@@ -96,7 +96,13 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { backLabelOf, Icon, LoadingState, TAB_BADGE_STYLE } from "./ui";
+import {
+  backLabelOf,
+  Icon,
+  LoadingState,
+  tabBadgeLabel,
+  tabBadgeStyle,
+} from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -912,6 +918,7 @@ export function AppShell({
   );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
+  const { fontScale } = useWindowDimensions();
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
   const insets = useSafeAreaInsets();
 
@@ -1199,8 +1206,11 @@ export function AppShell({
                 ),
                 ...(unreadCount
                   ? {
-                      tabBarBadge: unreadCount,
-                      tabBarBadgeStyle: TAB_BADGE_STYLE,
+                      tabBarBadge: tabBadgeLabel(unreadCount),
+                      tabBarBadgeStyle: tabBadgeStyle(
+                        tabBadgeLabel(unreadCount),
+                        fontScale,
+                      ),
                     }
                   : {}),
               }}
