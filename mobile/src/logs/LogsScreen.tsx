@@ -405,7 +405,7 @@ export function LogsScreen({
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "gps">, ReactNode> = {
     hero: (
       <Hero
-        eyebrow="Logbook"
+        eyebrow="Trips"
         title={tripsHeroTitle(trips.length)}
         actions={
           <View style={styles.heroActions}>

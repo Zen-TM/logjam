@@ -77,6 +77,25 @@ describe("notificationActions", () => {
     ]);
   });
 
+  // Mutation: return the phone's pill or failure on web, and Logjam Web says
+  // "Saved" or "Couldn't save" about a button called Download.
+  it("words Logjam Web's accepted pill and failure as a download", () => {
+    for (const fileSendStatus of ["pending", "accepted"]) {
+      const web = actionsFor(
+        notification("file_sent", {
+          fileSendId: "s1",
+          filename: "Claustral.gpx",
+          fileSendStatus,
+        }),
+        "web",
+      );
+      expect(web?.actions[0].failure).toBe("Couldn't download that file.");
+      expect(web?.pill).toBe(
+        fileSendStatus === "accepted" ? "Downloaded" : null,
+      );
+    }
+  });
+
   // `accepted` means the URL was issued, not that the bytes landed, so the
   // retry survives and there is nothing left to decline.
   it("keeps the download on offer once accepted, and drops decline", () => {

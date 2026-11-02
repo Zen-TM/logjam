@@ -140,19 +140,27 @@ export function notificationActions(
     // so accept stays on offer as a retry and there is nothing left to turn
     // down.
     const accepted = payload.fileSendStatus === "accepted";
+    const web = platform === "web";
+    // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
+    // there is a download and its words say so.
+    const acceptFailure = web
+      ? "Couldn't download that file."
+      : "Couldn't save that file.";
     if (accepted) {
       return {
         type: "file_sent",
         targetId: fileSendId,
-        pill: "Saved",
+        pill: web ? "Downloaded" : "Saved",
         sender,
         actions: [
           {
             kind: "accept",
             label: "Download again",
             confirm: null,
-            failure: "Couldn't save that file.",
-            success: "Downloaded again — find it in Saved.",
+            failure: acceptFailure,
+            success: web
+              ? "Downloaded again."
+              : "Downloaded again — find it in Saved.",
           },
         ],
       };
@@ -167,8 +175,8 @@ export function notificationActions(
           kind: "accept",
           label: platform === "web" ? "Download" : "Accept",
           confirm: null,
-          failure: "Couldn't save that file.",
-          success: "Saved — find it in Saved.",
+          failure: acceptFailure,
+          success: web ? "Downloaded." : "Saved — find it in Saved.",
         },
         {
           kind: "decline",

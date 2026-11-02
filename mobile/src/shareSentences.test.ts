@@ -2,13 +2,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { userFacingStrings } from "@logjam/shared";
+import { allStrings } from "@logjam/shared";
 
 // A sentence about who can see or do something is declared in
 // `contracts/share.ts` and read by both clients, so the two can't promise
 // different things (shared/DESIGN.md §12). Mutation that turns it red: type
-// the bulk-share promise into a component again ("Recipients can copy them
-// while the share is active.").
+// a share sentence into a component again: JSX text, a const, or the
+// argument of a call ("Recipients can copy them while the share is active.").
 const SRC = __dirname;
 const SHARE_WORDS = /can see|visible to|while the share|recipients/i;
 const ALLOWED: { file: string; text: string; reason: string }[] = [
@@ -32,7 +32,7 @@ function sources(dir: string): string[] {
 describe("share sentences on Logjam GPS", () => {
   it("writes none of its own", () => {
     const offenders = sources(SRC).flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8"))
+      allStrings(ts, path, readFileSync(path, "utf8"))
         .filter(({ text }) => SHARE_WORDS.test(text))
         .filter(
           ({ text }) =>
@@ -46,12 +46,17 @@ describe("share sentences on Logjam GPS", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("sees a sentence it forbids", () => {
-    const [first] = userFacingStrings(
-      ts,
-      "x.tsx",
+  // Mutation: read only JSX text and `COPY_PROPS`, as `userFacingStrings` does,
+  // and a const or a call's argument stops being seen.
+  it("sees a sentence it forbids, wherever it is typed", () => {
+    for (const source of [
       "export const a = <p>Friends can see this.</p>;",
-    );
-    expect(SHARE_WORDS.test(first.text)).toBe(true);
+      'export const b = "Anyone you share it with can see it.";',
+      'notify("Friends can see this.", "info");',
+      "const c = `Visible to ${n} friends`;",
+    ]) {
+      const [first] = allStrings(ts, "x.tsx", source);
+      expect(SHARE_WORDS.test(first.text), source).toBe(true);
+    }
   });
 });

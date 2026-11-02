@@ -342,13 +342,13 @@ describe("placeDeleteConfirm", () => {
       "Its notes, photos, tracks and shares go too. This can't be undone.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 1).confirmBody).toContain(
-      "1 logged trip stays in your logbook, unlinked.",
+      "1 logged trip stays, unlinked.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 4).confirmBody).toContain(
-      "4 logged trips stay in your logbook, unlinked.",
+      "4 logged trips stay, unlinked.",
     );
     expect(placeDeleteConfirm({ count: 3 }).confirmBody).toBe(
-      "Their notes, photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone.",
+      "Their notes, photos, tracks and shares go too. Trips that link to them stay, unlinked. This can't be undone.",
     );
   });
 });

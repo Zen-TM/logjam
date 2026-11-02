@@ -184,10 +184,10 @@ export function placeDeleteConfirm(
   const one = "name" in target || target.count === 1;
   const trips =
     linkedTripCount == null
-      ? `Trips that link to ${one ? "it" : "them"} stay in your logbook, unlinked.`
+      ? `Trips that link to ${one ? "it" : "them"} stay, unlinked.`
       : linkedTripCount === 0
         ? null
-        : `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip stays" : "trips stay"} in your logbook, unlinked.`;
+        : `${linkedTripCount} logged ${linkedTripCount === 1 ? "trip stays" : "trips stay"}, unlinked.`;
   return {
     confirmTitle:
       "name" in target
