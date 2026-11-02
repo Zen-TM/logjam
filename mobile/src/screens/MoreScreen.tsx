@@ -51,6 +51,7 @@ import { useConnectivity } from "../map/connectivity";
 import { readPlansList } from "../plans/plansCache";
 import { onMirrorChanged } from "../sync/syncDb";
 import {
+  usePendingOpCount,
   usePendingSyncCount,
   useSyncIssueCount,
   useSyncStatus,
@@ -119,6 +120,7 @@ export function MoreScreen({
   const online = useConnectivity() === "online";
   const syncStatus = useSyncStatus();
   const pendingCount = usePendingSyncCount();
+  const pendingOpCount = usePendingOpCount();
   const issueCount = useSyncIssueCount();
   const plans = useCachedPlansList(isGuest);
   const plansWaiting = plans ? tripPlansBadgeCount(plans) : 0;
@@ -128,6 +130,7 @@ export function MoreScreen({
     state: syncStatus.state,
     lastSyncAt: syncStatus.lastSyncAt,
     pendingCount,
+    pendingOpCount,
     issueCount,
     errorKind: syncStatus.errorKind,
     waitingSince: syncStatus.waitingSince,

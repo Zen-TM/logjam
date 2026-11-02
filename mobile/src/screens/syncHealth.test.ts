@@ -306,6 +306,16 @@ describe("syncHealth", () => {
       expect(health.tone).toBe("pending");
     });
 
+    // Mutation: compare `pendingCount` (things) to the threshold instead of
+    // the op count: 3 things made of 60 ops would read as ordinary.
+    it("measures the backlog in queued ops, not the things they make up", () => {
+      const health = syncHealth(
+        input({ state: "syncing", pendingCount: 3, pendingOpCount: 60 }),
+      );
+      expect(health.headline).toBe("Uploading 3 changes…");
+      expect(health.detail).toContain("take a while");
+    });
+
     it("keeps the ordinary wording below the threshold", () => {
       const health = syncHealth(input({ state: "syncing", pendingCount: 3 }));
       expect(health.headline).toBe("Sending 3 changes…");

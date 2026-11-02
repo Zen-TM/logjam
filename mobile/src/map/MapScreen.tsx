@@ -131,6 +131,7 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
+import { LayersGlyph, markMapDrawing, markMapDrawn } from "./mapLoading";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -937,6 +938,7 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
+  const pendingSyncCount = usePendingSyncCount();
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const offlineOnlyRef = useRef(offlineOnly);
   useLayoutEffect(() => {
@@ -4808,8 +4810,8 @@ export function MapScreen({
     }
     if (coverageHere.current) return null;
     return coverageHere.others.length > 0
-      ? "Offline — switch to a basemap you saved for this area."
-      : "Offline — no map saved for this area.";
+      ? "No saved map here for this basemap — switch to one you saved."
+      : "No saved map here.";
   })();
 
   const geoPdfNoticeText = misalignedGeoPdfNotice(
@@ -4978,6 +4980,8 @@ export function MapScreen({
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
+        onDidFinishRenderingFrame={markMapDrawing}
+        onDidFinishRenderingFrameFully={markMapDrawn}
         onPress={handleMapOrArrowPress}
         onLongPress={handleMapLongPress}
       >
@@ -5589,8 +5593,8 @@ export function MapScreen({
             button shortcut on the banner would add clutter, risk wrapping onto
             a second line, and open unexpectedly when panning. */}
         {/* SAY THAT THE MODE IS ON, because everything it causes looks like a
-            fault otherwise: the basemap notice below says "Offline" on a phone
-            with full bars, and elevation stops answering outside saved areas.
+            fault otherwise: the "No saved map here." notice below appears on a
+            phone with full bars, and elevation stops answering outside saved areas.
             Sits above that notice so the cause is read before the consequence.
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
@@ -5598,6 +5602,15 @@ export function MapScreen({
 
         {offlineOnly ? (
           <Notice icon="offline">Using only saved maps</Notice>
+        ) : null}
+
+        {/* A guest has no account for changes to wait on (SyncStatusPills). */}
+        {connectivity === "offline" ? (
+          <Notice icon="offline">Offline</Notice>
+        ) : null}
+
+        {pendingSyncCount > 0 && !isGuest ? (
+          <Notice icon="uploading">{`${pendingSyncCount} waiting to sync`}</Notice>
         ) : null}
 
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
@@ -5675,7 +5688,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
+          <LayersGlyph online={connectivity === "online"} />
         </Pressable>
         <Pressable
           accessibilityRole="button"

@@ -322,6 +322,8 @@ type SavedItem = {
    * builder — see the note where it is applied.
    */
   backedUp?: boolean;
+  /** This row syncs, and its create has not reached the account yet. */
+  waitingToSync?: boolean;
   /**
    * The id the OUTBOX would name for this row, when that is not `key`.
    *
@@ -1232,11 +1234,12 @@ export function SavedScreen({
     return rows.map((row) => {
       const entityId =
         row.syncEntityId === undefined ? row.key : row.syncEntityId;
-      const backedUp =
-        CATEGORY_SYNCS[row.category] &&
-        entityId !== null &&
-        !pendingCreates.has(entityId);
-      return backedUp ? { ...row, backedUp } : row;
+      if (!CATEGORY_SYNCS[row.category] || entityId === null) return row;
+      if (pendingCreates.has(entityId)) {
+        // A guest has no account for it to be waiting on.
+        return accountState === "guest" ? row : { ...row, waitingToSync: true };
+      }
+      return { ...row, backedUp: true };
     });
   })();
 
@@ -1937,12 +1940,20 @@ export function SavedScreen({
                     downloaded map and needs no announcement. LAST of the
                     glyphs, so the column it sits in is the same on every row;
                     the share glyph appearing on some rows must not push it. */}
+                    {/* Quiet when done, an up-arrow while it still has to go. */}
                     {item.backedUp ? (
                       <Icon
                         idea="sync"
                         size={15}
-                        color={theme.success}
+                        color={theme.textMuted}
                         label="Backed up to your account"
+                      />
+                    ) : item.waitingToSync ? (
+                      <Icon
+                        idea="uploading"
+                        size={15}
+                        color={theme.text}
+                        label="Waiting to sync"
                       />
                     ) : null}
                     {item.inlineAction ? (
