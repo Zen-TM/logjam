@@ -1571,6 +1571,13 @@ function App() {
             standaloneFilesError={standaloneFilesError}
             onRetryStandaloneFiles={refetchStandaloneFiles}
             onOpenWay={openWay}
+            onFocusBounds={setFlyToBounds}
+            onOpenRoute={(route) =>
+              openWay(
+                wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds),
+              )
+            }
+            onRoutesChanged={refetchRoutes}
             currentUserId={currentUser?.id ?? null}
             wayDetail={
               selectedWay ? (

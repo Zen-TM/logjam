@@ -41,6 +41,7 @@ import {
   formatTripDate,
   mediaCategory,
   messageFromError,
+  placeRoute,
   routeLengthM,
   placeStatus,
   attributeRows,
@@ -226,8 +227,8 @@ export function PlaceDetailScreen({
   // The place's route slot, as filled by a DRAWN route. It is a Route row,
   // not media, so nothing in MediaStrip would ever show it — and a link that
   // appears to do nothing is worse than no link at all.
-  const linkedRoute =
-    (routes.data ?? []).find((route) => route.placeId === placeId) ?? null;
+  const slot = placeRoute(placeId, routes.data ?? [], attachments);
+  const linkedRoute = slot?.kind === "drawn" ? slot.route : null;
   // Symmetric and many-to-many, unlike the route slot: a carpark serving three
   // canyons off one trailhead is linked from all three, and the link is stored
   // once with this place at either end.
