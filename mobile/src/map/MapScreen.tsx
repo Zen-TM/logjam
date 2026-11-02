@@ -2729,10 +2729,13 @@ export function MapScreen({
   // A press-and-hold is "something goes here". A sheet rather than an Alert —
   // Android's Alert drops buttons past three, and these entries carry glyphs
   // and a subtitle (DESIGN.md).
-  const notify = useCallback((text: string, tone: "done" | "error") => {
-    toastNonce.current += 1;
-    setToast({ text, tone, nonce: toastNonce.current });
-  }, []);
+  const notify = useCallback(
+    (text: string, tone: "done" | "error", informs?: boolean) => {
+      toastNonce.current += 1;
+      setToast({ text, tone, informs, nonce: toastNonce.current });
+    },
+    [],
+  );
   useEffect(() => {
     if (shownBasemapId === basemapId) return;
     const name = (id: string) =>
@@ -2740,6 +2743,7 @@ export function MapScreen({
     notify(
       basemapFallbackNotice(name(basemapId), name(shownBasemapId)),
       "done",
+      true,
     );
   }, [shownBasemapId, basemapId, notify]);
 
@@ -3625,6 +3629,7 @@ export function MapScreen({
           ? "Weak GPS signal — your position could be out by hundreds of metres."
           : "No GPS signal — the grey arrow is where you last had one.",
         "done",
+        true,
       );
     }, GPS_TOAST_DELAY_MS);
     return () => clearTimeout(timer);
@@ -4219,7 +4224,7 @@ export function MapScreen({
       if (!dotWanted) handleLocateMe();
       // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
-      notify("Recording — tap your location dot for stats.", "done");
+      notify("Recording — tap your location dot for stats.", "done", true);
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
@@ -4594,7 +4599,7 @@ export function MapScreen({
         fullText={`${navTarget.name} · ${navText}`}
         dismissLabel="Stop navigating"
         onDismiss={() => setNavTarget(null)}
-        onPress={() => notify(`${navTarget.name} · ${navText}`, "done")}
+        onPress={() => notify(`${navTarget.name} · ${navText}`, "done", true)}
       />
     ) : null,
     // A map that quietly hides pins is a map you can't trust. Says how many
@@ -4612,6 +4617,7 @@ export function MapScreen({
           notify(
             `Showing ${mapFilter.visibleIds?.length ?? 0} of ${mapFilter.totalCount} places`,
             "done",
+            true,
           )
         }
       />

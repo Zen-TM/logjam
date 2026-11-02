@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TOAST_MS } from "./designTokens.js";
 import { loadStateOf } from "./contracts/index.js";
-import { runToastAction, toastMs } from "./toast.js";
+import { runToastAction, toastGlyph, toastMs } from "./toast.js";
 
 describe("toastMs", () => {
   // Mutation that turns it red: return `TOAST_MS.done` for a toast with an action.
@@ -10,6 +10,15 @@ describe("toastMs", () => {
     expect(toastMs("done")).toBe(TOAST_MS.done);
     expect(toastMs("error")).toBe(TOAST_MS.error);
     expect(toastMs("done", action)).toBe(TOAST_MS.error);
+  });
+});
+
+describe("toastGlyph", () => {
+  // Mutation that turns it red: ignore `informs` (an instruction wears the check).
+  it("keeps the check for an outcome and gives a non-outcome the info glyph", () => {
+    expect(toastGlyph("done")).toBe("success");
+    expect(toastGlyph("done", true)).toBe("info");
+    expect(toastGlyph("error", true)).toBe("warning");
   });
 });
 
