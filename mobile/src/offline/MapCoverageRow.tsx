@@ -62,6 +62,7 @@ export function MapCoverageRow({
           variant="outlineAccent"
           label="Save map"
           disabled={!online}
+          disabledReason={unavailableReasonText("needs-connection")}
           onPress={() => {
             onSave?.();
             // Every stack sits under the tabs, whose Map tab holds the framing

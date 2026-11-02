@@ -141,7 +141,7 @@ export function setBrightLight(on: boolean): boolean {
     // Nothing to undo: a scheme picked by name is the user's, even Ghost Gum.
     if (!isBrightLight()) return true;
     return setThemeSchemeId(
-      normalizeThemeSchemeId(brightFrom) ?? DEFAULT_THEME_SCHEME_ID,
+      normalizeThemeSchemeId(brightFrom) ?? schemeForOs(osPrefersDark()),
     );
   }
   if (isBrightLight()) return true;
