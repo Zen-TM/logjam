@@ -124,6 +124,30 @@
   color: var(--color-text-muted);
 }
 
+/* The browser's own clear button is a saturated blue × in every scheme. It keeps
+   its behaviour and gets a × from two token-coloured strokes. */
+.searchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 var(--space-0-5);
+  cursor: pointer;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    );
+}
+
 /* The pill draws the focus state. */
 .searchInput:focus-visible {
   outline: none;
