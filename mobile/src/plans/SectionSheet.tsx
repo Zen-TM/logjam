@@ -304,10 +304,12 @@ export function SectionSheet({
             multiline
             autoCapitalize="sentences"
             error={bodyError}
-            hint={limitHint(
-              values.body.length,
-              TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
-            )}
+            hint={[
+              copy.sectionBodyHint,
+              limitHint(values.body.length, TRIP_PLAN_SECTION_BODY_MAX_LENGTH),
+            ]
+              .filter(Boolean)
+              .join(" ")}
             onChangeText={(body) => {
               set({ body });
               setBodyError(null);

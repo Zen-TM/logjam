@@ -102,7 +102,9 @@ import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
 import { nextRegionName } from "./regionName";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
+  bboxToFrame,
   defaultFrameInsets,
+  startingArea,
   frameToBbox,
   metresPerPixel,
   type FrameInsets,
@@ -183,9 +185,9 @@ const HERO_OVERLAP = 16;
  * a handle you have to aim under.
  */
 const MIN_TOP_INSET = HERO_OVERLAP + 22;
-// Past `defaultFrameInsets` (12% and 16% of a phone's map), so the fitted
-// bounds land inside the frame rather than under its edge.
-const BOUNDS_PADDING = { top: 160, bottom: 160, left: 64, right: 64 };
+// Room for the frame's handles around a plan's area, which the camera fits
+// and the frame then sits on (see applyBounds). The top clears the hero.
+const BOUNDS_PADDING = { top: 72, bottom: 32, left: 32, right: 32 };
 
 /**
  * The controls panel's height, fixed so the MAP never resizes under a frame the
@@ -228,7 +230,7 @@ export function RegionDownloadScreen({
   initialBasemapId?: BasemapId;
   initialCenter?: [number, number];
   initialZoom?: number;
-  /** A plan's items: the map fits them inside the default frame. */
+  /** A plan's items: the frame starts on them, padded. */
   initialBounds?: LngLatBounds;
 }) {
   const styles = useStyles();
@@ -247,6 +249,11 @@ export function RegionDownloadScreen({
     PROTOMAPS_FLAVOR,
   );
   const mapRef = useRef<MapRef>(null);
+  const framedRef = useRef(false);
+  const startArea = useMemo(
+    () => (initialBounds ? startingArea(initialBounds) : null),
+    [initialBounds],
+  );
 
   const downloadable = DOWNLOADABLE;
 
@@ -343,16 +350,30 @@ export function RegionDownloadScreen({
     (bounds: LngLatBounds) => {
       if (size.width === 0) return;
       const [west, south, east, north] = bounds;
-      setViewport({
+      const next = {
         north,
         south,
         east,
         west,
         width: size.width,
         height: size.height,
-      });
+      };
+      setViewport(next);
+      // A plan's area: the first settled reading puts the frame on the
+      // plan's places and ways, not on the default inset.
+      if (startArea && !framedRef.current) {
+        framedRef.current = true;
+        const [aw, as, ae, an] = startArea;
+        const f = bboxToFrame(next, {
+          west: aw,
+          south: as,
+          east: ae,
+          north: an,
+        });
+        setFrame({ ...f, top: Math.max(MIN_TOP_INSET, f.top) });
+      }
     },
-    [size.width, size.height],
+    [size.width, size.height, startArea],
   );
 
   /**
@@ -637,8 +658,8 @@ export function RegionDownloadScreen({
         >
           <Camera
             initialViewState={
-              initialBounds
-                ? { bounds: initialBounds, padding: BOUNDS_PADDING }
+              startArea
+                ? { bounds: startArea, padding: BOUNDS_PADDING }
                 : { center: startCenter, zoom: startZoom }
             }
           />

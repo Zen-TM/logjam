@@ -45,7 +45,6 @@ import {
   TRIP_PLAN_OFFLINE,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
-  TRIP_PLANS_LIST,
   type DateOnly,
   type SectionKeysOn,
   type TripPlanItem,
@@ -92,6 +91,7 @@ import { FormBuilderSheet, type FormBuilderState } from "./FormBuilderSheet";
 import { FormSheet, type FormSheetState } from "./FormSheet";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { PeopleView } from "./PeopleView";
+import { WriteUpBody } from "./WriteUpBody";
 import {
   openPlanMedia,
   PlanDownload,
@@ -755,9 +755,11 @@ function WriteUp({
               />
             ) : null}
           </View>
-          <Text style={styles.sectionBody} selectable>
-            {section.body || copy.writeUpEmpty}
-          </Text>
+          {section.body ? (
+            <WriteUpBody title={section.title} body={section.body} />
+          ) : (
+            <Text style={styles.sectionBody}>{copy.writeUpEmpty}</Text>
+          )}
         </View>
       ))}
       {add}

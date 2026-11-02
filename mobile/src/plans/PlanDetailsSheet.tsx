@@ -15,6 +15,7 @@ import {
   tripPlanInPlanNow,
   tripPlanPatch,
   pickDay,
+  settleDayRange,
   tripPlanSame,
   tripPlanTheirsChanged,
   TRIP_PLAN_FIELD_GROUPS,
@@ -187,7 +188,18 @@ export function PlanDetailsSheet({
             />
           </FormStack>
         ) : (
-          <Button label="Done" icon="done" onPress={toForm} />
+          <Button
+            label="Done"
+            icon="done"
+            onPress={() => {
+              const settled = settleDayRange({
+                start: values.startDate,
+                end: values.endDate,
+              });
+              set({ startDate: settled.start, endDate: settled.end });
+              toForm();
+            }}
+          />
         )
       }
     >
@@ -205,7 +217,6 @@ export function PlanDetailsSheet({
               set({ startDate: next.start, endDate: next.end });
             }}
           />
-          <Text style={styles.theirs}>{TRIP_PLAN_PAGE.copy.datesHintTap}</Text>
           {values.startDate ? (
             <Button
               label={TRIP_PLAN_PAGE.copy.datesClear}
@@ -213,7 +224,6 @@ export function PlanDetailsSheet({
               variant="ghost"
               onPress={() => {
                 set({ startDate: null, endDate: null });
-                toForm();
               }}
             />
           ) : null}

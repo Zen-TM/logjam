@@ -1,6 +1,6 @@
 // A plan someone is invited to by username, before they join
-// (`TRIP_PLAN_PREVIEW`, GET /plans/:id/preview): the write-up and who is
-// going, with Join and Decline. Joining answers nothing: forms are answered
+// (`TRIP_PLAN_PREVIEW`, GET /plans/:id/preview): who invited, the write-up
+// and who is going (`tripPlanInvitePage`), with Join and Decline. Joining answers nothing: forms are answered
 // from the plan afterwards. Logjam Web's twin is PlanInvitedPage. A preview is not cached: it needs a connection, unless the
 // reader has joined since, when the plan opens instead (`opensAsPreview`).
 import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
@@ -9,10 +9,9 @@ import {
   ApiError,
   contractSectionKeys,
   messageFromError,
-  tripPlanInvitedLine,
-  tripPlanPreviewHeaded,
+  tripPlanInvitePage,
+  tripTypeLabel,
   TRIP_PLAN_JOIN,
-  TRIP_PLAN_OFFLINE,
   TRIP_PLAN_PREVIEW,
   type SectionKeysOn,
   type TripPlanInvitedPreview,
@@ -38,6 +37,7 @@ import {
 } from "../ui";
 import { getInvitedPreview, joinPlan, leavePlan } from "./plansApi";
 import { fetchPlan, opensAsPreview, pollPlans } from "./plansCache";
+import { WriteUpBody } from "./WriteUpBody";
 
 const copy = TRIP_PLAN_PREVIEW.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
@@ -154,7 +154,7 @@ export function PlanPreview({
       TRIP_PLAN_JOIN.copy.declineTitle,
       TRIP_PLAN_JOIN.copy.declineBody,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: TRIP_PLAN_JOIN.copy.cancel, style: "cancel" },
         {
           text: copy.decline,
           style: "destructive",
@@ -185,75 +185,77 @@ export function PlanPreview({
     );
 
   const preview = loaded.kind === "preview" ? loaded.preview : null;
-  const headed = preview ? tripPlanPreviewHeaded(preview) : false;
+  const page = preview ? tripPlanInvitePage(preview, tripTypeLabel) : null;
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_PREVIEW, "gps">,
     ReactNode
-  > | null = preview
-    ? {
-        // The name is the screen's hero; its line is here.
-        hero: <Text style={styles.muted}>{tripPlanInvitedLine(preview)}</Text>,
-        notice: (
-          <>
-            <Row
-              icon="plan"
-              title={copy.invited}
-              titleNumberOfLines={3}
-              footer={
-                <View style={styles.controls}>
-                  <Button
-                    label={copy.join}
-                    compact
-                    loading={busy === "join"}
-                    disabled={!online}
-                    disabledReason={OFFLINE}
-                    onPress={() => void join()}
-                  />
-                  <Button
-                    label={copy.decline}
-                    compact
-                    variant="outlineAccent"
-                    loading={busy === "decline"}
-                    disabled={!online}
-                    disabledReason={OFFLINE}
-                    onPress={askDecline}
-                  />
-                </View>
-              }
-            />
-            {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
-            {error ? <ErrorBanner message={error} /> : null}
-          </>
-        ),
-        writeUp: preview.sections.map((section) => (
-          <View key={section.id} style={styles.section}>
-            <SectionHeader title={section.title} />
-            {section.body ? (
-              <Text style={styles.sectionBody} selectable>
-                {section.body}
-              </Text>
-            ) : null}
-          </View>
-        )),
-        people: (
-          <>
-            {headed ? (
-              <SectionHeader
-                title={copy.people}
-                count={preview.members.length}
-              />
-            ) : null}
-            {preview.members.map((member) => (
+  > | null =
+    preview && page
+      ? {
+          // The name is the screen's hero; its line is here.
+          hero: <Text style={styles.muted}>{page.facts}</Text>,
+          notice: (
+            <>
               <Row
-                key={member.id}
-                title={member.username}
-                leading={<Avatar username={member.username} />}
+                icon="plan"
+                title={page.inviteTitle}
+                subtitle={page.inviteHint}
+                titleNumberOfLines={3}
+                footer={
+                  <View style={styles.controls}>
+                    <Button
+                      label={copy.join}
+                      compact
+                      loading={busy === "join"}
+                      disabled={!online}
+                      disabledReason={OFFLINE}
+                      onPress={() => void join()}
+                    />
+                    <Button
+                      label={copy.decline}
+                      compact
+                      variant="outlineAccent"
+                      loading={busy === "decline"}
+                      disabled={!online}
+                      disabledReason={OFFLINE}
+                      onPress={askDecline}
+                    />
+                  </View>
+                }
               />
-            ))}
-          </>
-        ),
-      }
-    : null;
+              {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
+              {error ? <ErrorBanner message={error} /> : null}
+            </>
+          ),
+          writeUp: page.writeUpEmpty ? (
+            <Text style={styles.muted}>{page.writeUpEmpty}</Text>
+          ) : (
+            page.sections.map((section) => (
+              <View key={section.id} style={styles.section}>
+                <SectionHeader title={section.title} />
+                {section.body ? (
+                  <WriteUpBody title={section.title} body={section.body} />
+                ) : null}
+              </View>
+            ))
+          ),
+          people: (
+            <>
+              <SectionHeader
+                title={page.going.title}
+                count={page.going.count}
+              />
+              {preview.members.map((member) => (
+                <Row
+                  key={member.id}
+                  title={member.username}
+                  leading={<Avatar username={member.username} />}
+                />
+              ))}
+            </>
+          ),
+        }
+      : null;
 
   return (
     <View style={styles.screen}>
@@ -269,7 +271,7 @@ export function PlanPreview({
       ) : loaded.kind === "loading" ? (
         <LoadingState label={copy.loading} />
       ) : loaded.kind === "gone" ? (
-        <EmptyState icon="plan" title={TRIP_PLAN_OFFLINE.gone} />
+        <EmptyState icon="plan" title={copy.gone} />
       ) : loaded.kind === "failed" ? (
         <ErrorState
           message={loaded.message}
@@ -300,5 +302,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
   controls: { flexDirection: "row", gap: spacing(1) },
   section: { gap: spacing(1) },
-  sectionBody: { ...textRole.body, color: theme.text },
 }));

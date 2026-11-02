@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
+import { weekBand, type BandCell } from "@logjam/shared";
+
 import {
   hitSlop,
   radius,
@@ -209,34 +211,32 @@ export function DatePicker({
                   ))}
                 </View>
               ))
-            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => (
-                <View key={weekIndex} style={styles.week}>
-                  {week.map((key, dayIndex) => {
-                    if (key === null)
-                      return <View key={dayIndex} style={styles.day} />;
-                    return (
-                      <DayCell
-                        key={dayIndex}
-                        dateKey={key}
-                        selected={
-                          range
-                            ? key === range.start || key === range.end
-                            : key === value
-                        }
-                        inRange={
-                          range?.start != null &&
-                          range.end != null &&
-                          key > range.start &&
-                          key < range.end
-                        }
-                        isToday={key === today}
-                        disabled={!allowFuture && key > today}
-                        onPress={() => onChange(key)}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
+            : chunk(monthGrid(visibleMonth), 7).map((week, weekIndex) => {
+                const band = range ? weekBand(range, week) : [];
+                return (
+                  <View key={weekIndex} style={styles.week}>
+                    {week.map((key, dayIndex) => {
+                      if (key === null)
+                        return <View key={dayIndex} style={styles.day} />;
+                      return (
+                        <DayCell
+                          key={key}
+                          dateKey={key}
+                          selected={
+                            range
+                              ? key === range.start || key === range.end
+                              : key === value
+                          }
+                          band={band[dayIndex] ?? null}
+                          isToday={key === today}
+                          disabled={!allowFuture && key > today}
+                          onPress={() => onChange(key)}
+                        />
+                      );
+                    })}
+                  </View>
+                );
+              })}
         </Animated.View>
       </View>
     </View>
@@ -251,6 +251,10 @@ function usePager() {
   const [width, setWidth] = useState(0);
   const [pan] = useState(() => new Animated.Value(0));
   const paging = useRef(false);
+  // The slide-in waits for the new month to be on screen: starting it from
+  // the animation callback put the OLD grid (and its range band) on the
+  // incoming side for the frames before React's render landed.
+  const slideIn = useRef<number | null>(null);
   const widthRef = useRef(0);
   useEffect(() => {
     widthRef.current = width;
@@ -268,22 +272,30 @@ function usePager() {
       duration: PAGE_MS,
       useNativeDriver: true,
     }).start(() => {
+      slideIn.current = delta;
       commit();
-      pan.setValue(delta * widthRef.current);
-      Animated.timing(pan, {
-        toValue: 0,
-        duration: PAGE_MS,
-        useNativeDriver: true,
-      }).start(() => {
-        paging.current = false;
-      });
-      // Belt and braces: if that second animation is interrupted its callback
-      // may never run, and a stuck flag silently disables paging forever.
+      // Belt and braces: if the slide-in is interrupted its callback may never
+      // run, and a stuck flag silently disables paging forever.
       setTimeout(() => {
         paging.current = false;
-      }, PAGE_MS * 3);
+      }, PAGE_MS * 4);
     });
   };
+
+  // Runs after the render that `commit` caused.
+  useEffect(() => {
+    const delta = slideIn.current;
+    if (delta === null) return;
+    slideIn.current = null;
+    pan.setValue(delta * widthRef.current);
+    Animated.timing(pan, {
+      toValue: 0,
+      duration: PAGE_MS,
+      useNativeDriver: true,
+    }).start(() => {
+      paging.current = false;
+    });
+  });
 
   return {
     pan,
@@ -298,14 +310,14 @@ function usePager() {
 function DayCell({
   dateKey,
   selected,
-  inRange,
+  band,
   isToday,
   disabled,
   onPress,
 }: {
   dateKey: string;
   selected: boolean;
-  inRange: boolean;
+  band: BandCell | null;
   isToday: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -341,19 +353,43 @@ function DayCell({
       accessibilityLabel={dateKey}
       accessibilityState={{ selected, disabled }}
       onPress={disabled ? noop : onPress}
-      style={[styles.day, inRange && styles.rangeBand]}
+      style={styles.day}
     >
       {({ pressed }) => (
-        <View
-          style={[
-            styles.dayPill,
-            isToday && styles.todayRing,
-            selected && styles.selectedFill,
-            pressed && !disabled && styles.pressed,
-          ]}
-        >
-          {label}
-        </View>
+        <>
+          {band ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.band,
+                {
+                  // The ends under the fill start and stop at its centre; a row's
+                  // own ends are rounded, so a range across weeks reads as pieces.
+                  left: band.isStart ? "50%" : 0,
+                  right: band.isEnd ? "50%" : 0,
+                  borderTopLeftRadius: band.pieceStart ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomLeftRadius: band.pieceStart
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                  borderTopRightRadius: band.pieceEnd ? DAY_PILL_SIZE / 2 : 0,
+                  borderBottomRightRadius: band.pieceEnd
+                    ? DAY_PILL_SIZE / 2
+                    : 0,
+                },
+              ]}
+            />
+          ) : null}
+          <View
+            style={[
+              styles.dayPill,
+              isToday && styles.todayRing,
+              selected && styles.selectedFill,
+              pressed && !disabled && styles.pressed,
+            ]}
+          >
+            {label}
+          </View>
+        </>
       )}
     </Pressable>
   );
@@ -550,7 +586,13 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
-  rangeBand: { backgroundColor: withAlpha(theme.accent, 0.18) },
+  band: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -DAY_PILL_SIZE / 2,
+    height: DAY_PILL_SIZE,
+    backgroundColor: withAlpha(theme.accent, 0.18),
+  },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
   dayText: { ...textRole.detail, color: theme.text },

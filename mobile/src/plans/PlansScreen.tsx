@@ -174,7 +174,6 @@ export function PlansScreen({
   const shown = plansListView({ plans, failure, settled, online });
   const [bucket, setBucket] = useState<TripPlanBucket>("upcoming");
   const [newOpen, setNewOpen] = useState(false);
-  const [actionsOpen, setActionsOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [toastAt, setToastAt] = useState<number | undefined>(undefined);
   if (message && message.at !== toastAt) {
@@ -581,13 +580,6 @@ export function PlansScreen({
         titleNumberOfLines={2}
         onBack={onBack}
         backLabel={backLabel}
-        actions={
-          <IconButton
-            icon="overflow"
-            accessibilityLabel={copy.plansActions}
-            onPress={() => setActionsOpen(true)}
-          />
-        }
       >
         <View style={styles.pills}>
           <Button
@@ -710,21 +702,6 @@ export function PlansScreen({
           onOpenPlan({ id: made.id, name: made.name, status: "active" });
         }}
       />
-      <BottomSheet
-        visible={actionsOpen}
-        onClose={() => setActionsOpen(false)}
-        title={copy.plansActions}
-      >
-        <Row
-          icon="multiSelect"
-          title={copy.selectAllPlans}
-          disabled={selectableItems.length === 0}
-          onPress={() => {
-            setActionsOpen(false);
-            selectAll();
-          }}
-        />
-      </BottomSheet>
       <BottomSheet
         visible={menuFor !== null}
         onClose={() => setMenuFor(null)}
