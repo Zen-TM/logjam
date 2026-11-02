@@ -17,7 +17,7 @@
 // account reason is reported even when the device is also offline.
 //
 // Sharing has a THIRD axis nobody else has — `needs-upload`, below — and it
-// sits between the other two. See `shareCapabilityStatus`.
+// sits LAST in that order. See `shareCapabilityStatus`.
 //
 // Pure and storage-free on purpose: mobile's test setup is plain vitest with no
 // jsdom or testing-library, so this branching is only testable if it lives away
@@ -224,21 +224,23 @@ export function statusRowProps(status: CapabilityStatus): {
  * exist server-side, so a recording made ten seconds ago can be sent — routing
  * it through here would withhold a verb that works.
  *
- * PRECEDENCE: account, then upload, then connection. A row the account does
- * not hold is reported as such whether or not the phone is reachable: the
- * connectivity reading takes seconds to settle after a screen mounts, and two
- * Share rows on one place said different things while it did. The next step is
- * the same either way, since the outbox is waiting on the same connection.
+ * PRECEDENCE: account, then connection, then upload. `needs-connection` wins
+ * over `needs-upload` because offline BOTH are true and only one of them is
+ * something the user can act on: the outbox is waiting on the same connection,
+ * so "wait for it to sync" is advice with no next step, and it would have one
+ * sheet giving two different explanations for one outage. `needs-upload` is
+ * therefore only ever reported when connectivity is NOT the blocker — online,
+ * account linked, queue not yet drained — which is the only state where "it
+ * hasn't gone up yet" is news.
  */
 export function shareCapabilityStatus(
   accountState: AccountState,
   online: boolean,
   onServer: boolean,
 ): CapabilityStatus {
-  if (accountState !== "guest" && !onServer) {
-    return { status: "unavailable", reason: "needs-upload" };
-  }
-  return capabilityStatus("sharing", accountState, online);
+  const base = capabilityStatus("sharing", accountState, online);
+  if (base.status !== "available") return base;
+  return onServer ? base : { status: "unavailable", reason: "needs-upload" };
 }
 
 /**
