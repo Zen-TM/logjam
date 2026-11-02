@@ -9,7 +9,9 @@ import {
 } from "react";
 import {
   DEFAULT_THEME_SCHEME_ID,
+  normalizeThemeSchemeId,
   normalizeUserUiPreferences,
+  schemeForOs,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type ThemeScheme,
@@ -25,6 +27,12 @@ function applyScheme(id: ThemeSchemeId) {
   document.documentElement.dataset.scheme = id;
   window.dispatchEvent(new Event("logjam-theme-change"));
 }
+
+/** Until the account holds a pick, the scheme follows the OS. */
+const osScheme = () =>
+  schemeForOs(
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true,
+  );
 
 type ThemePreferencesContextValue = {
   schemeId: ThemeSchemeId;
@@ -44,9 +52,7 @@ export function ThemePreferencesProvider({
 }: {
   children: ReactNode;
 }) {
-  const [schemeId, setSchemeId] = useState<ThemeSchemeId>(
-    DEFAULT_THEME_SCHEME_ID,
-  );
+  const [schemeId, setSchemeId] = useState<ThemeSchemeId>(osScheme);
   const [isHydrating, setIsHydrating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +67,8 @@ export function ThemePreferencesProvider({
 
     try {
       const user = await fetchCurrentUser();
-      const normalized = normalizeUserUiPreferences(user.uiPreferences);
-      setSchemeId(normalized.themeSchemeId);
+      const picked = normalizeThemeSchemeId(user.uiPreferences?.themeSchemeId);
+      setSchemeId(picked ?? osScheme());
     } catch (err) {
       // Best-effort: keep the local default theme rather than surface a
       // toast for a background hydration failure — but still log it, or a

@@ -147,8 +147,9 @@ export const ASSET_HUES = {
   route: "#8FBFA6",
   /** Imported files (GPX/KML/GeoJSON) — waterhole blue. */
   import: "#86B5D4",
-  /** Recorded tracks — heath flower. */
-  track: "#B79EC0",
+  /** Recorded tracks — heath pink. The heath violet is reserved for "shared"
+   *  (`SHARED_PLACE_COLOR`); `sharedHue.test.ts` holds it out of every hue map. */
+  track: "#E0A8C4",
   /** Marked points — waratah, the most forward colour in the muted range: a
    *  waypoint is a thing you are trying to FIND again. Lifted for contrast as
    *  a glyph on Sandstone. */
@@ -163,7 +164,7 @@ export const ASSET_HUES = {
  * takes the accent; these are the rest. Same palette rule as `ASSET_HUES`.
  */
 export const TRIP_TYPE_OPEN_HUES = {
-  heath: "#B79EC0",
+  mist: "#A7C4C9",
   dryGrass: "#C9B37B",
   lichen: "#8FBFAE",
   waratah: "#D3A0A0",
@@ -244,7 +245,7 @@ export const FORM_RHYTHM = {
  */
 export const FONT = {
   gps: { xs: 12, sm: 14, base: 16, lg: 20, xl: 24, xxl: 28 },
-  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 20, xxl: 28 },
+  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 22, xxl: 28 },
 } as const;
 
 /** Type weights, the same on both media. */

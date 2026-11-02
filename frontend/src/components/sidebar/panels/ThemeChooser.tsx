@@ -59,7 +59,10 @@ function ThemeChooser() {
                     />
                   ))}
                 </span>
-                <span className={classes.name}>{scheme.name}</span>
+                <span className={classes.label}>
+                  <span>{scheme.name}</span>
+                  <span className={classes.mode}>{scheme.mode}</span>
+                </span>
                 {selected && (
                   <Icon
                     idea="done"

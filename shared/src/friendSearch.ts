@@ -48,13 +48,12 @@ export function avatarHueIndex(username: string, paletteSize: number): number {
 }
 
 /**
- * The six hues an avatar is drawn in — mid-light, muted, NSW-derived, the same
+ * The five hues an avatar is drawn in — mid-light, muted, NSW-derived, the same
  * family as `assetHue`'s. Here rather than in either client because the hash
  * above only keeps a person one colour if both clients count the same slots in
  * the same order: a palette of five on one side would repaint everyone.
  */
 export const FRIEND_AVATAR_HUES = [
-  "#B79EC0", // heath flower
   "#C9B37B", // dry grass
   "#8FBFAE", // lichen
   "#D3A0A0", // waratah, muted

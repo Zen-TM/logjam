@@ -170,14 +170,7 @@ const IDENTITY_FILLS = [
  * too, so this list can only shrink: fix the pair, delete its line. Adding to
  * it is a decision to ship an inaccessible pair, and needs saying.
  */
-const KNOWN_FAILURES = new Map([
-  ["sandstone: line on page (separation: a card's edge)", { floor: 1.43, why: "its line is under 1.5:1 on the page" }],
-  ["basalt: line on page (separation: a card's edge)", { floor: 1.47, why: "its line is under 1.5:1 on the page" }],
-  ["scribblyGum: line on page (separation: a card's edge)", { floor: 1.25, why: "its line is under 1.5:1 on the page" }],
-  ["ghostGum: line on page (separation: a card's edge)", { floor: 1.22, why: "its line is under 1.5:1 on the page" }],
-  ["ghostGum: textMuted on page", { floor: 6.62, why: "its muted text is under 7:1" }],
-  ["ghostGum: textMuted on cardPressed", { floor: 6.0, why: "its muted text is under 7:1" }],
-]);
+const KNOWN_FAILURES = new Map([]);
 
 // Reference basemap grounds a point mark is drawn on, not tokens: the OSM Topo
 // land colour and the satellite imagery's mid green.

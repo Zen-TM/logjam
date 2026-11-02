@@ -170,6 +170,14 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
+/**
+ * The scheme a client opens in before the user has picked one: it follows the
+ * OS, dark to Sandstone and light to Ghost Gum. A stored pick always wins.
+ */
+export function schemeForOs(prefersDark: boolean): ThemeSchemeId {
+  return prefersDark ? DEFAULT_THEME_SCHEME_ID : "ghostGum";
+}
+
 // In the dark schemes, `field` provides input background contrast against
 // `page` (calculated as `color-mix(in srgb, black 12%, page)` resolved to hex),
 // `lineStrong` matches muted text, and `cardPressed` steps darker than `card` so
@@ -185,7 +193,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#61553F",
       cardPressed: "#524836",
       field: "#45403C",
-      line: "#6B5F4B",
+      line: "#74674F",
       lineStrong: "#D8CCB9",
       text: "#F7F3EC",
       textMuted: "#D8CCB9",
@@ -204,11 +212,11 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
     description: "Cool plunge-water blues against dark gorge rock.",
     mode: "dark",
     tokens: {
-      page: "#2B3F52",
-      card: "#5F432F",
-      cardPressed: "#16232D",
-      field: "#263748",
-      line: "#16232D",
+      page: "#26394B",
+      card: "#33495E",
+      cardPressed: "#283C4F",
+      field: "#213242",
+      line: "#435A70",
       lineStrong: "#A7BBC9",
       text: "#EAF1F6",
       textMuted: "#A7BBC9",
@@ -232,7 +240,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#3A4D45",
       cardPressed: "#2A3A34",
       field: "#27362F",
-      line: "#212E29",
+      line: "#4A6157",
       lineStrong: "#B4C8BC",
       text: "#EAF2EC",
       textMuted: "#B4C8BC",
@@ -260,10 +268,10 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#F9FAF6",
       cardPressed: "#E0E4DB",
       field: "#F9FAF6",
-      line: "#D5DAD0",
+      line: "#BCC3B6",
       lineStrong: "#7A857C",
       text: "#252A26",
-      textMuted: "#4C554D",
+      textMuted: "#3F4740",
       accent: "#778D7C",
       warning: "#C2735A",
       success: "#7E8E3E",
