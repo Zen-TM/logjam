@@ -9,6 +9,7 @@ import {
   userFieldValues,
   validatePlacePayload,
   type ScopedCustomFieldDef,
+  coordinateEntry,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
@@ -536,7 +537,17 @@ export function PlaceEditSheet({
                 label="Latitude"
                 value={latitude}
                 onChangeText={(next) => {
-                  setLatitude(next);
+                  const entry = coordinateEntry(next, "latitude", latitude);
+                  setLatitude((was) => entry.latitude ?? was);
+                  setLongitude((was) => entry.longitude ?? was);
+                  // A pair fills both, so neither keeps its old error.
+                  if (
+                    entry.latitude !== undefined &&
+                    entry.longitude !== undefined
+                  ) {
+                    setLatitudeError(null);
+                    setLongitudeError(null);
+                  }
                   if (latitudeError) setLatitudeError(null);
                 }}
                 error={latitudeError}
@@ -548,7 +559,16 @@ export function PlaceEditSheet({
                 label="Longitude"
                 value={longitude}
                 onChangeText={(next) => {
-                  setLongitude(next);
+                  const entry = coordinateEntry(next, "longitude", longitude);
+                  setLatitude((was) => entry.latitude ?? was);
+                  setLongitude((was) => entry.longitude ?? was);
+                  if (
+                    entry.latitude !== undefined &&
+                    entry.longitude !== undefined
+                  ) {
+                    setLatitudeError(null);
+                    setLongitudeError(null);
+                  }
                   if (longitudeError) setLongitudeError(null);
                 }}
                 error={longitudeError}

@@ -18,6 +18,7 @@ import {
   isSystemFieldDef,
   isValidLatitude,
   isValidLongitude,
+  coordinateNumber,
 } from "@logjam/shared";
 import {
   numericFieldError,
@@ -333,8 +334,8 @@ function PlaceDialog({
     if (draftPlaceId) return Promise.resolve(draftPlaceId);
     if (draftPromiseRef.current) return draftPromiseRef.current;
 
-    const parsedLat = parseFloat(latitude);
-    const parsedLng = parseFloat(longitude);
+    const parsedLat = coordinateNumber(latitude);
+    const parsedLng = coordinateNumber(longitude);
     if (
       !name.trim() ||
       !latitude ||
@@ -433,8 +434,8 @@ function PlaceDialog({
     setError(null);
     setInvalidField(null);
     try {
-      const parsedLat = parseFloat(latitude);
-      const parsedLng = parseFloat(longitude);
+      const parsedLat = coordinateNumber(latitude);
+      const parsedLng = coordinateNumber(longitude);
       if (!name.trim()) {
         // Inline under the Name field (FieldError), not the bottom banner.
         setInvalidField("name");
@@ -690,6 +691,13 @@ function PlaceDialog({
                 className={classes.grow}
                 value={latitude}
                 onChange={setLatitude}
+                coordinate={{
+                  axis: "latitude",
+                  onPair: (pair) => {
+                    setLatitude(pair.latitude);
+                    setLongitude(pair.longitude);
+                  },
+                }}
                 constraints={LAT_CONSTRAINTS}
                 showError={showFieldErrors || invalidField === "coords"}
                 hint="Decimal degrees (WGS84)."
@@ -700,6 +708,13 @@ function PlaceDialog({
                 className={classes.grow}
                 value={longitude}
                 onChange={setLongitude}
+                coordinate={{
+                  axis: "longitude",
+                  onPair: (pair) => {
+                    setLatitude(pair.latitude);
+                    setLongitude(pair.longitude);
+                  },
+                }}
                 constraints={LNG_CONSTRAINTS}
                 showError={showFieldErrors || invalidField === "coords"}
                 hint="Decimal degrees (WGS84)."

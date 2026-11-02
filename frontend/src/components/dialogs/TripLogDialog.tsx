@@ -24,6 +24,8 @@ import {
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
   type TripLogCustomFieldType,
+  coordinateEntry,
+  coordinateNumber,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
@@ -647,8 +649,8 @@ function TripLogDialog({
   async function resolvePlaceIds(): Promise<string[]> {
     if (!creating) return selectedPlaceIds;
     if (!creating.name.trim()) throw new Error("Place name is required.");
-    const lat = parseFloat(creating.latitude);
-    const lng = parseFloat(creating.longitude);
+    const lat = coordinateNumber(creating.latitude);
+    const lng = coordinateNumber(creating.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng))
       throw new Error("Valid latitude and longitude are required.");
     if (!isValidLatitude(lat) || !isValidLongitude(lng))
@@ -1313,7 +1315,16 @@ function TripLogDialog({
                     value={creating.latitude}
                     onChange={(event) =>
                       setCreating((prev) =>
-                        prev ? { ...prev, latitude: event.target.value } : prev,
+                        prev
+                          ? {
+                              ...prev,
+                              ...coordinateEntry(
+                                event.target.value,
+                                "latitude",
+                                prev.latitude,
+                              ),
+                            }
+                          : prev,
                       )
                     }
                   />
@@ -1326,7 +1337,14 @@ function TripLogDialog({
                     onChange={(event) =>
                       setCreating((prev) =>
                         prev
-                          ? { ...prev, longitude: event.target.value }
+                          ? {
+                              ...prev,
+                              ...coordinateEntry(
+                                event.target.value,
+                                "longitude",
+                                prev.longitude,
+                              ),
+                            }
                           : prev,
                       )
                     }

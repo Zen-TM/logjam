@@ -36,7 +36,11 @@ import {
   type TripLogCustomFieldType,
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
-import { CUSTOM_FIELD_TYPES, makeCustomFieldKey } from "@logjam/shared";
+import {
+  coordinateEntry,
+  CUSTOM_FIELD_TYPES,
+  makeCustomFieldKey,
+} from "@logjam/shared";
 import type {
   TPlace,
   TUser,
@@ -939,8 +943,10 @@ function UnifiedImportDialog({
       return (
         f &&
         f.name.trim() &&
-        !isNaN(parseFloat(f.latitude)) &&
-        !isNaN(parseFloat(f.longitude))
+        f.latitude.trim() !== "" &&
+        f.longitude.trim() !== "" &&
+        !isNaN(Number(f.latitude)) &&
+        !isNaN(Number(f.longitude))
       );
     });
   }, [activeKind, tripCreateKeys, reviewState.createForms]);
@@ -1618,12 +1624,15 @@ function UnifiedImportDialog({
             placeholder="-33.123456"
             inputMode="decimal"
             error={
-              f.latitude.trim() === "" || !isNaN(parseFloat(f.latitude))
+              f.latitude.trim() === "" || !isNaN(Number(f.latitude))
                 ? null
                 : "Decimal degrees."
             }
             onChange={(event) =>
-              updateCreateForm(key, { latitude: event.target.value })
+              updateCreateForm(
+                key,
+                coordinateEntry(event.target.value, "latitude", f.latitude),
+              )
             }
           />
           <TextField
@@ -1633,12 +1642,15 @@ function UnifiedImportDialog({
             placeholder="150.123456"
             inputMode="decimal"
             error={
-              f.longitude.trim() === "" || !isNaN(parseFloat(f.longitude))
+              f.longitude.trim() === "" || !isNaN(Number(f.longitude))
                 ? null
                 : "Decimal degrees."
             }
             onChange={(event) =>
-              updateCreateForm(key, { longitude: event.target.value })
+              updateCreateForm(
+                key,
+                coordinateEntry(event.target.value, "longitude", f.longitude),
+              )
             }
           />
           <Button

@@ -197,6 +197,7 @@ export default function PlanItemEditDialog({
                   required
                   value={values.latitude}
                   onChange={(latitude) => set({ latitude })}
+                  coordinate={{ axis: "latitude", onPair: set }}
                   constraints={LATITUDE}
                   showError={asked}
                   hint={theirsHint("latitude")}
@@ -206,6 +207,7 @@ export default function PlanItemEditDialog({
                   required
                   value={values.longitude}
                   onChange={(longitude) => set({ longitude })}
+                  coordinate={{ axis: "longitude", onPair: set }}
                   constraints={LONGITUDE}
                   showError={asked}
                   hint={theirsHint("longitude")}

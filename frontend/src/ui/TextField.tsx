@@ -1,3 +1,4 @@
+import { coordinateEntry } from "@logjam/shared";
 import { FieldError } from "./FieldError";
 import {
   useId,
@@ -122,6 +123,7 @@ export function NumberField({
   constraints,
   showError = false,
   onBlur,
+  coordinate,
   ...fieldProps
 }: Omit<
   ComponentProps<typeof TextField>,
@@ -131,6 +133,12 @@ export function NumberField({
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
   showError?: boolean;
+  /** A latitude or longitude: text is kept as typed (the error says what is
+   *  wrong with it) and a pasted "lat, lng" pair goes to both fields. */
+  coordinate?: {
+    axis: "latitude" | "longitude";
+    onPair: (pair: { latitude: string; longitude: string }) => void;
+  };
 }) {
   const [touched, setTouched] = useState(false);
   const error = numericFieldError(value, constraints);
@@ -140,7 +148,17 @@ export function NumberField({
       type="text"
       inputMode={constraints.integer ? "numeric" : "decimal"}
       value={value}
-      onChange={(event) => onChange(sanitizeDecimalInput(event.target.value))}
+      onChange={(event) => {
+        const text = event.target.value;
+        if (!coordinate) return onChange(sanitizeDecimalInput(text));
+        const entry = coordinateEntry(text, coordinate.axis, value);
+        if (entry.latitude !== undefined && entry.longitude !== undefined)
+          coordinate.onPair({
+            latitude: entry.latitude,
+            longitude: entry.longitude,
+          });
+        else onChange(text);
+      }}
       onBlur={(event) => {
         setTouched(true);
         onBlur?.(event);
