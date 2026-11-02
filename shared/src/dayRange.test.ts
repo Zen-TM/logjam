@@ -82,20 +82,14 @@ describe("the band behind a range", () => {
     expect(band[1]).toEqual({
       pieceStart: true,
       pieceEnd: false,
-      isStart: true,
-      isEnd: false,
     });
     expect(band[2]).toEqual({
       pieceStart: false,
       pieceEnd: false,
-      isStart: false,
-      isEnd: false,
     });
     expect(band[3]).toEqual({
       pieceStart: false,
       pieceEnd: true,
-      isStart: false,
-      isEnd: true,
     });
   });
 
@@ -104,8 +98,8 @@ describe("the band behind a range", () => {
   it("rounds the row edge where a range crosses a week", () => {
     const range = { start: "2026-11-06", end: "2026-11-12" };
     const first = weekBand(range, week);
-    expect(first[4]?.isStart).toBe(true);
-    expect(first[6]).toMatchObject({ pieceEnd: true, isEnd: false });
+    expect(first[4]).toMatchObject({ pieceStart: true, pieceEnd: false });
+    expect(first[6]).toMatchObject({ pieceEnd: true });
     const next = weekBand(range, [
       "2026-11-09",
       "2026-11-10",
@@ -115,8 +109,8 @@ describe("the band behind a range", () => {
       null,
       null,
     ]);
-    expect(next[0]).toMatchObject({ pieceStart: true, isStart: false });
-    expect(next[3]).toMatchObject({ pieceEnd: true, isEnd: true });
+    expect(next[0]).toMatchObject({ pieceStart: true });
+    expect(next[3]).toMatchObject({ pieceEnd: true });
   });
 
   it("is empty for a one-day trip, an open range and a month the range misses", () => {

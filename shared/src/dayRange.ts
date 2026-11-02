@@ -28,16 +28,12 @@ export type BandCell = {
   pieceStart: boolean;
   /** Rightmost day of this row's piece: its right end is rounded. */
   pieceEnd: boolean;
-  /** The range's first day: the band begins at its centre, under the fill. */
-  isStart: boolean;
-  /** The range's last day: the band ends at its centre, under the fill. */
-  isEnd: boolean;
 };
 
 /**
  * The band behind a range, one row of seven cells at a time (`null` is a
  * blank cell). A continuous band covers the days from start to end,
- * including both; each row's piece is rounded at its own ends, so a range
+ * including both, through their whole cells to the outer edges; each row's piece is rounded at its own ends, so a range
  * that crosses a week shows rounded ends at the row edges. A one-day range
  * has no band, only the selected mark. Both clients draw from this. Guard:
  * dayRange.test.ts.
@@ -59,8 +55,6 @@ export function weekBand(
       ? {
           pieceStart: !inBand(week[i - 1] ?? null),
           pieceEnd: !inBand(week[i + 1] ?? null),
-          isStart: day === start,
-          isEnd: day === end,
         }
       : null,
   );
