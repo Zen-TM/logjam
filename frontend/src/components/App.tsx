@@ -641,13 +641,13 @@ function App() {
   );
   const planOnMap = planFetch.view;
   // Fit once per plan opened, not per refetch: the user may have panned since.
-  const planFitId = useRef<string | null>(null);
-  useEffect(() => {
-    if (planOnMap?.id === planFitId.current) return;
-    planFitId.current = planOnMap?.id ?? null;
+  // Adjusted during render, as the lint rule against setState in an effect asks.
+  const [fittedPlanId, setFittedPlanId] = useState<string | null>(null);
+  if ((planOnMap?.id ?? null) !== fittedPlanId) {
+    setFittedPlanId(planOnMap?.id ?? null);
     const bounds = planOnMap && planBounds(planOnMap);
     if (bounds) setFlyToBounds(bounds);
-  }, [planOnMap]);
+  }
   const planMapPlaces = useMemo<TPlace[]>(
     () => planOnMap?.places.map((place) => ({ ...place, ownerId: "" })) ?? [],
     [planOnMap],
