@@ -114,6 +114,31 @@ function childExpressionStrings(
 // Strings still to reword to the glossary; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
+    file: "components/dialogs/SelectedPlacesDialog.tsx",
+    rule: "curly-apostrophe",
+    text: "Unsharing won&rsquo;t remove",
+  },
+  {
+    file: "components/dialogs/SelectedPlacesDialog.tsx",
+    rule: "curly-apostrophe",
+    text: "they&rsquo;ll be unlinked",
+  },
+  {
+    file: "components/media/Lightbox.tsx",
+    rule: "curly-apostrophe",
+    text: "Couldn&rsquo;t load",
+  },
+  {
+    file: "components/sidebar/panels/PlacesPanel.tsx",
+    rule: "curly-apostrophe",
+    text: "aren&rsquo;t loaded",
+  },
+  {
+    file: "components/sidebar/panels/TripLogsPanel.tsx",
+    rule: "curly-apostrophe",
+    text: "aren&rsquo;t loaded",
+  },
+  {
     file: "components/App.tsx",
     rule: "cannot",
     text: "Your placed points will be lost. This cannot be undone.",
