@@ -45,6 +45,12 @@ const ALLOWED: Record<string, Allowed> = {
   "ui/SideSheet.module.css :: .title:focus-visible": {
     why: "focus lands on the title from script when the sheet opens",
   },
+  "components/gauges/GaugeView.module.css :: .chooser:focus": {
+    why: "focus lands on the chooser from script when it opens; its rows carry the ring",
+  },
+  "components/sidebar/SidebarPanel.module.css :: .panel:focus-visible": {
+    why: "focus lands on the panel from the Skip to panel link, never by Tab",
+  },
   "ui/Menu.module.css :: .menu:focus-visible": {
     why: "the popover itself takes focus from script; its items carry the ring",
   },
