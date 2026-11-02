@@ -297,6 +297,7 @@ export function FormBuilderSheet({
               loading={busy}
               disabled={!online || values.title.trim() === ""}
               disabledReason={online ? copy.titleNeeded : OFFLINE}
+              reasonShown={!online}
               onPress={() => void submit()}
             />
             {online ? null : <Text style={styles.note}>{OFFLINE}</Text>}

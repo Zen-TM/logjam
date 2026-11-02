@@ -206,6 +206,7 @@ export function PlanPreview({
                       loading={busy === "join"}
                       disabled={!online}
                       disabledReason={OFFLINE}
+                      reasonShown
                       onPress={() => void join()}
                     />
                     <Button
@@ -214,6 +215,7 @@ export function PlanPreview({
                       loading={busy === "decline"}
                       disabled={!online}
                       disabledReason={OFFLINE}
+                      reasonShown
                       onPress={askDecline}
                     />
                   </CardActions>

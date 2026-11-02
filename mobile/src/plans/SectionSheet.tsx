@@ -248,6 +248,7 @@ export function SectionSheet({
               loading={busy}
               disabled={!online}
               disabledReason={OFFLINE}
+              reasonShown
               onPress={() => void submit()}
             />
             {/* The button only dims: the words go under it (ui/Button.tsx). */}

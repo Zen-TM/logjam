@@ -231,6 +231,7 @@ export function PeopleView({
                   label={copy.letIn}
                   disabled={!online || busyId === member.user.id}
                   disabledReason={online ? WORKING : OFFLINE}
+                  reasonShown={!online}
                   onPress={() => letIn(member)}
                 />
               )}
@@ -241,6 +242,7 @@ export function PeopleView({
                 label={copy.turnDown}
                 disabled={!online || busyId === member.user.id}
                 disabledReason={online ? WORKING : OFFLINE}
+                reasonShown={!online}
                 onPress={() => turnDown(member)}
               />
             </View>
@@ -308,6 +310,7 @@ export function PeopleView({
                 loading={busyId === member.user.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => cancelInvite(member)}
               />
             )
@@ -323,6 +326,7 @@ export function PeopleView({
             variant="outlineAccent"
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => setInviteOpen(true)}
           />
           {/* The button only dims: the words go under it (ui/Button.tsx). */}

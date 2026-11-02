@@ -711,6 +711,7 @@ function WriteUp({
       variant="outlineAccent"
       disabled={!online}
       disabledReason={OFFLINE}
+      reasonShown
       onPress={() => onSection({ mode: "add" })}
     />
   );
@@ -805,6 +806,7 @@ function Items({
         variant="outlineAccent"
         disabled={!online}
         disabledReason={OFFLINE}
+        reasonShown
         onPress={() => setAdding(true)}
       />
       <Button
@@ -813,6 +815,7 @@ function Items({
         variant="outlineAccent"
         disabled={!online}
         disabledReason={OFFLINE}
+        reasonShown
         onPress={onDrawRoute}
       />
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}

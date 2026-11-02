@@ -168,7 +168,8 @@ renumber.
   read". The reason reaches a screen reader. A disabled button stays
   pressable, and the press shows the reason (a toast on Logjam GPS, the
   tooltip on Logjam Web, where a touch screen never hovers); `disabledReason`
-  is required by type. A disabled row dims its tile, title and controls, and
+  is required by type. A reason already printed beside the control is not
+  shown a second time on a press (`reasonShown`). A disabled row dims its tile, title and controls, and
   its reason line stays at full strength.
 - **"Needs an account" outranks "Needs a connection".**
 - **Submit is never disabled for validation**: pressing it is how the user

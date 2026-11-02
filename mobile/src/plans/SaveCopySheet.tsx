@@ -120,6 +120,7 @@ export function useSaveCopyPanel({
           loading={busy}
           disabled={!online}
           disabledReason={OFFLINE}
+          reasonShown
           onPress={() => void save(target)}
         />
         {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}

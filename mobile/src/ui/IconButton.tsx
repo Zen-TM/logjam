@@ -31,6 +31,7 @@ export function IconButton({
   color,
   disabled = false,
   disabledReason,
+  reasonShown,
   filled = false,
   size = 20,
 }: {
@@ -57,7 +58,10 @@ export function IconButton({
       // Stays pressable, and says why (shared/DESIGN.md §5).
       onPress={
         disabled
-          ? () => disabledReason && showDisabledReason(disabledReason)
+          ? () =>
+              disabledReason &&
+              !reasonShown &&
+              showDisabledReason(disabledReason)
           : onPress
       }
       hitSlop={hitSlop}

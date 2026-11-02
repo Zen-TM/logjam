@@ -522,6 +522,7 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() => join(item)}
                   />
                   <Button
@@ -530,6 +531,7 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={async () => {
                       if (
                         await confirm({
@@ -635,6 +637,7 @@ export function PlansScreen({
                   color={theme.accent}
                   disabled={!online}
                   disabledReason={OFFLINE}
+                  reasonShown
                   onPress={runBulkArchive}
                 />
               ) : null
@@ -711,6 +714,7 @@ export function PlansScreen({
                   variant="outlineAccent"
                   disabled={!online}
                   disabledReason={OFFLINE}
+                  reasonShown
                 />
                 {/* Away from the hero's Offline pill, so the words go under
                     it (ui/Button.tsx). */}

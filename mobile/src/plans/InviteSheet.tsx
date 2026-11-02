@@ -145,6 +145,7 @@ export function InviteSheet({
             loading={making === "copy"}
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => void makeLink("copy")}
           />
           <Button
@@ -154,6 +155,7 @@ export function InviteSheet({
             loading={making === "share"}
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => void makeLink("share")}
           />
           {/* The buttons only dim: the words go under them (ui/Button.tsx). */}
@@ -240,6 +242,7 @@ function InviteBody({
         loading={busyId === user.id}
         disabled={!online}
         disabledReason={OFFLINE}
+        reasonShown
         onPress={() => invite(user.id, user.username)}
       />
     );
@@ -321,6 +324,7 @@ function InviteBody({
                 loading={busyId === link.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => revoke(link)}
               />
             }

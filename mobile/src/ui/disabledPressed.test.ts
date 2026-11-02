@@ -75,3 +75,15 @@ describe("a repeated disabled press", () => {
     );
   });
 });
+
+describe("a disabled press whose reason is on screen", () => {
+  // Mutation: drop `!reasonShown` from the press handler of Button or
+  // IconButton, and the reason shows twice (printed inline and toasted).
+  it("is not toasted", () => {
+    for (const name of ["Button.tsx", "IconButton.tsx"]) {
+      expect(source(name)).toMatch(
+        /disabledReason &&\s+!reasonShown &&\s+showDisabledReason\(disabledReason\)/,
+      );
+    }
+  });
+});

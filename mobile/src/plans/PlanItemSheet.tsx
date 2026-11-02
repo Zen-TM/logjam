@@ -274,6 +274,7 @@ export function PlanItemSheet({
               loading={busy}
               disabled={!online}
               disabledReason={OFFLINE}
+              reasonShown
               onPress={() => void submit(item)}
             />
             {/* The button only dims: the words go under it (ui/Button.tsx). */}
