@@ -663,15 +663,17 @@ test.describe("desktop", () => {
 
     // The tile IS the checkbox (DESIGN.md), and the bar replaces the rail.
     await list.getByRole("checkbox").first().click();
-    await list.getByRole("button", { name: "Share or export" }).click();
+    await list.getByRole("button", { name: "Share", exact: true }).click();
 
-    const dialog = page.getByRole("dialog", { name: /place/ });
+    const dialog = page.getByRole("dialog", { name: /^Share \d+ place/ });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "Export" })).toBeVisible();
     await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
 
-    // The destructive verb confirms, and says what goes and what stays.
-    await dialog.getByRole("button", { name: /^Delete / }).click();
+    // The destructive verb is the bar's, and it confirms, saying what goes and
+    // what stays.
+    await list.getByRole("button", { name: "Delete", exact: true }).click();
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();
     await expect(confirm).toContainText("stay in your logbook");

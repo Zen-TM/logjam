@@ -50,7 +50,8 @@ test("an owned place's row has every verb, and Edit opens the form on its page",
     "Edit place",
     "Sharpen the area here",
     "Export the area here",
-    "Share or export…",
+    "Export…",
+    "Share…",
     "Delete place",
   ]);
 
@@ -78,6 +79,7 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
     "Open place",
     "Sharpen the area here",
     "Export the area here",
+    "Export…",
     "Save a copy",
     "Save a copy and remove",
     "Remove from my account",

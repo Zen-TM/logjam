@@ -31,6 +31,7 @@ import {
 } from "./notificationReadOverrides";
 import type {
   BulkShareItem,
+  BulkShareResult,
   FriendShareRow,
   FriendShares,
   LeaderboardResponse,
@@ -1719,6 +1720,27 @@ export function sharePlaceWith(
   return apiFetch<void>(`/places/${placeId}/share`, {
     method: "POST",
     body: { sharedWithUserId },
+  });
+}
+
+/**
+ * Share many places with many friends in one request. Re-sharing is a no-op the
+ * server counts rather than a 409, which is why the bulk dialog uses this and
+ * not `sharePlaceWith` in a loop. One `batchId` makes the recipient's inbox one
+ * row.
+ */
+export function bulkSharePlaces(
+  placeIds: string[],
+  recipientIds: string[],
+): Promise<BulkShareResult> {
+  return apiFetch<BulkShareResult>("/bulk-share", {
+    method: "POST",
+    body: {
+      items: placeIds.map((entityId) => ({ entityType: "place", entityId })),
+      recipientIds,
+      batchId: crypto.randomUUID(),
+      copyCount: 0,
+    },
   });
 }
 

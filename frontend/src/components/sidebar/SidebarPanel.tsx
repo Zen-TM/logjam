@@ -72,6 +72,7 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
+  onExportPlaces,
   // LiDAR
   onQuotaChanged,
   currentUser,
@@ -159,6 +160,7 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
+  onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
@@ -352,6 +354,7 @@ function SidebarPanel({
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
             onSharePlaces={onSharePlaces}
+            onExportPlaces={onExportPlaces}
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
           />
@@ -460,7 +463,7 @@ function SidebarPanel({
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
-            onSharePlace={(id) => onSharePlaces([id])}
+            onExportPlace={(id) => onExportPlaces([id])}
             verbRequest={placeVerbRequest}
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}

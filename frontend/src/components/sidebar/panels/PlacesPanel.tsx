@@ -150,6 +150,7 @@ function PlacesPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
+  onExportPlaces,
   onPlaceVerb,
   onExpandSheet,
 }: {
@@ -186,6 +187,7 @@ function PlacesPanel({
   /** A pin was pressed while this list is open: scroll to its row. */
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
+  onExportPlaces: (ids: string[]) => void;
   /** A row's verb that needs the place's page (a form, a confirm): the row
    *  opens the page and the page runs it. */
   onPlaceVerb: (id: WebPlaceVerbId) => void;
@@ -418,7 +420,8 @@ function PlacesPanel({
       edit: handOff("edit"),
       makeTopo: makeMap("topo"),
       exportArea: makeMap("geopdf"),
-      share: () => onSharePlaces([place.id]),
+      exportPlace: () => onExportPlaces([place.id]),
+      share: handOff("share"),
       copy: handOff("copy"),
       copyAndRemove: handOff("copyAndRemove"),
       remove: handOff("remove"),
@@ -582,7 +585,7 @@ function PlacesPanel({
           />
           <IconButton
             icon="shareFriend"
-            label="Share or export"
+            label="Share"
             onClick={() => onSharePlaces(selected.map((place) => place.id))}
           />
           <Menu

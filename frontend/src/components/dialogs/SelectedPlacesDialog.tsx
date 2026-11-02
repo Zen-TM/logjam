@@ -1,17 +1,21 @@
 import { useState } from "react";
-import { noFriendsMessage, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  noFriendsMatch,
+  noFriendsMessage,
+  sharePromise,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
-import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
+import { bulkSharePlaces } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
 import { messageFromError } from "../../errors/messageFromError";
 import type { TExportFormat } from "../../placeExport";
 import { buildPlaceExport } from "../../placeExport";
-import ConfirmDialog from "./ConfirmDialog";
 import {
   Avatar,
   Button,
   Dialog,
-  FieldError,
+  ErrorBanner,
   IconButton,
   IconTile,
   Row,
@@ -33,32 +37,34 @@ const plural = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
- * What to do with the places just picked: take them out as a file, hand them
- * to a friend, or delete the ones that are yours.
+ * Take the places just picked out as a file, or hand them to friends. One verb
+ * per opening: a dialog that offered both, and Delete, had no name for what it
+ * was doing. Giving ONE place to a friend is `ShareDialog`, which also lists
+ * who has it; this is the many-places form, so it ticks friends and then sends.
  *
  * THE SELECTION IS EDITABLE HERE, because the list behind it is filtered and a
  * place remembered mid-task may not be on screen any more — so the dialog
  * carries its own search for adding one and a minus on every row for dropping
  * one, rather than making the user close it and start the selection again.
  *
- * Sharing and deleting are OWNER-ONLY and say so with a count rather than by
- * disappearing: a selection of someone else's places is a normal thing to have
- * made, and a section that vanished would read as the dialog being broken.
+ * Sharing is OWNER-ONLY and says so with a count rather than by disappearing:
+ * a selection of someone else's places is a normal thing to have made, and a
+ * section that vanished would read as the dialog being broken.
  */
 function SelectedPlacesDialog({
   open,
+  mode,
   selectedPlaces,
   placeCustomFieldDefs,
   availablePlaces,
   ownedPlaceIds,
   friends,
   onClose,
-  onDeleted,
-  onQuotaChanged,
   onRemovePlace,
   onAddPlace,
 }: {
   open: boolean;
+  mode: "share" | "export";
   selectedPlaces: TPlace[];
   /** Labels the field values in the human-readable GPX/KML descriptions. The
    *  machine-readable forms key by `key` so they round-trip through import. */
@@ -67,18 +73,13 @@ function SelectedPlacesDialog({
   ownedPlaceIds: Set<string>;
   friends: TFriend[];
   onClose: () => void;
-  onDeleted: () => void;
-  onQuotaChanged?: () => void;
   onRemovePlace: (id: string) => void;
   onAddPlace: (id: string) => void;
 }) {
   const [shareSearch, setShareSearch] = useState("");
   const [shareFriendIds, setShareFriendIds] = useState<string[]>([]);
-  // Set by pressing Share with nobody picked; hidden again by the first pick.
-  const [shareNeedsFriend, setShareNeedsFriend] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<TExportFormat>("gpx");
   const [placeSearch, setPlaceSearch] = useState("");
   const toast = useToast();
@@ -90,10 +91,11 @@ function SelectedPlacesDialog({
       setPlaceSearch("");
       setShareSearch("");
       setShareFriendIds([]);
+      setShareError(null);
     }
   }
 
-  const busy = sharing || deleting;
+  const busy = sharing;
   const ownedPlaces = selectedPlaces.filter((place) =>
     ownedPlaceIds.has(place.id),
   );
@@ -120,30 +122,24 @@ function SelectedPlacesDialog({
   );
 
   async function handleShare() {
-    if (ownedPlaces.length === 0) return;
-    if (shareFriendIds.length === 0) {
-      setShareNeedsFriend(true);
-      return;
-    }
+    if (ownedPlaces.length === 0 || shareFriendIds.length === 0) return;
     setSharing(true);
+    setShareError(null);
     try {
-      for (const place of ownedPlaces) {
-        for (const friendId of shareFriendIds) {
-          try {
-            await sharePlaceWith(place.id, friendId);
-          } catch (err) {
-            console.error(err);
-            toast.error(
-              messageFromError(err, "Couldn't share one or more places."),
-            );
-          }
-        }
-      }
-      setShareFriendIds([]);
+      const result = await bulkSharePlaces(
+        ownedPlaces.map((place) => place.id),
+        shareFriendIds,
+      );
       onClose();
+      toast.success(
+        result.granted > 0
+          ? `Shared ${plural(ownedPlaces.length, "place")} with ${plural(shareFriendIds.length, "friend")}.`
+          : "They already have these.",
+      );
     } catch (err) {
+      // The dialog stays open with the picks intact, so a retry is one press.
       console.error(err);
-      toast.error(
+      setShareError(
         messageFromError(err, "Couldn't share places. Please try again."),
       );
     } finally {
@@ -165,123 +161,90 @@ function SelectedPlacesDialog({
     URL.revokeObjectURL(url);
   }
 
-  async function handleDelete() {
-    setDeleting(true);
-    try {
-      await bulkDeletePlaces(ownedPlaces.map((place) => place.id));
-      setShowDeleteConfirm(false);
-      onQuotaChanged?.();
-      onDeleted();
-      onClose();
-      toast.success(`Deleted ${plural(ownedPlaces.length, "place")}.`);
-    } catch (err) {
-      console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't delete places. Please try again."),
-      );
-    } finally {
-      setDeleting(false);
-    }
-  }
-
   return (
-    <>
-      <Dialog
-        open={open && !showDeleteConfirm}
-        title={plural(selectedPlaces.length, "place")}
-        size="large"
-        dismissible={!busy}
-        onClose={onClose}
-        footer={
-          <>
-            {ownedPlaces.length > 0 && (
-              <Button
-                variant="danger"
-                icon="delete"
-                className={classes.deleteVerb}
-                disabled={busy}
-                disabledReason="Working…"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                Delete {plural(ownedPlaces.length, "place")}
-              </Button>
-            )}
-            <Button onClick={onClose} disabled={busy} disabledReason="Working…">
-              Close
-            </Button>
-          </>
-        }
-      >
-        <div className={classes.body}>
-          <section className={classes.group}>
-            <SectionHeader title="These places" count={selectedPlaces.length} />
-            {sharedCount > 0 && (
-              <p className={classes.note}>
-                {plural(sharedCount, "place")} shared with you — those can be
-                exported, not shared on or deleted.
-              </p>
-            )}
-            {selectedPlaces.map((place) => (
-              <Row
-                key={place.id}
-                leading={
-                  <IconTile
-                    icon="place"
-                    hue={
-                      ownedPlaceIds.has(place.id)
-                        ? "var(--color-accent)"
-                        : "var(--hue-shared)"
-                    }
-                  />
-                }
-                title={place.name}
-                subtitle={
-                  ownedPlaceIds.has(place.id) ? undefined : "Shared with you"
-                }
-                trailing={
-                  <IconButton
-                    icon="remove"
-                    label={`Take ${place.name} out of the selection`}
-                    onClick={() => onRemovePlace(place.id)}
-                  />
-                }
-              />
-            ))}
+    <Dialog
+      open={open}
+      title={`${mode === "share" ? "Share" : "Export"} ${plural(selectedPlaces.length, "place")}`}
+      size="large"
+      dismissible={!busy}
+      onClose={onClose}
+      footer={
+        <Button onClick={onClose} disabled={busy} disabledReason="Working…">
+          Close
+        </Button>
+      }
+    >
+      <div className={classes.body}>
+        <section className={classes.group}>
+          <SectionHeader title="These places" count={selectedPlaces.length} />
+          {mode === "share" && sharedCount > 0 && (
+            <p className={classes.note}>
+              {plural(sharedCount, "place")} shared with you can&rsquo;t be
+              shared on.
+            </p>
+          )}
+          {selectedPlaces.map((place) => (
+            <Row
+              key={place.id}
+              leading={
+                <IconTile
+                  icon="place"
+                  hue={
+                    ownedPlaceIds.has(place.id)
+                      ? "var(--color-accent)"
+                      : "var(--hue-shared)"
+                  }
+                />
+              }
+              title={place.name}
+              subtitle={
+                ownedPlaceIds.has(place.id) ? undefined : "Shared with you"
+              }
+              trailing={
+                <IconButton
+                  icon="remove"
+                  label={`Take ${place.name} out of the selection`}
+                  onClick={() => onRemovePlace(place.id)}
+                />
+              }
+            />
+          ))}
 
-            <SearchField
-              label="Add another place"
-              placeholder="Search your places"
-              value={placeSearch}
-              onChange={(event) => setPlaceSearch(event.target.value)}
-              onKeyDown={(event) => {
-                // Enter takes the obvious one: the only match.
-                if (event.key !== "Enter") return;
-                event.preventDefault();
-                if (placeSearchResults.length === 1) {
-                  onAddPlace(placeSearchResults[0].id);
-                  setPlaceSearch("");
-                }
+          <SearchField
+            label="Add another place"
+            placeholder="Search your places"
+            value={placeSearch}
+            onChange={(event) => setPlaceSearch(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter takes the obvious one: the only match.
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              if (placeSearchResults.length === 1) {
+                onAddPlace(placeSearchResults[0].id);
+                setPlaceSearch("");
+              }
+            }}
+          />
+          {placeSearchResults.map((place) => (
+            <Row
+              key={place.id}
+              leading={<IconTile icon="add" hue="var(--color-neutral)" />}
+              title={place.name}
+              subtitle={
+                place.altNames.length > 0
+                  ? place.altNames.join(", ")
+                  : undefined
+              }
+              description="Press to add it to the selection"
+              onOpen={() => {
+                onAddPlace(place.id);
+                setPlaceSearch("");
               }}
             />
-            {placeSearchResults.map((place) => (
-              <Row
-                key={place.id}
-                leading={<IconTile icon="add" hue="var(--color-neutral)" />}
-                title={place.name}
-                subtitle={
-                  place.altNames.length > 0
-                    ? place.altNames.join(", ")
-                    : undefined
-                }
-                description="Press to add it to the selection"
-                onOpen={() => {
-                  onAddPlace(place.id);
-                  setPlaceSearch("");
-                }}
-              />
-            ))}
-          </section>
+          ))}
+        </section>
 
+        {mode === "export" && (
           <section className={classes.group}>
             <SectionHeader title="Export" />
             <div className={classes.exportRow}>
@@ -309,9 +272,11 @@ function SelectedPlacesDialog({
               </Button>
             </div>
           </section>
+        )}
 
+        {mode === "share" && (
           <section className={classes.group}>
-            <SectionHeader title="Share" />
+            <SectionHeader title="Share with" />
             {ownedPlaces.length === 0 ? (
               <p className={classes.note}>
                 Sharing is for your own places, and none of these are yours.
@@ -321,14 +286,7 @@ function SelectedPlacesDialog({
             ) : (
               <>
                 {/* What the press will do, before the press. */}
-                <p className={classes.note}>
-                  {sharedCount > 0
-                    ? `Your ${plural(ownedPlaces.length, "place")} of these. `
-                    : ""}
-                  Recipients can copy or export them while the share is active.
-                  Unsharing won&rsquo;t remove copies they&rsquo;ve already
-                  made.
-                </p>
+                <p className={classes.note}>{sharePromise("selection")}</p>
                 {shareFriendIds.length > 0 && (
                   <>
                     {shareFriendIds.map((id) => {
@@ -368,8 +326,8 @@ function SelectedPlacesDialog({
                 {friendMatches.length === 0 ? (
                   <p className={classes.note}>
                     {shareSearch.trim()
-                      ? `No friends match “${shareSearch.trim()}”.`
-                      : "Everyone you know is already on the list."}
+                      ? noFriendsMatch(shareSearch)
+                      : "Everyone you know is ticked."}
                   </p>
                 ) : (
                   friendMatches.map((friend) => (
@@ -391,57 +349,35 @@ function SelectedPlacesDialog({
                     />
                   ))
                 )}
+                {shareError && <ErrorBanner message={shareError} />}
                 <Button
                   variant="filled"
                   icon="done"
                   className={classes.shareVerb}
                   busy={sharing}
-                  disabled={busy}
-                  disabledReason="Working…"
+                  disabled={busy || shareFriendIds.length === 0}
+                  disabledReason={
+                    sharing ? "Working…" : "Pick a friend to share with"
+                  }
                   onClick={handleShare}
                 >
                   {shareFriendIds.length === 0
                     ? "Share"
                     : `Share with ${plural(shareFriendIds.length, "friend")}`}
                 </Button>
-                <FieldError
-                  message={
-                    shareNeedsFriend && shareFriendIds.length === 0
-                      ? "Pick a friend to share with."
-                      : null
-                  }
-                />
               </>
             )}
           </section>
+        )}
 
-          {friends.length === 0 && ownedPlaces.length > 0 && (
-            <p className={classes.note} role="note">
-              <Icon idea="friends" size={14} aria-hidden /> Sharing needs a
-              friend.
-            </p>
-          )}
-        </div>
-      </Dialog>
-
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        title={`Delete ${plural(ownedPlaces.length, "place")}?`}
-        message={
-          <>
-            This permanently deletes {plural(ownedPlaces.length, "place")},
-            along with their photos, tracks and shares. Your trip logs are kept
-            — they&rsquo;ll be unlinked from these places but stay in your
-            logbook. This cannot be undone.
-          </>
-        }
-        confirmLabel="Delete"
-        confirmColor="error"
-        busy={deleting}
-        onConfirm={handleDelete}
-        onClose={() => setShowDeleteConfirm(false)}
-      />
-    </>
+        {mode === "share" && friends.length === 0 && ownedPlaces.length > 0 && (
+          <p className={classes.note} role="note">
+            <Icon idea="friends" size={14} aria-hidden /> Sharing needs a
+            friend.
+          </p>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
