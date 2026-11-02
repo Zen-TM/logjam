@@ -6,7 +6,8 @@ import { useState } from "react";
 import {
   formatBytes,
   planAddVerbLabel,
-  planMemberVerbs,
+  tripPlanPerson,
+  todayDateKey,
   tripPlanRoleWord,
   planRemoveConfirm,
   planSelfRoleConfirm,
@@ -18,7 +19,7 @@ import {
   tripPlanGoing,
   tripPlanLetInMessage,
   tripPlanRemovedMessage,
-  type PlanMemberVerbId,
+  type PlanPersonActionId,
   type TripPlanMemberView,
   type TripPlanView,
 } from "@logjam/shared";
@@ -26,6 +27,7 @@ import {
   Avatar,
   Button,
   Checkbox,
+  Dialog,
   IconButton,
   ListEnd,
   Menu,
@@ -64,6 +66,8 @@ export default function PlanPeople({
     null,
   );
   const [deleteFiles, setDeleteFiles] = useState(false);
+  // Whose sheet is open, by id, so a write that removes them closes it.
+  const [personId, setPersonId] = useState<string | null>(null);
   const leader = plan.myRole === "leader";
   const archived = plan.archivedAt != null;
 
@@ -92,13 +96,17 @@ export default function PlanPeople({
   const asking = byStatus("requested");
   const invited = byStatus("invited");
   const going = tripPlanGoing(plan.members);
-  const leaders = going.filter((member) => member.role === "leader").length;
+  const today = todayDateKey();
   const asked = leader && asking.length > 0;
   const invitedShown = leader && invited.length > 0;
   // A heading needs a second group to divide from.
   const headed = asked || invitedShown;
 
-  const runVerb = (member: TripPlanMemberView, id: PlanMemberVerbId) => {
+  const act = (member: TripPlanMemberView, id: PlanPersonActionId) => {
+    setPersonId(null);
+    if (id === "letIn") return letIn(member);
+    if (id === "turnDown") return setTurningDown(member);
+    if (id === "cancelInvite") return cancelInvite(member);
     const role = PLAN_ROLE_OF_VERB[id];
     if (role && role !== "leader" && member.user.id === myUserId)
       setStepping(role);
@@ -113,6 +121,21 @@ export default function PlanPeople({
       setRemoving(member);
     }
   };
+
+  const letIn = (member: TripPlanMemberView) =>
+    void run(
+      member.user.id,
+      () => approveMember(plan.id, member.user.id),
+      copy.letInFailed,
+      tripPlanLetInMessage(member.user.username),
+    );
+  const cancelInvite = (member: TripPlanMemberView) =>
+    void run(
+      member.user.id,
+      () => removeMember(plan.id, member.user.id, "invited"),
+      copy.cancelInviteFailed,
+      copy.inviteCancelled,
+    );
 
   const roleWord = (member: TripPlanMemberView) =>
     member.role === "member" ? null : tripPlanRoleWord(member.role);
@@ -146,6 +169,11 @@ export default function PlanPeople({
     ? planTurnDownConfirm(turningDown.user.username)
     : null;
 
+  const person = plan.members.find((each) => each.user.id === personId);
+  const personView = person
+    ? tripPlanPerson(plan, person, myUserId, today)
+    : null;
+
   return (
     <div className={classes.list}>
       {asked && (
@@ -155,6 +183,7 @@ export default function PlanPeople({
             <Row
               key={member.user.id}
               title={member.user.username}
+              onOpen={() => setPersonId(member.user.id)}
               leading={<Avatar username={member.user.username} />}
               trailing={
                 !archived && (
@@ -165,14 +194,7 @@ export default function PlanPeople({
                       label={copy.letIn}
                       disabled={busy.isBusy(member.user.id)}
                       disabledReason="Replying…"
-                      onClick={() =>
-                        void run(
-                          member.user.id,
-                          () => approveMember(plan.id, member.user.id),
-                          copy.letInFailed,
-                          tripPlanLetInMessage(member.user.username),
-                        )
-                      }
+                      onClick={() => letIn(member)}
                     />
                     <IconButton
                       icon="ignore"
@@ -192,16 +214,13 @@ export default function PlanPeople({
         <SectionHeader title={copy.peopleGoing} count={going.length} />
       )}
       {going.map((member) => {
-        const verbs = planMemberVerbs(
-          plan.myRole,
-          { role: member.role, self: member.user.id === myUserId },
-          { archived, leaders },
-        );
+        const verbs = tripPlanPerson(plan, member, myUserId, today).actions;
         const word = roleWord(member);
         return (
           <Row
             key={member.user.id}
             title={member.user.username}
+            onOpen={() => setPersonId(member.user.id)}
             leading={<Avatar username={member.user.username} />}
             trailing={
               <>
@@ -211,7 +230,7 @@ export default function PlanPeople({
                     label={`Actions for ${member.user.username}`}
                     title={member.user.username}
                     placement="right-start"
-                    entries={menuEntries(verbs, (id) => runVerb(member, id))}
+                    entries={menuEntries(verbs, (id) => act(member, id))}
                     trigger={(props) => (
                       <IconButton
                         {...props}
@@ -233,6 +252,7 @@ export default function PlanPeople({
             <Row
               key={member.user.id}
               title={member.user.username}
+              onOpen={() => setPersonId(member.user.id)}
               subtitle={
                 member.invitedBy
                   ? `${TRIP_PLAN_JOIN.copy.invitedBy} ${member.invitedBy.username}`
@@ -244,14 +264,7 @@ export default function PlanPeople({
                   <IconButton
                     icon="close"
                     label={`${copy.cancelInvite}: ${member.user.username}`}
-                    onClick={() =>
-                      void run(
-                        member.user.id,
-                        () => removeMember(plan.id, member.user.id, "invited"),
-                        copy.cancelInviteFailed,
-                        copy.inviteCancelled,
-                      )
-                    }
+                    onClick={() => cancelInvite(member)}
                   />
                 )
               }
@@ -272,6 +285,43 @@ export default function PlanPeople({
         </ListEnd>
       )}
 
+      <Dialog
+        open={personView != null}
+        title={personView?.name}
+        onClose={() => setPersonId(null)}
+      >
+        {person && personView && (
+          <div className={classes.list}>
+            <p className={classes.note}>
+              {[personView.status, personView.role, personView.invitedBy]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            {personView.unanswered && personView.unanswered.length > 0 && (
+              <>
+                <SectionHeader title={copy.personUnanswered} />
+                <ul>
+                  {personView.unanswered.map((title) => (
+                    <li key={title}>{title}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {personView.actions.map((action) => (
+              <Button
+                key={action.id}
+                variant={action.danger ? "danger" : "outline"}
+                icon={action.icon}
+                disabled={busy.isBusy(person.user.id)}
+                disabledReason="Replying…"
+                onClick={() => act(person, action.id)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
+      </Dialog>
       <ConfirmDialog
         open={removeCopy != null}
         title={removeCopy?.confirmTitle}

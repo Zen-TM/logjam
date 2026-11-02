@@ -508,6 +508,31 @@ describe("someone asking to join", () => {
   });
 });
 
+describe("pressing a person", () => {
+  // Mutation: drop the row's onOpen, or the leader-only unanswered list, and
+  // the sheet never opens or names no form.
+  it("opens their sheet with unanswered forms and verbs", () => {
+    const withForm = {
+      ...plan,
+      forms: [
+        { id: "f1", title: "Gear check", myAnswer: null, answers: [] },
+      ] as unknown as TripPlanView["forms"],
+    };
+    render(
+      <PlanPeople
+        plan={withForm}
+        myUserId="u1"
+        onChanged={() => {}}
+        onInvite={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "bob" }));
+    const sheet = screen.getByRole("dialog");
+    expect(sheet.textContent).toContain("Gear check");
+    expect(sheet.textContent).toContain("Remove from plan");
+  });
+});
+
 describe("a leader stepping down on their own row", () => {
   // Mutation: run a self role change at once in PlanPeople, and one tap
   // makes alice a member with no way back by herself.

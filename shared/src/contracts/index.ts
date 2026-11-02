@@ -52,6 +52,7 @@ export * from "./gauges.js";
 export * from "./weather.js";
 export * from "./plans.js";
 export * from "./planVerbs.js";
+export * from "./planPerson.js";
 export * from "./planSections.js";
 export * from "./planOffline.js";
 
