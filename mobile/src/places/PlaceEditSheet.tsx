@@ -25,6 +25,14 @@ import {
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, muted } from "../theme";
+import {
+  coordinateBlur,
+  coordinateProblem,
+  coordinateText,
+  coordinateValue,
+  seedCoord,
+  shownCoord,
+} from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
 import {
@@ -148,6 +156,10 @@ export function PlaceEditSheet({
   const [altNames, setAltNames] = useState("");
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
+  // Only a field the user has typed in (or a picked point filled) writes; the
+  // others follow the place's stored value (`coordinateText`).
+  const [latitudeEdited, setLatitudeEdited] = useState(false);
+  const [longitudeEdited, setLongitudeEdited] = useState(false);
   const [notes, setNotes] = useState("");
   const [placeTypeId, setPlaceTypeId] = useState<string>(
     SYSTEM_PLACE_TYPE_IDS.canyon,
@@ -227,6 +239,8 @@ export function PlaceEditSheet({
     setAltNames(start.altNames);
     setLatitude(start.latitude);
     setLongitude(start.longitude);
+    setLatitudeEdited(false);
+    setLongitudeEdited(false);
     setNotes(start.notes);
     setPlaceTypeId(start.placeTypeId);
     setFieldValues(start.fieldValues);
@@ -246,6 +260,8 @@ export function PlaceEditSheet({
     if (pickedCoords) {
       setLatitude(seedCoord(pickedCoords.latitude));
       setLongitude(seedCoord(pickedCoords.longitude));
+      setLatitudeEdited(true);
+      setLongitudeEdited(true);
       setLatitudeError(null);
       setLongitudeError(null);
     }
@@ -280,6 +296,17 @@ export function PlaceEditSheet({
     [customFieldDefs, placeTypeId],
   );
 
+  const latitudeShown = coordinateText(
+    latitude,
+    latitudeEdited,
+    place?.latitude,
+  );
+  const longitudeShown = coordinateText(
+    longitude,
+    longitudeEdited,
+    place?.longitude,
+  );
+
   /** The form in the shape both the validator and the ops speak. */
   const draft = useMemo(
     () => ({
@@ -288,11 +315,20 @@ export function PlaceEditSheet({
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry !== ""),
-      latitude: coordinate(latitude, place?.latitude),
-      longitude: coordinate(longitude, place?.longitude),
+      latitude: coordinateValue(latitude, latitudeEdited, place?.latitude),
+      longitude: coordinateValue(longitude, longitudeEdited, place?.longitude),
       notes: notes.trim() || null,
     }),
-    [altNames, latitude, longitude, name, notes, place],
+    [
+      altNames,
+      latitude,
+      latitudeEdited,
+      longitude,
+      longitudeEdited,
+      name,
+      notes,
+      place,
+    ],
   );
 
   const save = useCallback(async () => {
@@ -307,18 +343,20 @@ export function PlaceEditSheet({
     // Every check runs, so one press lights every bad field. The coordinates
     // are required on an edit too, as on Logjam Web.
     const nameProblem = draft.name === "" ? PLACE_FORM.copy.nameMissing : null;
-    const latitudeProblem =
-      latitude.trim() === ""
-        ? PLACE_FORM.copy.latitudeMissing
-        : isValidLatitude(draft.latitude)
-          ? null
-          : PLACE_FORM.copy.latitudeInvalid;
-    const longitudeProblem =
-      longitude.trim() === ""
-        ? PLACE_FORM.copy.longitudeMissing
-        : isValidLongitude(draft.longitude)
-          ? null
-          : PLACE_FORM.copy.longitudeInvalid;
+    const latitudeProblem = coordinateProblem(
+      latitudeShown,
+      draft.latitude,
+      isValidLatitude,
+      PLACE_FORM.copy.latitudeMissing,
+      PLACE_FORM.copy.latitudeInvalid,
+    );
+    const longitudeProblem = coordinateProblem(
+      longitudeShown,
+      draft.longitude,
+      isValidLongitude,
+      PLACE_FORM.copy.longitudeMissing,
+      PLACE_FORM.copy.longitudeInvalid,
+    );
     // The same predicate the API applies, run before anything is queued: a
     // rejected op would otherwise sit in the outbox as a dead push whose reason
     // the user never sees. The coordinates are checked above, so only a valid
@@ -426,8 +464,8 @@ export function PlaceEditSheet({
     fieldValues,
     onClose,
     onSaved,
-    latitude,
-    longitude,
+    latitudeShown,
+    longitudeShown,
     placeTypeId,
     typeFieldDefs,
   ]);
@@ -535,22 +573,25 @@ export function PlaceEditSheet({
               label={PLACE_FORM.copy.latitude}
               requiredMark
               reserveError
-              value={latitude}
+              value={latitudeShown}
               onChangeText={(next) => {
                 setLatitude(next);
+                setLatitudeEdited(true);
                 if (latitudeError) setLatitudeError(null);
               }}
               error={latitudeError}
               keyboardType="numbers-and-punctuation"
-              onBlur={() =>
-                parseOnBlur(
-                  latitude,
-                  setLatitude,
-                  setLatitudeError,
+              onBlur={() => {
+                if (!latitudeEdited) return;
+                const left = coordinateBlur(
+                  latitudeShown,
                   isValidLatitude,
                   PLACE_FORM.copy.latitudeInvalid,
-                )
-              }
+                );
+                if (!left) return;
+                setLatitude(left.text);
+                setLatitudeError(left.error);
+              }}
             />
           </View>
           <View style={styles.coordField}>
@@ -558,22 +599,25 @@ export function PlaceEditSheet({
               label={PLACE_FORM.copy.longitude}
               requiredMark
               reserveError
-              value={longitude}
+              value={longitudeShown}
               onChangeText={(next) => {
                 setLongitude(next);
+                setLongitudeEdited(true);
                 if (longitudeError) setLongitudeError(null);
               }}
               error={longitudeError}
               keyboardType="numbers-and-punctuation"
-              onBlur={() =>
-                parseOnBlur(
-                  longitude,
-                  setLongitude,
-                  setLongitudeError,
+              onBlur={() => {
+                if (!longitudeEdited) return;
+                const left = coordinateBlur(
+                  longitudeShown,
                   isValidLongitude,
                   PLACE_FORM.copy.longitudeInvalid,
-                )
-              }
+                );
+                if (!left) return;
+                setLongitude(left.text);
+                setLongitudeError(left.error);
+              }}
             />
           </View>
         </View>
@@ -769,59 +813,6 @@ function typeName(
   types: { id: string; name: string }[] | null,
 ): string {
   return types?.find((type) => type.id === typeId)?.name ?? "place";
-}
-
-/** Leaving a coordinate field: a number is written back as a number ("-33.6290 "
- *  becomes "-33.629") and a bad one is flagged now, not at Save. */
-function parseOnBlur(
-  text: string,
-  setText: (text: string) => void,
-  setError: (error: string | null) => void,
-  isValid: (value: unknown) => boolean,
-  invalid: string,
-) {
-  const value = parseNumber(text);
-  if (text.trim() === "") return;
-  if (value == null) return setError(invalid);
-  setText(String(value));
-  setError(isValid(value) ? null : invalid);
-}
-
-/** "" and an unparseable entry both mean "not recorded", not zero. */
-function parseNumber(text: string): number | null {
-  const trimmed = text.trim();
-  if (trimmed === "") return null;
-  const value = Number(trimmed);
-  return Number.isFinite(value) ? value : null;
-}
-
-/** A stored position as the place's page shows it: five places, under two metres. */
-const SHOWN_COORD_DECIMALS = 5;
-function shownCoord(value: number | null | undefined): string {
-  return value == null
-    ? ""
-    : String(Number(value.toFixed(SHOWN_COORD_DECIMALS)));
-}
-
-/** The number a coordinate field holds. A field left showing the cut value of
- *  the stored one still means the stored one: opening a place and saving must
- *  not round its position. */
-function coordinate(text: string, stored: number | null | undefined) {
-  return stored != null && text === shownCoord(stored)
-    ? stored
-    : parseNumber(text);
-}
-
-/**
- * A picked coordinate at 6 decimal places — about 10 cm, which is finer than any
- * map press or GPS fix, and readable. Only a NEW point gets this: an existing
- * place shows `shownCoord`, and keeps its stored value until it is typed over.
- */
-const SEED_COORD_DECIMALS = 6;
-function seedCoord(value: number | null | undefined): string {
-  return value == null
-    ? ""
-    : String(Number(value.toFixed(SEED_COORD_DECIMALS)));
 }
 
 function sameList(a: string[], b: string[]): boolean {

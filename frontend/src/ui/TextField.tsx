@@ -161,7 +161,8 @@ export function NumberField({
   onChange: (next: string) => void;
   constraints: NumericFieldConstraints;
   showError?: boolean;
-  /** What an empty field says once it is shown: for a field that must be filled. */
+  /** What an empty field says on a Save attempt (`showError`), never on blur:
+   *  tapping "Select on map" with the field focused must not flash it. */
   emptyError?: string;
   /** Replaces the range or format message (the caller's words, one voice for
    *  both clients). */
@@ -170,9 +171,13 @@ export function NumberField({
   const [touched, setTouched] = useState(false);
   const rangeError = numericFieldError(value, constraints);
   const error =
-    emptyError && value.trim() === ""
-      ? emptyError
-      : rangeError && (invalidError ?? rangeError);
+    value.trim() === ""
+      ? showError
+        ? (emptyError ?? null)
+        : null
+      : touched || showError
+        ? rangeError && (invalidError ?? rangeError)
+        : null;
   return (
     <TextField
       {...fieldProps}
@@ -184,7 +189,7 @@ export function NumberField({
         setTouched(true);
         onBlur?.(event);
       }}
-      error={touched || showError ? error : null}
+      error={error}
     />
   );
 }
