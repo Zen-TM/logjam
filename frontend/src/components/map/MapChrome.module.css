@@ -74,17 +74,17 @@
   padding: 0 16px 0 14px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
   font-family: inherit;
   line-height: inherit;
   white-space: nowrap;
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
   cursor: pointer;
 }
 
 .trayItem:hover {
-  background: color-mix(in srgb, var(--color-text) 14%, var(--color-page));
+  background: var(--color-card-pressed);
 }
 
 .trayGlyph {

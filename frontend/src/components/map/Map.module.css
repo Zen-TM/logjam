@@ -106,9 +106,9 @@
 }
 
 :global(#map .maplibregl-ctrl-attrib) {
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
 }
 
 :global(#map .maplibregl-ctrl-attrib a) {
@@ -141,11 +141,6 @@
     calc(var(--space-6) * 5)
   );
   padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
-}
-
-/* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
-:global(#map .maplibregl-ctrl-attrib-button) {
-  filter: invert(1);
 }
 
 /* MapLibre's blue focus glow → Logjam Web's one focus ring. */
