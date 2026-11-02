@@ -97,6 +97,13 @@ const SENSITIVE_KEYS = new Set([
   // rather not publish (ADR 0034). `q` is the body of POST /places/search.
   "q",
   "query",
+  // A trip plan (`plans/plansCache.ts`): a section's text, a form's questions
+  // and labels, people's answers (phone numbers, medical notes), and a plan
+  // route's line, whose numbers no free-text pattern catches.
+  "body",
+  "questions",
+  "answers",
+  "points",
   "authorization",
   "cookie",
   // Sign-in: tokens, the authorization code and its PKCE verifier.

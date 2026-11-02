@@ -19,6 +19,7 @@ import {
   useEffectEvent,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
@@ -99,8 +100,20 @@ import {
   nswContourStyle,
   MAP_INK,
   MAP_MEASURE,
+  TRIP_PLAN_PAGE,
+  planRouteNotAdded,
   type SharpenedArea,
 } from "@logjam/shared";
+import {
+  isPlanPin,
+  mutedFeatures,
+  PLAN_DIM,
+  planModeReducer,
+  planModeStart,
+} from "../plans/planMap";
+import { addDrawnRouteToPlan } from "../plans/addDrawnRoute";
+import { readCachedPlan } from "../plans/plansCache";
+import { PlanPlaceSheet } from "../plans/PlanPlaceSheet";
 
 import { bboxOfPoints, type Bbox } from "../saved/bboxOfPoints";
 import type { SavedItemReveal } from "../saved/SavedScreen";
@@ -242,10 +255,12 @@ import { RoutesLayer } from "./RoutesLayer";
 import { ROUTE_ARROW_SDF_URI } from "@logjam/shared";
 import { ROUTE_ARROW_IMAGE } from "./routeArrowStyle";
 import type { MirrorPlace, MirrorRoute } from "../sync/mirrorStore";
+import { onMirrorChanged } from "../sync/syncDb";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 import {
   BottomSheet,
   Button,
+  Chip,
   Icon,
   IconButton,
   Notice,
@@ -403,6 +418,9 @@ const ANCHOR_DELETE_FLIP_DP = 78;
  *  at one cannot easily hit the other. */
 const ANCHOR_DELETE_GAP_DP = 26;
 
+/** The top padding a plan's fit leaves for the search row and an offline
+ *  notice under it (dp). */
+const PLAN_BANNER_CLEARANCE = 190;
 const DEGENERATE_BBOX_DEGREES = 1e-5;
 const SINGLE_POINT_ZOOM = 14;
 
@@ -811,6 +829,8 @@ export function MapScreen({
   continueTrack,
   startRecording,
   navigatePlace,
+  planMode,
+  onOpenPlan,
 }: {
   onOpenPlace: (placeId: string, name: string) => void;
   /**
@@ -860,7 +880,15 @@ export function MapScreen({
   // place's id and saves into its route slot; from the Saved tab's add sheet
   // `placeId` is null and the route belongs to nothing until the user links
   // it.
-  drawRouteFor?: { placeId: string | null; nonce: number } | null;
+  drawRouteFor?: {
+    placeId: string | null;
+    /** Drawn from this plan's page: the finished route goes into it. */
+    planId?: string;
+    nonce: number;
+  } | null;
+  /** Back to a plan's page: its banner was tapped, or a route drawn for it
+   *  was saved. */
+  onOpenPlan?: (planId: string) => void;
   // "Continue recording" from the Saved tab: pick a finished track back up. An
   // id only; the row comes from this screen's own list. It lands here rather
   // than being done on Saved because arming the recorder needs the location
@@ -873,6 +901,9 @@ export function MapScreen({
   // "Navigate to this place". An id only — the point comes from the mirror
   // this screen already reads, so no coordinate travels in navigation params.
   navigatePlace?: { placeId: string; nonce: number } | null;
+  // "Show on map" from a plan: the plan's items only, from the phone's cached
+  // copy, until "Back to my map". An id only.
+  planMode?: { planId: string; nonce: number } | null;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -1009,6 +1040,39 @@ export function MapScreen({
   // rows' `visible`) so it toggles smoothly and stays toggleable with zero
   // tracks — the layer sheet's Tracks switch drives this directly.
   const [showTracks, setShowTracks] = useState(true);
+  // PLAN MODE: the plan's places and ways over the user's own, which draw
+  // faint beside them. Read from the plans cache, so it works in a canyon for
+  // any plan opened before.
+  // Which plan is shown, and when it goes: `planModeReducer`.
+  const [planState, planDispatch] = useReducer(
+    planModeReducer,
+    planMode,
+    planModeStart,
+  );
+  if (planMode !== planState.arrivedFor)
+    planDispatch({ type: "arrive", planMode });
+  const { shownPlanId, plan: planOnMap } = planState;
+  const [planPlaceId, setPlanPlaceId] = useState<string | null>(null);
+  const leavePlan = () => planDispatch({ type: "leave" });
+  // Re-read whenever the cache changes: a plan the user lost leaves the map,
+  // one that gained items draws them.
+  useEffect(() => {
+    if (!shownPlanId) return;
+    let cancelled = false;
+    const read = () =>
+      void readCachedPlan(shownPlanId)
+        .then((cached) => {
+          if (!cancelled)
+            planDispatch({ type: "read", plan: cached?.plan ?? null });
+        })
+        .catch(console.error);
+    read();
+    const unsubscribe = onMirrorChanged(read);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [shownPlanId]);
   // Tapping a route opens its OPTIONS — the same panel Saved's ⋯ opens, with
   // the stats a sub-mode one row in (DESIGN.md: the same object offers the
   // same panel wherever it is tapped). Two sheets, one at a time, each holding
@@ -1017,6 +1081,7 @@ export function MapScreen({
   const [optionsRouteId, setOptionsRouteId] = useState<string | null>(null);
   // Set when the draw was started from a place page; consumed by the save.
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
+  const [draftPlanId, setDraftPlanId] = useState<string | null>(null);
   /** The colour the draft will SAVE with, picked in the tool panel.
    *
    *  Null means "not chosen in this session", which is why the save writes the
@@ -1243,7 +1308,7 @@ export function MapScreen({
    */
   const acceptSettleCamera = useRef(false);
   const fitCameraToBbox = useCallback(
-    (bbox: [number, number, number, number], padding = 40) => {
+    (bbox: [number, number, number, number], padding = 40, top = padding) => {
       if (!cameraRef.current) return;
       const [west, south, east, north] = bbox;
       stopNeedsReset.current = true;
@@ -1271,7 +1336,7 @@ export function MapScreen({
       // same numbers this function already takes as its bbox.
       cameraRef.current.fitBounds(bbox, {
         padding: {
-          top: padding,
+          top,
           right: padding,
           bottom: padding,
           left: padding,
@@ -1632,6 +1697,25 @@ export function MapScreen({
     ],
   );
 
+  // A plan's places draw on the owned pins' source; their ids are the
+  // plan's, so a tap finds no place of the user's. Beside them, the user's own
+  // are faint (`muted`), so the two can be told apart.
+  const pinsOwned = useMemo(() => {
+    if (!planOnMap) return ownedFc;
+    const plan = toPlaceFeatureCollection(planOnMap.places, placeTypeColors);
+    return {
+      ...plan,
+      features: [...plan.features, ...mutedFeatures(ownedFc).features],
+    };
+  }, [ownedFc, placeTypeColors, planOnMap]);
+  // Shared places are never the plan's, so under a plan they are as faint as
+  // the user's own.
+  const pinsShared = useMemo(
+    () => (planOnMap ? mutedFeatures(sharedFc) : sharedFc),
+    [planOnMap, sharedFc],
+  );
+  const planRoutes = planOnMap?.routes;
+
   /** Follow a track between two anchors, if snapping is on and finds one.
    *
    *  Async by nature (a cold tile is a range request), and the draft may have
@@ -1736,6 +1820,7 @@ export function MapScreen({
       const discard = () => {
         routeDraft.close();
         setEditingRouteId(null);
+        setDraftPlanId(null);
         setDraftColor(null);
         if (typeof then === "function") then();
       };
@@ -1887,6 +1972,7 @@ export function MapScreen({
       // Anchors ride along so a snapped route reopens with the user's own
       // handful of vertices rather than every snapped one.
       const anchors = routeDraft.anchorIndices();
+      let planForRoute: { planId: string; routeId: string } | null = null;
       setSavingRoute(true);
       try {
         if (editingRouteId) {
@@ -1925,18 +2011,28 @@ export function MapScreen({
           // was, so the user can pick a different name or back out themselves.
           if (!filled) return;
         } else {
-          await createRouteLocal({
+          const routeId = await createRouteLocal({
             name,
             points,
             anchors,
             ...(draftColor ? { color: draftColor } : {}),
           });
+          planForRoute = draftPlanId ? { planId: draftPlanId, routeId } : null;
         }
         setNamingRoute(false);
         routeDraft.close();
         setEditingRouteId(null);
         setDraftPlaceId(null);
+        setDraftPlanId(null);
         setDraftColor(null);
+        if (planForRoute) {
+          const { planId, routeId } = planForRoute;
+          if (await addDrawnRouteToPlan(planId, routeId)) onOpenPlan?.(planId);
+          else {
+            const notAdded = planRouteNotAdded();
+            Alert.alert(notAdded.title, notAdded.body);
+          }
+        }
       } catch (err) {
         console.error(err);
         Alert.alert("Route error", "Couldn't save that route.");
@@ -1948,6 +2044,8 @@ export function MapScreen({
       placeTrackMedia,
       places.data,
       draftPlaceId,
+      draftPlanId,
+      onOpenPlan,
       draftColor,
       editingRouteId,
       routeDraft,
@@ -2169,14 +2267,25 @@ export function MapScreen({
         void addToolPoint(lon, lat);
         return;
       }
-      const props = event.nativeEvent.features[0]?.properties;
+      // Two pins on one spot (a copy beside its original): the plan's wins
+      // while a plan is shown, so it can be opened from the map at all.
+      const features = event.nativeEvent.features;
+      const props = (
+        features.find((feature) => {
+          const id = feature.properties?.id;
+          return typeof id === "string" && isPlanPin(planOnMap, id);
+        }) ?? features[0]
+      )?.properties;
       // The OPTIONS sheet, not the detail screen: the same verbs the
       // Places list offers, with "Open place" first (DESIGN.md). Held as an id
       // so an edit made from inside the sheet re-renders it rather than showing
       // a stale copy.
-      if (props && typeof props.id === "string") setOptionsPlaceId(props.id);
+      const id = props?.id;
+      if (typeof id !== "string") return;
+      if (isPlanPin(planOnMap, id)) setPlanPlaceId(id);
+      else setOptionsPlaceId(id);
     },
-    [addToolPoint, collectingPoints],
+    [addToolPoint, collectingPoints, planOnMap],
   );
 
   const optionsPlace =
@@ -2433,6 +2542,24 @@ export function MapScreen({
       ...(showPlaceRoutes ? placeLinkedRoutes : []),
     ],
     [placeLinkedRoutes, showPlaceRoutes, showRoutes, standaloneRoutes],
+  );
+  const routesOnMap = useMemo(
+    () =>
+      planRoutes
+        ? [
+            ...planRoutes,
+            ...visibleRoutes.map((route) => ({ ...route, muted: true })),
+          ]
+        : visibleRoutes,
+    [planRoutes, visibleRoutes],
+  );
+  // A plan's way has no options sheet of the user's.
+  const pressRoute = useCallback(
+    (routeId: string) => {
+      if (!planRoutes?.some((route) => route.id === routeId))
+        setOptionsRouteId(routeId);
+    },
+    [planRoutes],
   );
 
   // Locking north-up straightens a map that is already turned. Without this the
@@ -2769,7 +2896,13 @@ export function MapScreen({
     // writes a camera stop per sample, which would overwrite the camera fit
     // within a frame.
     setFollowMode("off");
-    fitCameraToBbox(focus.bbox);
+    // Plan mode's banner covers the top of the map: its pins go below it.
+    // ponytail: the banner's measured height, if this misses on a small screen.
+    fitCameraToBbox(
+      focus.bbox,
+      undefined,
+      planMode ? PLAN_BANNER_CLEARANCE : undefined,
+    );
     // …and say WHICH rectangle — but only for a saved REGION, the one asset
     // whose extent is a meaningful box. A pulsing rectangle around a pin, a
     // line or a place point is noise (the asset itself is already the shape).
@@ -2778,7 +2911,14 @@ export function MapScreen({
     if (focus.basemapId) {
       setFocusPulse({ bbox: focus.bbox, nonce: focus.nonce });
     }
-  }, [focus?.nonce, focus, chooseBasemap, fitCameraToBbox, chooseTerrainLayer]);
+  }, [
+    focus?.nonce,
+    focus,
+    planMode,
+    chooseBasemap,
+    fitCameraToBbox,
+    chooseTerrainLayer,
+  ]);
 
   // Frame a draft restored from a killed session, once the map can take a
   // camera stop. Once per restored draft — the user's own panning owns the
@@ -2833,6 +2973,7 @@ export function MapScreen({
       routeDraft.open();
       setEditingRouteId(null);
       setDraftPlaceId(drawRouteFor.placeId);
+      setDraftPlanId(drawRouteFor.planId ?? null);
       setDraftColor(pickNextTrackColor(routes.data?.map((r) => r.color) ?? []));
     };
     if (routeDraft.active && routeDraft.points.length > 0) {
@@ -4633,7 +4774,7 @@ export function MapScreen({
                   type="raster"
                   id={`basemap-layer-${resolved.key}`}
                   beforeId={BAND_MARKERS.land}
-                  style={{ rasterOpacity: 1 }}
+                  style={{ rasterOpacity: planOnMap ? PLAN_DIM : 1 }}
                 />
               )}
             </ResolvedSource>
@@ -4793,7 +4934,10 @@ export function MapScreen({
               id={`import-fill-${imported.id}`}
               beforeId={groundBefore[`import-fill-${imported.id}`]}
               filter={["==", "$type", "Polygon"] as never}
-              style={{ fillColor: imported.color, fillOpacity: 0.2 }}
+              style={{
+                fillColor: imported.color,
+                fillOpacity: planOnMap ? PLAN_DIM * 0.2 : 0.2,
+              }}
             />
             <Layer
               key={`import-line-${imported.id}`}
@@ -4810,7 +4954,7 @@ export function MapScreen({
               style={{
                 lineColor: imported.color,
                 lineWidth: 3,
-                lineOpacity: 0.9,
+                lineOpacity: planOnMap ? PLAN_DIM : 0.9,
                 lineJoin: "round",
                 lineCap: "round",
               }}
@@ -4826,6 +4970,8 @@ export function MapScreen({
                 circleColor: imported.color,
                 circleStrokeColor: MAP_INK.ring,
                 circleStrokeWidth: 1.5,
+                circleOpacity: planOnMap ? PLAN_DIM : 1,
+                circleStrokeOpacity: planOnMap ? PLAN_DIM : 1,
               }}
             />
           </GeoJSONSource>
@@ -4836,7 +4982,10 @@ export function MapScreen({
             has fetched; mounted before the place pins so the pins stay on
             top of their own lines. */}
         {showPlaceRoutes ? (
-          <PlaceRoutesLayer onStatus={setRoutesStatus} />
+          <PlaceRoutesLayer
+            onStatus={setRoutesStatus}
+            dim={planOnMap != null}
+          />
         ) : null}
 
         {/* Saved routes, below the point markers — a route is ink on the map and
@@ -4847,12 +4996,12 @@ export function MapScreen({
             keeps an empty source rather than unmounting) so the 0↔1 route
             transition cannot re-add its layers to the top of the stack. */}
         <RoutesLayer
-          routes={visibleRoutes}
+          routes={routesOnMap}
           hiddenRouteId={editingRouteId}
           // While a tool is collecting points every tap belongs to the tool —
           // opening an options sheet mid-draw would steal the point being
           // placed.
-          onPressRoute={collectingPoints ? undefined : setOptionsRouteId}
+          onPressRoute={collectingPoints ? undefined : pressRoute}
         />
 
         {/* Recorded tracks: unpinned, mounted before the place
@@ -4862,6 +5011,7 @@ export function MapScreen({
           tracks={tracks}
           liveCoord={userCoord}
           showTracks={showTracks}
+          dim={planOnMap != null}
           onTrackPress={handleTrackPress}
         />
 
@@ -4895,8 +5045,8 @@ export function MapScreen({
             (privacy rule). Shared under owned; one definition, also drawn by
             the place point-picker (PlacePinsLayer). */}
         <PlacePinsLayer
-          ownedFc={ownedFc}
-          sharedFc={sharedFc}
+          ownedFc={pinsOwned}
+          sharedFc={pinsShared}
           onPress={handlePlacePress}
         />
 
@@ -5013,6 +5163,43 @@ export function MapScreen({
           <FocusPulse bbox={focusPulse.bbox} nonce={focusPulse.nonce} />
         ) : null}
       </Map>
+
+      {/* Plan mode's banner: between the search and record buttons, under the
+          search bar when that expands. */}
+      {planOnMap && !collectingPoints ? (
+        <View
+          pointerEvents="box-none"
+          style={[
+            styles.planBanner,
+            {
+              top: insets.top + CHROME_GAP,
+              left: CHROME_GAP + SEARCH_SIZE + spacing(1),
+              right: CHROME_GAP + SEARCH_SIZE + spacing(1),
+            },
+          ]}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={planOnMap.name}
+            onPress={() => onOpenPlan?.(planOnMap.id)}
+          >
+            <Notice
+              icon="plan"
+              numberOfLines={1}
+              action={
+                <IconButton
+                  icon="close"
+                  size={16}
+                  accessibilityLabel={TRIP_PLAN_PAGE.copy.backToMap}
+                  onPress={leavePlan}
+                />
+              }
+            >
+              {planOnMap.name}
+            </Notice>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* Place search: collapsed button top-left, expands to a full-width bar.
           Hidden while a point-collecting tool is armed — search is not usable
@@ -5178,6 +5365,7 @@ export function MapScreen({
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
             pretending, and the user is the one who asked us to. */}
+
         {offlineOnly ? (
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
@@ -5556,6 +5744,15 @@ export function MapScreen({
         onSaved={(text) => notify(text, "info")}
       />
 
+      <PlanPlaceSheet
+        planId={planOnMap?.id ?? ""}
+        place={
+          planOnMap?.places.find((place) => place.id === planPlaceId) ?? null
+        }
+        online={connectivity === "online"}
+        onClose={() => setPlanPlaceId(null)}
+        onInfo={(text, tone) => notify(text, tone ?? "info")}
+      />
       {/* Tapping a route line opens its VERBS; the stats are a sub-mode one tap
           in (DESIGN.md). No "Show on map" row here — the user is looking at
           the line they just tapped. */}
@@ -5775,6 +5972,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   // be findable while a recording runs, so it does not live in the column that
   // scrolls tools sideways over itself.
   recordSlot: { position: "absolute" },
+  planBanner: {
+    position: "absolute",
+    height: SEARCH_SIZE,
+    justifyContent: "center",
+  },
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,

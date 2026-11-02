@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_THEME_SCHEME_ID, THEME_SCHEMES } from "@logjam/shared";
 
-import { clampTextScale, huesFor, withAlpha } from "./theme";
+import { clampTextScale, huesFor, placeholderColor, withAlpha } from "./theme";
 
 describe("withAlpha", () => {
   it("expands 3-digit and parses 6-digit hex", () => {
@@ -42,5 +42,14 @@ describe("clampTextScale", () => {
 
   it("treats a missing OS scale as 1 rather than dividing by zero", () => {
     expect(clampTextScale(1.15, 0)).toBe(1.15);
+  });
+});
+
+describe("placeholderColor", () => {
+  // Mutation: return `theme.textMuted` unchanged from placeholderColor, which
+  // sits next to `text` in the dark schemes.
+  it("is dimmer than textMuted in every scheme", () => {
+    for (const scheme of Object.values(THEME_SCHEMES))
+      expect(placeholderColor(scheme.tokens)).not.toBe(scheme.tokens.textMuted);
   });
 });

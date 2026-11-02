@@ -91,10 +91,14 @@ export async function getSyncDb(): Promise<SQLite.SQLiteDatabase> {
  */
 async function ensureLocalColumns(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const table of SYNC_TABLES) {
-    if (table.kind !== "local") continue;
+    // A `keepOnReset` mirror table is never dropped either, so it migrates
+    // here too.
+    if (table.kind !== "local" && !table.keepOnReset) continue;
     const existing = await db.getAllAsync<{ name: string }>(
       `PRAGMA table_info(${table.name})`,
     );
+    // Not created yet (a mirror table is created after this runs).
+    if (existing.length === 0) continue;
     const present = new Set(existing.map((column) => column.name));
     for (const [name, decl] of Object.entries(table.columns)) {
       if (present.has(name)) continue;
@@ -122,6 +126,7 @@ async function dropStaleMirror(db: SQLite.SQLiteDatabase): Promise<boolean> {
 
   await db.withTransactionAsync(async () => {
     for (const table of MIRROR_TABLES) {
+      if (table.keepOnReset) continue;
       await db.runAsync(`DROP TABLE IF EXISTS ${table.name}`);
     }
     // The cursor acknowledges rows that no longer exist here; the next pull
@@ -280,6 +285,7 @@ export async function wipeMirror(): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
     for (const table of MIRROR_TABLES) {
+      if (table.keepOnReset) continue;
       // Entity ids are UUIDv4, so one global id set needs no entity→table map.
       // `notifications_cache` is keyless (and server-derived) — it just goes.
       const keep =

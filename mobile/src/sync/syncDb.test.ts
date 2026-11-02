@@ -7,14 +7,17 @@ import { describe, expect, it, vi } from "vitest";
 // mirror-wipe bugs surface).
 const wipeCalls: string[] = [];
 const execCalls: string[] = [];
-/** Columns this stand-in database claims each table already has. The one gap —
- * conflict_shelf.entity_name — is an install that predates the shelf storing
- * the name of the row a value belongs to, which is the case the local-table
- * migration exists for. */
+/** Columns this stand-in database claims each table already has. The gaps —
+ * conflict_shelf.entity_name, plans_cache.downloaded_at — are an install that
+ * predates each column, which is the case the column migration exists for. */
+const GAPS: Record<string, string> = {
+  conflict_shelf: "entity_name",
+  plans_cache: "downloaded_at",
+};
 const existingColumns = (table: string): { name: string }[] => {
   const declared = Object.keys(tableSchema(table)?.columns ?? {});
   return declared
-    .filter((name) => !(table === "conflict_shelf" && name === "entity_name"))
+    .filter((name) => GAPS[table] !== name)
     .map((name) => ({ name }));
 };
 const nativeDb = {
@@ -194,22 +197,27 @@ describe("local-table migration", () => {
   // table that already exists. So a column added to a local table after it
   // shipped reaches an upgraded install through this path or not at all, and
   // "not at all" is silent: every read of it returns undefined.
-  it("adds a declared local column the database is missing", async () => {
+  // A `keepOnReset` mirror table is never dropped either, so it takes the
+  // same path. Mutation: skip `keepOnReset` tables in ensureLocalColumns.
+  it("adds a declared column a never-dropped table is missing", async () => {
     await getSyncDb();
     const alters = execCalls.filter((sql) => sql.startsWith("ALTER TABLE"));
     expect(alters).toEqual([
       "ALTER TABLE conflict_shelf ADD COLUMN entity_name TEXT",
+      "ALTER TABLE plans_cache ADD COLUMN downloaded_at TEXT",
     ]);
   });
 
-  it("leaves the mirror tables to the version lever", async () => {
+  it("leaves the other mirror tables to the version lever", async () => {
     // A mirror table is rebuildable, so it is dropped and recreated rather than
     // altered; altering it here would be a second, divergent migration path.
     await getSyncDb();
     for (const sql of execCalls.filter((call) =>
       call.startsWith("ALTER TABLE"),
     )) {
-      expect(sql).toMatch(/^ALTER TABLE (outbox|conflict_shelf|sync_state) /);
+      expect(sql).toMatch(
+        /^ALTER TABLE (outbox|conflict_shelf|sync_state|plans_cache) /,
+      );
     }
   });
 

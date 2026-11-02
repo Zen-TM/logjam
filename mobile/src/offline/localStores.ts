@@ -117,6 +117,14 @@ export const TILEJSON_DIR = `${FileSystem.cacheDirectory}logjam-tilejson/`;
 export const GAUGES_DIR = `${FileSystem.documentDirectory}gauges/`;
 
 /**
+ * A trip plan's files, downloaded for the trip (`plans/planFiles.ts`): one
+ * folder per plan, its photos and files inside. WIPED: they are other
+ * people's places and photos, shared with this account only. A plan dropped
+ * from the phone takes its folder with it.
+ */
+export const PLAN_DIR = `${FileSystem.documentDirectory}plans/`;
+
+/**
  * Every tree `wipeAllLocalData` deletes. Databases are not here — they are
  * cleared by table, so their files survive with no rows (see wipeLocalData.ts).
  */
@@ -132,6 +140,7 @@ export const WIPED_DIRS = [
   GAUGES_DIR,
   TILEJSON_DIR,
   SHARPENED_AREAS_DIR,
+  PLAN_DIR,
 ] as const;
 
 /** Create the scratch directory if needed and return a URI inside it. */

@@ -49,6 +49,12 @@ export type Capability =
    * the capability itself does not need a connection.
    */
   | "inbox"
+  /**
+   * Trip plans. Read from the plans cache once linked, so the list and a plan
+   * opened before READ offline; every write in a plan is online-only and dims
+   * itself where it is drawn (`plans/`).
+   */
+  | "plans"
   /** Server-rendered LiDAR overlays (GET /topo-jobs/completed-overlays). */
   | "lidarOverlays"
   /** Location search through our API (POST /places/search), for a phone
@@ -84,6 +90,7 @@ const NEEDS_CONNECTION: Record<Capability, boolean> = {
   sharing: true,
   friends: true,
   inbox: false,
+  plans: false,
   lidarOverlays: true,
   placeSearch: true,
   serverPrefs: true,
@@ -129,6 +136,7 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
   sharing: "Sharing",
   friends: "Friends",
   inbox: "The inbox",
+  plans: "Plans",
   lidarOverlays: "LiDAR overlays",
   placeSearch: "Location search",
   serverPrefs: "This preference",

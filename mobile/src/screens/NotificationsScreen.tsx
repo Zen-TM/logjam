@@ -65,6 +65,7 @@ import {
   notificationHaystack,
   notificationLabel,
   notificationPlaceId,
+  notificationPlanTarget,
   notificationsTruncated,
   selectionCountLabel,
   tallyNotifications,
@@ -73,6 +74,7 @@ import {
   type NotificationActions,
   type NotificationBatch,
   type NotificationInlineAction,
+  type NotificationPlanTarget,
 } from "@logjam/shared";
 
 import { acceptFriendRequest, declineFriendRequest } from "../api/friends";
@@ -235,15 +237,20 @@ const EMPTY_BATCH_KEYS: ReadonlySet<string> = new Set<string>();
 
 export function NotificationsScreen({
   onBack,
+  backLabel,
   onUnreadChanged,
   onOpenPlace,
+  onOpenPlan,
   onOpenSaved,
   onOpenFriends,
   openAnnouncement,
 }: {
   onBack: () => void;
+  backLabel: string;
   onUnreadChanged?: () => void;
   onOpenPlace: (placeId: string) => void;
+  /** A plan notification: its plan, as Logjam Web's inbox opens it. */
+  onOpenPlan: (target: NotificationPlanTarget) => void;
   /**
    * "View in Saved" — the tab, on the filter the subject lives under, with that
    * row pulsed on arrival. `highlightKey` is null when the notification names
@@ -801,9 +808,9 @@ export function NotificationsScreen({
   );
 
   // Reading it is what marks it read, so both happen on one tap; the place
-  // then opens on top. A message is the exception: it opens over the inbox
-  // and is read when it closes, so in Unread its row stays put until then
-  // (as `toggleBatch` explains).
+  // or the plan then opens on top. A message is the exception: it opens over
+  // the inbox and is read when it closes, so in Unread its row stays put until
+  // then (as `toggleBatch` explains).
   const openNotification = useCallback(
     (n: TNotification) => {
       if (notificationAnnouncement(n)) {
@@ -812,9 +819,11 @@ export function NotificationsScreen({
       }
       void markRead(n);
       const placeId = notificationPlaceId(n);
+      const plan = notificationPlanTarget(n);
       if (placeId) onOpenPlace(placeId);
+      else if (plan) onOpenPlan(plan);
     },
-    [markRead, onOpenPlace],
+    [markRead, onOpenPlace, onOpenPlan],
   );
 
   const closeMessage = useCallback(() => {
@@ -989,7 +998,7 @@ export function NotificationsScreen({
   if (guestBlock) {
     return (
       <View style={styles.root}>
-        <Hero eyebrow={INBOX.title} title={INBOX.title} onBack={onBack} />
+        <Hero title={INBOX.title} onBack={onBack} backLabel={backLabel} />
         <EmptyState title={guestBlock.title} hint={guestBlock.hint} />
       </View>
     );
@@ -1005,7 +1014,6 @@ export function NotificationsScreen({
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
     hero: () => (
       <Hero
-        eyebrow={INBOX.title}
         // The answer to "what happened while I was away?" is a NUMBER of things
         // that did (shared/DESIGN.md §2), rather than a boolean marketing line
         // that says the same words for one notification and for forty. The
@@ -1013,6 +1021,7 @@ export function NotificationsScreen({
         // each other.
         title={inboxHeroTitle(unreadCount, notifications.length)}
         onBack={onBack}
+        backLabel={backLabel}
         value={String(tally.total)}
         valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={

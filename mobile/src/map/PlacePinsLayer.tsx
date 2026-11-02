@@ -12,6 +12,7 @@
 // mirror, and are NEVER baked into a tile (root AGENTS.md). Both sources here
 // are client-side GeoJSON handed straight to MapLibre; nothing about them is
 // logged or sent anywhere.
+import { PLAN_DIM } from "../plans/planMap";
 import { memo } from "react";
 import type { NativeSyntheticEvent } from "react-native";
 import {
@@ -59,6 +60,13 @@ export const PLACE_LABEL_EXPR = [
   ["concat", ["slice", ["get", "name"], 0, MAX_LABEL_CHARS], "…"],
   ["get", "name"],
 ];
+
+const MUTED_OPACITY = [
+  "case",
+  ["==", ["get", "muted"], true],
+  PLAN_DIM,
+  1,
+] as unknown as number;
 
 const LABEL_STYLE = {
   textField: PLACE_LABEL_EXPR as unknown as string,
@@ -135,6 +143,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleOpacity: 0,
             circleStrokeColor: SHARED_PLACE_COLOR,
             circleStrokeWidth: 1.5,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
@@ -148,6 +157,8 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             circleColor: ["get", "color"] as unknown as string,
             circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
+            circleOpacity: MUTED_OPACITY,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
@@ -166,6 +177,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           // would leave the name floating away from its pin.
           style={{
             ...LABEL_STYLE,
+            textOpacity: MUTED_OPACITY,
             textOffset: [0, 2.0],
             textAllowOverlap: true,
           }}
@@ -187,6 +199,9 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
             // the map, not a second piece of information.
             circleStrokeColor: MAP_INK.ring,
             circleStrokeWidth: 1.5,
+            // `muted`: the user's own, faint beside a plan's in plan mode.
+            circleOpacity: MUTED_OPACITY,
+            circleStrokeOpacity: MUTED_OPACITY,
           }}
         />
         <Layer
@@ -194,7 +209,7 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
           type="symbol"
           id={`${idPrefix}place-labels`}
           minzoom={MAP_LABEL_MIN_ZOOM}
-          style={LABEL_STYLE}
+          style={{ ...LABEL_STYLE, textOpacity: MUTED_OPACITY }}
         />
       </GeoJSONSource>
     </>

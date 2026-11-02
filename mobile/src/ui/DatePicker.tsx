@@ -11,6 +11,7 @@ import {
 } from "../theme";
 import {
   addMonths,
+  type DateRange,
   formatMonthLabel,
   monthGrid,
   monthOf,
@@ -54,9 +55,16 @@ const YEARS_PER_PAGE = YEAR_COLUMNS * YEAR_ROWS;
 export function DatePicker({
   value,
   onChange,
+  range,
+  allowFuture = false,
 }: {
   value: string | null;
   onChange: (key: string) => void;
+  /** Highlights start..end (end null = one day). Taps still arrive in
+   *  `onChange`; `pickDay` turns them into the next range. */
+  range?: DateRange;
+  /** A trip log records what happened; a plan looks ahead. */
+  allowFuture?: boolean;
 }) {
   const styles = useStyles();
 
@@ -210,9 +218,19 @@ export function DatePicker({
                       <DayCell
                         key={dayIndex}
                         dateKey={key}
-                        selected={key === value}
+                        selected={
+                          range
+                            ? key === range.start || key === range.end
+                            : key === value
+                        }
+                        inRange={
+                          range?.start != null &&
+                          range.end != null &&
+                          key > range.start &&
+                          key < range.end
+                        }
                         isToday={key === today}
-                        disabled={key > today}
+                        disabled={!allowFuture && key > today}
                         onPress={() => onChange(key)}
                       />
                     );
@@ -280,12 +298,14 @@ function usePager() {
 function DayCell({
   dateKey,
   selected,
+  inRange,
   isToday,
   disabled,
   onPress,
 }: {
   dateKey: string;
   selected: boolean;
+  inRange: boolean;
   isToday: boolean;
   disabled: boolean;
   onPress: () => void;
@@ -321,7 +341,7 @@ function DayCell({
       accessibilityLabel={dateKey}
       accessibilityState={{ selected, disabled }}
       onPress={disabled ? noop : onPress}
-      style={styles.day}
+      style={[styles.day, inRange && styles.rangeBand]}
     >
       {({ pressed }) => (
         <View
@@ -530,6 +550,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   todayRing: { borderWidth: 1, borderColor: withAlpha(theme.accent, 0.5) },
+  rangeBand: { backgroundColor: withAlpha(theme.accent, 0.18) },
   selectedFill: { backgroundColor: theme.accent },
   pressed: { opacity: 0.6 },
   dayText: { ...textRole.detail, color: theme.text },

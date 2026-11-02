@@ -88,10 +88,12 @@ const RANGE_PREF_KEY = "logbookStatsRange";
 export function StatsScreen({
   activity = null,
   onBack,
+  backLabel,
   onOpenActivity,
 }: {
   activity?: string | null;
   onBack: () => void;
+  backLabel: string;
   onOpenActivity: (activity: string) => void;
 }) {
   const styles = useStyles();
@@ -179,10 +181,10 @@ export function StatsScreen({
   > = {
     hero: () => (
       <Hero
-        eyebrow={activity ? "Logbook stats" : "Logbook"}
         title={title}
         titleNumberOfLines={2}
         onBack={onBack}
+        backLabel={backLabel}
       >
         {/* The rail is part of the hero rather than the scroll: it is the frame
               every number below is read in, and a window control that scrolls

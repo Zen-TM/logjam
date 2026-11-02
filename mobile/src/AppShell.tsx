@@ -1,6 +1,7 @@
 // The app shell: bottom tabs (Map / Places / Logs / Saved / More) with native
 // stacks for detail screens, behind the consent gate. The More tab is a hub
-// folding Inbox, Account, Friends, Sync issues and Settings off the tab bar.
+// folding Inbox, Plans, Account, Friends, Sync issues and Settings off the tab
+// bar.
 //
 // Mounts for a GUEST as well as an authenticated user. Everything that talks to
 // the server is registered conditionally below — a guest starts no sync engine,
@@ -27,6 +28,7 @@ import {
   currentConsentVersionOf,
   isThemeSchemeId,
   needsReconsent,
+  TRIP_PLANS_LIST,
   type IconIdea,
 } from "@logjam/shared";
 
@@ -54,9 +56,12 @@ import type { BasemapId } from "./map/sourceResolver";
 import { registerTopoAutoDownload } from "./offline/topoAutoDownload";
 import { registerSavedGaugeHistoryRefresh } from "./gauges/savedPlaceHistories";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
+import { canRunNow } from "./offline/networkPolicy";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
+import { planPushRefresh } from "./notifications/planPushRefresh";
 import { notificationTapTarget } from "./notifications/tapTarget";
+import { PLACE_FOCUS_DEGREES } from "./saved/bboxOfPoints";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
 import { AccountScreen } from "./screens/AccountScreen";
@@ -72,6 +77,14 @@ import { FriendSharesScreen } from "./sharing/FriendSharesScreen";
 import { LeaderboardScreen } from "./screens/LeaderboardScreen";
 import { MoreScreen } from "./screens/MoreScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
+import { PlanPreview } from "./plans/PlanPreview";
+import { PlanScreen } from "./plans/PlanScreen";
+import { PlansScreen } from "./plans/PlansScreen";
+import {
+  pollPlans,
+  refreshCachedPlan,
+  registerPlansPoll,
+} from "./plans/plansCache";
 import { SettingsScreen, type SettingsPage } from "./screens/SettingsScreen";
 import { DisplaySettingsScreen } from "./screens/settings/DisplaySettingsScreen";
 import { MapSettingsScreen } from "./screens/settings/MapSettingsScreen";
@@ -83,7 +96,7 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { Icon, LoadingState } from "./ui";
+import { backLabelOf, Icon, LoadingState } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -137,7 +150,12 @@ type MapStackParams = {
         // `drawRouteFor` = "Draw one on the map": arm the pen. From a place
         // page it carries that place's id and saves into its route slot;
         // from Saved's add sheet the id is null and the route stands alone.
-        drawRouteFor?: { placeId: string | null; nonce: number };
+        drawRouteFor?: {
+          placeId: string | null;
+          /** From a plan's page: the finished route is added to it. */
+          planId?: string;
+          nonce: number;
+        };
         // `continueTrack` = "Continue recording" from Saved: pick a finished
         // track back up. An id, never points.
         continueTrack?: { trackId: string; nonce: number };
@@ -147,6 +165,9 @@ type MapStackParams = {
         // never a coordinate: navigation params are persisted and dumped by
         // devtools, and the map reads the point from the mirror it already has.
         navigatePlace?: { placeId: string; nonce: number };
+        // `planMode` = "Show on map" from a plan: its items only, read from
+        // the plans cache. An id, never the plan.
+        planMode?: { planId: string; nonce: number };
       }
     | undefined;
   // Where the place form went to point at a map. A coordinate already in
@@ -160,12 +181,14 @@ type MapStackParams = {
   MapTripDetail: { trip: MirrorTrip };
   // Where the map was looking when "Save maps for offline use" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
+  // A plan's Download the map for this area passes its items' bounds.
   MapRegionDownload:
     | {
         basemapId: BasemapId;
         center: [number, number];
         zoom: number;
       }
+    | { bounds: [number, number, number, number] }
     | undefined;
 };
 
@@ -241,6 +264,18 @@ type MoreStackParams = {
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
   MoreTripDetail: { trip: MirrorTrip };
+  // A plan left or deleted comes back here with what happened.
+  Plans: { message?: { text: string; at: number } } | undefined;
+  // The name rides along for the hero while the cached plan is read.
+  /** `view`: the tab it opens on, People for a join request. `invited`: it
+   *  opens as the invite's preview (`opensPreview`), until Join. */
+  Plan: {
+    planId: string;
+    name: string;
+    view?: "people";
+    invited?: boolean;
+    joined?: boolean;
+  };
   Account: undefined;
   Friends: undefined;
   // The per-friend sharing audit, pushed from a friend's overflow sheet. Params
@@ -284,7 +319,6 @@ const TAB_BAR_TOP_PAD = spacing(0.5);
  * is what `MapView`'s `focus` param takes. Built at navigation time and never
  * stored: a region of interest stays off the server (mobile/AGENTS.md, Privacy and battery).
  */
-const PLACE_FOCUS_DEGREES = 0.005;
 function placeFocus(place: { latitude: number; longitude: number }) {
   return {
     bbox: [
@@ -341,6 +375,27 @@ function MapStackNav() {
             continueTrack={route.params?.continueTrack ?? null}
             startRecording={route.params?.startRecording ?? null}
             navigatePlace={route.params?.navigatePlace ?? null}
+            planMode={route.params?.planMode ?? null}
+            // The whole More stack is named, so Back from the plan lands on
+            // Plans, whatever More held when the user left for the map.
+            onOpenPlan={(planId) =>
+              navigation.getParent()?.navigate("More", {
+                state: {
+                  routes: [
+                    { name: "MoreHome" },
+                    { name: "Plans" },
+                    {
+                      name: "Plan",
+                      params: {
+                        planId,
+                        name: TRIP_PLANS_LIST.title,
+                        view: "items",
+                      },
+                    },
+                  ],
+                },
+              })
+            }
             onPickPoint={(from, hidePlaceId) =>
               navigation.navigate(
                 "MapPickPoint",
@@ -383,6 +438,7 @@ function MapStackNav() {
         {({ navigation, route }) => (
           <RegionDownloadScreen
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             // The download is already running by now: it reports as a card in
             // the Saved tab's Regions filter, which is also where it lives
             // once it lands.
@@ -395,9 +451,13 @@ function MapStackNav() {
                 params: { filter: "region", nonce: Date.now() },
               });
             }}
-            initialBasemapId={route.params?.basemapId}
-            initialCenter={route.params?.center}
-            initialZoom={route.params?.zoom}
+            {...(route.params && "bounds" in route.params
+              ? { initialBounds: route.params.bounds }
+              : {
+                  initialBasemapId: route.params?.basemapId,
+                  initialCenter: route.params?.center,
+                  initialZoom: route.params?.zoom,
+                })}
           />
         )}
       </MapStack.Screen>
@@ -408,6 +468,7 @@ function MapStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) =>
               navigation.navigate("MapTripDetail", { trip })
             }
@@ -442,6 +503,7 @@ function MapStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("MapPlaceDetail", { placeId, name })
             }
@@ -641,6 +703,7 @@ function PlacesStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) =>
               navigation.navigate("PlaceTripDetail", { trip })
             }
@@ -682,6 +745,7 @@ function PlacesStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("PlaceDetail", { placeId, name })
             }
@@ -717,6 +781,7 @@ function TripsStackNav() {
           <StatsScreen
             activity={route.params?.activity ?? null}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             // Pushed rather than swapped in place, so Back returns to the whole
             // picture the user drilled down from.
             onOpenActivity={(activity) =>
@@ -730,6 +795,7 @@ function TripsStackNav() {
           <TripDetailScreen
             trip={route.params.trip}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenPlace={(placeId, name) =>
               navigation.navigate("TripPlaceDetail", { placeId, name })
             }
@@ -750,6 +816,7 @@ function TripsStackNav() {
           <PlaceDetailScreen
             placeId={route.params.placeId}
             onBack={() => navigation.goBack()}
+            backLabel={backLabelOf(navigation.getState(), route.key)}
             onOpenTrip={(trip) => navigation.navigate("TripDetail", { trip })}
             onShowOnMap={(place) =>
               navigation.getParent()?.navigate("Map", {
@@ -847,6 +914,7 @@ export function AppShell({
         sync: registerSyncTriggers,
         topoAutoDownload: registerTopoAutoDownload,
         placeRegistryRefresh: registerPlaceRegistryRefresh,
+        plansPoll: registerPlansPoll,
         gaugeHistoryRefresh: registerSavedGaugeHistoryRefresh,
       }),
     [accountState],
@@ -907,6 +975,16 @@ export function AppShell({
             screen: "PlaceDetail",
             params: { placeId: target.placeId, name: "Place" },
           });
+        } else if (target.kind === "plan") {
+          nav.navigate("More", {
+            screen: "Plan",
+            params: {
+              planId: target.planId,
+              name: TRIP_PLANS_LIST.title,
+              view: target.view,
+              invited: target.invited,
+            },
+          });
         } else if (target.kind === "announcement") {
           nav.navigate("More", {
             screen: "Inbox",
@@ -923,8 +1001,29 @@ export function AppShell({
         }
       },
     );
-    return () => subscription.remove();
-  }, [isGuest]);
+    // A plan push while Logjam GPS is open: the list and that plan are
+    // fetched again, so neither reads stale, if the connection rule allows.
+    const received = Notifications.addNotificationReceivedListener(
+      (notification) => {
+        const refresh = planPushRefresh(
+          notification.request.content.data,
+          accountState,
+        );
+        if (!refresh) return;
+        void canRunNow("sync")
+          .then(async (allowed) => {
+            if (!allowed) return;
+            await pollPlans();
+            if (refresh.planId) await refreshCachedPlan(refresh.planId);
+          })
+          .catch(console.error);
+      },
+    );
+    return () => {
+      subscription.remove();
+      received.remove();
+    };
+  }, [isGuest, accountState]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
@@ -1093,6 +1192,7 @@ export function AppShell({
                         onOpenInbox={() => navigation.navigate("Inbox")}
                         onOpenAccount={() => navigation.navigate("Account")}
                         onOpenFriends={() => navigation.navigate("Friends")}
+                        onOpenPlans={() => navigation.navigate("Plans")}
                         onOpenSyncIssues={() =>
                           navigation.navigate("SyncIssues")
                         }
@@ -1108,12 +1208,24 @@ export function AppShell({
                       <NotificationsScreen
                         openAnnouncement={route.params?.openAnnouncement}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onUnreadChanged={refreshUnread}
                         // A share notification is a way in to the place it is
                         // about; the name is unknown here, so the detail screen
                         // resolves it from the id over the authed API.
                         onOpenPlace={(placeId) =>
                           navigation.navigate("MorePlaceDetail", { placeId })
+                        }
+                        onOpenPlan={(target) =>
+                          navigation.navigate("Plan", {
+                            planId: target.planId,
+                            name: TRIP_PLANS_LIST.title,
+                            view: target.view,
+                            invited: target.invited,
+                          })
                         }
                         // A notification about a saved item is a way in to that
                         // item: the Saved tab, on its filter, with the row pulsed.
@@ -1143,6 +1255,10 @@ export function AppShell({
                       <PlaceDetailScreen
                         placeId={route.params.placeId}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenTrip={(trip) =>
                           navigation.navigate("MoreTripDetail", { trip })
                         }
@@ -1187,6 +1303,10 @@ export function AppShell({
                       <TripDetailScreen
                         trip={route.params.trip}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenPlace={(placeId) =>
                           navigation.navigate("MorePlaceDetail", { placeId })
                         }
@@ -1200,12 +1320,117 @@ export function AppShell({
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
+                    name="Plans"
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <PlansScreen
+                        message={route.params?.message}
+                        onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
+                        onOpenPlan={(plan) =>
+                          navigation.navigate("Plan", {
+                            planId: plan.id,
+                            name: plan.name,
+                            invited: plan.status === "invited",
+                          })
+                        }
+                      />
+                    )}
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
+                    name="Plan"
+                    options={{ headerShown: false }}
+                    // Each plan its own route: a push for plan B tapped on
+                    // plan A's page opens B over A, rather than swapping A's
+                    // params under a screen that still holds A's state.
+                    getId={({ params }) => params.planId}
+                  >
+                    {({ navigation, route }) =>
+                      route.params.invited ? (
+                        <PlanPreview
+                          planId={route.params.planId}
+                          name={route.params.name}
+                          onBack={() => navigation.goBack()}
+                          backLabel={backLabelOf(
+                            navigation.getState(),
+                            route.key,
+                          )}
+                          onJoined={() =>
+                            navigation.setParams({
+                              invited: false,
+                              joined: true,
+                            })
+                          }
+                          onDeclined={(text) =>
+                            navigation.popTo("Plans", {
+                              message: { text, at: Date.now() },
+                            })
+                          }
+                        />
+                      ) : (
+                        <PlanScreen
+                          planId={route.params.planId}
+                          name={route.params.name}
+                          initialView={route.params.view}
+                          joined={route.params.joined}
+                          onBack={() => navigation.goBack()}
+                          backLabel={backLabelOf(
+                            navigation.getState(),
+                            route.key,
+                          )}
+                          onShowOnMap={(planId, bbox) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapView",
+                              params: {
+                                planMode: { planId, nonce: Date.now() },
+                                ...(bbox && {
+                                  focus: { bbox, nonce: Date.now() },
+                                }),
+                              },
+                            })
+                          }
+                          onDrawRoute={(planId) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapView",
+                              params: {
+                                drawRouteFor: {
+                                  placeId: null,
+                                  planId,
+                                  nonce: Date.now(),
+                                },
+                              },
+                            })
+                          }
+                          onDownloadMap={(bounds) =>
+                            navigation.getParent()?.navigate("Map", {
+                              screen: "MapRegionDownload",
+                              params: { bounds },
+                            })
+                          }
+                          onGone={(text) =>
+                            navigation.popTo("Plans", {
+                              message: { text, at: Date.now() },
+                            })
+                          }
+                        />
+                      )
+                    }
+                  </MoreStack.Screen>
+                  <MoreStack.Screen
                     name="Account"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <AccountScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onSignOut={onSignOut}
                         onOpenFriends={() => navigation.navigate("Friends")}
                       />
@@ -1215,9 +1440,13 @@ export function AppShell({
                     name="Friends"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <FriendsScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         onOpenShares={(friend) =>
                           navigation.navigate("FriendShares", friend)
                         }
@@ -1231,8 +1460,14 @@ export function AppShell({
                     name="Leaderboard"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <LeaderboardScreen onBack={() => navigation.goBack()} />
+                    {({ navigation, route }) => (
+                      <LeaderboardScreen
+                        onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
+                      />
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
@@ -1244,6 +1479,10 @@ export function AppShell({
                         friendshipId={route.params.friendshipId}
                         username={route.params.username}
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         // Inside the More stack, like the inbox's own place route,
                         // so Back returns to the sharing list.
                         onOpenPlace={(placeId) =>
@@ -1256,9 +1495,13 @@ export function AppShell({
                     name="SyncIssues"
                     options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
+                    {({ navigation, route }) => (
                       <SyncIssuesScreen
                         onBack={() => navigation.goBack()}
+                        backLabel={backLabelOf(
+                          navigation.getState(),
+                          route.key,
+                        )}
                         // A stuck change is a way IN to the thing it failed on: the
                         // permanent-failure sheet offers "open it and change it a
                         // way that works". Pushed inside the More stack, like the

@@ -66,6 +66,7 @@ type SectionProps = {
    *  dismissed it. */
   podiumShown: boolean;
   onBack: () => void;
+  backLabel: string;
   onDismissPodium: () => void;
   onOpenRules: () => void;
 };
@@ -76,14 +77,14 @@ export const LEADERBOARD_SECTIONS: Record<
   SectionKeysOn<typeof LEADERBOARD, "gps">,
   (props: SectionProps) => ReactNode
 > = {
-  hero: ({ board, onBack, onOpenRules }) => {
+  hero: ({ board, onBack, backLabel, onOpenRules }) => {
     const { rank, size } = selfStanding(board);
     return (
       <Hero
-        eyebrow={LEADERBOARD.title}
         title={leaderboardHeroTitle(rank, size)}
         value={leaderboardSeasonLine(board.season)}
         onBack={onBack}
+        backLabel={backLabel}
         actions={
           <IconButton
             icon="help"
@@ -112,7 +113,13 @@ export const LEADERBOARD_SECTIONS: Record<
   nudge: ({ board }) => <Nudge board={board} />,
 };
 
-export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
+export function LeaderboardScreen({
+  onBack,
+  backLabel,
+}: {
+  onBack: () => void;
+  backLabel: string;
+}) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -178,11 +185,7 @@ export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
   // Every state but the board keeps a hero, so the back arrow is always there.
   const gate = (body: ReactNode) => (
     <View style={styles.root}>
-      <Hero
-        eyebrow={LEADERBOARD.title}
-        title={LEADERBOARD.title}
-        onBack={onBack}
-      />
+      <Hero title={LEADERBOARD.title} onBack={onBack} backLabel={backLabel} />
       {body}
     </View>
   );
@@ -206,6 +209,7 @@ export function LeaderboardScreen({ onBack }: { onBack: () => void }) {
     board: response,
     podiumShown,
     onBack,
+    backLabel,
     onDismissPodium,
     onOpenRules: () => setRulesOpen(true),
   };

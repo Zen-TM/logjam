@@ -343,6 +343,11 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** An empty field's hint text: `textMuted` is so near `text` in the dark
+ *  schemes that a hint read as typed text, so it takes the shared dim. */
+export const placeholderColor = (theme: { textMuted: string }): string =>
+  withAlpha(theme.textMuted, OPACITY.disabled);
+
 /**
  * ASSET HUES — per-kind identity colours for on-device map assets.
  *

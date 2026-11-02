@@ -109,4 +109,7 @@ export const WIPED_DIR_FATE: Record<string, StoreFate> = {
   SHARPENED_AREAS_DIR: {
     keeps: "The account's list of sharpened areas, fetched again online.",
   },
+  PLAN_DIR: {
+    keeps: "A plan's files, downloaded again from the plan with one press.",
+  },
 };

@@ -26,6 +26,8 @@ export function useBulkSelection<Item>({
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
 
   const clearSelection = useCallback(() => setSelectedKeys([]), []);
+  /** Keep these and drop the rest: what a partly failed bulk action leaves. */
+  const selectOnly = useCallback((keys: string[]) => setSelectedKeys(keys), []);
 
   const toggleSelected = useCallback((key: string) => {
     setSelectedKeys((keys) =>
@@ -61,6 +63,7 @@ export function useBulkSelection<Item>({
   return {
     selectedKeys,
     clearSelection,
+    selectOnly,
     toggleSelected,
     selectItem,
     selectAll,
