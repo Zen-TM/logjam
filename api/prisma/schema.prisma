@@ -208,6 +208,11 @@ model Place {
   /// Who copied it into the plan; null on an owned row.
   addedById        String?          @map("added_by_id")
   placeTypeId      String           @map("place_type_id")
+  /// A plan place only: the name and icon of the adder's custom type, which
+  /// the row itself cannot point at (a plan holds system types, or the
+  /// adder's account delete would fail). Null for a system type.
+  typeName         String?          @map("type_name")
+  typeIconKey      String?          @map("type_icon_key")
   name             String
   altNames         String[]         @default([])
   latitude         Float

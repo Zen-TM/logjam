@@ -741,6 +741,7 @@ export async function copyPlaceFor(
     user.id,
     place.placeTypeId,
     body?.placeTypeId,
+    place.planId ? place.typeName : null,
   );
 
   // WHICH VALUES SURVIVE. A key the recipient defines with the same type

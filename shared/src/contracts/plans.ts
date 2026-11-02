@@ -19,11 +19,13 @@ import {
   type TripPlanItemKind,
   type TripPlanInvitedPreview,
   type TripPlanMemberStatus,
+  type TripPlanPlace,
   type TripPlanRole,
   type TripPlanSummary,
   type TripPlanUserRef,
   type TripPlanView,
 } from "../tripPlans.js";
+import { SYSTEM_PLACE_TYPES } from "../placeTypes.js";
 import type { ScreenContract } from "./types.js";
 import { formatBytes } from "../format.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
@@ -443,6 +445,9 @@ export const TRIP_PLAN_PAGE = {
     itemAttributes: "Attributes",
     itemDownloadHint: "Click to download",
     placeTypeFallback: "Place",
+    placeSetAside: "Set aside",
+    placeSetAsideHint:
+      "The person who added this place had these attributes, and its type here has no field for them. Save a copy to keep them.",
     placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
@@ -563,6 +568,37 @@ export function tripPlanLeaveState(plan: {
     alone: going.length <= 1,
     soleLeader: plan.myRole === "leader" && leaders <= 1,
   };
+}
+
+/**
+ * A plan place's type as shown: the adder's custom type by name and icon key,
+ * else the system type's own. An icon key a client lacks falls back in that
+ * client's own mapping. Guard: plans.test.ts ("a plan place's type").
+ */
+export function tripPlanPlaceType(
+  place: Pick<TripPlanPlace, "placeTypeId" | "typeName" | "typeIconKey">,
+): { name: string; iconKey: string } {
+  const system = SYSTEM_PLACE_TYPES.find(
+    (each) => each.id === place.placeTypeId,
+  );
+  return {
+    name:
+      place.typeName ?? system?.name ?? TRIP_PLAN_PAGE.copy.placeTypeFallback,
+    iconKey: place.typeIconKey ?? system?.iconKey ?? "map-pin",
+  };
+}
+
+/** The set-aside attributes of a plan place as read-only rows: key, label,
+ *  value, type (the shape `attributeRows` returns). */
+export function tripPlanSetAsideRows(
+  place: Pick<TripPlanPlace, "foreignFields">,
+): [string, string, unknown, string][] {
+  return (place.foreignFields ?? []).map((item) => [
+    item.key,
+    item.label,
+    item.value,
+    item.type,
+  ]);
 }
 
 /** "Added by tom", or nothing once the adder's account is gone. */

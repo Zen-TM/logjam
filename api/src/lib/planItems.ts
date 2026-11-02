@@ -144,6 +144,8 @@ export async function loadPlanItems(
           longitude: row.longitude,
           elevation: row.elevation,
           placeTypeId: row.placeTypeId,
+          typeName: row.typeName,
+          typeIconKey: row.typeIconKey,
           notes: row.notes,
           fieldValues: asFieldValues(row.fieldValues),
           foreignFields: row.foreignFields
@@ -324,8 +326,19 @@ async function addPlace(
   planId: string,
   input: TripPlanItemAdd,
 ): Promise<AddedItem> {
+  // The caller's own place, or one shared with them: adding is a copy, and a
+  // sharee may already Save a copy and add that. The owner-private columns
+  // never travel (reconcileCopiedPlace drops the owner's foreignFields; the
+  // insert below names every column it copies).
   const place = await prisma.place.findFirst({
-    where: { id: input.id, ownerId: user.id },
+    where: {
+      id: input.id,
+      OR: [
+        { ownerId: user.id },
+        { shares: { some: { sharedWithId: user.id } } },
+      ],
+    },
+    include: { placeType: { select: { name: true, iconKey: true } } },
   });
   if (!place) throw itemNotFound();
   // The photos always come. Preflight, as POST /places/:id/copy: over quota is
@@ -335,14 +348,16 @@ async function addPlace(
 
   // A plan holds system types only: a user's own type would make that user's
   // account delete fail (Place.placeTypeId restricts). Anything else lands as
-  // a Marker, its values parked with their labels (ADR 0018). Guard:
-  // __tests__/planItems.test.ts ("lands a place of the adder's own type as a Marker").
-  const placeTypeId = isSystemPlaceTypeId(place.placeTypeId)
+  // a Marker, its values parked with their labels (ADR 0018) and the type's
+  // name and icon kept beside it. Guard: __tests__/planItems.test.ts
+  // ("lands a place of the adder's own type as a Marker").
+  const isSystem = isSystemPlaceTypeId(place.placeTypeId);
+  const placeTypeId = isSystem
     ? place.placeTypeId
     : SYSTEM_PLACE_TYPE_IDS.marker;
   const reconciled = await reconcileCopiedPlace({
     recipientId: null,
-    sourceOwnerId: user.id,
+    sourceOwnerId: place.ownerId,
     sourceTypeId: place.placeTypeId,
     targetTypeId: placeTypeId,
     fieldValues: place.fieldValues,
@@ -361,6 +376,8 @@ async function addPlace(
         longitude: place.longitude,
         elevation: place.elevation,
         placeTypeId,
+        typeName: isSystem ? null : place.placeType.name,
+        typeIconKey: isSystem ? null : place.placeType.iconKey,
         notes: place.notes,
         fieldValues: reconciled.fieldValues as Prisma.InputJsonValue,
         foreignFields:

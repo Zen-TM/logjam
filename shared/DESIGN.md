@@ -349,6 +349,11 @@ renumber.
   it. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now.
+- **A mode with a way out is a `MapBanner`**: a pill in the search row,
+  the search button's height and colour, inset so an open search bar covers
+  it, the X last. Its label is one line, cut with an ellipsis, and never
+  widens the pill; pressing it opens what it is about or shows the whole text,
+  which a screen reader says too. A sentence or buttons are a `Notice`.
 - **Overlays divide by what a thing is** (Places, Ways). Whose
   it is lives on the thing: the shared ring, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
