@@ -238,33 +238,7 @@ router.post(
     if (!source) throw new AppError(404, NOT_FOUND);
     requireShareAccess(await getRouteRole(user.id, source), "route");
 
-    const copy = await prisma.$transaction(async (tx) => {
-      // A fresh colour from the COPIER's palette, not the source's: the owner's
-      // choice was made to keep their own lines apart, and carrying it over is
-      // how two routes end up the same colour on the copier's map.
-      const existingRoutes = await tx.route.findMany({
-        where: { ownerId: user.id },
-        select: { color: true },
-      });
-      return tx.route.create({
-        data: {
-          ownerId: user.id,
-          placeId: null,
-          name: source.name,
-          color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
-          points: source.points as Prisma.InputJsonValue,
-          // Carried as-is: anchors are INDICES into `points`, and the points are
-          // copied verbatim, so the two cannot fall out of step. Null stays null
-          // — "every vertex is the user's" is the honest reading of a route drawn
-          // before anchors existed, and inventing one here would claim otherwise.
-          anchors:
-            source.anchors === null
-              ? Prisma.DbNull
-              : (source.anchors as Prisma.InputJsonValue),
-        },
-      });
-    });
-
+    const copy = await copyRouteFor(user.id, source);
     res.status(201).json(copy);
   },
 );
@@ -366,3 +340,40 @@ router.delete(
 );
 
 export default router;
+
+/**
+ * An unlinked copy of `source` owned by `userId`: the body of POST
+ * /routes/:id/copy, and of Save a copy on a plan's route
+ * (routes/planItems.ts). The caller has already decided the user may see it.
+ */
+export async function copyRouteFor(
+  userId: string,
+  source: { name: string; points: Prisma.JsonValue; anchors: Prisma.JsonValue },
+) {
+  return prisma.$transaction(async (tx) => {
+    // A fresh colour from the COPIER's palette, not the source's: the owner's
+    // choice was made to keep their own lines apart, and carrying it over is
+    // how two routes end up the same colour on the copier's map.
+    const existingRoutes = await tx.route.findMany({
+      where: { ownerId: userId },
+      select: { color: true },
+    });
+    return tx.route.create({
+      data: {
+        ownerId: userId,
+        placeId: null,
+        name: source.name,
+        color: pickNextTrackColor(existingRoutes.map((r) => r.color)),
+        points: source.points as Prisma.InputJsonValue,
+        // Carried as-is: anchors are INDICES into `points`, and the points are
+        // copied verbatim, so the two cannot fall out of step. Null stays null
+        // — "every vertex is the user's" is the honest reading of a route drawn
+        // before anchors existed, and inventing one here would claim otherwise.
+        anchors:
+          source.anchors === null
+            ? Prisma.DbNull
+            : (source.anchors as Prisma.InputJsonValue),
+      },
+    });
+  });
+}

@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "api_script" {
     command = ["node", "-e", "console.error('api-script needs a command override'); process.exit(1)"]
     environment = [{
       name  = "AUTH_MODE"
-      value = "cognito"
+      value = "oidc"
       }, {
       name  = "AWS_REGION"
       value = "ap-southeast-2"

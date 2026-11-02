@@ -104,3 +104,13 @@ body {
    and the rule that decides this lives with the dialog itself — `Dialog.module.css`
    keys it off the same 768px breakpoint as the rest of this file. Nothing
    overrides a dialog from here. */
+
+/* The plan summary prints as paper even in a dark scheme: with "Background
+   graphics" on, the @page margin is the root's canvas, not the body's. Guard:
+   components/plans/PlanSummary.margins.test.ts. */
+@media print {
+  html:has(> body > #plan-print) {
+    background: #fff;
+    color-scheme: light;
+  }
+}

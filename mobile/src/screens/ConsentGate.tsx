@@ -17,13 +17,9 @@ import {
 
 import type { SignOutHandler } from "../offline/signOutConfirm";
 import { updateConsent } from "../api/queries";
-import {
-  PRIVACY_POLICY_URL,
-  TERMS_URL,
-  openLegalDocument,
-} from "../legalLinks";
 import { spacing, makeStyles } from "../theme";
-import { Button, ErrorBanner, SwitchRow, TextField, TextLink } from "../ui";
+import { Button, ErrorBanner, SwitchRow, TextField } from "../ui";
+import { TermsSwitch } from "./TermsSwitch";
 
 export function ConsentGate({
   consentVersion,
@@ -125,17 +121,8 @@ export function ConsentGate({
           editable={!submitting}
         />
       ) : null}
-      <TextLink
-        label="Read the Terms of Use"
-        onPress={() => openLegalDocument(TERMS_URL)}
-      />
-      <TextLink
-        label="Read the Privacy Policy"
-        onPress={() => openLegalDocument(PRIVACY_POLICY_URL)}
-      />
-      <SwitchRow
-        title="I agree to the terms"
-        description="Terms and Privacy Policy"
+      <TermsSwitch
+        updated={!newAccount}
         checked={agreed}
         onChange={(next) => {
           setAgreed(next);

@@ -1,7 +1,7 @@
 // Which background triggers `AppShell` arms for an account state. A guest arms
-// none of the account-backed ones (sync and topo auto-download): they
-// could only 401, and sync not running is what makes guest mode "don't sync
-// yet" (ADR 0007). The place registry refresh is armed for everyone: the file
+// none of the account-backed ones (sync, topo auto-download, the plans
+// poll): they could only 401, and sync not running is what makes guest
+// mode "don't sync yet" (ADR 0007). The place registry refresh is armed for everyone: the file
 // is public and comes from the CDN, not our API (ADR 0034); so are the river
 // gauge histories (ADR 0044).
 //
@@ -17,6 +17,7 @@ export function registerShellTriggers(
     sync: Register;
     topoAutoDownload: Register;
     placeRegistryRefresh: Register;
+    plansPoll: Register;
     gaugeHistoryRefresh: Register;
   },
 ): () => void {
@@ -25,7 +26,11 @@ export function registerShellTriggers(
     registrars.gaugeHistoryRefresh(),
   ];
   if (accountState !== "guest") {
-    cleanups.push(registrars.sync(), registrars.topoAutoDownload());
+    cleanups.push(
+      registrars.sync(),
+      registrars.topoAutoDownload(),
+      registrars.plansPoll(),
+    );
   }
   return () => cleanups.forEach((cleanup) => cleanup());
 }

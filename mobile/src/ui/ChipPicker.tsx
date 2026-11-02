@@ -11,6 +11,7 @@ import {
   muted,
 } from "../theme";
 import { Chip, type ChipOption } from "./Chip";
+import { Field } from "./Field";
 import { FieldError } from "./FieldError";
 import { SectionHeader } from "./SectionHeader";
 
@@ -36,6 +37,7 @@ export function ChipPicker({
   primaryValue,
   hint,
   error,
+  field = false,
 }: {
   label: string;
   options: ChipOption[];
@@ -55,6 +57,9 @@ export function ChipPicker({
   hint?: string;
   /** The problem with this choice (shared/DESIGN.md §11, "Form errors"). */
   error?: string | null;
+  /** One question among a form's fields: labelled as a `Field` is, not
+   *  headed as a vocabulary of its own (a trip's types). */
+  field?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -72,50 +77,59 @@ export function ChipPicker({
 
   const isSelected = new Set(selected);
 
+  const chips = (
+    <View style={styles.chips}>
+      {options.map((option) => (
+        <Chip
+          key={option.value}
+          label={option.label}
+          active={isSelected.has(option.value)}
+          disabled={disabledValues?.has(option.value) ?? false}
+          hue={option.hue}
+          icon={option.icon}
+          starred={option.value === primaryValue}
+          onPress={() => onToggle(option.value)}
+        />
+      ))}
+      {onAdd && !adding ? (
+        <Chip
+          label={addPlaceholder}
+          icon="add"
+          dashed
+          onPress={() => {
+            setAdding(true);
+            // Focus on the next frame: the input does not exist yet on this one.
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }}
+        />
+      ) : null}
+      {adding ? (
+        <TextInput
+          ref={inputRef}
+          style={styles.input}
+          value={draft}
+          onChangeText={setDraft}
+          onSubmitEditing={commit}
+          onBlur={commit}
+          accessibilityLabel={addPlaceholder}
+          placeholder={addPlaceholder}
+          placeholderTextColor={theme.textMuted}
+          autoCapitalize="none"
+          returnKeyType="done"
+        />
+      ) : null}
+    </View>
+  );
+  if (field)
+    return (
+      <Field label={label} hint={hint} error={error}>
+        {chips}
+      </Field>
+    );
   return (
     <View style={styles.wrap}>
       <SectionHeader title={label} />
-      <View style={styles.chips}>
-        {options.map((option) => (
-          <Chip
-            key={option.value}
-            label={option.label}
-            active={isSelected.has(option.value)}
-            disabled={disabledValues?.has(option.value) ?? false}
-            hue={option.hue}
-            icon={option.icon}
-            starred={option.value === primaryValue}
-            onPress={() => onToggle(option.value)}
-          />
-        ))}
-        {onAdd && !adding ? (
-          <Chip
-            label={addPlaceholder}
-            icon="add"
-            dashed
-            onPress={() => {
-              setAdding(true);
-              // Focus on the next frame: the input does not exist yet on this one.
-              requestAnimationFrame(() => inputRef.current?.focus());
-            }}
-          />
-        ) : null}
-        {adding ? (
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={draft}
-            onChangeText={setDraft}
-            onSubmitEditing={commit}
-            onBlur={commit}
-            accessibilityLabel={addPlaceholder}
-            placeholder={addPlaceholder}
-            placeholderTextColor={theme.textMuted}
-            autoCapitalize="none"
-            returnKeyType="done"
-          />
-        ) : null}
-      </View>
+      {chips}
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
       <FieldError message={error} />
     </View>
