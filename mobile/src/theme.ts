@@ -343,6 +343,11 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** An empty field's hint text: `textMuted` is so near `text` in the dark
+ *  schemes that a hint read as typed text, so it takes the shared dim. */
+export const placeholderColor = (theme: { textMuted: string }): string =>
+  withAlpha(theme.textMuted, OPACITY.disabled);
+
 /**
  * ASSET HUES — per-kind identity colours for on-device map assets.
  *
@@ -410,6 +415,8 @@ const notificationHues = (
     topo: assetHue.overlay,
     /** Topo exports — the waterhole blue of the vector files they produce. */
     export: assetHue.import,
+    /** Trip plans — the plan's own hue, as on the Plans list. */
+    plan: assetHue.plan,
     /** A maintainer message: about Logjam itself, so the scheme accent. */
     message: theme.accent,
     /** A file a friend sent you — the waterhole blue an accepted copy wears in

@@ -1,0 +1,60 @@
+.scroll {
+  overflow-x: auto;
+}
+
+/* Fixed-width question columns scroll sideways under a pinned name column;
+   at 340px that is two columns and a sliver of the third. */
+.table {
+  composes: detail from "../textRoles.generated.module.css";
+  --name-width: 96px;
+  --column-width: 108px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: calc(var(--name-width) + var(--columns) * var(--column-width));
+  color: var(--color-text);
+}
+
+.table th,
+.table td {
+  padding: var(--space-0-5) var(--space-1);
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-page);
+  border-right: 1px solid var(--color-line);
+}
+
+/* A header or cell is cut at two lines; the button says it whole. */
+.cell {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.empty {
+  color: var(--color-text-muted);
+}
+
+.whole {
+  composes: body from "../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text);
+  white-space: pre-wrap;
+}

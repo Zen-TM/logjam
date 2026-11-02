@@ -171,6 +171,26 @@ export function moveFrameEdge(
   }
 }
 
+/** Share of the box's size added on each side to a plan's starting area. */
+export const START_AREA_PAD = 0.12;
+
+/**
+ * The area the download frame starts on for a set of places and ways: their
+ * bbox, padded by START_AREA_PAD of its size on each side. The bbox arrives
+ * already no smaller than a place's frame (planBbox), so a single place keeps
+ * a usable box.
+ */
+export function startingArea([west, south, east, north]: [
+  number,
+  number,
+  number,
+  number,
+]): [number, number, number, number] {
+  const dx = (east - west) * START_AREA_PAD;
+  const dy = (north - south) * START_AREA_PAD;
+  return [west - dx, south - dy, east + dx, north + dy];
+}
+
 /** Opening frame: a generous inset, so all four handles are visible at once. */
 export function defaultFrameInsets(size: {
   width: number;

@@ -50,6 +50,7 @@ import {
 // file cannot drift. Every existing `from "./placeUtils"` import still resolves.
 export type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
 import type { TPlace, TNotification, TTripLog, TUser } from "@logjam/shared";
+import { usernameAvailable as sharedUsernameAvailable } from "@logjam/shared";
 
 // Only http(s) URLs are safe to render as a clickable <a href> or store as a
 // place source link — any other scheme (javascript:, data:, vbscript:, ...)
@@ -1089,18 +1090,8 @@ export function deleteAccount(): Promise<void> {
   return apiFetch<void>("/users/me", { method: "DELETE" });
 }
 
-/** Before sign-up, so no token. Unknown counts as free: the welcome form catches a clash. */
-export async function usernameAvailable(username: string): Promise<boolean> {
-  try {
-    const res = await fetch(
-      `${API_BASE_URL}/users/username-available?username=${encodeURIComponent(username)}`,
-      { signal: AbortSignal.timeout(4_000) },
-    );
-    return !res.ok || (await res.json()).available !== false;
-  } catch {
-    return true;
-  }
-}
+export const usernameAvailable = (username: string): Promise<boolean> =>
+  sharedUsernameAvailable(API_BASE_URL, username);
 
 export function recordConsent(
   version: string,

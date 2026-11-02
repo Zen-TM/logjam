@@ -56,6 +56,10 @@ export async function resolveCopyPlaceType(
   recipientId: string,
   sourceTypeId: string,
   requested?: unknown,
+  /** A plan's place: its custom type's name, kept when it was added. The
+   *  copier's own type of that name wins; a type is never created for it, so
+   *  no match leaves the plan place's system type. */
+  planTypeName?: string | null,
 ): Promise<CopyTypeResolution> {
   if (requested !== undefined && requested !== null) {
     if (typeof requested !== "string" || requested.length === 0) {
@@ -82,15 +86,16 @@ export async function resolveCopyPlaceType(
   // is a 500-shaped situation reported as one rather than papered over.
   if (!source) throw fault("The place's type is missing");
 
-  if (source.ownerId === null)
+  if (source.ownerId === null && !planTypeName)
     return { placeTypeId: source.id, created: false };
 
   const candidates = await prisma.placeType.findMany({
     where: visiblePlaceTypeWhere(recipientId),
     select: { id: true, ownerId: true, name: true },
   });
-  const matched = matchPlaceTypeByName(source.name, candidates);
+  const matched = matchPlaceTypeByName(planTypeName ?? source.name, candidates);
   if (matched) return { placeTypeId: matched.id, created: false };
+  if (planTypeName) return { placeTypeId: source.id, created: false };
 
   const created = await createPlaceType(recipientId, undefined, {
     name: source.name,
@@ -104,30 +109,50 @@ export async function resolveCopyPlaceType(
  * The values a copy keeps and the ones it parks, for a copy landing in
  * `placeTypeId`.
  *
- * The SOURCE's `foreignFields` are deliberately NOT read here: a copy clears
- * them rather than concatenating. A copy-of-a-copy reconciles the
- * sender's `fieldValues` against the recipient's definitions and nothing else —
- * otherwise residue accumulates down a share chain with no owner and no way to
- * clear it.
+ * The SOURCE's `foreignFields` are deliberately NOT read for an owned source:
+ * a copy clears them rather than concatenating. A copy-of-a-copy reconciles
+ * the sender's `fieldValues` against the recipient's definitions and nothing
+ * else — otherwise residue accumulates down a share chain with no owner and no
+ * way to clear it.
+ *
+ * A PLAN is the exception on both sides, because its place belongs to no one
+ * and so has no one's definitions but the system's. Into a plan
+ * (`recipientId` null), every value without a system definition is parked.
+ * Out of a plan (`sourceOwnerId` null), the parked values ARE the plan's
+ * values, which members see read-only and cannot adopt, so they are fed back
+ * through the split as values, each its own definition, as a type change does.
+ * Guard: __tests__/planItems.test.ts ("lands a place of the adder's own type
+ * as a Marker").
  */
 export async function reconcileCopiedPlace(args: {
-  recipientId: string;
-  sourceOwnerId: string;
+  recipientId: string | null;
+  sourceOwnerId: string | null;
   sourceTypeId: string;
   targetTypeId: string;
   fieldValues: unknown;
+  foreignFields?: unknown;
 }): Promise<{
   fieldValues: Record<string, unknown>;
   foreignFields: ReturnType<typeof reconcileCopiedFieldValues>["foreignFields"];
 }> {
+  const parked =
+    args.sourceOwnerId === null ? asForeignFields(args.foreignFields) : [];
   const [senderDefs, recipientDefs]: TripLogCustomFieldDef[][] =
     await Promise.all([
       defsForPlaceType(args.sourceOwnerId, args.sourceTypeId),
       defsForPlaceType(args.recipientId, args.targetTypeId),
     ]);
   return reconcileCopiedFieldValues({
-    fieldValues: args.fieldValues,
-    senderDefs,
+    fieldValues: {
+      ...Object.fromEntries(parked.map((item) => [item.key, item.value])),
+      ...asFieldValues(args.fieldValues),
+    },
+    senderDefs: [
+      ...parked
+        .filter((item) => !senderDefs.some((def) => def.key === item.key))
+        .map(parkedItemAsDef),
+      ...senderDefs,
+    ],
     recipientDefs,
   });
 }

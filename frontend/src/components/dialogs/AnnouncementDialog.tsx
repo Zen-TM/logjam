@@ -3,39 +3,10 @@ import {
   ANNOUNCEMENT,
   parseMessageMarkdown,
   type MessageBlock,
-  type MessageInline,
 } from "@logjam/shared";
 import { Dialog } from "../../ui";
+import { messageInlines } from "../MessageInlines";
 import classes from "./AnnouncementDialog.module.css";
-
-function inlines(nodes: MessageInline[]): ReactNode[] {
-  return nodes.map((node, i) => {
-    switch (node.type) {
-      case "text":
-        return node.text;
-      case "strong":
-        return <strong key={i}>{inlines(node.children)}</strong>;
-      case "em":
-        return <em key={i}>{inlines(node.children)}</em>;
-      case "code":
-        return (
-          <code key={i} className={classes.code}>
-            {node.text}
-          </code>
-        );
-      case "link":
-        return (
-          <a key={i} href={node.href} target="_blank" rel="noopener noreferrer">
-            {inlines(node.children)}
-          </a>
-        );
-      case "break":
-        return <br key={i} />;
-      default:
-        return node satisfies never;
-    }
-  });
-}
 
 // The dialog's title is the h2, so the message's own headings sit under it;
 // the parser makes the shallowest level 1, so none is skipped.
@@ -47,19 +18,19 @@ function block(node: MessageBlock, i: number): ReactNode {
       const Tag = HEADING_TAG[node.level];
       return (
         <Tag key={i} className={classes.heading}>
-          {inlines(node.children)}
+          {messageInlines(node.children)}
         </Tag>
       );
     }
     case "paragraph":
       return (
         <p key={i} className={classes.paragraph}>
-          {inlines(node.children)}
+          {messageInlines(node.children)}
         </p>
       );
     case "list": {
       const items = node.items.map((item, j) => (
-        <li key={j}>{inlines(item)}</li>
+        <li key={j}>{messageInlines(item)}</li>
       ));
       return node.ordered ? (
         <ol key={i} start={node.start} className={classes.list}>

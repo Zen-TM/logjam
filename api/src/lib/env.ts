@@ -23,9 +23,7 @@ const baseSchema = z.object({
   // ECS workers get DB_USER/DB_PASSWORD injected directly.
   DB_SECRET_ID: z.string().optional(),
 
-  // "cognito" is an alias of "oidc", kept so no env change has to land in the
-  // same deploy as the code that reads it.
-  AUTH_MODE: z.enum(["fake", "oidc", "cognito"]),
+  AUTH_MODE: z.enum(["fake", "oidc"]),
   FAKE_USER_SUB: z.string().optional(),
   // Token verification (middleware/auth.ts), required unless AUTH_MODE=fake.
   // OIDC_AUDIENCE is a comma-separated list of the client ids whose ID tokens

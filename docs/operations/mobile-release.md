@@ -112,7 +112,7 @@ needs: [`mobile/e2e/README.md`](../../mobile/e2e/README.md).
 | `browse.yaml` | `fake` | the signed-in shell: tabs, place list from the API, place detail, inbox, account |
 | `map.yaml` | `fake` | map tab, layers picker, the vector basemap and its attribution, locate-me |
 | `guest.yaml` | `oidc`, after `adb shell pm clear com.logjamnsw.mobile` | the entry chooser, a guest's local place, account features shown disabled |
-| `signin.yaml` | `oidc`, with the test Cognito user | real sign-in through the provider's browser sheet to the shell |
+| `signin.yaml` | `oidc`, with the test Cognito user | real password sign-in on the landing screen to the shell |
 
 A flow that fails is not retried until it passes: find out why. A flow broken
 by an intended UI change is fixed in a PR to `main`, and the release waits

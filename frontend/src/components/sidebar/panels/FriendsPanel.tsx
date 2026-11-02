@@ -25,12 +25,12 @@
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
 // `/friends/search` never return an email (api/src/__tests__/friends.test.ts), and nothing here
 // would have somewhere to put one.
+import { useUserSearch } from "../../../useUserSearch";
 import {
   Fragment,
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -85,16 +85,12 @@ import {
   createFriendInvite,
   getFriendInvites,
   revokeFriendInvites,
-  searchUsers,
   sendFriendRequest,
   acceptFriendRequest,
   declineFriendRequest,
   removeFriend,
   getLeaderboard,
 } from "../../../placeUtils";
-
-/** Shorter than this and the server has nothing useful to match on. */
-const SEARCH_MIN_CHARS = 3;
 
 type Bucket = FriendsBucket;
 
@@ -535,15 +531,17 @@ export function AddFriendDialog({
 }) {
   const toast = useToast();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<TSearchUser[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
+  const { short, results, total } = useUserSearch(
+    query,
+    open,
+    copy.searchFailed,
+  );
   const [sentIds, setSentIds] = useState<ReadonlySet<string>>(new Set());
   // Made a friend by sending, shown until the refetched list says so itself.
   const [friendedIds, setFriendedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Closing clears the search, during render.
   const [wasOpen, setWasOpen] = useState(open);
@@ -551,44 +549,10 @@ export function AddFriendDialog({
     setWasOpen(open);
     if (!open) {
       setQuery("");
-      setResults([]);
       setSentIds(new Set());
       setFriendedIds(new Set());
     }
   }
-
-  // Too short a query (or a closed dialog) shows no results, also during
-  // render; the effect's cleanup drops any response still on its way.
-  const searches = open && query.trim().length >= SEARCH_MIN_CHARS;
-  if (!searches && results.length > 0) setResults([]);
-
-  useEffect(() => {
-    if (!searches) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    // Guards a stale response landing after a newer query's already
-    // replaced it (type "abel" then "abelin" — if "abel"'s GET resolves last,
-    // its results must not overwrite "abelin"'s). `searchUsers`/`apiFetch` take
-    // no signal, so this is the cancelled-flag form of the same guard.
-    let cancelled = false;
-    timerRef.current = setTimeout(() => {
-      searchUsers(query.trim())
-        .then(({ data, total: all }) => {
-          if (!cancelled) {
-            setResults(data);
-            setTotal(all);
-          }
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          console.error(err);
-          toast.error(messageFromError(err, copy.searchFailed));
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [searches, query, toast]);
 
   async function handleSend(user: TSearchUser) {
     setSendingId(user.id);
@@ -618,7 +582,6 @@ export function AddFriendDialog({
     ...friends.map((friend) => friend.id),
     ...friendedIds,
   ]);
-  const typed = query.trim();
 
   return (
     <Dialog
@@ -636,7 +599,7 @@ export function AddFriendDialog({
           data-autofocus
           onChange={(event) => setQuery(event.target.value)}
         />
-        {typed.length < SEARCH_MIN_CHARS ? (
+        {short ? (
           <p className={classes.note}>{copy.searchHint}</p>
         ) : results.length === 0 ? (
           <p className={classes.note}>{copy.searchEmpty}</p>
