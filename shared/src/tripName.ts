@@ -8,6 +8,8 @@ import { SYSTEM_PLACE_TYPE_IDS } from "./placeTypes.js";
 export const TRIP_NAME_MAX_LENGTH = 200;
 export const TRIP_TYPE_MAX_LENGTH = 40;
 export const MAX_PLACES_PER_TRIP = 20;
+/** Said where a tick would pass the cap, on both clients. */
+export const TRIP_PLACES_CAP_SENTENCE = `A trip can have at most ${MAX_PLACES_PER_TRIP} places.`;
 export const MAX_TRIP_TYPES_PER_TRIP = 10;
 
 /**
@@ -113,7 +115,7 @@ export function enforceCanyoningTag(
   //
   // The alternative — letting the system tag exceed the cap — is what makes
   // this a bug: storing 11 types means reopening the dialog PATCHes all 11
-  // back and the request 400s ("At most 10 types per trip"), so the trip
+  // back and the request is refused (413), so the trip
   // becomes uneditable. The system would have created a row its own validator
   // rejects. Do not turn this skip into a throw, and do not raise the cap:
   // `types` is a user-controlled unbounded String[] and the cap is a mandatory
