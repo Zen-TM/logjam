@@ -401,6 +401,9 @@ renumber.
 - **A point mark is a hue fill, a `MAP_INK.casing` ring and a white halo**, the
   same on both clients, so it reads on light land and on satellite. Guard:
   `shared/src/mapPin.test.ts` and the checker's mark pairs.
+- **Pin stacking differs on purpose**: Logjam Web draws a shared pin over your own,
+  Logjam GPS your own over a shared one, and each halo sits under its pin.
+  Guards: the halo-order tests in the two `mapMarks.test.ts`.
 - **A control over the map is a card**: the `card` fill and a `line` edge, its
   shape kept per medium (circles on Logjam GPS, rounded squares on Logjam Web).
   Guards: `mobile/src/map/mapMarks.test.ts`,

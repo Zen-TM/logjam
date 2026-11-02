@@ -27,6 +27,28 @@ describe("the map's marks and chrome", () => {
     );
   });
 
+  // Mutation: add the halo layers after `place-circles` in Map.tsx, and a white
+  // disc covers every pin.
+  it("adds both halos before either pin", () => {
+    const at = (id: string) => map.indexOf(`id: "${id}"`);
+    const haloLoop = map.indexOf('["place-halo", "places"]');
+    expect(haloLoop).toBeGreaterThan(-1);
+    expect(haloLoop).toBeLessThan(at("place-circles"));
+    expect(haloLoop).toBeLessThan(at("shared-place-circles"));
+  });
+
+  // Mutation: delete `.group::after`, and the zoom group loses its edge under
+  // its opaque buttons; drop the attribution button's `background-color:
+  // transparent`, and MapLibre's pale disc sits under the glyph on a dark scheme.
+  it("edges a button group over its buttons and clears the credits button", () => {
+    expect(control).toMatch(
+      /\.group::after\s*{[^}]*inset 0 0 0 1px var\(--color-line\)/,
+    );
+    expect(control).toMatch(
+      /maplibregl-ctrl-attrib \.maplibregl-ctrl-attrib-button\)\s*{[^}]*background-color: transparent/,
+    );
+  });
+
   // Mutation: set `.mapButton` back to `var(--color-page)`, and the map's
   // buttons stop matching Logjam GPS's card.
   it("fills a map button with the card colour and its edge", () => {

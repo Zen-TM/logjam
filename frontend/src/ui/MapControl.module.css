@@ -36,12 +36,24 @@
 }
 
 .group {
+  position: relative;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--color-card);
-  box-shadow: var(--shadow-map-card);
+  box-shadow: var(--shadow-float);
+}
+
+/* The edge paints over the buttons, whose opaque fills would hide an inset
+   shadow on the group itself. */
+.group::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  pointer-events: none;
 }
 
 .group .mapButton {
@@ -143,8 +155,11 @@
 /* MapLibre draws the (i) as a fixed black data-URI icon, which a dark scheme
    inverted and Ghost Gum's light card swallowed. Drawn instead as a mask in the
    text colour, so it follows every scheme. */
-:global(#map .maplibregl-ctrl-attrib-button) {
+:global(#map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button) {
   background-image: none;
+  /* MapLibre's own half-white disc (and a grey one when open) would sit under a
+     light glyph on a dark scheme. */
+  background-color: transparent;
 }
 
 :global(#map .maplibregl-ctrl-attrib-button)::before {
