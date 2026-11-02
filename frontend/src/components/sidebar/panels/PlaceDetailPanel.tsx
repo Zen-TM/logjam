@@ -182,7 +182,7 @@ function PlaceDetailPanel({
   onBack,
   onOpenTrip,
   onMakeMap,
-  onSharePlace,
+  onExportPlace,
   verbRequest,
   onVerbRequestConsumed,
   customFieldDefs,
@@ -216,7 +216,7 @@ function PlaceDetailPanel({
   /** Start a map over this place; the menu names the two kinds. */
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
   /** Open the share-or-export dialog on this place, the one the list uses. */
-  onSharePlace: (placeId: string) => void;
+  onExportPlace: (placeId: string) => void;
   /** A verb pressed on this place's row in the list, for this page to run. */
   verbRequest: { id: WebPlaceVerbId } | null;
   onVerbRequestConsumed: () => void;
@@ -644,7 +644,8 @@ function PlaceDetailPanel({
     },
     makeTopo: () => onMakeMap(current, "topo"),
     exportArea: () => onMakeMap(current, "geopdf"),
-    share: () => onSharePlace(current.id),
+    exportPlace: () => onExportPlace(current.id),
+    share: () => setShowShareDialog(true),
     copy: () => void handleCopyPlace(false),
     copyAndRemove: () => setConfirmCopyAndRemove(true),
     remove: () => setConfirmRemove(true),
@@ -1024,7 +1025,7 @@ function PlaceDetailPanel({
         <Row
           leading={<IconTile icon="shareFriend" hue="var(--color-accent)" />}
           title={copy.shareWithFriend}
-          onOpen={() => onSharePlace(current.id)}
+          onOpen={() => setShowShareDialog(true)}
         />
       </section>
     ),

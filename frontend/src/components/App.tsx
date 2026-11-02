@@ -312,10 +312,17 @@ function App() {
    * box, and it lands in the filter.
    */
   const [selectingFilterArea, setSelectingFilterArea] = useState(false);
-  // The places handed to the share-and-export dialog.
+  // The places handed to the bulk share or export dialog, and which it is.
   const [selectedAreaPlaceIds, setSelectedAreaPlaceIds] = useState<string[]>(
     [],
   );
+  const [selectionMode, setSelectionMode] = useState<"share" | "export">(
+    "share",
+  );
+  const openSelection = (ids: string[], mode: "share" | "export") => {
+    setSelectionMode(mode);
+    setSelectedAreaPlaceIds(ids);
+  };
   // Page ↔ map: a sheet beside the list pushes the map's chrome over and the
   // row under the pointer lights its pin. Any page's sheet, not just
   // Places': a page is unmounted when it closes and `usePanelSheet` clears this
@@ -1766,7 +1773,8 @@ function App() {
             sharedPlaces={sharedPlaces}
             onAddPlace={() => setShowAdd(true)}
             onOpenUnifiedImport={() => setShowUnifiedImport(true)}
-            onSharePlaces={setSelectedAreaPlaceIds}
+            onSharePlaces={(ids) => openSelection(ids, "share")}
+            onExportPlaces={(ids) => openSelection(ids, "export")}
             onMakeMap={makeMap}
             onHoverPlace={placeHighlight.set}
             onFiltersOpenChange={setSidebarSheetOpen}
@@ -2189,14 +2197,13 @@ function App() {
 
         <SelectedPlacesDialog
           open={selectedAreaPlaceIds.length > 0}
+          mode={selectionMode}
           selectedPlaces={selectedAreaPlaces}
           placeCustomFieldDefs={placeCustomFieldDefs}
           availablePlaces={allPlaces}
           ownedPlaceIds={ownedPlaceIds}
           friends={friends}
           onClose={() => setSelectedAreaPlaceIds([])}
-          onDeleted={refetch}
-          onQuotaChanged={refetchCurrentUser}
           onRemovePlace={(id) =>
             setSelectedAreaPlaceIds((ids) => ids.filter((x) => x !== id))
           }

@@ -80,10 +80,17 @@ export const PLACE_VERBS = [
     reason: EXPORTED_AT_A_DESK,
   },
   {
+    id: "exportPlace",
+    icon: "export",
+    label: "Export…",
+    for: "both",
+    on: "web",
+    reason: EXPORTED_AT_A_DESK,
+  },
+  {
     id: "share",
     icon: "shareFriend",
-    // Logjam Web's dialog also exports the place; Logjam GPS's panel shares.
-    label: { web: "Share or export…", gps: "Share" },
+    label: { web: "Share…", gps: "Share" },
     for: "owner",
     separated: true,
   },
