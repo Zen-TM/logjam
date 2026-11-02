@@ -5,7 +5,7 @@ import {
   type TripPlanFormView,
   type TripPlanView,
 } from "@logjam/shared";
-import { addedBy, planMapPress, planSummary } from "./plansModel";
+import { addedBy, planBounds, planMapPress, planSummary } from "./plansModel";
 
 describe("the print summary", () => {
   const user = (username: string) => ({ id: username, username });
@@ -282,5 +282,39 @@ describe("a press on the map while a plan is open", () => {
     expect(
       planMapPress({ kind: "place", id: "plan-place" }, own, "me"),
     ).toBeNull();
+  });
+});
+
+describe("planBounds", () => {
+  const plan = (
+    places: [number, number][],
+    routes: [number, number][][],
+  ): Pick<TripPlanView, "places" | "routes"> =>
+    ({
+      places: places.map(([longitude, latitude]) => ({ longitude, latitude })),
+      routes: routes.map((points) => ({ points })),
+    }) as unknown as Pick<TripPlanView, "places" | "routes">;
+
+  // Mutation that turns it red: leave the routes' points out of the box.
+  it("holds every place and every point of every route", () => {
+    const [west, south, east, north] = planBounds(
+      plan(
+        [[150.3, -33.5]],
+        [
+          [
+            [150.1, -33.7],
+            [150.2, -33.6],
+          ],
+        ],
+      ),
+    )!;
+    expect(west).toBeLessThanOrEqual(150.1);
+    expect(east).toBeGreaterThanOrEqual(150.3);
+    expect(south).toBeLessThanOrEqual(-33.7);
+    expect(north).toBeGreaterThanOrEqual(-33.5);
+  });
+
+  it("is null for a plan with nothing on the map", () => {
+    expect(planBounds(plan([], []))).toBeNull();
   });
 });

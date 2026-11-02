@@ -9,6 +9,7 @@ import {
   tripPlanAnswerText,
   tripPlanRoleWord,
 } from "@logjam/shared";
+import { placesBounds } from "../sidebar/panels/placesModel";
 import type {
   TripPlanFormPresetId,
   TripPlanFormView,
@@ -160,4 +161,18 @@ export function planMapPress(
       );
     }
   }
+}
+
+/** The box the map fits to when a plan opens: its places and every point of
+ *  its routes, as MapLibre's `fitBounds` takes it. Null when it has none. */
+export function planBounds(
+  plan: Pick<TripPlanView, "places" | "routes">,
+): [number, number, number, number] | null {
+  const box = placesBounds([
+    ...plan.places,
+    ...plan.routes.flatMap((route) =>
+      route.points.map(([longitude, latitude]) => ({ longitude, latitude })),
+    ),
+  ]);
+  return box && [box.west, box.south, box.east, box.north];
 }
