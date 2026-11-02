@@ -8,10 +8,12 @@
 import { useId, useState } from "react";
 import {
   customFieldDisplayLabel,
+  formatFieldValue,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
   TRIP_PLAN_PAGE,
   tripPlanInPlanNow,
+  tripPlanSetAsideRows,
   type TripPlanItem,
 } from "@logjam/shared";
 import {
@@ -244,6 +246,22 @@ export default function PlanItemEditDialog({
                       )}
                     </div>
                   ))}
+                </section>
+              )}
+              {place && tripPlanSetAsideRows(place).length > 0 && (
+                <section className={classes.form}>
+                  <SectionHeader title={copy.placeSetAside} />
+                  <p className={classes.note}>{copy.placeSetAsideHint}</p>
+                  <dl className={classes.facts}>
+                    {tripPlanSetAsideRows(place).map(
+                      ([key, label, value, type]) => (
+                        <div key={key} className={classes.fact}>
+                          <dt>{label}</dt>
+                          <dd>{formatFieldValue(value, type)}</dd>
+                        </div>
+                      ),
+                    )}
+                  </dl>
                 </section>
               )}
             </>

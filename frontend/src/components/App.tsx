@@ -729,7 +729,12 @@ function App() {
   const pressInPlan = (press: Parameters<typeof planMapPress>[0]) => {
     const pick = planMapPress(
       press,
-      { places, routes, files: standaloneFiles, tracks: placeTracks },
+      {
+        places: [...places, ...sharedPlaces],
+        routes,
+        files: standaloneFiles,
+        tracks: placeTracks,
+      },
       currentUser?.id ?? null,
     );
     if (
@@ -1644,7 +1649,8 @@ function App() {
                   name={plans.find((plan) => plan.id === selectedPlanId)?.name}
                   refetch={planFetch.refetch}
                   own={{
-                    places,
+                    // A place shared with the caller is added as a copy too.
+                    places: [...places, ...sharedPlaces],
                     routes,
                     files: standaloneFiles,
                   }}

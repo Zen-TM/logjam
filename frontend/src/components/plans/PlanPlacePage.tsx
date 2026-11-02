@@ -11,15 +11,17 @@ import {
   mediaCategory,
   PLACE_PAGE,
   SYSTEM_FIELD_DEFS,
-  SYSTEM_PLACE_TYPES,
   TRIP_PLAN_PAGE,
   tripPlanAddedByLine,
   tripPlanCopyCoordinatesLabel,
+  tripPlanPlaceType,
+  tripPlanSetAsideRows,
   userFieldValues,
   type TripPlanPlace,
 } from "@logjam/shared";
 import { Hero, IconButton, IconTile, Row, SectionHeader } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
+import { PlaceTypeIcon } from "../sidebar/panels/placeTypeIcon";
 import PlaceSlideshow from "../media/PlaceSlideshow";
 import classes from "./plans.module.css";
 
@@ -35,7 +37,8 @@ export default function PlanPlacePage({
 }) {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
-  const type = SYSTEM_PLACE_TYPES.find((each) => each.id === place.placeTypeId);
+  const type = tripPlanPlaceType(place);
+  const setAside = tripPlanSetAsideRows(place);
   const position = mapPointPosition(place);
   const attributes = attributeRows(
     SYSTEM_FIELD_DEFS,
@@ -61,10 +64,8 @@ export default function PlanPlacePage({
       <Hero title={place.name} onBack={onBack} backLabel={planCopy.back} />
       <div className={classes.list}>
         <p className={classes.note}>
-          {[
-            type?.name ?? planCopy.placeTypeFallback,
-            tripPlanAddedByLine(place.addedBy),
-          ]
+          <PlaceTypeIcon iconKey={type.iconKey} />{" "}
+          {[type.name, tripPlanAddedByLine(place.addedBy)]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -101,6 +102,23 @@ export default function PlanPlacePage({
               </div>
             ))}
           </dl>
+        )}
+        {setAside.length > 0 && (
+          <>
+            <SectionHeader
+              title={planCopy.placeSetAside}
+              count={setAside.length}
+            />
+            <p className={classes.note}>{planCopy.placeSetAsideHint}</p>
+            <dl className={classes.facts}>
+              {setAside.map(([key, label, value, type]) => (
+                <div key={key} className={classes.fact}>
+                  <dt>{label}</dt>
+                  <dd>{formatFieldValue(value, type)}</dd>
+                </div>
+              ))}
+            </dl>
+          </>
         )}
       </div>
     </div>
