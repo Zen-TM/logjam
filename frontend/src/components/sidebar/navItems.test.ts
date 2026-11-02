@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   FRIENDS,
   INBOX,
-  labelWithBadge,
   PLACES_LIST,
   TRIPS_LIST,
   TRIP_PLANS_LIST,
@@ -11,7 +10,6 @@ import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  MORE_BADGE_NOUN,
   NAV_ITEMS_FOR_TEST,
   type NavItem,
   type NavItemId,
@@ -126,17 +124,6 @@ describe("isPanelInMore", () => {
 
   it("never selects More on desktop, where the group is empty", () => {
     expect(isPanelInMore([], "inbox")).toBe(false);
-  });
-});
-
-describe("labelWithBadge", () => {
-  it("names the count so the visual badge can be hidden from assistive tech", () => {
-    expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
-    expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
-    expect(labelWithBadge("Plans", 1, "invited")).toBe("Plans, 1 invited");
-    // More counts several kinds at once, so it says neither "unread" nor
-    // "invited" (NavRail's More button).
-    expect(labelWithBadge("More", 2, MORE_BADGE_NOUN)).toBe("More, 2 new");
   });
 });
 

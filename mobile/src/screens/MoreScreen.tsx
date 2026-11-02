@@ -29,6 +29,7 @@ import {
 import { Text, View } from "react-native";
 import {
   labelWithBadge,
+  navBadgeNoun,
   navFor,
   navLabel,
   tripPlansBadgeCount,
@@ -173,7 +174,7 @@ export function MoreScreen({
         accessibilityLabel={labelWithBadge(
           navLabel("plans"),
           plansWaiting,
-          "waiting on you",
+          navBadgeNoun("plans"),
         )}
         onPress={onOpenPlans}
         {...capabilityRowProps("plans", accountState, online)}
@@ -202,7 +203,7 @@ export function MoreScreen({
         accessibilityLabel={labelWithBadge(
           "Account sync issues",
           issueCount,
-          "need you",
+          navBadgeNoun("syncIssues"),
         )}
         onPress={onOpenSyncIssues}
         right={<Trailing />}

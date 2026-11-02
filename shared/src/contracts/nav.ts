@@ -71,6 +71,7 @@ export const NAV = [
     label: "Sync issues",
     icon: "warning",
     group: "personal",
+    badgeNoun: "need you",
     on: "gps",
     reason:
       "Logjam Web writes straight to the server, so nothing waits to sync there.",
@@ -108,6 +109,13 @@ export function navFor<P extends ContractPlatform>(
 /** The word for one destination. */
 export function navLabel(id: NavId): string {
   return NAV.find((entry) => entry.id === id)!.label;
+}
+
+/** What a destination's badge counts, for `labelWithBadge`; undefined reads
+ *  "unread". */
+export function navBadgeNoun(id: NavId): string | undefined {
+  const entry = NAV.find((e) => e.id === id) as NavEntry;
+  return entry.badgeNoun;
 }
 
 /** "Inbox, 3 unread": a badge is hidden from assistive tech, so its count joins

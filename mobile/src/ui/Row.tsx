@@ -12,6 +12,7 @@ import {
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+import { BADGE_SIZE, halfRadius } from "./pill";
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -283,10 +284,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   rightRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   badge: {
-    minWidth: 20,
-    height: 20,
+    minWidth: BADGE_SIZE,
+    height: BADGE_SIZE,
     paddingHorizontal: spacing(1),
-    borderRadius: radius.pill,
+    borderRadius: halfRadius(BADGE_SIZE),
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: theme.warning,

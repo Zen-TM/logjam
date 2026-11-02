@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV, navFor, navLabel } from "./nav.js";
+import { labelWithBadge, NAV, navBadgeNoun, navFor, navLabel } from "./nav.js";
 
 const ids = (entries: readonly { id: string }[]) =>
   entries.map((entry) => entry.id);
@@ -62,5 +62,20 @@ describe("NAV", () => {
 
   it("names the trips tab Trips", () => {
     expect(navLabel("logs")).toBe("Trips");
+  });
+});
+
+// Mutation: return the bare label for a positive count, or drop `badgeNoun`
+// from `plans` (Logjam Web and Logjam GPS would then say different things).
+describe("labelWithBadge", () => {
+  it("names the count so a hidden badge is still heard", () => {
+    expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
+    expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
+    expect(labelWithBadge("Plans", 1, "invited")).toBe("Plans, 1 invited");
+  });
+
+  it("reads a destination's noun from NAV on both clients", () => {
+    expect(navBadgeNoun("plans")).toBe("invited");
+    expect(navBadgeNoun("inbox")).toBeUndefined();
   });
 });
