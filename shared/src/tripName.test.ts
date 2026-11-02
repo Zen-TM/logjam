@@ -157,7 +157,7 @@ describe("enforceCanyoningTag", () => {
 // The round-trips the fix exists to protect: a stored 10-type place-linked
 // trip must stay editable. The dialog reopens on the stored array, re-enforces,
 // and PATCHes the result back — that result must never exceed the cap, or
-// parseTripTypes 400s and the trip is wedged.
+// parseTripTypes refuses it (413) and the trip is wedged.
 describe("enforceCanyoningTag — dialog round-trips at the cap", () => {
   const nineUserTypes = Array.from({ length: 9 }, (_, i) => `t${i}`);
 

@@ -1,14 +1,16 @@
 // Cognito's account calls over plain fetch (no Amplify), for a Cognito issuer
 // only. Change email and global sign-out take the access token, which needs the
 // aws.cognito.signin.user.admin scope (oidc.ts). The sign-in and sign-up calls
-// below them take the app client's id, and back Logjam Web's own forms
-// (ADR 0045).
+// below them take the app client's id, and back both clients' own forms
+// (ADR 0045). A client passes `signal` to bound a call: none has a timeout of
+// its own.
 import { parseCognitoIssuer } from "./cognitoIssuer.js";
 
 async function call(
   issuer: string,
   op: string,
   body: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const cognito = parseCognitoIssuer(issuer);
   if (!cognito) throw new Error("Not a Cognito issuer");
@@ -21,6 +23,7 @@ async function call(
         "X-Amz-Target": `AWSCognitoIdentityProviderService.${op}`,
       },
       body: JSON.stringify(body),
+      signal,
     },
   );
   if (res.ok) return (await res.json().catch(() => ({}))) ?? {};
@@ -83,16 +86,22 @@ export async function passwordSignIn(
   clientId: string,
   email: string,
   password: string,
+  signal?: AbortSignal,
 ): Promise<CognitoTokens | null> {
-  const res = await call(issuer, "InitiateAuth", {
-    ClientId: clientId,
-    AuthFlow: "USER_AUTH",
-    AuthParameters: {
-      USERNAME: email,
-      PREFERRED_CHALLENGE: "PASSWORD",
-      PASSWORD: password,
+  const res = await call(
+    issuer,
+    "InitiateAuth",
+    {
+      ClientId: clientId,
+      AuthFlow: "USER_AUTH",
+      AuthParameters: {
+        USERNAME: email,
+        PREFERRED_CHALLENGE: "PASSWORD",
+        PASSWORD: password,
+      },
     },
-  });
+    signal,
+  );
   const t = res.AuthenticationResult as
     | {
         IdToken: string;
@@ -115,16 +124,22 @@ export async function signUp(
   issuer: string,
   clientId: string,
   args: { email: string; password: string; name: string },
+  signal?: AbortSignal,
 ): Promise<void> {
-  await call(issuer, "SignUp", {
-    ClientId: clientId,
-    Username: args.email,
-    Password: args.password,
-    UserAttributes: [
-      { Name: "email", Value: args.email },
-      { Name: "name", Value: args.name },
-    ],
-  });
+  await call(
+    issuer,
+    "SignUp",
+    {
+      ClientId: clientId,
+      Username: args.email,
+      Password: args.password,
+      UserAttributes: [
+        { Name: "email", Value: args.email },
+        { Name: "name", Value: args.name },
+      ],
+    },
+    signal,
+  );
 }
 
 export async function confirmSignUp(
@@ -132,31 +147,49 @@ export async function confirmSignUp(
   clientId: string,
   email: string,
   code: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await call(issuer, "ConfirmSignUp", {
-    ClientId: clientId,
-    Username: email,
-    ConfirmationCode: code,
-  });
+  await call(
+    issuer,
+    "ConfirmSignUp",
+    {
+      ClientId: clientId,
+      Username: email,
+      ConfirmationCode: code,
+    },
+    signal,
+  );
 }
 
 export async function resendSignUpCode(
   issuer: string,
   clientId: string,
   email: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await call(issuer, "ResendConfirmationCode", {
-    ClientId: clientId,
-    Username: email,
-  });
+  await call(
+    issuer,
+    "ResendConfirmationCode",
+    {
+      ClientId: clientId,
+      Username: email,
+    },
+    signal,
+  );
 }
 
 export async function forgotPassword(
   issuer: string,
   clientId: string,
   email: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await call(issuer, "ForgotPassword", { ClientId: clientId, Username: email });
+  await call(
+    issuer,
+    "ForgotPassword",
+    { ClientId: clientId, Username: email },
+    signal,
+  );
 }
 
 export async function confirmForgotPassword(
@@ -165,11 +198,17 @@ export async function confirmForgotPassword(
   email: string,
   code: string,
   password: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await call(issuer, "ConfirmForgotPassword", {
-    ClientId: clientId,
-    Username: email,
-    ConfirmationCode: code,
-    Password: password,
-  });
+  await call(
+    issuer,
+    "ConfirmForgotPassword",
+    {
+      ClientId: clientId,
+      Username: email,
+      ConfirmationCode: code,
+      Password: password,
+    },
+    signal,
+  );
 }

@@ -42,7 +42,7 @@ afterEach(() => {
 // a missing header is alice, so it cannot see this).
 describe("POST /elevation/point without a token", () => {
   beforeEach(() => {
-    process.env.AUTH_MODE = "cognito";
+    process.env.AUTH_MODE = "oidc";
   });
 
   it("401s and reads no DEM", async () => {
