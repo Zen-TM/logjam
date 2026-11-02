@@ -119,6 +119,65 @@ describe("logger redaction", () => {
     expect(body.ops[0].fields.tripTypes).toBe("[redacted]");
   });
 
+  // Every write shape of /plans, compare-and-set pairs included. Mutation:
+  // delete any one of the four "PLANS" paths from `redactPaths`.
+  it("censors a plan's name, sections, form labels and answers", () => {
+    const words = ["Wollangambe", "Exit up the gully", "Contact", "0400"];
+    const bodies = [
+      { name: "Wollangambe weekend", tripTypes: ["with Dad"] },
+      { name: { from: "Wollangambe", to: "Wollangambe 2" } },
+      { title: "Exit up the gully", body: "Exit up the gully, then left" },
+      { title: { from: "Exit", to: "Exit up the gully" } },
+      {
+        title: "Contact",
+        questions: [
+          {
+            id: "q",
+            kind: "choice",
+            label: "Contact",
+            help: "Contact",
+            options: [{ id: "a", label: "0400" }],
+          },
+        ],
+      },
+      { questions: { from: [{ label: "Contact" }], to: [{ label: "0400" }] } },
+      { answers: { name: "Contact Person", phone: "0400 000 000" } },
+      { answers: { "form-1": { phone: "0400 000 000" } } },
+    ];
+    for (const body of bodies) {
+      const line = JSON.stringify(captureLog({ req: { body } }));
+      for (const word of words) expect(line).not.toContain(word);
+    }
+  });
+
+  // A plan item's edit nests everything under { from, to }. Mutation: delete
+  // "req.body.position" or "req.body.geometry" from `redactPaths`.
+  it("censors a plan item edit's names, positions, lines and values", () => {
+    const bodies = [
+      { name: { from: "Secret Place", to: "Secret Place 2" } },
+      {
+        position: {
+          from: { latitude: -33.51, longitude: 150.41 },
+          to: { latitude: -33.52, longitude: 150.42 },
+        },
+      },
+      { notes: { from: null, to: "Secret Place beta" } },
+      { fieldValues: { v_grade: { from: null, to: "Secret Place" } } },
+      {
+        geometry: {
+          from: { points: [[150.41, -33.51]], anchors: null },
+          to: { points: [[150.42, -33.52]], anchors: null },
+        },
+      },
+      { displayName: { from: null, to: "Secret Place exit" } },
+    ];
+    for (const body of bodies) {
+      const line = JSON.stringify(captureLog({ req: { body } }));
+      for (const word of ["Secret", "33.5", "150.4"])
+        expect(line).not.toContain(word);
+    }
+  });
+
   it("leaves non-sensitive fields intact", () => {
     const out = captureLog({ req: { body: { id: "place-1" } } });
     const body = (out.req as { body: Record<string, unknown> }).body;

@@ -21,6 +21,7 @@ import {
   type BulkShareItem,
   type FriendShareRow,
   type SharableEntityType,
+  USER_SEARCH_MIN_CHARS,
 } from "@logjam/shared";
 import { resolveUser } from "../lib/resolveUser";
 import { sendPushToUser } from "../services/push";
@@ -1091,8 +1092,11 @@ router.get(
     const user = await resolveUser(req.user!.sub);
 
     const { q } = req.query;
-    if (!q || typeof q !== "string" || q.length < 3) {
-      throw new AppError(400, say`Type at least 3 characters to search.`);
+    if (!q || typeof q !== "string" || q.length < USER_SEARCH_MIN_CHARS) {
+      throw new AppError(
+        400,
+        say`Type at least ${USER_SEARCH_MIN_CHARS} characters to search.`,
+      );
     }
 
     // Same where for the page and the count, so the total reveals nothing

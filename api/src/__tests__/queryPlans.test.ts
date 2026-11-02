@@ -14,6 +14,8 @@ import {
   BOB_SHARED_PLACE_ID,
   BOB_SHARED_ROUTE_ID,
   BOB_SHARED_TOPO_JOB_ID,
+  CAROL_PLAN_ID,
+  SEED_PLAN_ID,
   SHARED_PLACE_ID,
 } from "./_actors";
 
@@ -60,6 +62,12 @@ const READ_PATHS: Record<string, [string, ...string[]]> = {
   "/friends/requests": ["/friends/requests"],
   "/friends/:id/shares": ["/friends/:friendship/shares"],
   "/friends/invites": ["/friends/invites"],
+  // Mutation: drop trip_plan_members_user_id_idx and GET /plans turns red.
+  "/plans": ["/plans"],
+  "/plans/leader-forms": ["/plans/leader-forms"],
+  "/plans/:id": [`/plans/${SEED_PLAN_ID}`],
+  "/plans/:planId/invites": [`/plans/${SEED_PLAN_ID}/invites`],
+  "/plans/:planId/preview": [`/plans/${CAROL_PLAN_ID}/preview`],
   "/topo-jobs": ["/topo-jobs"],
   "/topo-jobs/completed-overlays": ["/topo-jobs/completed-overlays"],
   "/topo-jobs/:id": [`/topo-jobs/${BOB_SHARED_TOPO_JOB_ID}`],

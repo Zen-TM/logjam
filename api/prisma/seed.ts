@@ -26,6 +26,8 @@ import {
   linksCanyon,
   friendInviteUrl,
   isFriendInviteToken,
+  planInviteUrl,
+  TRIP_PLAN_INVITE_TTL_DAYS,
   setFieldValues,
   routeLengthM,
   routeToGpx,
@@ -1339,6 +1341,9 @@ assertValid(
   isFriendInviteToken(SEED_FRIEND_INVITE_TOKEN) ? null : "not a token",
 );
 
+/** Alice's link to her plan, minted per run like the friend one. */
+const SEED_PLAN_INVITE_TOKEN = mintFriendInviteToken();
+
 const TOPO_TILE = tileAt(12, 150.3179, -33.6563);
 const TOPO_BOUNDS = tileBounds(TOPO_TILE.z, TOPO_TILE.x, TOPO_TILE.y);
 /** What the pipeline stores: the union of the per-tile coverage, here one tile. */
@@ -1493,6 +1498,12 @@ async function main() {
     prisma.fileSendRecipient.deleteMany(),
     prisma.fileSend.deleteMany(),
     prisma.friendInvite.deleteMany(),
+    prisma.tripPlanInvite.deleteMany(),
+    prisma.tripPlanAnswer.deleteMany(),
+    prisma.tripPlanForm.deleteMany(),
+    prisma.tripPlanSection.deleteMany(),
+    prisma.tripPlanMember.deleteMany(),
+    prisma.tripPlan.deleteMany(),
     prisma.deviceToken.deleteMany(),
     prisma.syncTombstone.deleteMany(),
     prisma.egressLogCursor.deleteMany(),
@@ -2347,6 +2358,151 @@ async function main() {
     },
   });
 
+  // A made-up plan: alice leads, bob is in it, carol used alice's link and
+  // waits to be let in. It holds one place and one route of its own, which
+  // belong to no user.
+  const planId = fid(100);
+  const inDays = (days: number) => new Date(Date.now() + days * 86_400_000);
+  await prisma.tripPlan.create({
+    data: {
+      id: planId,
+      createdById: ALICE_ID,
+      name: "Wollangambe weekend",
+      startDate: inDays(21),
+      endDate: inDays(22),
+      tripTypes: ["canyoning"],
+    },
+  });
+  await prisma.tripPlanMember.createMany({
+    data: [
+      {
+        id: fid(101),
+        planId,
+        userId: ALICE_ID,
+        role: "leader",
+        status: "active",
+      },
+      {
+        id: fid(102),
+        planId,
+        userId: BOB_ID,
+        role: "member",
+        status: "active",
+        invitedById: ALICE_ID,
+      },
+      {
+        id: fid(106),
+        planId,
+        userId: CAROL_ID,
+        role: "member",
+        status: "requested",
+        invitedById: ALICE_ID,
+      },
+    ],
+  });
+  await prisma.tripPlanInvite.create({
+    data: {
+      id: fid(107),
+      planId,
+      createdById: ALICE_ID,
+      tokenHash: hashFriendInviteToken(SEED_PLAN_INVITE_TOKEN),
+      expiresAt: inDays(TRIP_PLAN_INVITE_TTL_DAYS),
+    },
+  });
+  // carol's plan, which she has invited alice to by username.
+  const carolPlanId = fid(110);
+  await prisma.tripPlan.create({
+    data: {
+      id: carolPlanId,
+      createdById: CAROL_ID,
+      name: "Kanangra Walls loop",
+      startDate: inDays(35),
+      endDate: inDays(36),
+      tripTypes: ["bushwalking"],
+      members: {
+        create: [
+          { id: fid(111), userId: CAROL_ID, role: "leader", status: "active" },
+          {
+            id: fid(112),
+            userId: ALICE_ID,
+            role: "member",
+            status: "invited",
+            invitedById: CAROL_ID,
+          },
+        ],
+      },
+    },
+  });
+  await prisma.tripPlanSection.create({
+    data: {
+      id: fid(103),
+      planId,
+      title: "Overview",
+      body: "Two days on the Wollangambe. Wetsuits and lilos.",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanForm.create({
+    data: {
+      id: fid(104),
+      planId,
+      title: "Safety contacts",
+      preset: "safetyContacts",
+      questions: [
+        { id: "name", kind: "text", label: "Contact's name", required: true },
+        {
+          id: "phone",
+          kind: "phone",
+          label: "Contact's phone",
+          required: true,
+        },
+      ],
+      visibleTo: "members",
+      position: 0,
+    },
+  });
+  await prisma.tripPlanAnswer.createMany({
+    data: [
+      {
+        id: fid(105),
+        formId: fid(104),
+        userId: BOB_ID,
+        answers: { name: "Sam Example", phone: "0400 000 000" },
+      },
+      {
+        id: fid(108),
+        formId: fid(104),
+        userId: CAROL_ID,
+        answers: { name: "Jo Example", phone: "0400 000 001" },
+      },
+    ],
+  });
+  await prisma.place.create({
+    data: {
+      id: wpid(100),
+      planId,
+      addedById: ALICE_ID,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.marker,
+      name: "Wollangambe meeting point",
+      latitude: -33.4789,
+      longitude: 150.3612,
+    },
+  });
+  await prisma.route.create({
+    data: {
+      id: rtid(100),
+      planId,
+      addedById: ALICE_ID,
+      name: "Walk in to the Wollangambe",
+      color: TRACK_COLORS[2],
+      points: [
+        [150.3612, -33.4789],
+        [150.3625, -33.4801],
+        [150.3641, -33.4812],
+      ],
+    },
+  });
+
   // Deletions a phone has yet to hear about. The ids name nothing: the rows are
   // gone, which is what a tombstone says.
   await prisma.syncTombstone.createMany({
@@ -2514,6 +2670,46 @@ async function main() {
         read: false,
         createdAt: ago(280),
       },
+      // lib/planMembership.ts, called by routes/planMembers.ts,
+      // planInvites.ts and plans.ts
+      {
+        userId: ALICE_ID,
+        type: "plan_invited",
+        payload: { planId: carolPlanId, invitedById: CAROL_ID },
+        read: false,
+        createdAt: ago(15),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_join_request",
+        payload: { planId, requesterId: CAROL_ID },
+        read: false,
+        createdAt: ago(10),
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_member_joined",
+        payload: { planId, memberId: BOB_ID },
+        read: true,
+        createdAt: ago(700),
+      },
+      {
+        userId: BOB_ID,
+        type: "plan_join_approved",
+        payload: { planId, approvedById: ALICE_ID },
+        read: false,
+      },
+      {
+        userId: ALICE_ID,
+        type: "plan_access_ended",
+        payload: {
+          planId: fid(120),
+          reason: "deleted",
+          planName: "Mount Solitary loop",
+        },
+        read: true,
+        createdAt: ago(2000),
+      },
       // lib/egressMeter.ts: the two numbers, stringified
       {
         userId: ALICE_ID,
@@ -2560,6 +2756,9 @@ async function main() {
   );
   console.log(
     `Alice's invite link, for another user: open Logjam Web at ${friendInviteUrl("", SEED_FRIEND_INVITE_TOKEN)}`,
+  );
+  console.log(
+    `Alice's plan invite link: open Logjam Web at ${planInviteUrl("", SEED_PLAN_INVITE_TOKEN)}`,
   );
 }
 

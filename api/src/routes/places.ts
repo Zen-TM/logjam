@@ -15,7 +15,7 @@ import {
 } from "../lib/placeCopy";
 import { sharedPlaceIdsFor } from "../lib/shareAccess";
 import { serializeSharedPlace } from "../lib/placeVisibility";
-import { Prisma } from "@prisma/client";
+import { Prisma, type Place } from "@prisma/client";
 import { getParam } from "../lib/getParam";
 import { deletePlacesCascade } from "../lib/bulkDelete";
 import { assertHasStorageQuota } from "../lib/storageQuota";
@@ -36,6 +36,8 @@ import {
   invalidFieldValueKeys,
   asFieldValues,
   normalizeUserUiPreferences,
+  PLACE_MAX_ALT_NAMES,
+  PLACE_NAME_MAX_LENGTH,
   TRACK_MIME_TYPES,
   validatePlacePayload,
   isValidGaugeId,
@@ -43,15 +45,14 @@ import {
 } from "@logjam/shared";
 import { serializeTrip, tripPlacesInclude } from "./tripLogsGlobal";
 
-// Bounds for the free-text place fields. `validatePlacePayload` (shared)
+// Bounds for the free-text place fields (shared, with the plan item patch
+// parsers that cap a compare-and-set `from`). `validatePlacePayload` (shared)
 // covers coordinates + numerics only; without text field bounds, a mistyped
 // `name`/`altNames`/`notes`/`attributes` would pass validation and die inside
 // Prisma as a raw 500 — and on the sync push path, one such op would poison
 // every subsequent flush of that batch (the per-op catch re-throws
 // non-AppErrors). Bad input is a 400.
 // Sibling values: TRIP_NAME_MAX_LENGTH / ROUTE_NAME_MAX_LENGTH = 200.
-export const PLACE_NAME_MAX_LENGTH = 200;
-export const PLACE_MAX_ALT_NAMES = 50;
 
 /**
  * Type/shape check for the place fields `validatePlacePayload` does not
@@ -465,128 +466,14 @@ router.post(
 
     const placeId = getParam(req.params.id);
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, say`Couldn't find that place.`);
+    // A plan's place (null owner) answers as a missing one.
+    if (!place?.ownerId)
+      throw new AppError(404, say`Couldn't find that place.`);
 
     // Owner and share recipients may copy (hybrid model: the place record
     // itself is visible to sharees).
     await requirePlaceAccess(user.id, place);
-
-    // WHETHER THE PHOTOS COME TOO. The body wins when it says; otherwise the
-    // caller's remembered preference decides, which is what lets a client with
-    // no switch of its own (Logjam Web, today) still do what the user asked for
-    // on Logjam GPS rather than quietly doing the other thing.
-    const copyMedia =
-      typeof req.body?.copyMedia === "boolean"
-        ? req.body.copyMedia
-        : normalizeUserUiPreferences(user.uiPreferences).copyPlaceMedia;
-
-    // PREFLIGHT BEFORE ANYTHING IS CREATED. An over-quota copy is a 507 with no
-    // place, no route and no orphaned objects; the authoritative check still
-    // runs with the charge (copyPlaceMedia.ts), which is what catches the race
-    // this cannot.
-    const { rows: mediaRows, totalBytes: mediaBytes } = copyMedia
-      ? await placeMediaToCopy(placeId)
-      : { rows: [], totalBytes: 0n };
-    if (mediaBytes > 0n) await assertHasStorageQuota(user.id, mediaBytes);
-
-    // WHICH TYPE, and it is the one decision a copy cannot take back silently:
-    // a system type resolves globally, a user type matches by NAME against the
-    // recipient's system types first and their own second, and only a genuine
-    // miss creates one. `placeTypeId` in the body is the explicit picker,
-    // which the copy sheet pre-fills with exactly this answer.
-    const typeResolution = await resolveCopyPlaceType(
-      user.id,
-      place.placeTypeId,
-      req.body?.placeTypeId,
-    );
-
-    // WHICH VALUES SURVIVE. A key the recipient defines with the same type
-    // lands in the field it belongs in; anything else is parked, self-
-    // describing, in `foreignFields` for the user to adopt, discard or append
-    // later. The source's OWN foreignFields are dropped rather than carried:
-    // a copy-of-a-copy reconciles field VALUES and nothing else, or residue
-    // accumulates down a share chain with no owner and no way to clear it.
-    const reconciled = await reconcileCopiedPlace({
-      recipientId: user.id,
-      sourceOwnerId: place.ownerId,
-      sourceTypeId: place.placeTypeId,
-      targetTypeId: typeResolution.placeTypeId,
-      fieldValues: place.fieldValues,
-    });
-
-    // Create a copy of the place.
-    // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
-    // collide on self-copy, and preserving across owners would mis-attribute the
-    // copy as the recipient's canonical RopeWiki record. Lineage is preserved
-    // via forkedFromId; "forked from RopeWiki" is derivable from
-    // forkedFrom.ropeWikiId if ever needed.
-    const copiedPlace = await prisma.place.create({
-      data: {
-        ownerId: user.id,
-        name: place.name,
-        altNames: place.altNames,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        placeTypeId: typeResolution.placeTypeId,
-        notes: place.notes,
-        elevation: place.elevation,
-        fieldValues: reconciled.fieldValues as Prisma.InputJsonValue,
-        foreignFields:
-          reconciled.foreignFields.length > 0
-            ? (reconciled.foreignFields as unknown as Prisma.InputJsonValue)
-            : Prisma.DbNull,
-        ropeWikiId: null,
-        ropeWikiSnapshot: Prisma.JsonNull,
-        forkedFromId: placeId,
-      },
-    });
-
-    // The linked route is copied with the place — deliberately UNLIKE media,
-    // which a copy does not duplicate. A route is one row the copier now owns;
-    // media is S3 objects plus a quota charge. The route is also the single
-    // most useful thing to receive with a copied place, and the copier can
-    // already see it (a linked route is part of the shared place record).
-    const sourceRoute = await prisma.route.findUnique({
-      where: { placeId },
-      select: { name: true, color: true, points: true },
-    });
-    if (sourceRoute) {
-      await prisma.route.create({
-        data: {
-          ownerId: user.id,
-          placeId: copiedPlace.id,
-          name: sourceRoute.name,
-          color: sourceRoute.color,
-          points: sourceRoute.points as Prisma.InputJsonValue,
-        },
-      });
-    }
-
-    // Media last, and never fatal: by here the place the user asked for
-    // exists, so a failure is reported as a count rather than as a failed copy
-    // (copyPlaceMedia.ts states the reasoning).
-    const media = mediaRows.length
-      ? await copyPlaceMedia({
-          sourcePlaceId: placeId,
-          targetPlaceId: copiedPlace.id,
-          recipientId: user.id,
-        })
-      : { copied: 0, skipped: 0 };
-
-    // `createdPlaceType` is stated rather than left to be noticed: a new tab
-    // appearing unannounced reads as a bug, and the client says so in the
-    // toast that follows the copy.
-    //
-    // `mediaSkipped` is stated for the harder version of the same reason: after
-    // a copy-and-remove there is no second chance to notice photos are missing.
-    res.status(201).json({
-      ...copiedPlace,
-      linkedPlaceIds: [],
-      createdPlaceType: typeResolution.created,
-      mediaCopied: media.copied,
-      mediaSkipped: media.skipped,
-      ...(media.outOfSpace ? { mediaOutOfSpace: true } : {}),
-    });
+    res.status(201).json(await copyPlaceFor(user, place, req.body));
   },
 );
 
@@ -816,3 +703,134 @@ router.delete(
 );
 
 export default router;
+
+/**
+ * A copy of `place` for `user`: the body of POST /places/:id/copy, and of
+ * Save a copy on a plan's place (routes/planItems.ts), where the source has
+ * no owner. The caller has already decided the user may see `place`.
+ */
+export async function copyPlaceFor(
+  user: { id: string; uiPreferences: Prisma.JsonValue },
+  place: Place,
+  body: { copyMedia?: unknown; placeTypeId?: unknown } | undefined,
+) {
+  // WHETHER THE PHOTOS COME TOO. The body wins when it says; otherwise the
+  // caller's remembered preference decides, which is what lets a client with
+  // no switch of its own (Logjam Web, today) still do what the user asked for
+  // on Logjam GPS rather than quietly doing the other thing.
+  const copyMedia =
+    typeof body?.copyMedia === "boolean"
+      ? body.copyMedia
+      : normalizeUserUiPreferences(user.uiPreferences).copyPlaceMedia;
+
+  // PREFLIGHT BEFORE ANYTHING IS CREATED. An over-quota copy is a 507 with no
+  // place, no route and no orphaned objects; the authoritative check still
+  // runs with the charge (copyPlaceMedia.ts), which is what catches the race
+  // this cannot.
+  const { rows: mediaRows, totalBytes: mediaBytes } = copyMedia
+    ? await placeMediaToCopy(place.id)
+    : { rows: [], totalBytes: 0n };
+  if (mediaBytes > 0n) await assertHasStorageQuota(user.id, mediaBytes);
+
+  // WHICH TYPE, and it is the one decision a copy cannot take back silently:
+  // a system type resolves globally, a user type matches by NAME against the
+  // recipient's system types first and their own second, and only a genuine
+  // miss creates one. `placeTypeId` in the body is the explicit picker,
+  // which the copy sheet pre-fills with exactly this answer.
+  const typeResolution = await resolveCopyPlaceType(
+    user.id,
+    place.placeTypeId,
+    body?.placeTypeId,
+  );
+
+  // WHICH VALUES SURVIVE. A key the recipient defines with the same type
+  // lands in the field it belongs in; anything else is parked, self-
+  // describing, in `foreignFields` for the user to adopt, discard or append
+  // later. The source's OWN foreignFields are dropped rather than carried
+  // (a plan's place is the exception, lib/placeCopy.ts): a copy-of-a-copy
+  // reconciles field VALUES and nothing else, or residue accumulates down a
+  // share chain with no owner and no way to clear it.
+  const reconciled = await reconcileCopiedPlace({
+    recipientId: user.id,
+    sourceOwnerId: place.ownerId,
+    sourceTypeId: place.placeTypeId,
+    targetTypeId: typeResolution.placeTypeId,
+    fieldValues: place.fieldValues,
+    foreignFields: place.foreignFields,
+  });
+
+  // Create a copy of the place.
+  // Drop ropeWikiId + ropeWikiSnapshot: @@unique([ownerId, ropeWikiId]) would
+  // collide on self-copy, and preserving across owners would mis-attribute the
+  // copy as the recipient's canonical RopeWiki record. Lineage is preserved
+  // via forkedFromId; "forked from RopeWiki" is derivable from
+  // forkedFrom.ropeWikiId if ever needed. A plan's place is no one's lineage:
+  // its id reaches no owner route (lib/planAccess.ts).
+  const copiedPlace = await prisma.place.create({
+    data: {
+      ownerId: user.id,
+      name: place.name,
+      altNames: place.altNames,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      placeTypeId: typeResolution.placeTypeId,
+      notes: place.notes,
+      elevation: place.elevation,
+      fieldValues: reconciled.fieldValues as Prisma.InputJsonValue,
+      foreignFields:
+        reconciled.foreignFields.length > 0
+          ? (reconciled.foreignFields as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+      ropeWikiId: null,
+      ropeWikiSnapshot: Prisma.JsonNull,
+      forkedFromId: place.ownerId ? place.id : null,
+    },
+  });
+
+  // The linked route is copied with the place — deliberately UNLIKE media,
+  // which a copy does not duplicate. A route is one row the copier now owns;
+  // media is S3 objects plus a quota charge. The route is also the single
+  // most useful thing to receive with a copied place, and the copier can
+  // already see it (a linked route is part of the shared place record).
+  const sourceRoute = await prisma.route.findUnique({
+    where: { placeId: place.id },
+    select: { name: true, color: true, points: true },
+  });
+  if (sourceRoute) {
+    await prisma.route.create({
+      data: {
+        ownerId: user.id,
+        placeId: copiedPlace.id,
+        name: sourceRoute.name,
+        color: sourceRoute.color,
+        points: sourceRoute.points as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  // Media last, and never fatal: by here the place the user asked for
+  // exists, so a failure is reported as a count rather than as a failed copy
+  // (copyPlaceMedia.ts states the reasoning).
+  const media = mediaRows.length
+    ? await copyPlaceMedia({
+        sourcePlaceId: place.id,
+        targetPlaceId: copiedPlace.id,
+        recipientId: user.id,
+      })
+    : { copied: 0, skipped: 0 };
+
+  // `createdPlaceType` is stated rather than left to be noticed: a new tab
+  // appearing unannounced reads as a bug, and the client says so in the
+  // toast that follows the copy.
+  //
+  // `mediaSkipped` is stated for the harder version of the same reason: after
+  // a copy-and-remove there is no second chance to notice photos are missing.
+  return {
+    ...copiedPlace,
+    linkedPlaceIds: [],
+    createdPlaceType: typeResolution.created,
+    mediaCopied: media.copied,
+    mediaSkipped: media.skipped,
+    ...(media.outOfSpace ? { mediaOutOfSpace: true } : {}),
+  };
+}

@@ -129,6 +129,24 @@ export const friendInviteRedeemLimiter = rateLimit({
   keyGenerator: userOrIpKey,
 });
 
+// The plan invite twins of the two above: minting a plan's links, and
+// previewing or redeeming one.
+export const planInviteCreateLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
+export const planInviteRedeemLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userOrIpKey,
+});
+
 export const ropeWikiHeavyLimiter = rateLimit({
   windowMs: 5 * 60_000,
   max: 5,

@@ -74,9 +74,11 @@ async function hasDirectShare(
  */
 export async function getRouteRole(
   userId: string,
-  route: { id: string; ownerId: string; placeId: string | null },
+  route: { id: string; ownerId: string | null; placeId: string | null },
 ): Promise<ShareRole> {
   if (route.ownerId === userId) return "owner";
+  // A plan-owned route (null owner) is nobody's and is never shared.
+  if (route.ownerId === null) return "none";
   if (await hasDirectShare(userId, "route", route.id)) return "shared";
   return (await hasPlaceInheritedAccess(userId, "route", route.id))
     ? "shared"
@@ -170,7 +172,8 @@ export async function loadEntityRole(
         where: { id: entityId },
         select: { id: true, ownerId: true, placeId: true },
       });
-      return row
+      // A plan-owned row answers as a missing one.
+      return row?.ownerId
         ? { ownerId: row.ownerId, role: await getRouteRole(userId, row) }
         : null;
     }

@@ -3,6 +3,9 @@
 // (api/src/routes/placesBulk.ts), and the frontend dialogs so every surface
 // rejects the same out-of-range values.
 
+export const PLACE_NAME_MAX_LENGTH = 200;
+export const PLACE_MAX_ALT_NAMES = 50;
+
 export const LATITUDE_RANGE = { min: -90, max: 90 } as const;
 export const LONGITUDE_RANGE = { min: -180, max: 180 } as const;
 
