@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Prisma } from "@prisma/client";
+import { applyStorageChanges } from "./storageQuota";
 
 /**
  * The storage counter has ONE pair of writers, and the reason is the clamp.
@@ -40,5 +42,28 @@ describe("the storage counter has one pair of writers", () => {
   it("the decrement is the clamped one", () => {
     const source = readFileSync(join(__dirname, "storageQuota.ts"), "utf8");
     expect(source).toMatch(/GREATEST\(0,\s*storage_used_bytes\s*-/);
+  });
+});
+
+// Mutation: apply the changes in the map's insertion order.
+describe("applyStorageChanges", () => {
+  it("locks each user's row in user id order", async () => {
+    const order: unknown[] = [];
+    const db = {
+      $executeRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+        order.push(values[values.length - 1]);
+        return 1;
+      },
+    } as unknown as Prisma.TransactionClient;
+    await applyStorageChanges(
+      new Map([
+        ["c", 5n],
+        ["a", -3n],
+        ["b", 0n],
+        ["d", -1n],
+      ]),
+      db,
+    );
+    expect(order).toEqual(["a", "c", "d"]);
   });
 });

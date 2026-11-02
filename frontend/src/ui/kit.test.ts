@@ -47,3 +47,20 @@ describe("the one colour picker", () => {
     expect(/<SwatchPicker|type="color"/.test(all)).toBe(false);
   });
 });
+
+// A kit container that takes `children` and can stack more than one owns the
+// gap between them (shared/DESIGN.md §10). Mutation: delete `gap` from one
+// rule below (`.listEnd`, say) and two buttons in it touch.
+describe("kit containers that stack children", () => {
+  const stacks: [css: string, rule: string][] = [
+    ["Row", "listEnd"],
+    ["FilterField", "wrap"],
+    ["SideSheet", "body"],
+    ["SideSheet", "section"],
+    ["TextField", "field"],
+  ];
+  it.each(stacks)("%s.module.css sets a gap on .%s", (css, rule) => {
+    const src = readFileSync(join(__dirname, `${css}.module.css`), "utf8");
+    expect(src).toMatch(new RegExp(`\\.${rule} \\{[^}]*\\bgap:`));
+  });
+});

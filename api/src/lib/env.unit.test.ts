@@ -97,8 +97,8 @@ describe("validateEnv — failure paths exit the process", () => {
     expect(() => validateEnv()).toThrow(/process\.exit/);
   });
 
-  it("exits when AUTH_MODE=cognito is missing Cognito vars", () => {
-    process.env.AUTH_MODE = "cognito";
+  it("exits when AUTH_MODE=oidc is missing its provider vars", () => {
+    process.env.AUTH_MODE = "oidc";
     expect(() => validateEnv()).toThrow(/process\.exit/);
   });
 
@@ -157,7 +157,7 @@ describe("TLS env vars are in the schema", () => {
   it("refuses DATABASE_SSL=disable in production, where it would drop RDS TLS", () => {
     setEnv({
       NODE_ENV: "production",
-      AUTH_MODE: "cognito",
+      AUTH_MODE: "oidc",
       OIDC_ISSUER: "https://idp.example.com",
       OIDC_AUDIENCE: "c",
       DB_HOST: "db",
@@ -202,21 +202,18 @@ describe("OIDC token verification config", () => {
     OIDC_AUDIENCE: "a, b",
   };
 
-  it.each(["oidc", "cognito"])(
-    "accepts AUTH_MODE=%s and parses the audience list",
-    (mode) => {
-      setEnv({ ...base, AUTH_MODE: mode });
-      expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual(["a", "b"]);
-    },
-  );
+  it("accepts AUTH_MODE=oidc and parses the audience list", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc" });
+    expect(validateEnv().OIDC_AUDIENCE_LIST).toEqual(["a", "b"]);
+  });
 
-  it.each(["oidc", "cognito"])("requires the issuer for %s", (mode) => {
-    setEnv({ ...base, AUTH_MODE: mode, OIDC_ISSUER: undefined });
+  it("requires the issuer", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_ISSUER: undefined });
     expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
   });
 
-  it.each(["oidc", "cognito"])("requires the audience for %s", (mode) => {
-    setEnv({ ...base, AUTH_MODE: mode, OIDC_AUDIENCE: undefined });
+  it("requires the audience", () => {
+    setEnv({ ...base, AUTH_MODE: "oidc", OIDC_AUDIENCE: undefined });
     expect(() => validateEnv()).toThrow(/process\.exit\(1\)/);
   });
 

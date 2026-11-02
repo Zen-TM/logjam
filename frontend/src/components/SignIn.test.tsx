@@ -146,6 +146,18 @@ describe("SignIn under Cognito", () => {
     expect(oidc.signUp).not.toHaveBeenCalled();
   });
 
+  // Mutation: drop the `signUpFormProblem` call in handleSignUp.
+  it("will not sign up without a name", async () => {
+    draw();
+    fillSignUp();
+    type("Name", "");
+    fireEvent.click(screen.getByRole("checkbox", { name: /Terms of Use/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
+    press("Sign up");
+    await screen.findByText("Enter your name.");
+    expect(oidc.signUp).not.toHaveBeenCalled();
+  });
+
   it("will not sign up without the age", async () => {
     draw();
     fillSignUp();
