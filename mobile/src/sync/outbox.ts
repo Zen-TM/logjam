@@ -66,9 +66,9 @@ export function rowToEntry(row: OutboxRow): OutboxEntry {
 
 /**
  * Things the user made or changed that the server has not accepted yet: a place
- * created and renamed offline is one thing, not two ops. A place link is part
- * of its trip or place, not a thing of its own. Drives the "N waiting to sync"
- * indicator.
+ * created and renamed offline is one thing, not two ops. A place link is a
+ * thing of its own (linking two existing places queues only that link). Drives
+ * the "N waiting to sync" indicator; `countPendingOpRows` is the work behind it.
  */
 export async function countPendingOps(): Promise<number> {
   const db = await getSyncDb();
@@ -80,7 +80,16 @@ export async function countPendingOps(): Promise<number> {
   // on "3 changes waiting to send" and not on the screen for things only the
   // user can resolve.
   const row = await db.getFirstAsync<{ n: number }>(
-    "SELECT COUNT(DISTINCT entity || ':' || entity_id) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying') AND entity != 'placeLink'",
+    "SELECT COUNT(DISTINCT entity || ':' || entity_id) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying')",
+  );
+  return row?.n ?? 0;
+}
+
+/** The queued ops themselves: how much work is waiting, for the bulk-upload wording. */
+export async function countPendingOpRows(): Promise<number> {
+  const db = await getSyncDb();
+  const row = await db.getFirstAsync<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM outbox WHERE state IN ('queued', 'inflight', 'retrying')",
   );
   return row?.n ?? 0;
 }

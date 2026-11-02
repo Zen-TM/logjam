@@ -24,8 +24,13 @@ export type SyncHealthInput = {
   state: "idle" | "syncing" | "error";
   /** ISO instant of the last successful cycle. */
   lastSyncAt: string | null;
-  /** Outbox rows not yet accepted by the server. */
+  /** Things (places, tracks, trips) not yet accepted by the server. */
   pendingCount: number;
+  /**
+   * The queued ops behind them, which is what the bulk-upload wording is
+   * tuned against. Defaults to `pendingCount`.
+   */
+  pendingOpCount?: number;
   /** Parked ops + shelved conflicts — things only the user can resolve. */
   issueCount: number;
   /**
@@ -47,7 +52,7 @@ export type SyncHealthInput = {
 };
 
 /**
- * Above this many queued changes, a running cycle is a bulk upload rather than
+ * Above this many queued ops (`pendingOpCount`, not the things they make up), a running cycle is a bulk upload rather than
  * an ordinary catch-up, and needs copy that reads as progress. A guest who
  * links after a season has hundreds of ops and a photo backlog that can take
  * hours; "Sending 847 changes…" with no sense of scale reads as a hang, and the
@@ -163,6 +168,7 @@ export function syncIssuesTitle(issueCount: number): string {
 
 export function syncHealth(input: SyncHealthInput): SyncHealth {
   const { online, state, lastSyncAt, pendingCount, issueCount } = input;
+  const bulk = (input.pendingOpCount ?? pendingCount) >= BULK_UPLOAD_THRESHOLD;
   const now = input.now ?? Date.now();
 
   // 0. No account. Every branch below is a claim about a server this user
@@ -239,7 +245,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    (guard: mobile/src/screens/syncHealth.test.ts) — "Syncing…" with no
   //    signal is the optimistic label shared/DESIGN.md §10 forbids.
   if (state === "syncing" && online) {
-    if (pendingCount >= BULK_UPLOAD_THRESHOLD) {
+    if (bulk) {
       return {
         headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
         detail:
@@ -259,7 +265,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
 
   // 3. Work is queued. Which sentence is true depends on whether it CAN move.
   if (pendingCount > 0) {
-    if (pendingCount >= BULK_UPLOAD_THRESHOLD && online) {
+    if (bulk && online) {
       return {
         headline: `${plural(pendingCount, "change", "changes")} to upload`,
         detail: "They upload in batches. This can take a while.",

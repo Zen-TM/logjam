@@ -27,7 +27,11 @@ import {
 } from "./mirrorStore";
 import { mirrorQueryError } from "./mirrorQueryError";
 import { onMirrorChanged } from "./syncDb";
-import { countPendingOps, pendingCreateIds } from "./outbox";
+import {
+  countPendingOpRows,
+  countPendingOps,
+  pendingCreateIds,
+} from "./outbox";
 import { countSyncIssues } from "./syncIssues";
 import {
   getSyncStatus,
@@ -229,19 +233,12 @@ export function usePendingCreateIds(): Set<string> {
   return ids;
 }
 
-/**
- * How many local changes are still waiting to reach the server.
- *
- * The reassurance Logjam GPS owes the user: their edit is not lost, it
- * is queued. Counts every outbox row that hasn't flushed, media uploads
- * included, and updates live as the queue drains.
- */
-export function usePendingSyncCount(): number {
+function usePendingCount(read: () => Promise<number>): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
-      countPendingOps()
+      read()
         .then((n) => {
           if (!cancelled) setCount(n);
         })
@@ -255,8 +252,23 @@ export function usePendingSyncCount(): number {
       unsubscribeMirror();
       unsubscribeSync();
     };
-  }, []);
+  }, [read]);
   return count;
+}
+
+/**
+ * How many things the user made or changed are still waiting to reach the
+ * server: a place created and edited offline is one, a track is one, a photo is
+ * one. The reassurance Logjam GPS owes the user: their edit is not lost, it is
+ * queued. Updates live as the queue drains.
+ */
+export function usePendingSyncCount(): number {
+  return usePendingCount(countPendingOps);
+}
+
+/** The queued ops behind that count: how much work is waiting, not how many things. */
+export function usePendingOpCount(): number {
+  return usePendingCount(countPendingOpRows);
 }
 
 /** Live count of everything on the Account sync issues screen. */

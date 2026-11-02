@@ -131,6 +131,7 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
+import { LayersGlyph, markMapDrawing, markMapDrawn } from "./mapLoading";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -934,8 +935,6 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
-  // The last frame was only partly drawn: tiles are still coming, or never will.
-  const [mapLoading, setMapLoading] = useState(false);
   const pendingSyncCount = usePendingSyncCount();
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const offlineOnlyRef = useRef(offlineOnly);
@@ -4933,8 +4932,8 @@ export function MapScreen({
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
-        onDidFinishRenderingFrame={() => setMapLoading(true)}
-        onDidFinishRenderingFrameFully={() => setMapLoading(false)}
+        onDidFinishRenderingFrame={markMapDrawing}
+        onDidFinishRenderingFrameFully={markMapDrawn}
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
@@ -5538,8 +5537,8 @@ export function MapScreen({
             button shortcut on the banner would add clutter, risk wrapping onto
             a second line, and open unexpectedly when panning. */}
         {/* SAY THAT THE MODE IS ON, because everything it causes looks like a
-            fault otherwise: the basemap notice below says "Offline" on a phone
-            with full bars, and elevation stops answering outside saved areas.
+            fault otherwise: the "No saved map here." notice below appears on a
+            phone with full bars, and elevation stops answering outside saved areas.
             Sits above that notice so the cause is read before the consequence.
 
             Deliberately worded as SIMULATING: the phone is not offline, we are
@@ -5633,15 +5632,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          {/* Online and still drawing: the one cue that a blank map is
-              loading and not broken. Offline it is the notice that explains. */}
-          <Icon
-            idea={
-              mapLoading && connectivity === "online" ? "loading" : "layers"
-            }
-            size={FAB_ICON}
-            color={theme.text}
-          />
+          <LayersGlyph online={connectivity === "online"} />
         </Pressable>
         <Pressable
           accessibilityRole="button"

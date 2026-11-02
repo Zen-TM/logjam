@@ -189,7 +189,9 @@ handler or a camera write, read
 Reads come from the on-device mirror and writes queue in the outbox.
 
 - **Offline is one muted `StatusPill` in the hero**; a second counts what is
-  waiting to sync (`SyncStatusPills`). Never a banner, never per row.
+  waiting to sync (`SyncStatusPills`). The map has no hero, so it says both as
+  a `Notice` in its stack, only while true. Never a banner on a hero screen.
+  A Saved row is marked only when its create has not reached the account.
 - **A network-only action is disabled with "Needs a connection" as its
   subtitle.** These need a connection: downloading offline maps and sharpened areas and a
   plan's files for the trip; sharing and reading who a place

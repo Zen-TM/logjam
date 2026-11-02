@@ -20,7 +20,7 @@ vi.mock("./mediaSyncBridge", () => ({ scheduleMutationSync: () => {} }));
 vi.mock("expo-file-system/legacy", () => ({}));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "" }));
 
-const { countPendingOps } = await import("./outbox");
+const { countPendingOps, countPendingOpRows } = await import("./outbox");
 
 let n = 0;
 function enqueue(entity: string, id: string, op: string, state = "queued") {
@@ -38,12 +38,21 @@ describe("countPendingOps", () => {
     enqueue("place", "p1", "update");
     enqueue("route", "r1", "create");
     enqueue("tripLog", "t1", "create");
-    enqueue("placeLink", "l1", "create");
     expect(await countPendingOps()).toBe(3);
+    expect(await countPendingOpRows()).toBe(4);
+  });
+
+  // Mutation: exclude `placeLink` from the count (linking two existing places
+  // queues only the link, so the pill would say nothing is waiting).
+  it("counts a place link queued on its own as one thing", async () => {
+    const before = await countPendingOps();
+    enqueue("placeLink", "l1", "create");
+    expect(await countPendingOps()).toBe(before + 1);
   });
 
   it("leaves out ops parked for the user to resolve", async () => {
+    const before = await countPendingOps();
     enqueue("place", "p2", "create", "blocked");
-    expect(await countPendingOps()).toBe(3);
+    expect(await countPendingOps()).toBe(before);
   });
 });
