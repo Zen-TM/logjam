@@ -160,14 +160,6 @@ export function DraftToolPanel({
         />
       ) : null}
 
-      {snapOpen ? (
-        <SnapPicker
-          mode={snapMode}
-          onChange={onSnapModeChange}
-          disabled={saving}
-        />
-      ) : null}
-
       {/* Two groups in one row: what you do to the line on the left, what the
           line is and how you leave it on the right. The picked point's delete
           verb is NOT here — it rides next to the point itself on the map
@@ -243,6 +235,14 @@ export function DraftToolPanel({
           ) : null}
         </View>
       </View>
+
+      {snapOpen ? (
+        <SnapPicker
+          mode={snapMode}
+          onChange={onSnapModeChange}
+          disabled={saving}
+        />
+      ) : null}
     </View>
   );
 }
