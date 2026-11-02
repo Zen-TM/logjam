@@ -10,6 +10,10 @@
 //  - Cold start keeps a known user on a transient failure (network, timeout) and
 //    drops only on no session: classify a failure other than "transient" as
 //    sign-out, or ignore `localIdentity`, and the restore tests go red.
+//  - A password sign-in's outcome: a form answer is returned to the form, a
+//    sign-in opens the app, and a hand-over runs the browser sheet. Open the
+//    sheet for a `form` answer, or skip `setState("authenticated")` for
+//    `signedIn`, and the password tests go red.
 //  - Sign-out clears tokens and identity BEFORE any network call: move
 //    `signOutLocally` after `endProviderSession`, or make a failing
 //    `endProviderSession` skip `setState("chooser")`, and the sign-out tests
@@ -19,8 +23,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const setState = vi.fn();
 const effects: (() => void | (() => void))[] = [];
 const events: string[] = [];
-const config = { authMode: "fake" as string };
+const config = {
+  authMode: "fake" as string,
+  oidcIssuer: undefined as string | undefined,
+};
 const signInWithBrowser = vi.fn();
+const signInWithPasswordFlow = vi.fn();
 const finishSignIn = vi.fn();
 const getSession = vi.fn();
 const signOutLocally = vi.fn();
@@ -49,6 +57,11 @@ vi.mock("./oidcSession", () => ({
   endProviderSession,
 }));
 vi.mock("./finishSignIn", () => ({ finishSignIn }));
+vi.mock("./passwordFlow", () => ({
+  signInWithPasswordFlow,
+  usesOwnForms: (mode: string, issuer?: string) =>
+    mode !== "fake" && issuer === "https://cognito.test",
+}));
 vi.mock("./guestModePreference", () => ({
   clearEntryChoice: () => events.push("clearEntryChoice"),
   readEntryChoice: () => "unchosen",
@@ -73,6 +86,7 @@ beforeEach(() => {
   config.authMode = "fake";
   for (const fn of [
     signInWithBrowser,
+    signInWithPasswordFlow,
     finishSignIn,
     getSession,
     signOutLocally,
@@ -133,6 +147,59 @@ describe("OIDC sign-in", () => {
     finishSignIn.mockResolvedValue({ ok: false, error: "cancelled" });
     expect(await useAuth().signIn()).toBe(false);
     expect(setState).not.toHaveBeenCalledWith("authenticated");
+  });
+});
+
+describe("password sign-in", () => {
+  beforeEach(() => {
+    config.authMode = "oidc";
+  });
+
+  it("opens the app when the flow signs in", async () => {
+    signInWithPasswordFlow.mockResolvedValue({ type: "signedIn" });
+    expect(
+      await useAuth().signInWithPassword("a@b.co", "pw", "canyon_fan"),
+    ).toEqual({
+      type: "done",
+    });
+    expect(signInWithPasswordFlow).toHaveBeenCalledWith(
+      "a@b.co",
+      "pw",
+      "canyon_fan",
+    );
+    expect(setState).toHaveBeenLastCalledWith("authenticated");
+    expect(signInWithBrowser).not.toHaveBeenCalled();
+  });
+
+  it("hands a form answer back to the form and opens no browser", async () => {
+    const answer = {
+      type: "form",
+      message: "Wrong password.",
+      unconfirmed: false,
+    };
+    signInWithPasswordFlow.mockResolvedValue(answer);
+    expect(await useAuth().signInWithPassword("a@b.co", "pw")).toBe(answer);
+    expect(signInWithBrowser).not.toHaveBeenCalled();
+    expect(setState).not.toHaveBeenCalledWith("authenticated");
+  });
+
+  it("opens the browser sheet when only the provider can finish", async () => {
+    signInWithPasswordFlow.mockResolvedValue({ type: "provider" });
+    signInWithBrowser.mockResolvedValue({ type: "success", idToken: "i" });
+    finishSignIn.mockResolvedValue({ ok: true });
+    expect(await useAuth().signInWithPassword("a@b.co", "pw")).toEqual({
+      type: "done",
+    });
+    expect(signInWithBrowser).toHaveBeenCalledOnce();
+    expect(setState).toHaveBeenLastCalledWith("authenticated");
+  });
+
+  it("offers the forms only under a Cognito issuer and real auth", () => {
+    config.authMode = "oidc";
+    config.oidcIssuer = "https://cognito.test";
+    expect(useAuth().ownForms).toBe(true);
+    config.authMode = "fake";
+    expect(useAuth().ownForms).toBe(false);
   });
 });
 

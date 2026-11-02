@@ -21,16 +21,26 @@ export function isFriendInviteToken(value: unknown): value is string {
   return typeof value === "string" && TOKEN.test(value);
 }
 
-/** `origin` is Logjam Web's, e.g. `https://example.test`. */
-export function friendInviteUrl(origin: string, token: string): string {
-  return `${origin.replace(/\/+$/, "")}/#${FRAGMENT_KEY}=${token}`;
+/** An invite link under fragment `key`, on Logjam Web's `origin`
+ *  (e.g. `https://example.test`). Plan links use it too (planInvite.ts). */
+export function inviteUrl(key: string, origin: string, token: string): string {
+  return `${origin.replace(/\/+$/, "")}/#${key}=${token}`;
 }
 
 /**
- * The token in a location hash (`#invite=…`), or null. Anything that is not
+ * The token under `key` in a location hash, or null. Anything that is not
  * exactly a token is null, so a mangled link asks the server nothing.
  */
-export function friendInviteTokenFromHash(hash: string): string | null {
-  const value = new URLSearchParams(hash.replace(/^#/, "")).get(FRAGMENT_KEY);
+export function inviteTokenFromHash(key: string, hash: string): string | null {
+  const value = new URLSearchParams(hash.replace(/^#/, "")).get(key);
   return isFriendInviteToken(value) ? value : null;
+}
+
+export function friendInviteUrl(origin: string, token: string): string {
+  return inviteUrl(FRAGMENT_KEY, origin, token);
+}
+
+/** The token in `#invite=…`, or null. */
+export function friendInviteTokenFromHash(hash: string): string | null {
+  return inviteTokenFromHash(FRAGMENT_KEY, hash);
 }

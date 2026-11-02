@@ -4,10 +4,13 @@
 // AppShell pulls in the RN runtime and vitest cannot parse React Native's Flow
 // sources. Same split, and the same reason, as `sharing/shareRowSubtitle.ts`.
 
+import { notificationPlanTarget, type TNotification } from "@logjam/shared";
+
 /** Where a tapped notification sends the user — or that it sends them nowhere. */
 export type NotificationTapTarget =
   | { kind: "blocked" }
   | { kind: "place"; placeId: string }
+  | { kind: "plan"; planId: string; view?: "people"; invited?: boolean }
   | { kind: "announcement"; announcementId: string }
   | { kind: "inbox" };
 
@@ -40,6 +43,24 @@ export function notificationTapTarget(args: {
     | undefined;
   const placeId = data?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
+  // A plan push opens where Logjam Web opens its inbox row
+  // (`notificationPlanTarget`): an invite as its preview, a join request on
+  // People. A plan the recipient lost is only named in the inbox.
+  const { type } = (args.data ?? {}) as { type?: unknown };
+  const plan =
+    typeof type === "string"
+      ? notificationPlanTarget({
+          type,
+          payload: args.data ?? {},
+        } as TNotification)
+      : null;
+  if (plan)
+    return {
+      kind: "plan",
+      planId: plan.planId,
+      view: plan.view,
+      invited: plan.invited,
+    };
   const announcementId = data?.announcementId;
   if (typeof announcementId === "string" && announcementId.length > 0) {
     return { kind: "announcement", announcementId };

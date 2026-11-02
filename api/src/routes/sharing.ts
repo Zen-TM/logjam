@@ -148,7 +148,10 @@ router.delete(
     // "place X is shared with user Y" from "it is not". The owner decision
     // derives from placeAccess (getPlaceRole), never an inline owner check.
     const place = await prisma.place.findUnique({ where: { id: placeId } });
-    if (!place) throw new AppError(404, say`Couldn't find that place.`);
+    // A plan's place (null owner) is never shared, so answers as missing.
+    if (!place?.ownerId)
+      throw new AppError(404, say`Couldn't find that place.`);
+    const placeOwnerId = place.ownerId;
 
     const isSharer = (await getPlaceRole(user.id, place)) === "owner";
     const isSharee = targetUserId === user.id;
@@ -198,7 +201,7 @@ router.delete(
       await writeTombstones(
         tx,
         shareRevokeTombstones({
-          placeOwnerId: place.ownerId,
+          placeOwnerId,
           shareeId: targetUserId,
           shareId: shares[0].id,
           placeId,
@@ -206,7 +209,7 @@ router.delete(
           routeId: linkedRoute?.id ?? null,
         }).concat(
           shares.slice(1).map((extra) => ({
-            userId: place.ownerId,
+            userId: placeOwnerId,
             entityType: "placeShare" as const,
             entityId: extra.id,
           })),
