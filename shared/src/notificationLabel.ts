@@ -40,9 +40,9 @@ function who(value: unknown, fallback: string): string {
  * than render a raw enum name.
  */
 const SHARED_ITEM_NOUN: Record<string, string> = {
-  waypoint: "a waypoint",
+  waypoint: "a place",
   route: "a route",
-  topoJob: "a LiDAR topo",
+  topoJob: "a LiDAR map",
 };
 
 /**
@@ -133,7 +133,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
     case "topo_export_complete": {
       const format =
         EXPORT_FORMAT_LABELS[p.format as ExportFormat] ??
-        String(p.format ?? "Topo").toUpperCase();
+        String(p.format ?? "Area").toUpperCase();
       if (p.status === "failed") {
         return {
           text: `${format} export failed`,

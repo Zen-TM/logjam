@@ -171,7 +171,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  // No wash on a fill: an ink wash darkens Daylight's accent until the count
+  // No wash on a fill: an ink wash darkens Ghost Gum's accent until the count
   // on it falls under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
   badgeText: { ...textRole.caption, color: theme.textMuted },

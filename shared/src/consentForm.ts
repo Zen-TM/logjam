@@ -55,7 +55,7 @@ export function consentSubmitFailure(
 ): ConsentFormProblem {
   const message = messageFromError(
     err,
-    "Couldn't record your consent. Please try again.",
+    "Couldn't record your consent. Try again.",
   );
   if (
     newAccount &&

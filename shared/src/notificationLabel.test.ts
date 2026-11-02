@@ -91,7 +91,7 @@ describe("notificationLabel", () => {
           entityId: "w1",
         }),
       ),
-    ).toEqual({ text: "bob shared a waypoint with you" });
+    ).toEqual({ text: "bob shared a place with you" });
     expect(
       notificationLabel(
         notification("item_shared", {
@@ -99,7 +99,7 @@ describe("notificationLabel", () => {
           entityType: "topoJob",
         }),
       ).text,
-    ).toBe("bob shared a LiDAR topo with you");
+    ).toBe("bob shared a LiDAR map with you");
     // An entity type this build has never heard of still reads as a sentence
     // rather than leaking a raw enum name.
     expect(

@@ -76,7 +76,7 @@ export const NOTIFICATION_PREFERENCES = [
   // A LiDAR map or an export mails whether it finishes or fails
   // (topo/worker.py, topo/export_worker.py, api/src/lib/topoJobReaper.ts).
   { key: "topoEmail", group: "email", label: "LiDAR maps" },
-  { key: "exportEmail", group: "email", label: "LiDAR map exports" },
+  { key: "exportEmail", group: "email", label: "Area exports" },
   { key: "friendRequestInApp", group: "inApp", label: "Friend requests" },
   { key: "shareInApp", group: "inApp", label: "Shares with me" },
 ] as const satisfies readonly {

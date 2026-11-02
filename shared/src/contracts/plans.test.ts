@@ -445,7 +445,7 @@ describe("a plan's verbs", () => {
   it("gives a reason for each verb only one client has, and for no other", () => {
     for (const list of PLAN_VERB_LISTS)
       for (const verb of list)
-        expect("on" in verb, verb.id).toBe("reason" in verb);
+        expect("on" in verb, verb.id).toBe("reason" in verb || "gap" in verb);
   });
 
   it("counts what a delete takes, leaving zeros out", () => {

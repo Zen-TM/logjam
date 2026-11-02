@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import * as contracts from "./index.js";
 import { SYSTEM_FIELD_DEFS } from "../placeTypes.js";
 import { PLACE_STATUS_ORDER } from "../placeStatus.js";
 import { BULK_SHARE_ITEM_TYPES } from "../sharing.js";
 import { TERRAIN_SWITCH_KEYS } from "../terrain.js";
 import { DEFAULT_NOTIFICATION_PREFERENCES } from "../themeSchemes.js";
 import {
+  abandonConfirm,
   attributeFilterShape,
   leaderboardHeroTitle,
   leaderboardNudge,
@@ -114,15 +116,22 @@ describe("every screen contract", () => {
     },
   );
 
-  // Red when a section is marked `on` one client with no `reason`: a
-  // platform-only section is a divergence, and it has to say what about the
-  // medium forces it.
+  // Red when a section is marked `on` one client with neither a `reason` nor a
+  // `gap`, or with both: a platform-only section is a divergence, and it has
+  // to say what about the medium forces it, or that it is not built yet.
   it.each(SCREEN_CONTRACTS.map((contract) => [contract.id, contract] as const))(
-    "%s gives a reason for each section only one client draws, and for no other",
+    "%s gives exactly one of reason or gap for each section only one client draws, and neither for any other",
     (_id, contract) => {
       for (const section of contract.sections) {
-        if (section.on) expect(section.reason, section.key).toBeTruthy();
-        else expect(section.reason, section.key).toBeUndefined();
+        if (section.on)
+          expect(
+            [section.reason, section.gap].filter(Boolean),
+            section.key,
+          ).toHaveLength(1);
+        else {
+          expect(section.reason, section.key).toBeUndefined();
+          expect(section.gap, section.key).toBeUndefined();
+        }
       }
     },
   );
@@ -305,7 +314,7 @@ describe("a place's verbs", () => {
 
   it("gives a reason for each verb only one client has", () => {
     for (const verb of PLACE_VERBS)
-      if ("on" in verb) expect(verb.reason).toBeTruthy();
+      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
     expect(placeVerbIds("gps")).not.toContain("makeTopo");
     expect(placeVerbIds("web")).toContain("makeTopo");
   });
@@ -531,7 +540,7 @@ describe("friends", () => {
 
   it("gives a reason for each share verb only one client has", () => {
     for (const verb of FRIEND_SHARE_VERBS)
-      if ("on" in verb) expect(verb.reason).toBeTruthy();
+      if ("on" in verb) expect(verb.reason ?? verb.gap).toBeTruthy();
   });
 
   it("names the direction a friend's list runs", () => {
@@ -871,7 +880,8 @@ describe("the map point panel", () => {
       "weather",
     ]);
     for (const verb of MAP_POINT_VERBS)
-      if ("on" in verb) expect(verb.reason.length).toBeGreaterThan(0);
+      if ("on" in verb)
+        expect((verb.reason ?? verb.gap).length).toBeGreaterThan(0);
     expect(mapPointVerbs("gps")).toEqual([
       {
         id: "navigate",
@@ -989,7 +999,7 @@ describe("the measure tool", () => {
       "leave",
     ]);
     for (const verb of MAP_MEASURE_VERBS)
-      expect("on" in verb, verb.id).toBe("reason" in verb);
+      expect("on" in verb, verb.id).toBe("reason" in verb || "gap" in verb);
     expect(MAP_MEASURE_START_NOTE.web).toBe("Click the map to measure");
     expect(MAP_MEASURE_START_NOTE.gps).toBe("Tap the map to measure");
   });
@@ -1039,5 +1049,45 @@ describe("the leaderboard", () => {
     expect(leaderboardNudge(["kit", "bo", "al"])).toBe(
       "kit, bo and al aren't on it yet.",
     );
+  });
+});
+
+describe("a contract's reason and gap", () => {
+  const reasons: string[] = [];
+  const walk = (value: unknown, seen = new Set<unknown>()) => {
+    if (typeof value !== "object" || value === null || seen.has(value)) return;
+    seen.add(value);
+    for (const [key, child] of Object.entries(value)) {
+      if (key === "reason" && typeof child === "string") reasons.push(child);
+      else walk(child, seen);
+    }
+  };
+  walk(contracts);
+
+  // A reason is about the medium; a feature not built yet is a `gap`
+  // (shared/DESIGN.md §14). Mutation that turns it red: write the sentence at
+  // `account.ts` ("Logjam GPS has no data export yet.") back as a `reason`.
+  it("reads as a reason about the medium, never as a gap", () => {
+    expect(reasons.length).toBeGreaterThan(10);
+    for (const reason of reasons)
+      expect(reason, reason).not.toMatch(/\b(gap|not built|has no|yet)\b/i);
+  });
+});
+
+describe("abandonConfirm", () => {
+  // Mutation: swap the two branches.
+  it("says a new thing is lost whole and an edit only loses its changes", () => {
+    expect(abandonConfirm("place", true)).toEqual({
+      confirmTitle: "Discard this place?",
+      confirmBody: "Nothing you've entered is kept.",
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    expect(abandonConfirm("trip", false)).toEqual({
+      confirmTitle: "Discard your changes?",
+      confirmBody: "The trip stays as it was.",
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
   });
 });

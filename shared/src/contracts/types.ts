@@ -14,12 +14,15 @@ export type ContractPlatform = "web" | "gps";
 /**
  * One section of a surface. `on` defaults to both clients; a section only one
  * client draws says which, and `reason` says what about the medium rules it
- * out on the other.
+ * out on the other (or `gap`, when the other client just lacks it yet).
  */
 export type ContractSection<K extends string = string> = {
   key: K;
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client: a sentence or an issue. A section with
+   *  `on` has a `reason` or a `gap`, never both. */
+  gap?: string;
   /** Drawn only on something the viewer owns: a page of a shared item has no
    *  such section, on either client. Not a platform difference, so no reason. */
   ownerOnly?: true;

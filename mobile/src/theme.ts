@@ -237,6 +237,7 @@ export const fontSize = {
   base: scaled(FONT.gps.base),
   lg: scaled(FONT.gps.lg),
   xl: scaled(FONT.gps.xl),
+  xxl: scaled(FONT.gps.xxl),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
@@ -278,6 +279,7 @@ type TextRoleStyle = {
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
   lineHeight?: number;
   textTransform?: "uppercase";
+  fontVariant?: ["tabular-nums"];
 };
 export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 /**
@@ -298,6 +300,7 @@ export const textRoles = Object.fromEntries(
       fontWeight: fontWeight[role.weight],
       ...("leading" in role ? { lineHeight: leading } : {}),
       ...("uppercase" in role ? { textTransform: "uppercase" } : {}),
+      ...("tabular" in role ? { fontVariant: ["tabular-nums"] } : {}),
     };
     return [name, style];
   }),

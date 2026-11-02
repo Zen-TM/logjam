@@ -21,9 +21,9 @@
  */
 export const WORKER_SPECS = {
   /** logjam-topo-worker — LiDAR topo generation. The expensive one. */
-  topo: { vcpus: 8, memoryGiB: 16, label: "Topo generation" },
+  topo: { vcpus: 8, memoryGiB: 16, label: "LiDAR map generation" },
   /** logjam-topo-export-worker — on-demand export rendering. */
-  topoExport: { vcpus: 4, memoryGiB: 8, label: "Topo export" },
+  topoExport: { vcpus: 4, memoryGiB: 8, label: "Area export" },
 } as const;
 
 export type WorkerKind = keyof typeof WORKER_SPECS;

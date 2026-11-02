@@ -159,7 +159,7 @@ test.describe("desktop", () => {
       aside.getByRole("radio", { name: /^You share/ }),
     ).toBeVisible();
     await expect(
-      aside.getByRole("button", { name: "Unshare" }).first(),
+      aside.getByRole("button", { name: "Stop sharing" }).first(),
     ).toBeVisible();
     await expectNoViolations(page, "aside");
 
@@ -173,7 +173,7 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toBeVisible();
     await expectNoViolations(page, "aside");
 
-    await aside.getByRole("button", { name: /^Unshare 1 from/ }).click();
+    await aside.getByRole("button", { name: /^Stop sharing 1 with/ }).click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
     await page
@@ -395,7 +395,7 @@ test.describe("desktop", () => {
     // The page's notice asks for Safety contacts first; the verb is in ⋯.
     await aside.getByRole("button", { name: "Plan actions" }).click();
     await page
-      .getByRole("menuitem", { name: "Start a trip log from this plan" })
+      .getByRole("menuitem", { name: "Log a trip from this plan" })
       .click();
     const dialog = page.locator("dialog[open]");
     await expect(
@@ -806,7 +806,7 @@ test.describe("desktop", () => {
 
     // Back to the logbook, where Stats opens from the hero.
     await aside.getByRole("button", { name: "Back to Logs" }).click();
-    await aside.getByRole("button", { name: "Logbook stats" }).click();
+    await aside.getByRole("button", { name: "Trip stats" }).click();
     await expect(
       aside.getByRole("heading", { level: 2, name: /out$/ }),
     ).toBeVisible();

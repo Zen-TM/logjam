@@ -40,7 +40,7 @@ export const GAUGES = {
     noneNow: "no recent reading now",
     noneForDate: "This gauge has no reading for that date.",
     noRecent: "This gauge has had no reading in the last 7 days.",
-    failed: "River gauges couldn\u2019t be loaded.",
+    failed: "River gauges couldn't be loaded.",
     staleFile: "Readings last refreshed",
     // Only if the file's own attribution is blank: the credit is never dropped.
     credit: "© State of New South Wales through WaterNSW",

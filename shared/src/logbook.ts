@@ -435,7 +435,7 @@ export function statsHeadline(
     : [
         { label: "Trips", value: `${stats.trips}` },
         { label: "Places visited", value: `${stats.places}` },
-        { label: "Activity types", value: `${stats.activities}` },
+        { label: "Trip types", value: `${stats.activities}` },
         ground,
       ];
 }

@@ -15,14 +15,16 @@ token, a kit prop, a contract or a test can hold lives there and is not
 written here. Prose is only for what code cannot hold. Before adding a line,
 try to make it code; when you convert a rule to code, delete its line.
 
-| Decision                                                                                   | Declared in                                                                      |
-| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes    | `designTokens.ts`, `themeSchemes.ts`                                             |
-| Which glyph stands for an idea                                                             | `icons.ts`                                                                       |
-| Which components the kit has, on which client                                              | `KIT_COMPONENTS` in `kit.ts`                                                     |
-| A shared screen's sections, order, words, verbs and empty states                           | `contracts/`                                                                     |
-| Words copy must not use ("Retry", "the app", "basemap", "tiles", "the server", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
-| How long a switch's label and hint may be: about two lines on a phone                      | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
+| Decision                                                                                                                    | Declared in                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Colour roles and schemes, space, form rhythm, radius, type and its roles, control sizes                                     | `designTokens.ts`, `themeSchemes.ts`                                             |
+| Which glyph stands for an idea                                                                                              | `icons.ts`                                                                       |
+| Which components the kit has, on which client                                                                               | `KIT_COMPONENTS` in `kit.ts`                                                     |
+| A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
+| The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
+| Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
+| A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
+| How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
 Section numbers are cited from code comments: add sections at the end, never
 renumber.
@@ -42,9 +44,12 @@ renumber.
 
 ## 1. The field comes first
 
-- **Readable in full sun.** Ghost Gum is the sunlight scheme: every text pair
-  at 7:1 or more. The dark schemes hold AA: 4.5:1 for text, 3:1 for a glyph,
-  an edge or a control. A new foreground/background pair joins
+- **Readable in full sun.** Ghost Gum is the sunlight scheme: its text and
+  muted text clear 7:1. A label on a fill clears 4.5:1 in every scheme, since
+  Ghost Gum's intent colours sit in the narrow band where they clear 4.5:1
+  under the dark `onFill` and 3:1 on its pale page. The dark schemes hold AA:
+  4.5:1 for text, 3:1 for a glyph, an edge or a control. A surface is told
+  from the one under it by its fill and its edge. A new pair joins
   `scripts/wcag-contrast.mjs`, measured on the surface it renders on; its
   known-failures list only shrinks.
 - **A touch target is 48×48 dp**, even when drawn smaller. A mouse target is
@@ -54,14 +59,21 @@ renumber.
   glyph, its numbers one press away.
 - **Offline is normal, not an error.** The UI answers three questions, once
   each: am I offline, is my work safe, what can't I do right now (§5).
-- **Anything that loses data takes two steps**: the verb, then a confirm
-  (§9). The confirm's button is the only place the warning fill appears.
+- **A confirm is for what can't come back**: losing data, spending something
+  (mobile data, credits), or ending something that is running. A step you can
+  undo where you are never confirms; it offers Undo. Nothing else asks.
+- **The warning fill has three uses**: a destructive confirm's button, the
+  recording light, and a notice about data being lost right now. It always
+  carries a glyph: accent and warning share a luminance.
 
 ## 2. A screen answers one question
 
 - **Lead with the question the user opened the screen to answer, and answer
   it before any list.** The answer is the hero, usually one line. A screen
   with no question (Settings) has no hero; the map is its own answer.
+  On Logjam GPS the hero says the answer and the page's name is its eyebrow;
+  on Logjam Web the hero is the page's name, because the chips under it carry
+  the counts (`ScreenContract.title`).
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
 - **Between the hero and the list, only what narrows the list** (the rail, a
@@ -73,6 +85,8 @@ renumber.
 - **A list you hunt through by name has a search bar under the rail**, always
   there, not behind an icon. It is hidden with nothing to search and stays
   mounted but disabled during a selection.
+- **Sort persists, per list and per device; filters and search clear when
+  the user leaves the list**, and Reset leaves the sort alone.
 - **A page's add button wears what it adds**, not a bare plus: `addPlace`,
   `addTrip`, `addSaved`. A menu of several ways in keeps the plus.
 - **A list that grows without limit never shares a scroller with one that
@@ -220,7 +234,7 @@ renumber.
   compact buttons.
 - **What a press does follows from what the thing is.** A thing with a page
   opens it. A thing whose only home is the map (a way, a GeoPDF, a saved map,
-  a LiDAR topo) opens on the map. A thing with nowhere to open does its one
+  a sharpened area) opens on the map. A thing with nowhere to open does its one
   job (a file downloads), which is also first in its ⋯. A row with nothing to
   do is not pressable and has no fill.
 - **A thing offers the same verbs on its row, its page and its pin**, minus
@@ -248,8 +262,9 @@ renumber.
   with both, never neither ("Save a copy and remove").
 - **Visibility belongs to the layer**, not a switch on each thing's page.
 - **A subtitle says something the user cannot already see**: not the active
-  filter, the heading or the pill beside it. A navigation row's subtitle is
-  live state ("3 unread"), never a description.
+  filter, the heading or the pill beside it. A navigation row's count is
+  its badge, never its subtitle; its subtitle is live state that is not a
+  count, or absent.
 - **Two facts get two looks**: "shared with you" and "you shared this with 3"
   are never one word apart in the same slot.
 - **Labels wrap, never ellipsise**; a user's own title stops at two lines.
@@ -300,6 +315,9 @@ renumber.
 - **A requirement shows on submit; a limit shows live.** An error clears when
   its field is edited.
 - **A toast reports an outcome and goes on its own**; errors stay longer.
+- **A toast reports an event; a condition that lasts is shown while it is
+  true** (no fix, points not being saved), by a notice or by the figure it
+  affects.
 - **Say what is true, not what is hopeful**: a queued upload offline is
   "Waiting", not "Uploading…".
 - **A preview shows the result as it will be made**: framing a map's area
@@ -317,7 +335,8 @@ renumber.
 ## 12. Copy and helper text
 
 - **Name the surface: Logjam Web or Logjam GPS.**
-- **A custom field is an "attribute"** in anything a user reads, never "field".
+- **One thing, one word.** The word for each thing, and the words never
+  used for it, are `COPY_RULES`; a failing test prints what to say.
 - **A button is a verb** ("Make a map", not "Map").
 - **Helper text is the exception.** Where a label and an icon are not enough:
   one plain sentence saying what the setting means, an example over a rule
@@ -332,7 +351,8 @@ renumber.
 - **Counts pluralise**: "1 place", "37 places".
 - **A verb names what the user wants, not the calls behind it** ("Merge into
   another type").
-- **Name what failed** ("Download didn't finish").
+- **Name what failed**: "Couldn't save this place.", "Download didn't
+  finish". Never "Please", "That didn't work" or "item".
 - **A sentence about what someone else can see or do is checked against the
   API** before it ships.
 
@@ -353,6 +373,9 @@ renumber.
   the job it serves only happens on the other client (a GeoPDF is made to be
   printed, so it is made on Logjam Web). "Not built yet" is a gap to log, not
   a reason.
+- **A contract's `reason` is about the medium.** A feature not built yet on
+  one client is its `gap`, so the parity debt is one search
+  (`contracts.test.ts` refuses a gap written as a reason).
 - **One look, one component.** Extend a kit component with a prop before
   adding a file; the kit does looks, a screen does layout.
 - **The kit is presentation only.** A component that owns permissions, file
@@ -375,4 +398,4 @@ renumber.
   it is lives on the thing: the shared badge, the shared row mark.
 - **Colours drawn on the map are `MAP_INK`**: they belong to the basemap,
   not the scheme.
-- **Offline, the map is blank outside saved regions.**
+- **Offline, the map is blank outside offline maps.**

@@ -28,6 +28,7 @@ import {
 import type { ScreenContract } from "./types.js";
 
 export * from "./types.js";
+export * from "./confirm.js";
 export * from "./placesList.js";
 export * from "./placesFilterSheet.js";
 export * from "./placeVerbs.js";

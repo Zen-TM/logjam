@@ -167,11 +167,11 @@ export function notificationActions(
         },
         {
           kind: "decline",
-          label: "Turn down",
-          failure: "Couldn't turn that down.",
-          success: "Turned down.",
+          label: "Decline",
+          failure: "Couldn't decline that.",
+          success: "Declined.",
           confirm: {
-            title: "Turn down this file?",
+            title: "Decline this file?",
             // Two facts and no more: what you lose, and the ONE way back. What
             // it does to the sender and the other recipients was true but not
             // the question being asked, and length is what stops a confirm
@@ -181,7 +181,7 @@ export function notificationActions(
             // verb — live and revocable — and blurring them here is exactly the
             // confusion the two verbs exist to prevent (ADR 0016).
             body: `You won't get a copy of ${filename}. If you want it back, you'd have to ask ${sender ?? "them"} to send it again.`,
-            confirmLabel: "Turn down",
+            confirmLabel: "Decline",
           },
         },
       ],

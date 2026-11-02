@@ -38,12 +38,12 @@ export const STATS = {
     emptyTitle: "Nothing logged in here yet",
     emptyBody:
       "Log a few trips and this fills in — days out, how often you get away, and how far you've got through your places.",
-    byActivity: "By activity",
+    byActivity: "By trip type",
     multiTagged: "a trip with two tags counts under both",
     placesVisited: "Places visited",
     onFoot: "On foot",
     tripAttributes: "Trip attributes",
-    backToActivities: "Back to every activity",
+    backToActivities: "Back to every trip type",
   },
 } as const satisfies ScreenContract;
 
@@ -68,8 +68,8 @@ export function statsPlaceAttributesTitle(typeName: string): string {
 /** Attributes scoped to one activity show only on that activity's view. */
 export function statsUnderActivitiesNote(count: number): string {
   return count === 1
-    ? "1 more attribute belongs to a single activity — open that activity above to see it"
-    : `${count} more attributes belong to single activities — open an activity above to see them`;
+    ? "1 more attribute belongs to a single trip type — open that trip type above to see it"
+    : `${count} more attributes belong to single trip types — open a trip type above to see them`;
 }
 
 export function statsTruncatedNote(shown: number, total: number): string {

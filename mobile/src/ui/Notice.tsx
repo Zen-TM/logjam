@@ -9,7 +9,7 @@ import { Icon, type Glyph } from "./Icon";
  * Logjam Web's `Notice`.
  *
  * It sits on the page colour, not a scrim: a scrim under `text` is dark on dark
- * in Daylight. Its words are `text`, centred IN the notice (a pill that is
+ * in Ghost Gum. Its words are `text`, centred IN the notice (a pill that is
  * centred on the screen but whose words hug the left reads as drifting); the
  * intent is the glyph, and `tone="warning"` adds the warning edge.
  * Over the map it is not pressable, so it never eats a pan; `action` is the one

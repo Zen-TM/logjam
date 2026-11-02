@@ -21,6 +21,8 @@ type PlanVerbDeclaration = {
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
   danger?: boolean;
   separated?: boolean;
 };
@@ -50,7 +52,7 @@ export const PLAN_VERBS = [
   {
     id: "tripLog",
     icon: "trip",
-    label: "Start a trip log from this plan",
+    label: "Log a trip from this plan",
     roles: ANY,
     whenArchived: true,
   },
@@ -493,9 +495,9 @@ export function planSelfRoleConfirm(
 
 export function planTurnDownConfirm(username: string): PlanConfirmCopy {
   return {
-    confirmTitle: `Turn down ${username}?`,
+    confirmTitle: `Decline ${username}?`,
     confirmBody:
-      "They're told their request was turned down. They can ask again with the link.",
-    confirmLabel: "Turn down",
+      "They're told their request was declined. They can ask again with the link.",
+    confirmLabel: "Decline",
   };
 }

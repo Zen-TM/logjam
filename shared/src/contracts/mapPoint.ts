@@ -72,7 +72,9 @@ type PointVerbDeclaration = {
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
-  | { on: ContractPlatform; reason: string }
+  | { on: ContractPlatform; reason: string; gap?: undefined }
+  // Or the other client lacks it yet, and `gap` says so.
+  | { on: ContractPlatform; gap: string; reason?: undefined }
 );
 
 /** In the order each client draws them. */

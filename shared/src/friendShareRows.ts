@@ -169,14 +169,14 @@ export function unshareAllConfirm(args: {
 }): { title: string; body: string } {
   const things = args.count === 1 ? "1 item" : `${args.count} items`;
   return {
-    title: `Unshare ${things} from ${args.friendName}?`,
+    title: `Stop sharing ${things} with ${args.friendName}?`,
     body:
       `${args.friendName} loses access to ${things}` +
       (args.includesPlace
         ? ", and a place takes its notes, its photos and its route with it. "
         : ". ") +
       `You stay friends, and what ${args.friendName} shares with you is unaffected. ` +
-      `There is no undo — you would have to share each one again. Unsharing won't remove copies ${args.friendName} has already made.`,
+      `There is no undo — you would have to share each one again. Stopping sharing won't remove copies ${args.friendName} has already made.`,
   };
 }
 

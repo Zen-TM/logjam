@@ -59,6 +59,7 @@ export function webTextRolesCss(): string {
       // The page's own line height (index.css), written so the role does not
       // depend on where it is composed.
       ...("leading" in role ? ["line-height: 1.5"] : []),
+      ...("tabular" in role ? ["font-variant-numeric: tabular-nums"] : []),
     ];
     return `.${name} {\n${props.map((p) => `  ${p};`).join("\n")}\n}\n`;
   });

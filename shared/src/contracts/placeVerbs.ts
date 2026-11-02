@@ -25,6 +25,8 @@ type VerbDeclaration = {
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
   /** Destructive: the warning look, and a confirm that says what goes. */
   danger?: boolean;
   /** Below a rule, with the verbs that end the user's relationship with the

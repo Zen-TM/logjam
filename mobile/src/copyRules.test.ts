@@ -57,6 +57,75 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
   },
 ];
 
+// Rewritten by the copy sweep; delete an entry with its string.
+const BASELINE: { file: string; text: string; rule: string }[] = [
+  {
+    file: "imports/ImportOptionsSheet.tsx",
+    rule: "attach-to-place",
+    text: "Attach to a place",
+  },
+  {
+    file: "places/PlaceEditSheet.tsx",
+    rule: "curly-apostrophe",
+    text: "Separate alternative names with commas — they’re searchable too.",
+  },
+  {
+    file: "saved/SavedScreen.tsx",
+    rule: "region",
+    text: "Download a map region",
+  },
+  { file: "saved/SavedScreen.tsx", rule: "region", text: "Download a region" },
+  {
+    file: "saved/SavedScreen.tsx",
+    rule: "region",
+    text: "Places need maps that work with no signal. Save a region before you leave town.",
+  },
+  { file: "saved/SavedScreen.tsx", rule: "region", text: "Region" },
+  {
+    file: "saved/SavedScreen.tsx",
+    rule: "region",
+    text: "Without a saved region the map is blank once you lose signal.",
+  },
+  {
+    file: "screens/LandingScreen.tsx",
+    rule: "logbook",
+    text: "Your canyoning logbook and offline maps.",
+  },
+  {
+    file: "screens/settings/OfflineSettingsScreen.tsx",
+    rule: "lidar-topo",
+    text: "Topo auto-downloads",
+  },
+  {
+    file: "tracks/TrackOptionsSheet.tsx",
+    rule: "attach-to-place",
+    text: "Attach to a place",
+  },
+];
+
+const baselined = (file: string, rule: string, text: string) =>
+  BASELINE.some(
+    (entry) =>
+      entry.file === file && entry.rule === rule && text.includes(entry.text),
+  );
+
+/** Every rule a user-facing string breaks, bar what ALLOWED excuses. */
+function hits() {
+  return [...sources(SRC), APP].flatMap((path) =>
+    userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
+      ({ line, text }) =>
+        copyViolations(text)
+          .filter(
+            () =>
+              !ALLOWED.some(
+                (a) => relative(SRC, path) === a.file && text.includes(a.text),
+              ),
+          )
+          .map((rule) => ({ file: relative(SRC, path), line, rule, text })),
+    ),
+  );
+}
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -96,24 +165,28 @@ describe("copy on Logjam GPS", () => {
   });
 
   it("breaks no copy rule", () => {
-    const offenders = [...sources(SRC), APP].flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
-        ({ line, text }) =>
-          copyViolations(text)
-            .filter(
-              () =>
-                !ALLOWED.some(
-                  (a) =>
-                    relative(SRC, path) === a.file && text.includes(a.text),
-                ),
-            )
-            .map(
-              (id) =>
-                `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-            ),
-      ),
-    );
+    const offenders = hits()
+      .filter(({ file, rule, text }) => !baselined(file, rule, text))
+      .map(
+        ({ file, line, rule, text }) =>
+          `${file}:${line} "${text}" — ${copySay(rule)}`,
+      );
     expect(offenders).toEqual([]);
+  });
+
+  // Mutation: reword one baselined string so it no longer offends.
+  it("every baseline entry still offends — the list only shrinks", () => {
+    const all = hits();
+    const stale = BASELINE.filter(
+      (entry) =>
+        !all.some(
+          ({ file, rule, text }) =>
+            file === entry.file &&
+            rule === entry.rule &&
+            text.includes(entry.text),
+        ),
+    );
+    expect(stale).toEqual([]);
   });
 
   // The measure tool's words are declared once, in @logjam/shared

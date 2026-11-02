@@ -16,16 +16,16 @@ describe("messageFromError", () => {
 
   it("maps a known status code when no server message is present", () => {
     expect(messageFromError(new ApiError(403, "/x", "GET"), "fallback")).toBe(
-      "You don't have permission to do that.",
+      "You don't have access to that.",
     );
     expect(messageFromError(new ApiError(404, "/x", "GET"), "fallback")).toBe(
-      "The requested item could not be found.",
+      "Couldn't find that.",
     );
   });
 
   it("uses a generic 5xx message for unmapped server errors", () => {
     expect(messageFromError(new ApiError(502, "/x", "GET"), "fallback")).toBe(
-      "Something went wrong on our end. Please try again.",
+      "Something went wrong on our end. Try again.",
     );
   });
 

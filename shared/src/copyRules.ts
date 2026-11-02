@@ -1,5 +1,5 @@
-// The copy rules of shared/DESIGN.md §12 that a machine can check, declared
-// once for both clients. `copyRules.test.ts` holds every string in
+// The copy rules of shared/DESIGN.md §12 that a machine can check (the
+// glossary and the error register among them), declared once for both clients. `copyRules.test.ts` holds every string in
 // `contracts/` and in each client's JSX to them; a hit is fixed, or listed in
 // the test's allow-list with the reason it is legitimate.
 import type * as TypeScript from "typescript";
@@ -37,6 +37,73 @@ export const COPY_RULES: readonly CopyRule[] = [
     id: "the-server",
     pattern: /\bthe server\b/i,
     say: 'Say what failed in our words ("Couldn\'t reach Logjam"), not where it ran.',
+  },
+  {
+    id: "please",
+    pattern: /\bplease\b/i,
+    say: 'Name what failed: "Couldn\'t save this place." Add "Try again." only where it can help; never "Please".',
+  },
+  {
+    id: "cannot",
+    pattern: /\bcannot\b/i,
+    say: 'Contractions: "can\'t".',
+  },
+  {
+    id: "that-didnt-work",
+    pattern: /\bthat (?:action )?didn['’]t work\b/i,
+    say: 'Name what failed: "Couldn\'t {verb} {the thing}."',
+  },
+  {
+    id: "curly-apostrophe",
+    pattern: /[’‘]/,
+    say: "A straight apostrophe: '.",
+  },
+  { id: "waypoint", pattern: /\bwaypoints?\b/i, say: 'Say "place".' },
+  {
+    id: "custom-field",
+    pattern: /\bcustom fields?\b/i,
+    say: 'Say "attribute".',
+  },
+  {
+    id: "logbook",
+    pattern: /\blog ?books?\b/i,
+    say: 'Say "trips" or "your trips".',
+  },
+  {
+    id: "trip-log",
+    pattern: /\btrip logs?\b/i,
+    say: 'Say "trip"; the verb is "Log a trip".',
+  },
+  { id: "activity", pattern: /\bactivit(?:y|ies)\b/i, say: 'Say "trip type".' },
+  {
+    id: "lidar-topo",
+    pattern: /\bLiDAR (?:topos?|overlays?)\b|\btopos?\b/i,
+    say: 'A sharpen job\'s result is a "sharpened area"; "LiDAR map" where either kind is meant.',
+  },
+  {
+    id: "region",
+    pattern: /\b(?:map )?regions?\b/i,
+    say: 'Say "offline map"; the verb is "Save an offline map".',
+  },
+  {
+    id: "unshare",
+    pattern: /\bunshar(?:e|es|ed|ing)\b/i,
+    say: 'The owner "Stop sharing"; a sharee "Remove from my account"; a friend "Remove friend".',
+  },
+  {
+    id: "recipients",
+    pattern: /\brecipients?\b/i,
+    say: 'Say "friends you pick" (sharePromise).',
+  },
+  {
+    id: "turn-down",
+    pattern: /\bturn(?:ed)? down\b|\blet in\b/i,
+    say: 'Answer an offer "Accept" or "Decline" (a plan invite: "Join" or "Decline").',
+  },
+  {
+    id: "attach-to-place",
+    pattern: /\battach(?:ed)? to (?:a|this) place\b/i,
+    say: 'Say "Link to a place" / "Unlink from this place".',
   },
 ];
 

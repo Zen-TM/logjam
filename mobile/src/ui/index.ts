@@ -17,6 +17,7 @@ export {
   nextRange,
   type NumberRange,
 } from "@logjam/shared";
+export { confirm } from "./confirm";
 export { Hero } from "./Hero";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { Icon, type Glyph } from "./Icon";

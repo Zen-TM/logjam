@@ -47,7 +47,7 @@ describe("notificationActions", () => {
     expect(actions?.actions.map((a) => a.kind)).toEqual(["accept", "decline"]);
   });
 
-  it("offers save + turn down on a pending file send", () => {
+  it("offers save + decline on a pending file send", () => {
     const actions = notificationActions(
       notification("file_sent", {
         fileSendId: "s1",
@@ -60,7 +60,7 @@ describe("notificationActions", () => {
     expect(actions?.targetId).toBe("s1");
     expect(actions?.actions.map((a) => a.label)).toEqual([
       "Save a copy",
-      "Turn down",
+      "Decline",
     ]);
     expect(actions?.pill).toBeNull();
   });
