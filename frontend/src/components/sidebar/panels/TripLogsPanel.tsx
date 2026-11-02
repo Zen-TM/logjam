@@ -35,6 +35,7 @@ import {
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
   TRIPS_LIST,
+  trackDayLabel,
   tripTypeLabel,
   tripVerbs,
   type CustomFieldFilter,
@@ -801,11 +802,7 @@ function TripLogsPanel({
           <Row
             key={file.id}
             title={mediaDisplayName(file)}
-            subtitle={
-              file.metadata.startedAt
-                ? formatTripDate(file.metadata.startedAt)
-                : undefined
-            }
+            subtitle={trackDayLabel(file.metadata.startedAt ?? null)}
             leading={<IconTile icon="track" hue="var(--color-accent)" />}
             trailing={
               <Button

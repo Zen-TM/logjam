@@ -1,4 +1,4 @@
-import { todayDateKey } from "./logbook.js";
+import { formatTripDate, todayDateKey } from "./logbook.js";
 import { haversineMeters } from "./placeGeo.js";
 
 /**
@@ -136,4 +136,18 @@ export function tripPrefillFromTrack(
         )
       : [],
   };
+}
+
+/**
+ * A recording's local day as a logbook line ("Sun 15 Mar 2026"). Not
+ * `formatTripDate(startedAt)`, which reads a stored UTC-midnight trip date and
+ * would show a morning walk under the day before.
+ */
+export function trackDayLabel(
+  startedAt: string | null,
+  timeZone?: string,
+): string {
+  return formatTripDate(
+    `${tripPrefillFromTrack({ startedAt }, timeZone).date}T00:00:00.000Z`,
+  );
 }

@@ -47,6 +47,7 @@ import {
   reconcileCustomFieldFilters,
   sortTrips,
   tripDeleteConfirm,
+  trackDayLabel,
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
@@ -659,7 +660,7 @@ export function LogsScreen({
                   key={source.key}
                   icon={TRIPS_ADD_ICON.add}
                   title={source.name}
-                  subtitle={`${source.startedAt ? formatTripDate(source.startedAt) : ""} · ${RECORDINGS_TO_LOG.verb}`}
+                  subtitle={`${trackDayLabel(source.startedAt)} · ${RECORDINGS_TO_LOG.verb}`}
                   accessibilityLabel={`${RECORDINGS_TO_LOG.verb} from ${source.name}`}
                   onPress={() => {
                     setToLogOpen(false);

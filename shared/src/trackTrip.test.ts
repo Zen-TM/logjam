@@ -3,6 +3,7 @@ import {
   gpxEnds,
   placesNearTrackEnds,
   recordingsToLog,
+  trackDayLabel,
   tripPrefillFromTrack,
 } from "./trackTrip.js";
 
@@ -143,5 +144,15 @@ describe("gpxEnds", () => {
       { latitude: -33.3, longitude: 150.4 },
     ]);
     expect(gpxEnds("<gpx/>")).toEqual([]);
+  });
+});
+
+describe("trackDayLabel", () => {
+  it("names the local day of the track, not its UTC day", () => {
+    // 07:30 on the 15th in Sydney is the 14th in UTC.
+    expect(
+      trackDayLabel("2026-03-14T20:30:00.000Z", "Australia/Sydney"),
+    ).toContain("15");
+    expect(trackDayLabel("2026-03-14T20:30:00.000Z", "UTC")).toContain("14");
   });
 });
