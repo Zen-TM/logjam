@@ -49,6 +49,15 @@ describe("placeSummary without facts", () => {
     );
   });
 
+  // Mutation: strip every leading `-`, or drop the length cap.
+  it("keeps a minus sign that is not a bullet, and cuts a long line", () => {
+    expect(placeSummary({ notes: "-33.86, 151.20" })).toBe("-33.86, 151.20");
+    expect(placeSummary({ notes: "- gate code 1234" })).toBe("gate code 1234");
+    const long = placeSummary({ notes: "word ".repeat(100) });
+    expect(long.length).toBeLessThanOrEqual(80);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
   it("keeps the facts when there are any, and is empty with neither", () => {
     expect(
       placeSummary({ fieldValues: { hours: 5 }, notes: "Gate is locked" }),

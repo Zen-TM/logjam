@@ -997,6 +997,7 @@ const PlaceRow = memo(function PlaceRow({
       title={place.name}
       titleNumberOfLines={2}
       subtitle={subtitle || undefined}
+      subtitleNumberOfLines={2}
       selected={selected}
       disabled={selecting && !deletable}
       onLongPress={onToggle}

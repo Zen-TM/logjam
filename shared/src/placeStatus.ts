@@ -83,11 +83,19 @@ export function placeSummary(place: PlaceSummaryFields): string {
   return facts || firstNotesLine(place.notes);
 }
 
-/** The first line with words in it, without the Markdown mark that opens it. */
+/** Notes are uncapped user text; a row shows a glance of them, not a page. */
+const NOTES_LINE_MAX = 80;
+
+/** The first line with words in it, without the Markdown marker that opens it
+ *  (a `#`, `>` or bullet followed by a space: "-33.86" is not one), cut to
+ *  `NOTES_LINE_MAX` characters. */
 function firstNotesLine(notes: string | null | undefined): string {
   for (const line of (notes ?? "").split("\n")) {
-    const text = line.replace(/^[\s#>*-]+/, "").trim();
-    if (text) return text;
+    const text = line.replace(/^\s*(?:#{1,6}|>|[-*+])\s+/, "").trim();
+    if (!text) continue;
+    return text.length > NOTES_LINE_MAX
+      ? `${text.slice(0, NOTES_LINE_MAX - 1).trimEnd()}…`
+      : text;
   }
   return "";
 }
