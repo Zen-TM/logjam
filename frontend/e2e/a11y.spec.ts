@@ -185,6 +185,11 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toHaveCount(
       0,
     );
+    // One layer per press: the selection went, the page did not.
+    // Mutation: drop the `defaultPrevented` guard in `useEscape`.
+    await expect(
+      aside.getByRole("radio", { name: /^You share/ }),
+    ).toBeVisible();
   });
 
   test("Plans: the list, a plan's page and its views", async ({ page }) => {
@@ -1362,6 +1367,184 @@ test.describe("fits", () => {
     await expect(scale.getByRole("radio", { name: "Other" })).toBeInViewport({
       ratio: 1,
     });
+  });
+});
+
+/**
+ * The keyboard's promises (frontend/DESIGN.md): a list is one tab stop, a page
+ * is entered at its back arrow and left by Escape onto the row that opened it,
+ * and Escape lifts an armed tool. axe cannot see any of it.
+ */
+test.describe("keyboard", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  async function openPlaces(page: Page) {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    return aside;
+  }
+
+  // Mutation: drop `useListKeys` from `PanelBody` and every row is three tab
+  // stops again.
+  test("a list is one tab stop, moved by the arrow keys", async ({ page }) => {
+    const aside = await openPlaces(page);
+    const rows = aside.locator("[data-place-id]");
+    expect(await rows.count()).toBeGreaterThan(10);
+
+    const tabStops = await rows
+      .first()
+      .evaluate(
+        (row) =>
+          [
+            ...(
+              row.closest("[data-list]") as HTMLElement
+            ).querySelectorAll<HTMLElement>("button, a[href], input"),
+          ].filter(
+            (el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled,
+          ).length,
+      );
+    // The row's title, and the list's "Add a place" at its end.
+    expect(tabStops).toBeLessThanOrEqual(2);
+
+    const first = rows.nth(0).locator("[data-row-open]");
+    const second = rows.nth(1).locator("[data-row-open]");
+    await first.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(second).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(first).toBeFocused();
+
+    // Tab leaves the list: not into the next row's tile or its ⋯.
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.activeElement?.closest("[data-row]")),
+      )
+      .toBeNull();
+    await page.keyboard.press("Shift+Tab");
+    await expect(first).toBeFocused();
+
+    // Space ticks the tile, Shift+F10 opens the actions, Enter opens the page.
+    await page.keyboard.press("Space");
+    await expect(rows.nth(0).getByRole("checkbox")).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(rows.nth(0).getByRole("checkbox")).not.toBeChecked();
+    await page.keyboard.press("Shift+F10");
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  // Mutation: draw a page's rows in a plain `div` instead of a `RowList` (drop
+  // it from PlacesPanel) and that page has no list, so its case goes red.
+  for (const panel of ["Places", "Logs", "Ways", "Plans", "Friends", "Inbox"]) {
+    test(`${panel}: its rows are a list with one tab stop`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await page.getByRole("button", { name: new RegExp(`^${panel}`) }).click();
+      const aside = page.locator("aside");
+      await expect(aside.locator("[data-row-open]").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      const { lists, stops } = await aside.evaluate((root) => {
+        const lists = [...root.querySelectorAll("[data-list]")].filter((list) =>
+          list.querySelector("[data-row-open]"),
+        );
+        const stops = [
+          ...root.querySelectorAll<HTMLButtonElement>(
+            '[data-row-open], [data-row] [role="checkbox"], [data-row] [aria-haspopup="menu"]',
+          ),
+        ].filter((el) => el.tabIndex >= 0 && !el.disabled);
+        return { lists: lists.length, stops: stops.length };
+      });
+      expect(lists).toBeGreaterThan(0);
+      expect(stops).toBe(lists);
+      await expect(aside.getByRole("list").first()).toBeVisible();
+    });
+  }
+
+  // Mutation: drop `usePanelFocus` and focus is the page's body after Enter,
+  // and Escape does nothing.
+  test("a place: Enter lands on the back arrow, Escape returns to its row", async ({
+    page,
+  }) => {
+    const aside = await openPlaces(page);
+    const row = aside.locator("[data-place-id]").nth(2);
+    const open = row.locator("[data-row-open]");
+    const name = (await open.textContent()) ?? "";
+    await open.focus();
+    await page.keyboard.press("Enter");
+
+    await expect(
+      page.getByRole("button", { name: "Back to Places" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(
+      aside.getByRole("button", { name, exact: true }),
+    ).toBeFocused();
+  });
+
+  test("Settings: Escape leaves a sub-page for the row that opened it", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const aside = page.locator("aside");
+    const row = aside.locator("[data-row-open]").first();
+    const name = (await row.textContent()) ?? "";
+    await row.focus();
+    await page.keyboard.press("Enter");
+    await expect(aside.getByRole("button", { name: /^Back/ })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(
+      aside.getByRole("button", { name, exact: true }),
+    ).toBeFocused();
+  });
+
+  test("Skip to panel moves focus into the open panel", async ({ page }) => {
+    await openPlaces(page);
+    await page.getByRole("link", { name: "Skip to panel" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("aside")).toBeFocused();
+  });
+
+  // Mutation: drop the document listener in App.tsx and Measure stays armed.
+  test("Escape lifts an armed Measure tool, and the Draw tool asks first", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const aside = page.locator("aside");
+    const tools = page.getByRole("button", { name: "Tools", exact: true });
+    const tray = page.getByRole("group", { name: "Tools" });
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Measure distance" }).click();
+    const heading = aside.getByRole("heading", {
+      level: 2,
+      name: "Measure distance",
+    });
+    await expect(heading).toBeVisible();
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Escape");
+    await expect(heading).toHaveCount(0);
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Draw a route" }).click();
+    const draw = aside.getByRole("heading", { level: 2, name: "New route" });
+    await expect(draw).toBeVisible();
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(draw).toBeVisible();
   });
 });
 

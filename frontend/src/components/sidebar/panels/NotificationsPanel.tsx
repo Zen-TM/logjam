@@ -73,6 +73,7 @@ import {
   IconTile,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
@@ -903,7 +904,7 @@ function NotificationsPanel({
               count={countBatchRows(section.data, batches)}
               className={classes.dayHead}
             />
-            {section.data.map(renderRow)}
+            <RowList>{section.data.map(renderRow)}</RowList>
           </section>
         );
       })}

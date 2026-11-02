@@ -74,6 +74,7 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   SelectionBar,
   TileCheckbox,
@@ -362,7 +363,7 @@ function FriendsPanel({
             <EmptyState icon="friends" title={copy.noRequestsTitle} />
           </div>
         ) : (
-          <div className={classes.list}>
+          <RowList className={classes.list}>
             {showRequests &&
               friendRequests.map((request) => (
                 <Row
@@ -464,7 +465,7 @@ function FriendsPanel({
                 />
               ))}
             <ListEnd>{addFriendButton}</ListEnd>
-          </div>
+          </RowList>
         )}
       </>
     ),

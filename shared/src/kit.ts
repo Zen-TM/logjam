@@ -52,6 +52,7 @@ export const KIT_COMPONENTS = {
   // — rows, tiles and lists —
   Row: both,
   ListEnd: both,
+  RowList: web("a list of rows with arrow keys; touch has no arrow keys"),
   SwitchRow: both,
   SectionHeader: both,
   Avatar: both,

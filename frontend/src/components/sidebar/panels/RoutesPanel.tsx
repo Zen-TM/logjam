@@ -34,6 +34,7 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   StatusPill,
   type MenuEntry,
@@ -382,7 +383,7 @@ export default function RoutesPanel({
       />
     </div>
   ) : (
-    <div className={classes.list}>
+    <RowList className={classes.list}>
       {visible.map((way) => {
         const identity = KIND_IDENTITY[way.kind];
         const ownerId =
@@ -433,7 +434,7 @@ export default function RoutesPanel({
         );
       })}
       <ListEnd>{addWayButtons}</ListEnd>
-    </div>
+    </RowList>
   );
 
   return (

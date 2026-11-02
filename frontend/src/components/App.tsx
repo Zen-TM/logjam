@@ -1,5 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useCallback,
+  useMemo,
+} from "react";
 import { CurrentUserIdContext } from "../CurrentUserIdContext";
+import { useIsMobile } from "../useIsMobile";
 import NavRail from "./sidebar/NavRail";
 import SidebarPanel from "./sidebar/SidebarPanel";
 import Map, { BASE_LAYERS, type SnapMode } from "./map/Map";
@@ -1211,6 +1219,34 @@ function App() {
     draftChanged,
     cancelDrawingRoute,
   );
+
+  // Escape leaves an armed Measure or Draw tool, as its × does (the route's
+  // goes through the discard confirm). Heard on the document because the user
+  // is on the map, where no panel holds the key; a layer above it (a dialog, a
+  // menu, a field) has already consumed the press.
+  const cancelArmedTool = useEffectEvent(() => {
+    if (drawingRoute) cancelRouteGuard.requestClose();
+    else setActivePanel(null);
+  });
+  const toolArmed = measuring || drawingRoute;
+  // The panel is a landmark to skip to only beside the map: a phone has a sheet.
+  const isNarrow = useIsMobile();
+  useEffect(() => {
+    if (!toolArmed) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (
+        (event.target as Element).closest?.(
+          'input, textarea, select, dialog, [role="menu"], [popover]',
+        )
+      )
+        return;
+      event.preventDefault();
+      cancelArmedTool();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [toolArmed]);
   const clearRouteGuard = useUnsavedChangesGuard(
     routeDraft.points.length > 0,
     () => routeDraft.reset(),
@@ -1494,6 +1530,20 @@ function App() {
   return (
     <CurrentUserIdContext.Provider value={currentUser?.id ?? null}>
       <div className={classes.app}>
+        {activePanel && !isNarrow && (
+          <a
+            href="#panel"
+            className={classes.skipLink}
+            onClick={(event) => {
+              const panel = document.getElementById("panel");
+              if (!panel) return;
+              event.preventDefault();
+              panel.focus();
+            }}
+          >
+            Skip to panel
+          </a>
+        )}
         <a href="#main-content" className={classes.skipLink}>
           Skip to map
         </a>

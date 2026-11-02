@@ -65,6 +65,7 @@ import {
   LoadingState,
   Menu,
   Row,
+  RowList,
   SearchField,
   SelectionBar,
   TileCheckbox,
@@ -692,7 +693,7 @@ function PlacesPanel({
       />
     </div>
   ) : (
-    <div className={classes.list}>
+    <RowList className={classes.list}>
       {visible.map((row) => {
         const { place, owned, status } = row;
         const isSelected = selectedIds.includes(place.id);
@@ -783,7 +784,7 @@ function PlacesPanel({
         );
       })}
       <ListEnd>{addPlaceButton}</ListEnd>
-    </div>
+    </RowList>
   );
 
   const sheet = sheetOpen && (

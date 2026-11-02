@@ -58,6 +58,7 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
@@ -645,7 +646,7 @@ function TripLogsPanel({
               count={group.trips.length}
               className={classes.yearHead}
             />
-            {group.trips.map(renderRow)}
+            <RowList>{group.trips.map(renderRow)}</RowList>
           </section>
         );
       })}

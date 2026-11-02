@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
@@ -29,6 +29,8 @@ import type {
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
 import { TRIPS_LIST, type NotificationPlanTarget } from "@logjam/shared";
 import { PanelCloseContext } from "../../ui/Hero";
+import { useListKeys } from "../../ui/useListKeys";
+import { usePanelFocus } from "../../ui/usePanelFocus";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import FriendsPanel from "./panels/FriendsPanel";
@@ -44,6 +46,19 @@ import AccountPanel from "./panels/AccountPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
+
+/** The page's body: where its keys and its focus moves live. Mounted only while
+ *  a panel is open, so its listeners have an element to attach to. */
+function PanelBody({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  usePanelFocus(ref);
+  useListKeys(ref);
+  return (
+    <div ref={ref} className={classes.panelBody}>
+      {children}
+    </div>
+  );
+}
 
 function SidebarPanel({
   activePanel,
@@ -334,7 +349,7 @@ function SidebarPanel({
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
     <PanelCloseContext.Provider value={onClose}>
-      <div className={classes.panelBody}>
+      <PanelBody>
         {activePanel === "places" && (
           <PlacesPanel
             places={places}
@@ -520,7 +535,7 @@ function SidebarPanel({
             onOpenPlace={openPlaceDetail}
           />
         )}
-      </div>
+      </PanelBody>
     </PanelCloseContext.Provider>
   );
 
@@ -540,7 +555,13 @@ function SidebarPanel({
   }
 
   return (
-    <aside className={classes.panel} aria-label={title}>
+    // The target of the "Skip to panel" link (App.tsx).
+    <aside
+      id="panel"
+      tabIndex={-1}
+      className={classes.panel}
+      aria-label={title}
+    >
       {panelContent}
     </aside>
   );
