@@ -11,7 +11,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   abandonConfirm,
   answersFromDraft,
@@ -50,6 +50,7 @@ import {
   IconButton,
   Row,
   SectionHeader,
+  confirm,
 } from "../ui";
 import { AnswersTable } from "./AnswersTable";
 import { PlanFormFields } from "./PlanFormFields";
@@ -222,25 +223,16 @@ export function FormSheet({
     }
   }
 
-  function remove(target: TripPlanFormView) {
-    const confirm = planFormDeleteConfirm(target);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => {
-          onState(null);
-          deleteForm(plan.id, target.id)
-            .then(() => afterPlanWrite(plan.id))
-            .then(() => onInfo(copy.deleted))
-            .catch(async (err: unknown) => {
-              if (err instanceof ApiError) await afterPlanWrite(plan.id);
-              onError(messageFromError(err, copy.deleteFailed));
-            });
-        },
-      },
-    ]);
+  async function remove(target: TripPlanFormView) {
+    if (!(await confirm(planFormDeleteConfirm(target)))) return;
+    onState(null);
+    deleteForm(plan.id, target.id)
+      .then(() => afterPlanWrite(plan.id))
+      .then(() => onInfo(copy.deleted))
+      .catch(async (err: unknown) => {
+        if (err instanceof ApiError) await afterPlanWrite(plan.id);
+        onError(messageFromError(err, copy.deleteFailed));
+      });
   }
 
   const sees = form ? tripPlanSeesAnswers(plan.myRole, form.visibleTo) : false;

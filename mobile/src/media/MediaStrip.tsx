@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -35,7 +34,14 @@ import { savesCapturesToGallery } from "./galleryPreference";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
 import { listTracks, type Track } from "../tracks/tracksDb";
-import { BottomSheet, Row, SectionHeader, Icon, type Glyph } from "../ui";
+import {
+  BottomSheet,
+  confirm,
+  Row,
+  SectionHeader,
+  Icon,
+  type Glyph,
+} from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
 /**
@@ -139,8 +145,8 @@ export function MediaStrip({
    * upload would sit in the outbox as a dead push. Photos are uncapped.
    */
   limit?: number;
-  /** Routed to the screen's toast channel; falls back to an Alert. */
-  onFailed?: (message: string) => void;
+  /** Routed to the screen's toast channel. */
+  onFailed: (message: string) => void;
   /**
    * Show a route attachment on the map. Given for `kind="track"`, a tap opens
    * the map rather than the viewer — a line on a basemap is the only useful way
@@ -181,14 +187,6 @@ export function MediaStrip({
     setSourceMode(null);
   }, []);
 
-  const fail = useCallback(
-    (message: string) => {
-      if (onFailed) onFailed(message);
-      else Alert.alert("Couldn't attach that", message);
-    },
-    [onFailed],
-  );
-
   const attach = useCallback(
     async (file: {
       uri: string;
@@ -200,12 +198,12 @@ export function MediaStrip({
         await attachMediaLocal(linkedType, linkedId, file);
       } catch (err) {
         console.error(err);
-        fail("That file couldn't be attached.");
+        onFailed("That file couldn't be attached.");
       } finally {
         setBusy(false);
       }
     },
-    [fail, linkedId, linkedType],
+    [onFailed, linkedId, linkedType],
   );
 
   const captureFrom = useCallback(
@@ -295,27 +293,27 @@ export function MediaStrip({
     const asset = result.assets[0];
     const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
-      fail("Pick a .gpx or .kml file.");
+      onFailed("Pick a .gpx or .kml file.");
       return;
     }
     await attach({ uri: asset.uri, mimeType, fileName: asset.name });
-  }, [attach, fail]);
+  }, [attach, onFailed]);
 
   const attachTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
       try {
         if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
-          fail("That track has too few points to attach.");
+          onFailed("That track has too few points to attach.");
         }
       } catch (err) {
         console.error(err);
-        fail("That track couldn't be attached.");
+        onFailed("That track couldn't be attached.");
       } finally {
         setBusy(false);
       }
     },
-    [fail, linkedId, linkedType],
+    [onFailed, linkedId, linkedType],
   );
 
   // Loaded when the picker opens, not on mount — most visits never attach.
@@ -343,15 +341,17 @@ export function MediaStrip({
       : category === "image" || category === "video";
   });
 
-  const confirmDelete = useCallback((item: MirrorMedia) => {
-    Alert.alert("Delete this attachment?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => void deleteMediaLocal(item).catch(console.error),
-      },
-    ]);
+  const confirmDelete = useCallback(async (item: MirrorMedia) => {
+    if (
+      await confirm({
+        confirmTitle: "Delete this attachment?",
+        confirmBody:
+          "It goes from your account and your other devices. This can't be undone.",
+        confirmLabel: "Delete",
+        tone: "destructive",
+      })
+    )
+      void deleteMediaLocal(item).catch(console.error);
   }, []);
 
   const atLimit = limit != null && shown.length >= limit;
@@ -402,7 +402,7 @@ export function MediaStrip({
                   ? onShowRoute(item)
                   : setViewerIndex(itemIndex)
               }
-              onLongPress={() => confirmDelete(item)}
+              onLongPress={() => void confirmDelete(item)}
               online={online}
             />
           ))}
@@ -438,7 +438,7 @@ export function MediaStrip({
           // the button unresponsive.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
-            fail("That action didn't work. Please try again.");
+            onFailed("That action didn't work. Please try again.");
           });
         }}
         title={

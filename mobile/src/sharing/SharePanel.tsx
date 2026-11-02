@@ -40,7 +40,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -80,7 +79,15 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
+import {
+  Avatar,
+  Button,
+  confirm,
+  ErrorBanner,
+  SectionHeader,
+  Row,
+  Icon,
+} from "../ui";
 import {
   radius,
   spacing,
@@ -356,18 +363,17 @@ export function useSharePanel({
    * The confirm, and the only place a user is told that part of what they
    * picked is going out for keeps. Destructive-styled because half of it is.
    */
-  const confirmBulk = useCallback(() => {
+  const confirmBulk = useCallback(async () => {
     if (!bulkPlan) return;
-    const confirm = bulkShareConfirm(bulkPlan, selected.size);
-    if (!confirm) return;
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: bulkPlan.copies.length > 0 ? "destructive" : "default",
-        onPress: () => void runBulk(),
-      },
-    ]);
+    const ask = bulkShareConfirm(bulkPlan, selected.size);
+    if (!ask) return;
+    const ok = await confirm({
+      confirmTitle: ask.title,
+      confirmBody: ask.body,
+      confirmLabel: ask.confirmLabel,
+      tone: bulkPlan.copies.length > 0 ? "destructive" : "filled",
+    });
+    if (ok) void runBulk();
   }, [bulkPlan, runBulk, selected.size]);
 
   const toggle = useCallback((id: string) => {

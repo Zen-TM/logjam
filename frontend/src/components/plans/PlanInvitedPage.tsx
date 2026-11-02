@@ -192,9 +192,12 @@ export default function PlanInvitedPage({
     <div className={classes.root}>
       <ConfirmDialog
         open={declining}
-        title={TRIP_PLAN_JOIN.copy.declineTitle}
-        message={TRIP_PLAN_JOIN.copy.declineBody}
-        confirmLabel={copy.decline}
+        copy={{
+          confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
+          confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
+          confirmLabel: copy.decline,
+          tone: "filled",
+        }}
         busy={busy}
         onClose={() => setDeclining(false)}
         onConfirm={() => void decline().then(() => setDeclining(false))}

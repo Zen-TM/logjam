@@ -5,11 +5,11 @@
 //
 // PRIVACY: a row carries a basemap label and counts. Never the bbox, never a
 // path.
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { formatBytes } from "../format";
 import { spacing, useTheme, useHues } from "../theme";
-import { Button, Row } from "../ui";
+import { Button, confirm, Row } from "../ui";
 import {
   cancelRegionDownload,
   pauseRegionDownload,
@@ -128,22 +128,23 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
               label={state.kind === "failed" ? "Discard" : "Stop"}
               variant="ghost"
               compact
-              onPress={() =>
-                Alert.alert(
-                  state.kind === "failed"
-                    ? "Discard this download?"
-                    : "Stop this download?",
-                  "The download so far will be deleted from this phone.",
-                  [
-                    { text: "Keep it", style: "cancel" },
-                    {
-                      text: state.kind === "failed" ? "Discard" : "Stop",
-                      style: "destructive",
-                      onPress: () => cancelRegionDownload(spec.id),
-                    },
-                  ],
-                )
-              }
+              onPress={() => {
+                const failed = state.kind === "failed";
+                void (async () => {
+                  if (
+                    await confirm({
+                      confirmTitle: failed
+                        ? "Discard this download?"
+                        : "Stop this download?",
+                      confirmBody:
+                        "The download so far will be deleted from this phone.",
+                      confirmLabel: failed ? "Discard" : "Stop",
+                      tone: "destructive",
+                    })
+                  )
+                    cancelRegionDownload(spec.id);
+                })();
+              }}
             />
           </View>
         )

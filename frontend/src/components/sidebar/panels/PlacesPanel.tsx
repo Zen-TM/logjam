@@ -886,20 +886,20 @@ function PlacesPanel({
       )}
       <ConfirmDialog
         open={pendingDelete != null}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel="Delete"
-        confirmColor="error"
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}
       />
       <ConfirmDialog
         open={confirmRefresh}
-        title="Import from RopeWiki?"
-        message="This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten."
-        confirmLabel="Fetch from RopeWiki"
-        confirmColor="secondary"
+        copy={{
+          confirmTitle: "Import from RopeWiki?",
+          confirmBody:
+            "This fetches the public NSW canyon list from ropewiki.com and adds any canyons you don't already have, updating RopeWiki-sourced ones you haven't edited. Canyons that look like ones you already have are set aside for you to review before they're imported. Nothing you've edited is overwritten.",
+          confirmLabel: "Fetch from RopeWiki",
+          tone: "filled",
+        }}
         busy={refreshing}
         onConfirm={() => void importFromRopeWiki()}
         onClose={() => setConfirmRefresh(false)}

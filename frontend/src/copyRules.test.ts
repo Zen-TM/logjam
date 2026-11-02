@@ -114,11 +114,6 @@ function childExpressionStrings(
 // Rewritten by the copy sweep; delete an entry with its string.
 const BASELINE: { file: string; text: string; rule: string }[] = [
   {
-    file: "components/App.tsx",
-    rule: "cannot",
-    text: "Your placed points will be lost. This cannot be undone.",
-  },
-  {
     file: "components/ConsentGate.tsx",
     rule: "please",
     text: "Logjam's Terms of Use and Privacy Policy have changed (last updated ). Please review them and confirm your agreement to keep using Logjam.",
@@ -140,23 +135,8 @@ const BASELINE: { file: string; text: string; rule: string }[] = [
   },
   {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
-    rule: "cannot",
-    text: ",\n            along with their photos, tracks and shares. Your trip logs are kept\n            — they&rsquo;ll be unlinked from these places but stay in your\n            logbook. This cannot be undone.",
-  },
-  {
-    file: "components/dialogs/SelectedPlacesDialog.tsx",
-    rule: "logbook",
-    text: ",\n            along with their photos, tracks and shares. Your trip logs are kept\n            — they&rsquo;ll be unlinked from these places but stay in your\n            logbook. This cannot be undone.",
-  },
-  {
-    file: "components/dialogs/SelectedPlacesDialog.tsx",
     rule: "recipients",
     text: "Recipients can copy or export them while the share is active.\n                  Unsharing won&rsquo;t remove copies they&rsquo;ve already\n                  made.",
-  },
-  {
-    file: "components/dialogs/SelectedPlacesDialog.tsx",
-    rule: "trip-log",
-    text: ",\n            along with their photos, tracks and shares. Your trip logs are kept\n            — they&rsquo;ll be unlinked from these places but stay in your\n            logbook. This cannot be undone.",
   },
   {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
@@ -207,16 +187,6 @@ const BASELINE: { file: string; text: string; rule: string }[] = [
     file: "components/dialogs/UnifiedImportDialog.tsx",
     rule: "logbook",
     text: "You have no places yet. Importing a logbook works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later.",
-  },
-  {
-    file: "components/media/MediaGallery.tsx",
-    rule: "cannot",
-    text: ". This\n            cannot be undone.",
-  },
-  {
-    file: "components/sidebar/panels/PlaceDetailPanel.tsx",
-    rule: "cannot",
-    text: ".\n            This cannot be undone.",
   },
   {
     file: "components/sidebar/panels/mapsModel.ts",

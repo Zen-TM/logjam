@@ -8,6 +8,7 @@
 // go of rather than edited and deleted.
 import { LIDAR_JOB_COPY } from "../sharpen.js";
 import type { IconIdea } from "../icons.js";
+import type { ConfirmCopy } from "./confirm.js";
 import type { ContractPlatform } from "./types.js";
 
 export type PlaceVerbSurface = "row" | "page" | "pin";
@@ -164,8 +165,6 @@ export function placeVerbs<P extends ContractPlatform>(
     }));
 }
 
-export type DeleteConfirmCopy = { confirmTitle: string; confirmBody: string };
-
 /**
  * What deleting places costs, said once for every surface that offers Delete:
  * what goes, and what stays.
@@ -180,7 +179,7 @@ export type DeleteConfirmCopy = { confirmTitle: string; confirmBody: string };
 export function placeDeleteConfirm(
   target: { name: string } | { count: number },
   linkedTripCount?: number,
-): DeleteConfirmCopy {
+): ConfirmCopy {
   const one = "name" in target || target.count === 1;
   const trips =
     linkedTripCount == null
@@ -202,5 +201,7 @@ export function placeDeleteConfirm(
     ]
       .filter(Boolean)
       .join(" "),
+    confirmLabel: "Delete",
+    tone: "destructive",
   };
 }

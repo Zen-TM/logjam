@@ -423,9 +423,7 @@ function Builder({
       </Dialog>
       <ConfirmDialog
         open={leaving}
-        title={copy.discardTitle}
-        message={copy.discardBody}
-        confirmLabel={copy.discardConfirm}
+        copy={abandonConfirm("form", !form)}
         onConfirm={() => {
           setLeaving(false);
           setValues(null);

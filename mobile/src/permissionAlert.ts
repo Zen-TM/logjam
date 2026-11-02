@@ -2,7 +2,18 @@
 // refusal (`canAskAgain === false`) and from then on the only way back is app
 // settings — a denial that just returns leaves a button that does nothing,
 // forever, with no explanation.
-import { Alert, Linking } from "react-native";
+import { Linking } from "react-native";
+
+import { confirm, type ToastMessage } from "./ui";
+
+type Listener = (message: Omit<ToastMessage, "nonce">) => void;
+const toastListeners = new Set<Listener>();
+
+/** Subscribe to the "ask again" notices: BackgroundToast, the only consumer. */
+export function onPermissionToast(listener: Listener): () => void {
+  toastListeners.add(listener);
+  return () => toastListeners.delete(listener);
+}
 
 export function alertPermissionDenied(input: {
   title: string;
@@ -12,14 +23,17 @@ export function alertPermissionDenied(input: {
   settingsMessage: string;
   canAskAgain: boolean;
 }): void {
-  Alert.alert(
-    input.title,
-    input.canAskAgain ? input.askAgainMessage : input.settingsMessage,
-    input.canAskAgain
-      ? undefined
-      : [
-          { text: "Cancel", style: "cancel" },
-          { text: "Open settings", onPress: () => Linking.openSettings() },
-        ],
-  );
+  if (input.canAskAgain) {
+    for (const listener of toastListeners)
+      listener({ text: input.askAgainMessage, tone: "error" });
+    return;
+  }
+  void confirm({
+    confirmTitle: input.title,
+    confirmBody: input.settingsMessage,
+    confirmLabel: "Open settings",
+    tone: "filled",
+  }).then((open) => {
+    if (open) void Linking.openSettings();
+  });
 }

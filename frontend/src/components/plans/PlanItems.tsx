@@ -212,10 +212,12 @@ export default function PlanItems({
 
       <ConfirmDialog
         open={saving != null}
-        title={saveLabel}
-        message={<p>{copy.saveCopyLine}</p>}
-        confirmLabel={saveLabel}
-        confirmColor="primary"
+        copy={{
+          confirmTitle: saveLabel,
+          confirmBody: copy.saveCopyLine,
+          confirmLabel: saveLabel,
+          tone: "filled",
+        }}
         busy={busy}
         onClose={() => setSaving(null)}
         onConfirm={() => {
@@ -242,9 +244,7 @@ export default function PlanItems({
       />
       <ConfirmDialog
         open={deleteCopy != null}
-        title={deleteCopy?.confirmTitle}
-        message={deleteCopy?.confirmBody}
-        confirmLabel={deleteCopy?.confirmLabel}
+        copy={deleteCopy}
         busy={busy}
         onClose={() => setDeleting(null)}
         onConfirm={() => {

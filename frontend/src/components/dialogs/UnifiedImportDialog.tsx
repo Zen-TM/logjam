@@ -1947,10 +1947,13 @@ function UnifiedImportDialog({
 
       <ConfirmDialog
         open={confirmingUndo}
-        title="Undo this import?"
-        message="Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone."
-        confirmLabel="Undo the import"
-        confirmColor="error"
+        copy={{
+          confirmTitle: "Undo this import?",
+          confirmBody:
+            "Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone.",
+          confirmLabel: "Undo the import",
+          tone: "destructive",
+        }}
         busy={undoing}
         onConfirm={() => void handleUndo()}
         onClose={() => setConfirmingUndo(false)}

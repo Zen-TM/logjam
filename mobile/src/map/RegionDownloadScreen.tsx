@@ -26,7 +26,6 @@
 // presigned URL, filed under the area").
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   LayoutChangeEvent,
   ScrollView,
   StyleSheet,
@@ -63,11 +62,14 @@ import {
   BottomSheet,
   Button,
   Chip,
+  confirm,
   Field,
   Hero,
   Notice,
   ChipRail,
   TextField,
+  Toast,
+  type ToastMessage,
 } from "../ui";
 import {
   enqueueRegionDownloads,
@@ -274,6 +276,14 @@ export function RegionDownloadScreen({
   // Set while the free-space check is in flight, so a second tap can't enqueue
   // the same area twice.
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const notifyError = useCallback((text: string) => {
+    setToast((prev) => ({
+      text,
+      tone: "error",
+      nonce: (prev?.nonce ?? 0) + 1,
+    }));
+  }, []);
   // The run being named. Non-null means the jobs are ALREADY enqueued and
   // running — this prompt is over the top of them, never in front of them.
   const [naming, setNaming] = useState<{
@@ -524,8 +534,7 @@ export function RegionDownloadScreen({
         try {
           // Offline by the same reading that enabled Save (`gate`).
           if (gate.noConnection) {
-            Alert.alert(
-              "No connection",
+            notifyError(
               "Saving maps needs a connection. Try again when you have one.",
             );
             return;
@@ -541,20 +550,11 @@ export function RegionDownloadScreen({
           // a setting to go and find.
           let allowCellular = false;
           if (isExpensive(connection)) {
-            allowCellular = await new Promise<boolean>((resolve) => {
-              Alert.alert(
-                "Use mobile data?",
-                "This download will use your mobile data.",
-                [
-                  {
-                    text: "Cancel",
-                    style: "cancel",
-                    onPress: () => resolve(false),
-                  },
-                  { text: "Download", onPress: () => resolve(true) },
-                ],
-                { cancelable: true, onDismiss: () => resolve(false) },
-              );
+            allowCellular = await confirm({
+              confirmTitle: "Use mobile data?",
+              confirmBody: "This download will use your mobile data.",
+              confirmLabel: "Download",
+              tone: "filled",
             });
             if (!allowCellular) return;
           }
@@ -578,13 +578,21 @@ export function RegionDownloadScreen({
           setNaming({ groupId, name: defaultName });
         } catch (err) {
           if (!(err instanceof NotEnoughSpaceError)) throw err;
-          Alert.alert("Not enough space", `${err.message} Or pick fewer maps.`);
+          notifyError(`Not enough space. ${err.message} Or pick fewer maps.`);
         } finally {
           setBusy(false);
         }
       })();
     },
-    [bbox, job, areaBytes, defaultName, startDownloads, gate.noConnection],
+    [
+      bbox,
+      job,
+      areaBytes,
+      defaultName,
+      startDownloads,
+      gate.noConnection,
+      notifyError,
+    ],
   );
 
   // Confirm and dismiss do the same thing: the field starts on the default, so
@@ -848,6 +856,8 @@ export function RegionDownloadScreen({
           </Text>
         </View>
       </BottomSheet>
+
+      <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
   );
 }

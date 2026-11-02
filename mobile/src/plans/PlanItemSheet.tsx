@@ -7,7 +7,7 @@
 // and shows the plan's value under a field the plan changed meanwhile
 // (`tripPlanInPlanNow`); an item gone from the plan closes the sheet.
 import { Fragment, useRef, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   abandonConfirm,
   ApiError,
@@ -49,6 +49,7 @@ import {
   Row,
   SectionHeader,
   TextField,
+  confirm,
 } from "../ui";
 import { deletePlanItem, patchPlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
@@ -142,27 +143,21 @@ export function PlanItemSheet({
       ).filter((verb) => verb.id !== "download")
     : [];
 
-  const confirmDelete = (target: TripPlanItem) => {
-    const confirm = planItemDeleteConfirm(
-      itemTitle(target),
-      target.kind === "place" ? target.media.length : 0,
+  const confirmDelete = async (target: TripPlanItem) => {
+    const ok = await confirm(
+      planItemDeleteConfirm(
+        itemTitle(target),
+        target.kind === "place" ? target.media.length : 0,
+      ),
     );
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => {
-          deletePlanItem(planId, target.kind, target.id)
-            .then(() => afterPlanWrite(planId))
-            .then(() => onInfo(copy.itemDeleted))
-            .catch((err: unknown) => {
-              if (err instanceof ApiError) void afterPlanWrite(planId);
-              onError(messageFromError(err, copy.itemDeleteFailed));
-            });
-        },
-      },
-    ]);
+    if (!ok) return;
+    deletePlanItem(planId, target.kind, target.id)
+      .then(() => afterPlanWrite(planId))
+      .then(() => onInfo(copy.itemDeleted))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError) void afterPlanWrite(planId);
+        onError(messageFromError(err, copy.itemDeleteFailed));
+      });
   };
 
   const run = (id: PlanItemVerbId, target: TripPlanItem) => {

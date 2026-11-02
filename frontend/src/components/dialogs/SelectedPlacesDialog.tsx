@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { noFriendsMessage, type TripLogCustomFieldDef } from "@logjam/shared";
+import {
+  noFriendsMessage,
+  placeDeleteConfirm,
+  type TripLogCustomFieldDef,
+} from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
 import { bulkDeletePlaces, sharePlaceWith } from "../../placeUtils";
 import { useToast } from "../feedback/ToastProvider";
@@ -426,17 +430,7 @@ function SelectedPlacesDialog({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        title={`Delete ${plural(ownedPlaces.length, "place")}?`}
-        message={
-          <>
-            This permanently deletes {plural(ownedPlaces.length, "place")},
-            along with their photos, tracks and shares. Your trip logs are kept
-            — they&rsquo;ll be unlinked from these places but stay in your
-            logbook. This cannot be undone.
-          </>
-        }
-        confirmLabel="Delete"
-        confirmColor="error"
+        copy={placeDeleteConfirm({ count: ownedPlaces.length })}
         busy={deleting}
         onConfirm={handleDelete}
         onClose={() => setShowDeleteConfirm(false)}

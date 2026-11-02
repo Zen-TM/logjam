@@ -88,19 +88,17 @@ function DeleteCustomFieldDialog({
   return (
     <ConfirmDialog
       open={def !== null}
-      title={confirm.confirmTitle}
-      message={
-        <>
-          <p>{confirm.confirmBody}</p>
-          {impactError && <ErrorBanner message={impactError} />}
-          {error && <ErrorBanner message={error} />}
-        </>
-      }
-      confirmLabel={SETTINGS_LIST.copy.deleteAttribute}
+      copy={{
+        ...confirm,
+        confirmLabel: SETTINGS_LIST.copy.deleteAttribute,
+      }}
       busy={deleting}
       onConfirm={handleConfirm}
       onClose={handleClose}
-    />
+    >
+      {impactError && <ErrorBanner message={impactError} />}
+      {error && <ErrorBanner message={error} />}
+    </ConfirmDialog>
   );
 }
 

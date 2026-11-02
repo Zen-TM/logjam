@@ -9,46 +9,6 @@ const { confirm } = await import("./confirm");
 
 const SRC = join(import.meta.dirname, "..");
 
-// migrated by the confirm PR
-const BASELINE: string[] = [
-  "AppShell.tsx",
-  "customFields/CustomFieldsEditor.tsx",
-  "imports/ImportOptionsSheet.tsx",
-  "logs/LogsScreen.tsx",
-  "logs/TripOptionsSheet.tsx",
-  "map/MapScreen.tsx",
-  "map/RegionDownloadScreen.tsx",
-  "media/MediaStrip.tsx",
-  "notifications/NotificationOptionsSheet.tsx",
-  "offline/RegionDownloadRow.tsx",
-  "permissionAlert.ts",
-  "places/fillRouteSlot.ts",
-  "places/PlaceDetailScreen.tsx",
-  "places/PlaceOptionsSheet.tsx",
-  "places/PlacesScreen.tsx",
-  "places/PlaceTypesEditor.tsx",
-  "plans/FormSheet.tsx",
-  "plans/PeopleView.tsx",
-  "plans/PlanItemSheet.tsx",
-  "plans/PlanOptionsSheet.tsx",
-  "plans/PlanPreview.tsx",
-  "plans/PlansScreen.tsx",
-  "plans/SectionSheet.tsx",
-  "routes/RouteOptionsSheet.tsx",
-  "saved/SavedScreen.tsx",
-  "screens/AccountScreen.tsx",
-  "screens/FriendsScreen.tsx",
-  "screens/NotificationsScreen.tsx",
-  "screens/settings/MapSettingsScreen.tsx",
-  "screens/SyncIssuesScreen.tsx",
-  "sharing/FriendSharesScreen.tsx",
-  "sharing/SharePanel.tsx",
-  "sharing/useSharing.tsx",
-  "tracks/finishRecordingPrompt.ts",
-  "tracks/RecordingSheet.tsx",
-  "tracks/TrackOptionsSheet.tsx",
-];
-
 const callers = (dir: string): string[] =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -104,16 +64,9 @@ describe("confirm", () => {
 });
 
 // Every Alert goes through confirm(), so Cancel is always "Cancel"
-// (mobile/DESIGN.md §4). Mutation: add `Alert.alert(` to any screen outside
-// the baseline, or migrate a baselined file and leave its entry.
+// (mobile/DESIGN.md §4). Mutation: add `Alert.alert(` to any screen.
 describe("Alert.alert is called only by confirm()", () => {
-  const found = callers(SRC).sort();
-
-  it("is not called by a file the baseline does not list", () => {
-    expect(found.filter((file) => !BASELINE.includes(file))).toEqual([]);
-  });
-
-  it("lists only files that still call it — the list only shrinks", () => {
-    expect(BASELINE.filter((file) => !found.includes(file))).toEqual([]);
+  it("is not called by any other file", () => {
+    expect(callers(SRC).sort()).toEqual([]);
   });
 });

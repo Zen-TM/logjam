@@ -1193,16 +1193,10 @@ function App() {
     : routeDraft.points.length > 0;
 
   // The route editor is a map tool, not a Dialog, so it asks for itself.
-  const [routeConfirm, setRouteConfirm] = useState<"cancel" | "clear" | null>(
-    null,
-  );
+  const [routeConfirm, setRouteConfirm] = useState<"cancel" | null>(null);
   const abandonRoute = abandonConfirm("route", !editingRouteId);
   const requestCancelRoute = () =>
     draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
-  const requestClearRoute = () =>
-    routeDraft.points.length > 0
-      ? setRouteConfirm("clear")
-      : routeDraft.reset();
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1714,7 +1708,7 @@ function App() {
                   color={drawColor}
                   onColorChange={setDrawColor}
                   onUndo={routeDraft.undo}
-                  onClear={requestClearRoute}
+                  onClear={routeDraft.clear}
                   onReverse={routeDraft.reverse}
                   routeHover={routeHover}
                   // Editing keeps the name it already has; naming belongs to
@@ -2028,10 +2022,7 @@ function App() {
 
         <ConfirmDialog
           open={routeConfirm === "cancel"}
-          title={abandonRoute.confirmTitle}
-          message={abandonRoute.confirmBody}
-          confirmLabel={abandonRoute.confirmLabel}
-          confirmColor="error"
+          copy={abandonRoute}
           onConfirm={() => {
             setRouteConfirm(null);
             cancelDrawingRoute();
@@ -2041,19 +2032,6 @@ function App() {
             afterRouteCancel.current = null;
             setRouteConfirm(null);
           }}
-        />
-
-        <ConfirmDialog
-          open={routeConfirm === "clear"}
-          title="Clear this route?"
-          message="Your placed points will be lost. This cannot be undone."
-          confirmLabel="Clear"
-          confirmColor="error"
-          onConfirm={() => {
-            setRouteConfirm(null);
-            routeDraft.reset();
-          }}
-          onClose={() => setRouteConfirm(null)}
         />
 
         <RouteNameDialog

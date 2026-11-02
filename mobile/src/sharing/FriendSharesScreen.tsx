@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { FlatList, RefreshControl, Text, View } from "react-native";
 
 import {
   buildShareCards,
@@ -74,6 +74,7 @@ import { requestSync } from "../sync/syncEngine";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
+  confirm,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -255,35 +256,31 @@ export function FriendSharesScreen({
   );
 
   const runUnshare = useCallback(
-    (targets: FriendShareCard[]) => {
-      const confirm = unshareAllConfirm({
+    async (targets: FriendShareCard[]) => {
+      const ask = unshareAllConfirm({
         count: targets.length,
         friendName: username,
         includesPlace: targets.some((card) => card.row.entityType === "place"),
       });
-      Alert.alert(confirm.title, confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Unshare",
-          style: "destructive",
-          onPress: () => {
-            setBusy(true);
-            void unshareWithFriend(friendshipId, targets.map(shareCardItem))
-              .then(async ({ revokedCount }) => {
-                clearSelection();
-                notify(
-                  unshareOutcomeMessage({ revokedCount, friendName: username }),
-                );
-                await settle(true);
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify(copy.unshareFailed, "error");
-              })
-              .finally(() => setBusy(false));
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: ask.title,
+        confirmBody: ask.body,
+        confirmLabel: "Unshare",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      setBusy(true);
+      void unshareWithFriend(friendshipId, targets.map(shareCardItem))
+        .then(async ({ revokedCount }) => {
+          clearSelection();
+          notify(unshareOutcomeMessage({ revokedCount, friendName: username }));
+          await settle(true);
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify(copy.unshareFailed, "error");
+        })
+        .finally(() => setBusy(false));
     },
     [clearSelection, friendshipId, notify, settle, username],
   );
@@ -375,47 +372,40 @@ export function FriendSharesScreen({
    * leaves the screen now rather than on the next pull.
    */
   const runRemove = useCallback(
-    (targets: FriendShareCard[]) => {
-      const confirm = removeAllConfirm({
+    async (targets: FriendShareCard[]) => {
+      const ask = removeAllConfirm({
         count: targets.length,
         friendName: username,
         copyableCount: targets.filter((card) => card.copyable).length,
       });
-      Alert.alert(confirm.title, confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setBusy(true);
-            const failed: string[] = [];
-            let removed = 0;
-            void (async () => {
-              for (const card of targets) {
-                try {
-                  if (card.row.entityType === "place") {
-                    await removeSharedPlace(card.row.entityId);
-                  } else {
-                    await removeSharedEntity(
-                      card.row.entityType,
-                      card.row.entityId,
-                    );
-                  }
-                  removed += 1;
-                } catch (err) {
-                  console.error(err);
-                  failed.push(card.title);
-                }
-              }
-              clearSelection();
-              const report = removeOutcomeMessage({ removed, failed });
-              notify(report.text, report.tone);
-              await settle(false);
-              setBusy(false);
-            })();
-          },
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: ask.title,
+        confirmBody: ask.body,
+        confirmLabel: "Remove",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      setBusy(true);
+      const failed: string[] = [];
+      let removed = 0;
+      for (const card of targets) {
+        try {
+          if (card.row.entityType === "place") {
+            await removeSharedPlace(card.row.entityId);
+          } else {
+            await removeSharedEntity(card.row.entityType, card.row.entityId);
+          }
+          removed += 1;
+        } catch (err) {
+          console.error(err);
+          failed.push(card.title);
+        }
+      }
+      clearSelection();
+      const report = removeOutcomeMessage({ removed, failed });
+      notify(report.text, report.tone);
+      await settle(false);
+      setBusy(false);
     },
     [clearSelection, notify, settle, username],
   );

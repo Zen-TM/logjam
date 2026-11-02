@@ -10,7 +10,7 @@
 // scrolls away leaves the drag handle as the only exit — which means DISCARD
 // (DESIGN.md).
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Alert, AppState, StyleSheet, View } from "react-native";
+import { AppState, StyleSheet, View } from "react-native";
 
 import { ensureForegroundLocationPermission } from "../map/locationPermission";
 import { ELEVATION_TRACK_MAX_SAMPLES } from "@logjam/shared";
@@ -21,6 +21,8 @@ import {
   BottomSheet,
   closedSheet,
   Button,
+  confirm,
+  ErrorBanner,
   FieldError,
   IconButton,
 } from "../ui";
@@ -53,9 +55,15 @@ export function RecordingSheet({
   allowNetwork?: boolean;
 }) {
   const theme = useTheme();
+  const [error, setError] = useState<string | null>(null);
 
   const recording = activeTrack?.state === "recording";
   const open = visible && activeTrack != null;
+  // A failure belongs to the opening it happened in.
+  const close = useCallback(() => {
+    setError(null);
+    onClose();
+  }, [onClose]);
 
   // A recorder that cannot write must not present as one that is writing: the
   // clock keeps ticking off the wall clock whether or not points reach SQLite,
@@ -143,8 +151,7 @@ export function RecordingSheet({
     };
     work().catch((err: unknown) => {
       console.error(err);
-      Alert.alert(
-        "Recording error",
+      setError(
         recording
           ? "Couldn't pause the recording."
           : "Couldn't resume the recording.",
@@ -154,47 +161,39 @@ export function RecordingSheet({
 
   const handleFinish = useCallback(() => {
     if (!activeTrack) return;
-    confirmFinishRecording(activeTrack.id, onClose);
-  }, [activeTrack, onClose]);
+    setError(null);
+    confirmFinishRecording(activeTrack.id, close, setError);
+  }, [activeTrack, close]);
 
-  const handleDiscard = useCallback(() => {
+  const handleDiscard = useCallback(async () => {
     if (!activeTrack) return;
     const trackId = activeTrack.id;
-    Alert.alert(
-      "Discard this recording?",
-      "Every point recorded so far is deleted. This can't be undone.",
-      [
-        { text: "Keep recording", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            // Every sibling verb surfaces failure (finish alerts,
-            // pause/resume alerts above) — a discard that silently fails to
-            // delete leaves the user on a sheet whose subject may still exist,
-            // with nothing telling them it didn't work.
-            discardTrackRecording(trackId).then(
-              () => onClose(),
-              (err: unknown) => {
-                console.error(err);
-                Alert.alert(
-                  "Recording error",
-                  "Couldn't delete the recording.",
-                );
-              },
-            );
-          },
-        },
-      ],
+    setError(null);
+    const discard = await confirm({
+      confirmTitle: "Discard this recording?",
+      confirmBody:
+        "Every point recorded so far is deleted. This can't be undone.",
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    if (!discard) return;
+    // A discard that silently fails to delete leaves the user on a sheet whose
+    // subject may still exist, with nothing telling them it didn't work.
+    discardTrackRecording(trackId).then(
+      () => close(),
+      (err: unknown) => {
+        console.error(err);
+        setError("Couldn't delete the recording.");
+      },
     );
-  }, [activeTrack, onClose]);
+  }, [activeTrack, close]);
 
   if (!activeTrack) return closedSheet;
 
   return (
     <BottomSheet
       visible={visible}
-      onClose={onClose}
+      onClose={close}
       title={recording ? "Recording" : "Recording paused"}
       footer={
         <View style={styles.actions}>
@@ -217,6 +216,9 @@ export function RecordingSheet({
       }
     >
       <View style={styles.body}>
+        {error ? (
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        ) : null}
         {writeFailing ? (
           <FieldError message="Points aren't being saved — this phone's storage is full or can't be written to. Finish, then free up space." />
         ) : null}

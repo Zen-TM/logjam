@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
+import { RefreshControl, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -112,6 +112,7 @@ import {
   BottomSheet,
   Button,
   CardActions,
+  confirm,
   EmptyState,
   ErrorState,
   Hero,
@@ -554,23 +555,16 @@ export function NotificationsScreen({
     })();
   }, [notify, readAction, setRead]);
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedNotifications;
-    const count = targets.length;
-    const { confirmTitle, confirmBody } = notificationDeleteConfirm(count);
-    Alert.alert(confirmTitle, confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            await deleteNotifications(targets);
-            clearSelection();
-          })();
-        },
-      },
-    ]);
+    const ok = await confirm({
+      ...notificationDeleteConfirm(targets.length),
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    await deleteNotifications(targets);
+    clearSelection();
   }, [clearSelection, deleteNotifications, selectedNotifications]);
 
   const markAll = useCallback(async () => {
@@ -589,36 +583,23 @@ export function NotificationsScreen({
   const [actionsOpen, setActionsOpen] = useState(false);
   const readCount = notifications.filter((n) => n.read).length;
 
-  const clearRead = useCallback(() => {
-    Alert.alert(
-      CLEAR_READ_CONFIRM.confirmTitle,
-      CLEAR_READ_CONFIRM.confirmBody,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: CLEAR_READ_CONFIRM.confirmLabel,
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                await clearReadNotifications();
-                // The mirror follows the server: the read ones this phone holds
-                // go from the cache too, so they stay gone offline.
-                await removeCachedNotifications(
-                  notifications.filter((n) => n.read).map((n) => n.id),
-                );
-                clearSelection();
-                onUnreadChanged?.();
-                query.refetch();
-              } catch (err) {
-                console.error(err);
-                notify(CLEAR_READ_CONFIRM.failed, "error");
-              }
-            })();
-          },
-        },
-      ],
-    );
+  const clearRead = useCallback(async () => {
+    const ok = await confirm({ ...CLEAR_READ_CONFIRM, tone: "destructive" });
+    if (!ok) return;
+    try {
+      await clearReadNotifications();
+      // The mirror follows the server: the read ones this phone holds
+      // go from the cache too, so they stay gone offline.
+      await removeCachedNotifications(
+        notifications.filter((n) => n.read).map((n) => n.id),
+      );
+      clearSelection();
+      onUnreadChanged?.();
+      query.refetch();
+    } catch (err) {
+      console.error(err);
+      notify(CLEAR_READ_CONFIRM.failed, "error");
+    }
   }, [clearSelection, notifications, notify, onUnreadChanged, query]);
 
   /**
@@ -699,23 +680,21 @@ export function NotificationsScreen({
 
   /** A destructive action is a dialog first, and the dialog carries the why (DESIGN.md). */
   const requestAction = useCallback(
-    (
+    async (
       n: TNotification,
       target: NotificationActions,
       action: NotificationInlineAction,
     ) => {
-      if (!action.confirm) {
-        void runAction(n, target, action);
-        return;
+      if (action.confirm) {
+        const ok = await confirm({
+          confirmTitle: action.confirm.title,
+          confirmBody: action.confirm.body,
+          confirmLabel: action.confirm.confirmLabel,
+          tone: "destructive",
+        });
+        if (!ok) return;
       }
-      Alert.alert(action.confirm.title, action.confirm.body, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: action.confirm.confirmLabel,
-          style: "destructive",
-          onPress: () => void runAction(n, target, action),
-        },
-      ]);
+      void runAction(n, target, action);
     },
     [runAction],
   );
@@ -784,26 +763,20 @@ export function NotificationsScreen({
    * many rather than which.
    */
   const requestBatchAction = useCallback(
-    (batch: NotificationBatch, kind: BatchFileActionKind) => {
+    async (batch: NotificationBatch, kind: BatchFileActionKind) => {
       const pending = batchPendingFileSends(batch);
       if (pending.length === 0) return;
-      if (kind === "accept") {
-        void runBatch(batch, kind);
-        return;
+      if (kind !== "accept") {
+        const who = batch.sender ?? "them";
+        const ok = await confirm({
+          confirmTitle: `Turn down ${pending.length} files?`,
+          confirmBody: `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
+          confirmLabel: "Turn down",
+          tone: "destructive",
+        });
+        if (!ok) return;
       }
-      const who = batch.sender ?? "them";
-      Alert.alert(
-        `Turn down ${pending.length} files?`,
-        `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Turn down",
-            style: "destructive",
-            onPress: () => void runBatch(batch, kind),
-          },
-        ],
-      );
+      void runBatch(batch, kind);
     },
     [runBatch],
   );

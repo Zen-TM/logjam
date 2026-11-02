@@ -324,20 +324,7 @@ export default function PlanPeople({
       </Dialog>
       <ConfirmDialog
         open={removeCopy != null}
-        title={removeCopy?.confirmTitle}
-        message={
-          <>
-            <p>{removeCopy?.confirmBody}</p>
-            {removeCopy?.deleteFilesLabel && (
-              <Checkbox
-                label={removeCopy.deleteFilesLabel}
-                checked={deleteFiles}
-                onChange={setDeleteFiles}
-              />
-            )}
-          </>
-        }
-        confirmLabel={removeCopy?.confirmLabel}
+        copy={removeCopy}
         busy={busy.isBusy(removing?.user.id)}
         onClose={() => setRemoving(null)}
         onConfirm={() => {
@@ -350,12 +337,18 @@ export default function PlanPeople({
             tripPlanRemovedMessage(who.user.username),
           ).then(() => setRemoving(null));
         }}
-      />
+      >
+        {removeCopy?.deleteFilesLabel && (
+          <Checkbox
+            label={removeCopy.deleteFilesLabel}
+            checked={deleteFiles}
+            onChange={setDeleteFiles}
+          />
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={steppingCopy != null}
-        title={steppingCopy?.confirmTitle}
-        message={steppingCopy?.confirmBody}
-        confirmLabel={steppingCopy?.confirmLabel}
+        copy={steppingCopy}
         busy={busy.isBusy(myUserId)}
         onClose={() => setStepping(null)}
         onConfirm={() => {
@@ -370,10 +363,7 @@ export default function PlanPeople({
       />
       <ConfirmDialog
         open={turnDownCopy != null}
-        title={turnDownCopy?.confirmTitle}
-        message={turnDownCopy?.confirmBody}
-        confirmLabel={turnDownCopy?.confirmLabel}
-        confirmColor="primary"
+        copy={turnDownCopy}
         busy={busy.isBusy(turningDown?.user.id)}
         onClose={() => setTurningDown(null)}
         onConfirm={() => {

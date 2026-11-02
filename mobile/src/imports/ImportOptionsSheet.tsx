@@ -14,7 +14,7 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the file you tapped.
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
   messageFromError,
@@ -23,7 +23,14 @@ import {
 } from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
-import { BottomSheet, closedSheet, ColourField, RenameForm, Row } from "../ui";
+import {
+  BottomSheet,
+  closedSheet,
+  ColourField,
+  confirm,
+  RenameForm,
+  Row,
+} from "../ui";
 import { vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -329,18 +336,21 @@ export function ImportOptionsSheet({
               onPress={() => {
                 const removal = actions.delete!;
                 close();
-                Alert.alert(removal.confirmTitle, removal.confirmBody, [
-                  { text: "Keep it", style: "cancel" },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: () =>
-                      removal.run().catch((err: unknown) => {
-                        console.error(err);
-                        onError("Couldn't delete that import.");
-                      }),
-                  },
-                ]);
+                void (async () => {
+                  if (
+                    !(await confirm({
+                      confirmTitle: removal.confirmTitle,
+                      confirmBody: removal.confirmBody,
+                      confirmLabel: "Delete",
+                      tone: "destructive",
+                    }))
+                  )
+                    return;
+                  removal.run().catch((err: unknown) => {
+                    console.error(err);
+                    onError("Couldn't delete that import.");
+                  });
+                })();
               }}
             />
           ) : null}

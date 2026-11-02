@@ -1091,3 +1091,17 @@ describe("abandonConfirm", () => {
     });
   });
 });
+
+describe("the delete confirms", () => {
+  // Mutation: drop `tone` or `confirmLabel` from any of the three.
+  it("each carry a Delete verb in the warning tone", () => {
+    for (const copy of [
+      placeDeleteConfirm({ name: "Claustral" }),
+      placeTypeDeleteConfirm("Canyon"),
+      attributeDeleteConfirm("Water level", 0, { one: "trip", many: "trips" }),
+    ]) {
+      expect(copy.confirmLabel).toBe("Delete");
+      expect(copy.tone).toBe("destructive");
+    }
+  });
+});

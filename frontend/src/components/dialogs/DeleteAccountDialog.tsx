@@ -94,6 +94,7 @@ function DeleteAccountForm({
             type="submit"
             form={formId}
             variant="destructive"
+            icon="delete"
             busy={deleting}
             disabled={!inputMatches}
             disabledReason="Type the phrase above to confirm"

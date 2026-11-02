@@ -7,7 +7,7 @@
 // plan changed shows the plan's value under it; a section deleted elsewhere
 // closes the sheet.
 import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   abandonConfirm,
   ApiError,
@@ -40,6 +40,7 @@ import {
   FormStack,
   Row,
   TextField,
+  confirm,
 } from "../ui";
 import {
   createSection,
@@ -157,21 +158,12 @@ export function SectionSheet({
       .finally(() => setMoving(false));
   };
 
-  const confirmDelete = (target: TripPlanSectionView) => {
-    const confirm = planSectionDeleteConfirm(target.title);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => {
-          deleteSection(planId, target.id)
-            .then(() => afterPlanWrite(planId))
-            .then(() => onInfo(copy.sectionDeleted))
-            .catch((err: unknown) => refused(err, copy.sectionDeleteFailed));
-        },
-      },
-    ]);
+  const confirmDelete = async (target: TripPlanSectionView) => {
+    if (!(await confirm(planSectionDeleteConfirm(target.title)))) return;
+    deleteSection(planId, target.id)
+      .then(() => afterPlanWrite(planId))
+      .then(() => onInfo(copy.sectionDeleted))
+      .catch((err: unknown) => refused(err, copy.sectionDeleteFailed));
   };
 
   const index = section ? sections.indexOf(section) : -1;

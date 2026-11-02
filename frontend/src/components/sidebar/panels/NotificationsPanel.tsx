@@ -41,6 +41,7 @@ import {
   type SectionKeysOn,
   tallyNotifications,
   type NotificationActions,
+  type ConfirmCopy,
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationKind,
@@ -115,9 +116,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
 type Bucket = "all" | "unread" | "read";
 
 type PendingConfirm = {
-  title: string;
-  message: string;
-  confirmLabel: string;
+  copy: ConfirmCopy;
   run: () => Promise<void>;
 };
 
@@ -466,9 +465,11 @@ function NotificationsPanel({
 
   const confirmDelete = (ids: string[]) =>
     setPendingConfirm({
-      title: notificationDeleteConfirm(ids.length).confirmTitle,
-      message: notificationDeleteConfirm(ids.length).confirmBody,
-      confirmLabel: "Delete",
+      copy: {
+        ...notificationDeleteConfirm(ids.length),
+        confirmLabel: "Delete",
+        tone: "destructive",
+      },
       run: async () => {
         await deleteNotifications(ids);
         clearSelection();
@@ -500,9 +501,12 @@ function NotificationsPanel({
 
   const confirmClearRead = () =>
     setPendingConfirm({
-      title: CLEAR_READ_CONFIRM.confirmTitle,
-      message: CLEAR_READ_CONFIRM.confirmBody,
-      confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+      copy: {
+        confirmTitle: CLEAR_READ_CONFIRM.confirmTitle,
+        confirmBody: CLEAR_READ_CONFIRM.confirmBody,
+        confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+        tone: "destructive",
+      },
       run: async () => {
         try {
           await clearReadNotifications();
@@ -572,9 +576,13 @@ function NotificationsPanel({
     };
     if (action.confirm) {
       setPendingConfirm({
-        title: action.confirm.title,
-        message: action.confirm.body,
-        confirmLabel: action.confirm.confirmLabel,
+        // Declining an invite or a request loses nothing of the user's own.
+        copy: {
+          confirmTitle: action.confirm.title,
+          confirmBody: action.confirm.body,
+          confirmLabel: action.confirm.confirmLabel,
+          tone: "filled",
+        },
         run,
       });
     } else {
@@ -1000,10 +1008,7 @@ function NotificationsPanel({
 
       <ConfirmDialog
         open={pendingConfirm != null}
-        title={pendingConfirm?.title ?? ""}
-        message={pendingConfirm?.message ?? ""}
-        confirmLabel={pendingConfirm?.confirmLabel}
-        confirmColor="error"
+        copy={pendingConfirm?.copy}
         busy={confirming}
         onConfirm={() => {
           if (!pendingConfirm) return;

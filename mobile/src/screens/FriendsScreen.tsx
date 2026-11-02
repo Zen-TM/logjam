@@ -31,7 +31,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   RefreshControl,
   Share,
@@ -94,6 +93,7 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  confirm,
   ListEnd,
   IconButton,
   LoadingState,
@@ -241,25 +241,22 @@ export function FriendsScreen({
   );
 
   const confirmRemove = useCallback(
-    (item: Extract<FriendItem, { kind: "friend" }>) => {
+    async (item: Extract<FriendItem, { kind: "friend" }>) => {
       setMenuItem(null);
       // A dialog, because the consequence is the point and it is bigger than the
       // verb suggests (DESIGN.md).
-      const { confirmTitle, confirmBody } = friendRemoveConfirm(item.username);
-      Alert.alert(confirmTitle, confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () =>
-            void runAction(
-              item.friendshipId,
-              () => removeFriend(item.friendshipId),
-              copy.removeFailed,
-              friendRemovedMessage(item.username),
-            ),
-        },
-      ]);
+      const ok = await confirm({
+        ...friendRemoveConfirm(item.username),
+        confirmLabel: "Remove",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void runAction(
+        item.friendshipId,
+        () => removeFriend(item.friendshipId),
+        copy.removeFailed,
+        friendRemovedMessage(item.username),
+      );
     },
     [runAction],
   );

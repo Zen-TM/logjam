@@ -12,7 +12,7 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   climbFromProfile,
   messageFromError,
@@ -25,7 +25,14 @@ import {
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
-import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
+import {
+  BottomSheet,
+  closedSheet,
+  confirm,
+  RenameForm,
+  Row,
+  ColourField,
+} from "../ui";
 import { trackActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
@@ -439,22 +446,23 @@ export function TrackOptionsSheet({
             icon="delete"
             hue={theme.warning}
             disabled={busy}
-            onPress={() => {
+            onPress={async () => {
               close();
               if (!actions.delete) return;
               const removal = actions.delete;
-              Alert.alert(removal.confirmTitle, removal.confirmBody, [
-                { text: "Keep it", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () =>
-                    removal.run().catch((err: unknown) => {
-                      console.error(err);
-                      onError("Couldn't delete that track.");
-                    }),
-                },
-              ]);
+              if (
+                !(await confirm({
+                  confirmTitle: removal.confirmTitle,
+                  confirmBody: removal.confirmBody,
+                  confirmLabel: "Delete",
+                  tone: "destructive",
+                }))
+              )
+                return;
+              removal.run().catch((err: unknown) => {
+                console.error(err);
+                onError("Couldn't delete that track.");
+              });
             }}
           />
         </View>

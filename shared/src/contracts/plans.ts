@@ -928,9 +928,6 @@ export const TRIP_PLAN_FORMS = {
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
     titleNeeded: "Give the form a title.",
-    discardTitle: "Discard changes?",
-    discardBody: "What you changed in this form will be lost.",
-    discardConfirm: "Discard changes",
     // The chooser a new form starts from.
     chooseTemplates: "Templates",
     chooseMine: "From your other plans",

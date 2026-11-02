@@ -210,9 +210,9 @@ function OpenDialog({
             <>
               <Button onClick={() => setConfirming(false)}>Cancel</Button>
               <Button
-                variant={
-                  discard.tone === "destructive" ? "destructive" : "filled"
-                }
+                {...(discard.tone === "destructive"
+                  ? { variant: "destructive", icon: discard.icon ?? "delete" }
+                  : { variant: "filled" })}
                 onClick={() => {
                   setConfirming(false);
                   onClose();

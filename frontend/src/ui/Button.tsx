@@ -5,6 +5,11 @@ import { Tooltip } from "./Tooltip";
 
 type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
 
+/** The warning fill always carries a glyph: that, not its colour, tells it from the accent (shared/DESIGN.md §7). */
+type VariantIcon =
+  | { variant: "destructive"; icon: Glyph }
+  | { variant?: Exclude<ButtonVariant, "destructive">; icon?: Glyph };
+
 /**
  * A control that can be disabled says why (shared/DESIGN.md §5), so `disabled`
  * and `disabledReason` come as a pair: the compiler refuses a bare
@@ -43,11 +48,10 @@ export function Button({
   type = "button",
   ...rest
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> &
-  Disablable & {
-    variant?: ButtonVariant;
+  Disablable &
+  VariantIcon & {
     compact?: boolean;
     busy?: boolean;
-    icon?: Glyph;
     trailingIcon?: Glyph;
     children: ReactNode;
     ref?: Ref<HTMLButtonElement>;

@@ -6,7 +6,7 @@
 // Edit and Start a trip log are the caller's: this sheet closes and the
 // caller opens the form.
 import { Fragment, useRef, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   ApiError,
   messageFromError,
@@ -25,7 +25,7 @@ import {
 
 import { unavailableReasonText } from "../auth/capabilities";
 import { makeStyles, spacing, useTheme } from "../theme";
-import { BottomSheet, Row, todayDateKey } from "../ui";
+import { BottomSheet, confirm, Row, todayDateKey } from "../ui";
 import { archivePlan, deletePlan, leavePlan } from "./plansApi";
 import { LeaveSheet } from "./LeaveSheet";
 import { PlanDownloadRows } from "./PlanDownload";
@@ -78,21 +78,6 @@ export function PlanOptionsSheet({
     };
   };
 
-  const confirm = (
-    words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
-    // Leaving a shared plan is not deleting it (shared/DESIGN.md §9).
-    destructive: boolean,
-    action: () => void,
-  ) =>
-    Alert.alert(words.confirmTitle, words.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: words.confirmLabel,
-        style: destructive ? "destructive" : "default",
-        onPress: action,
-      },
-    ]);
-
   // A plan that is gone for the caller (404) is dropped and its page goes;
   // any other refusal refetches, so the page shows the plan as it is.
   const write = (
@@ -133,10 +118,9 @@ export function PlanOptionsSheet({
         copy.archiveFailed,
       );
     } else if (id === "delete") {
-      confirm(
-        planDeleteConfirm(target.name, tripPlanCounts(target)),
-        true,
-        () => {
+      void confirm(planDeleteConfirm(target.name, tripPlanCounts(target))).then(
+        (ok) => {
+          if (!ok) return;
           onLeaving(true);
           void write(
             target,

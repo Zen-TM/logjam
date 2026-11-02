@@ -361,8 +361,7 @@ function TripDetailPanel({
 
       <ConfirmDialog
         open={confirmingDelete}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onClose={() => setConfirmingDelete(false)}

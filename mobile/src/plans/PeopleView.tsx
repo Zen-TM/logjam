@@ -6,7 +6,7 @@
 // the status the leader saw, so a stale row removes nobody (409). Every write
 // is online-only, so offline each control is disabled with its reason.
 import { Fragment, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
   formatBytes,
@@ -41,6 +41,7 @@ import {
   Row,
   SectionHeader,
   StatusPill,
+  confirm,
 } from "../ui";
 import { InviteSheet } from "./InviteSheet";
 import { approveMember, removeMember, setMemberRole } from "./plansApi";
@@ -96,9 +97,9 @@ export function PeopleView({
       .finally(() => setBusyId(null));
   };
 
-  const remove = (member: TripPlanMemberView) => {
+  const remove = async (member: TripPlanMemberView) => {
     const files = tripPlanFilesChargedTo(plan, member.user.id);
-    const confirm = planRemoveConfirm(
+    const words = planRemoveConfirm(
       member.user.username,
       plan.name,
       files.count > 0
@@ -112,23 +113,18 @@ export function PeopleView({
         tripPlanRemovedMessage(member.user.username),
         copy.removeFailed,
       );
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      ...(confirm.deleteFilesLabel
-        ? [
-            {
-              text: confirm.deleteFilesLabel,
-              style: "destructive" as const,
-              onPress: () => go(true),
-            },
-          ]
-        : []),
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => go(false),
-      },
-    ]);
+    if (!(await confirm(words))) return;
+    // Removing is one confirm; what happens to their files is a second, so
+    // Cancel there keeps the files and still removes them.
+    const deleteFiles =
+      files.count > 0 &&
+      (await confirm({
+        confirmTitle: `Delete ${member.user.username}'s files too?`,
+        confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. Cancel keeps them; ${member.user.username} is removed either way.`,
+        confirmLabel: "Delete files",
+        tone: "destructive",
+      }));
+    go(deleteFiles);
   };
 
   const letIn = (member: TripPlanMemberView) =>
@@ -167,35 +163,26 @@ export function PeopleView({
       member.role === "leader" &&
       role !== "leader"
     ) {
-      const confirm = planSelfRoleConfirm(
-        role,
-        going
-          .filter((each) => each.role === "leader" && each.user.id !== myId)
-          .map((each) => each.user.username),
-      );
-      return Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        { text: confirm.confirmLabel, style: "destructive", onPress: change },
-      ]);
+      return void confirm(
+        planSelfRoleConfirm(
+          role,
+          going
+            .filter((each) => each.role === "leader" && each.user.id !== myId)
+            .map((each) => each.user.username),
+        ),
+      ).then((ok) => ok && change());
     }
     change();
   };
 
-  const turnDown = (member: TripPlanMemberView) => {
-    const confirm = planTurnDownConfirm(member.user.username);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        onPress: () =>
-          write(
-            member,
-            () => removeMember(plan.id, member.user.id, "requested"),
-            copy.turnedDown,
-            copy.turnDownFailed,
-          ),
-      },
-    ]);
+  const turnDown = async (member: TripPlanMemberView) => {
+    if (!(await confirm(planTurnDownConfirm(member.user.username)))) return;
+    write(
+      member,
+      () => removeMember(plan.id, member.user.id, "requested"),
+      copy.turnedDown,
+      copy.turnDownFailed,
+    );
   };
 
   const leader = plan.myRole === "leader";

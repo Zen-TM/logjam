@@ -24,6 +24,7 @@ import {
   planLeaveConfirm,
   tripPlanRowSubtitle,
   tripPlansEmpty,
+  type ConfirmCopy,
   type SectionKeysOn,
   type TripPlanBucket,
   type TripPlanSummary,
@@ -74,21 +75,23 @@ const RUN: Record<
   delete: (id) => deletePlan(id),
 };
 
-function confirmCopy(plans: TripPlanSummary[], deleteAdded: boolean) {
+function confirmCopy(
+  plans: TripPlanSummary[],
+  deleteAdded: boolean,
+): ConfirmCopy {
   const { lead, leave } = tripPlanBulkOffers(plans);
-  const one =
-    plans.length === 1
-      ? lead.length === 1
-        ? planDeleteConfirm(plans[0].name, { places: 0, ways: 0 })
-        : planLeaveConfirm(plans[0].name)
-      : tripPlanBulkConfirm(
-          { lead: lead.length, leave: leave.length },
-          deleteAdded,
-        );
+  if (plans.length === 1)
+    return lead.length === 1
+      ? planDeleteConfirm(plans[0].name, { places: 0, ways: 0 })
+      : planLeaveConfirm(plans[0].name);
+  const { destructive, ...bulk } = tripPlanBulkConfirm(
+    { lead: lead.length, leave: leave.length },
+    deleteAdded,
+  );
+  // Leaving alone keeps what you added, unless the box is ticked.
   return {
-    title: one.confirmTitle,
-    message: one.confirmBody,
-    confirmLabel: one.confirmLabel,
+    ...bulk,
+    tone: destructive || deleteAdded ? "destructive" : "filled",
   };
 }
 
@@ -473,34 +476,28 @@ export default function PlansPanel({
       {confirm && (
         <ConfirmDialog
           open
-          {...confirmCopy(confirm, deleteAdded)}
-          message={
-            <>
-              <p>{confirmCopy(confirm, deleteAdded).message}</p>
-              {tripPlanBulkOffers(confirm).leave.length > 0 && (
-                <Checkbox
-                  label={TRIP_PLAN_BULK_DELETE_ADDED_LABEL}
-                  checked={deleteAdded}
-                  onChange={setDeleteAdded}
-                />
-              )}
-            </>
-          }
-          confirmColor={
-            tripPlanBulkOffers(confirm).lead.length > 0 || deleteAdded
-              ? "error"
-              : "primary"
-          }
+          copy={confirmCopy(confirm, deleteAdded)}
           busy={busyId != null}
           onConfirm={() => void run(byRole(confirm))}
           onClose={() => setConfirm(null)}
-        />
+        >
+          {tripPlanBulkOffers(confirm).leave.length > 0 && (
+            <Checkbox
+              label={TRIP_PLAN_BULK_DELETE_ADDED_LABEL}
+              checked={deleteAdded}
+              onChange={setDeleteAdded}
+            />
+          )}
+        </ConfirmDialog>
       )}
       <ConfirmDialog
         open={declining != null}
-        title={TRIP_PLAN_JOIN.copy.declineTitle}
-        message={TRIP_PLAN_JOIN.copy.declineBody}
-        confirmLabel={copy.decline}
+        copy={{
+          confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
+          confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
+          confirmLabel: copy.decline,
+          tone: "filled",
+        }}
         busy={busyId != null}
         onClose={() => setDeclining(null)}
         onConfirm={() => {

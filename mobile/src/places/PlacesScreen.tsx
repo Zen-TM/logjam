@@ -26,14 +26,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  RefreshControl,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Keyboard, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -105,6 +98,7 @@ import {
   SearchField,
   SyncStatusPills,
   Toast,
+  confirm,
   useBulkSelection,
   type MeterSegment,
   type ChipOption,
@@ -389,33 +383,22 @@ export function PlacesScreen({
     }, [clearSelection]),
   );
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedItems;
     const count = targets.length;
-    const confirm = placeDeleteConfirm({ count });
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            let failures = 0;
-            for (const place of targets) {
-              try {
-                await deletePlaceLocal(place.id);
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            if (failures === 0) info(`Deleted ${placesCountLabel(count)}.`);
-            else fail(`${failures} of ${count} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    if (!(await confirm(placeDeleteConfirm({ count })))) return;
+    let failures = 0;
+    for (const place of targets) {
+      try {
+        await deletePlaceLocal(place.id);
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    if (failures === 0) info(`Deleted ${placesCountLabel(count)}.`);
+    else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Every selectable place is one this user OWNS (`isDeletable` above), so a
@@ -714,7 +697,7 @@ export function PlacesScreen({
             }
             onClear={clearSelection}
             onSelectAll={selectAll}
-            onDelete={deleteSelected}
+            onDelete={() => void deleteSelected()}
           />
         ) : (
           <ChipRail

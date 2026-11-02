@@ -745,6 +745,7 @@ describe("a plan's people", () => {
       confirmBody:
         "You won't be able to make yourself a leader again. The leaders mira, tom and sue can.",
       confirmLabel: "Make yourself a member",
+      tone: "filled",
     });
     expect(planSelfRoleConfirm("editor", ["mira"]).confirmBody).toBe(
       "You won't be able to make yourself a leader again. The leader mira can.",
