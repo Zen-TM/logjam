@@ -72,7 +72,8 @@ Logjam GPS has no public release, so no old build needs the Amplify flow.
   (`signInWithPassword` in `mobile/src/auth/oidcSession.ts`, its endpoints from
   discovery) and finished through `finishSignIn`, so refresh, sign-out, the
   different-user wipe and guest linking are unchanged; every Cognito call
-  settles within `SESSION_TIMEOUT_MS`. A password stays in component state and
+  settles within `SESSION_TIMEOUT_MS`, and a timeout, a dropped connection or a
+  Cognito outage stays on the form, where the browser sheet would fail too. A password stays in component state and
   is never stored or logged. Guards: `mobile/src/auth/passwordFlow.test.ts`,
   `mobile/src/auth/oidcSession.test.ts`, `mobile/src/auth/passwordPrivacy.test.ts`.
   Everything else above stands.

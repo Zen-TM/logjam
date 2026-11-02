@@ -5,6 +5,7 @@ const signInWithPassword = vi.fn();
 const finishSignIn = vi.fn();
 const isReachableNow = vi.fn();
 const updateConsent = vi.fn();
+const fetchCurrentUser = vi.fn();
 
 vi.mock("./oidcSession", () => ({
   signInWithPassword: (...a: unknown[]) => signInWithPassword(...a),
@@ -17,12 +18,12 @@ vi.mock("../map/connectivity", () => ({
 }));
 vi.mock("../api/queries", () => ({
   updateConsent: (...a: unknown[]) => updateConsent(...a),
+  fetchCurrentUser: () => fetchCurrentUser(),
 }));
 
 const { OFFLINE_SIGN_IN, signInWithPasswordFlow, usesOwnForms } = await import(
   "./passwordFlow"
 );
-const { CURRENT_CONSENT_VERSION } = await import("@logjam/shared");
 
 const named = (name: string) => Object.assign(new Error("x"), { name });
 const session = { type: "success", idToken: "i", commit: vi.fn() };
@@ -38,6 +39,7 @@ beforeEach(() => {
   isReachableNow.mockResolvedValue(true);
   finishSignIn.mockResolvedValue({ ok: true });
   updateConsent.mockResolvedValue({});
+  fetchCurrentUser.mockResolvedValue({ currentConsentVersion: "2999-01-01" });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -77,14 +79,12 @@ describe("signInWithPasswordFlow", () => {
     });
   });
 
-  // Mutation: record consent before finishSignIn, or without the username.
+  // Mutation: record consent before finishSignIn, without the username, or with
+  // this build's CURRENT_CONSENT_VERSION.
   it("records a new account's consent and username after it signs in", async () => {
     signInWithPassword.mockResolvedValue(session);
     await signInWithPasswordFlow("a@b.co", "pw", "canyon_fan");
-    expect(updateConsent).toHaveBeenCalledWith(
-      CURRENT_CONSENT_VERSION,
-      "canyon_fan",
-    );
+    expect(updateConsent).toHaveBeenCalledWith("2999-01-01", "canyon_fan");
     expect(finishSignIn.mock.invocationCallOrder[0]).toBeLessThan(
       updateConsent.mock.invocationCallOrder[0],
     );
@@ -96,6 +96,23 @@ describe("signInWithPasswordFlow", () => {
     updateConsent.mockRejectedValue(new Error("offline"));
     expect(await signInWithPasswordFlow("a@b.co", "pw", "canyon_fan")).toEqual({
       type: "signedIn",
+    });
+  });
+
+  // Mutation: drop the `isLinkFailure` branch, and these open the browser sheet.
+  it.each([
+    ["SessionTimeoutError"],
+    ["TypeError"],
+    ["InternalErrorException"],
+    ["ServiceUnavailableException"],
+  ])("stays on the form after a %s while online", async (name) => {
+    const err = new Error("nope");
+    err.name = name;
+    signInWithPassword.mockRejectedValue(err);
+    expect(await signInWithPasswordFlow("a@b.co", "pw")).toEqual({
+      type: "form",
+      message: "Couldn't reach sign-in. Try again.",
+      unconfirmed: false,
     });
   });
 
@@ -133,7 +150,6 @@ describe("signInWithPasswordFlow", () => {
   it("hands over to the provider for a failure that is not Cognito's answer", async () => {
     for (const err of [
       named("InvalidParameterException"),
-      new TypeError("Network request failed"),
       new Error("Discovery answered 503"),
     ]) {
       signInWithPassword.mockRejectedValue(err);

@@ -76,7 +76,8 @@ export function AccountForms({
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const shownError = error ?? auth.error;
+  // `auth.error` is about signing in, and goes stale on the other screens.
+  const shownError = error ?? (screen === "signIn" ? auth.error : null);
 
   const clearPasswords = () => {
     setPassword("");
@@ -116,24 +117,29 @@ export function AccountForms({
     );
 
   const signInWith = async (newAccountUsername?: string) => {
-    const result = await auth.signInWithPassword(
-      email.trim(),
-      password,
-      newAccountUsername,
-    );
-    if (result.type === "form" && result.unconfirmed) {
-      // Signed up, never entered the code: send one and ask for it here. The
-      // password stays until the code is accepted, which signs them in.
-      setSignedUpUsername(undefined);
-      goTo("confirmSignUp");
-      await sendCode(email.trim());
-      return;
+    let codeNeeded = false;
+    try {
+      const result = await auth.signInWithPassword(
+        email.trim(),
+        password,
+        newAccountUsername,
+      );
+      if (result.type === "done") return;
+      if (result.unconfirmed) {
+        // Signed up, never entered the code: send one and ask for it here. The
+        // password stays until the code is accepted, which signs them in.
+        codeNeeded = true;
+        setSignedUpUsername(undefined);
+        goTo("confirmSignUp");
+        await sendCode(email.trim());
+      } else {
+        goTo("signIn");
+        setError(result.message);
+      }
+    } finally {
+      // Sent, so gone, whichever way it went.
+      if (!codeNeeded) clearPasswords();
     }
-    // Sent, so gone, whichever way it went.
-    clearPasswords();
-    if (result.type === "done") return;
-    goTo("signIn");
-    setError(result.message);
   };
 
   const onSignIn = () => {

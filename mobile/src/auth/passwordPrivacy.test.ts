@@ -45,7 +45,10 @@ vi.mock("expo-web-browser", () => ({}));
 vi.mock("../map/connectivity", () => ({
   isReachableNow: vi.fn(async () => true),
 }));
-vi.mock("../api/queries", () => ({ updateConsent: vi.fn(async () => ({})) }));
+vi.mock("../api/queries", () => ({
+  fetchCurrentUser: vi.fn(async () => ({})),
+  updateConsent: vi.fn(async () => ({})),
+}));
 // What the real finishSignIn does with the session, without its wipe and API.
 vi.mock("./finishSignIn", () => ({
   finishSignIn: async (s: { commit: () => Promise<void> }) => {

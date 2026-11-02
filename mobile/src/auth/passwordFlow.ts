@@ -5,18 +5,30 @@
 // The password is a parameter, used once and not kept: nothing here stores it,
 // logs it, or puts it in a message (Guard: passwordPrivacy.test.ts).
 import {
-  CURRENT_CONSENT_VERSION,
+  currentConsentVersionOf,
   failureStaysOnForm,
   messageFromError,
   parseCognitoIssuer,
 } from "@logjam/shared";
 
-import { updateConsent } from "../api/queries";
+import { fetchCurrentUser, updateConsent } from "../api/queries";
 import { isReachableNow } from "../map/connectivity";
 import { finishSignIn } from "./finishSignIn";
 import { signInWithPassword } from "./oidcSession";
 
 export const OFFLINE_SIGN_IN = "No connection. Connect to sign in.";
+export const WEAK_LINK_SIGN_IN = "Couldn't reach sign-in. Try again.";
+
+// A slow or dropped link, or Cognito itself down: nothing about this attempt or
+// this app client, and the browser sheet would fail on the same link.
+const LINK_FAILURES = new Set([
+  "SessionTimeoutError",
+  "TypeError",
+  "InternalErrorException",
+  "ServiceUnavailableException",
+]);
+const isLinkFailure = (err: unknown) =>
+  err instanceof Error && LINK_FAILURES.has(err.name);
 
 /** The forms exist only under a Cognito issuer and real auth; any other issuer keeps the one button. */
 export function usesOwnForms(
@@ -51,6 +63,9 @@ export async function signInWithPasswordFlow(
     attempt = await signInWithPassword(email, password);
   } catch (err) {
     const online = await isReachableNow().catch(() => true);
+    if (online && isLinkFailure(err)) {
+      return { type: "form", message: WEAK_LINK_SIGN_IN, unconfirmed: false };
+    }
     if (failureStaysOnForm(err, online)) {
       return {
         type: "form",
@@ -74,9 +89,13 @@ export async function signInWithPasswordFlow(
     return { type: "form", message: finished.error, unconfirmed: false };
   }
   if (newAccountUsername) {
-    await updateConsent(CURRENT_CONSENT_VERSION, newAccountUsername).catch(() =>
-      console.error("Couldn't record consent at sign-up"),
-    );
+    // The server's version, not this build's: it refuses any other, and the
+    // username goes with it. A build can be months old (ADR 0022).
+    await fetchCurrentUser()
+      .then((me) =>
+        updateConsent(currentConsentVersionOf(me), newAccountUsername),
+      )
+      .catch(() => console.error("Couldn't record consent at sign-up"));
   }
   return { type: "signedIn" };
 }
