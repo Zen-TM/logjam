@@ -112,6 +112,10 @@ handler or a camera write, read
 - **`Alert` is raised only by `confirm()`** (`src/ui/confirm.ts`), which
   draws Cancel and the verb (`confirm.test.ts`). A list of choices is a
   sheet; an error is a toast.
+- **A form sheet guards its own exits.** `BottomSheet` takes `discard`
+  (`abandonConfirm`): while it is non-null, ×, the back gesture, the backdrop
+  and a drag all raise the confirm, and a drag springs back meanwhile. A
+  sub-mode passes null and backs out to its form (`formDiscard.test.ts`).
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
 - **A background job's toast is at the shell** (`BackgroundToast.tsx`),

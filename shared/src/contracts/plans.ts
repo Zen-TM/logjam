@@ -930,7 +930,6 @@ export const TRIP_PLAN_FORMS = {
     titleNeeded: "Give the form a title.",
     discardTitle: "Discard changes?",
     discardBody: "What you changed in this form will be lost.",
-    discardKeep: "Keep editing",
     discardConfirm: "Discard changes",
     // The chooser a new form starts from.
     chooseTemplates: "Templates",

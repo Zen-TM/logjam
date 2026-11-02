@@ -288,7 +288,10 @@ renumber.
   and submit label. A shortcut ("Log a trip here") opens the real form,
   pre-filled.
 - **Abandoning a new thing confirms losing it; abandoning an edit confirms
-  losing the changes; an untouched form asks nothing.**
+  losing the changes; an untouched form asks nothing.** The form surface asks
+  (`discard` on `Dialog` and `BottomSheet`), so every way out is covered: ×,
+  Cancel, Escape, the back gesture, the backdrop, a drag. A form's footer is
+  Cancel and the submit verb; there is no "Discard" button.
 - **Rename in a form, never in a live field on the row.**
 - **A long errand done once elsewhere is a sub-view one press away**
   ("Haven't got one?"), not instructions above the form.

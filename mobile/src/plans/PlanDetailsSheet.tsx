@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import {
+  abandonConfirm,
   messageFromError,
   parseTripPlanCreate,
   tripPlanAdoptTheirs,
@@ -161,9 +162,11 @@ export function PlanDetailsSheet({
     />
   );
 
+  const dirty = mode === "form" && !tripPlanSame(values, seen);
   return (
     <BottomSheet
       visible={visible}
+      discard={dirty ? abandonConfirm("plan", !plan) : null}
       // Inside the date sub-mode, a drag or × is back to the form, not away
       // with everything typed.
       onClose={mode === "form" ? onClose : toForm}

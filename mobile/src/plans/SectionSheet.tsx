@@ -9,6 +9,7 @@
 import { Fragment, useState, type Dispatch, type SetStateAction } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
+  abandonConfirm,
   ApiError,
   limitHint,
   messageFromError,
@@ -226,9 +227,11 @@ export function SectionSheet({
       : undefined;
   const editing = formKey !== null;
 
+  const dirty = editing && !tripPlanSame(values, seen);
   return (
     <BottomSheet
       visible={open}
+      discard={dirty ? abandonConfirm("section", formKey === "add") : null}
       onClose={back ?? close}
       onBack={back}
       title={

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import {
+  abandonConfirm,
   ATTRIBUTE_NOUN,
   defsForType,
   setFieldValues as withFieldValues,
@@ -65,6 +66,25 @@ import {
  * They live in component state and leave only through the outbox's authed push;
  * nothing here is logged, and the failure copy is ours rather than the error's.
  */
+type FormValues = {
+  name: string;
+  altNames: string;
+  latitude: string;
+  longitude: string;
+  notes: string;
+  placeTypeId: string;
+  fieldValues: Record<string, string>;
+};
+
+/** An emptied field is the same as one never filled, so it is left out. */
+const formFingerprint = (values: FormValues) =>
+  JSON.stringify({
+    ...values,
+    fieldValues: Object.entries(values.fieldValues)
+      .filter(([, value]) => value !== "")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  });
+
 /** The sheet's sub-screens. Modes, never a second sheet (DESIGN.md). */
 type Mode = "form" | "date" | "fields" | "fieldForm";
 
@@ -138,6 +158,8 @@ export function PlaceEditSheet({
   // custom-field form.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [dateFieldKey, setDateFieldKey] = useState<string | null>(null);
+  // The form as seeded, to tell an edit from an untouched sheet (§10).
+  const [pristine, setPristine] = useState("");
   const [editingField, setEditingField] = useState<ScopedCustomFieldDef | null>(
     null,
   );
@@ -167,27 +189,38 @@ export function PlaceEditSheet({
     setLongitudeError(null);
     setFormError(null);
     setSaving(false);
-    setName(place?.name ?? "");
-    setAltNames((place?.altNames ?? []).join(", "));
-    // An existing place's stored value is shown exactly; a freshly picked point
-    // is trimmed, because a map press carries fifteen meaningless decimals.
-    setLatitude(
-      place ? numberText(place.latitude) : seedCoord(initialCoords?.latitude),
-    );
-    setLongitude(
-      place ? numberText(place.longitude) : seedCoord(initialCoords?.longitude),
-    );
-    // The grades are ordinary field values, seeded by the one path every other
-    // field uses.
-    setNotes(place?.notes ?? "");
-    // A new place starts as a CANYON: this is a canyoning app, and a default
-    // that is right most of the time beats a picker with nothing chosen. The
-    // rail is right there to say otherwise.
-    setPlaceTypeId(place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon);
+    const start: FormValues = {
+      name: place?.name ?? "",
+      altNames: (place?.altNames ?? []).join(", "),
+      // An existing place's stored value is shown exactly; a freshly picked
+      // point is trimmed, because a map press carries fifteen meaningless
+      // decimals.
+      latitude: place
+        ? numberText(place.latitude)
+        : seedCoord(initialCoords?.latitude),
+      longitude: place
+        ? numberText(place.longitude)
+        : seedCoord(initialCoords?.longitude),
+      notes: place?.notes ?? "",
+      // A new place starts as a CANYON: this is a canyoning app, and a default
+      // that is right most of the time beats a picker with nothing chosen. The
+      // rail is right there to say otherwise.
+      placeTypeId: place?.placeTypeId ?? SYSTEM_PLACE_TYPE_IDS.canyon,
+      // The grades are ordinary field values, seeded by the one path every
+      // other field uses.
+      fieldValues: fieldValueStrings(userFieldValues(place?.fieldValues)),
+    };
+    setName(start.name);
+    setAltNames(start.altNames);
+    setLatitude(start.latitude);
+    setLongitude(start.longitude);
+    setNotes(start.notes);
+    setPlaceTypeId(start.placeTypeId);
+    setFieldValues(start.fieldValues);
+    setPristine(formFingerprint(start));
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    setFieldValues(fieldValueStrings(userFieldValues(place?.fieldValues)));
   }
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -398,9 +431,22 @@ export function PlaceEditSheet({
             ? "Edit place"
             : "Add a place";
 
+  const dirty =
+    mode === "form" &&
+    formFingerprint({
+      name,
+      altNames,
+      latitude,
+      longitude,
+      notes,
+      placeTypeId,
+      fieldValues,
+    }) !== pristine;
+
   return (
     <BottomSheet
       visible={visible}
+      discard={dirty ? abandonConfirm("place", !editing) : null}
       // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
       // not "throw away everything I just typed".
       onClose={

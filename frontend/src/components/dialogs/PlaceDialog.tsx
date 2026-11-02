@@ -5,6 +5,7 @@ import type {
   MediaItem,
 } from "@logjam/shared";
 import {
+  abandonConfirm,
   coerceFieldValue,
   mediaCategory,
   buildCustomFieldDef,
@@ -34,10 +35,8 @@ import {
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
-import ConfirmDialog from "./ConfirmDialog";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
@@ -406,11 +405,6 @@ function PlaceDialog({
     onClose();
   }
 
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
-
   function handlePickCoords() {
     setPicking(true);
     onPickCoords((lat, lng) => {
@@ -611,19 +605,16 @@ function PlaceDialog({
         title={isEdit ? "Edit place" : "Add a place"}
         size="large"
         dismissible={!saving}
-        onClose={guard.requestClose}
-        footer={
+        onClose={() => void handleRequestClose()}
+        discard={isDirty ? abandonConfirm("place", !isEdit) : null}
+        footer={(requestClose) => (
           <>
-            {/* Not "Cancel": the add-attribute sub-form renders its own
-                "Cancel" that only backs out of that sub-form, and both can be
-                on screen at once. In edit mode the object is the *changes*,
-                not the place. */}
             <Button
-              onClick={guard.requestClose}
+              onClick={requestClose}
               disabled={saving}
               disabledReason="Saving…"
             >
-              {isEdit ? "Discard changes" : "Discard place"}
+              Cancel
             </Button>
             {/* type="submit" with no onClick — handleSubmit is the only save
                 path, so a click can't fire alongside the form's submit. */}
@@ -631,7 +622,7 @@ function PlaceDialog({
               {isEdit ? "Save changes" : "Add place"}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -905,16 +896,6 @@ function PlaceDialog({
         def={fieldToDelete}
         onClose={() => setFieldToDelete(null)}
         onDeleted={handleFieldDeleted}
-      />
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
       />
     </>
   );

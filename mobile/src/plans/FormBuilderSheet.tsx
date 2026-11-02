@@ -12,8 +12,9 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
+  abandonConfirm,
   ApiError,
   messageFromError,
   parseTripPlanFormCreate,
@@ -61,6 +62,7 @@ import {
   BottomSheet,
   Button,
   ChipRail,
+  confirm,
   ErrorBanner,
   ErrorState,
   Field,
@@ -255,35 +257,33 @@ export function FormBuilderSheet({
     }
   }
 
-  // Unsaved work asks before it goes (Discard changes?, as the route editor
-  // on the map does). A saving sheet doesn't close at all.
+  // Unsaved work asks before it goes. A saving sheet doesn't close at all.
   const dirty =
     values != null &&
     (form ? seen : started) != null &&
     !tripPlanSame(values, form ? seen : started);
-  const leave = (go: () => void) => {
-    if (!dirty) return go();
-    Alert.alert(copy.discardTitle, copy.discardBody, [
-      { text: copy.discardKeep, style: "cancel" },
-      { text: copy.discardConfirm, style: "destructive", onPress: go },
-    ]);
-  };
-  // A new form's editor goes back to the picker; an edit has nowhere to go.
+  const abandon = abandonConfirm("form", !form);
+  // A new form's editor goes back to the picker, which is its own way out of
+  // the work: it asks here. An edit has nowhere to go but out, and the sheet
+  // asks for itself.
   const back =
     formKey === "new" && values
-      ? () =>
-          leave(() => {
+      ? () => {
+          const reset = () => {
             setValues(null);
             setStarted(null);
             setError(null);
-          })
+          };
+          if (!dirty) return reset();
+          void confirm(abandon).then((discarded) => discarded && reset());
+        }
       : undefined;
-  const closeSheet = () => leave(close);
 
   return (
     <BottomSheet
       visible={open}
-      onClose={back ?? closeSheet}
+      discard={dirty && !back ? abandon : null}
+      onClose={back ?? close}
       onBack={back}
       closable={!busy}
       title={form ? copy.editTitle : copy.newTitle}

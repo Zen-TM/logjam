@@ -13,6 +13,7 @@ import {
 } from "react";
 import { Alert, Text, View } from "react-native";
 import {
+  abandonConfirm,
   answersFromDraft,
   ApiError,
   contractSectionKeys,
@@ -118,6 +119,8 @@ export function FormSheet({
   // caller's answer, and a form changed under it (a 409, then the refetch)
   // keeps what still fits (`fitAnswerDraft`).
   const [draft, setDraft] = useState<TripPlanAnswerDraft>({});
+  // The draft as it started, to tell an answer being typed from one just opened.
+  const [openedDraft, setOpenedDraft] = useState<TripPlanAnswerDraft>({});
   const [draftFor, setDraftFor] = useState<Pick<
     TripPlanFormView,
     "id" | "updatedAt" | "questions" | "visibleTo"
@@ -131,7 +134,12 @@ export function FormSheet({
     if (draftFor) setDraftFor(null);
   } else if (draftFor?.id !== form.id) {
     setDraftFor(form);
-    setDraft(draftFromAnswers(form.questions, form.myAnswer?.answers ?? {}));
+    const started = draftFromAnswers(
+      form.questions,
+      form.myAnswer?.answers ?? {},
+    );
+    setDraft(started);
+    setOpenedDraft(started);
     setError(null);
     setChanged(false);
   } else if (draftFor.updatedAt !== form.updatedAt) {
@@ -323,9 +331,14 @@ export function FormSheet({
         }
       : null;
 
+  const dirty =
+    answering && JSON.stringify(draft) !== JSON.stringify(openedDraft);
   return (
     <BottomSheet
       visible={form != null}
+      discard={
+        dirty && form ? abandonConfirm("answer", form.myAnswer == null) : null
+      }
       // Inside answering, every way out (drag, back, ×) backs out one layer.
       onClose={back ?? close}
       title={saying ? (said.title ?? form.title) : (form?.title ?? "")}

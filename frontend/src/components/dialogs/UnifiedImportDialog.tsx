@@ -21,6 +21,7 @@ import {
   ErrorBanner,
 } from "../../ui";
 import {
+  abandonConfirm,
   matchPlace,
   matchTripPlace,
   haversineMeters,
@@ -83,7 +84,6 @@ import {
 } from "../../csvImport/prepareRows";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import ConfirmDialog from "./ConfirmDialog";
 import MatchReview, {
   type ReviewItem,
@@ -1830,7 +1830,6 @@ function UnifiedImportDialog({
   // exists there's nothing left to lose, so handleDismiss (= onClose) runs
   // unguarded.
   const isDirty = !outcome && (placeFile != null || tripFile != null);
-  const guard = useUnsavedChangesGuard(isDirty, handleDismiss);
 
   function renderContent() {
     if (showingMergeSettings) return renderMergeSettings();
@@ -1851,7 +1850,7 @@ function UnifiedImportDialog({
     return renderConfirmStep();
   }
 
-  function renderActions() {
+  function renderActions(requestClose: () => void) {
     // Inside the sub-view every way out means "back to the confirm step".
     if (showingMergeSettings) {
       return (
@@ -1875,9 +1874,7 @@ function UnifiedImportDialog({
     if (step === "map") {
       return (
         <>
-          <Button onClick={guard.requestClose}>
-            {onBack ? "Back" : "Cancel"}
-          </Button>
+          <Button onClick={requestClose}>{onBack ? "Back" : "Cancel"}</Button>
           <Button variant="filled" onClick={handleMapNext}>
             Next
           </Button>
@@ -1936,22 +1933,17 @@ function UnifiedImportDialog({
         onClose={
           showingMergeSettings
             ? () => setShowingMergeSettings(false)
-            : guard.requestClose
+            : handleDismiss
         }
-        footer={renderActions()}
+        discard={
+          isDirty && !showingMergeSettings
+            ? abandonConfirm("import", true)
+            : null
+        }
+        footer={renderActions}
       >
         {renderContent()}
       </Dialog>
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your loaded file and any mapping changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
 
       <ConfirmDialog
         open={confirmingUndo}

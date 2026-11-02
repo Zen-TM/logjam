@@ -94,8 +94,8 @@ import PlanInviteLinkDialog from "./plans/PlanInviteLinkDialog";
 import { planMapPress } from "./plans/plansModel";
 import { usePlan, usePlans } from "../plansApi";
 import ConfirmDialog from "./dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../useUnsavedChangesGuard";
 import {
+  abandonConfirm,
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
@@ -1192,14 +1192,17 @@ function App() {
       JSON.stringify(editingOriginal.points)
     : routeDraft.points.length > 0;
 
-  const cancelRouteGuard = useUnsavedChangesGuard(
-    draftChanged,
-    cancelDrawingRoute,
+  // The route editor is a map tool, not a Dialog, so it asks for itself.
+  const [routeConfirm, setRouteConfirm] = useState<"cancel" | "clear" | null>(
+    null,
   );
-  const clearRouteGuard = useUnsavedChangesGuard(
-    routeDraft.points.length > 0,
-    () => routeDraft.reset(),
-  );
+  const abandonRoute = abandonConfirm("route", !editingRouteId);
+  const requestCancelRoute = () =>
+    draftChanged ? setRouteConfirm("cancel") : cancelDrawingRoute();
+  const requestClearRoute = () =>
+    routeDraft.points.length > 0
+      ? setRouteConfirm("clear")
+      : routeDraft.reset();
 
   // While checking for an existing session, show a branded splash instead of
   // a blank flash before the sign-in form or map appears.
@@ -1277,7 +1280,7 @@ function App() {
     };
     if (!drawingRoute) return arm();
     afterRouteCancel.current = arm;
-    cancelRouteGuard.requestClose();
+    requestCancelRoute();
   };
 
   const startEditingRoute = (route: TRoute) => {
@@ -1711,7 +1714,7 @@ function App() {
                   color={drawColor}
                   onColorChange={setDrawColor}
                   onUndo={routeDraft.undo}
-                  onClear={clearRouteGuard.requestClose}
+                  onClear={requestClearRoute}
                   onReverse={routeDraft.reverse}
                   routeHover={routeHover}
                   // Editing keeps the name it already has; naming belongs to
@@ -1723,7 +1726,7 @@ function App() {
                     if (existing) void saveDrawnRoute(existing.name);
                     else setNamingRoute(true);
                   }}
-                  onCancel={cancelRouteGuard.requestClose}
+                  onCancel={requestCancelRoute}
                   saving={savingRoute}
                   snapMode={snapMode}
                   onSnapModeChange={setSnapMode}
@@ -2024,33 +2027,33 @@ function App() {
         />
 
         <ConfirmDialog
-          open={cancelRouteGuard.guardOpen}
-          // Editing and drawing lose different things, so they cannot share one
-          // sentence: abandoning an edit costs the changes, not the route.
-          title={editingRouteId ? "Discard your edits?" : "Discard this route?"}
-          message={
-            editingRouteId
-              ? "Your changes to this route will be lost. The route itself is not deleted."
-              : "Your placed points will be lost. This cannot be undone."
-          }
-          confirmLabel="Discard"
+          open={routeConfirm === "cancel"}
+          title={abandonRoute.confirmTitle}
+          message={abandonRoute.confirmBody}
+          confirmLabel={abandonRoute.confirmLabel}
           confirmColor="error"
-          onConfirm={cancelRouteGuard.confirmDiscard}
+          onConfirm={() => {
+            setRouteConfirm(null);
+            cancelDrawingRoute();
+          }}
           onClose={() => {
             // Keeping the route also drops whatever was waiting on its discard.
             afterRouteCancel.current = null;
-            cancelRouteGuard.cancelDiscard();
+            setRouteConfirm(null);
           }}
         />
 
         <ConfirmDialog
-          open={clearRouteGuard.guardOpen}
+          open={routeConfirm === "clear"}
           title="Clear this route?"
           message="Your placed points will be lost. This cannot be undone."
           confirmLabel="Clear"
           confirmColor="error"
-          onConfirm={clearRouteGuard.confirmDiscard}
-          onClose={clearRouteGuard.cancelDiscard}
+          onConfirm={() => {
+            setRouteConfirm(null);
+            routeDraft.reset();
+          }}
+          onClose={() => setRouteConfirm(null)}
         />
 
         <RouteNameDialog

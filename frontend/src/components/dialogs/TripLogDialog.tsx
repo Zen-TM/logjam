@@ -1,6 +1,7 @@
 import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import {
+  abandonConfirm,
   buildCustomFieldDef,
   CANYONING_TRIP_TYPE,
   coerceFieldValue,
@@ -26,7 +27,6 @@ import {
   type TripLogCustomFieldType,
 } from "@logjam/shared";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import type { TPlace, TTripLog } from "../../placeUtils";
 import {
   createTripLog,
@@ -69,7 +69,6 @@ import {
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
-import ConfirmDialog from "./ConfirmDialog";
 import { CurrentUserIdContext } from "../../CurrentUserIdContext";
 import classes from "./TripLogDialog.module.css";
 
@@ -548,7 +547,7 @@ function TripLogDialog({
     currentFingerprint !== pristineFormSnapshot;
 
   // Autosave the create form so a phone call, a tab eviction or a flat battery
-  // doesn't take it — the exits `useUnsavedChangesGuard` structurally cannot
+  // doesn't take it — the exits `Dialog`'s `discard` structurally cannot
   // cover, because nobody is there to answer its prompt.
   useEffect(() => {
     if (!open || tripLog || !currentUserId) return;
@@ -781,10 +780,14 @@ function TripLogDialog({
     onClose();
   }
 
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
+  // Reached only when clean, or once the dialog's discard confirm is answered
+  // with its verb. "Discard" is the deliberate answer the autosaved draft can't
+  // second-guess; create mode only, so discarding *edits* to a saved trip
+  // doesn't take an unrelated create draft with it.
+  function closeAndForget() {
+    if (isDirty && !tripLog) clearTripDraft();
+    void handleRequestClose();
+  }
 
   function getFieldValue(key: string): string {
     return fieldValues[key] ?? "";
@@ -1104,26 +1107,23 @@ function TripLogDialog({
         dismissible={!saving}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
-        onClose={mode === "places" ? backToForm : guard.requestClose}
-        footer={
+        onClose={mode === "places" ? backToForm : closeAndForget}
+        discard={
+          isDirty && mode !== "places" ? abandonConfirm("trip", !tripLog) : null
+        }
+        footer={(requestClose) =>
           mode === "places" ? (
             <Button variant="filled" icon="done" onClick={backToForm}>
               Done
             </Button>
           ) : (
             <>
-              {/* Not "Cancel": the add-attribute sub-form renders its own
-                  "Cancel" that only backs out of that sub-form, and both can be
-                  on screen at once — two identical words, opposite scopes. In
-                  edit mode the object is the *changes*, not the trip: "Discard
-                  trip" on a saved trip would read as "delete it from my
-                  logbook". */}
               <Button
-                onClick={guard.requestClose}
+                onClick={requestClose}
                 disabled={saving}
                 disabledReason="Saving…"
               >
-                {tripLog ? "Discard changes" : "Discard trip"}
+                Cancel
               </Button>
               {/* type="submit" with no onClick — handleSubmit is the only save
                   path, so a click can't fire alongside the form's submit. */}
@@ -1549,23 +1549,6 @@ function TripLogDialog({
             });
           }
         }}
-      />
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={() => {
-          // "Discard" is the deliberate answer the autosaved draft can't
-          // second-guess — the whole point of the prompt is that the user means
-          // it. Create mode only: discarding *edits* to a saved trip must not
-          // take an unrelated create draft with it.
-          if (!tripLog) clearTripDraft();
-          guard.confirmDiscard();
-        }}
-        onClose={guard.cancelDiscard}
       />
     </>
   );

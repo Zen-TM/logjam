@@ -3,18 +3,22 @@ import {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { IconButton } from "./Button";
+import type { ConfirmCopy } from "@logjam/shared";
+import { Button, IconButton } from "./Button";
 import classes from "./Dialog.module.css";
 
 type DialogProps = {
   open: boolean;
   title: ReactNode;
   onClose: () => void;
-  /** Pinned below the scrolling body: Cancel, then the ONE primary action. */
-  footer?: ReactNode;
+  /** Pinned below the scrolling body: Cancel, then the ONE primary action. A
+   *  function receives `requestClose`, which a Cancel button calls so it asks
+   *  the same question as Escape and ×. */
+  footer?: ReactNode | ((requestClose: () => void) => ReactNode);
   /** Pinned under the title, above the scrolling body: the rail that says which
    *  part of a long form the body is showing. It stays put, so "which group am
    *  I in" is never scrolled off the thing it names. */
@@ -27,6 +31,10 @@ type DialogProps = {
   dismissible?: boolean;
   /** A confirm: announced as an alert dialog, with its body as the description. */
   alert?: boolean;
+  /** Non-null while the form holds work (shared/DESIGN.md §10): every way out,
+   *  `requestClose` included, raises this confirm and `onClose` runs only on
+   *  its verb. Null closes at once. Guard: `formDiscard.test.ts`. */
+  discard?: ConfirmCopy | null;
   children: ReactNode;
 };
 
@@ -43,6 +51,8 @@ type DialogProps = {
  * - Escape, the close button and a press that starts AND ends on the backdrop
  *   call `onClose`. A press that starts in a field and ends outside it (a text
  *   selection dragged too far) is not a dismissal.
+ * - With `discard`, those same exits ask first. A close that is held for the
+ *   confirm is not a close, so the native one is re-shown (`onNativeClose`).
  * - Rendered into `document.body`, and it stops its own Escape, so closing it
  *   does not also close the sheet it was raised from or clear the selection of
  *   the list behind it (Dialog.test.tsx).
@@ -60,18 +70,27 @@ function OpenDialog({
   size = "small",
   dismissible = true,
   alert = false,
+  discard = null,
   children,
 }: DialogProps) {
+  const [confirming, setConfirming] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const bodyId = useId();
-  // Closes unless a request is in flight, and says whether it did. An effect
-  // event, so the listeners below see the latest props without re-binding.
-  const closeIfDismissible = useEffectEvent(() => {
-    if (dismissible) onClose();
-    return dismissible;
-  });
+  // Closes unless a request is in flight or a discard is to be confirmed, and
+  // says whether it did. The listeners below take it as an effect event, so
+  // they see the latest props without re-binding.
+  const requestClose = () => {
+    if (!dismissible) return false;
+    if (discard) {
+      setConfirming(true);
+      return false;
+    }
+    onClose();
+    return true;
+  };
+  const closeIfDismissible = useEffectEvent(requestClose);
 
   useLayoutEffect(() => {
     const dialog = dialogRef.current;
@@ -144,37 +163,69 @@ function OpenDialog({
   }, []);
 
   return (
-    <dialog
-      ref={dialogRef}
-      className={[classes.dialog, size === "large" && classes.large]
-        .filter(Boolean)
-        .join(" ")}
-      role={alert ? "alertdialog" : undefined}
-      aria-labelledby={titleId}
-      aria-describedby={alert ? bodyId : undefined}
-    >
-      <header className={classes.head}>
-        <h2
-          id={titleId}
-          ref={headingRef}
-          tabIndex={-1}
-          className={classes.title}
+    <>
+      <dialog
+        ref={dialogRef}
+        className={[classes.dialog, size === "large" && classes.large]
+          .filter(Boolean)
+          .join(" ")}
+        role={alert ? "alertdialog" : undefined}
+        aria-labelledby={titleId}
+        aria-describedby={alert ? bodyId : undefined}
+      >
+        <header className={classes.head}>
+          <h2
+            id={titleId}
+            ref={headingRef}
+            tabIndex={-1}
+            className={classes.title}
+          >
+            {title}
+          </h2>
+          <IconButton
+            icon="close"
+            label="Close"
+            onClick={requestClose}
+            disabled={!dismissible}
+            disabledReason="Wait for this to finish"
+          />
+        </header>
+        {toolbar && <div className={classes.toolbar}>{toolbar}</div>}
+        <div id={bodyId} className={classes.body}>
+          {children}
+        </div>
+        {footer && (
+          <footer className={classes.foot}>
+            {typeof footer === "function" ? footer(requestClose) : footer}
+          </footer>
+        )}
+      </dialog>
+      {discard && (
+        <Dialog
+          open={confirming}
+          title={discard.confirmTitle}
+          alert
+          onClose={() => setConfirming(false)}
+          footer={
+            <>
+              <Button onClick={() => setConfirming(false)}>Cancel</Button>
+              <Button
+                variant={
+                  discard.tone === "destructive" ? "destructive" : "filled"
+                }
+                onClick={() => {
+                  setConfirming(false);
+                  onClose();
+                }}
+              >
+                {discard.confirmLabel}
+              </Button>
+            </>
+          }
         >
-          {title}
-        </h2>
-        <IconButton
-          icon="close"
-          label="Close"
-          onClick={onClose}
-          disabled={!dismissible}
-          disabledReason="Wait for this to finish"
-        />
-      </header>
-      {toolbar && <div className={classes.toolbar}>{toolbar}</div>}
-      <div id={bodyId} className={classes.body}>
-        {children}
-      </div>
-      {footer && <footer className={classes.foot}>{footer}</footer>}
-    </dialog>
+          {discard.confirmBody}
+        </Dialog>
+      )}
+    </>
   );
 }

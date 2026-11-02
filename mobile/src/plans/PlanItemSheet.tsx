@@ -9,6 +9,7 @@
 import { Fragment, useRef, useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import {
+  abandonConfirm,
   ApiError,
   itemFieldDefs,
   itemPatch,
@@ -235,9 +236,19 @@ export function PlanItemSheet({
       : undefined;
   const dateDef = attrDefs.find((def) => def.key === dateKey);
   const dateValue = dateKey ? (values[ITEM_ATTR + dateKey] ?? "") : "";
+  const dirty =
+    editing &&
+    !dateKey &&
+    seen != null &&
+    !tripPlanSame(values, itemWords(seen));
   return (
     <BottomSheet
       visible={item !== null}
+      discard={
+        dirty
+          ? abandonConfirm(item?.kind === "place" ? "place" : "way", false)
+          : null
+      }
       onClose={back ?? onClose}
       onBack={back}
       closable={!busy}

@@ -63,6 +63,7 @@ import {
   type DeviceMotionMeasurement,
 } from "expo-sensors";
 import {
+  abandonConfirm,
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
   TRACK_MIME_TYPES,
@@ -277,6 +278,7 @@ import {
   BottomSheet,
   Button,
   Chip,
+  confirm,
   Icon,
   MapBanner,
   Notice,
@@ -1876,25 +1878,11 @@ export function MapScreen({
         discard();
         return;
       }
-      // TWO cases, and the wrong sentence is a lie in one of them. Drawing a
-      // new route, the points ARE what is lost. Editing a saved one, they are
-      // not: the stored route is untouched until Save, so the honest promise is
-      // that it stays as it was — "the points you placed will be lost" reads as
-      // if the route itself is going.
-      if (editingRouteId) {
-        Alert.alert("Discard changes?", "The saved route is left as it was.", [
-          { text: "Keep editing", style: "cancel" },
-          { text: "Discard changes", style: "destructive", onPress: discard },
-        ]);
-        return;
-      }
-      Alert.alert(
-        "Discard this route?",
-        "The points you placed will be lost.",
-        [
-          { text: "Keep drawing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: discard },
-        ],
+      // Drawing a new route, the points ARE what is lost; editing a saved one,
+      // the stored route is untouched until Save, so the copy says it stays as
+      // it was (`abandonConfirm`).
+      void confirm(abandonConfirm("route", !editingRouteId)).then(
+        (discarded) => discarded && discard(),
       );
     },
     [editingRouteId, routeDraft],

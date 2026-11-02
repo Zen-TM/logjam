@@ -27,7 +27,6 @@ const BASELINE: string[] = [
   "places/PlaceOptionsSheet.tsx",
   "places/PlacesScreen.tsx",
   "places/PlaceTypesEditor.tsx",
-  "plans/FormBuilderSheet.tsx",
   "plans/FormSheet.tsx",
   "plans/PeopleView.tsx",
   "plans/PlanItemSheet.tsx",

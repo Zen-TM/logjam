@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import {
+  abandonConfirm,
   ATTRIBUTE_NOUN,
   CANYONING_TRIP_TYPE,
   enforceCanyoningTag,
@@ -284,6 +285,35 @@ export function TripEditSheet({
     setTypes((prev) => enforceCanyoningTag(prev, linkedCanyon));
   }
 
+  // The form once it has settled after opening (the canyoning tag above lands
+  // in the opening render), to tell an edit from an untouched sheet (§10). An
+  // emptied field is the same as one never filled.
+  const fingerprint = JSON.stringify({
+    dateKey,
+    selected,
+    displayName,
+    types,
+    notes,
+    fieldValues: Object.entries(fieldValues)
+      .filter(([, value]) => value !== "")
+      .sort(([a], [b]) => a.localeCompare(b)),
+  });
+  const [pristine, setPristine] = useState<{ for: string; of: string } | null>(
+    null,
+  );
+  if (openKey === null && pristine !== null) setPristine(null);
+  if (
+    openKey !== null &&
+    seededFor === openKey &&
+    taggedFor === linkedCanyon &&
+    pristine?.for !== openKey
+  )
+    setPristine({ for: openKey, of: fingerprint });
+  const dirty =
+    mode === "form" &&
+    pristine?.for === openKey &&
+    fingerprint !== pristine?.of;
+
   // The place-cap error belongs to the picker mode; leaving it clears it, same
   // as any other field's error clearing when the user moves on.
   if (mode !== "places" && placesError !== null) setPlacesError(null);
@@ -496,6 +526,7 @@ export function TripEditSheet({
   return (
     <BottomSheet
       visible={visible}
+      discard={dirty ? abandonConfirm("trip", !editing) : null}
       // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
       // not "throw away everything I just typed".
       onClose={

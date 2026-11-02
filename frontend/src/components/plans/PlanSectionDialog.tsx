@@ -7,6 +7,7 @@
 // refused, never made again.
 import { useId, useState } from "react";
 import {
+  abandonConfirm,
   limitHint,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
@@ -18,8 +19,6 @@ import {
   type TripPlanSectionView,
 } from "@logjam/shared";
 import { Button, Dialog, ErrorBanner, TextArea, TextField } from "../../ui";
-import ConfirmDialog from "../dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
@@ -93,7 +92,6 @@ function SectionForm({
     moved && current && tripPlanTheirsChanged([field], values, current, opened)
       ? current[field]
       : null;
-  const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((was) => ({ ...was, ...next }));
     setError(null);
@@ -129,12 +127,13 @@ function SectionForm({
         open
         size="large"
         title={editing ? copy.sectionTitle : copy.sectionNewTitle}
-        onClose={guard.requestClose}
+        onClose={onClose}
+        discard={dirty ? abandonConfirm("section", !editing) : null}
         dismissible={!busy}
-        footer={
+        footer={(requestClose) => (
           <>
             <Button
-              onClick={guard.requestClose}
+              onClick={requestClose}
               disabled={busy}
               disabledReason="Saving…"
             >
@@ -144,7 +143,7 @@ function SectionForm({
               {editing ? copy.sectionSave : planAddVerbLabel("section")}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -197,18 +196,6 @@ function SectionForm({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title={editing ? "Discard unsaved changes?" : "Discard this section?"}
-        message={
-          editing
-            ? "Your changes will be lost."
-            : "What you typed will be lost."
-        }
-        confirmLabel="Discard"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }
