@@ -30,6 +30,7 @@ import {
   type PlanItemVerbId,
   type TripPlanItem,
   type TripPlanRole,
+  coordinateEntry,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -340,7 +341,9 @@ export function PlanItemSheet({
                     value={values.latitude}
                     hint={theirs("latitude")}
                     keyboardType="numbers-and-punctuation"
-                    onChangeText={(latitude) => set({ latitude })}
+                    onChangeText={(next) =>
+                      set(coordinateEntry(next, "latitude", values.latitude))
+                    }
                   />
                 </View>
                 <View style={styles.coordField}>
@@ -349,7 +352,9 @@ export function PlanItemSheet({
                     value={values.longitude}
                     hint={theirs("longitude")}
                     keyboardType="numbers-and-punctuation"
-                    onChangeText={(longitude) => set({ longitude })}
+                    onChangeText={(next) =>
+                      set(coordinateEntry(next, "longitude", values.longitude))
+                    }
                   />
                 </View>
               </View>

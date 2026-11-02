@@ -99,3 +99,27 @@ describe("PlaceDialog, while open", () => {
     expect(nameBox().value).toBe("Bravo Chasm");
   });
 });
+
+const box = (label: RegExp) => screen.getByLabelText(label) as HTMLInputElement;
+
+// Finding web-prod-veteran-04. Mutation: put NumberField's sanitising back
+// on the coordinate fields, and the pair is joined into -33.62901503156.
+describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
+  it("fills Latitude and Longitude", () => {
+    render(dialog(null));
+    fireEvent.change(box(/^Latitude/), {
+      target: { value: "-33.6290, 150.3156" },
+    });
+    expect(box(/^Latitude/).value).toBe("-33.629");
+    expect(box(/^Longitude/).value).toBe("150.3156");
+  });
+
+  it("keeps other text as typed, and flags it", () => {
+    render(dialog(null));
+    fireEvent.change(box(/^Latitude/), { target: { value: "-33,6290 150" } });
+    expect(box(/^Latitude/).value).toBe("-33,6290 150");
+    expect(box(/^Longitude/).value).toBe("");
+    fireEvent.blur(box(/^Latitude/));
+    expect(screen.getByText("Enter a valid number")).toBeTruthy();
+  });
+});

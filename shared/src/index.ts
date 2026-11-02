@@ -65,6 +65,7 @@ export * from "./apiTypes.js";
 export * from "./sync.js";
 export * from "./sharing.js";
 export * from "./friendSearch.js";
+export * from "./coordinates.js";
 export * from "./friendShareRows.js";
 export * from "./syncClient.js";
 export * from "./routeExport.js";

@@ -690,6 +690,13 @@ function PlaceDialog({
                 className={classes.grow}
                 value={latitude}
                 onChange={setLatitude}
+                coordinate={{
+                  axis: "latitude",
+                  onPair: (pair) => {
+                    setLatitude(pair.latitude);
+                    setLongitude(pair.longitude);
+                  },
+                }}
                 constraints={LAT_CONSTRAINTS}
                 showError={showFieldErrors || invalidField === "coords"}
                 hint="Decimal degrees (WGS84)."
@@ -700,6 +707,13 @@ function PlaceDialog({
                 className={classes.grow}
                 value={longitude}
                 onChange={setLongitude}
+                coordinate={{
+                  axis: "longitude",
+                  onPair: (pair) => {
+                    setLatitude(pair.latitude);
+                    setLongitude(pair.longitude);
+                  },
+                }}
                 constraints={LNG_CONSTRAINTS}
                 showError={showFieldErrors || invalidField === "coords"}
                 hint="Decimal degrees (WGS84)."
