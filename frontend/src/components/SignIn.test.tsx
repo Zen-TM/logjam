@@ -80,8 +80,8 @@ describe("SignIn under another issuer", () => {
 
   it("redirects on click and shows a failure above the button", () => {
     oidc.hasCognitoAccount.mockReturnValue(false);
-    draw("Sign in failed. Please try again.");
-    expect(screen.getByText("Sign in failed. Please try again.")).toBeTruthy();
+    draw("Couldn't sign in. Try again.");
+    expect(screen.getByText("Couldn't sign in. Try again.")).toBeTruthy();
     press("Sign in or create an account");
     expect(onRedirect).toHaveBeenCalledOnce();
   });
@@ -264,7 +264,7 @@ describe("SignIn under Cognito", () => {
     type("New password", PASSWORD);
     type("Confirm new password", PASSWORD);
     press("Reset password");
-    await screen.findByText("Password reset — please sign in.");
+    await screen.findByText("Password reset. Sign in to continue.");
     expect(oidc.confirmForgotPassword).toHaveBeenCalledWith(
       EMAIL,
       "123456",

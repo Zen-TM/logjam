@@ -389,7 +389,7 @@ export function statsCadence(
   }
   if (stats.averageGapDays != null && stats.longestGapDays != null) {
     lines.push(
-      `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${stats.longestGapDays}`,
+      `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${pluralCount(stats.longestGapDays, "day")}`,
     );
   }
   lines.push(

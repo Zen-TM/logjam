@@ -17,6 +17,7 @@ import { Text, View } from "react-native";
 import {
   TRACK_MIME_TYPES,
   messageFromError,
+  SHARE_SENTENCES,
   truncationHint,
 } from "@logjam/shared";
 
@@ -127,7 +128,7 @@ export function usePlacePicker({
         }).then((filled) => {
           if (filled) onDone();
         }),
-      "Couldn't attach that to the place.",
+      "Couldn't link that to the place.",
     );
   };
 
@@ -138,9 +139,7 @@ export function usePlacePicker({
     header: (
       <View style={styles.header}>
         {promise ? <Text style={styles.hint}>{promise}</Text> : null}
-        <Text style={styles.hint}>
-          Anyone you share a place with can see linked routes.
-        </Text>
+        <Text style={styles.hint}>{SHARE_SENTENCES.linkedRoutes}</Text>
         <TextField label="Find a place" value={query} onChangeText={setQuery} />
       </View>
     ),

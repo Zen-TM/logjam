@@ -868,7 +868,7 @@ function PlacesPanel({
     truncated: placesTotal != null && placesTotal > places.length && (
       <p className={classes.note}>
         Showing your {places.length} most recent places of {placesTotal}. Older
-        ones aren&rsquo;t loaded.
+        ones aren't loaded.
       </p>
     ),
     list,

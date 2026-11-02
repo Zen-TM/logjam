@@ -449,7 +449,7 @@ function FriendsPanel({
                           {
                             id: "remove",
                             label: friendVerb("remove").label,
-                            icon: "unshare",
+                            icon: friendVerb("remove").icon,
                             danger: true,
                             onSelect: () => setRemoving(friend),
                           },

@@ -77,7 +77,7 @@ describe("batchFileActionMessage", () => {
     expect(
       batchFileActionMessage({ kind: "decline", done: 4, failed: 0, total: 4 })
         .text,
-    ).toBe("Turned down 4 files.");
+    ).toBe("Declined 4 files.");
   });
 
   it("says one file, not 1 files", () => {

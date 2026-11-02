@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildWays,
-  WAY_KIND_LABELS,
-  WAY_KINDS,
   wayKindCounts,
   wayMatchesSearch,
   type WayItem,
@@ -72,19 +70,6 @@ const build = (args: {
     currentUserId: args.currentUserId === undefined ? ME : args.currentUserId,
     sharedPlaceIds: new Set(args.sharedPlaceIds ?? []),
   });
-
-describe("WAY_KINDS", () => {
-  // Two lists that must agree: a kind with no word for it would render a blank
-  // chip rather than fail.
-  it("labels every kind", () => {
-    expect(Object.keys(WAY_KIND_LABELS).sort()).toEqual([...WAY_KINDS].sort());
-  });
-
-  // Where a way lives is a property of the row, not a kind axis.
-  it("names only what a way IS", () => {
-    expect([...WAY_KINDS]).toEqual(["route", "track", "import"]);
-  });
-});
 
 describe("buildWays", () => {
   it("takes a file's kind from its own origin", () => {

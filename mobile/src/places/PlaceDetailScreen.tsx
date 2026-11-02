@@ -28,6 +28,7 @@ import {
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   placeAttributesTitle,
+  placeSectionTitle,
   placeSources,
   placeStatusLabel,
   placeVerbs,
@@ -229,6 +230,7 @@ export function PlaceDetailScreen({
   // appears to do nothing is worse than no link at all.
   const slot = placeRoute(placeId, routes.data ?? [], attachments);
   const linkedRoute = slot?.kind === "drawn" ? slot.route : null;
+  const hasRoute = slot !== null;
   // Symmetric and many-to-many, unlike the route slot: a carpark serving three
   // canyons off one trailhead is linked from all three, and the link is stored
   // once with this place at either end.
@@ -403,7 +405,12 @@ export function PlaceDetailScreen({
     gauge: () =>
       place.gaugeId || isOwner ? (
         <>
-          <SectionHeader title={copy.gauge} />
+          <SectionHeader
+            title={placeSectionTitle("gauge", copy.gauge, {
+              owned: isOwner,
+              filled: Boolean(place.gaugeId),
+            })}
+          />
           <PlaceGaugeSection
             latitude={place.latitude}
             longitude={place.longitude}
@@ -425,7 +432,13 @@ export function PlaceDetailScreen({
     attributes: () =>
       customFields.length > 0 ? (
         <>
-          <SectionHeader title={placeAttributesTitle(placeTypeName)} />
+          <SectionHeader
+            title={placeSectionTitle(
+              "attributes",
+              placeAttributesTitle(placeTypeName),
+              { owned: isOwner, filled: true },
+            )}
+          />
           <AttributeTable rows={customFields} />
         </>
       ) : null,
@@ -460,7 +473,10 @@ export function PlaceDetailScreen({
     notes: () => (
       <>
         <SectionHeader
-          title={place.notes && isOwner ? copy.notesVisible : copy.notes}
+          title={placeSectionTitle("notes", copy.notes, {
+            owned: isOwner,
+            filled: Boolean(place.notes),
+          })}
         />
         {place.notes ? (
           <Text style={styles.notes}>{place.notes}</Text>
@@ -473,7 +489,13 @@ export function PlaceDetailScreen({
     sources: () =>
       sources.length > 0 ? (
         <>
-          <SectionHeader title={copy.sources} count={sources.length} />
+          <SectionHeader
+            title={placeSectionTitle("sources", copy.sources, {
+              owned: isOwner,
+              filled: true,
+            })}
+            count={sources.length}
+          />
           {sources.map((source, index) => (
             <Row
               key={index}
@@ -497,7 +519,10 @@ export function PlaceDetailScreen({
     photos: () => (
       <>
         <SectionHeader
-          title={copy.photos}
+          title={placeSectionTitle("photos", copy.photos, {
+            owned: isOwner,
+            filled: photoCount > 0,
+          })}
           count={photoCount > 0 ? photoCount : undefined}
         />
         <MediaStrip
@@ -514,7 +539,12 @@ export function PlaceDetailScreen({
 
     route: () => (
       <>
-        <SectionHeader title={copy.route} />
+        <SectionHeader
+          title={placeSectionTitle("route", copy.route, {
+            owned: isOwner,
+            filled: hasRoute,
+          })}
+        />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
 

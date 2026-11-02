@@ -58,45 +58,7 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
 ];
 
 // Strings still to reword to the glossary; delete an entry with its string.
-const BASELINE: { file: string; text: string; rule: string }[] = [
-  {
-    file: "imports/ImportOptionsSheet.tsx",
-    rule: "attach-to-place",
-    text: "Attach to a place",
-  },
-  {
-    file: "saved/SavedScreen.tsx",
-    rule: "region",
-    text: "Download a map region",
-  },
-  { file: "saved/SavedScreen.tsx", rule: "region", text: "Download a region" },
-  {
-    file: "saved/SavedScreen.tsx",
-    rule: "region",
-    text: "Places need maps that work with no signal. Save a region before you leave town.",
-  },
-  { file: "saved/SavedScreen.tsx", rule: "region", text: "Region" },
-  {
-    file: "saved/SavedScreen.tsx",
-    rule: "region",
-    text: "Without a saved region the map is blank once you lose signal.",
-  },
-  {
-    file: "screens/LandingScreen.tsx",
-    rule: "logbook",
-    text: "Your canyoning logbook and offline maps.",
-  },
-  {
-    file: "screens/settings/OfflineSettingsScreen.tsx",
-    rule: "lidar-topo",
-    text: "Topo auto-downloads",
-  },
-  {
-    file: "tracks/TrackOptionsSheet.tsx",
-    rule: "attach-to-place",
-    text: "Attach to a place",
-  },
-];
+const BASELINE: { file: string; text: string; rule: string }[] = [];
 
 const baselined = (file: string, rule: string, text: string) =>
   BASELINE.some(

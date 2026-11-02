@@ -2,8 +2,7 @@
 // they imported, and the tracks on places friends shared with them.
 //
 // The page answers "what lines have I got?" (shared/DESIGN.md §2). One pinned rail
-// narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
-// mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
+// narrows it by kind, using the kinds `WAY_KIND_WORDS` declares for both clients; what each kind IS is `waysModel.ts`.
 //
 // A row OPENS — whatever kind it is — and its ⋯ acts. Which verbs it offers is
 // `wayActions.ts`, the same list the way's own page offers: a row shows the
@@ -19,6 +18,8 @@ import {
   routeToGpx,
   routeToKml,
   type StandaloneFile,
+  WAY_KIND_WORDS,
+  WAY_KINDS,
   wayVerbIcon,
 } from "@logjam/shared";
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
@@ -45,8 +46,6 @@ import {
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
   buildWays,
-  WAY_KIND_LABELS,
-  WAY_KINDS,
   wayKindCounts,
   wayMatchesSearch,
   type WayItem,
@@ -273,7 +272,7 @@ export default function RoutesPanel({
             },
             {
               id: "import",
-              label: "Import from file",
+              label: "Import a file",
               icon: "upload",
               onSelect: onOpenUnifiedImport,
             },
@@ -302,7 +301,7 @@ export default function RoutesPanel({
           { value: ANY_KIND, label: "All", count: counts.all },
           ...WAY_KINDS.map((each) => ({
             value: each,
-            label: WAY_KIND_LABELS[each],
+            label: WAY_KIND_WORDS[each].plural,
             count: counts[each],
             icon: KIND_IDENTITY[each].icon,
             hue: KIND_IDENTITY[each].hue,
@@ -357,8 +356,8 @@ export default function RoutesPanel({
     <div className={classes.emptyArea}>
       <EmptyState
         icon="route"
-        title="No lines yet"
-        body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
+        title="No ways yet"
+        body="Draw a route on the map. Tracks you record in Logjam GPS appear here too."
         actions={addWayButtons}
       />
     </div>
@@ -397,12 +396,12 @@ export default function RoutesPanel({
             data-way-kind={way.kind}
             title={way.title}
             subtitle={subtitleOf(way)}
-            description={WAY_KIND_LABELS[way.kind]}
+            description={WAY_KIND_WORDS[way.kind].plural}
             leading={
               <IconTile
                 icon={identity.icon}
                 hue={identity.hue}
-                label={WAY_KIND_LABELS[way.kind]}
+                label={WAY_KIND_WORDS[way.kind].plural}
               />
             }
             // Every kind opens, and opening centres the map on it.

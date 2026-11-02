@@ -152,7 +152,7 @@ export function AccountForms({
       setError("Enter your password.");
       return;
     }
-    return submit("Sign in failed. Please try again.", () => signInWith());
+    return submit("Couldn't sign in. Try again.", () => signInWith());
   };
 
   const onSignUp = () => {
@@ -169,7 +169,7 @@ export function AccountForms({
     setUsernameError(problem?.field === "username" ? problem.message : null);
     setError(problem?.field === "form" ? problem.message : null);
     if (problem) return;
-    return submit("Sign up failed. Please try again.", async () => {
+    return submit("Couldn't sign up. Try again.", async () => {
       if (!(await isUsernameFree(username.trim()))) {
         setUsernameError(USERNAME_TAKEN);
         return;
@@ -185,7 +185,7 @@ export function AccountForms({
   };
 
   const onConfirmSignUp = () =>
-    submit("Confirmation failed. Please try again.", async () => {
+    submit("Couldn't confirm your code. Try again.", async () => {
       await accountCalls.confirmSignUp(email.trim(), code.trim());
       // The password is held from the form that led here, so the just-verified
       // account signs in without asking again.

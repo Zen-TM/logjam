@@ -180,7 +180,7 @@ function SelectedPlacesDialog({
           <SectionHeader title="These places" count={selectedPlaces.length} />
           {mode === "share" && sharedCount > 0 && (
             <p className={classes.note}>
-              {plural(sharedCount, "place")} shared with you can&rsquo;t be
+              {plural(sharedCount, "place")} shared with you can't be
               shared on.
             </p>
           )}

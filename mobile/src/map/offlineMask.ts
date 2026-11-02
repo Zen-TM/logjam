@@ -1,4 +1,4 @@
-// Without a mask, "Offline maps only" leaves a blurry smear around downloaded
+// Without a mask, "Use only saved maps" leaves a blurry smear around downloaded
 // areas: a region pyramid starts at z8, and one z8 tile covers hundreds of
 // kilometres, so MapLibre draws that whole tile wherever it overlaps the
 // source's bounds — upscaled 256× at walking zoom. The result reads as a map,

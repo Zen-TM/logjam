@@ -14,6 +14,7 @@ import {
   formatFieldValue,
   formatTripDate,
   mediaCategory,
+  navLabel,
   TRIP_PAGE,
   tripDeleteConfirm,
   tripTypeLabel,
@@ -128,7 +129,7 @@ function TripDetailPanel({
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete this trip. Please try again."),
+        messageFromError(err, "Couldn't delete this trip. Try again."),
       );
     } finally {
       setDeleting(false);
@@ -138,12 +139,16 @@ function TripDetailPanel({
   if (!tripLog) {
     return (
       <div className={classes.root}>
-        <Hero title="Trip" onBack={onBack} backLabel="Back to Logs" />
+        <Hero
+          title="Trip"
+          onBack={onBack}
+          backLabel={`Back to ${navLabel("logs")}`}
+        />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
             title="No trip selected"
-            body="Pick one from Logs, or from the place it visited."
+            body={`Pick one from ${navLabel("logs")}, or from the place it visited.`}
           />
         </div>
       </div>
@@ -312,7 +317,7 @@ function TripDetailPanel({
         <Hero
           title={title}
           onBack={onBack}
-          backLabel="Back to Logs"
+          backLabel={`Back to ${navLabel("logs")}`}
           actions={
             <>
               <Menu

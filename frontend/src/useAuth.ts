@@ -124,7 +124,7 @@ export function useAuth() {
         console.error(err);
         if (cancelled) return;
         // Not known signed out: whoever was here may still hold a session.
-        setError(messageFromError(err, "Sign in failed. Please try again."));
+        setError(messageFromError(err, "Couldn't sign in. Try again."));
         sessionCheckFailed.current = true;
         setState("signIn");
         return;
@@ -182,7 +182,7 @@ export function useAuth() {
       void clearTileCache();
       setState((prev) => {
         if (prev !== "authenticated") return prev;
-        setError("Your session has expired. Please sign in again.");
+        setError("Your session has expired. Sign in again.");
         return "signIn";
       });
     });
@@ -197,7 +197,7 @@ export function useAuth() {
       await signInRedirect();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Sign in failed. Please try again."));
+      setError(messageFromError(err, "Couldn't sign in. Try again."));
     }
   }, []);
 

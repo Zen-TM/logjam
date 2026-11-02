@@ -782,12 +782,12 @@ test.describe("desktop", () => {
     await expect(form.getByLabel(/^Name/).first()).toHaveValue("Unsaved name");
   });
 
-  test("Logs, a trip, its form, and Stats", async ({ page }) => {
+  test("Trips, a trip, its form, and Stats", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Logs", exact: true }).click();
+    await page.getByRole("button", { name: "Trips", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: "Logs", exact: true }),
+      aside.getByRole("heading", { level: 2, name: "Trips", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -814,7 +814,7 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("heading", { name: "Notes" })).toBeVisible();
 
     // Back to the logbook, where Stats opens from the hero.
-    await aside.getByRole("button", { name: "Back to Logs" }).click();
+    await aside.getByRole("button", { name: "Back to Trips" }).click();
     await aside.getByRole("button", { name: "Trip stats" }).click();
     await expect(
       aside.getByRole("heading", { level: 2, name: /out$/ }),
@@ -1045,7 +1045,7 @@ test.describe("desktop", () => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
-    await page.getByRole("menuitem", { name: "Import from file" }).click();
+    await page.getByRole("menuitem", { name: "Import a file" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(

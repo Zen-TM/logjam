@@ -77,6 +77,7 @@ import {
   NOTIFICATION_VERBS,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  placeSectionTitle,
   placeAttributesTitle,
   placeStatusLabel,
   PLACE_VERBS,
@@ -346,13 +347,13 @@ describe("placeDeleteConfirm", () => {
       "Its notes, photos, tracks and shares go too. This can't be undone.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 1).confirmBody).toContain(
-      "1 logged trip stays in your logbook, unlinked.",
+      "1 logged trip stays, unlinked.",
     );
     expect(placeDeleteConfirm({ name: "Claustral" }, 4).confirmBody).toContain(
-      "4 logged trips stay in your logbook, unlinked.",
+      "4 logged trips stay, unlinked.",
     );
     expect(placeDeleteConfirm({ count: 3 }).confirmBody).toBe(
-      "Their notes, photos, tracks and shares go too. Trips that link to them stay in your logbook, unlinked. This can't be undone.",
+      "Their notes, photos, tracks and shares go too. Trips that link to them stay, unlinked. This can't be undone.",
     );
   });
 });
@@ -378,6 +379,25 @@ describe("a place's page", () => {
         expect(contractSectionsFor(PLACE_PAGE, client, owned)).toContain(
           "gauge",
         );
+  });
+
+  // Mutation: drop `shareeSees` from "photos", and the owner's page stops
+  // saying a friend sees the photos.
+  it("marks, on the owner's page only, each section a friend sees", () => {
+    const title = (owned: boolean, filled: boolean) =>
+      placeSectionTitle("photos", "Photos & videos", { owned, filled });
+    expect(title(true, true)).toBe(
+      "Photos & videos · visible to friends you share with",
+    );
+    expect(title(false, true)).toBe("Photos & videos");
+    expect(title(true, false)).toBe("Photos & videos");
+    // What a friend never sees is never marked, and is never also shown to them.
+    for (const section of PLACE_PAGE.sections) {
+      if ("ownerOnly" in section) expect("shareeSees" in section).toBe(false);
+    }
+    expect(
+      placeSectionTitle("trips", "Your trips", { owned: true, filled: true }),
+    ).toBe("Your trips");
   });
 
   // Red when a primary verb is dropped from the page's verbs: the buttons and

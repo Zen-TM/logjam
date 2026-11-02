@@ -277,7 +277,7 @@ describe("the share / send-a-copy verb matrix", () => {
   // A place's route slot takes TRACK media and nothing else, so this verb has
   // a narrower gate than Send a copy over the very same file — the row that can
   // only fail is absent, not offered (DESIGN.md).
-  it("gives EVERY import Attach to a place — attaching links the row", () => {
+  it("gives EVERY import Link to a place — attaching links the row", () => {
     for (const sourcePath of [
       "/imports/i1-source.gpx",
       "/imports/i1-source.kml",
@@ -295,7 +295,7 @@ describe("the share / send-a-copy verb matrix", () => {
     }
   });
 
-  it("never offers Attach to a place on the kinds that are not files", () => {
+  it("never offers Link to a place on the kinds that are not files", () => {
     expect(routeActions(route("owner")).attachToPlace).toBeUndefined();
     // A recording gets there through createRouteFrom instead: the track itself
     // is never linked, a route made from it is.

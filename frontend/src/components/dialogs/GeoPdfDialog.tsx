@@ -674,9 +674,7 @@ function GeoPdfDialog({
       onClose();
     } catch (e) {
       console.error(e);
-      setError(
-        messageFromError(e, "Couldn't queue the export. Please try again."),
-      );
+      setError(messageFromError(e, "Couldn't queue the export. Try again."));
     } finally {
       setGenerating(false);
     }

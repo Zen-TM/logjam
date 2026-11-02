@@ -140,7 +140,7 @@ export function useSharing({
       const ok = await confirm({
         confirmTitle: `Stop sharing with ${recipient.sharedWith.username}?`,
         confirmBody: revokeBody(recipient.sharedWith.username),
-        confirmLabel: "Unshare",
+        confirmLabel: "Stop sharing",
         tone: "destructive",
       });
       if (!ok) return;

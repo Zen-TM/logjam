@@ -32,7 +32,7 @@
 // see the comment on its `enabledOverlays` effect).
 //
 // PRIVACY: nothing here renders coordinates or bboxes — rows show generic
-// labels ("Offline map region"), user-supplied names (renames, GeoPDF/track
+// labels ("Offline map"), user-supplied names (renames, GeoPDF/track
 // titles, topo job names), and sizes/dates only. "Show on map" passes a bbox
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
@@ -59,6 +59,7 @@ import {
   routeLengthM,
   messageFromError,
   removeShareConfirm,
+  WAY_KIND_WORDS,
   wayVerbIcon,
   wayVerbLabel,
   type IconIdea,
@@ -259,25 +260,20 @@ const CATEGORY_META: Record<
     icon: IconIdea;
   }
 > = {
-  region: { label: "Region", plural: "Regions", icon: "map" },
+  region: { label: "Offline map", plural: "Offline maps", icon: "map" },
   overlay: {
     label: "Sharpened area",
     plural: "Sharpened areas",
     icon: "lidar",
   },
   geoPdf: { label: "GeoPDF", plural: "GeoPDFs", icon: "geoPdf" },
-  // Routes you drew, as opposed to files you brought in. Kept a separate
-  // category rather than folded into "import": a route is editable in place and
-  // an import is an opaque file, and a list that mixes them would need to
-  // explain which rows can be edited.
-  route: { label: "Route", plural: "Routes", icon: "route" },
-  // NOT named for a format ("GPX & KML") and not for lines ("Ways"): a row
-  // here is a whole FILE the user brought in from another app, and it may hold
-  // points and polygons as readily as lines. "Files" alone was rejected as too
-  // vague — everything in this tab is a file — so the distinguishing word is
-  // the one that survives.
-  import: { label: "Import", plural: "Imports", icon: "importedFile" },
-  track: { label: "Track", plural: "Tracks", icon: "track" },
+  // The three kinds of line are `WAY_KIND_WORDS`, shared with Logjam Web's Ways
+  // page. Route stays a category of its own beside import: a route is editable
+  // in place and an import is an opaque file, and a list that mixed them would
+  // need to explain which rows can be edited.
+  route: WAY_KIND_WORDS.route,
+  import: WAY_KIND_WORDS.import,
+  track: WAY_KIND_WORDS.track,
 };
 
 // Reading order for the filter rail, the capacity meter and the "add to this
@@ -960,7 +956,7 @@ export function SavedScreen({
       rows.push({
         key: savedRegionKey(group.key),
         category: "region",
-        title: group.label ?? "Offline map region",
+        title: group.label ?? "Offline map",
         subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
@@ -980,7 +976,7 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this region?",
+          confirmTitle: "Delete this offline map?",
           confirmBody: `The offline tiles for this area (${countOf(basemapMembers.length, "map")}) are removed from the device.`,
           run: async () => {
             for (const artifact of group.members) {
@@ -1290,7 +1286,7 @@ export function SavedScreen({
         return { label: "Add to device", onPress: () => setAddSheetOpen(true) };
       case "region":
         return {
-          label: "Download a region",
+          label: "Save an offline map",
           onPress: onDownloadRegion,
           ...(online ? {} : { disabledReason: "Needs a connection" }),
         };
@@ -1488,7 +1484,7 @@ export function SavedScreen({
       const ok = await confirm({
         confirmTitle: `Delete ${member.title}?`,
         confirmBody:
-          "This map is removed from the device. The rest of this region stays.",
+          "This map is removed from the device. The rest of this offline map stays.",
         confirmLabel: "Delete",
         tone: "destructive",
       });
@@ -2073,7 +2069,7 @@ export function SavedScreen({
             source above its account one. */}
         <View style={styles.sheetBody}>
           <Row
-            title="Download a map region"
+            title="Save an offline map"
             icon="map"
             hue={assetHue.region}
             disabled={!online}
@@ -2297,7 +2293,7 @@ export function SavedScreen({
               {menuItem.removeShare ? (
                 <Row
                   title="Remove from my account"
-                  icon="unshare"
+                  icon="hide"
                   hue={theme.warning}
                   {...shareRowProps}
                   onPress={() => {
@@ -2454,15 +2450,15 @@ function EmptyPanel({
   const copy: Record<Category | "all", { title: string; hint: string }> = {
     route: {
       title: "No routes yet",
-      hint: "Draw one on the map with the draw tool.",
+      hint: "Draw one with the draw tool, or on Logjam Web.",
     },
     all: {
       title: "Nothing saved yet",
-      hint: "Places need maps that work with no signal. Save a region before you leave town.",
+      hint: "Places need maps that work with no signal. Save an offline map before you leave town.",
     },
     region: {
       title: "No offline map",
-      hint: "Without a saved region the map is blank once you lose signal.",
+      hint: "Without an offline map the map is blank once you lose signal.",
     },
     overlay: {
       title: "No sharpened areas here",

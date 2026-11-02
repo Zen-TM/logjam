@@ -1,9 +1,9 @@
-import { MAP_MEASURE, TRIP_PLANS_LIST } from "@logjam/shared";
+import { MAP_MEASURE, navLabel, TRIP_PLANS_LIST } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
- * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Plans ·
- * Friends, then Inbox · Account · Settings. What is on
+ * Places · Trips (and Stats) · Ways (routes, tracks, imports) · Plans ·
+ * Friends, then Inbox · Settings · Account. What is on
  * the map is not a page: it is the Layers control over the map.
  */
 export type PanelId =
@@ -41,7 +41,7 @@ export const DRAFT_PEEK_REVEAL_PX = 152;
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
   places: "Places",
-  logs: "Logs",
+  logs: navLabel("logs"),
   ways: "Ways",
   plans: TRIP_PLANS_LIST.title,
   friends: "Friends",

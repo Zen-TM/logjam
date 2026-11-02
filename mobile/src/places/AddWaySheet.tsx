@@ -257,7 +257,7 @@ export function AddWaySheet({
         // unhandled here it was an unhandled rejection and the row looked dead.
         void job().catch((err: unknown) => {
           console.error(err);
-          onError("That didn't work. Please try again.");
+          onError("Couldn't finish that. Try again.");
         });
       }}
       title={
@@ -369,7 +369,7 @@ export function AddWaySheet({
                   onPress={() =>
                     fill("route", async () => {
                       await updateRouteLocal(route.id, { placeId });
-                      return "Route attached to this place.";
+                      return "Route linked to this place.";
                     })
                   }
                 />
@@ -400,7 +400,7 @@ export function AddWaySheet({
                 onPress={() =>
                   fill("import", async () => {
                     await vectorImportActions(row).attachToPlace!(placeId);
-                    return "Attached a copy as this place's route.";
+                    return "Linked a copy as this place's route.";
                   })
                 }
               />

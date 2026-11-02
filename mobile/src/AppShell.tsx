@@ -27,6 +27,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   currentConsentVersionOf,
   isThemeSchemeId,
+  navLabel,
   needsReconsent,
   TRIP_PLANS_LIST,
   type IconIdea,
@@ -1167,6 +1168,7 @@ export function AppShell({
             <Tabs.Screen
               name="Places"
               options={{
+                tabBarLabel: navLabel("places"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="place" color={color} />
                 ),
@@ -1177,6 +1179,7 @@ export function AppShell({
             <Tabs.Screen
               name="Logs"
               options={{
+                tabBarLabel: navLabel("logs"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="trip" color={color} />
                 ),
@@ -1187,6 +1190,7 @@ export function AppShell({
             <Tabs.Screen
               name="Saved"
               options={{
+                tabBarLabel: navLabel("saved"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="saved" color={color} />
                 ),

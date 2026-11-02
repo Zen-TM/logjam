@@ -665,7 +665,7 @@ function NotificationsPanel({
   // The row's own answer, inside the card. Inert while a selection runs: a
   // press meant for a checkbox must not accept a friend request.
   const rowFooter = (n: TNotification): ReactNode => {
-    const target = notificationActions(n);
+    const target = notificationActions(n, "web");
     if (target) {
       return target.actions.map((action) => (
         <Button
@@ -754,7 +754,7 @@ function NotificationsPanel({
       title = label.text;
       subtitle = [
         label.detail,
-        notificationActions(row)?.pill,
+        notificationActions(row, "web")?.pill,
         formatTime(row.createdAt),
       ]
         .filter(Boolean)

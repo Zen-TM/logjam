@@ -399,10 +399,7 @@ function PlaceDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded media. Please try again.",
-          ),
+          messageFromError(err, "Couldn't discard uploaded media. Try again."),
         );
         return;
       }
@@ -566,7 +563,7 @@ function PlaceDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save custom field. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);

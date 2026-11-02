@@ -266,3 +266,19 @@
   gap: var(--space-1);
   padding-top: var(--space-1);
 }
+
+/* A count waiting on the row: the nav rail's badge, so a number reads the same
+   in the rail and in a list. */
+.badge {
+  composes: caption from "../textRoles.generated.module.css";
+  min-width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+  color: var(--color-on-fill);
+}

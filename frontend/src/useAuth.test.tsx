@@ -74,7 +74,7 @@ describe("the sign-in callback", () => {
     oidc.completeSignInFromUrl.mockRejectedValue(new Error("access_denied"));
     const { result } = renderHook(() => useAuth());
     await waitFor(() => expect(result.current.state).toBe("signIn"));
-    expect(result.current.error).toBe("Sign in failed. Please try again.");
+    expect(result.current.error).toBe("Couldn't sign in. Try again.");
     expect(apiFetch).not.toHaveBeenCalled();
     expect(oidc.loadSession).not.toHaveBeenCalled();
   });

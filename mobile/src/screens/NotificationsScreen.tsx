@@ -730,7 +730,7 @@ export function NotificationsScreen({
           onProgress: (progress) =>
             setBatchBusy((prev) => (prev ? { ...prev, progress } : prev)),
           run: async (notification) => {
-            const target = notificationActions(notification);
+            const target = notificationActions(notification, "gps");
             // No target means the row is not answerable any more (expired, or
             // already taken) — nothing to do, and not a failure either.
             if (!target) return;
@@ -770,9 +770,9 @@ export function NotificationsScreen({
       if (kind !== "accept") {
         const who = batch.sender ?? "them";
         const ok = await confirm({
-          confirmTitle: `Turn down ${pending.length} files?`,
+          confirmTitle: `Decline ${pending.length} files?`,
           confirmBody: `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
-          confirmLabel: "Turn down",
+          confirmLabel: "Decline",
           tone: "destructive",
         });
         if (!ok) return;
@@ -1259,7 +1259,7 @@ const NotificationRow = memo(function NotificationRow({
   }
   const label = notificationLabel(item);
   const meta = notificationMeta(item, theme);
-  const target = notificationActions(item);
+  const target = notificationActions(item, "gps");
   const subtitle = [label.detail, formatTime(item.createdAt)]
     .filter(Boolean)
     .join(" · ");
@@ -1457,24 +1457,22 @@ const BatchRow = memo(function BatchRow({
               {/* THE COUNT IS THE PROGRESS INDICATOR, so neither of these
                   passes `loading`: `Button` swaps the whole label out for a
                   spinner, which would discard the one thing worth showing — a
-                  batch accept is a download queue, and "Saving 2 of 3" is the
+                  batch accept is a download queue, and "Accepting 2 of 3" is the
                   difference between waiting and wondering whether it hung.
                   `actionsDisabled` covers the run, so the pair still dims and
                   refuses taps. */}
               <Button
                 label={
                   batchBusy?.kind === "accept"
-                    ? `Saving ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
-                    : `Save all ${pending.length}`
+                    ? `Accepting ${batchBusy.progress.done + 1} of ${batchBusy.progress.total}`
+                    : `Accept all ${pending.length}`
                 }
                 disabled={actionsDisabled}
                 onPress={() => onBatchAction(batch, "accept")}
               />
               <Button
                 label={
-                  batchBusy?.kind === "decline"
-                    ? "Turning down…"
-                    : "Turn all down"
+                  batchBusy?.kind === "decline" ? "Declining…" : "Decline all"
                 }
                 variant="outlineAccent"
                 disabled={actionsDisabled}

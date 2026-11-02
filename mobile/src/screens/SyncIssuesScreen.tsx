@@ -206,7 +206,7 @@ export function SyncIssuesScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("That didn't work. Try again in a moment.", "error");
+          notify("Couldn't do that. Try again in a moment.", "error");
         });
     },
     [load, notify],
@@ -384,7 +384,7 @@ export function SyncIssuesScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("That didn't work. Try again in a moment.", "error");
+          notify("Couldn't do that. Try again in a moment.", "error");
         });
     },
     [load, notify, online],
@@ -613,7 +613,7 @@ export function SyncIssuesScreen({
                 recreateFromDeadRemote(op.seq),
                 op.entity === "place"
                   ? "Place recreated with your change."
-                  : "Waypoint recreated with your change.",
+                  : "Place recreated with your change.",
               )
             }
             onSendRest={confirmSendRest}
@@ -693,11 +693,11 @@ function StuckMenu({
       {canRecreate(op) ? (
         <Row
           icon="retry"
-          title={op.entity === "place" ? "Recreate place" : "Recreate waypoint"}
+          title={op.entity === "place" ? "Recreate place" : "Recreate place"}
           subtitle={
             op.entity === "place"
               ? "Makes a new place from this phone's copy, with your change."
-              : "Makes a new waypoint, with your change."
+              : "Makes a new place, with your change."
           }
           onPress={() => onRecreate(op)}
         />

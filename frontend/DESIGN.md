@@ -55,7 +55,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   panel never makes its own. Every hero is the same height, so switching
   views never moves the rail under it.
 - **A page with two views swaps them under one chip rail**, the first under
-  the hero. A view reached from the page (Logs → Stats, by a hero icon) or a
+  the hero. A view reached from the page (Trips → Stats, by a hero icon) or a
   step inside a view opens in place with `Hero onBack`; focus goes to the arrow on the way in and to the opened row on the
   way out.
 - **One "add" per page**: a compact filled `Add ▾` in the hero, opening a

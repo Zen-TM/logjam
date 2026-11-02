@@ -6,7 +6,7 @@
 // the status the leader saw, so a stale row removes nobody (409). Every write
 // is online-only, so offline each control is disabled with its reason.
 import { Fragment, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import {
   ApiError,
   formatBytes,
@@ -69,6 +69,7 @@ export function PeopleView({
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  const stacked = useWindowDimensions().fontScale > 1.3;
   // The person whose sheet is open, by id: it reads the plan as it is now, so
   // a write that removes them closes it.
   const [personId, setPersonId] = useState<string | null>(null);
@@ -220,21 +221,22 @@ export function PeopleView({
           subtitle={online ? undefined : OFFLINE}
           onPress={() => setPersonId(member.user.id)}
           right={
-            <View style={styles.right}>
-              {/* An archived plan takes no one in; turning down still works. */}
+            <View style={[styles.right, stacked && styles.rightStacked]}>
+              {/* An archived plan takes no one in; declining still works. */}
               {archived ? null : (
-                <IconButton
+                <Button
+                  compact
                   icon="accept"
-                  filled
-                  color={theme.accent}
-                  accessibilityLabel={copy.letIn}
+                  label={copy.letIn}
                   disabled={!online || busyId === member.user.id}
                   onPress={() => letIn(member)}
                 />
               )}
-              <IconButton
+              <Button
+                compact
+                variant="outlineAccent"
                 icon="ignore"
-                accessibilityLabel={copy.turnDown}
+                label={copy.turnDown}
                 disabled={!online || busyId === member.user.id}
                 onPress={() => turnDown(member)}
               />
@@ -376,6 +378,8 @@ export function PeopleView({
 
 const useStyles = makeStyles((theme, textRole) => ({
   right: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  // Two labelled buttons beside a name don't fit at a large text size.
+  rightStacked: { flexDirection: "column", alignItems: "flex-end" },
   verbs: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
   detail: { ...muted(theme, textRole.detail) },

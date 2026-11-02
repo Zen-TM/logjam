@@ -103,7 +103,7 @@ export function ConsentGate({
       <Text style={styles.body}>
         {newAccount
           ? "Choose your public display name and review the terms to finish creating your account."
-          : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Please review them and confirm your agreement to keep using Logjam.`}
+          : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
       </Text>
       {newAccount ? (
         <TextField

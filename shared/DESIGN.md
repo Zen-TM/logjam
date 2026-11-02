@@ -23,6 +23,7 @@ try to make it code; when you convert a rule to code, delete its line.
 | A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
 | The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
 | Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
+| Where a user can go: the tabs, the rail and More, in order, with their words                                                | `contracts/nav.ts` (`NAV`)                                                       |
 | A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
 | How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
@@ -174,6 +175,9 @@ renumber.
 
 - **An idea keeps its glyph everywhere, and a glyph never means two ideas.**
   Draw `<Icon idea=…>`; a new idea joins `icons.ts`.
+- **Ending a share is three ideas, each with its own glyph**: `unshare` (the
+  owner stops sharing), `hide` (a friend removes it from their account) and
+  `removeFriend` (end a friendship, drop someone from a plan).
 - **An icon-only control has a label**, which is its accessible name and its
   tooltip. If the glyph needs a sentence, the glyph is wrong.
 - **A menu item is a glyph and a verb.** A bulk bar may be glyphs alone.
@@ -365,8 +369,15 @@ renumber.
   another type").
 - **Name what failed**: "Couldn't save this place.", "Download didn't
   finish". Never "Please", "That didn't work" or "item".
-- **A sentence about what someone else can see or do is checked against the
-  API** before it ships.
+- **A sentence about what someone else can see or do is declared once**, in
+  `contracts/share.ts` (`sharePromise`, `SHARE_SENTENCES`), and read by both
+  clients; `shareSentences.test.ts` in each fails on one that types its own.
+  On the owner's place page a section a friend sees says so in its title
+  (`placeSectionTitle`). The sentence is checked against the API before it
+  ships.
+- **A caller's words beat a status's.** `messageFromError` returns the
+  API's sentence, then the caller's fallback; only 401, 429, 5xx and a lost
+  connection are worded by status.
 
 ## 13. Privacy in the UI
 

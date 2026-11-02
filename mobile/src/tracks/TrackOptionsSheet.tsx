@@ -251,7 +251,7 @@ export function TrackOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a place"
+              ? "Link to a place"
               : track.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -403,7 +403,7 @@ export function TrackOptionsSheet({
               picker says before the fact (routeSlot.ts's promise). */}
           {actions.createRouteFrom ? (
             <Row
-              title="Attach to a place"
+              title="Link to a place"
               subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}

@@ -538,7 +538,7 @@ function UnifiedImportDialog({
     const kind = detectFileKind(parsed.headers);
     if (kind === "unknown") {
       setError(
-        "This file doesn't look like a place list or a logbook. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; logbooks need a place name and date.",
+        "This file doesn't look like a place list or a trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.",
       );
       return;
     }
@@ -742,7 +742,7 @@ function UnifiedImportDialog({
       setError(
         placeFile && !placeMapValid
           ? "Name, latitude and longitude are required for a place list."
-          : "A place name column and a date column are required for a logbook, and each new attribute needs a name.",
+          : "A place name column and a date column are required for a trip list, and each new attribute needs a name.",
       );
       return;
     }
@@ -1038,9 +1038,7 @@ function UnifiedImportDialog({
       });
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't import places. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't import places. Try again."));
     } finally {
       setImporting(false);
     }
@@ -1217,9 +1215,7 @@ function UnifiedImportDialog({
       });
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't import trips. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't import trips. Try again."));
     } finally {
       setImporting(false);
     }
@@ -1237,9 +1233,7 @@ function UnifiedImportDialog({
       onClose();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't undo this import. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't undo this import. Try again."));
     } finally {
       setUndoing(false);
     }
@@ -1264,7 +1258,7 @@ function UnifiedImportDialog({
   const stageSuffix =
     bothFiles && !outcome
       ? activeKind === "triplog"
-        ? " — logbook (2 of 2)"
+        ? " — trips (2 of 2)"
         : " — places (1 of 2)"
       : "";
 
@@ -1292,7 +1286,7 @@ function UnifiedImportDialog({
           value={loaded.kind}
           options={[
             { value: "place", label: "Places" },
-            { value: "triplog", label: "Logbook" },
+            { value: "triplog", label: "Trips" },
           ]}
           onChange={(next) => overrideKind(loaded, which, next as FileKind)}
         />
@@ -1321,7 +1315,7 @@ function UnifiedImportDialog({
           </p>
         )}
         {noPlacesYet && (
-          <ErrorBanner message="You have no places yet. Importing a logbook works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later." />
+          <ErrorBanner message="You have no places yet. Importing a trip list works best after you load the RopeWiki place database — your trips can then match against it. You can still import now and link trips later." />
         )}
         {/* A real button, so the drop zone is reachable from the keyboard —
             it was a div with an onClick, which no key could ever press. The
@@ -1344,7 +1338,7 @@ function UnifiedImportDialog({
           />
           <span>
             Drop a CSV here, or click to browse. You can add a place list and a
-            logbook together.
+            trip list together.
           </span>
         </button>
         <input
@@ -1361,7 +1355,7 @@ function UnifiedImportDialog({
         )}
         <p className={classes.note}>
           A place list needs a name, latitude and longitude (grades and notes
-          are optional). A logbook needs a place name and a date (notes
+          are optional). A trip list needs a place name and a date (notes
           optional). Need a starting point?{" "}
           {/* GENERATED from the chosen type's own definitions, not a static
               file: a static template promises what a place has, and that
@@ -1386,7 +1380,7 @@ function UnifiedImportDialog({
             download
             className={classes.inlineLink}
           >
-            Logbook template
+            Trips template
           </a>
         </p>
 
@@ -1438,9 +1432,7 @@ function UnifiedImportDialog({
                     }
                   >
                     {isCustomAttr && (
-                      <option value={role}>
-                        Custom field: {role.slice(5)}
-                      </option>
+                      <option value={role}>Attribute: {role.slice(5)}</option>
                     )}
                     {placeRoleOptions.map((r) => (
                       <option key={r} value={r}>
@@ -1473,7 +1465,7 @@ function UnifiedImportDialog({
           <div className={classes.fileSection}>
             {renderFileChip(tripFile, "triplog")}
             <SectionHeader
-              title="Logbook columns"
+              title="Trip columns"
               count={tripFile.headers.length}
             />
             {renderColumnMapHeader()}
@@ -1511,9 +1503,7 @@ function UnifiedImportDialog({
                           Field: {d.label}
                         </option>
                       ))}
-                      <option value="new-cf">
-                        Import as new custom field…
-                      </option>
+                      <option value="new-cf">Import as a new attribute…</option>
                       <option value="discard">Ignore</option>
                     </Select>
                   </div>
@@ -1562,7 +1552,7 @@ function UnifiedImportDialog({
             <p className={classes.note} role="status">
               {tripMapValid
                 ? "Place name and date found — trips will match places by name."
-                : "A place name column and a date column are required for a logbook."}
+                : "A place name column and a date column are required for a trip list."}
             </p>
             {ignoredTripCols.length > 0 && (
               <p className={classes.note}>

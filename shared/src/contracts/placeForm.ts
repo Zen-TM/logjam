@@ -2,6 +2,7 @@
 // `places/PlaceEditSheet.tsx`. One form for both modes; only the title, the
 // submit label and the done toast differ.
 import { LATITUDE_RANGE, LONGITUDE_RANGE } from "../placeValidation.js";
+import { SHARE_SENTENCES } from "./share.js";
 import type { ScreenContract } from "./types.js";
 
 export const PLACE_FORM = {
@@ -60,8 +61,7 @@ export const PLACE_FORM = {
     coordinatesHint: "Decimal degrees (WGS84).",
     selectOnMap: "Select on map",
     notes: "Notes",
-    notesHint:
-      "Visible to anyone you share the place with. Per-trip notes stay private.",
+    notesHint: SHARE_SENTENCES.notesHint,
     sources: "Sources",
     photos: "Photos & videos",
     route: "Route",

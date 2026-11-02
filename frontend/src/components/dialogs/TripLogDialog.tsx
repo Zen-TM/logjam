@@ -785,10 +785,7 @@ function TripLogDialog({
       } catch (err) {
         console.error(err);
         setError(
-          messageFromError(
-            err,
-            "Couldn't discard uploaded files. Please try again.",
-          ),
+          messageFromError(err, "Couldn't discard uploaded files. Try again."),
         );
         return;
       }
@@ -1090,7 +1087,7 @@ function TripLogDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save the attribute. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);

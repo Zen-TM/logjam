@@ -398,6 +398,14 @@ describe("stats presentation", () => {
     expect(lines).toContain("longest run 2 days back to back");
   });
 
+  // Mutation: print the bare number again, "longest gap 730".
+  it("gives the longest gap its unit", () => {
+    const { lines } = statsCadence(base, null);
+    expect(lines.find((line) => line.includes("longest gap"))).toMatch(
+      /longest gap \d+ days?$/,
+    );
+  });
+
   it("swaps New places for Revisited on an unbounded range", () => {
     expect(statsHeadline(base, null, false).map((tile) => tile.label)).toEqual([
       "Trips",

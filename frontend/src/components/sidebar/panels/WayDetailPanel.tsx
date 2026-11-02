@@ -42,6 +42,7 @@ import {
   pairedStatLayout,
   wayVerbIcon,
   MAP_MEASURE,
+  sharedWayNote,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -737,9 +738,9 @@ export default function WayDetailPanel({
         {!owned && (
           <section className={classes.section}>
             <p className={classes.note}>
-              {way.viaPlace
-                ? `Shared with you as part of ${sharingPlace?.name ?? "a place"} — you can see it, but not change it. Removing that place is what stops it showing here.`
-                : "Shared with you — you can see it, but not change it."}
+              {sharedWayNote(
+                way.viaPlace ? (sharingPlace?.name ?? "a place") : null,
+              )}
             </p>
           </section>
         )}
@@ -828,7 +829,7 @@ export default function WayDetailPanel({
       <ConfirmDialog
         open={ending === "copyAndRemove"}
         copy={{
-          confirmTitle: "Save to your Ways and remove?",
+          confirmTitle: "Save a copy and remove?",
           confirmBody: `A copy of "${way.title}" is saved to your Ways first, then ${
             ownerName ? `${ownerName}'s` : "the owner's"
           } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,

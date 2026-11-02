@@ -62,10 +62,10 @@ const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
 const NETWORK_ERROR_MESSAGE =
   "Couldn't reach Logjam. Check your connection and try again.";
 
+// 403 and 404 are absent on purpose: only the caller knows what it was after
+// ("Couldn't find this place."), so its fallback beats a generic sentence.
 const STATUS_MESSAGES: Record<number, string | undefined> = {
   401: "You're signed out. Sign in and try again.",
-  403: "You don't have access to that.",
-  404: "Couldn't find that.",
   429: "Too many requests. Wait a moment and try again.",
   500: SERVER_ERROR_MESSAGE,
   503: "Logjam is unavailable for a moment. Try again shortly.",

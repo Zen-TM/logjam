@@ -7,12 +7,13 @@
 // verbs (`TRIP_VERBS`).
 import type { IconIdea } from "../icons.js";
 import { TRIP_SORT_OPTIONS, type TripSortKey } from "../tripFilter.js";
+import { navLabel } from "./nav.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
 
 export const TRIPS_LIST = {
   id: "logs.list",
   question: "What have I done?",
-  title: "Logs",
+  title: navLabel("logs"),
   sections: [
     { key: "hero" },
     // One rail: what kind of trip. The selection bar takes its place.
@@ -72,7 +73,7 @@ export const TRIPS_ADD = {
   ],
   copy: {
     add: "Log a trip",
-    importFile: "Import from file",
+    importFile: "Import a file",
     menu: "Add trips",
   },
 } as const satisfies ScreenContract;

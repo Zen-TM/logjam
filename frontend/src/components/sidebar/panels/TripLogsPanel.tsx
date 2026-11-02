@@ -743,7 +743,7 @@ function TripLogsPanel({
     truncated: tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
       <p className={classes.note}>
         Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
-        Older ones aren&rsquo;t loaded.
+        Older ones aren't loaded.
       </p>
     ),
     list,

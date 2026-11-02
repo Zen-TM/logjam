@@ -1,10 +1,10 @@
 // The Ways page's decisions, kept out of the component so they can be tested:
-// what a "way" is, which kinds exist, and how four sources become one list.
+// what a "way" is and how four sources become one list.
 //
 // Ways answers "what lines have I got?" — routes I drew, tracks I recorded,
 // files I imported (shared/DESIGN.md §2). Logjam GPS answers the same question on its
-// Saved tab, and its vocabulary is the one used here: `CATEGORY_META` in
-// `mobile/src/saved/savedKeys.ts` names them Routes, Tracks and Imports.
+// Saved tab, and its vocabulary is the one used here: `WAY_KIND_WORDS` in
+// `@logjam/shared` names them Routes, Tracks and Imports.
 //
 // A track on a place a FRIEND shared reaches this page through
 // `GET /places/tracks`, which is the only surface that carries it — it is not
@@ -13,28 +13,14 @@
 // file's name and `origin` alongside its colour.
 import {
   mediaDisplayName,
+  type WayKind,
   ROUTE_NAME_MAX_LENGTH,
   routeLengthM,
   type StandaloneFile,
 } from "@logjam/shared";
 import type { PlaceTrack, TRoute } from "../../../placeUtils";
 
-/**
- * The kinds of line, in the order the rail offers them. Routes first: they are
- * the only kind authored here, and the only one this page can create.
- */
-export const WAY_KINDS = ["route", "track", "import"] as const;
-
-export type WayKind = (typeof WAY_KINDS)[number];
-
-/** The rail's words — Logjam GPS's own (`CATEGORY_META`). Plural, because a
- *  chip labels a group. Each names what a thing IS; where it lives is a
- *  property of the row, never a category beside these. */
-export const WAY_KIND_LABELS: Record<WayKind, string> = {
-  route: "Routes",
-  track: "Tracks",
-  import: "Imports",
-};
+export type { WayKind };
 
 /** One row on the page, whatever it was built from. */
 export type WayItem = {

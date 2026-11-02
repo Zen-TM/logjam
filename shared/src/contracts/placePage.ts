@@ -10,7 +10,7 @@ import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
 import { PLACE_FORM } from "./placeForm.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
-import type { ScreenContract } from "./types.js";
+import type { ContractSection, ScreenContract } from "./types.js";
 
 export const PLACE_PAGE = {
   id: "places.page",
@@ -32,16 +32,16 @@ export const PLACE_PAGE = {
     // The owner's pick of a river gauge, read-only to a sharee, who sees the
     // section only when one is set. The owner with none gets a quiet way to
     // choose; Logjam never picks for them.
-    { key: "gauge" },
+    { key: "gauge", shareeSees: true },
     // Only the attributes the place answered: a form asks every question, a
     // page reports the answers.
-    { key: "attributes" },
+    { key: "attributes", shareeSees: true },
     { key: "doesntFit", ownerOnly: true },
-    { key: "notes" },
+    { key: "notes", shareeSees: true },
     // Where the place came from (a RopeWiki import): links out.
-    { key: "sources" },
-    { key: "photos" },
-    { key: "route" },
+    { key: "sources", shareeSees: true },
+    { key: "photos", shareeSees: true },
+    { key: "route", shareeSees: true },
     { key: "linkedPlaces", ownerOnly: true },
     { key: "trips" },
     { key: "sharedWith", ownerOnly: true },
@@ -62,7 +62,7 @@ export const PLACE_PAGE = {
 
     copyPosition: "Coordinates copied.",
     openInMaps: "Open in a maps app",
-    notesVisible: "Notes · visible to anyone you share with",
+    sharedMarker: "visible to friends you share with",
 
     chooseGauge: "Choose a river gauge",
     changeGauge: "Change gauge",
@@ -100,6 +100,25 @@ export const PLACE_PAGE_PRIMARY_VERBS = [
   "show",
   "logTrip",
 ] as const satisfies readonly PlaceVerbId[];
+
+/**
+ * A section's title on the page. On the owner's page, a section with something
+ * in it that a friend sees says so, so the owner never has to remember which
+ * parts a share hands over (ADR 0002: the place record and its place-level
+ * media, never the trips).
+ */
+export function placeSectionTitle(
+  key: (typeof PLACE_PAGE.sections)[number]["key"],
+  title: string,
+  view: { owned: boolean; filled: boolean },
+): string {
+  const section: ContractSection | undefined = PLACE_PAGE.sections.find(
+    (each) => each.key === key,
+  );
+  return view.owned && view.filled && section?.shareeSees
+    ? `${title} · ${PLACE_PAGE.copy.sharedMarker}`
+    : title;
+}
 
 /** "Canyon attributes": the heading of what this KIND of place records. */
 export function placeAttributesTitle(typeName: string | null): string {

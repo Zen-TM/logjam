@@ -182,7 +182,7 @@ export const FRIEND_VERBS = [
   { id: "shares", icon: "shareFriend", label: "Shared items", for: "friend" },
   {
     id: "remove",
-    icon: "unshare",
+    icon: "removeFriend",
     label: "Remove friend",
     for: "friend",
     danger: true,

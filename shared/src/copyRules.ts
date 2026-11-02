@@ -74,6 +74,11 @@ export const COPY_RULES: readonly CopyRule[] = [
     pattern: /\btrip logs?\b/i,
     say: 'Say "trip"; the verb is "Log a trip".',
   },
+  {
+    id: "logs-tab",
+    pattern: /\bLogs\b/,
+    say: 'The trips tab is "Trips".',
+  },
   { id: "activity", pattern: /\bactivit(?:y|ies)\b/i, say: 'Say "trip type".' },
   {
     id: "lidar-topo",
@@ -262,6 +267,48 @@ export function userFacingStrings(
       COPY_PROPS.has(node.name.getText().replace(/["']/g, ""))
     )
       text = stringOf(node.initializer);
+    if (text)
+      found.push({
+        line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+        text,
+      });
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return found;
+}
+
+/**
+ * Every string a source file spells: a literal, a template (its text pieces)
+ * and JSX text, wherever it sits. For a rule about a sentence that must be
+ * declared in one place, where the net of `userFacingStrings` (words by
+ * property name) would miss a const or a call's argument.
+ */
+export function allStrings(
+  tsModule: unknown,
+  fileName: string,
+  source: string,
+): { line: number; text: string }[] {
+  const ts = tsModule as typeof TypeScript;
+  const sf = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const found: { line: number; text: string }[] = [];
+  const visit = (node: TypeScript.Node): void => {
+    let text: string | null = null;
+    if (ts.isJsxText(node)) text = node.text.trim();
+    else if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node)
+    )
+      text = node.text;
+    else if (ts.isTemplateExpression(node))
+      text =
+        node.head.text + node.templateSpans.map((s) => s.literal.text).join("");
     if (text)
       found.push({
         line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,

@@ -93,7 +93,7 @@ function ChangeEmailForm({
       setError(
         messageFromError(
           err,
-          "Couldn't send the verification code. Please try again.",
+          "Couldn't send the verification code. Try again.",
         ),
       );
     } finally {
@@ -111,7 +111,7 @@ function ChangeEmailForm({
       setError(
         messageFromError(
           err,
-          "Couldn't resend the verification code. Please try again.",
+          "Couldn't resend the verification code. Try again.",
         ),
       );
     } finally {
@@ -133,9 +133,7 @@ function ChangeEmailForm({
       onSuccess(pendingEmail);
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Incorrect or expired code. Please try again."),
-      );
+      setError(messageFromError(err, "Incorrect or expired code. Try again."));
     } finally {
       setBusy(false);
     }

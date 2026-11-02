@@ -4,8 +4,10 @@ import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
 import {
   isResolvedElsewhereError,
-  notificationActions,
+  notificationActions as actionsFor,
 } from "./notificationActions.js";
+
+const notificationActions = (n: TNotification) => actionsFor(n, "gps");
 
 function notification(
   type: string,
@@ -58,11 +60,40 @@ describe("notificationActions", () => {
     );
     expect(actions?.type).toBe("file_sent");
     expect(actions?.targetId).toBe("s1");
-    expect(actions?.actions.map((a) => a.label)).toEqual([
-      "Save a copy",
+    expect(actions?.actions.map((a) => a.label)).toEqual(["Accept", "Decline"]);
+    expect(actions?.pill).toBeNull();
+  });
+
+  // Mutation: return "Accept" on web too, and a download reads as an offer.
+  it("calls accepting a sent file a download on Logjam Web", () => {
+    const sent = notification("file_sent", {
+      fileSendId: "s1",
+      filename: "Claustral.gpx",
+      fileSendStatus: "pending",
+    });
+    expect(actionsFor(sent, "web")?.actions.map((a) => a.label)).toEqual([
+      "Download",
       "Decline",
     ]);
-    expect(actions?.pill).toBeNull();
+  });
+
+  // Mutation: return the phone's pill or failure on web, and Logjam Web says
+  // "Saved" or "Couldn't save" about a button called Download.
+  it("words Logjam Web's accepted pill and failure as a download", () => {
+    for (const fileSendStatus of ["pending", "accepted"]) {
+      const web = actionsFor(
+        notification("file_sent", {
+          fileSendId: "s1",
+          filename: "Claustral.gpx",
+          fileSendStatus,
+        }),
+        "web",
+      );
+      expect(web?.actions[0].failure).toBe("Couldn't download that file.");
+      expect(web?.pill).toBe(
+        fileSendStatus === "accepted" ? "Downloaded" : null,
+      );
+    }
   });
 
   // `accepted` means the URL was issued, not that the bytes landed, so the

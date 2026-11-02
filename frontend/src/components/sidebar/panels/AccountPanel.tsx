@@ -123,7 +123,7 @@ function AccountPanel({
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't download your data. Please try again."),
+        messageFromError(err, "Couldn't download your data. Try again."),
       );
     } finally {
       setExporting(false);
@@ -233,7 +233,7 @@ function AccountPanel({
           <SectionHeader title={copy.yourData} />
           <Button
             variant="outline"
-            icon="export"
+            icon="download"
             busy={exporting}
             onClick={handleExport}
           >

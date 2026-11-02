@@ -84,6 +84,7 @@ describe("contract copy", () => {
     ["custom-field", "Edit custom fields", "Edit attributes"],
     ["logbook", "Your logbook", "Your trips"],
     ["trip-log", "Start a trip log", "Log a trip"],
+    ["logs-tab", "Back to Logs", "Back to Trips"],
     ["activity", "By activity", "By trip type"],
     ["lidar-topo", "Make a LiDAR topo", "Make a sharpened area"],
     ["lidar-topo", "Open the topo", "Open the sharpened area"],
@@ -129,7 +130,7 @@ describe("the words an API failure shows", () => {
 // The sentences in shared/src outside contracts/ (labels, notification text,
 // validation and error sentences) keep the same rules as the contracts and the
 // clients: a hit is fixed here, with no baseline. Mutation that turns it red: put "Please"
-// back into `STATUS_MESSAGES[403]` in `apiErrors.ts`.
+// back into `STATUS_MESSAGES[401]` in `apiErrors.ts`.
 describe("shared copy outside contracts/", () => {
   const SRC = dirname(fileURLToPath(import.meta.url));
   const files = (dir: string): string[] =>

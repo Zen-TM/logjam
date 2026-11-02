@@ -1,10 +1,10 @@
 import { Fragment, type Ref } from "react";
+import { labelWithBadge } from "@logjam/shared";
 import type { PanelId } from "./panels";
 import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
   MORE_BADGE_NOUN,
   type NavBadgeCounts,
 } from "./navItems";
@@ -62,7 +62,7 @@ function NavButton({
 
 /**
  * The page nav. A fixed 84px rail on desktop — every page labelled, the active
- * one filled — and Logjam GPS's tab bar on narrow web (Map · Places · Logs ·
+ * one filled — and Logjam GPS's tab bar on narrow web (Map · Places · Trips ·
  * Ways · More). Pressing the open page's button closes it; on narrow web the
  * Map tab does.
  */
