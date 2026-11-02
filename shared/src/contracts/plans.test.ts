@@ -455,7 +455,7 @@ describe("a plan's verbs", () => {
     expect(
       planDeleteConfirm("Wollangambe trip", { places: 0, ways: 0 }).confirmBody,
     ).toBe(
-      "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
+      "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.",
     );
   });
 
@@ -464,13 +464,15 @@ describe("a plan's verbs", () => {
   it("counts the caller's own answer among those a form delete takes", () => {
     const form = { title: "Carpooling", answers: [], myAnswer: { seats: 2 } };
     expect(planFormDeleteConfirm(form).confirmBody).toBe(
-      "Its questions and 1 answer go, for everyone in the plan.",
+      "Its questions and 1 answer go, for everyone in the plan. This can't be undone.",
     );
     expect(
       planFormDeleteConfirm({ ...form, answers: [{}, {}] }).confirmBody,
-    ).toBe("Its questions and 3 answers go, for everyone in the plan.");
+    ).toBe(
+      "Its questions and 3 answers go, for everyone in the plan. This can't be undone.",
+    );
     expect(planFormDeleteConfirm({ ...form, myAnswer: null }).confirmBody).toBe(
-      "Its questions go, for everyone in the plan.",
+      "Its questions go, for everyone in the plan. This can't be undone.",
     );
   });
 });
@@ -643,10 +645,10 @@ describe("a plan's items", () => {
   // (shared/DESIGN.md §9: a destructive confirm counts what goes).
   it("counts a deleted place's photos", () => {
     expect(planItemDeleteConfirm("Wollangambe").confirmBody).toBe(
-      "It goes for everyone in the plan. Copies people saved stay.",
+      "It goes for everyone in the plan. Copies people saved stay. This can't be undone.",
     );
     expect(planItemDeleteConfirm("Wollangambe", 1).confirmBody).toBe(
-      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay.",
+      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay. This can't be undone.",
     );
     expect(planItemDeleteConfirm("Wollangambe", 3).confirmBody).toContain(
       "Its 3 photos go too.",

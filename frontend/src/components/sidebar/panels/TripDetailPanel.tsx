@@ -183,7 +183,7 @@ function TripDetailPanel({
       : [item];
   });
   const copy = TRIP_PAGE.copy;
-  const deleteCopy = tripDeleteConfirm(1);
+  const deleteCopy = tripDeleteConfirm({ title });
 
   // Exhaustive by type: a section the contract names and this page does not
   // draw, or the reverse, fails `tsc` (`TRIP_PAGE`, shared/src/contracts).
