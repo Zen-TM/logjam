@@ -112,8 +112,7 @@ function childExpressionStrings(
 }
 
 // Strings still to reword to the glossary; delete an entry with its string.
-const BASELINE: { file: string; text: string; rule: string }[] = [
-];
+const BASELINE: { file: string; text: string; rule: string }[] = [];
 
 const baselined = (file: string, rule: string, text: string) =>
   BASELINE.some(
