@@ -63,7 +63,7 @@ export function ProgressBar({
           : ({ "--progress": `${known}%` } as CSSProperties)
       }
     >
-      <span className={classes.progressFill} />
+      <span className={classes.progressFill} data-own-motion />
     </div>
   );
 }

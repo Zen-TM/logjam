@@ -83,12 +83,14 @@ body {
 
 /* Reduced motion, for every surface at once: a transition or animation still
    runs (so `transitionend` and `animationend` still fire) but ends at once, and
-   nothing scrolls smoothly. A rule that wants something gentler than that, a
-   fade, writes its own `prefers-reduced-motion` block after this. */
+   nothing scrolls smoothly. The rule is `!important`, so a component's own
+   reduced-motion block cannot beat it: an element that keeps a gentler motion
+   of its own (the indeterminate progress bar's fade) carries `data-own-motion`
+   and is left out here. Guard: `src/reducedMotion.test.ts`. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *:not([data-own-motion]),
+  *:not([data-own-motion])::before,
+  *:not([data-own-motion])::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

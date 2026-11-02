@@ -135,7 +135,7 @@ test.describe("desktop", () => {
     for (let stop = 0; stop < 12; stop++) {
       await page.keyboard.press("Tab");
       const ring = await page.evaluate(() => {
-        const el = document.activeElement;
+        const el = document.activeElement as HTMLElement | null;
         if (!el || el === document.body) return null;
         const draws = (node: Element) => {
           const style = getComputedStyle(node);
@@ -143,29 +143,42 @@ test.describe("desktop", () => {
             style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0
           );
         };
-        // A stop may draw its ring on the card or field around it.
+        const name = el.getAttribute("aria-label") ?? el.tagName;
+        if (draws(el)) return { name, drawn: true };
+        // A stop may draw its ring on the card or field around it, but only
+        // WHILE focused: an outline an ancestor carries anyway is not it.
         const around = [el.parentElement, el.parentElement?.parentElement];
-        return {
-          name: el.getAttribute("aria-label") ?? el.tagName,
-          drawn: draws(el) || around.some((node) => !!node && draws(node)),
-        };
+        const lit = around.filter(
+          (node): node is HTMLElement => !!node && draws(node),
+        );
+        el.blur();
+        const drawnByFocus = lit.some((node) => !draws(node));
+        el.focus();
+        return { name, drawn: drawnByFocus };
       });
       if (ring && !ring.drawn) missing.push(ring.name);
     }
     expect(missing).toEqual([]);
 
-    const longest = await page.evaluate(() =>
-      Math.max(
-        ...[...document.querySelectorAll("button")].map((el) =>
-          Math.max(
-            ...getComputedStyle(el)
-              .transitionDuration.split(",")
-              .map((d) => parseFloat(d) * (d.trim().endsWith("ms") ? 1 : 1000)),
+    // The global rule is what stills them: with motion allowed the same buttons
+    // transition, so removing the rule fails the second check.
+    const longestTransition = () =>
+      page.evaluate(() =>
+        Math.max(
+          ...[...document.querySelectorAll("button")].map((el) =>
+            Math.max(
+              ...getComputedStyle(el)
+                .transitionDuration.split(",")
+                .map(
+                  (d) => parseFloat(d) * (d.trim().endsWith("ms") ? 1 : 1000),
+                ),
+            ),
           ),
         ),
-      ),
-    );
-    expect(longest).toBeLessThan(1);
+      );
+    expect(await longestTransition()).toBeLessThan(1);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    expect(await longestTransition()).toBeGreaterThan(50);
   });
 
   test("Friends, a request, the sharing audit and the share dialog", async ({
