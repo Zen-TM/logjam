@@ -366,10 +366,13 @@ function DayCell({
               style={[
                 styles.band,
                 {
-                  // Whole cells, so the band reaches the range's outer edges; a
-                  // row's own ends are rounded, so a range across weeks reads as pieces.
-                  left: 0,
-                  right: 0,
+                  // A piece's ends are the pill's own footprint, so a selected
+                  // start or end day's pill covers the band's end exactly; a row's
+                  // ends are rounded too, so a range across weeks reads as pieces.
+                  left: band.pieceStart ? "50%" : 0,
+                  marginLeft: band.pieceStart ? -DAY_PILL_SIZE / 2 : 0,
+                  right: band.pieceEnd ? "50%" : 0,
+                  marginRight: band.pieceEnd ? -DAY_PILL_SIZE / 2 : 0,
                   borderTopLeftRadius: band.pieceStart ? DAY_PILL_SIZE / 2 : 0,
                   borderBottomLeftRadius: band.pieceStart
                     ? DAY_PILL_SIZE / 2
