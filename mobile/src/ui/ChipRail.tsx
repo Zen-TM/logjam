@@ -51,13 +51,14 @@ export function ChipRail<T extends string>({
       hue={option.hue}
       icon={option.icon}
       count={option.count}
+      choice="single"
       onPress={() => onChange(option.value)}
     />
   ));
 
   if (!scroll)
     return (
-      <View style={styles.group}>
+      <View accessibilityRole="radiogroup" style={styles.group}>
         {chips}
         {trailing}
       </View>
@@ -129,7 +130,7 @@ function Rail<T extends string>({
   };
 
   return (
-    <View>
+    <View accessibilityRole="radiogroup">
       <ScrollView
         ref={scrollRef}
         horizontal

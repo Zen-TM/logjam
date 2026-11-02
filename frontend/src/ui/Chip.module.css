@@ -60,6 +60,20 @@
   background: transparent;
 }
 
+/* Forced colours drop the fill that says "selected"; Highlight puts it back. */
+@media (forced-colors: active) {
+  .active {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+
+  .active .glyph {
+    color: HighlightText;
+  }
+}
+
 .chip:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;
@@ -108,11 +122,6 @@
   color: var(--color-text);
   font-family: inherit;
   line-height: inherit;
-}
-
-.pickerInput:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .pickerHint {

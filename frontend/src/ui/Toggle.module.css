@@ -45,6 +45,27 @@
   background: var(--color-on-fill);
 }
 
+@media (forced-colors: active) {
+  .toggle {
+    forced-color-adjust: none;
+    background: Canvas;
+    border-color: ButtonText;
+  }
+
+  .thumb {
+    background: ButtonText;
+  }
+
+  .toggle[aria-checked="true"] {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .toggle[aria-checked="true"] .thumb {
+    background: HighlightText;
+  }
+}
+
 .toggle:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;

@@ -74,7 +74,11 @@ export function Hero({
       ) : null}
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
       <View style={styles.titleRow}>
-        <Text style={styles.title} numberOfLines={titleNumberOfLines}>
+        <Text
+          accessibilityRole="header"
+          style={styles.title}
+          numberOfLines={titleNumberOfLines}
+        >
           {title}
         </Text>
         {actions}

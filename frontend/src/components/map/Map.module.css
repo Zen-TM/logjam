@@ -143,6 +143,15 @@
   padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
 
+/* MapLibre's own focus style on the (i) is a blue box-shadow, which forced
+   colours drop. The ring goes on the box, not the button. */
+:global(
+  #map .maplibregl-ctrl-attrib:has(.maplibregl-ctrl-attrib-button:focus-visible)
+) {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
 /* MapLibre's blue focus glow → Logjam Web's one focus ring. */
 :global(#map .maplibregl-ctrl button:focus-visible) {
   box-shadow: none;

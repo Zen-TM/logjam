@@ -88,6 +88,7 @@ export function ChipPicker({
           hue={option.hue}
           icon={option.icon}
           starred={option.value === primaryValue}
+          choice="multi"
           onPress={() => onToggle(option.value)}
         />
       ))}

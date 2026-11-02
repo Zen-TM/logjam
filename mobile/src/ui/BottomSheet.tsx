@@ -32,6 +32,7 @@ import {
 } from "../theme";
 import { confirm } from "./confirm";
 import { IconButton } from "./IconButton";
+import { useReducedMotionRef } from "./useReducedMotion";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
@@ -293,6 +294,7 @@ export function BottomSheet({
   if (visible && !mounted) setMounted(true);
   const notifyClosed = useEffectEvent(() => onClosed?.());
   const [progress] = useState(() => new Animated.Value(0));
+  const reduced = useReducedMotionRef();
   // The modal's own height: the spacer above the sheet is at least this
   // tall, so the sheet can be dragged fully off the bottom edge.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
@@ -373,7 +375,7 @@ export function BottomSheet({
     () => () =>
       Animated.timing(progress, {
         toValue: 1,
-        duration: 220,
+        duration: reduced.current ? 0 : 220,
         useNativeDriver: true,
       }).start(),
   );
@@ -457,14 +459,14 @@ export function BottomSheet({
     }
     Animated.timing(progress, {
       toValue: 0,
-      duration: 180,
+      duration: reduced.current ? 0 : 180,
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (!finished) return;
       setMounted(false);
       notifyClosed();
     });
-  }, [progress, scroll, slideIn, visible]);
+  }, [progress, reduced, scroll, slideIn, visible]);
 
   useEffect(() => {
     settleRef.current = () => {
