@@ -199,7 +199,12 @@
   /* Open, the credits are too wide to share the row with the compass and the
      scale bar, so they sit on the row above rather than over them. */
   :global(#map .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show)) {
-    bottom: calc(var(--bottom-nav-height) + 8px + var(--map-button-size) + 8px);
+    bottom: calc(
+      var(--bottom-nav-height) +
+      var(--space-1) +
+      var(--map-button-size) +
+      var(--space-1)
+    );
   }
 
   .geoPdfConfirmBar {
