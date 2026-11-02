@@ -52,6 +52,7 @@ export function Chip({
   count,
   starred = false,
   dashed = false,
+  choice,
   onPress,
 }: {
   label: string;
@@ -63,6 +64,10 @@ export function Chip({
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
   dashed?: boolean;
+  /** What picking this chip means to a screen reader: one of a rail's options
+   *  (`radio`) or a vocabulary entry toggled on its own (`checkbox`). Left out,
+   *  the chip is a plain button, as the "add one" chip is. */
+  choice?: "single" | "multi";
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -73,9 +78,17 @@ export function Chip({
   const tint = chipFill(hue ?? theme.accent, theme);
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={
+        choice === "single"
+          ? "radio"
+          : choice === "multi"
+            ? "checkbox"
+            : "button"
+      }
       accessibilityLabel={starred ? `${label}, starred` : undefined}
-      accessibilityState={{ selected: active, disabled }}
+      accessibilityState={
+        choice ? { checked: active, disabled } : { selected: active, disabled }
+      }
       disabled={disabled}
       onPress={onPress}
       hitSlop={hitSlop}

@@ -121,6 +121,53 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "#map");
   });
 
+  test("Tab shows a ring on each stop, forced colours keep it, and reduced motion stills transitions", async ({
+    page,
+  }) => {
+    await page.emulateMedia({
+      forcedColors: "active",
+      reducedMotion: "reduce",
+    });
+    await openApp(page);
+    // Every stop through the rail and the chrome draws an outline: a ring that
+    // is a box-shadow, or nothing, is gone under forced colours.
+    const missing: string[] = [];
+    for (let stop = 0; stop < 12; stop++) {
+      await page.keyboard.press("Tab");
+      const ring = await page.evaluate(() => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return null;
+        const draws = (node: Element) => {
+          const style = getComputedStyle(node);
+          return (
+            style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0
+          );
+        };
+        // A stop may draw its ring on the card or field around it.
+        const around = [el.parentElement, el.parentElement?.parentElement];
+        return {
+          name: el.getAttribute("aria-label") ?? el.tagName,
+          drawn: draws(el) || around.some((node) => !!node && draws(node)),
+        };
+      });
+      if (ring && !ring.drawn) missing.push(ring.name);
+    }
+    expect(missing).toEqual([]);
+
+    const longest = await page.evaluate(() =>
+      Math.max(
+        ...[...document.querySelectorAll("button")].map((el) =>
+          Math.max(
+            ...getComputedStyle(el)
+              .transitionDuration.split(",")
+              .map((d) => parseFloat(d) * (d.trim().endsWith("ms") ? 1 : 1000)),
+          ),
+        ),
+      ),
+    );
+    expect(longest).toBeLessThan(1);
+  });
+
   test("Friends, a request, the sharing audit and the share dialog", async ({
     page,
   }) => {

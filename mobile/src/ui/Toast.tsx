@@ -3,6 +3,7 @@ import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
+import { useReducedMotionRef } from "./useReducedMotion";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
 export type ToastMessage = {
@@ -42,6 +43,7 @@ export function Toast({
   const [lift] = useState(() => new Animated.Value(12));
   const [slide] = useState(() => new Animated.Value(0));
   const dismissed = useEffectEvent(onDismissed);
+  const reduced = useReducedMotionRef();
   // The PanResponder below lives for the component's life, so it reads the
   // latest callback through a ref (an Effect Event cannot be called from it).
   const latest = useRef(onDismissed);
@@ -58,7 +60,7 @@ export function Toast({
         if (swipeDismisses(g.dx, g.vx)) {
           Animated.timing(slide, {
             toValue: Math.sign(g.dx || g.vx) * 400,
-            duration: 160,
+            duration: reduced.current ? 0 : 160,
             useNativeDriver: true,
           }).start(() => latest.current());
         } else {
@@ -79,10 +81,11 @@ export function Toast({
     opacity.setValue(0);
     lift.setValue(12);
     slide.setValue(0);
+    const still = reduced.current;
     const show = Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 160,
+        duration: still ? 0 : 160,
         useNativeDriver: true,
       }),
       Animated.spring(lift, {
@@ -91,11 +94,12 @@ export function Toast({
         bounciness: 4,
       }),
     ]);
+    if (still) lift.setValue(0);
     show.start();
     const timer = setTimeout(() => {
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 220,
+        duration: still ? 0 : 220,
         useNativeDriver: true,
       }).start(({ finished }) => {
         if (finished) dismissed();
@@ -106,7 +110,7 @@ export function Toast({
       clearTimeout(timer);
     };
     // Keyed on nonce so the same text fired twice replays the animation.
-  }, [lift, message, opacity, slide]);
+  }, [lift, message, opacity, reduced, slide]);
 
   if (!message) return null;
   const error = message.tone === "error";

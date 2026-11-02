@@ -60,3 +60,24 @@ describe("kit containers that stack children", () => {
     expect(src).toMatch(new RegExp(`\\b${style}: \\{[^}]*\\bgap:`));
   });
 });
+
+// Screen-reader roles. Mutation: drop
+// `accessibilityRole="header"` from Hero's title, `radiogroup` from ChipRail,
+// or `choice="multi"` from ChipPicker.
+describe("kit screen-reader roles", () => {
+  const source = (file: string) =>
+    readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+
+  it("heads a Hero by its title", () => {
+    expect(source("Hero.tsx")).toMatch(
+      /accessibilityRole="header"\s+style=\{styles\.title\}/,
+    );
+  });
+
+  it("makes a chip rail a radio group and a picker's chips checkboxes", () => {
+    expect(source("ChipRail.tsx")).toContain('accessibilityRole="radiogroup"');
+    expect(source("ChipRail.tsx")).toContain('choice="single"');
+    expect(source("ChipPicker.tsx")).toContain('choice="multi"');
+    expect(source("Chip.tsx")).toMatch(/"radio"[\s\S]*"checkbox"/);
+  });
+});

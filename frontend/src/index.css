@@ -81,6 +81,21 @@ body {
   outline-offset: 2px;
 }
 
+/* Reduced motion, for every surface at once: a transition or animation still
+   runs (so `transitionend` and `animationend` still fire) but ends at once, and
+   nothing scrolls smoothly. A rule that wants something gentler than that, a
+   fade, writes its own `prefers-reduced-motion` block after this. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Visually hidden, still read by assistive tech. */
 .visually-hidden {
   position: absolute;

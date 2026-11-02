@@ -30,6 +30,14 @@
   color: var(--color-on-fill);
 }
 
+/* Two-tone: the ring in `text` over a `page` gap, so it reads on a map of any
+   colour. An outline, not a shadow alone, so forced colours keep it. */
+.mapButton:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px var(--color-page);
+}
+
 .mapButton:disabled {
   color: var(--color-text-muted);
   cursor: default;
@@ -51,6 +59,15 @@
 
 .group .mapButton + .mapButton {
   border-top: var(--hairline);
+}
+
+@media (forced-colors: active) {
+  .mapButton[aria-pressed="true"],
+  .mapButton[aria-expanded="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 /* Inside a clipped group, the ring goes inside the button. */

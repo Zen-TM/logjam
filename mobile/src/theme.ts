@@ -221,9 +221,15 @@ export function persistTextScale(scale: TextScale): boolean {
   return writePref(TEXT_SCALE_PREF_KEY, String(scale));
 }
 
+/** No type renders under this, whatever the pick: the 0.9 option would draw `xs`
+ *  at 11. The floor is the smallest step, `FONT.gps.xs` (12 on both clients). */
+const TEXT_FLOOR_PX = FONT.gps.xs;
+
 // Rounded to whole pixels: RN takes fractional font sizes, but a 13.8 px label
 // beside a 13.8 px icon lands on a different subpixel on every device.
-const scaled = (px: number): number => Math.round(px * textScale);
+export const scaleType = (px: number, scale: number): number =>
+  Math.max(Math.round(px * scale), TEXT_FLOOR_PX);
+const scaled = (px: number): number => scaleType(px, textScale);
 
 // Spacing, radius and type read the shared scales (`@logjam/shared`
 // designTokens.ts), the same names Logjam Web's tokens are generated from.

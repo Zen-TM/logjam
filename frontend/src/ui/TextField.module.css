@@ -28,10 +28,9 @@
   color: var(--color-text-muted);
 }
 
+/* The global ring (index.css) shows focus; the accent edge only backs it up. */
 .input:focus-visible {
-  outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .input[aria-invalid="true"] {
@@ -102,7 +101,8 @@
 
 .search:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 .searchGlyph {

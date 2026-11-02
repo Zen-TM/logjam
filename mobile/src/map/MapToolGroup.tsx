@@ -18,7 +18,7 @@ import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
 import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
 
 import { makeStyles, useTheme } from "../theme";
-import { Icon } from "../ui";
+import { Icon, useReducedMotion } from "../ui";
 
 export type MapTool = "measure" | "route";
 
@@ -74,18 +74,19 @@ export function MapToolGroup({
   // together on a delay.
   const [values] = useState(() => TOOLS.map(() => new Animated.Value(0)));
   const dir = side === "right" ? 1 : -1;
+  const reduced = useReducedMotion();
   useEffect(() => {
     const anims = TOOLS.map((_, k) =>
       Animated.timing(values[k], {
         toValue: open ? 1 : 0,
-        duration: (TOOLS.length - k) * SLOT_MS,
-        delay: open ? k * SLOT_MS : 0,
+        duration: reduced ? 0 : (TOOLS.length - k) * SLOT_MS,
+        delay: open && !reduced ? k * SLOT_MS : 0,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
     );
     Animated.parallel(anims).start();
-  }, [open, values]);
+  }, [open, reduced, values]);
 
   // restSlot is where a tool actually RESTS when open (0 = nearest the +) —
   // the reverse of k, per the move-order comment above. It drives both how

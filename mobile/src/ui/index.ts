@@ -36,6 +36,7 @@ export { BottomSheet, closedSheet } from "./BottomSheet";
 export { SelectionBar } from "./SelectionBar";
 export { SelectionMark } from "./SelectionMark";
 export { useBulkSelection } from "./useBulkSelection";
+export { useReducedMotion } from "./useReducedMotion";
 export { SearchField } from "./SearchField";
 export { TextField } from "./TextField";
 export { Field, FormStack } from "./Field";
