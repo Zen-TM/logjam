@@ -1,42 +1,59 @@
-// Both clients draw a place's page in the order `PLACE_PAGE` declares, and
-// nothing else decides it: each walks `contractSectionsFor` and calls the
-// section for every key, so a page that placed one section by hand (a
-// `sections.weather()` outside the walk) would drift from the other client.
+// Both clients draw a place's page in the order `PLACE_PAGE` declares: each
+// takes its keys from `contractSectionsFor`, applies nothing to them but the
+// one step it has always had, and calls the section map only from that walk.
+// This reads each page's source for exactly that walk, so a hand-written key
+// list, a `.reverse()`/`.sort()`/`.filter()` on the keys, or a
+// `sections.weather()` call from the JSX turns it red.
 //
-// Mutation that turns it red: call `sections.weather()` from the JSX of either
-// page, or replace its `contractSectionsFor(PLACE_PAGE, …)` walk with a
-// hand-written list of keys.
+// Mutations that turn it red: add `.reverse()` after the walk in either page;
+// call `sections.weather()` from the JSX of either page; pass `place` instead
+// of `place.fieldValues` to `formatCanyonGrade` (`unknown` lets that compile
+// and return no grade).
+//
+// Not covered: the order inside a section, which key a section draws under
+// (`tsc` holds the keys of the `sections` map against the contract), and the
+// rendered DOM or native tree, which only a render test would see.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { PLACE_PAGE } from "./placePage.js";
-
 const repo = join(import.meta.dirname, "..", "..", "..");
-const pages = {
-  web: "frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx",
-  gps: "mobile/src/places/PlaceDetailScreen.tsx",
-} as const;
+const read = (file: string) =>
+  readFileSync(join(repo, file), "utf8").replace(/\s+/g, " ");
 
-describe.each(Object.entries(pages))(
-  "Logjam %s's place page",
-  (client, file) => {
-    const source = readFileSync(join(repo, file), "utf8");
+const WEB = read("frontend/src/components/sidebar/panels/PlaceDetailPanel.tsx");
+const GPS = read("mobile/src/places/PlaceDetailScreen.tsx");
 
-    it("walks the contract's sections", () => {
-      expect(source).toContain(`contractSectionsFor(PLACE_PAGE, "${client}"`);
-    });
+/** Every use of the section map in a page: `sections.x(` and `sections[k](`. */
+const uses = (source: string) =>
+  [...source.matchAll(/\bsections(?:\.\w+|\[[^\]]+\])/g)].map((m) => m[0]);
 
-    it("draws a section only inside that walk (the hero aside, on GPS)", () => {
-      const direct = [...source.matchAll(/sections\.(\w+)\(\)/g)].map(
-        (m) => m[1],
-      );
-      expect(direct).toEqual(client === "gps" ? ["hero"] : []);
-    });
+describe("Logjam Web's place page", () => {
+  it("walks the contract's keys and draws each through the one call", () => {
+    expect(WEB).toContain(
+      'const sectionKeys = contractSectionsFor(PLACE_PAGE, "web", isOwnedPlace);',
+    );
+    expect(WEB).toContain(
+      "{sectionKeys.map((key) => ( <Fragment key={key}>{sections[key]()}</Fragment> ))}",
+    );
+    expect(WEB.match(/\bsectionKeys\b/g)).toHaveLength(2);
+    expect(uses(WEB)).toEqual(["sections[key]"]);
+  });
 
-    it("names every key the contract does for its client", () => {
-      for (const { key } of PLACE_PAGE.sections)
-        expect(source).toMatch(new RegExp(`\\b${key}: \\(`));
-    });
-  },
-);
+  it("reads the grade from the place's field values", () => {
+    expect(WEB).toContain("formatCanyonGrade(current.fieldValues)");
+  });
+});
+
+describe("Logjam GPS's place page", () => {
+  it("walks the contract's keys, takes the hero out, and draws the rest through the one call", () => {
+    expect(GPS).toContain(
+      '{contractSectionsFor(PLACE_PAGE, "gps", isOwner) .filter((key) => key !== "hero") .map((key) => ( <Fragment key={key}>{sections[key]()}</Fragment> ))}',
+    );
+    expect(uses(GPS)).toEqual(["sections.hero", "sections[key]"]);
+  });
+
+  it("reads the grade from the place's field values", () => {
+    expect(GPS).toContain("formatCanyonGrade(place.fieldValues)");
+  });
+});

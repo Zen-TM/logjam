@@ -27,17 +27,15 @@ import {
   isReservedFieldKey,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
-  formatFieldValue,
   formatPlacePosition,
   placeAttributesTitle,
   placeSources,
   placeStatusLabel,
   placeVerbs,
-  type AttributeRow,
   type PlaceVerbIdOn,
   type SectionKeysOn,
   userFieldValues,
-  withFieldUnit,
+  withRowUnit,
   distinctTripTypes,
   formatCanyonGrade,
   formatDistanceM,
@@ -273,14 +271,7 @@ export function PlaceDetailScreen({
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
   const customFields = attributeRows(labellingDefs, storedFields).map(
-    ([key, label, value, type]): AttributeRow => [
-      key,
-      label,
-      value == null || value === ""
-        ? value
-        : withFieldUnit(key, formatFieldValue(value, type)),
-      type,
-    ],
+    withRowUnit,
   );
 
   // Position is what every place has. Type-specific attributes render in the

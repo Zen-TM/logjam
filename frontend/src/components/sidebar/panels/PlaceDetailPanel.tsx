@@ -729,19 +729,6 @@ function PlaceDetailPanel({
       </section>
     ),
 
-    // A link, not a verb of ours: the browser hands the point to whatever the
-    // person uses for directions.
-    navigate: () => (
-      <section className={classes.section}>
-        <Row
-          leading={<IconTile icon="openExternal" hue="var(--color-accent)" />}
-          title={copy.openInMaps}
-          href={`https://www.openstreetmap.org/?mlat=${current.latitude}&mlon=${current.longitude}#map=16/${current.latitude}/${current.longitude}`}
-          external
-        />
-      </section>
-    ),
-
     // Asks Open-Meteo for the 0.1° cell round the place and nothing more
     // (ADR 0038), and only on this press.
     weather: () => (

@@ -7,6 +7,7 @@
 import { fieldValue } from "../fieldValues.js";
 import { SOURCES_FIELD_KEY, systemFieldDef } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
+import type { AttributeRow } from "../logbook.js";
 import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
 import { PLACE_FORM } from "./placeForm.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
@@ -21,7 +22,11 @@ export const PLACE_PAGE = {
     { key: "hero" },
     { key: "verbs" },
     { key: "position" },
-    { key: "navigate" },
+    {
+      key: "navigate",
+      on: "gps",
+      gap: "A browser has no app to hand a position to, so Logjam Web has Copy position. A link to a third-party map would send the point off the account: the maintainer's call.",
+    },
     // Only the attributes the place answered: a form asks every question, a
     // page reports the answers. They come before the forecast and the gauge:
     // the place's own facts are what a trip day needs first.
@@ -109,6 +114,15 @@ export function formatPlacePosition(latitude: number, longitude: number) {
 export function withFieldUnit(key: string, text: string): string {
   const unit = systemFieldDef(key)?.unit;
   return unit ? `${text} ${unit}` : text;
+}
+
+/** An attribute row with its built-in unit on the value ("15" becomes "15
+ *  m"). The value is otherwise left raw: the table formats it by type, and
+ *  formatting it here as well would format a date twice. */
+export function withRowUnit(row: AttributeRow): AttributeRow {
+  const [key, label, value, type] = row;
+  if (value == null || value === "" || !systemFieldDef(key)?.unit) return row;
+  return [key, label, withFieldUnit(key, String(value)), type];
 }
 
 /** "Canyon attributes": the heading of what this KIND of place records. */
