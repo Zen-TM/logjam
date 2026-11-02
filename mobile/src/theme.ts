@@ -40,6 +40,11 @@ import { readPref, writePref } from "./prefsDb";
 
 const THEME_SCHEME_PREF_KEY = "themeSchemeId";
 const TEXT_SCALE_PREF_KEY = "textScale";
+// The dark scheme Bright light came from, empty when it is off.
+const BRIGHT_FROM_PREF_KEY = "brightLightFrom";
+
+/** The sunlight scheme: the one light scheme, read in full sun. */
+export const BRIGHT_LIGHT_SCHEME_ID: ThemeSchemeId = "ghostGum";
 
 function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
@@ -65,11 +70,43 @@ const subscribeToScheme = (listener: () => void) => {
  * one is what makes Logjam GPS open in the right colours with no network.
  */
 export function setThemeSchemeId(id: ThemeSchemeId): boolean {
+  // Any pick made by name is a choice, not the sun: Bright light lets go.
+  if (isBrightLight()) writePref(BRIGHT_FROM_PREF_KEY, "");
   if (id !== currentThemeSchemeId) {
     currentThemeSchemeId = id;
     for (const listener of schemeListeners) listener();
   }
   return writePref(THEME_SCHEME_PREF_KEY, id);
+}
+
+/** The scheme painted right now, outside a component. */
+export const getThemeSchemeId = (): ThemeSchemeId => currentThemeSchemeId;
+
+/** Whether the sunlight scheme is on by the Layers sheet's switch, so it
+ *  outlasts a launch and the account's own scheme does not undo it. */
+export function isBrightLight(): boolean {
+  return !!readPref(BRIGHT_FROM_PREF_KEY);
+}
+
+/**
+ * Bright light on: the sunlight scheme, remembering the dark one it came from.
+ * Off: back to that one. This phone only: the account's scheme, and Logjam
+ * Web's, stay as the user picked them in Settings. Returns false when the
+ * device would not store it.
+ */
+export function setBrightLight(on: boolean): boolean {
+  if (!on) {
+    return setThemeSchemeId(
+      normalizeThemeSchemeId(readPref(BRIGHT_FROM_PREF_KEY)) ??
+        DEFAULT_THEME_SCHEME_ID,
+    );
+  }
+  const from =
+    THEME_SCHEMES[currentThemeSchemeId].mode === "light"
+      ? DEFAULT_THEME_SCHEME_ID
+      : currentThemeSchemeId;
+  const stored = setThemeSchemeId(BRIGHT_LIGHT_SCHEME_ID);
+  return writePref(BRIGHT_FROM_PREF_KEY, from) && stored;
 }
 
 const ThemeSchemeContext = createContext<ThemeSchemeId>(currentThemeSchemeId);

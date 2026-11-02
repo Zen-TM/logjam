@@ -45,6 +45,8 @@ import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
 import { RouteStatsBody } from "./RouteStatsBody";
+import { MapCoverageRow } from "../offline/MapCoverageRow";
+import { bboxOfPoints } from "../saved/bboxOfPoints";
 
 export function RouteOptionsSheet({
   route,
@@ -233,6 +235,10 @@ export function RouteOptionsSheet({
     onClose();
   };
 
+  const routeBox = bboxOfPoints(
+    route.points.map(([lon, lat]) => ({ lon, lat })),
+  );
+
   const save = (format: "gpx" | "kml") => {
     close();
     setBusy(true);
@@ -373,6 +379,7 @@ export function RouteOptionsSheet({
               onPress={onShowOnMap}
             />
           ) : null}
+          {routeBox ? <MapCoverageRow bbox={routeBox} onSave={close} /> : null}
           <Row
             title="View stats"
             icon="stats"

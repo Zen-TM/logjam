@@ -57,6 +57,8 @@ import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
+import { MapCoverageRow } from "../offline/MapCoverageRow";
+import { PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 import { PlaceGaugeSection } from "../gauges/PlaceGaugeSection";
 import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
 import { MediaStrip } from "../media/MediaStrip";
@@ -391,6 +393,14 @@ export function PlaceDetailScreen({
           right={<Icon idea="copy" size={20} color={theme.textMuted} />}
           accessibilityLabel={`Copy the coordinates of ${place.name}`}
           onPress={copyPosition}
+        />
+        <MapCoverageRow
+          bbox={[
+            place.longitude - PLACE_FOCUS_DEGREES,
+            place.latitude - PLACE_FOCUS_DEGREES,
+            place.longitude + PLACE_FOCUS_DEGREES,
+            place.latitude + PLACE_FOCUS_DEGREES,
+          ]}
         />
       </>
     ),

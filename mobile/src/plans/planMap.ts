@@ -3,8 +3,7 @@
 // interest stays off the server (mobile/AGENTS.md).
 import type { TripPlanView } from "@logjam/shared";
 
-import type { MapArtifact } from "../map/sourceResolver";
-
+import { coveredByOfflineMaps } from "../offline/coveredByOfflineMaps";
 import { bboxOfPoints, PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 
 /** The plan's places and ways, as `[west, south, east, north]`, or null. At
@@ -35,23 +34,7 @@ export function planBbox(
 
 /** Whether one saved map region already holds the whole of a plan's area,
  *  so "Download the map for this area" has nothing left to save. */
-export function planMapSaved(
-  bbox: [number, number, number, number],
-  artifacts: readonly Pick<MapArtifact, "kind" | "bbox">[],
-): boolean {
-  const [west, south, east, north] = bbox;
-  // ponytail: one region must hold it all; two that tile the area together
-  // still offer the row. A union check if that turns up.
-  return artifacts.some(
-    ({ kind, bbox: region }) =>
-      kind === "basemap-region" &&
-      region !== null &&
-      region[0] <= west &&
-      region[1] <= south &&
-      region[2] >= east &&
-      region[3] >= north,
-  );
-}
+export const planMapSaved = coveredByOfflineMaps;
 
 /** Whether a pressed pin is one of the plan's places, not one of the user's:
  *  a plan's pin opens its place sheet, the user's their own options. */

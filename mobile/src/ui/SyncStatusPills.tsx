@@ -8,11 +8,14 @@
 //
 // The offline pill still shows for a guest: being offline is true regardless of
 // whether an account exists, and it explains why the map is blank.
+import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { useAccountState } from "../auth/AccountStateContext";
+import { useLastSyncAt } from "../sync/useSyncQueries";
 import { spacing } from "../theme";
 import { StatusPill } from "./StatusPill";
+import { syncAgeLabel } from "./syncAge";
 
 export function SyncStatusPills({
   online,
@@ -24,12 +27,19 @@ export function SyncStatusPills({
 }) {
   const isGuest = useAccountState().accountState === "guest";
   const showPending = pendingCount > 0 && !isGuest;
+  // Read once per mount: a day is the finest the label tells.
+  const [now] = useState(Date.now);
+  const age = syncAgeLabel(useLastSyncAt(), now);
 
   if (online && !showPending) return null;
   return (
     <View style={styles.row}>
       {online ? null : (
-        <StatusPill label="Offline" tone="muted" icon="offline" />
+        <StatusPill
+          label={age ? `Offline · ${age}` : "Offline"}
+          tone="muted"
+          icon="offline"
+        />
       )}
       {showPending ? (
         <StatusPill

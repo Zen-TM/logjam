@@ -51,6 +51,9 @@ import {
 } from "@logjam/shared";
 
 import {
+  BRIGHT_LIGHT_SCHEME_ID,
+  setBrightLight,
+  useThemeSchemeId,
   spacing,
   makeStyles,
   useTheme,
@@ -75,9 +78,14 @@ import type { Connectivity } from "./connectivity";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
-type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
+// Bright light is a row above the tabs, not one of them.
+type Tab = Exclude<SectionKeysOn<typeof MAP_LAYERS, "gps">, "brightLight">;
 
 const copy = MAP_LAYERS.copy;
+
+const tabKeys = contractSectionKeys(MAP_LAYERS, "gps").filter(
+  (key): key is Tab => key !== "brightLight",
+);
 
 const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
@@ -248,9 +256,10 @@ export function MapLayersSheet({
         ) : null
       }
     >
+      {legend ? null : <BrightLightRow />}
       <View style={styles.rail}>
         <ChipRail
-          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
+          options={tabKeys.map((key) => ({
             value: key,
             label: TAB_LABEL[key],
           }))}
@@ -261,6 +270,19 @@ export function MapLayersSheet({
 
       {panes[tab]()}
     </BottomSheet>
+  );
+}
+
+/** The sunlight scheme, one switch away; off returns to the dark scheme it
+ *  came from. */
+function BrightLightRow() {
+  const bright = useThemeSchemeId() === BRIGHT_LIGHT_SCHEME_ID;
+  return (
+    <SwitchRow
+      title={copy.brightLight}
+      checked={bright}
+      onChange={setBrightLight}
+    />
   );
 }
 
