@@ -27,6 +27,7 @@ import {
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
   formatCredits,
+  formatCreditsOf,
   confirmEmailChange,
   messageFromError,
   requestEmailChange,
@@ -314,8 +315,10 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatCredits(user.monthlyComputeUsage)} of{" "}
-          {formatCredits(user.monthlyComputeCredits)}
+          {formatCreditsOf(
+            user.monthlyComputeUsage,
+            user.monthlyComputeCredits,
+          )}
           {creditsResetLabel ? (
             <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}

@@ -1,7 +1,6 @@
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
-  deleteAccountPhrase,
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
 } from "@logjam/shared";
@@ -116,7 +115,6 @@ function DeleteAccountForm({
           label={deleteAccountPhraseLabel(username)}
           value={confirmInput}
           onChange={(event) => setConfirmInput(event.target.value)}
-          placeholder={deleteAccountPhrase(username)}
           disabled={deleting}
           data-autofocus
         />
