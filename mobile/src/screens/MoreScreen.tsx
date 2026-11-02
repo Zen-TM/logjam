@@ -143,7 +143,7 @@ export function MoreScreen({
     await requestSync();
     if (getSyncStatus().state !== "error")
       setToast({ text: "Synced.", tone: "done", nonce: Date.now() });
-  }, []);
+  }, [setToast]);
   const user = userQuery.data;
   const syncNowStatus = capabilityStatus("syncNow", accountState, online);
 
