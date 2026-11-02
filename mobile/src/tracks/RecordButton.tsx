@@ -14,15 +14,25 @@
 // finishing never waits on finding the panel first. Wet hands, cold hands, and
 // nothing in Logjam GPS is worse than a recording that will not stop.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, View } from "react-native";
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Pressable,
+  View,
+} from "react-native";
 
 import { SEARCH_SIZE } from "../map/mapChrome";
 import { radius, makeStyles } from "../theme";
+import { holdTick } from "../ui";
 
 /** One breath. Slow on purpose: at the map's scale this reads as alive rather
  *  than as an alarm, and it is a redraw every two seconds, not every frame of
  *  a fast blink. */
 const PULSE_MS = 2000;
+
+/** Where the halo rests when motion is reduced: a steady glow, mid-breath. */
+const STEADY_PULSE = 0.4;
 
 const RING = 26;
 const CORE = 12;
@@ -51,11 +61,33 @@ export function RecordButton({
   const recording = state === "recording";
   const [pulse] = useState(() => new Animated.Value(0));
 
+  // The system's Remove animations setting. The recording stays a light, not a
+  // beat: the halo holds still and the ring and core carry the state.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((on) => alive && setReduceMotion(on))
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      setReduceMotion,
+    );
+    return () => {
+      alive = false;
+      subscription.remove();
+    };
+  }, []);
+
   useEffect(() => {
     if (!recording || !animate) {
       // Reset rather than freeze: a halo stopped mid-breath at half opacity
       // reads as a third state that means nothing.
       pulse.setValue(0);
+      return;
+    }
+    if (reduceMotion) {
+      pulse.setValue(STEADY_PULSE);
       return;
     }
     const loop = Animated.loop(
@@ -74,7 +106,7 @@ export function RecordButton({
       loop.stop();
       pulse.setValue(0);
     };
-  }, [recording, animate, pulse]);
+  }, [recording, animate, reduceMotion, pulse]);
 
   return (
     <Pressable
@@ -88,7 +120,14 @@ export function RecordButton({
       }
       style={styles.button}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={
+        onLongPress
+          ? () => {
+              holdTick();
+              onLongPress();
+            }
+          : undefined
+      }
     >
       {/* Behind the ring, and driven by scale + opacity only, so the whole
           breath runs on the native driver. */}

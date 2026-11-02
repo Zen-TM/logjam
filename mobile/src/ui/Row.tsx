@@ -11,6 +11,7 @@ import {
   muted,
   useTheme,
 } from "../theme";
+import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
@@ -182,7 +183,14 @@ export function Row({
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={
+        onLongPress
+          ? () => {
+              holdTick();
+              onLongPress();
+            }
+          : undefined
+      }
       disabled={disabled}
       hitSlop={hitSlop}
       style={({ pressed }) => [

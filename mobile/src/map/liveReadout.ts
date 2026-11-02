@@ -13,19 +13,12 @@ import { useSyncExternalStore } from "react";
 
 import { haversineMeters } from "@logjam/shared";
 
-/**
- * A fix older than this says nothing about how fast someone is moving NOW.
- *
- * It has to exist because the map's watcher is `timeInterval` AND
- * `distanceInterval` (Android ANDs them), so a phone standing still stops
- * producing fixes ENTIRELY — with no staleness rule the chip would keep
- * reporting the speed of the last time the user walked, indefinitely, which is
- * the one number it must never show (Guard: mobile/src/map/liveReadout.test.ts).
- * 20 s is a comfortable six watcher intervals: long enough that an ordinary
- * skipped fix does not blank the chip, short enough that a stop reads as a
- * stop.
- */
-export const READOUT_STALE_MS = 20_000;
+import {
+  FIX_STALE_MS,
+  fixAgeLabel,
+  fixQuality,
+  type FixQuality,
+} from "./gpsSignal";
 
 /**
  * The shortest gap this will divide a distance by.
@@ -72,7 +65,7 @@ export function deriveSpeedMps(
   }
   if (!previous) return null;
   const gapMs = current.atMs - previous.atMs;
-  if (gapMs < MIN_DERIVE_GAP_MS || gapMs > READOUT_STALE_MS) return null;
+  if (gapMs < MIN_DERIVE_GAP_MS || gapMs > FIX_STALE_MS) return null;
   const metres = haversineMeters(
     previous.lat,
     previous.lon,
@@ -88,9 +81,39 @@ export type LiveReadout = {
   /** True when the height came from the terrain rather than from the handset —
    *  the chip says which, because the two can differ by a lot. */
   fromTerrain: boolean;
-  /** When the fix behind this arrived, for the staleness rule above. */
+  /** When the fix behind this arrived, for `fixQuality` (gpsSignal.ts). */
   atMs: number;
+  /** Metres, 68% confidence, so a tower fix reads as "about". */
+  accuracyM: number | null;
 };
+
+/**
+ * What the chip draws, as of `nowMs`.
+ *
+ * A stale fix invalidates the SPEED but not the height: the ground under you
+ * is still the ground under you, so the height stays, greyed and with its age.
+ * Quality is `fixQuality`'s, the one rule every figure from the position reads
+ * (guard: liveReadout.test.ts).
+ */
+export function readoutFigures(
+  readout: LiveReadout | null,
+  nowMs: number,
+): {
+  quality: FixQuality;
+  speedMps: number | null;
+  elevationM: number | null;
+  /** Set when stale: how long ago the fix behind the figures was. */
+  age: string | null;
+} {
+  const quality = fixQuality(readout, nowMs);
+  const stale = quality === "stale";
+  return {
+    quality,
+    speedMps: stale ? null : (readout?.speedMps ?? null),
+    elevationM: readout?.elevationM ?? null,
+    age: stale && readout ? fixAgeLabel(nowMs - readout.atMs) : null,
+  };
+}
 
 let live: LiveReadout | null = null;
 const listeners = new Set<() => void>();
@@ -99,6 +122,18 @@ const listeners = new Set<() => void>();
 export function publishLiveReadout(next: LiveReadout | null): void {
   live = next;
   for (const listener of listeners) listener();
+}
+
+/**
+ * A fix arrived that moved too little to act on. It still proves the sky is
+ * there, so the figures keep their height and are not aged for standing still.
+ */
+export function refreshLiveReadout(
+  atMs: number,
+  accuracyM: number | null,
+  speedMps: number | null,
+): void {
+  if (live) publishLiveReadout({ ...live, atMs, accuracyM, speedMps });
 }
 
 function getLiveReadout(): LiveReadout | null {

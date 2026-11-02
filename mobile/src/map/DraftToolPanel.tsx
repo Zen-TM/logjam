@@ -32,6 +32,7 @@
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
+import type { ReactNode } from "react";
 import { Text, View } from "react-native";
 import {
   formatDistanceM,
@@ -81,6 +82,7 @@ export function DraftToolPanel({
   snapMode,
   onSnapModeChange,
   allowNetwork = true,
+  recordingLight,
 }: {
   /** Which tool owns the taps — the only thing that varies in this panel. */
   tool: "route" | "measure";
@@ -110,6 +112,9 @@ export function DraftToolPanel({
    * already on the phone, and nothing goes out.
    */
   allowNetwork?: boolean;
+  /** The record button while a recording runs: the tool has taken the corner
+   *  it sits in, and a running recording stays on screen (mobile/DESIGN.md §3). */
+  recordingLight?: ReactNode;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -134,6 +139,9 @@ export function DraftToolPanel({
         </Text>
         <View style={styles.spacer} />
         <ElevationReadout profile={profile} loading={loading} />
+        {recordingLight ? (
+          <View style={styles.light}>{recordingLight}</View>
+        ) : null}
       </View>
 
       {editingName ? (
@@ -236,6 +244,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
+  light: { alignSelf: "center" },
   distance: {
     ...textRole.heading,
     color: theme.text,

@@ -66,12 +66,10 @@ import {
   SYSTEM_PLACE_TYPE_IDS,
   demCredits,
   TRACK_MIME_TYPES,
-  compassPointFor,
   distinctTripTypes,
   draftAnchorIndices,
   draftPoints,
   emptyDraft,
-  formatDistanceM,
   haversineMeters,
   initialBearingDegrees,
   MAP_OVERLAY_REFINEMENTS,
@@ -162,6 +160,7 @@ import { setOfflineOnly as setOfflineOnlyMode } from "../offline/offlineOnlyMode
 import {
   deriveSpeedMps,
   publishLiveReadout,
+  refreshLiveReadout,
   type ReadoutFix,
 } from "./liveReadout";
 import {
@@ -279,7 +278,9 @@ import {
   Chip,
   Icon,
   MapBanner,
+  NavReadout,
   Notice,
+  holdTick,
   Row,
   TextField,
   Toast,
@@ -2646,6 +2647,7 @@ export function MapScreen({
   // cancels first) — this is the "the user left" half.
   useEffect(() => cancelZoomRamp, [followMode, mapFocused, cancelZoomRamp]);
   const [navTarget, setNavTarget] = useState<Waypoint | null>(null);
+  const stopNavigating = useCallback(() => setNavTarget(null), []);
   const navDistanceM =
     navTarget && userCoord
       ? haversineMeters(
@@ -3572,11 +3574,23 @@ export function MapScreen({
    * ever called on an actual transition.
    */
   const gpsQualityRef = useRef<FixQuality>(gpsQuality);
+  /** When the fix behind the arrow arrived, while it is stale and null
+   *  otherwise: the age the figures show. A stale fix does not change, and
+   *  keeping it null for a live one means this renders on a transition only. */
+  const [staleFixAtMs, setStaleFixAtMs] = useState<number | null>(null);
+  const staleFixAtRef = useRef<number | null>(null);
   const noteGpsQuality = useCallback(() => {
-    const next = fixQuality(lastFix.current, Date.now());
-    if (next === gpsQualityRef.current) return;
-    gpsQualityRef.current = next;
-    setGpsQuality(next);
+    const fix = lastFix.current;
+    const next = fixQuality(fix, Date.now());
+    const staleAt = next === "stale" ? (fix?.atMs ?? null) : null;
+    if (next !== gpsQualityRef.current) {
+      gpsQualityRef.current = next;
+      setGpsQuality(next);
+    }
+    if (staleAt !== staleFixAtRef.current) {
+      staleFixAtRef.current = staleAt;
+      setStaleFixAtMs(staleAt);
+    }
   }, []);
   useEffect(() => {
     if (!sensorsActive || !dotWanted) return;
@@ -3660,44 +3674,52 @@ export function MapScreen({
    */
   const previousReadoutFix = useRef<ReadoutFix | null>(null);
   const readoutSeq = useRef(0);
-  const noteReadoutFix = useCallback((position: Location.LocationObject) => {
-    if (!speedElevationEnabledRef.current) return;
-    const fix: ReadoutFix = {
-      lon: position.coords.longitude,
-      lat: position.coords.latitude,
-      speedMps: position.coords.speed,
-      atMs: position.timestamp,
-    };
-    const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
-    previousReadoutFix.current = fix;
-    publishLiveReadout({
-      speedMps,
-      elevationM: position.coords.altitude,
-      fromTerrain: false,
-      atMs: fix.atMs,
-    });
+  const noteReadoutFix = useCallback(
+    (position: Location.LocationObject, cached = false) => {
+      if (!speedElevationEnabledRef.current) return;
+      const fix: ReadoutFix = {
+        lon: position.coords.longitude,
+        lat: position.coords.latitude,
+        speedMps: position.coords.speed,
+        // Our clock for a live delivery, the platform's only for the OS's cached
+        // fix, as the arrow does (`deliveredFix`): a drifted phone clock must not
+        // grey every figure.
+        atMs: cached ? position.timestamp : Date.now(),
+      };
+      const speedMps = deriveSpeedMps(fix, previousReadoutFix.current);
+      previousReadoutFix.current = fix;
+      publishLiveReadout({
+        speedMps,
+        elevationM: position.coords.altitude,
+        fromTerrain: false,
+        atMs: fix.atMs,
+        accuracyM: position.coords.accuracy,
+      });
 
-    // Guarded by a sequence number: tile reads resolve out of order, and a
-    // late answer for a fix two positions ago would overwrite the current
-    // one with the height of somewhere the user has left.
-    const seq = (readoutSeq.current += 1);
-    // `distanceM` describes a position's place along a LINE; a lone point is
-    // at zero of one.
-    sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
-      allowNetwork: !offlineOnlyRef.current,
-    })
-      .then(({ heights: [elevationM] }) => {
-        if (seq !== readoutSeq.current || elevationM == null) return;
-        publishLiveReadout({
-          speedMps,
-          elevationM,
-          fromTerrain: true,
-          atMs: fix.atMs,
-        });
+      // Guarded by a sequence number: tile reads resolve out of order, and a
+      // late answer for a fix two positions ago would overwrite the current
+      // one with the height of somewhere the user has left.
+      const seq = (readoutSeq.current += 1);
+      // `distanceM` describes a position's place along a LINE; a lone point is
+      // at zero of one.
+      sampleElevations([{ lon: fix.lon, lat: fix.lat, distanceM: 0 }], {
+        allowNetwork: !offlineOnlyRef.current,
       })
-      // No detail: the error could carry a tile index, which is a position.
-      .catch(() => undefined);
-  }, []);
+        .then(({ heights: [elevationM] }) => {
+          if (seq !== readoutSeq.current || elevationM == null) return;
+          publishLiveReadout({
+            speedMps,
+            elevationM,
+            fromTerrain: true,
+            atMs: fix.atMs,
+            accuracyM: position.coords.accuracy,
+          });
+        })
+        // No detail: the error could carry a tile index, which is a position.
+        .catch(() => undefined);
+    },
+    [],
+  );
 
   // The marker's own position watcher.
   //
@@ -3766,7 +3788,7 @@ export function MapScreen({
         // as broken, and indoors that callback can be minutes away. A cached
         // fix is stale by definition, which is exactly what `atMs` and the
         // staleness rule are for — the height still stands, the speed does not.
-        noteReadoutFix(lastKnown);
+        noteReadoutFix(lastKnown, true);
         applyFix([lastKnown.coords.longitude, lastKnown.coords.latitude]);
       }
       // Balanced = fused wifi/cell + GPS. High (GPS-priority) starves indoors
@@ -3786,7 +3808,17 @@ export function MapScreen({
         },
         (position) => {
           noteFixArrived(position);
-          if (!movedFarEnough(position)) return;
+          if (!movedFarEnough(position)) {
+            if (speedElevationEnabledRef.current) {
+              const { speed, accuracy } = position.coords;
+              refreshLiveReadout(
+                Date.now(),
+                accuracy,
+                speed != null && speed >= 0 ? speed : null,
+              );
+            }
+            return;
+          }
           noteReadoutFix(position);
           applyFix([position.coords.longitude, position.coords.latitude]);
         },
@@ -4167,11 +4199,15 @@ export function MapScreen({
       // While either point tool is armed, press-and-hold near the line means
       // "add a point here" — the mobile stand-in for dragging the line on web.
       // Only when it lands near the line; anywhere else follows the preference.
-      if (insertAnchorNear(lon, lat)) return;
+      if (insertAnchorNear(lon, lat)) {
+        holdTick();
+        return;
+      }
       // Drawing or measuring: every other long-press outcome (waypoint, navigate,
       // start route/measure, add place, "This point" sheet) is a bug mid-draw —
       // press-and-hold off the line does nothing while a tool is armed.
       if (collectingPoints) return;
+      holdTick();
       const point = { latitude: lat, longitude: lon };
       switch (longPressAction) {
         case "waypoint":
@@ -4216,7 +4252,7 @@ export function MapScreen({
       if (!dotWanted) handleLocateMe();
       // A pulsing marker is not a discoverable button. Said once, at the only
       // moment it is useful, rather than left as chrome for the whole trip.
-      notify("Recording — tap your location dot for stats.", "info");
+      notify("Recording — tap the record button for stats.", "info");
     } catch (err) {
       console.error(err);
       Alert.alert("Recording error", "Couldn't start recording.");
@@ -4565,11 +4601,6 @@ export function MapScreen({
   // the other. While a tool is collecting points BOTH of those are gone
   // (they'd only be in the way mid-draw), so the stack takes their place
   // instead of leaving the draw/measure card floating below an empty row.
-  const navText =
-    navTarget &&
-    (navDistanceM != null && navBearingDeg != null
-      ? `${formatDistanceM(navDistanceM)} · ${compassPointFor(navBearingDeg)} ${Math.round(navBearingDeg)}°`
-      : "waiting for GPS…");
   // A banner's label is one short line; the whole sentence is what a press
   // shows and a screen reader says (shared/DESIGN.md §15).
   const banners = [
@@ -4581,17 +4612,6 @@ export function MapScreen({
         dismissLabel={TRIP_PLAN_PAGE.copy.backToMap}
         onDismiss={leavePlan}
         onPress={() => onOpenPlan?.(planOnMap.id)}
-      />
-    ) : null,
-    navTarget ? (
-      <MapBanner
-        key="nav"
-        icon="navigateTo"
-        label={navText ?? ""}
-        fullText={`${navTarget.name} · ${navText}`}
-        dismissLabel="Stop navigating"
-        onDismiss={() => setNavTarget(null)}
-        onPress={() => notify(`${navTarget.name} · ${navText}`, "info")}
       />
     ) : null,
     // A map that quietly hides pins is a map you can't trust. Says how many
@@ -4624,6 +4644,37 @@ export function MapScreen({
       ? insets.top + CHROME_GAP
       : insets.top + CHROME_GAP + SEARCH_SIZE + spacing(1)) +
     bannerRows * (SEARCH_SIZE + spacing(1));
+  // One button, drawn in the corner, or in the tool panel's header while a
+  // tool is collecting points and has taken the corner: a running recording is
+  // on screen in every map mode (mobile/DESIGN.md §3).
+  const recordButton = (
+    <RecordButton
+      state={
+        activeTrack?.state === "done" ? null : (activeTrack?.state ?? null)
+      }
+      // The same gate the sensors run behind: no frames for a screen
+      // nobody is looking at (mobile/CLAUDE.md, Battery).
+      animate={sensorsActive}
+      onPress={() => {
+        if (activeTrack) {
+          setRecordingSheetOpen(true);
+          return;
+        }
+        // Explicitly closed, not merely left alone: a recording discarded
+        // from inside the sheet unmounts it while this flag is still true,
+        // and the next one would then open onto a panel nobody asked for.
+        setRecordingSheetOpen(false);
+        void handleStartRecording();
+      }}
+      // Finishing must never require finding the panel first — cold hands,
+      // wet phone, a party waiting. Same confirm as the sheet's button.
+      onLongPress={
+        activeTrack ? () => confirmFinishRecording(activeTrack.id) : undefined
+      }
+    />
+  );
+  const recordingLight =
+    activeTrack && activeTrack.state !== "done" ? recordButton : undefined;
   const recordingWriteFailing = useSyncExternalStore(
     onTrackWriteHealthChanged,
     isRecordingWriteFailing,
@@ -5379,9 +5430,8 @@ export function MapScreen({
       {/* The record button holds the corner the search pill does not, and
           leaves with it while a tool is collecting points: the draw/measure
           card now sits under this row, and a HUD that has to dodge a button
-          gets pushed down the screen instead of using it. Recording is not
-          interrupted by the button going away — it keeps running, and the card
-          is dismissed in one tap. */}
+          gets pushed down the screen instead of using it. A running recording
+          does not go with it: its light moves into the tool panel's header. */}
       {collectingPoints ? null : (
         <View
           style={[
@@ -5390,34 +5440,7 @@ export function MapScreen({
             controlsOnLeft ? { left: CHROME_GAP } : { right: CHROME_GAP },
           ]}
         >
-          <RecordButton
-            state={
-              activeTrack?.state === "done"
-                ? null
-                : (activeTrack?.state ?? null)
-            }
-            // The same gate the sensors run behind: no frames for a screen
-            // nobody is looking at (mobile/CLAUDE.md, Battery).
-            animate={sensorsActive}
-            onPress={() => {
-              if (activeTrack) {
-                setRecordingSheetOpen(true);
-                return;
-              }
-              // Explicitly closed, not merely left alone: a recording discarded
-              // from inside the sheet unmounts it while this flag is still true,
-              // and the next one would then open onto a panel nobody asked for.
-              setRecordingSheetOpen(false);
-              void handleStartRecording();
-            }}
-            // Finishing must never require finding the panel first — cold hands,
-            // wet phone, a party waiting. Same confirm as the sheet's button.
-            onLongPress={
-              activeTrack
-                ? () => confirmFinishRecording(activeTrack.id)
-                : undefined
-            }
-          />
+          {recordButton}
         </View>
       )}
 
@@ -5432,10 +5455,24 @@ export function MapScreen({
             without being asked. Everything else about a running recording is a
             tap away; this is the exception. */}
         {activeTrack && recordingWriteFailing ? (
-          <Notice icon="warning" tone="warning">
+          <Notice icon="warning" tone="critical">
             Points aren&apos;t being saved — finish the recording and check free
             space.
           </Notice>
+        ) : null}
+
+        {/* Where you are going, as a pair of figures. Second to the one notice
+            that outranks it (data being lost), above every tool and status. */}
+        {navTarget ? (
+          <NavReadout
+            name={navTarget.name}
+            distanceM={navDistanceM}
+            bearingDeg={navBearingDeg}
+            quality={gpsQuality}
+            fixAtMs={staleFixAtMs}
+            active={sensorsActive}
+            onStop={stopNavigating}
+          />
         ) : null}
 
         {/* Developer builds only; draws nothing unless a sensor log is running. */}
@@ -5459,6 +5496,7 @@ export function MapScreen({
             snapMode={snapMode}
             onSnapModeChange={handleSnapModeChange}
             onDiscard={measureDraft.close}
+            recordingLight={recordingLight}
           />
         ) : null}
 
@@ -5487,6 +5525,7 @@ export function MapScreen({
             onReverse={routeDraft.reverse}
             color={draftColor}
             onColorChange={setDraftColor}
+            recordingLight={recordingLight}
           />
         ) : null}
 

@@ -388,7 +388,9 @@ renumber.
 - **Tools share one button whose tray opens sideways**; arming one closes
   it. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
-- **Notices sit in one stack** and say only what is true right now.
+- **Notices sit in one stack** and say only what is true right now. A notice
+  about data being lost right now is `tone="critical"` (the warning fill,
+  `onFill` words, a glyph by type) and comes first.
 - **A mode with a way out is a `MapBanner`**: a pill in the search row,
   the search button's height and colour, inset so an open search bar covers
   it, the X last. Its label is one line, cut with an ellipsis, and never

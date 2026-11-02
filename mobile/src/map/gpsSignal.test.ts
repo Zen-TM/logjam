@@ -4,6 +4,7 @@ import {
   deliveredFix,
   FIX_COARSE_M,
   FIX_STALE_MS,
+  fixAgeLabel,
   fixQuality,
   nextFix,
 } from "./gpsSignal";
@@ -86,5 +87,13 @@ describe("nextFix", () => {
     const cached = { atMs: NOW - 600_000, accuracyM: 5 };
     expect(nextFix(live, cached, true)).toBe(live);
     expect(nextFix(null, cached, true)).toBe(cached);
+  });
+});
+
+describe("fixAgeLabel", () => {
+  it("counts seconds, then minutes, then hours", () => {
+    expect(fixAgeLabel(21_000)).toBe("21 s ago");
+    expect(fixAgeLabel(125_000)).toBe("2 min ago");
+    expect(fixAgeLabel(3 * 3_600_000)).toBe("3 h ago");
   });
 });
