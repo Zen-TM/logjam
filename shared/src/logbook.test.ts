@@ -540,10 +540,13 @@ describe("defaultTrackName", () => {
     expect(name).not.toContain("/");
   });
 
+  // Mutation: `now.toISOString().slice(0, 10)` reads the 2nd here.
   it("uses the local day, not the UTC one", () => {
-    // 00:30 local on the 3rd is still the 2nd in UTC east of Greenwich.
-    expect(defaultTrackName(new Date(2026, 10, 3, 0, 30))).toBe(
-      `Track ${formatDateKey("2026-11-03")}`,
-    );
+    // 01:30 on the 3rd in Sydney (UTC+11) is still the 2nd in UTC.
+    inTimeZone("Australia/Sydney", () => {
+      expect(defaultTrackName(new Date("2026-11-02T14:30:00.000Z"))).toBe(
+        `Track ${formatDateKey("2026-11-03")}`,
+      );
+    });
   });
 });

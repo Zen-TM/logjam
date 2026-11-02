@@ -81,6 +81,7 @@ describe("trackDisplayName", () => {
   it("drops the file extension a list row has no use for", () => {
     expect(trackDisplayName("Track 3 Nov 2026.gpx")).toBe("Track 3 Nov 2026");
     expect(trackDisplayName("Descent.KML")).toBe("Descent");
+    expect(trackDisplayName("Loop.geojson")).toBe("Loop");
   });
 
   it("leaves a name that is not a track file alone", () => {

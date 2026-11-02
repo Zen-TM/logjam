@@ -12,6 +12,15 @@ describe("large font scale", () => {
     expect(hero).toMatch(/titleNumberOfLines = 2,/);
   });
 
+  // Mutation: delete `tabBarBadgeStyle: TAB_BADGE_STYLE` from AppShell.tsx.
+  it("applies the badge style to the More tab", () => {
+    const shell = readFileSync(
+      new URL("../AppShell.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(shell).toContain("tabBarBadgeStyle: TAB_BADGE_STYLE");
+  });
+
   // Mutation: give the badge a `height` (React Navigation's own is a fixed 18
   // that clips scaled text) and this fails.
   it("sizes the tab badge from its text", () => {

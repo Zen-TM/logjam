@@ -14,6 +14,7 @@
  */
 import type { RoutePoint } from "./routeValidation.js";
 import { escapeXml } from "./escapeXml.js";
+import { MEDIA_EXTENSION_BY_MIME, TRACK_MIME_TYPES } from "./media.js";
 
 /** Six decimal places ≈ 0.1 m — past GPS precision, and keeps files small. */
 function coord(value: number): string {
@@ -90,7 +91,13 @@ export function exportFilename(
   return `${safe || fallback}.${extension}`;
 }
 
-/** A track file's name for a list: `exportFilename`'s extension is for the download only. */
+// Every extension a stored track file can carry, from the one list uploads use.
+const TRACK_EXTENSION = new RegExp(
+  `(?<=.)\\.(${TRACK_MIME_TYPES.map((mime) => MEDIA_EXTENSION_BY_MIME[mime]).join("|")})$`,
+  "i",
+);
+
+/** A track file's name for a list: the extension is for the download only. */
 export function trackDisplayName(filename: string): string {
-  return filename.replace(/(?<=.)\.(gpx|kml)$/i, "");
+  return filename.replace(TRACK_EXTENSION, "");
 }
