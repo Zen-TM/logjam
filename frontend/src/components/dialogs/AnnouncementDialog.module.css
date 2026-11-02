@@ -39,6 +39,6 @@
 }
 
 /* No fill: a fill says "press here" (shared/DESIGN.md §4). */
-.code {
+.message code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { pickDay, todayDateKey, tripPlanDatesLabel } from "@logjam/shared";
+import {
+  pickDay,
+  todayDateKey,
+  tripPlanDatesLabel,
+  weekBand,
+} from "@logjam/shared";
 import { Button, IconButton } from "./Button";
 import { inRange, monthGrid } from "./dateRange";
 import classes from "./DateRangeField.module.css";
@@ -32,7 +37,6 @@ export function DateRangeField({
   end,
   onChange,
   hint,
-  tapHint,
   labels,
 }: {
   label: string;
@@ -40,8 +44,6 @@ export function DateRangeField({
   end: string | null;
   onChange: (start: string | null, end: string | null) => void;
   hint?: string;
-  /** How to get a one-day trip back: shown under the calendar. */
-  tapHint?: string;
   labels: { none: string; clear: string; prevMonth: string; nextMonth: string };
 }) {
   const first = start ?? todayDateKey();
@@ -63,6 +65,10 @@ export function DateRangeField({
   const range = { start, end };
   const today = todayDateKey();
   const days = monthGrid(shown.year, shown.month);
+  // Drawn from the month shown, never stored: no band outlives its month.
+  const band = Array.from({ length: 6 }, (_, w) =>
+    weekBand(range, days.slice(w * 7, w * 7 + 7)),
+  ).flat();
   // The one day in the tab order, and the one the arrow keys move from.
   const [active, setActive] = useState<string | null>(null);
   const stop =
@@ -162,13 +168,18 @@ export function DateRangeField({
         {days.map((day, i) => {
           if (!day) return <span key={i} className={classes.blank} />;
           const edge = day === start || day === (end ?? start);
+          const b = band[i];
           return (
             <button
               key={day}
               type="button"
               className={[
                 classes.cell,
-                inRange(range, day) && classes.inRange,
+                b && classes.inRange,
+                b?.pieceStart && classes.pieceStart,
+                b?.pieceEnd && classes.pieceEnd,
+                b?.isStart && classes.bandStart,
+                b?.isEnd && classes.bandEnd,
                 edge && classes.end,
                 day === today && classes.today,
               ]
@@ -197,7 +208,6 @@ export function DateRangeField({
           <Button onClick={() => onChange(null, null)}>{labels.clear}</Button>
         )}
       </div>
-      {tapHint && <p className={classes.summary}>{tapHint}</p>}
       {hint && <p className={classes.summary}>{hint}</p>}
     </fieldset>
   );

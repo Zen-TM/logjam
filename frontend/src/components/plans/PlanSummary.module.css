@@ -13,10 +13,6 @@
   color: var(--color-text-muted);
 }
 
-.body {
-  white-space: pre-wrap;
-}
-
 @media screen {
   .summary {
     display: none;

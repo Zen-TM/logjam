@@ -18,6 +18,7 @@ import {
 } from "@logjam/shared";
 import { Button, Checkbox, Dialog } from "../../ui";
 import { planSummary, summaryForms, type SummaryParts } from "./plansModel";
+import WriteUpBody from "./WriteUpBody";
 import classes from "./PlanSummary.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
@@ -167,7 +168,7 @@ function PlanSummary({
       {summary.sections.map((section, index) => (
         <section key={index}>
           <h2>{section.title}</h2>
-          <p className={classes.body}>{section.body}</p>
+          <WriteUpBody title={section.title} body={section.body} />
         </section>
       ))}
       <SummaryTable

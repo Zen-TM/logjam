@@ -179,10 +179,12 @@ function SectionForm({
             minRows={8}
             onChange={(event) => set({ body: event.target.value })}
             // A limit shows live (shared/DESIGN.md §11).
-            hint={limitHint(
-              values.body.length,
-              TRIP_PLAN_SECTION_BODY_MAX_LENGTH,
-            )}
+            hint={[
+              copy.sectionBodyHint,
+              limitHint(values.body.length, TRIP_PLAN_SECTION_BODY_MAX_LENGTH),
+            ]
+              .filter(Boolean)
+              .join(" ")}
           />
           {theirs("body") != null && (
             <div className={classes.theirs}>
