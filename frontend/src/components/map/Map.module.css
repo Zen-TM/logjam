@@ -143,6 +143,16 @@
   padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
 
+/* MapLibre's own focus style on the (i) is a blue box-shadow, which forced
+   colours drop. The ring goes on the box, not the button: the button is
+   inverted above, and an outline would invert with it. */
+:global(
+  #map .maplibregl-ctrl-attrib:has(.maplibregl-ctrl-attrib-button:focus-visible)
+) {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
 /* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
 :global(#map .maplibregl-ctrl-attrib-button) {
   filter: invert(1);
