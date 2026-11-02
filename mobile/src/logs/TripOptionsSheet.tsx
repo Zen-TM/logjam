@@ -49,13 +49,7 @@ export function TripOptionsSheet({
   const styles = useStyles();
 
   const confirmDelete = async (target: MirrorTrip) => {
-    if (
-      !(await confirm({
-        ...tripDeleteConfirm(1),
-        confirmLabel: "Delete",
-        tone: "destructive",
-      }))
-    )
+    if (!(await confirm(tripDeleteConfirm({ title: tripTitle(target) }))))
       return;
     deleteTripLocal(target.id)
       .then(() => {
