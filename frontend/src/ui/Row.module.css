@@ -159,7 +159,8 @@
   outline: none;
 }
 
-.open:disabled {
+.open:disabled,
+.open[aria-disabled="true"] {
   cursor: default;
 }
 

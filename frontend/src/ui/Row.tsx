@@ -9,6 +9,7 @@ import {
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
 import { Icon, type Glyph } from "./Icon";
+import { Tooltip } from "./Tooltip";
 
 /**
  * A row's tile that is also its checkbox (DESIGN.md): the tile at rest, a
@@ -179,6 +180,7 @@ export function Row({
   selected = false,
   accentEdge = false,
   disabled = false,
+  disabledReason,
   className,
   ...rest
 }: Omit<HTMLAttributes<HTMLDivElement>, "title"> & {
@@ -216,6 +218,9 @@ export function Row({
    *  tone instead (a form owed within the week). */
   accentEdge?: boolean | "warning";
   disabled?: boolean;
+  /** Why a disabled row is, as `Button`'s: the row stays focusable and says it
+   *  on hover and focus instead of going silently grey. */
+  disabledReason?: string;
 }) {
   const inList = useContext(InRowList);
   const subtitleId = useId();
@@ -249,6 +254,21 @@ export function Row({
           >
             <span className={classes.title}>{title}</span>
           </a>
+        ) : onOpen && disabled && disabledReason ? (
+          <Tooltip content={disabledReason}>
+            {(tipId) => (
+              <button
+                type="button"
+                className={classes.open}
+                aria-disabled
+                aria-describedby={[tipId, describedBy]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <span className={classes.title}>{title}</span>
+              </button>
+            )}
+          </Tooltip>
         ) : onOpen ? (
           <button
             type="button"
