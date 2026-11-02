@@ -69,6 +69,37 @@ describe("a plan's place on Logjam Web", () => {
     expect(screen.getByText("V grade")).toBeTruthy();
   });
 
+  // Mutation: leave foreignFields out of PlanPlacePage or the edit dialog, and
+  // the adder's set-aside attributes sit in the payload with nothing showing
+  // them; or the type name, and a custom type reads as a Marker.
+  it("shows its type's name and its set-aside attributes, read-only", () => {
+    const withSetAside = {
+      ...place,
+      typeName: "Swimming hole",
+      typeIconKey: "waves",
+      foreignFields: [
+        { key: "depth", label: "Depth", type: "string", value: "deep" },
+      ],
+    } as unknown as TripPlanPlace;
+    render(<PlanPlacePage place={withSetAside} onBack={() => {}} />);
+    expect(screen.getByText(/Swimming hole/)).toBeTruthy();
+    expect(screen.getByText("Depth")).toBeTruthy();
+    expect(screen.getByText("deep")).toBeTruthy();
+    cleanup();
+    render(
+      <PlanItemEditDialog
+        planId="p1"
+        opened={withSetAside as TripPlanItem}
+        item={withSetAside as TripPlanItem}
+        onSaved={() => {}}
+        onStale={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("Depth")).toBeTruthy();
+    expect(screen.queryByLabelText("Depth")).toBeNull();
+  });
+
   // Mutation: send the position, or the notes, though unchanged, and an edit
   // of one 409s over another member's edit of the other.
   it("edits its details, each compared with what is stored", async () => {
