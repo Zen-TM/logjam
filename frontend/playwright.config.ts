@@ -39,9 +39,26 @@ export default defineConfig({
     channel: "chrome",
   },
   projects: [
+    // An account with no scheme pick follows the OS, so the OS is part of the
+    // test: dark opens Sandstone (the whole suite), light opens Ghost Gum (the
+    // accessibility audit again, where a pair that only fails on a light page
+    // shows up).
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "dark",
+      },
+    },
+    {
+      name: "chromium-light",
+      testMatch: /a11y\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        channel: "chrome",
+        colorScheme: "light",
+      },
     },
   ],
   // Only auto-boot the frontend when targeting local; for prod we hit the

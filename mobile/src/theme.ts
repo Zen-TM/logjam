@@ -18,7 +18,6 @@ import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 import {
   ASSET_HUES,
   CONTROL,
-  DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
@@ -27,6 +26,7 @@ import {
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
+  schemeForOs,
   SPACE_UNIT,
   type SpaceStep,
   TEXT_ROLES,
@@ -45,7 +45,22 @@ function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
   // An unrecognised id (downgraded Logjam GPS, hand-edited row) falls back rather than
   // crashing the whole style layer on a bad string.
-  return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
+  return normalizeThemeSchemeId(stored) ?? schemeForOs(osPrefersDark());
+}
+
+/**
+ * Whether the OS is in dark mode; true where there is no OS to ask, which is
+ * Sandstone, the default. Required lazily for the reason `osFontScale` is.
+ */
+function osPrefersDark(): boolean {
+  try {
+    const { Appearance } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("react-native") as typeof import("react-native");
+    return Appearance.getColorScheme() !== "light";
+  } catch {
+    return true;
+  }
 }
 
 let currentThemeSchemeId = resolveSchemeId();

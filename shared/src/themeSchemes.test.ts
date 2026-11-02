@@ -8,6 +8,10 @@ import {
   DEFAULT_THEME_SCHEME_ID,
   DEFAULT_NOTIFICATION_PREFERENCES,
   THEME_SCHEME_ORDER,
+  THEME_SCHEMES,
+  schemeForOs,
+  storedThemeSchemeId,
+  normalizeUserUiPreferencesKeepingNoPick,
 } from "./themeSchemes.js";
 
 describe("isThemeSchemeId", () => {
@@ -217,5 +221,41 @@ describe("normalizeImportMergePolicy", () => {
     expect(normalizeImportMergePolicy("nope")).toBeUndefined();
     expect(normalizeImportMergePolicy(null)).toBeUndefined();
     expect(normalizeImportMergePolicy(["a"])).toBeUndefined();
+  });
+});
+
+// Mutation: swap the two branches of `schemeForOs` and both lines go red.
+describe("schemeForOs", () => {
+  it("opens a dark OS in Sandstone and a light one in Ghost Gum", () => {
+    expect(schemeForOs(true)).toBe("sandstone");
+    expect(schemeForOs(false)).toBe("ghostGum");
+    expect(THEME_SCHEMES[schemeForOs(true)].mode).toBe("dark");
+    expect(THEME_SCHEMES[schemeForOs(false)].mode).toBe("light");
+  });
+});
+
+// Mutation: have `normalizeUserUiPreferencesKeepingNoPick` return
+// `normalizeUserUiPreferences` unchanged and the no-pick cases go red.
+describe("a scheme nobody picked", () => {
+  it("reads as no pick, not as the default", () => {
+    for (const none of [undefined, null, {}, { themeSchemeId: "nope" }]) {
+      expect(storedThemeSchemeId(none)).toBeNull();
+      expect(normalizeUserUiPreferencesKeepingNoPick(none)).not.toHaveProperty(
+        "themeSchemeId",
+      );
+    }
+    expect(normalizeUserUiPreferences({}).themeSchemeId).toBe(
+      DEFAULT_THEME_SCHEME_ID,
+    );
+  });
+
+  it("keeps a pick, and a retired id as the scheme it became", () => {
+    expect(
+      normalizeUserUiPreferencesKeepingNoPick({ themeSchemeId: "basalt" })
+        .themeSchemeId,
+    ).toBe("basalt");
+    expect(storedThemeSchemeId({ themeSchemeId: "ironbark" })).toBe(
+      "scribblyGum",
+    );
   });
 });
