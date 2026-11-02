@@ -33,16 +33,15 @@ if (process.env.AUTH_MODE === "fake") {
 }
 
 // Positive fail-closed assertion: any AWS container runtime (ECS/EB Fargate)
-// MUST run real auth ("oidc", or its alias "cognito"). This catches a
+// MUST run real auth ("oidc"). This catches a
 // misconfigured prod task even if the AUTH_MODE=fake heuristics above were
 // somehow all defeated. Guard: src/middleware/auth.unit.test.ts.
 if (
   process.env.ECS_CONTAINER_METADATA_URI_V4 &&
-  process.env.AUTH_MODE !== "oidc" &&
-  process.env.AUTH_MODE !== "cognito"
+  process.env.AUTH_MODE !== "oidc"
 ) {
   throw new Error(
-    `AUTH_MODE must be "oidc" (or "cognito") in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
+    `AUTH_MODE must be "oidc" in an AWS container runtime (got "${process.env.AUTH_MODE}").`,
   );
 }
 
