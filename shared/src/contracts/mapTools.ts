@@ -26,7 +26,7 @@ export const MAP_TOOLS = [
     label: "Make a map",
     on: "web",
     reason:
-      "Framing a LiDAR map or an area export is desk work, and the result takes minutes to make. Logjam GPS shows what Logjam Web made, offline.",
+      "A LiDAR map is framed at a desk and takes minutes to make, and a GeoPDF is printed there; Logjam GPS shows what Logjam Web made, offline.",
   },
 ] as const satisfies readonly MapToolDeclaration[];
 

@@ -2133,13 +2133,12 @@ export function MapScreen({
         return;
       }
       if (tool === "place") {
-        // The form opens on the middle of the map the user is looking at, as
-        // Logjam Web's tray opens its form for the map in view.
-        if (viewportBbox)
-          setAddPlaceAt({
-            latitude: (viewportBbox.south + viewportBbox.north) / 2,
-            longitude: (viewportBbox.west + viewportBbox.east) / 2,
-          });
+        // Logjam GPS has no empty "Add a place" form from the map, so the form
+        // opens seeded on the middle of the map in view.
+        setAddPlaceAt({
+          latitude: camera.latitude,
+          longitude: camera.longitude,
+        });
         return;
       }
       if (routeDraft.active) {
@@ -2157,7 +2156,8 @@ export function MapScreen({
       routeDraft,
       handleCancelRouteDraw,
       routes.data,
-      viewportBbox,
+      camera.latitude,
+      camera.longitude,
     ],
   );
 

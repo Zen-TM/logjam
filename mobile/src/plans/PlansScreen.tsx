@@ -63,6 +63,8 @@ import {
   ErrorState,
   Hero,
   useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   IconButton,
   LoadingState,
   Row,
@@ -621,7 +623,7 @@ export function PlansScreen({
           compact={heroCollapse.compact}
           title={
             heroCollapse.compact
-              ? `${TRIP_PLANS_LIST.title} · ${plans?.length ?? 0}`
+              ? compactHeroTitle(TRIP_PLANS_LIST.title, plans?.length ?? 0)
               : shown.kind === "list"
                 ? tripPlansHeroTitle(shown.plans, today)
                 : shown.kind === "loading"
@@ -633,12 +635,11 @@ export function PlansScreen({
           backLabel={backLabel}
           actions={
             heroCollapse.compact ? (
-              <Button
+              <HeroAdd
                 label={copy.add}
                 icon="add"
                 compact
                 disabled={!online}
-                disabledReason={unavailableReasonText("needs-connection")}
                 onPress={() => setNewOpen(true)}
               />
             ) : undefined

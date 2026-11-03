@@ -87,6 +87,8 @@ import {
   ErrorState,
   Hero,
   useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   IconButton,
   LoadingState,
   Row,
@@ -351,7 +353,7 @@ export function FriendsScreen({
           compact={heroCollapse.compact}
           title={
             heroCollapse.compact
-              ? `${FRIENDS.title} · ${friends.length}`
+              ? compactHeroTitle(FRIENDS.title, friends.length)
               : FRIENDS.title
           }
           value={friendsHeroSubtitle(requests.length, friends.length)}
@@ -366,10 +368,10 @@ export function FriendsScreen({
                   onPress={onOpenLeaderboard}
                 />
               ) : null}
-              <Button
+              <HeroAdd
                 label={copy.add}
                 icon="addFriend"
-                compact
+                compact={heroCollapse.compact}
                 onPress={() => setAddOpen(true)}
               />
             </View>

@@ -19,7 +19,10 @@ export {
 } from "@logjam/shared";
 export { confirm } from "./confirm";
 export { Hero } from "./Hero";
+export { HeroAdd } from "./HeroAdd";
 export { useHeroCollapse } from "./useHeroCollapse";
+export { compactHeroTitle } from "./heroCollapseRule";
+export { useReduceMotion } from "./useReduceMotion";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";
 export { Icon, type Glyph } from "./Icon";
 export { IconButton } from "./IconButton";

@@ -1,86 +1,86 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  AccessibilityInfo,
   LayoutAnimation,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 
-/** Scrolled this far, the full hero gives way; back at the top, it returns. */
-export const COLLAPSE_AT = 32;
-const EXPAND_AT = 4;
-const COMPACT_ROW = 56;
+import { COMPACT_ROW, nextCompact } from "./heroCollapseRule";
+import { useReduceMotionRef } from "./useReduceMotion";
 
 /**
- * Whether a list's pinned hero is full or compact, from the list's own scroll.
- *
- * `compact` flips past `COLLAPSE_AT` and back at the top. It collapses only
- * when the list would still scroll afterwards: the compact hero hands its
- * height to the list, and a list that no longer overflowed would scroll back to
- * the top and expand again, over and over. The swap eases unless the user asked
- * for reduced motion. Guard: `heroCollapse.test.ts`.
+ * Whether a list's pinned hero is full or compact, from the list's own scroll,
+ * size and layout (`nextCompact` holds the rule; guard: `heroCollapse.test.ts`).
+ * The swap eases unless the user asked for reduced motion.
  *
  * Spread `scrollProps` on the list and `heroProps` on a `View` around the hero.
  */
 export function useHeroCollapse() {
   const [compact, setCompact] = useState(false);
-  const fullHeight = useRef(0);
-  const compactHeight = useRef(COMPACT_ROW);
   const state = useRef(false);
-  const reduceMotion = useRef(false);
+  const reduceMotion = useReduceMotionRef();
+  const metrics = useRef({
+    y: 0,
+    contentHeight: 0,
+    viewHeight: 0,
+    fullHeight: 0,
+    compactHeight: COMPACT_ROW,
+  });
 
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((on) => {
-        if (alive) reduceMotion.current = on;
-      })
-      .catch(() => {});
-    const sub = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      (on) => {
-        reduceMotion.current = on;
-      },
-    );
-    return () => {
-      alive = false;
-      sub.remove();
-    };
-  }, []);
-
-  const set = useCallback((next: boolean) => {
-    if (state.current === next) return;
+  const evaluate = useCallback(() => {
+    const next = nextCompact({ compact: state.current, ...metrics.current });
+    if (next === state.current) return;
     state.current = next;
     if (!reduceMotion.current)
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setCompact(next);
-  }, []);
+  }, [reduceMotion]);
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-      const y = contentOffset.y;
-      if (state.current) {
-        if (y <= EXPAND_AT) set(false);
-        return;
-      }
-      const gives = Math.max(0, fullHeight.current - compactHeight.current);
-      const overflow = contentSize.height - layoutMeasurement.height;
-      if (y > COLLAPSE_AT && overflow > gives + COLLAPSE_AT) set(true);
+      Object.assign(metrics.current, {
+        y: contentOffset.y,
+        contentHeight: contentSize.height,
+        viewHeight: layoutMeasurement.height,
+      });
+      evaluate();
     },
-    [set],
+    [evaluate],
   );
 
-  const onLayout = useCallback((e: LayoutChangeEvent) => {
+  // A search or a filter can shorten the list without a scroll event.
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      metrics.current.contentHeight = height;
+      evaluate();
+    },
+    [evaluate],
+  );
+
+  const onListLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      metrics.current.viewHeight = e.nativeEvent.layout.height;
+      evaluate();
+    },
+    [evaluate],
+  );
+
+  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
     const { height } = e.nativeEvent.layout;
-    if (state.current) compactHeight.current = height;
-    else fullHeight.current = height;
+    if (state.current) metrics.current.compactHeight = height;
+    else metrics.current.fullHeight = height;
   }, []);
 
   return {
     compact,
-    scrollProps: { onScroll, scrollEventThrottle: 32 },
-    heroProps: { onLayout },
+    scrollProps: {
+      onScroll,
+      scrollEventThrottle: 32,
+      onContentSizeChange,
+      onLayout: onListLayout,
+    },
+    heroProps: { onLayout: onHeroLayout },
   };
 }

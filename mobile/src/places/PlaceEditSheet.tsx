@@ -51,8 +51,8 @@ import {
  * Both paths queue through the outbox, so adding a place standing at its
  * entrance with no signal works exactly like adding one at home.
  *
- * Coordinates are typed, or seeded by the caller from a point pressed on the map
- * (`initialCoords`). They are never captured from GPS *here*: a permission window
+ * Coordinates are typed, or seeded by the caller from a point pressed on the map or
+ * the map's centre (`initialCoords`). They are never captured from GPS *here*: a permission window
  * cannot be raised from an open sheet (DESIGN.md — the bug that made "Take
  * photo" look dead), so any future fix-based entry belongs in the caller too.
  *

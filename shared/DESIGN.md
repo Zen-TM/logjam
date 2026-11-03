@@ -76,6 +76,10 @@ renumber.
   the counts (`ScreenContract.title`).
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
+  On Logjam GPS's long lists (Places, Trips, Friends, Plans) the full hero
+  pins at the top and hands over to `Hero compact` once the list scrolls: one
+  row, "Name · count", its add reduced to the glyph. It returns at the top, and
+  when the list is too short to scroll. The rail and the search stay pinned.
 - **Between the hero and the list, only what narrows the list** (the rail, a
   search bar, a selection bar). A way elsewhere is a hero action; a number it carries is its
   badge.

@@ -90,10 +90,11 @@ import {
 } from "../sync/useSyncQueries";
 import {
   BottomSheet,
-  Button,
   Meter,
   Hero,
   useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   Icon,
   IconButton,
   LoadingState,
@@ -142,6 +143,9 @@ const ALL_TYPES = "all";
 type Countable = MirrorPlace & {
   _count?: { tripLogLinks: number; shares: number };
 };
+
+/** The page's name: the full hero's eyebrow and the compact row's title. */
+const PAGE_NAME = "Places";
 
 export function PlacesScreen({
   onOpenPlace,
@@ -663,10 +667,10 @@ export function PlacesScreen({
       <View {...heroCollapse.heroProps}>
         <Hero
           compact={heroCollapse.compact}
-          eyebrow="Places"
+          eyebrow={PAGE_NAME}
           title={
             heroCollapse.compact
-              ? `Places · ${places.length}`
+              ? compactHeroTitle(PAGE_NAME, places.length)
               : placesHeroTitle(places.length)
           }
           actions={
@@ -685,28 +689,15 @@ export function PlacesScreen({
                 }}
               />
               {/* One way in on this client, so a button and no menu. */}
-              {contractSectionKeys(PLACES_ADD, "gps").map((key) =>
-                // The title carries the count in the compact row, and the
-                // button's words would squeeze it to an ellipsis.
-                heroCollapse.compact ? (
-                  <IconButton
-                    key={key}
-                    icon={PLACES_ADD_ICON[key]}
-                    accessibilityLabel={PLACES_ADD.copy[key]}
-                    color={theme.accent}
-                    filled
-                    onPress={() => startEditing(null)}
-                  />
-                ) : (
-                  <Button
-                    key={key}
-                    label={PLACES_ADD.copy[key]}
-                    icon={PLACES_ADD_ICON[key]}
-                    compact
-                    onPress={() => startEditing(null)}
-                  />
-                ),
-              )}
+              {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+                <HeroAdd
+                  key={key}
+                  label={PLACES_ADD.copy[key]}
+                  icon={PLACES_ADD_ICON[key]}
+                  compact={heroCollapse.compact}
+                  onPress={() => startEditing(null)}
+                />
+              ))}
             </View>
           }
         >

@@ -115,6 +115,9 @@ export const KIT_COMPONENTS = {
 
   // — surfaces —
   Hero: both,
+  HeroAdd: gps(
+    "a list hero's one add: labelled, then the glyph alone in the compact row",
+  ),
   DataTable: web(
     "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",
   ),

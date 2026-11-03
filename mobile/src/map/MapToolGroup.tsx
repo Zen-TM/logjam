@@ -17,12 +17,10 @@
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   Pressable,
   Text,
-  View,
   useWindowDimensions,
 } from "react-native";
 
@@ -30,7 +28,7 @@ import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
 import { mapTools, type MapToolIdOn } from "@logjam/shared";
 
 import { makeStyles, spacing, useTheme } from "../theme";
-import { Icon } from "../ui";
+import { Icon, useReduceMotion } from "../ui";
 
 export type MapTool = MapToolIdOn<"gps">;
 
@@ -100,21 +98,7 @@ export function MapToolTray({
   const { width: windowWidth } = useWindowDimensions();
   const room = windowWidth - FAB_SIZE - CHROME_GAP * 2 - spacing(1);
 
-  const [reduceMotion, setReduceMotion] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((on) => alive && setReduceMotion(on))
-      .catch(() => {});
-    const sub = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduceMotion,
-    );
-    return () => {
-      alive = false;
-      sub.remove();
-    };
-  }, []);
+  const reduceMotion = useReduceMotion();
 
   // One value drives the whole tray: it slides out from the column and fades
   // in on the native driver, or just appears under reduced motion.
@@ -140,7 +124,6 @@ export function MapToolTray({
         styles.tray,
         { top, width: room, [side]: CHROME_GAP + FAB_SIZE + spacing(1) },
         {
-          height: TOOLS.length * FAB_SIZE + (TOOLS.length - 1) * spacing(1),
           opacity: progress,
           transform: [{ translateX }],
         },

@@ -86,6 +86,8 @@ import {
   ErrorState,
   Hero,
   useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   ListEnd,
   IconButton,
   LoadingState,
@@ -108,6 +110,9 @@ import { LogsFilterSheet } from "./LogsFilterSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 
 const ALL_TYPES = "";
+
+/** The page's name: the full hero's eyebrow and the compact row's title. */
+const PAGE_NAME = "Logbook";
 
 export function LogsScreen({
   onOpenTrip,
@@ -409,10 +414,10 @@ export function LogsScreen({
       <View {...heroCollapse.heroProps}>
         <Hero
           compact={heroCollapse.compact}
-          eyebrow="Logbook"
+          eyebrow={PAGE_NAME}
           title={
             heroCollapse.compact
-              ? `Logbook · ${trips.length}`
+              ? compactHeroTitle(PAGE_NAME, trips.length)
               : tripsHeroTitle(trips.length)
           }
           actions={
@@ -443,22 +448,12 @@ export function LogsScreen({
               />
               {/* One way in, so a button: Logjam Web's menu holds this and an
                 import (`TRIPS_ADD`). */}
-              {heroCollapse.compact ? (
-                <IconButton
-                  icon={TRIPS_ADD_ICON.add}
-                  accessibilityLabel={TRIPS_ADD.copy.add}
-                  color={theme.accent}
-                  filled
-                  onPress={() => setEditing({ trip: null })}
-                />
-              ) : (
-                <Button
-                  label={TRIPS_ADD.copy.add}
-                  icon={TRIPS_ADD_ICON.add}
-                  compact
-                  onPress={() => setEditing({ trip: null })}
-                />
-              )}
+              <HeroAdd
+                label={TRIPS_ADD.copy.add}
+                icon={TRIPS_ADD_ICON.add}
+                compact={heroCollapse.compact}
+                onPress={() => setEditing({ trip: null })}
+              />
             </View>
           }
         >
