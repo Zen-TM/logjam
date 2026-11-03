@@ -107,6 +107,7 @@ import {
   type TerrainSwitchKey,
   MAP_MEASURE,
   MAP_MEASURE_ICON,
+  MAP_OVERLAY_DEFAULTS,
   MAP_TERRAIN,
   LIDAR_JOB_COPY,
   opensPreview,
@@ -245,17 +246,20 @@ function App() {
   // NEW KEYS, not the old four reused: those answered different questions, and
   // a stored `false` for "shared ways" arriving as "hide every line I have"
   // would silently empty the map of someone who had only ever hidden a friend's.
-  const [showPlaces, setShowPlaces] = useStoredState("logjam.showPlaces", true);
+  const [showPlaces, setShowPlaces] = useStoredState(
+    "logjam.showPlaces",
+    MAP_OVERLAY_DEFAULTS.places,
+  );
   const [showWays, setShowWays] = useStoredState("logjam.showWays", true);
   // Off until asked for: the layer fetches a public file only while it is on.
   const [showGauges, setShowGauges] = useStoredState(
     "logjam.showGauges",
-    false,
+    MAP_OVERLAY_DEFAULTS.gauges,
   );
 
   const [showMgaGrid, setShowMgaGrid] = useStoredState(
     "logjam.showMgaGrid",
-    false,
+    MAP_OVERLAY_DEFAULTS.mgaGrid,
   );
 
   // Route draw/edit mode. The vertex list lives here (not in Map) so the HUD

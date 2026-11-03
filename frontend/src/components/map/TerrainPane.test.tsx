@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAP_TERRAIN, NSW_LAND, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import {
+  MAP_TERRAIN,
+  NSW_LAND,
+  RASTER_TEMPLATE_DEFAULTS,
+  TERRAIN_LAYER_DEFAULTS,
+} from "@logjam/shared";
 import { LandRow, TerrainPane } from "./LayersPopover";
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
@@ -25,6 +30,7 @@ function draw(
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
+    slopeBands: RASTER_TEMPLATE_DEFAULTS.slope.bands,
     hasVegetation,
     sharpenedCount: 2,
     onOpenSharpened: vi.fn(),
@@ -40,6 +46,19 @@ describe("the Terrain group on Logjam Web", () => {
     const text = document.body.textContent ?? "";
     expect(text.indexOf(copy.contours)).toBeLessThan(text.indexOf(copy.slope));
     expect(text.indexOf(copy.slope)).toBeLessThan(text.indexOf(copy.hillshade));
+  });
+
+  // Mutation: drop a hint from the row, or the help button from Slope, and a
+  // user who never opened the bands editor has nothing saying what the colours mean.
+  it("says what each layer is, and opens the slope key from Slope's help", () => {
+    draw();
+    expect(screen.getByText(copy.contoursHint)).toBeTruthy();
+    expect(screen.getByText(copy.slopeHint)).toBeTruthy();
+    expect(screen.getByText(copy.hillshadeHint)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: copy.slopeAbout }));
+    expect(screen.getByText(copy.slopeLegend)).toBeTruthy();
+    expect(screen.getByText("40–50°")).toBeTruthy();
+    expect(screen.getByText("70°+")).toBeTruthy();
   });
 
   it("switches each layer by its key", () => {

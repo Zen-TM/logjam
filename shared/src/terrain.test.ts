@@ -7,6 +7,7 @@ import {
   NSW_SLOPE,
   normalizeTerrainLayers,
   slopeBandAt,
+  slopeLegendRows,
   slopeReliefColor,
   terrainCredit,
   TERRAIN_LAYER_DEFAULTS,
@@ -294,5 +295,27 @@ describe("terrainBeforeIds", () => {
       "pm-roads_minor",
       "pm-places_locality",
     ]);
+  });
+});
+
+describe("slopeLegendRows", () => {
+  // Mutation: label a top band "40–90°" (drop the `>= 90` branch), or key the
+  // rows by `rgbaCssFromHex` of the wrong band, and this goes red.
+  it("labels each band as the map paints it, a band to vertical as open-ended", () => {
+    const bands = RASTER_TEMPLATE_DEFAULTS.slope.bands;
+    const rows = slopeLegendRows(bands);
+    expect(rows).toHaveLength(bands.length);
+    rows.forEach((row, i) => {
+      expect(row.colour).toBe(rgbaCssFromHex(bands[i]!.colour));
+      expect(row.label).toBe(
+        bands[i]!.toDeg >= 90
+          ? `${bands[i]!.fromDeg}°+`
+          : `${bands[i]!.fromDeg}–${bands[i]!.toDeg}°`,
+      );
+    });
+    expect(
+      slopeLegendRows([{ fromDeg: 40, toDeg: 90, colour: "#ff0000ff" }])[0]!
+        .label,
+    ).toBe("40°+");
   });
 });

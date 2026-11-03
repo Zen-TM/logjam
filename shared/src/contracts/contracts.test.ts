@@ -44,6 +44,7 @@ import {
   MAP_POINT_VERBS,
   MAP_LAYERS,
   MAP_OVERLAYS,
+  MAP_OVERLAY_DEFAULTS,
   MAP_OVERLAY_REFINEMENTS,
   MAP_TERRAIN,
   attributeDeleteConfirm,
@@ -782,6 +783,20 @@ describe("the map's overlays list", () => {
       "mgaGrid",
       "importFile",
     ]);
+  });
+
+  // Mutation: default gauges or the grid on, and a fresh install fetches a
+  // public file, or draws lines over every map, nobody asked for.
+  it("starts with only the user's own places drawn, on rows both clients have", () => {
+    expect(MAP_OVERLAY_DEFAULTS).toEqual({
+      places: true,
+      gauges: false,
+      mgaGrid: false,
+    });
+    for (const row of Object.keys(MAP_OVERLAY_DEFAULTS)) {
+      expect(contractSectionKeys(MAP_OVERLAYS, "web")).toContain(row);
+      expect(contractSectionKeys(MAP_OVERLAYS, "gps")).toContain(row);
+    }
   });
 
   it("refines only rows that exist", () => {

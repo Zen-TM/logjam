@@ -34,7 +34,7 @@
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   BASEMAP_UNAVAILABLE_LABEL,
@@ -45,6 +45,7 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type SectionKeysOn,
   type TerrainSwitchKey,
@@ -74,6 +75,7 @@ import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
+import { useSlopeBands } from "./slopeBandsPreference";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -183,7 +185,9 @@ export function MapLayersSheet({
   const [tab, setTab] = useState<Tab>("basemap");
   // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
-  const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
+  const [legend, setLegend] = useState<"vegetation" | "land" | "slope" | null>(
+    null,
+  );
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -210,7 +214,7 @@ export function MapLayersSheet({
         online={online}
         artifacts={artifacts}
         hasVegetation={hasVegetation}
-        onOpenLegend={() => setLegend("vegetation")}
+        onOpenLegend={setLegend}
       />
     ),
     overlays: () => (
@@ -252,6 +256,8 @@ export function MapLayersSheet({
       overlay={
         legend === "land" ? (
           <LandLegend />
+        ) : legend === "slope" ? (
+          <SlopeLegend />
         ) : legend === "vegetation" ? (
           <Text style={styles.legend}>{MAP_TERRAIN.copy.vegetationLegend}</Text>
         ) : null
@@ -392,7 +398,7 @@ function TerrainTab({
   artifacts: readonly MapArtifact[];
   /** A sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
-  onOpenLegend: () => void;
+  onOpenLegend: (legend: "vegetation" | "slope") => void;
 }) {
   const styles = useStyles();
   const rows = {
@@ -410,11 +416,22 @@ function TerrainTab({
           <SwitchRow
             key={key}
             title={MAP_TERRAIN.copy[key]}
-            description={state.reason}
+            description={
+              state.reason ??
+              (key === "land" ? undefined : MAP_TERRAIN.copy[`${key}Hint`])
+            }
             disabled={state.disabled}
             style={styles.itemRow}
             checked={state.checked}
             onChange={(on) => onChange(key, on)}
+            help={
+              key === "slope"
+                ? {
+                    label: MAP_TERRAIN.copy.slopeAbout,
+                    onPress: () => onOpenLegend("slope"),
+                  }
+                : undefined
+            }
           />,
         ];
       }),
@@ -429,7 +446,7 @@ function TerrainTab({
         onChange={(on) => onChange("vegetation", on)}
         help={{
           label: MAP_TERRAIN.copy.vegetationAbout,
-          onPress: onOpenLegend,
+          onPress: () => onOpenLegend("vegetation"),
         }}
       />
     ) : null,
@@ -438,6 +455,22 @@ function TerrainTab({
     <View style={styles.body}>
       {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
     </View>
+  );
+}
+
+/** What the slope's colours mean: the account's bands, chosen on Logjam Web. */
+function SlopeLegend() {
+  const styles = useStyles();
+  return (
+    <>
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.slopeLegend}</Text>
+      {slopeLegendRows(useSlopeBands()).map(({ label, colour }) => (
+        <View key={label} style={styles.landRow}>
+          <View style={[styles.slopeSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{label}</Text>
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -731,6 +764,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   legend: { ...textRole.body, color: theme.text },
   landRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   landSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
+  // The bands are translucent: the outline keeps a faint one visible.
+  slopeSwatch: {
+    width: spacing(2),
+    height: spacing(2),
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.line,
+  },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {

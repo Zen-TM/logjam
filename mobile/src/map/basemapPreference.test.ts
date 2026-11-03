@@ -7,9 +7,12 @@ vi.mock("../prefsDb", () => ({
 
 let storedValue: string | null = null;
 
-const { readBasemapPreference, readTerrainLayers } = await import(
-  "./basemapPreference"
-);
+const {
+  readBasemapPreference,
+  readGaugesLayer,
+  readMgaGridLayer,
+  readTerrainLayers,
+} = await import("./basemapPreference");
 const { DEFAULT_BASEMAP } = await import("./basemapMeta");
 
 describe("readBasemapPreference", () => {
@@ -28,6 +31,19 @@ describe("readBasemapPreference", () => {
     // reach the resolver, which throws on an unknown basemap id.
     storedValue = "osm";
     expect(readBasemapPreference()).toBe(DEFAULT_BASEMAP);
+  });
+});
+
+describe("the overlays a fresh install draws", () => {
+  // Mutation: read an unset preference as "on", and the grid lines show over
+  // every map (and the gauge file is fetched) before anyone asks.
+  it("has no river gauges and no MGA grid until switched on", () => {
+    storedValue = null;
+    expect(readGaugesLayer()).toBe(false);
+    expect(readMgaGridLayer()).toBe(false);
+    storedValue = "on";
+    expect(readGaugesLayer()).toBe(true);
+    expect(readMgaGridLayer()).toBe(true);
   });
 });
 

@@ -208,6 +208,21 @@ export function slopeBandAt(
 }
 
 /**
+ * The slope key: one row per band, as the map paints it ("30–40°", and
+ * "50°+" for a top band that runs to vertical), in `bands`' own order.
+ * Guard: `terrain.test.ts`.
+ */
+export function slopeLegendRows(
+  bands: readonly SlopeBand[],
+): { label: string; colour: string }[] {
+  return bands.map((band) => ({
+    label:
+      band.toDeg >= 90 ? `${band.fromDeg}°+` : `${band.fromDeg}–${band.toDeg}°`,
+    colour: rgbaCssFromHex(band.colour),
+  }));
+}
+
+/**
  * One credit for the statewide layers a printed map drew, top of the map
  * first ("Contours, slope and hillshade: derived from the NSW 5 m …"): each
  * layer's own credit has the same body, and a sheet has room for one line.

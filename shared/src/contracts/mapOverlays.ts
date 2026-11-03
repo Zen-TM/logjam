@@ -39,6 +39,21 @@ export const MAP_OVERLAYS = {
 } as const satisfies ScreenContract;
 
 /**
+ * What a fresh install draws, on both clients: the user's own pins, and
+ * nothing that fetches a public file (river gauges) or draws across every map
+ * (the MGA grid) until it is asked for. Ways are left out: Logjam GPS splits
+ * them into the sub-switches below. Guards: `contracts.test.ts`, and each
+ * client's test that a fresh install reads these.
+ */
+export const MAP_OVERLAY_DEFAULTS: Readonly<
+  Record<"places" | "gauges" | "mgaGrid", boolean>
+> = {
+  places: true,
+  gauges: false,
+  mgaGrid: false,
+};
+
+/**
  * Sub-switches Logjam GPS draws under a row, one level deep. Logjam Web has
  * none: it has the room to say "Every line you have" and the map's own legend.
  * On a phone in a canyon, "stop drawing campsites" and "hide my tracks" are
