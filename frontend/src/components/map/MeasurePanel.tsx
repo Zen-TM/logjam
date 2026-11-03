@@ -11,7 +11,7 @@ import {
   type SnapMode,
 } from "@logjam/shared";
 import { useElevationProfile } from "../../placeUtils";
-import { Button, FieldError, Hero, IconButton, StatGrid } from "../../ui";
+import { FieldError, Hero, IconButton, StatGrid } from "../../ui";
 import { DraftPeek, SnapSelect, useSettledLine, useUndoKey } from "./draftTool";
 import { useSheetAtPeek } from "../sidebar/sheetSnap";
 // The route tool's page, minus what only a kept line has: one layout for both.
@@ -98,7 +98,11 @@ export function MeasurePanel({
               stats={pairedStatLayout(mapMeasureFacts({ points, terrain }))}
             />
 
-            {range && <p className={classes.band}>{range} above sea level</p>}
+            {range && (
+              <p className={classes.band}>
+                {range} {copy.aboveSeaLevel}
+              </p>
+            )}
             {hasLine && !profile && loading && (
               <p className={classes.note}>{copy.readingTerrain}</p>
             )}
@@ -113,28 +117,16 @@ export function MeasurePanel({
           <footer className={classes.actions}>
             <SnapSelect value={snapMode} onChange={onSnapModeChange} />
             <div className={classes.buttons}>
-              {mapMeasureVerbs("web").map((verb) =>
-                verb.id === "clear" ? (
-                  <Button
-                    key={verb.id}
-                    compact
-                    onClick={verbs[verb.id].run}
-                    disabled={verbs[verb.id].disabled}
-                    disabledReason={verbs[verb.id].reason}
-                  >
-                    {verb.label}
-                  </Button>
-                ) : (
-                  <IconButton
-                    key={verb.id}
-                    icon={verb.icon}
-                    label={verb.label}
-                    onClick={verbs[verb.id].run}
-                    disabled={verbs[verb.id].disabled}
-                    disabledReason={verbs[verb.id].reason}
-                  />
-                ),
-              )}
+              {mapMeasureVerbs("web").map((verb) => (
+                <IconButton
+                  key={verb.id}
+                  icon={verb.icon}
+                  label={verb.label}
+                  onClick={verbs[verb.id].run}
+                  disabled={verbs[verb.id].disabled}
+                  disabledReason={verbs[verb.id].reason}
+                />
+              ))}
             </div>
           </footer>
         </>
