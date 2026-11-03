@@ -44,6 +44,7 @@ import {
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
+  placeDeleteDone,
   placesCountLabel,
   placesEmptyKind,
   placeTypeHasTab,
@@ -403,7 +404,7 @@ export function PlacesScreen({
       }
     }
     clearSelection();
-    if (failures === 0) info(`Deleted ${placesCountLabel(count)}.`);
+    if (failures === 0) info(placeDeleteDone(count));
     else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 

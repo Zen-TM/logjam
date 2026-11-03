@@ -11,6 +11,7 @@ import { StyleSheet, View } from "react-native";
 
 import {
   tripDeleteConfirm,
+  tripDeleteDone,
   tripTitle,
   tripVerbs,
   type TripVerbId,
@@ -53,7 +54,7 @@ export function TripOptionsSheet({
       return;
     deleteTripLocal(target.id)
       .then(() => {
-        onInfo("Trip deleted.");
+        onInfo(tripDeleteDone(1));
         onGone?.();
       })
       .catch((err: unknown) => {
