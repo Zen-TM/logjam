@@ -1268,7 +1268,9 @@ test.describe("desktop", () => {
     await expect(aside.locator("dd").first()).toHaveText(/\d (m|km)$/);
     await expectNoViolations(page, "aside");
 
-    await aside.getByRole("button", { name: "Clear", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Clear all points", exact: true })
+      .click();
     await expect(status).toHaveText("Click the map to measure");
 
     // Nothing is kept, so leaving asks nothing.
@@ -1457,7 +1459,11 @@ test.describe("narrow web", () => {
   // note, the distance and Undo, with the map left to press. Dragging it up (the
   // keyboard does the same through the grab bar) brings back the rest.
   for (const tool of [
-    { name: "Measure distance", title: "Measure distance", rest: "Clear" },
+    {
+      name: "Measure distance",
+      title: "Measure distance",
+      rest: "Clear all points",
+    },
     { name: "Draw a route", title: "Draw a route", rest: "Save" },
   ]) {
     test(`${tool.name}: the tool's page opens at the peek, over little of the map`, async ({
