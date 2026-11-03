@@ -3,8 +3,6 @@
 // interest stays off the server (mobile/AGENTS.md).
 import { planExtent, type TripPlanView } from "@logjam/shared";
 
-import type { MapArtifact } from "../map/sourceResolver";
-
 import { coveredByOfflineMaps } from "../offline/coveredByOfflineMaps";
 import { PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 

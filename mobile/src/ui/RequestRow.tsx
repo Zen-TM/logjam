@@ -4,6 +4,7 @@ import { Text } from "react-native";
 import { makeStyles, muted, spacing } from "../theme";
 import { Button } from "./Button";
 import { CardActions } from "./CardActions";
+import type { Disablable } from "./disabledReason";
 import { Row } from "./Row";
 
 export type RequestAnswer = {
@@ -37,6 +38,8 @@ export function RequestAnswers({
   hint?: string;
 }) {
   const styles = useStyles();
+  // `disabled` and its reason travel as the pair Button's type asks for.
+  const gate = { disabled, disabledReason, reasonShown } as Disablable;
   return (
     <>
       <CardActions>
@@ -45,9 +48,7 @@ export function RequestAnswers({
             key={answer.key}
             label={answer.label}
             variant={answer.decline ? "outlineAccent" : undefined}
-            disabled={disabled}
-            disabledReason={disabledReason}
-            reasonShown={reasonShown}
+            {...gate}
             loading={answer.loading}
             onPress={answer.onPress}
           />

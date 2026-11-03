@@ -15,6 +15,12 @@ import { IconButton } from "./IconButton";
  *
  * It carries its own top safe-area inset and a hairline bottom edge, so the
  * screen body below it is plain padded content.
+ *
+ * `compact` is the pinned form for a long list: ONE row (back arrow, title,
+ * `actions`) and nothing else, so the headline metric, meter, chips and search
+ * scroll with the list instead of eating the screen. `children` then takes the
+ * row's slot while it is set (a multi-select's bar), at the same height so the
+ * list does not jump. Guard: `heroCompact.test.ts`.
  */
 export function Hero({
   eyebrow,
@@ -24,10 +30,12 @@ export function Hero({
   secondaryValue,
   valueSuffix,
   actions,
+  compact = false,
   onBack,
   backLabel,
   children,
 }: {
+  compact?: boolean;
   eyebrow?: string;
   title: string;
   titleNumberOfLines?: number;
@@ -57,6 +65,18 @@ export function Hero({
   const styles = useStyles();
 
   const insets = useSafeAreaInsets();
+  if (compact)
+    return (
+      <CompactHero
+        title={title}
+        titleNumberOfLines={titleNumberOfLines}
+        actions={actions}
+        onBack={onBack}
+        backLabel={backLabel}
+      >
+        {children}
+      </CompactHero>
+    );
   return (
     <View style={[styles.hero, { paddingTop: insets.top + spacing(1.5) }]}>
       {onBack ? (
@@ -96,6 +116,50 @@ export function Hero({
   );
 }
 
+function CompactHero({
+  title,
+  titleNumberOfLines,
+  actions,
+  onBack,
+  backLabel,
+  children,
+}: {
+  title: string;
+  titleNumberOfLines: number;
+  actions?: React.ReactNode;
+  onBack?: () => void;
+  backLabel?: string;
+  children?: React.ReactNode;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[styles.compact, { paddingTop: insets.top }]}>
+      <View style={styles.compactRow}>
+        {children != null ? (
+          <View style={styles.compactSlot}>{children}</View>
+        ) : (
+          <>
+            {onBack ? (
+              <IconButton
+                icon="back"
+                accessibilityLabel={`Back to ${backLabel}`}
+                color={theme.text}
+                onPress={onBack}
+              />
+            ) : null}
+            <Text style={styles.title} numberOfLines={titleNumberOfLines}>
+              {title}
+            </Text>
+            {actions}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
 const useStyles = makeStyles((theme, textRole) => ({
   hero: {
     // No fill: it sits on the page and a hairline separates it from the list,
@@ -107,6 +171,18 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingBottom: spacing(2),
     gap: spacing(1),
   },
+  compact: {
+    borderBottomWidth: 1,
+    borderBottomColor: theme.line,
+    paddingHorizontal: spacing(2),
+  },
+  compactRow: {
+    minHeight: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1.5),
+  },
+  compactSlot: { flex: 1, marginHorizontal: -spacing(1) },
   eyebrow: {
     ...muted(theme, textRole.section),
     letterSpacing: 1,

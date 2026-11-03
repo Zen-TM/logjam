@@ -162,3 +162,9 @@ function subscribe(listener: () => void): () => void {
 export function useLiveReadout(): LiveReadout | null {
   return useSyncExternalStore(subscribe, getLiveReadout);
 }
+
+/** The unit's leading space, unbreakable: at a large text size "km/h" wrapped
+ *  under its figure. Guard: liveReadout.test.ts. */
+export function keepWithValue(unit: string): string {
+  return unit.replace(" ", "\u00A0");
+}

@@ -34,7 +34,7 @@ import {
   muted,
   veil,
 } from "../theme";
-import { readoutFigures, useLiveReadout } from "./liveReadout";
+import { keepWithValue, readoutFigures, useLiveReadout } from "./liveReadout";
 
 // The height of one line of each text, as the font draws it (the same estimate
 // the scale bar makes): the chip is a fixed box around them.
@@ -104,7 +104,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
           accessibilityLabel={`Speed ${speed.join(" ")}`}
         >
           {speed[0]}
-          <Text style={styles.unit}>{speed[1]}</Text>
+          <Text style={styles.unit}>{keepWithValue(speed[1])}</Text>
         </Text>
       </View>
       <View style={styles.divider} />
@@ -122,7 +122,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
           accessibilityLabel={`Elevation ${elevation.join(" ")}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
           {elevation[0]}
-          <Text style={styles.unit}>{elevation[1]}</Text>
+          <Text style={styles.unit}>{keepWithValue(elevation[1])}</Text>
         </Text>
       </View>
     </View>

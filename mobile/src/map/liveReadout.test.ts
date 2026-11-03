@@ -4,6 +4,7 @@ import { FIX_COARSE_M, FIX_STALE_MS } from "./gpsSignal";
 import {
   deriveSpeedMps,
   getLiveReadout,
+  keepWithValue,
   publishLiveReadout,
   publishTerrainElevation,
   readoutFigures,
@@ -153,5 +154,14 @@ describe("the published reading", () => {
       atMs: 9000,
       speedMps: 0,
     });
+  });
+});
+
+// Mutation: return `unit` unchanged, and "km/h" wraps under its figure at a
+// large text size.
+describe("keepWithValue", () => {
+  it("joins the unit to its figure with a no-break space", () => {
+    expect(keepWithValue(" km/h")).toBe("\u00A0km/h");
+    expect(keepWithValue("")).toBe("");
   });
 });

@@ -1032,19 +1032,37 @@ export function NotificationsScreen({
 
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  // The answer to "what happened while I was away?" is a NUMBER of things that
+  // did (shared/DESIGN.md §2), rather than a line that says the same words for
+  // one notification and for forty. The tally beside it stays the whole inbox,
+  // so the two never restate each other.
+  const summary = (
+    <View style={styles.summary}>
+      <Text style={styles.summaryTitle}>
+        {inboxHeroTitle(unreadCount, notifications.length)}
+      </Text>
+      <Text style={styles.summaryTally}>
+        {tally.total} {tally.total === 1 ? "notification" : "notifications"}
+      </Text>
+    </View>
+  );
+
+  // The chips and the truncation note scroll in the list's header, in the
+  // contract's order; every other section is drawn in place.
+  const headKeys: readonly string[] = ["buckets", "truncated"];
+  const head = contractSectionKeys(INBOX, "gps").filter((key) =>
+    headKeys.includes(key),
+  );
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
+    // Only this row is pinned: the unread line, chips and search ride in the
+    // list's header and scroll away with it. A multi-select's bar takes the
+    // row's slot, so the list does not jump when picking starts (DESIGN.md).
     hero: () => (
       <Hero
-        // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (shared/DESIGN.md §2), rather than a boolean marketing line
-        // that says the same words for one notification and for forty. The
-        // tally below it stays the whole inbox, so the two lines never restate
-        // each other.
-        title={inboxHeroTitle(unreadCount, notifications.length)}
+        compact
+        title={INBOX.title}
         onBack={onBack}
         backLabel={backLabel}
-        value={String(tally.total)}
-        valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={
           <IconButton
             icon="overflow"
@@ -1052,59 +1070,52 @@ export function NotificationsScreen({
             onPress={() => setActionsOpen(true)}
           />
         }
-      />
+      >
+        {selecting && readAction ? (
+          <SelectionBar
+            countLabel={selectionCountLabel(selectedNotifications)}
+            showSelectAll={selectedItems.length < selectableItems.length}
+            // ONE read/unread button, not a pair: which way it goes follows the
+            // selection (all read → unread, anything unread → read), and the
+            // bar's count line states the unread tally so the direction can be
+            // read off the screen rather than remembered.
+            extra={
+              <IconButton
+                icon={readAction.icon}
+                accessibilityLabel={readAction.label}
+                color={theme.accent}
+                onPress={applyReadAction}
+              />
+            }
+            onClear={clearSelection}
+            onSelectAll={selectAll}
+            onDelete={deleteSelected}
+          />
+        ) : undefined}
+      </Hero>
     ),
-    buckets: () => (
-      <>
-        {/* The bulk bar takes the ChipRail's slot and only that slot, so
-            the rail's height cannot change when a selection starts (DESIGN.md). */}
-        {notifications.length > 0 ? (
-          <View style={styles.rail}>
-            {selecting && readAction ? (
-              <SelectionBar
-                countLabel={selectionCountLabel(selectedNotifications)}
-                showSelectAll={selectedItems.length < selectableItems.length}
-                // ONE read/unread button, not a pair: which way it goes follows the
-                // selection (all read → unread, anything unread → read), and the
-                // bar's count line states the unread tally so the direction can be
-                // read off the screen rather than remembered.
-                extra={
-                  <IconButton
-                    icon={readAction.icon}
-                    accessibilityLabel={readAction.label}
-                    color={theme.accent}
-                    onPress={applyReadAction}
-                  />
-                }
-                onClear={clearSelection}
-                onSelectAll={selectAll}
-                onDelete={deleteSelected}
-              />
-            ) : (
-              <ChipRail
-                options={buckets}
-                value={bucket}
-                onChange={changeBucket}
-                scroll
-              />
-            )}
-            {/* The name search, in the SAME place in both states so the rail's
-                height cannot differ between them (DESIGN.md). It goes inert rather than
-                unmounting while picking — a keystroke could narrow a selected row
-                out of the list — and dims to say so, the treatment Saved's field
-                and the waypoint tag rail already use. */}
-            <View style={styles.searchField}>
-              <SearchField
-                label={INBOX.copy.searchField}
-                value={search}
-                onChangeText={setSearch}
-                editable={!selecting}
-              />
-            </View>
+    buckets: () =>
+      notifications.length > 0 ? (
+        <View style={styles.rail}>
+          <ChipRail
+            options={buckets}
+            value={bucket}
+            onChange={changeBucket}
+            scroll
+          />
+          {/* Inert while picking rather than unmounted — a keystroke could
+              narrow a selected row out of the list — and dimmed to say so, the
+              treatment Saved's field already uses. */}
+          <View style={styles.searchField}>
+            <SearchField
+              label={INBOX.copy.searchField}
+              value={search}
+              onChangeText={setSearch}
+              editable={!selecting}
+            />
           </View>
-        ) : null}
-      </>
-    ),
+        </View>
+      ) : null,
     truncated: () =>
       truncated ? (
         <Text style={styles.truncation}>
@@ -1121,6 +1132,15 @@ export function NotificationsScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            {summary}
+            {head.map((key) => (
+              <Fragment key={key}>{page[key]()}</Fragment>
+            ))}
+          </View>
+        }
         refreshControl={
           <RefreshControl
             refreshing={false}
@@ -1146,9 +1166,11 @@ export function NotificationsScreen({
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(INBOX, "gps").map((key) => (
-        <Fragment key={key}>{page[key]()}</Fragment>
-      ))}
+      {contractSectionKeys(INBOX, "gps")
+        .filter((key) => !head.includes(key))
+        .map((key) => (
+          <Fragment key={key}>{page[key]()}</Fragment>
+        ))}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}
@@ -1384,6 +1406,7 @@ const NotificationRow = memo(function NotificationRow({
               label={showInSaved.label}
               variant="ghost"
               disabled={selecting}
+              disabledReason={actionsDisabledReason(true, selecting)}
               onPress={() => onPress(item)}
             />
           </CardActions>
@@ -1591,11 +1614,17 @@ function EmptyPanel({
 const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
-  rail: {
-    paddingHorizontal: spacing(2),
+  summary: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: spacing(1),
     paddingTop: spacing(1.5),
-    paddingBottom: spacing(1.5),
+    paddingBottom: spacing(1),
   },
+  summaryTitle: { ...textRole.heading, color: theme.text },
+  summaryTally: { ...muted(theme, textRole.detail) },
+  // The chips run off the right edge, so the rail bleeds past the list's gutter.
+  rail: { marginHorizontal: -spacing(2), paddingLeft: spacing(2) },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),

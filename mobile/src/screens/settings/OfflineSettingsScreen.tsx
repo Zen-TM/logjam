@@ -191,7 +191,6 @@ export function OfflineSettingsScreen({
       <ScreenScroll>
         <SectionHeader title="Fetch automatically" />
         <PreferenceRow
-          icon="lidar"
           title="Sharpened areas"
           subtitle={
             needsAccount("autoTopo")
@@ -238,7 +237,6 @@ export function OfflineSettingsScreen({
             which is where it is usually changed. Here so it can be found and
             so Logjam Web — which has no switch of its own — follows it too. */}
         <PreferenceRow
-          icon="photo"
           title="Copy photos too"
           subtitle={copyMediaBlocked ?? "Shared place photos and files."}
           subtitleNumberOfLines={2}

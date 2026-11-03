@@ -90,7 +90,6 @@ import {
   Button,
   Meter,
   Hero,
-  ListEnd,
   Icon,
   IconButton,
   LoadingState,
@@ -593,7 +592,6 @@ export function PlacesScreen({
   // What a CLEAR button could actually clear. A type tab is not it — the tab
   // is visible, one tap from All, and an empty panel telling someone to clear
   // "filters" they never opened is a dead end.
-  const filtering = hiddenFilterCount > 0 || search.trim() !== "";
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
@@ -803,19 +801,6 @@ export function PlacesScreen({
             }}
             tintColor={theme.accent}
           />
-        }
-        ListFooterComponent={
-          // The list ends with the button its empty state offers.
-          places.length > 0 && !filtering ? (
-            <ListEnd>
-              <Button
-                label={PLACES_ADD.copy.add}
-                icon={PLACES_ADD_ICON.add}
-                variant="outlineAccent"
-                onPress={() => startEditing(null)}
-              />
-            </ListEnd>
-          ) : undefined
         }
         ListEmptyComponent={
           <EmptyPanel

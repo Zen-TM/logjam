@@ -71,7 +71,7 @@ import {
   friendSharesEmptyTitle,
   friendSharesNote,
   friendsEmptyKind,
-  friendsHeroTitle,
+  friendsHeroSubtitle,
   INBOX,
   INBOX_VERBS,
   inboxHeroTitle,
@@ -623,10 +623,10 @@ describe("the inbox", () => {
 
 describe("friends", () => {
   it("leads with a request, then the count of friends", () => {
-    expect(friendsHeroTitle(2, 5)).toBe("2 requests");
-    expect(friendsHeroTitle(1, 5)).toBe("1 request");
-    expect(friendsHeroTitle(0, 0)).toBe("No friends yet");
-    expect(friendsHeroTitle(0, 1)).toBe("1 friend");
+    expect(friendsHeroSubtitle(2, 5)).toBe("2 requests");
+    expect(friendsHeroSubtitle(1, 5)).toBe("1 request");
+    expect(friendsHeroSubtitle(0, 0)).toBe("No friends yet");
+    expect(friendsHeroSubtitle(0, 1)).toBe("1 friend");
   });
 
   it("tells an empty page from an empty bucket", () => {

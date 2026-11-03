@@ -62,7 +62,6 @@ import {
   EmptyState,
   Hero,
   IconButton,
-  ListEnd,
   ListBody,
   Row,
   SelectionBar,
@@ -424,6 +423,14 @@ export function PlansScreen({
     ({ item }: { item: TripPlanSummary }) => {
       const stamp = stamps.get(item.id);
       const pill = tripPlanRowPill(item);
+      // Under the name with the other marks: beside it, at a large text size,
+      // the pill left the title a sliver and broke it mid-word.
+      const pillMark = pill ? (
+        <StatusPill
+          label={pill}
+          tone={item.status === "active" ? "outline" : "accent"}
+        />
+      ) : null;
       const picked = selectedKeys.includes(item.id);
       return (
         <Row
@@ -458,12 +465,6 @@ export function PlansScreen({
           disabled={selecting && !planSelectable(item)}
           right={
             <View style={styles.trailing}>
-              {pill ? (
-                <StatusPill
-                  label={pill}
-                  tone={item.status === "active" ? "outline" : "accent"}
-                />
-              ) : null}
               {selecting && planSelectable(item) ? (
                 // The ⋯'s box, so the card keeps its size when selecting starts.
                 <SelectionMark selected={picked} />
@@ -481,11 +482,13 @@ export function PlansScreen({
           // downloaded and changed marks sit under the line, so a long one
           // can't squeeze the name and dates.
           footer={
-            item.status === "active" &&
-            (planChanged(item, stamp) ||
+            item.status !== "invited" &&
+            (pill ||
+              planChanged(item, stamp) ||
               stamp?.downloadedAt ||
               item.unansweredForms > 0) ? (
               <View style={styles.pills}>
+                {pillMark}
                 {item.unansweredForms > 0 ? (
                   <StatusPill
                     label={tripPlanFormsToAnswerLine(item.unansweredForms)}
@@ -516,6 +519,7 @@ export function PlansScreen({
                 style={styles.footer}
                 onStartShouldSetResponder={() => true}
               >
+                {pillMark}
                 <CardActions>
                   <Button
                     label={TRIP_PLAN_JOIN.copy.join}
@@ -610,7 +614,6 @@ export function PlansScreen({
             label={copy.add}
             icon="add"
             compact
-            variant="outlineAccent"
             disabled={!online}
             disabledReason={unavailableReasonText("needs-connection")}
             onPress={() => setNewOpen(true)}
@@ -704,25 +707,6 @@ export function PlansScreen({
               // The way in, where a new plan would land.
               action={bucket === "upcoming" ? newPlan : undefined}
             />
-          }
-          // The list ends with the button its empty state offers.
-          ListFooterComponent={
-            bucket === "upcoming" && rows.length > 0 ? (
-              <ListEnd>
-                <Button
-                  {...newPlan}
-                  variant="outlineAccent"
-                  disabled={!online}
-                  disabledReason={OFFLINE}
-                  reasonShown
-                />
-                {/* Away from the hero's Offline pill, so the words go under
-                    it (ui/Button.tsx). */}
-                {newPlan.disabledReason ? (
-                  <Text style={styles.offline}>{newPlan.disabledReason}</Text>
-                ) : null}
-              </ListEnd>
-            ) : undefined
           }
         />
       </ListBody>
@@ -853,11 +837,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   menu: { gap: spacing(1) },
   hint: { ...muted(theme, textRole.detail) },
   // One line, centred: a pill and the ⋯ share a centre line.
-  trailing: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-  },
+  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

@@ -800,24 +800,29 @@ function Items({
   // The button only dims: the words go under it (ui/Button.tsx).
   const add = canAdd ? (
     <ListEnd>
-      <Button
-        label={planAddVerbLabel("copy")}
-        icon="add"
-        variant="outlineAccent"
-        disabled={!online}
-        disabledReason={OFFLINE}
-        reasonShown
-        onPress={() => setAdding(true)}
-      />
-      <Button
-        label={planAddVerbLabel("route")}
-        icon="route"
-        variant="outlineAccent"
-        disabled={!online}
-        disabledReason={OFFLINE}
-        reasonShown
-        onPress={onDrawRoute}
-      />
+      {/* One size, sharing the width, as a card's buttons do. */}
+      <View style={styles.addBoth}>
+        <CardActions>
+          <Button
+            label={planAddVerbLabel("copy")}
+            icon="add"
+            variant="outlineAccent"
+            disabled={!online}
+            disabledReason={OFFLINE}
+            reasonShown
+            onPress={() => setAdding(true)}
+          />
+          <Button
+            label={planAddVerbLabel("route")}
+            icon="route"
+            variant="outlineAccent"
+            disabled={!online}
+            disabledReason={OFFLINE}
+            reasonShown
+            onPress={onDrawRoute}
+          />
+        </CardActions>
+      </View>
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
         <AddCopySheet
@@ -907,6 +912,8 @@ function Items({
           // Its actions all need a connection.
           subtitle={subtitle(addedBy(route), false)}
           right={menu(route)}
+          // A row on the card colour answers a press; its ⋯ is its only verb.
+          onPress={menu(route) ? () => setMenuItem(route) : undefined}
         />
       ))}
       {plan.files.map((file) => {
@@ -942,7 +949,9 @@ function Items({
                     )
                       .then(setViewing)
                       .catch(failed)
-                : undefined
+                : menu(file)
+                  ? () => setMenuItem(file)
+                  : undefined
             }
           />
         );
@@ -1104,6 +1113,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   formFooter: { gap: spacing(0.5) },
   age: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
+  addBoth: { alignSelf: "stretch" },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

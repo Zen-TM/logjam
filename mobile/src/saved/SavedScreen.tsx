@@ -102,7 +102,6 @@ import {
   Meter,
   Hero,
   IconButton,
-  ListEnd,
   RenameForm,
   Row,
   SectionHeader,
@@ -969,7 +968,7 @@ export function SavedScreen({
         key: savedRegionKey(group.key),
         category: "region",
         title,
-        subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
+        subtitle: `${countOf(group.members.length, "layer")} · saved ${formatDay(first.downloadedAt)}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
         // Which basemap to switch the map to on "Show on map" — the first of
@@ -1637,13 +1636,12 @@ export function SavedScreen({
 
   return (
     <View style={styles.screen}>
+      {/* Only the title row is pinned (and the bulk bar, which takes its
+          slot while picking): the storage summary, chips and search scroll
+          with the list so it gets the screen. */}
       <Hero
-        eyebrow="Saved for offline use"
-        title="On this device"
-        value={formatBytes(usedBytes)}
-        valueSuffix={
-          freeBytes != null ? `used · ${formatBytes(freeBytes)} free` : "used"
-        }
+        compact
+        title="Saved"
         actions={
           <Button
             label="Add"
@@ -1653,19 +1651,6 @@ export function SavedScreen({
           />
         }
       >
-        <Meter segments={segments} />
-        {/* Offline is a normal state here — everything already on the device
-            still works — so it sits beside what is still waiting to leave
-            rather than reading as an error. */}
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
-
-      {/* While picking, the contextual bar takes only the segmented control's
-          slot rather than replacing the whole rail: keeping narrowing controls
-          mounted in both states prevents list jumps caused by height differences.
-          They go inert rather than unmounting — see the note on `disabled`
-          below. */}
-      <View style={styles.rail}>
         {selecting ? (
           <SelectionBar
             countLabel={`${countOf(selectedItems.length, "item")} selected${
@@ -1686,48 +1671,69 @@ export function SavedScreen({
             }
             onDelete={deleteSelected}
           />
-        ) : (
-          <ChipRail
-            options={filterOptions}
-            value={filter}
-            onChange={selectFilter}
-            scroll
-          />
-        )}
-        {/* A name search on every tab — every category carries a
-            `search.haystack`. Nothing to search: the field is hidden with
-            nothing on the phone, and the empty panel gets the whole screen
-            body. */}
-        {activeCategoryCount > 0 ? (
-          // The field carries its own right pad because the rail has none —
-          // the category chips are meant to scroll off the edge, an input
-          // running into it just looks clipped.
-          <View style={styles.searchField}>
-            <SearchField
-              label={`Search ${searchNoun(filter)}`}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              // Narrowing the list mid-selection could scroll a selected row
-              // out of view or drop it out of the visible set entirely — the
-              // same reason changing category clears the selection outright
-              // (selectFilter). The field stays visible (so the bar's height
-              // never differs from the rail's) but inert, rather than losing
-              // what was typed. It also GREYS OUT — a live-looking field that
-              // silently eats taps read as broken, not as "not now".
-              editable={!selecting}
-            />
-          </View>
-        ) : null}
-      </View>
+        ) : undefined}
+      </Hero>
 
-      {/* Hero + rail stay pinned; only the inventory scrolls, so the filter
-          you are working in never scrolls out of reach. */}
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <View style={styles.summary}>
+          <Text style={styles.used}>
+            {formatBytes(usedBytes)}
+            <Text style={styles.usedSuffix}>
+              {" "}
+              {freeBytes != null
+                ? `used · ${formatBytes(freeBytes)} free`
+                : "used"}
+            </Text>
+          </Text>
+          {/* One kind on the phone: its legend would say the line above again. */}
+          <Meter
+            segments={segments}
+            legend={segments.filter((s) => s.value > 0).length > 1}
+          />
+          {/* Offline is a normal state here — everything already on the device
+              still works — so it sits beside what is still waiting to leave
+              rather than reading as an error. */}
+          <SyncStatusPills online={online} pendingCount={pendingCount} />
+        </View>
+
+        <View style={styles.rail}>
+          <ChipRail
+            options={filterOptions}
+            value={filter}
+            onChange={selectFilter}
+            scroll
+          />
+          {/* A name search on every tab — every category carries a
+              `search.haystack`. Nothing to search: the field is hidden with
+              nothing on the phone, and the empty panel gets the whole screen
+              body. */}
+          {activeCategoryCount > 0 ? (
+            // The field carries its own right pad because the rail has none —
+            // the category chips are meant to scroll off the edge, an input
+            // running into it just looks clipped.
+            <View style={styles.searchField}>
+              <SearchField
+                label={`Search ${searchNoun(filter)}`}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                // Narrowing the list mid-selection could scroll a selected row
+                // out of view or drop it out of the visible set entirely — the
+                // same reason changing category clears the selection outright
+                // (selectFilter). The field stays visible but inert, rather
+                // than losing what was typed. It also GREYS OUT — a
+                // live-looking field that silently eats taps read as broken,
+                // not as "not now".
+                editable={!selecting}
+              />
+            </View>
+          ) : null}
+        </View>
+
         {activeOp ? (
           <Row
             title={activeOp.label}
@@ -2057,13 +2063,6 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
-
-        {/* The list ends with the button its empty state offers (the same one),
-            so adding is where the eye ends up after scrolling to the bottom. */}
-        <SavedListEnd
-          show={visibleItems.length > 0 && !searching}
-          action={emptyAction}
-        />
       </ScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
@@ -2529,43 +2528,6 @@ type SavedAction = {
   disabledReason?: string;
 };
 
-/** The end of a non-empty tab: the add button its empty state offers. */
-function SavedListEnd({
-  show,
-  action,
-}: {
-  show: boolean;
-  action: SavedAction | null;
-}) {
-  if (!show || !action) return null;
-  return (
-    <ListEnd>
-      <SavedAddButton action={action} />
-    </ListEnd>
-  );
-}
-
-/** The tab's one add button, with its reason when it cannot run just now. */
-function SavedAddButton({ action }: { action: SavedAction }) {
-  const styles = useStyles();
-
-  return (
-    <View style={styles.addButton}>
-      <Button
-        label={action.label}
-        icon="addSaved"
-        compact
-        disabled={action.disabledReason != null}
-        disabledReason={action.disabledReason ?? ""}
-        onPress={action.onPress}
-      />
-      {action.disabledReason ? (
-        <Text style={styles.addReason}>{action.disabledReason}</Text>
-      ) : null}
-    </View>
-  );
-}
-
 /**
  * The Share sub-mode of the per-item sheet: who has this item, and who else
  * could. Sits beside the place detail screen's Shared-with section on the same
@@ -2630,8 +2592,6 @@ function PulseSlot({
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  addButton: { alignItems: "center", gap: spacing(0.5) },
-  addReason: { ...muted(theme, textRole.detail) },
   // Matches `Row`'s own card radius, so the tint stops where the card does
   // rather than squaring off its corners.
   pulseWash: {
@@ -2648,13 +2608,17 @@ const useStyles = makeStyles((theme, textRole) => ({
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
   railInert: { opacity: opacity.disabled },
+  // The chips run off the right edge, so the rail bleeds past the body's gutter.
   rail: {
+    marginHorizontal: -spacing(2),
     paddingLeft: spacing(2),
-    paddingTop: spacing(1.5),
-    paddingBottom: spacing(1.5),
   },
+  summary: { gap: spacing(1) },
+  used: { ...textRole.heading, color: theme.text },
+  usedSuffix: { ...muted(theme, textRole.detail) },
   body: {
     paddingHorizontal: spacing(2),
+    paddingTop: spacing(1.5),
     paddingBottom: spacing(4),
     gap: spacing(1),
   },
