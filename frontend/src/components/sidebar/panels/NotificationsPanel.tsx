@@ -189,8 +189,6 @@ function NotificationsPanel({
   // does not sit with live buttons until the server says it has gone.
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(NO_KEYS);
   const [busyId, setBusyId] = useState<string | null>(null);
-  /** Sends whose download failed here, so an accepted row offers "Try again". */
-  const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
     null,
   );
@@ -560,11 +558,6 @@ function NotificationsPanel({
           await declineFileSend(target.targetId);
         }
         if (survives) {
-          setFailedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(n.id);
-            return next;
-          });
           // Answering it is reading it.
           if (!n.read) void setRead([n.id], true);
         } else {
@@ -574,8 +567,6 @@ function NotificationsPanel({
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, action.failure));
-        // Only a failed download of an already-accepted send shows "Try again".
-        if (survives) setFailedIds((prev) => new Set(prev).add(n.id));
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (Friends, Logjam GPS, another tab), or the
           // send is gone: the buttons are dead, not retryable, so clear the row
@@ -675,15 +666,22 @@ function NotificationsPanel({
   // The row's own answer, inside the card. Inert while a selection runs: a
   // press meant for a checkbox must not accept a friend request.
   const rowFooter = (n: TNotification): ReactNode => {
-    const target = notificationActions(n, { failed: failedIds.has(n.id) });
+    const target = notificationActions(n);
     if (target) {
       return target.actions.map((action) => (
         <Button
           key={action.kind}
           compact
           // Decline is the outline: two filled buttons side by side make "no"
-          // look like the thing to press.
-          variant={action.kind === "decline" ? "outline" : "filled"}
+          // look like the thing to press. A second fetch of a finished send
+          // is plain: it is not the thing to press.
+          variant={
+            action.quiet
+              ? "plain"
+              : action.kind === "decline"
+                ? "outline"
+                : "filled"
+          }
           disabled={selecting || busyId !== null}
           disabledReason={selecting ? "Not while selecting" : "Working…"}
           onClick={() => answer(n, target, action)}
@@ -764,7 +762,7 @@ function NotificationsPanel({
       title = label.text;
       subtitle = [
         label.detail,
-        notificationActions(row, { failed: failedIds.has(row.id) })?.pill,
+        notificationActions(row)?.pill,
         formatTime(row.createdAt),
       ]
         .filter(Boolean)
