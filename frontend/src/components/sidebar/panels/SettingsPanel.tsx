@@ -301,7 +301,7 @@ function SettingsPanel({
             target="_blank"
             rel="noopener noreferrer"
           >
-            Privacy Policy
+            Privacy policy
           </a>
           .
         </p>
