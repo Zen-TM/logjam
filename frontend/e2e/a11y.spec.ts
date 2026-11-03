@@ -357,7 +357,8 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
 
     // Add a copy: alice's own places and ways, ticked and priced.
-    await aside.getByRole("button", { name: "Add a place or way" }).click();
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add a place or way" }).click();
     await expect(dialog.getByRole("radio", { name: /^Places/ })).toBeVisible();
     await dialog.getByRole("checkbox").first().check();
     await expectNoViolations(page, "dialog");
@@ -523,8 +524,6 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    // The hero's button and the list's end are one button drawn twice
-    // (UX §9, `listEnd.test.ts`), so the first is the hero's.
     await aside
       .getByRole("button", { name: "Add a place type" })
       .first()
