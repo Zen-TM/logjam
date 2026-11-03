@@ -31,6 +31,18 @@ export type ContractSection<K extends string = string> = {
   shareeSees?: true;
 };
 
+/**
+ * A difference no section or verb carries because it is not a block of the
+ * screen: a way in, a gesture, a confirm. One client does it, and `reason`
+ * says what about the medium rules it out on the other.
+ * `contracts.test.ts` holds every list of these to a non-empty `reason`.
+ */
+export type ClientOnly = {
+  id: string;
+  on: ContractPlatform;
+  reason: string;
+};
+
 export type ScreenContract<
   K extends string = string,
   C extends string = string,

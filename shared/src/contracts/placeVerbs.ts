@@ -96,14 +96,6 @@ export const PLACE_VERBS = [
     reason: EXPORTED_FROM_SHARE_DIALOG,
   },
   {
-    id: "exportPlace",
-    icon: "export",
-    label: "Export…",
-    for: "both",
-    on: "web",
-    reason: EXPORTED_AT_A_DESK,
-  },
-  {
     id: "share",
     icon: "shareFriend",
     label: { web: "Share…", gps: "Share" },

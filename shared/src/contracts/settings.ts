@@ -6,7 +6,7 @@
 import type { NotificationPreferences } from "../themeSchemes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
 import type { ConfirmCopy } from "./confirm.js";
-import type { ScreenContract } from "./types.js";
+import type { ClientOnly, ScreenContract } from "./types.js";
 
 export const SETTINGS = {
   id: "settings.menu",
@@ -34,6 +34,44 @@ export const SETTINGS = {
     about: "About",
   },
 } as const satisfies ScreenContract;
+
+/**
+ * The Logjam GPS settings pages and rows with no Logjam Web twin. Not
+ * sections: `preferences` is one section on both clients, and Logjam GPS
+ * splits it into pages.
+ */
+export const SETTINGS_PHONE_ONLY = [
+  {
+    id: "map",
+    on: "gps",
+    reason:
+      "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
+  },
+  {
+    id: "offline",
+    on: "gps",
+    reason:
+      "Offline maps and copied photos are stored on the phone. A browser keeps neither.",
+  },
+  {
+    id: "privacy",
+    on: "gps",
+    reason:
+      "App lock, crash reports and Save to gallery configure the phone's own lock, error reporting and photo library. Logjam Web leaves each to the browser.",
+  },
+  {
+    id: "pushNotifications",
+    on: "gps",
+    reason:
+      "A push is allowed per phone, by the phone's own permission, so its switch sits under This phone. Logjam Web's switches follow the account.",
+  },
+  {
+    id: "textSize",
+    on: "gps",
+    reason:
+      "Logjam Web follows the browser's own zoom and text size, so there is nothing to set. The phone's size is chosen in Logjam GPS.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** A navigation row's subtitle is live state: how many the user has made. */
 export function ownTypeCountLabel(own: number): string {

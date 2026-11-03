@@ -8,7 +8,7 @@
 import type { IconIdea } from "../icons.js";
 import { TRIP_SORT_OPTIONS, type TripSortKey } from "../tripFilter.js";
 import { navLabel } from "./nav.js";
-import type { ContractPlatform, ScreenContract } from "./types.js";
+import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
 
 export const TRIPS_LIST = {
   id: "logs.list",
@@ -224,6 +224,32 @@ export function tripsEmptyState(
     action: "add",
   };
 }
+
+/**
+ * How a selection starts and grows on every list. The bar's verbs are subsets
+ * of `PLACE_VERBS` / `TRIP_VERBS`, so their web-only entries (Map, Export)
+ * already carry reasons; what differs here is the gesture.
+ */
+export const SELECTION_GESTURES = [
+  {
+    id: "shiftClickRange",
+    on: "web",
+    reason:
+      "A range needs a modifier key and a pointer, and a touch screen has neither. Logjam Web's list says so under its header.",
+  },
+  {
+    id: "pressAndHold",
+    on: "gps",
+    reason:
+      "A finger cannot hover or hold a modifier key, so a press and hold on a row starts a selection. Logjam Web selects with its checkboxes.",
+  },
+  {
+    id: "selectAllButton",
+    on: "gps",
+    reason:
+      "A touch screen cannot press Ctrl+A, which is how Logjam Web selects every row.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** The selection bar's count, on every list: "3 selected". The list's own
  *  noun is already on screen. */
