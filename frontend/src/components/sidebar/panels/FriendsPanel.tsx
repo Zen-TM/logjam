@@ -18,8 +18,8 @@
 // send writes the recipient a notification and both verbs resolve it,
 // avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
-// The leaderboard button is drawn only for someone who has joined it: for anyone
-// else nothing here mentions it, and the way in is the switch in Settings
+// The leaderboard button is drawn only for someone who has joined it; anyone
+// else with friends gets one line pointing at the switch in Settings
 // (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
 //
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
@@ -52,6 +52,7 @@ import {
   type SectionKeysOn,
   friendSearchHint,
   LEADERBOARD,
+  LEADERBOARD_SETTING,
   leaderboardBadge,
   leaderboardButtonLabel,
   selfStanding,
@@ -287,10 +288,12 @@ function FriendsPanel({
     bucket,
   });
 
+  // `false` from the server outranks the cached preference: the user left
+  // on another device since this session fetched it.
+  const joinedBoard = leaderboardOptIn && board?.joined !== false;
+
   function leaderboardButton() {
-    // `false` from the server outranks the cached preference: the user left
-    // on another device since this session fetched it.
-    if (!leaderboardOptIn || board?.joined === false) return null;
+    if (!joinedBoard) return null;
     const standing = board?.joined ? selfStanding(board) : null;
     return (
       <IconButton
@@ -369,122 +372,129 @@ function FriendsPanel({
             />
           </div>
         ) : (
-          <RowList className={classes.list}>
-            {showRequests &&
-              friendRequests.map((request) => (
-                <Row
-                  key={request.id}
-                  leading={<Avatar username={request.requester.username} />}
-                  title={request.requester.username}
-                  subtitle={copy.requestSubtitle}
-                  disabled={busyId === request.id}
-                  accentEdge
-                  footer={
-                    <>
-                      <Button
-                        compact
-                        variant="filled"
-                        busy={busyId === request.id}
-                        onClick={() =>
-                          void runAction(
-                            request.id,
-                            () => acceptFriendRequest(request.id),
-                            friendRequestAnswers(request.requester.username)[0]
-                              .failure,
-                            friendRequestAnswers(request.requester.username)[0]
-                              .success,
-                          ).then(onRefetchNotifications)
-                        }
-                      >
-                        {friendVerb("accept").label}
-                      </Button>
-                      <Button
-                        compact
-                        variant="outline"
-                        disabled={busyId === request.id}
-                        disabledReason="Replying…"
-                        onClick={() => {
-                          const decline = friendRequestAnswers(
-                            request.requester.username,
-                          )[1];
-                          askDecline({
-                            copy: {
-                              confirmTitle: decline.confirm!.title,
-                              confirmBody: decline.confirm!.body,
-                              confirmLabel: decline.confirm!.confirmLabel,
-                              tone: "destructive",
-                            },
-                            run: () =>
-                              runAction(
-                                request.id,
-                                () => declineFriendRequest(request.id),
-                                decline.failure,
-                                decline.success,
-                              ),
-                          });
-                        }}
-                      >
-                        {friendVerb("decline").label}
-                      </Button>
-                    </>
-                  }
-                />
-              ))}
+          <>
+            <RowList className={classes.list}>
+              {showRequests &&
+                friendRequests.map((request) => (
+                  <Row
+                    key={request.id}
+                    leading={<Avatar username={request.requester.username} />}
+                    title={request.requester.username}
+                    subtitle={copy.requestSubtitle}
+                    disabled={busyId === request.id}
+                    accentEdge
+                    footer={
+                      <>
+                        <Button
+                          compact
+                          variant="filled"
+                          busy={busyId === request.id}
+                          onClick={() =>
+                            void runAction(
+                              request.id,
+                              () => acceptFriendRequest(request.id),
+                              friendRequestAnswers(
+                                request.requester.username,
+                              )[0].failure,
+                              friendRequestAnswers(
+                                request.requester.username,
+                              )[0].success,
+                            ).then(onRefetchNotifications)
+                          }
+                        >
+                          {friendVerb("accept").label}
+                        </Button>
+                        <Button
+                          compact
+                          variant="outline"
+                          disabled={busyId === request.id}
+                          disabledReason="Replying…"
+                          onClick={() => {
+                            const decline = friendRequestAnswers(
+                              request.requester.username,
+                            )[1];
+                            askDecline({
+                              copy: {
+                                confirmTitle: decline.confirm!.title,
+                                confirmBody: decline.confirm!.body,
+                                confirmLabel: decline.confirm!.confirmLabel,
+                                tone: "destructive",
+                              },
+                              run: () =>
+                                runAction(
+                                  request.id,
+                                  () => declineFriendRequest(request.id),
+                                  decline.failure,
+                                  decline.success,
+                                ),
+                            });
+                          }}
+                        >
+                          {friendVerb("decline").label}
+                        </Button>
+                      </>
+                    }
+                  />
+                ))}
 
-            {showFriends &&
-              friends.map((friend) => (
-                <Row
-                  key={friend.friendshipId}
-                  leading={
-                    <TileCheckbox
-                      tile={<Avatar username={friend.username} />}
-                      label={`Select ${friend.username}`}
-                      checked={selectedIds.includes(friend.friendshipId)}
-                      selecting={selecting}
-                      onToggle={(extendRange) =>
-                        toggle(friend.friendshipId, extendRange)
-                      }
-                    />
-                  }
-                  selected={selectedIds.includes(friend.friendshipId)}
-                  title={friend.username}
-                  description="Opens what you share with each other"
-                  disabled={busyId === friend.friendshipId}
-                  onOpen={() => setOpenFriend(friend)}
-                  trailing={
-                    selecting ? undefined : (
-                      <Menu
-                        label={`Actions for ${friend.username}`}
-                        title={friend.username}
-                        placement="bottom-end"
-                        entries={[
-                          {
-                            id: "shares",
-                            label: friendVerb("shares").label,
-                            icon: "shareFriend",
-                            onSelect: () => setOpenFriend(friend),
-                          },
-                          {
-                            id: "remove",
-                            label: friendVerb("remove").label,
-                            icon: friendVerb("remove").icon,
-                            danger: true,
-                            onSelect: () => setRemoving(friend),
-                          },
-                        ]}
-                        trigger={(props) => (
-                          <IconButton
-                            {...props}
-                            icon="overflow"
-                            label={`Actions for ${friend.username}`}
-                          />
-                        )}
+              {showFriends &&
+                friends.map((friend) => (
+                  <Row
+                    key={friend.friendshipId}
+                    leading={
+                      <TileCheckbox
+                        tile={<Avatar username={friend.username} />}
+                        label={`Select ${friend.username}`}
+                        checked={selectedIds.includes(friend.friendshipId)}
+                        selecting={selecting}
+                        onToggle={(extendRange) =>
+                          toggle(friend.friendshipId, extendRange)
+                        }
                       />
-                    )
-                  }
-                />
-              ))}
-          </RowList>
+                    }
+                    selected={selectedIds.includes(friend.friendshipId)}
+                    title={friend.username}
+                    description="Opens what you share with each other"
+                    disabled={busyId === friend.friendshipId}
+                    onOpen={() => setOpenFriend(friend)}
+                    trailing={
+                      selecting ? undefined : (
+                        <Menu
+                          label={`Actions for ${friend.username}`}
+                          title={friend.username}
+                          placement="bottom-end"
+                          entries={[
+                            {
+                              id: "shares",
+                              label: friendVerb("shares").label,
+                              icon: "shareFriend",
+                              onSelect: () => setOpenFriend(friend),
+                            },
+                            {
+                              id: "remove",
+                              label: friendVerb("remove").label,
+                              icon: friendVerb("remove").icon,
+                              danger: true,
+                              onSelect: () => setRemoving(friend),
+                            },
+                          ]}
+                          trigger={(props) => (
+                            <IconButton
+                              {...props}
+                              icon="overflow"
+                              label={`Actions for ${friend.username}`}
+                            />
+                          )}
+                        />
+                      )
+                    }
+                  />
+                ))}
+            </RowList>
+            {friends.length > 0 && !joinedBoard && (
+              <p className={classes.note}>{LEADERBOARD_SETTING.offer}</p>
+            )}
+          </>
         )}
       </>
     ),

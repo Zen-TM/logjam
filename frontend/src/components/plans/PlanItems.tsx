@@ -24,7 +24,6 @@ import {
   EmptyState,
   IconButton,
   IconTile,
-  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -208,7 +207,6 @@ export default function PlanItems({
           })}
         </div>
       ))}
-      {addCopy && shown.length > 0 && <ListEnd>{addCopy}</ListEnd>}
 
       <ConfirmDialog
         open={saving != null}

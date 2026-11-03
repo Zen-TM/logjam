@@ -52,17 +52,21 @@ export const LEADERBOARD_SETTING = {
   // that says whose board it is. The hint is what joining shows.
   hint: "Friends see only your count.",
   joined: "You're on the leaderboard. Find it in Friends.",
+  // Friends' standing line for someone who has friends and has not joined:
+  // the one place besides Settings that says the board exists.
+  offer:
+    "Rank your canyons against your friends: turn on the Canyon leaderboard in Settings.",
   left: "You've left the leaderboard.",
   saveFailed: "Couldn't change the leaderboard setting.",
 } as const;
 
 /** The rank Friends' leaderboard button wears as a badge: none on a board of
- *  one, where a rank says nothing. */
+ *  one, where a rank says nothing. "#2", not "2", which reads as a count. */
 export function leaderboardBadge(
   rank: number,
   boardSize: number,
 ): string | null {
-  return boardSize < 2 ? null : String(rank);
+  return boardSize < 2 ? null : `#${rank}`;
 }
 
 /** That button's name, so the badge's number is in it (DESIGN.md: a badge is

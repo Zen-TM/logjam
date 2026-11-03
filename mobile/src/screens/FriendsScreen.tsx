@@ -50,6 +50,7 @@ import {
   friendsHeroSubtitle,
   FRIENDS,
   friendVerb,
+  LEADERBOARD_SETTING,
   leaderboardButtonLabel,
   selfStanding,
   type LeaderboardResponse,
@@ -449,6 +450,12 @@ export function FriendsScreen({
             />
           }
           renderItem={renderItem}
+          ListFooterComponent={
+            friends.length > 0 &&
+            !(leaderboardOptIn && board?.joined !== false) ? (
+              <Text style={styles.hint}>{LEADERBOARD_SETTING.offer}</Text>
+            ) : undefined
+          }
           ListEmptyComponent={
             <EmptyPanel
               kind={friendsEmptyKind({

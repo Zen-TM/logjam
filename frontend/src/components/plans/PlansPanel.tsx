@@ -38,7 +38,6 @@ import {
   Hero,
   IconButton,
   IconTile,
-  ListEnd,
   SelectionBar,
   SelectionVerb,
   TileCheckbox,
@@ -465,10 +464,7 @@ export default function PlansPanel({
         />
       </div>
     ) : (
-      <RowList className={classes.list}>
-        {rows.map(renderRow)}
-        {offersNewPlan && <ListEnd>{newPlanButton}</ListEnd>}
-      </RowList>
+      <RowList className={classes.list}>{rows.map(renderRow)}</RowList>
     ),
   };
 

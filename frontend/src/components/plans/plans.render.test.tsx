@@ -364,9 +364,10 @@ describe("Edit form over another leader's save", () => {
   });
 });
 
-describe("a plan's page ends each list with its add button", () => {
-  // Mutation: drop the ListEnd, and a long write-up has no way to add below.
-  it("ends the write-up with Add a write-up section", () => {
+describe("a plan's page keeps its adds in the hero", () => {
+  // Mutation: put a `<ListEnd>` add back under the write-up, and the page
+  // draws the same verb twice.
+  it("draws Add a write-up section once, in the hero's menu", () => {
     renderPanel({
       view: {
         ...plan,
@@ -375,20 +376,26 @@ describe("a plan's page ends each list with its add button", () => {
       },
     });
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("section") })
-        .length,
-    ).toBeGreaterThan(0);
+      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(
+      screen.getByRole("menuitem", { name: planAddVerbLabel("section") }),
+    ).toBeTruthy();
   });
 
-  // Mutation: drop `disabled={formsFull}`, and the API refuses the 21st form.
+  // Mutation: drop `disabledReason` from the form entry, and the API refuses
+  // the 21st form.
   it("stops offering Add a form at the cap", () => {
     const forms = Array.from({ length: TRIP_PLAN_MAX_FORMS }, (_, i) => ({
       ...contacts,
       id: `f${i}`,
     }));
     renderPanel({ view: { ...plan, myRole: "leader", forms } });
-    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
-    const add = screen.getByRole("button", { name: planAddVerbLabel("form") });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const add = screen.getByRole("menuitem", {
+      name: new RegExp(planAddVerbLabel("form")),
+    });
     expect(
       (add as HTMLButtonElement).disabled ||
         add.getAttribute("aria-disabled") === "true",
