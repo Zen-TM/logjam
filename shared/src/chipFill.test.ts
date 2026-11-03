@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chipFill, contrastRatio } from "./chipFill.js";
 import {
   ASSET_HUES,
+  OPACITY,
   PLACE_STATUS_HUES,
   TRIP_TYPE_OPEN_HUES,
 } from "./designTokens.js";
@@ -51,6 +52,34 @@ describe("chipFill", () => {
           contrastRatio(tokens.onFill, fill),
           `${id} ${hue}→${fill}`,
         ).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  // A filled button under the pointer dims its fill to `OPACITY.pressed` and
+  // keeps its label solid (Button.module.css). Mutation that turns it red: set
+  // `OPACITY.pressed` to 0.3.
+  it.each(THEME_SCHEME_ORDER)(
+    "%s: a pressed accent or warning fill keeps 4.5:1 ink on the page and the card",
+    (id) => {
+      const { tokens } = THEME_SCHEMES[id];
+      const mix = (fill: string, ground: string) =>
+        `#${[1, 3, 5]
+          .map((i) => {
+            const f = parseInt(fill.slice(i, i + 2), 16);
+            const g = parseInt(ground.slice(i, i + 2), 16);
+            return Math.round(f * OPACITY.pressed + g * (1 - OPACITY.pressed))
+              .toString(16)
+              .padStart(2, "0");
+          })
+          .join("")}`;
+      for (const fill of [tokens.accent, tokens.warning]) {
+        for (const ground of [tokens.page, tokens.card]) {
+          expect(
+            contrastRatio(tokens.onFill, mix(fill, ground)),
+            `${id} ${fill} on ${ground}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
       }
     },
   );
