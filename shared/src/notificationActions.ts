@@ -235,13 +235,13 @@ export function notificationActions(
     // device that took it, and the other device never saw it. So a second fetch
     // stays on offer, quietly, whatever happened in this session. Guard:
     // notificationActions.test.ts.
+    const web = platform === "web";
+    // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
+    // there is a download and its words say so.
+    const acceptFailure = web
+      ? "Couldn't download that file."
+      : "Couldn't save that file.";
     if (payload.fileSendStatus === "accepted") {
-      const web = platform === "web";
-      // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
-      // there is a download and its words say so.
-      const acceptFailure = web
-        ? "Couldn't download that file."
-        : "Couldn't save that file.";
       return {
         type: "file_sent",
         targetId: fileSendId,
