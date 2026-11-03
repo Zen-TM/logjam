@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FRIENDS } from "@logjam/shared";
+import { FRIENDS, LEADERBOARD_SETTING } from "@logjam/shared";
 
 import { getLeaderboard, sendFriendRequest } from "../../../placeUtils";
 import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
@@ -145,11 +145,11 @@ describe("sending a request from the Add dialog", () => {
 // Off, the feature is invisible: nothing on Friends mentions it, and it asks
 // the server nothing. Mutation: draw the button whatever the switch says.
 describe("the leaderboard button on Friends", () => {
-  function show(leaderboardOptIn: boolean) {
+  function show(leaderboardOptIn: boolean, friends: object[] = []) {
     render(
       <FriendsPanel
         leaderboardOptIn={leaderboardOptIn}
-        friends={[]}
+        friends={friends as never}
         friendRequests={[]}
         onRefetchFriends={() => {}}
         onRefetchShared={() => {}}
@@ -162,6 +162,18 @@ describe("the leaderboard button on Friends", () => {
     show(false);
     expect(screen.queryByRole("button", { name: /Leaderboard/ })).toBeNull();
     expect(getLeaderboard).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the line, or draw it for someone on the board.
+  it("is offered in a line to someone with friends who has not joined", async () => {
+    show(false, [{ friendshipId: "f1", userId: "b", username: "bob" }]);
+    expect(screen.getByText(LEADERBOARD_SETTING.offer)).toBeTruthy();
+  });
+
+  it("offers no line to someone on the board", async () => {
+    show(true, [{ friendshipId: "f1", userId: "b", username: "bob" }]);
+    await screen.findByRole("button", { name: /Leaderboard/ });
+    expect(screen.queryByText(LEADERBOARD_SETTING.offer)).toBeNull();
   });
 
   // Mutation: trust the cached preference over the server's `false`.
@@ -181,7 +193,7 @@ describe("the leaderboard button on Friends", () => {
     const button = await screen.findByRole("button", {
       name: "Leaderboard, you're #2 of 2",
     });
-    expect(button.textContent).toBe("2");
+    expect(button.textContent).toBe("#2");
 
     fireEvent.click(button);
     expect(

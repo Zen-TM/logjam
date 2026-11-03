@@ -1020,7 +1020,7 @@ describe("the snap words", () => {
 
 describe("the leaderboard", () => {
   it("says where the user stands, and a board of one as such", () => {
-    expect(leaderboardBadge(2, 4)).toBe("2");
+    expect(leaderboardBadge(2, 4)).toBe("#2");
     expect(leaderboardBadge(1, 1)).toBeNull();
     expect(leaderboardButtonLabel({ rank: 2, size: 4 })).toBe(
       "Leaderboard, you're #2 of 4",

@@ -61,7 +61,6 @@ import {
   IconButton,
   IconTile,
   LoadingState,
-  ListEnd,
   Menu,
   Row,
   StatusPill,
@@ -580,17 +579,6 @@ export default function PlanDetailPanel({
             </section>
           ))
         )}
-        {plan.sections.length > 0 && canAddSection && (
-          <ListEnd>
-            <Button
-              variant="filled"
-              icon="add"
-              onClick={() => setSectionOpen({ id: null })}
-            >
-              {planAddVerbLabel("section")}
-            </Button>
-          </ListEnd>
-        )}
       </div>
     ),
     items: tab === "items" && (
@@ -674,19 +662,6 @@ export default function PlanDetailPanel({
               }
             />
           ))
-        )}
-        {plan.forms.length > 0 && canBuildForms && (
-          <ListEnd>
-            <Button
-              variant="filled"
-              icon="add"
-              disabled={formsFull}
-              disabledReason={formsFullReason}
-              onClick={() => setBuilding({ id: null })}
-            >
-              {planAddVerbLabel("form")}
-            </Button>
-          </ListEnd>
         )}
       </div>
     ),

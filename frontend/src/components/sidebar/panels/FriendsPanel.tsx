@@ -18,8 +18,8 @@
 // send writes the recipient a notification and both verbs resolve it,
 // avoiding a second, separately-fetched copy of a list the Inbox draws better.
 //
-// The leaderboard button is drawn only for someone who has joined it: for anyone
-// else nothing here mentions it, and the way in is the switch in Settings
+// The leaderboard button is drawn only for someone who has joined it; anyone
+// else with friends gets one line pointing at the switch in Settings
 // (contracts/leaderboard.ts; FriendsPanel.render.test.tsx).
 //
 // PRIVACY: usernames only, everywhere. `/friends`, `/friends/requests` and
@@ -51,6 +51,7 @@ import {
   type SectionKeysOn,
   friendSearchHint,
   LEADERBOARD,
+  LEADERBOARD_SETTING,
   leaderboardBadge,
   leaderboardButtonLabel,
   selfStanding,
@@ -282,10 +283,12 @@ function FriendsPanel({
     bucket,
   });
 
+  // `false` from the server outranks the cached preference: the user left
+  // on another device since this session fetched it.
+  const joinedBoard = leaderboardOptIn && board?.joined !== false;
+
   function leaderboardButton() {
-    // `false` from the server outranks the cached preference: the user left
-    // on another device since this session fetched it.
-    if (!leaderboardOptIn || board?.joined === false) return null;
+    if (!joinedBoard) return null;
     const standing = board?.joined ? selfStanding(board) : null;
     return (
       <IconButton
@@ -465,6 +468,9 @@ function FriendsPanel({
                   }
                 />
               ))}
+            {friends.length > 0 && !joinedBoard && (
+              <p className={classes.note}>{LEADERBOARD_SETTING.offer}</p>
+            )}
           </div>
         )}
       </>

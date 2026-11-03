@@ -197,6 +197,9 @@ export default function SharpenedAreasView({
             </span>
           )}
         </div>
+        <Button compact variant="filled" icon="lidar" onClick={onSharpen}>
+          {LIDAR_JOB_COPY.make}
+        </Button>
         <IconButton icon="close" label="Close" onClick={onClose} />
       </div>
       <div className={classes.body}>
@@ -246,9 +249,6 @@ export default function SharpenedAreasView({
             />
           );
         })}
-        <Button compact variant="filled" icon="lidar" onClick={onSharpen}>
-          {LIDAR_JOB_COPY.make}
-        </Button>
         <MakingFooter
           items={beingMade}
           onDismiss={(item) => onDismissActiveJob(item.id)}
