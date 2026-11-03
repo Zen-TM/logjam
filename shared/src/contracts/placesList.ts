@@ -6,7 +6,7 @@
 import type { IconIdea } from "../icons.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
-import type { ContractPlatform, ScreenContract } from "./types.js";
+import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
 
 export const PLACES_LIST = {
   id: "places.list",
@@ -90,6 +90,19 @@ export const PLACES_ADD = {
     menu: "Add places",
   },
 } as const satisfies ScreenContract;
+
+/**
+ * The first-run dialog offering to load the NSW place database or import the
+ * user's own files. Not a menu entry, so not a `PLACES_ADD` section.
+ */
+export const PLACES_ONBOARDING = [
+  {
+    id: "welcomeDialog",
+    on: "web",
+    reason:
+      "Loading RopeWiki and importing files is desk work, like the imports in the Add menu. Logjam GPS's first-run empty state sends the user to Logjam Web for it.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** The glyph of each way in, the same idea on both clients. Exhaustive by
  *  type, so an entry cannot be added without one. */
