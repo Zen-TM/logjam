@@ -71,6 +71,44 @@ export const NOTIFICATION_TYPES = [
   "plan_access_ended",
 ] as const;
 
+/**
+ * What opening a notification's row goes to, per type, one declaration. A type
+ * with no entry does not compile, so a new type cannot ship opening nothing by
+ * accident; each client's test holds its own router to this table.
+ *
+ *  - `place` / `plan`: the place or plan the payload names
+ *  - `friends`: the Friends screen
+ *  - `item`: the shared route or LiDAR map, by its `entityType`
+ *  - `topo`: the finished map (Logjam Web: Sharpened areas; Logjam GPS: Saved)
+ *  - `file`: Saved once an accepted send is kept, Logjam GPS only; Logjam Web
+ *    has no Saved
+ *  - `message`: the announcement's own dialog, not a destination
+ *  - `none`: nothing exists to look at (a failure, a quota, an export, a send
+ *    still waiting)
+ */
+export const NOTIFICATION_DESTINATIONS = {
+  friend_request: "friends",
+  friend_request_accepted: "friends",
+  place_shared: "place",
+  item_shared: "item",
+  file_sent: "file",
+  topo_complete: "topo",
+  topo_failed: "none",
+  topo_export_complete: "none",
+  topo_export_skipped: "none",
+  egress_quota_warning: "none",
+  egress_quota_exceeded: "none",
+  announcement: "message",
+  plan_invited: "plan",
+  plan_join_request: "plan",
+  plan_join_approved: "plan",
+  plan_member_joined: "plan",
+  plan_access_ended: "none",
+} as const satisfies Record<
+  (typeof NOTIFICATION_TYPES)[number],
+  "place" | "plan" | "friends" | "item" | "topo" | "file" | "message" | "none"
+>;
+
 export function notificationLabel(n: TNotification): NotificationLabel {
   const p = n.payload;
   switch (n.type) {

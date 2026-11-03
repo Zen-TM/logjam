@@ -45,12 +45,9 @@ export const FRIENDS = {
       "A request you send or receive waits here until someone answers it.",
     loadFailed: "Couldn't load friends.",
 
-    acceptFailed: "Couldn't accept friend request.",
-    declineFailed: "Couldn't decline friend request.",
     removeFailed: "Couldn't remove friend.",
     sendFailed: "Couldn't send friend request.",
     searchFailed: "Couldn't search users.",
-    declined: "Request declined.",
 
     // The invite link, under the search in the Add sheet.
     inviteHint: `Or send a link. It makes one person your friend when they open it and sign in, and stops working after ${FRIEND_INVITE_TTL_DAYS} days.`,

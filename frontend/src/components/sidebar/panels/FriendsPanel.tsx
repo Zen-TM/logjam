@@ -38,6 +38,7 @@ import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
+  friendRequestAnswers,
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
@@ -384,8 +385,10 @@ function FriendsPanel({
                           void runAction(
                             request.id,
                             () => acceptFriendRequest(request.id),
-                            copy.acceptFailed,
-                            friendAcceptedMessage(request.requester.username),
+                            friendRequestAnswers(request.requester.username)[0]
+                              .failure,
+                            friendRequestAnswers(request.requester.username)[0]
+                              .success,
                           ).then(onRefetchNotifications)
                         }
                       >
@@ -400,8 +403,10 @@ function FriendsPanel({
                           void runAction(
                             request.id,
                             () => declineFriendRequest(request.id),
-                            copy.declineFailed,
-                            copy.declined,
+                            friendRequestAnswers(request.requester.username)[1]
+                              .failure,
+                            friendRequestAnswers(request.requester.username)[1]
+                              .success,
                           )
                         }
                       >

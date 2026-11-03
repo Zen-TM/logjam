@@ -2,10 +2,36 @@
 // rules that are easy to lose: a notification about something that does not
 // exist has NO destination, and a file send only has one once it was kept.
 import { describe, expect, it } from "vitest";
-import { notificationWayTarget } from "@logjam/shared";
+import {
+  NOTIFICATION_DESTINATIONS,
+  NOTIFICATION_TYPES,
+  notificationWayTarget,
+} from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 import { notificationDestination } from "./notificationDestination";
+
+type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+const SAMPLE_PAYLOADS = {
+  friend_request: {},
+  friend_request_accepted: {},
+  place_shared: { placeId: "p1" },
+  item_shared: { entityType: "route", entityId: "r1" },
+  file_sent: { fileSendStatus: "accepted", filename: "x.gpx" },
+  topo_complete: { jobId: "j1" },
+  topo_failed: {},
+  topo_export_complete: {},
+  topo_export_skipped: {},
+  egress_quota_warning: {},
+  egress_quota_exceeded: {},
+  announcement: {},
+  plan_invited: { planId: "pl1" },
+  plan_join_request: { planId: "pl1" },
+  plan_join_approved: { planId: "pl1" },
+  plan_member_joined: { planId: "pl1" },
+  plan_access_ended: { planId: "pl1", reason: "removed" },
+} satisfies Record<NotificationType, Record<string, unknown>>;
 
 function notification(
   type: string,
@@ -136,5 +162,19 @@ describe("notificationDestination", () => {
     expect(notificationDestination(n)).toMatchObject({
       highlightKey: notificationWayTarget(n),
     });
+  });
+
+  // Mutation that turns it red: add a type to NOTIFICATION_TYPES whose
+  // declared destination this table does not reach. A place or plan is reached
+  // through its own target (`notificationPlaceId`, `notificationPlanTarget`,
+  // held to the same declaration in `shared`), not here.
+  it("reaches a destination for every type that declares one", () => {
+    const here = new Set(["friends", "item", "topo", "file"]);
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, SAMPLE_PAYLOADS[type]);
+      expect(notificationDestination(n) !== null, type).toBe(
+        here.has(NOTIFICATION_DESTINATIONS[type]),
+      );
+    }
   });
 });

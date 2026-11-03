@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  NOTIFICATION_DESTINATIONS,
   NOTIFICATION_TYPES,
+  notificationPlaceId,
   notificationAnnouncement,
   notificationHaystack,
   notificationKind,
@@ -318,6 +320,26 @@ describe("NOTIFICATION_TYPES", () => {
       expect(notificationLabel(notification(type)).text, type).not.toBe(
         "Notification",
       );
+    }
+  });
+});
+
+// Mutation that turns this red: add a type to NOTIFICATION_TYPES without an
+// entry in NOTIFICATION_DESTINATIONS (it fails to compile too), or declare
+// `place` / `plan` for a type whose payload names neither.
+describe("NOTIFICATION_DESTINATIONS", () => {
+  it("declares exactly the stored types", () => {
+    expect(Object.keys(NOTIFICATION_DESTINATIONS).sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
+  });
+
+  it("agrees with the place and plan targets the payload names", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, { placeId: "p1", planId: "pl1" });
+      const kind = NOTIFICATION_DESTINATIONS[type];
+      if (kind === "place") expect(notificationPlaceId(n), type).not.toBeNull();
+      expect(notificationPlanTarget(n) !== null, type).toBe(kind === "plan");
     }
   });
 });

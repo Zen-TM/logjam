@@ -173,7 +173,7 @@ function NotificationsPanel({
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onOpenPlan: (target: NotificationPlanTarget) => void;
   /** Open a route's page; false when the user no longer holds it. */
-  onOpenRoute: (routeId: string) => boolean;
+  onOpenRoute: (routeId: string) => Promise<boolean>;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
 }) {
@@ -417,7 +417,16 @@ function NotificationsPanel({
     }
     if (destination.kind === "plan") return onOpenPlan(destination.target);
     if (destination.kind === "way") {
-      if (!onOpenRoute(destination.routeId)) toast.error(copy.removed);
+      // A failed lookup is not "removed": it keeps its own error.
+      void onOpenRoute(destination.routeId).then(
+        (found) => {
+          if (!found) toast.error(copy.removed);
+        },
+        (err) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't open that route."));
+        },
+      );
       return;
     }
     if (destination.kind === "sharpened") {

@@ -83,23 +83,25 @@ describe("notificationActions", () => {
     ]);
   });
 
-  // Every decline is a dialog: side by side in a row there is no overflow sheet
-  // left to keep "no" away from "yes".
-  it("confirms every decline and no accept", () => {
-    for (const n of [
+  // A file decline is a dialog; a friend-request decline never asks, since the
+  // requester can ask again. Mutation that turns it red: give the friend
+  // decline in `friendRequestAnswers` a confirm.
+  it("confirms a file decline and never a friend decline or an accept", () => {
+    const friend = notificationActions(
       notification("friend_request", {
         friendshipId: "f1",
         requesterUsername: "bob",
       }),
+    )!;
+    expect(friend.actions.map((a) => a.confirm)).toEqual([null, null]);
+    const file = notificationActions(
       notification("file_sent", {
         fileSendId: "s1",
         filename: "Claustral.gpx",
       }),
-    ]) {
-      const actions = notificationActions(n);
-      for (const action of actions!.actions) {
-        expect(Boolean(action.confirm)).toBe(action.kind === "decline");
-      }
+    )!;
+    for (const action of file.actions) {
+      expect(Boolean(action.confirm)).toBe(action.kind === "decline");
     }
   });
 

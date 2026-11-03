@@ -68,10 +68,10 @@ const noop = () => {};
 // Read marks really apply, as App's do, so a row read in Unread leaves it.
 function Harness({
   rows,
-  onOpenRoute = () => true,
+  onOpenRoute = async () => true,
 }: {
   rows: TNotification[];
-  onOpenRoute?: (routeId: string) => boolean;
+  onOpenRoute?: (routeId: string) => Promise<boolean>;
 }) {
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     new Map(),
@@ -217,7 +217,7 @@ describe("NotificationsPanel: a shared route", () => {
 
   // Mutation: drop the `way` branch from `goTo`, and the tap opens nothing.
   it("opens the route when the row is tapped, and reads it", () => {
-    const onOpenRoute = vi.fn(() => true);
+    const onOpenRoute = vi.fn(async () => true);
     render(<Harness rows={[shared]} onOpenRoute={onOpenRoute} />);
     fireEvent.click(
       screen.getByRole("button", { name: "bob shared a route with you" }),
@@ -228,7 +228,7 @@ describe("NotificationsPanel: a shared route", () => {
 
   // Mutation: ignore the false return, and a revoked share fails silently.
   it("says so when the route is gone", async () => {
-    render(<Harness rows={[shared]} onOpenRoute={() => false} />);
+    render(<Harness rows={[shared]} onOpenRoute={async () => false} />);
     fireEvent.click(
       screen.getByRole("button", { name: "bob shared a route with you" }),
     );

@@ -120,7 +120,7 @@ import {
   Hero,
   IconButton,
   ListBody,
-  RequestRow,
+  RequestAnswers,
   Row,
   ChipRail,
   SelectionBar,
@@ -821,6 +821,23 @@ export function NotificationsScreen({
     [runBatch],
   );
 
+  /**
+   * "View in Saved" / "View in Friends" — the other half of a notification
+   * being a way in to the thing it is about.
+   *
+   * Reading it is what marks it read, exactly as the row's own tap does: the
+   * user has followed this notification through to its subject, which is the
+   * most complete thing they can do with it short of answering it.
+   */
+  const viewNotification = useCallback(
+    (n: TNotification, destination: NotificationDestination) => {
+      void markRead(n);
+      if (destination.tab === "friends") onOpenFriends();
+      else onOpenSaved(destination.filter, destination.highlightKey);
+    },
+    [markRead, onOpenFriends, onOpenSaved],
+  );
+
   // Reading it is what marks it read, so both happen on one tap; the place
   // or the plan then opens on top. A message is the exception: it opens over
   // the inbox and is read when it closes, so in Unread its row stays put until
@@ -831,18 +848,17 @@ export function NotificationsScreen({
         setMessageId(n.id);
         return;
       }
-      void markRead(n);
       const placeId = notificationPlaceId(n);
       const plan = notificationPlanTarget(n);
-      if (placeId) return onOpenPlace(placeId);
-      if (plan) return onOpenPlan(plan);
       // Every other row opens what it is about, as its ⋯ sheet's "View in" does.
       const destination = notificationDestination(n);
-      if (!destination) return;
-      if (destination.tab === "friends") onOpenFriends();
-      else onOpenSaved(destination.filter, destination.highlightKey);
+      if (!placeId && !plan && destination)
+        return viewNotification(n, destination);
+      void markRead(n);
+      if (placeId) onOpenPlace(placeId);
+      else if (plan) onOpenPlan(plan);
     },
-    [markRead, onOpenFriends, onOpenPlace, onOpenPlan, onOpenSaved],
+    [markRead, onOpenPlace, onOpenPlan, viewNotification],
   );
 
   const closeMessage = useCallback(() => {
@@ -897,23 +913,6 @@ export function NotificationsScreen({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a navigation param consumed once by nonce, once the list holds its row
     showMessage(row);
   }, [openAnnouncement, query.notifications, refetch, showMessage]);
-
-  /**
-   * "View in Saved" / "View in Friends" — the other half of a notification
-   * being a way in to the thing it is about.
-   *
-   * Reading it is what marks it read, exactly as the row's own tap does: the
-   * user has followed this notification through to its subject, which is the
-   * most complete thing they can do with it short of answering it.
-   */
-  const viewNotification = useCallback(
-    (n: TNotification, destination: NotificationDestination) => {
-      void markRead(n);
-      if (destination.tab === "friends") onOpenFriends();
-      else onOpenSaved(destination.filter, destination.highlightKey);
-    },
-    [markRead, onOpenFriends, onOpenSaved],
-  );
 
   const openMenu = useCallback((n: TNotification) => setMenuId(n.id), []);
 
@@ -1325,7 +1324,7 @@ const NotificationRow = memo(function NotificationRow({
       ? notificationDestination(item)
       : null;
   return (
-    <RequestRow
+    <Row
       icon={meta.icon}
       hue={meta.hue}
       title={label.text}
@@ -1368,18 +1367,21 @@ const NotificationRow = memo(function NotificationRow({
       ]}
       // INSIDE the card. Sitting below it, the pair would read as a caption for
       // the next notification down.
-      answers={(target?.actions ?? []).map((action) => ({
-        key: action.kind,
-        label: action.label,
-        decline: action.kind === "decline",
-        loading: busyKind === action.kind,
-        onPress: () => onAction(item, target!, action),
-      }))}
-      disabled={actionsDisabled}
-      // The reason on the thing that is dimmed, not on the screen (DESIGN.md).
-      hint={!online ? "Needs a connection" : undefined}
       footer={
-        showInSaved ? (
+        target && target.actions.length > 0 ? (
+          <RequestAnswers
+            answers={target.actions.map((action) => ({
+              key: action.kind,
+              label: action.label,
+              decline: action.kind === "decline",
+              loading: busyKind === action.kind,
+              onPress: () => onAction(item, target, action),
+            }))}
+            disabled={actionsDisabled}
+            // The reason on the thing that is dimmed, not on the screen (DESIGN.md).
+            hint={!online ? "Needs a connection" : undefined}
+          />
+        ) : showInSaved ? (
           <CardActions>
             <Button
               label={showInSaved.label}

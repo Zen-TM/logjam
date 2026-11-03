@@ -50,10 +50,12 @@ import {
   emptyFilters,
   reconcileCustomFilters,
   apiFetch,
+  getRoutes,
   getTopoExport,
 } from "../placeUtils";
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
+import { findRouteById } from "./sidebar/panels/inboxModel";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import { consentGate, currentConsentVersionOf } from "../consent";
@@ -1250,10 +1252,12 @@ function App() {
   };
 
   /** Open a route by id; false when the user no longer holds it (a share
-   *  since revoked or a route since deleted). */
-  const openRoute = (routeId: string): boolean => {
-    const route = routes.find((r) => r.id === routeId);
+   *  since revoked or a route since deleted). The cached list may predate the
+   *  share, or never have loaded, so a miss asks the server before it says so. */
+  const openRoute = async (routeId: string): Promise<boolean> => {
+    const route = await findRouteById(routes, routeId, getRoutes);
     if (!route) return false;
+    if (!routes.includes(route)) refetchRoutes();
     openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));
     return true;
   };

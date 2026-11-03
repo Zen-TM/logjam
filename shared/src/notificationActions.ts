@@ -32,11 +32,9 @@ export type NotificationInlineAction = {
    * Non-null means raise this dialog first (DESIGN.md — destructive actions
    * confirm in a dialog, which is where the explanation goes).
    *
-   * Both declines carry one, and the friend-request decline carries one even
-   * though neither Logjam Web nor the Friends screen asks: on THOSE surfaces decline
-   * lives behind an overflow sheet, which is the house rule that "no" is never
-   * a mis-tap away from "yes" (FriendsScreen's own note). Side by side in a
-   * list row there is no sheet left to be that guard, so the dialog is.
+   * A friend-request decline never carries one (the requester can ask again);
+   * a file decline always does, because side by side in a list row there is no
+   * overflow sheet left to keep "no" a step away from "yes".
    */
   confirm: { title: string; body: string; confirmLabel: string } | null;
   /**
@@ -74,9 +72,9 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 }
 
 /**
- * A friend request's two answers, for any surface that draws them as a pair:
- * the Inbox row, the Friends list and Logjam Web's Friends page all say the same
- * words and ask the same decline question. Guard: notificationActions.test.ts.
+ * A friend request's two answers, for every surface that draws them: the
+ * Inbox row and both Friends lists say the same words. Guard:
+ * notificationActions.test.ts.
  */
 export function friendRequestAnswers(
   username: string,
@@ -94,13 +92,9 @@ export function friendRequestAnswers(
       label: "Decline",
       failure: "Couldn't decline that request.",
       success: "Request declined.",
-      confirm: {
-        title: `Decline ${username}'s request?`,
-        // The two things the user actually needs: it is not announced, and
-        // it is not final.
-        body: `${username} won't be told, and can send another request later.`,
-        confirmLabel: "Decline",
-      },
+      // Never asks, on any surface: the requester is not told and can ask
+      // again, so nothing is lost. Guard: notificationActions.test.ts.
+      confirm: null,
     },
   ];
 }

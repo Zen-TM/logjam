@@ -62,3 +62,19 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
       return null;
   }
 }
+
+/**
+ * The route an Inbox row names. The cached list may predate the share, or
+ * never have loaded (it loads only while Ways is in use), so a miss asks the
+ * server before the caller says the route is gone. Null only when the fresh
+ * list lacks it too.
+ */
+export async function findRouteById<R extends { id: string }>(
+  cached: readonly R[],
+  routeId: string,
+  fetchAll: () => Promise<readonly R[]>,
+): Promise<R | null> {
+  const hit = cached.find((r) => r.id === routeId);
+  if (hit) return hit;
+  return (await fetchAll()).find((r) => r.id === routeId) ?? null;
+}

@@ -16,52 +16,62 @@ export type RequestAnswer = {
 };
 
 /**
- * A row that asks a question (a friend request, a file offered, someone
- * asking to join a plan) and answers it in the row: Accept and Decline inside
- * the card, whichever list it sits in. One component, so the Inbox, Friends
- * and People cannot draw the same question three ways. Guard:
+ * The pair that answers a request: Accept and Decline inside the card, as the
+ * footer of a `Row`. A row that sometimes carries other footers (the Inbox)
+ * uses this directly; a row that is always a question uses `RequestRow`.
+ */
+export function RequestAnswers({
+  answers,
+  disabled,
+  hint,
+}: {
+  answers: RequestAnswer[];
+  /** Inert, not hidden: the pair stays so the row cannot change height. */
+  disabled?: boolean;
+  /** Why they are inert, under the pair: on the thing that is dimmed. */
+  hint?: string;
+}) {
+  const styles = useStyles();
+  return (
+    <>
+      <CardActions>
+        {answers.map((answer) => (
+          <Button
+            key={answer.key}
+            label={answer.label}
+            variant={answer.decline ? "outlineAccent" : undefined}
+            disabled={disabled}
+            loading={answer.loading}
+            onPress={answer.onPress}
+          />
+        ))}
+      </CardActions>
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+    </>
+  );
+}
+
+/**
+ * A row that is a question (a friend request, someone asking to join a plan),
+ * answered in the row: Accept and Decline inside the card, whichever list it
+ * sits in, so Friends and People cannot draw it two ways. Guard:
  * `requestRow.test.ts`.
  */
 export function RequestRow({
   answers,
   disabled,
   hint,
-  footer,
   ...row
 }: Omit<ComponentProps<typeof Row>, "footer"> & {
   answers: RequestAnswer[];
-  /** Inert, not hidden: the pair stays so the row cannot change height. */
   disabled?: boolean;
-  /** Why they are inert, under the pair: on the thing that is dimmed. */
   hint?: string;
-  /** A quieter alternative drawn under the pair, or in its place. */
-  footer?: React.ReactNode;
 }) {
-  const styles = useStyles();
   return (
     <Row
       {...row}
       footer={
-        <>
-          {answers.length > 0 ? (
-            <CardActions>
-              {answers.map((answer) => (
-                <Button
-                  key={answer.key}
-                  label={answer.label}
-                  variant={answer.decline ? "outlineAccent" : undefined}
-                  disabled={disabled}
-                  loading={answer.loading}
-                  onPress={answer.onPress}
-                />
-              ))}
-            </CardActions>
-          ) : null}
-          {answers.length > 0 && hint ? (
-            <Text style={styles.hint}>{hint}</Text>
-          ) : null}
-          {footer}
-        </>
+        <RequestAnswers answers={answers} disabled={disabled} hint={hint} />
       }
     />
   );
