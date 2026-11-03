@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import AccountFailedPanel, { waitsOnAccount } from "./AccountFailedPanel";
+import AccountFailedPanel from "./AccountFailedPanel";
+import { waitsOnAccount } from "../panels";
 import { PanelCloseContext } from "../../../ui/Hero";
 
 afterEach(cleanup);

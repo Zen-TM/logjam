@@ -59,3 +59,18 @@ export const PANEL_TITLES: Record<PanelId, string> = {
 /** A page with several views swaps its content in place under one rail of
  *  chips, rather than being several pages. */
 export type LogsView = "logs" | "stats";
+
+// The lists wait on the account load (frontend/AGENTS.md: no user data loads
+// before it settles), so one that failed leaves each of them with nothing to
+// show but "Loading…". They say it once instead.
+const WAITS_ON_ACCOUNT: readonly PanelId[] = [
+  "places",
+  "logs",
+  "ways",
+  "plans",
+  "friends",
+  "inbox",
+];
+
+export const waitsOnAccount = (panel: PanelId | null) =>
+  panel !== null && WAITS_ON_ACCOUNT.includes(panel);

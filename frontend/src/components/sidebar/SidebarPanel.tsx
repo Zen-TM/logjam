@@ -6,6 +6,7 @@ import {
   DRAFT_PEEK_REVEAL_PX,
   isDraftPanel,
   PANEL_TITLES,
+  waitsOnAccount,
   type LogsView,
   type PanelId,
 } from "./panels";
@@ -41,9 +42,7 @@ import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
-import AccountFailedPanel, {
-  waitsOnAccount,
-} from "./panels/AccountFailedPanel";
+import AccountFailedPanel from "./panels/AccountFailedPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";

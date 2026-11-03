@@ -5,9 +5,9 @@ import { ToastProvider, useToast } from "./ToastProvider";
 
 afterEach(cleanup);
 
-let toastApi: ReturnType<typeof useToast>;
+const grabbed: { toast?: ReturnType<typeof useToast> } = {};
 function Grab() {
-  toastApi = useToast();
+  grabbed.toast = useToast();
   return null;
 }
 
@@ -21,12 +21,12 @@ describe("toasts", () => {
       </ToastProvider>,
     );
     act(() => {
-      toastApi.error("Couldn't load your account.");
-      toastApi.error("Couldn't load your account.");
-      toastApi.error("Couldn't load your account.");
+      grabbed.toast!.error("Couldn't load your account.");
+      grabbed.toast!.error("Couldn't load your account.");
+      grabbed.toast!.error("Couldn't load your account.");
     });
     expect(screen.getAllByText("Couldn't load your account.")).toHaveLength(1);
-    act(() => toastApi.error("Couldn't load places."));
+    act(() => grabbed.toast!.error("Couldn't load places."));
     expect(screen.getAllByRole("button", { name: /dismiss/i })).toHaveLength(2);
   });
 });
