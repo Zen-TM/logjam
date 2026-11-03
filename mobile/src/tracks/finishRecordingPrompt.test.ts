@@ -30,6 +30,7 @@ vi.mock("./trackBackup", () => ({
 }));
 vi.mock("./trackRecorder", () => ({
   finishTrackRecording: vi.fn(async () => state.mediaId),
+  isActiveRecording: vi.fn(async () => true),
 }));
 vi.mock("./tracksDb", () => ({
   getTrack: vi.fn(async () => ({ id: "t1", pointCount: state.pointCount })),

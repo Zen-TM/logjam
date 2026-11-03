@@ -582,6 +582,13 @@ export async function stopTrackRecordingForWipe(): Promise<void> {
   await stopLocationUpdatesIfRunning();
 }
 
+/** Whether `trackId` is still the recording or paused one. A confirm can wait
+ *  behind another (the dialogs queue), so what it was asked about may have
+ *  finished or gone by the time it is answered. */
+export async function isActiveRecording(trackId: string): Promise<boolean> {
+  return (await findActiveTrack())?.id === trackId;
+}
+
 export async function discardTrackRecording(trackId: string): Promise<void> {
   await stopLocationUpdatesIfRunning();
   await deleteTrack(trackId);
