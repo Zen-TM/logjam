@@ -30,3 +30,16 @@ describe("a palette", () => {
     expect(inline).toEqual(["screens/settings/MapSettingsScreen.tsx"]);
   });
 });
+
+// Settings > Map is a stack of card rows, so its colour is one too. Mutation:
+// drop `icon="colour"` from the marker colour in MapSettingsScreen, and it is a
+// bare row between cards again.
+describe("the marker colour in Map settings", () => {
+  it("is drawn as a settings row", () => {
+    const screen = readFileSync(
+      join(SRC, "screens/settings/MapSettingsScreen.tsx"),
+      "utf8",
+    );
+    expect(screen).toMatch(/<ColourField\s+icon="colour"/);
+  });
+});

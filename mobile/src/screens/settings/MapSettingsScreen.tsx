@@ -287,6 +287,7 @@ export function MapSettingsScreen() {
 
         <SectionHeader title="Your location marker" />
         <ColourField
+          icon="colour"
           label="Colour"
           palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
           value={MARKER_COLORS[markerColorId]}
