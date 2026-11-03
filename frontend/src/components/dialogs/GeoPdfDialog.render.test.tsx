@@ -100,9 +100,11 @@ function dialog({
   open,
   onClose = () => {},
   onSelectOnMap = () => {},
+  activeLayerId = "six-topo",
   ...props
 }: {
   open: boolean;
+  activeLayerId?: string;
   onSelectOnMap?: (...args: unknown[]) => void;
   pendingExtent?: TBbox | null;
   pendingScale?: number | null;
@@ -123,7 +125,7 @@ function dialog({
         onSelectOnMap={onSelectOnMap}
         pendingExtent={null}
         pendingScale={null}
-        activeLayerId="six-topo"
+        activeLayerId={activeLayerId}
         terrainLayers={TERRAIN_LAYER_DEFAULTS}
         completedTopoJobs={[]}
         slopeBands={[]}
@@ -220,7 +222,7 @@ describe("GeoPdfDialog, remembers the last settings", () => {
 
   it("opens on them after a GeoPDF is made", async () => {
     await makeOne();
-    render(dialog({ open: true }));
+    render(dialog({ open: true, activeLayerId: "osm-cycle" }));
     expect(paper("A3").ariaChecked).toBe("true");
     expect(paper("Landscape").ariaChecked).toBe("true");
     expect(paper("Imagery").ariaChecked).toBe("true");
@@ -274,13 +276,48 @@ describe("GeoPdfDialog, remembers the last settings", () => {
     expect(slopeOn()).toBe(true);
   });
 
+  // Mutation: list Land tenure with the Terrain chips again, and the Export
+  // dialog groups it differently from the layers control.
+  it("groups Land tenure under Overlays, as the layers control does", () => {
+    render(dialog({ open: true }));
+    const group = (name: string) => screen.getByRole("group", { name });
+    expect(
+      within(group("Overlays")).queryByRole("button", { name: "Land tenure" }),
+    ).toBeTruthy();
+    expect(
+      within(group(MAP_TERRAIN.title)).queryByRole("button", {
+        name: "Land tenure",
+      }),
+    ).toBeNull();
+  });
+
+  // Mutation: apply the stored base layer over the map's, and Export opens on
+  // a base the map is not showing.
+  it("opens on the map's own base layer, not the last one printed", () => {
+    localStorage.setItem(
+      GEOPDF_SETTINGS_KEY,
+      JSON.stringify({ baseLayer: "six-imagery" }),
+    );
+    render(dialog({ open: true, activeLayerId: "six-topo" }));
+    expect(screen.getByRole("radio", { name: "Topo" }).ariaChecked).toBe(
+      "true",
+    );
+  });
+
+  // Mutation: drop UNPRINTABLE_NOTE, and the Layers list offers a basemap the
+  // Export list silently lacks.
+  it("says why a basemap the map offers is not here", () => {
+    render(dialog({ open: true }));
+    expect(screen.getByText(/Cycle can't be printed/)).toBeTruthy();
+  });
+
   // Mutation: stop passing the dialog's own base layers to `readSettings`.
   it("takes a stored base layer the dialog offers, not one it does not", () => {
     localStorage.setItem(
       GEOPDF_SETTINGS_KEY,
       JSON.stringify({ baseLayer: "six-imagery" }),
     );
-    render(dialog({ open: true }));
+    render(dialog({ open: true, activeLayerId: "osm-cycle" }));
     expect(screen.getByRole("radio", { name: "Imagery" }).ariaChecked).toBe(
       "true",
     );

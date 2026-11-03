@@ -15,13 +15,34 @@ export const PRINTABLE_BASE_LAYERS = BASE_LAYERS.filter((layer) =>
 const FALLBACK_BASE_LAYER = "six-topo";
 
 /**
- * The base layer to open with, given whatever the map is showing. The map's own
- * layer is kept when this form can honour it, and otherwise the fallback is —
- * asking the LIST rather than testing the id's prefix, which is what makes this
- * hold for a basemap added later.
+ * Why the map's picker offers a basemap this one does not, or null when it
+ * offers none: the layers control and this list are one set otherwise.
  */
-export function seedBaseLayer(activeLayerId: string): string {
-  return PRINTABLE_BASE_LAYERS.some((layer) => layer.id === activeLayerId)
+export const UNPRINTABLE_NOTE = (() => {
+  const names = BASE_LAYERS.filter(
+    (layer) => !PRINTABLE_BASE_LAYERS.includes(layer),
+  ).map((layer) => layer.name);
+  return names.length === 0
+    ? null
+    : `${names.join(" and ")} can't be printed: ${names.length === 1 ? "its" : "their"} tile server's policy forbids it.`;
+})();
+
+/**
+ * The base layer to open with, given whatever the map is showing. The map's own
+ * layer is kept when this form can honour it (what was printed last time does
+ * not outrank what is on screen), then the last one printed, then the
+ * fallback — asking the LIST rather than testing the id's prefix, which is
+ * what makes this hold for a basemap added later.
+ */
+export function seedBaseLayer(
+  activeLayerId: string,
+  lastPrinted?: string,
+): string {
+  const printable = (id: string | undefined) =>
+    PRINTABLE_BASE_LAYERS.some((layer) => layer.id === id);
+  return printable(activeLayerId)
     ? activeLayerId
-    : FALLBACK_BASE_LAYER;
+    : printable(lastPrinted)
+      ? lastPrinted!
+      : FALLBACK_BASE_LAYER;
 }

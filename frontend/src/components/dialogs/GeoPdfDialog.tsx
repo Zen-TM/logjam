@@ -11,7 +11,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TBbox } from "../map/Map";
 import BasemapGallery from "../map/BasemapGallery";
-import { PRINTABLE_BASE_LAYERS, seedBaseLayer } from "./geoPdfBaseLayer";
+import {
+  PRINTABLE_BASE_LAYERS,
+  seedBaseLayer,
+  UNPRINTABLE_NOTE,
+} from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
@@ -165,6 +169,11 @@ const AREA_VIEW_OPTIONS: ChipOption<AreaView>[] = [
   { value: "map", label: "On the map" },
   { value: "edges", label: "Type the edges" },
 ];
+
+// Land tenure is a Terrain layer to the map's stacking but an overlay to the
+// user, in the layers control and here: who holds the land is no part of the
+// shape of the ground (`MAP_TERRAIN`).
+const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter((key) => key !== "land");
 
 // The Overlays group's chips that are not layers of the map.
 const MY_PLACES = "my-places";
@@ -379,7 +388,8 @@ function GeoPdfDialog({
       if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
       return updated;
     });
-    if (c.baseLayer) setSelectedBaseLayer(c.baseLayer);
+    if (c.baseLayer)
+      setSelectedBaseLayer(seedBaseLayer(activeLayerId, c.baseLayer));
     if (c.overlays) setSelectedOverlays(new Set(c.overlays));
     if (c.terrainPinned) setTerrainFollowsMap(false);
     if (c.compass !== undefined) setCompassEnabled(c.compass);
@@ -1310,22 +1320,24 @@ function GeoPdfDialog({
                     mapView={mapCenter ?? null}
                     oneRow
                   />
+                  {UNPRINTABLE_NOTE && (
+                    <p className={classes.note}>{UNPRINTABLE_NOTE}</p>
+                  )}
                 </div>
                 <ChipPicker
                   label={MAP_TERRAIN.title}
-                  options={TERRAIN_LAYER_KEYS.map((key) => ({
+                  options={SHAPE_KEYS.map((key) => ({
                     value: key,
                     label: MAP_TERRAIN.copy[key],
                     disabled: offReason(key) !== null,
                   }))}
-                  selected={TERRAIN_LAYER_KEYS.filter(
+                  selected={SHAPE_KEYS.filter(
                     (key) => offReason(key) === null && overlays.has(key),
                   )}
                   onToggle={toggleOverlay}
                   hint={
-                    TERRAIN_LAYER_KEYS.map(offReason)
-                      .filter(Boolean)
-                      .join(" ") || undefined
+                    SHAPE_KEYS.map(offReason).filter(Boolean).join(" ") ||
+                    undefined
                   }
                 />
                 <ChipPicker
@@ -1339,6 +1351,7 @@ function GeoPdfDialog({
                     ),
                     { value: MY_PLACES, label: "My places" },
                     { value: SHARED_PLACES, label: "Shared places" },
+                    { value: "land", label: MAP_TERRAIN.copy.land },
                   ]}
                   selected={[
                     ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : [])
@@ -1346,6 +1359,7 @@ function GeoPdfDialog({
                       .filter((name) => overlays.has(name)),
                     ...(showOwnedPlacesOnPdf ? [MY_PLACES] : []),
                     ...(showSharedPlacesOnPdf ? [SHARED_PLACES] : []),
+                    ...(overlays.has("land") ? ["land"] : []),
                   ]}
                   onToggle={(value) => {
                     if (value === MY_PLACES)
