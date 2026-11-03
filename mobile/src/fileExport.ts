@@ -30,11 +30,15 @@ import {
   GEOJSON_MIME_TYPE,
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
+  buildPlaceExport,
   routeToGpx,
   routeToKml,
   trackPointsToGpx,
   trackPointsToKml,
+  type ExportFieldLabel,
   type RecordedTrackPoint,
+  type TExportFormat,
+  type TPlace,
   type RoutePoint,
 } from "@logjam/shared";
 
@@ -150,4 +154,18 @@ export async function exportTrack(
     content,
     mimeTypeFor(format),
   );
+}
+
+/** A place as GPX, KML, GeoJSON or CSV: the file Logjam Web downloads. */
+export async function exportPlace(
+  place: TPlace,
+  format: TExportFormat,
+  defs: ExportFieldLabel[],
+): Promise<string | null> {
+  const { content, mimeType, filename } = buildPlaceExport(
+    [place],
+    format,
+    defs,
+  );
+  return saveExportFile(filename, content, mimeType);
 }
