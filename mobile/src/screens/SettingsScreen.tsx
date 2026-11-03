@@ -55,7 +55,7 @@ import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { makeStyles, useTheme, muted } from "../theme";
+import { makeStyles, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -63,9 +63,8 @@ import {
   ScreenScroll,
   SectionHeader,
   Toast,
-  type ToastMessage,
-  Icon,
   type Glyph,
+  type ToastMessage,
 } from "../ui";
 
 /** The sub-pages, in the order someone goes looking for them. */
@@ -107,7 +106,6 @@ export function SettingsScreen({
 }: {
   onOpenPage: (page: SettingsPage) => void;
 }) {
-  const theme = useTheme();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -188,7 +186,7 @@ export function SettingsScreen({
               ? capabilityRowProps("serverPrefs", accountState, online)
               : {})}
             onPress={() => onOpenPage(page)}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
           />
         ))}
       </>
@@ -209,7 +207,7 @@ export function SettingsScreen({
               .length,
           )}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
       </>
     ),
@@ -221,14 +219,14 @@ export function SettingsScreen({
           title={copy.tripAttributes}
           subtitle={ownAttributeCountLabel(ownCount(tripFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
         <Row
           icon="tag"
           title={copy.placeAttributes}
           subtitle={ownAttributeCountLabel(ownCount(placeFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
       </>
     ),

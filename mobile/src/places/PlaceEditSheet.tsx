@@ -735,7 +735,7 @@ export function PlaceEditSheet({
               ? "Add your own — permits, access notes, anything."
               : `${typeFieldDefs.length} on this type`
           }
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
           onPress={() => setMode("fields")}
         />
       </>

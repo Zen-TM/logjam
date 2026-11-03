@@ -168,7 +168,7 @@ export function MoreScreen({
         accessibilityLabel={labelWithBadge(navLabel("inbox"), unreadCount ?? 0)}
         onPress={onOpenInbox}
         {...capabilityRowProps("inbox", accountState, online)}
-        right={<Trailing />}
+        chevron
       />
     ),
     // Read from the plans cache, which the shell's poll keeps fresh: the hub
@@ -191,7 +191,7 @@ export function MoreScreen({
         )}
         onPress={onOpenPlans}
         {...capabilityRowProps("plans", accountState, online)}
-        right={<Trailing />}
+        chevron
       />
     ),
     friends: (
@@ -203,7 +203,7 @@ export function MoreScreen({
         // (DESIGN.md).
         onPress={onOpenFriends}
         {...capabilityRowProps("friends", accountState, online)}
-        right={<Trailing />}
+        chevron
       />
     ),
     // Sync issues can only exist once something has tried to sync.
@@ -219,7 +219,7 @@ export function MoreScreen({
           navBadgeNoun("syncIssues"),
         )}
         onPress={onOpenSyncIssues}
-        right={<Trailing />}
+        chevron
       />
     ),
     settings: (
@@ -227,7 +227,7 @@ export function MoreScreen({
         icon={navIcon("settings")}
         title={navLabel("settings")}
         onPress={onOpenSettings}
-        right={<Trailing />}
+        chevron
       />
     ),
     account: (
@@ -245,7 +245,7 @@ export function MoreScreen({
               : undefined
         }
         onPress={onOpenAccount}
-        right={<Trailing />}
+        chevron
       />
     ),
   };
@@ -325,11 +325,6 @@ function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
     return onMirrorChanged(read);
   }, [isGuest]);
   return plans;
-}
-
-function Trailing() {
-  const theme = useTheme();
-  return <Icon idea="disclosure" size={20} color={theme.textMuted} />;
 }
 
 const useStyles = makeStyles((theme, textRole) => ({

@@ -65,7 +65,6 @@ import {
   TextField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 
 const copy = ACCOUNT.copy;
@@ -336,7 +335,7 @@ function LinkedAccountScreen({
             subtitle={online ? user.email : undefined}
             {...changeEmailRowProps(online, config.authMode)}
             onPress={() => setSheet("email")}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
           />
         </>
       ) : null,
