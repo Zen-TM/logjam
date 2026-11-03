@@ -460,9 +460,6 @@ export function RegionDownloadScreen({
     ? planRegionForBasemaps(bbox, pyramidIds, detailZoom, catalogMaxZoom)
     : null;
   const caps = bbox && job ? checkRegionCaps(bbox, job.totalTiles) : null;
-  // The vector map comes with every area and is a download worth making on
-  // its own, so no raster need be picked.
-  const mapCount = selected.length + 1;
   const canDownload = bbox != null && caps?.ok === true && gate.canSave;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
@@ -834,7 +831,7 @@ export function RegionDownloadScreen({
             here: the download outlives this screen, and a screen whose whole
             job is to be left is the wrong place to report from. */}
           <Button
-            label={mapCount > 1 ? `Save ${mapCount} maps` : "Save this area"}
+            label="Save this area"
             icon="saveOffline"
             onPress={() => handleSave(true)}
             disabled={!canDownload || busy}
