@@ -21,6 +21,7 @@ import {
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useToast } from "../../feedback/ToastProvider";
 import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -97,6 +98,7 @@ function PlaceTypeSection({
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
   const [mergingFrom, setMergingFrom] = useState<TPlaceType | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
+  const toast = useToast();
 
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
@@ -207,10 +209,9 @@ function PlaceTypeSection({
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
-                              setMergeTargetId(
-                                types.find((other) => other.id !== type.id)
-                                  ?.id ?? "",
-                              );
+                              // No default: one click must not file a type's
+                              // places under whichever type happens to be first.
+                              setMergeTargetId("");
                             },
                           }
                         : {
@@ -312,7 +313,9 @@ function PlaceTypeSection({
         open={mergingFrom !== null}
         copy={
           mergingFrom && {
-            confirmTitle: `Merge "${mergingFrom.name}" into another type?`,
+            confirmTitle: `Merge "${mergingFrom.name}" into ${
+              mergeTarget ? `"${mergeTarget.name}"` : "another type"
+            }?`,
             confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
               mergeTarget ? `"${mergeTarget.name}"` : "the new type"
             } has no attribute for are kept on each place, and can be added to it later.`,
@@ -322,14 +325,21 @@ function PlaceTypeSection({
           }
         }
         busy={saving}
+        confirmDisabledReason={
+          mergeTargetId ? undefined : "Pick the type to move them to"
+        }
         onConfirm={async () => {
           const type = mergingFrom;
           if (!type || !mergeTargetId) return;
+          const moved = placeCountLabel(type.placeCount);
           const ok = await run(async () => {
             await reassignPlaceType(type.id, mergeTargetId);
             await deletePlaceType(type.id);
           }, "Couldn't merge those types.");
-          if (ok) setMergingFrom(null);
+          if (ok) {
+            setMergingFrom(null);
+            toast.success(`${moved} moved to ${mergeTarget?.name}`);
+          }
         }}
         onClose={() => {
           if (!saving) setMergingFrom(null);
@@ -340,6 +350,7 @@ function PlaceTypeSection({
           value={mergeTargetId}
           onChange={(event) => setMergeTargetId(event.target.value)}
         >
+          <option value="">Choose a type</option>
           {types
             .filter((type) => type.id !== mergingFrom?.id)
             .map((type) => (

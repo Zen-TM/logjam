@@ -189,6 +189,7 @@ function PlaceDetailPanel({
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
   onQuotaChanged,
+  onWaysChanged,
   onRefetchTripLogs,
   onAfterDelete,
   routes,
@@ -225,6 +226,8 @@ function PlaceDetailPanel({
   placeCustomFieldDefs: ScopedCustomFieldDef[];
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onQuotaChanged: () => void;
+  /** A file was attached or removed: the Ways list reads files from here too. */
+  onWaysChanged: () => void;
   // Retrigger the global Trip Logs list/search after a trip is created or
   // deleted here — the place-scoped refetch below only updates this panel.
   onRefetchTripLogs: () => void;
@@ -585,6 +588,7 @@ function PlaceDetailPanel({
         toast.error(messageFromError(err, "Couldn't refresh media."));
       });
     onQuotaChanged();
+    onWaysChanged();
   }
 
   function refreshTripLogs() {

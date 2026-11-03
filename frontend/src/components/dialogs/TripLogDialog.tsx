@@ -58,6 +58,7 @@ import {
   uploadMedia,
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
+import { discardUploads } from "./discardUploads";
 import {
   clearTripDraft,
   readTripDraft,
@@ -258,6 +259,13 @@ function TripLogDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftTripId, setDraftTripId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  // Uploads in flight, across the dialog's drop zones.
+  const [uploading, setUploading] = useState(0);
+  const handleUploadBusy = (busy: boolean) =>
+    setUploading((n) => n + (busy ? 1 : -1));
   // Set once the trip has been saved/committed, so closing won't delete it.
   const committedRef = useRef(false);
   // De-dupes concurrent draft creation when several files upload at once.
@@ -499,6 +507,7 @@ function TripLogDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
   }
 
@@ -547,14 +556,12 @@ function TripLogDialog({
   );
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
-  // dialog was (re)populated — not just "the dialog is open". Media
-  // is excluded: uploads persist immediately (or via the self-cleaning draft
-  // trip in create mode), so they're never "unsaved" by the time a close is
-  // attempted.
+  // dialog was (re)populated — not just "the dialog is open". Uploads persist
+  // at once, but only Discard can undo them, so they count too.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    currentFingerprint !== initialFormSnapshot;
+    (uploadedIds.length > 0 || currentFingerprint !== initialFormSnapshot);
 
   // Whether there's anything in the form worth keeping. Measured against the
   // pristine baseline, so a restored draft still counts as worth keeping even
@@ -726,10 +733,12 @@ function TripLogDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
   }
 
   // "Log a trip" on a track: the track goes into the form as a copy of its file
@@ -798,6 +807,20 @@ function TripLogDialog({
         console.error(err);
         setError(
           messageFromError(err, "Couldn't discard uploaded files. Try again."),
+        );
+        return;
+      }
+    }
+    if (tripLog && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        await discardUploads(uploadedIds, handleMediaDeleted);
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded files. Please try again.",
+          ),
         );
         return;
       }
@@ -1392,6 +1415,7 @@ function TripLogDialog({
             linkedId={tripLog ? tripLog.id : ""}
             resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
             onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
             disabled={saving}
           />
         </section>
@@ -1421,6 +1445,7 @@ function TripLogDialog({
             linkedId={tripLog ? tripLog.id : ""}
             resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
             onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
             disabled={saving}
           />
         </section>
@@ -1440,7 +1465,8 @@ function TripLogDialog({
               : TRIP_FORM.copy.addTitle
         }
         size="large"
-        dismissible={!saving}
+        // A file still landing would miss the delete Discard does.
+        dismissible={!saving && uploading === 0}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
         onClose={mode === "places" ? backToForm : closeAndForget}
@@ -1456,8 +1482,8 @@ function TripLogDialog({
             <>
               <Button
                 onClick={requestClose}
-                disabled={saving}
-                disabledReason="Saving…"
+                disabled={saving || uploading > 0}
+                disabledReason={saving ? "Saving…" : "Uploading…"}
               >
                 Cancel
               </Button>

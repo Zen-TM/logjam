@@ -26,6 +26,7 @@ export default function MediaUpload({
   linkedType,
   linkedId,
   onUploaded,
+  onBusyChange,
   disabled,
   resolveLinkedId,
   category,
@@ -35,6 +36,8 @@ export default function MediaUpload({
   linkedType: MediaLinkedType;
   linkedId: string;
   onUploaded: (item: MediaItem) => void;
+  /** Called as an upload starts and ends, so a dialog can hold its exits. */
+  onBusyChange?: (busy: boolean) => void;
   disabled?: boolean;
   // When set, awaited once per upload batch to obtain the linkedId. Lets a
   // not-yet-saved entity (e.g. a draft trip log) be materialised on first
@@ -83,6 +86,7 @@ export default function MediaUpload({
       return;
     }
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const targetId = resolveLinkedId ? await resolveLinkedId() : linkedId;
       for (const file of selected) {
@@ -120,6 +124,7 @@ export default function MediaUpload({
     }
     setErrors(failures);
     setBusy(false);
+    onBusyChange?.(false);
   }
 
   return (

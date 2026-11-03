@@ -9,13 +9,15 @@ import { Button, Dialog } from "../../ui";
  * `destructive` tone, the accent fill for a `filled` one that loses nothing
  * (Rename, Fetch from RopeWiki). `children` sit under the body (a choice that
  * belongs to the confirm). While `busy`, both buttons wait and nothing
- * dismisses it. `copy` is null once the verb is closed. Small and centred at
+ * dismisses it. `confirmDisabledReason` holds the verb back until the choice in
+ * `children` is made, and says why. `copy` is null once the verb is closed. Small and centred at
  * every width.
  */
 function ConfirmDialog({
   open,
   copy,
   busy = false,
+  confirmDisabledReason,
   onConfirm,
   onClose,
   children,
@@ -23,10 +25,14 @@ function ConfirmDialog({
   open: boolean;
   copy: ConfirmCopy | null | undefined;
   busy?: boolean;
+  confirmDisabledReason?: string;
   onConfirm: () => void;
   onClose: () => void;
   children?: ReactNode;
 }) {
+  const hold = confirmDisabledReason
+    ? ({ disabled: true, disabledReason: confirmDisabledReason } as const)
+    : {};
   return (
     <Dialog
       open={open}
@@ -40,7 +46,7 @@ function ConfirmDialog({
             Cancel
           </Button>
           {copy?.tone === "filled" ? (
-            <Button variant="filled" busy={busy} onClick={onConfirm}>
+            <Button variant="filled" busy={busy} onClick={onConfirm} {...hold}>
               {copy.confirmLabel}
             </Button>
           ) : (
@@ -49,6 +55,7 @@ function ConfirmDialog({
               icon={copy?.icon ?? "delete"}
               busy={busy}
               onClick={onConfirm}
+              {...hold}
             >
               {copy?.confirmLabel}
             </Button>

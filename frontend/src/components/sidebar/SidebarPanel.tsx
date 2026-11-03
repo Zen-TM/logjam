@@ -95,6 +95,7 @@ function SidebarPanel({
   onExportPlaces,
   // LiDAR
   onQuotaChanged,
+  onWaysChanged,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
@@ -188,6 +189,7 @@ function SidebarPanel({
   onSharePlaces: (ids: string[]) => void;
   onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
+  onWaysChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
@@ -496,6 +498,7 @@ function SidebarPanel({
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
+            onWaysChanged={onWaysChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onBack={() => setActivePanel("places")}
             onOpenTrip={openTripDetail}

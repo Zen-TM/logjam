@@ -46,6 +46,7 @@ import {
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
+import { discardUploads } from "./discardUploads";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
@@ -173,6 +174,13 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  // Uploads in flight, across the dialog's drop zones.
+  const [uploading, setUploading] = useState(0);
+  const handleUploadBusy = (busy: boolean) =>
+    setUploading((n) => n + (busy ? 1 : -1));
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
 
@@ -290,6 +298,7 @@ function PlaceDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
@@ -302,22 +311,22 @@ function PlaceDialog({
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
-  // Media/custom-field-def edits are excluded: both persist immediately
-  // (media uploads, and add/delete-field through their own endpoints), so
-  // they're never "unsaved" by the time a close is attempted.
+  // Custom-field-def edits are excluded: they persist through their own
+  // endpoint. Uploads persist too, but only Discard can undo them.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    JSON.stringify({
-      name,
-      altNames,
-      latitude,
-      longitude,
-      notes,
-      sources,
-      fieldValues,
-      placeTypeId,
-    }) !== initialFormSnapshot;
+    (uploadedIds.length > 0 ||
+      JSON.stringify({
+        name,
+        altNames,
+        latitude,
+        longitude,
+        notes,
+        sources,
+        fieldValues,
+        placeTypeId,
+      }) !== initialFormSnapshot);
 
   // In edit mode, fetch the place's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -381,11 +390,13 @@ function PlaceDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
     onMediaChanged?.();
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
     onMediaChanged?.();
   }
 
@@ -401,6 +412,20 @@ function PlaceDialog({
         console.error(err);
         setError(
           messageFromError(err, "Couldn't discard uploaded media. Try again."),
+        );
+        return;
+      }
+    }
+    if (isEdit && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        await discardUploads(uploadedIds, handleMediaDeleted);
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded files. Please try again.",
+          ),
         );
         return;
       }
@@ -858,6 +883,7 @@ function PlaceDialog({
             linkedId={place ? place.id : ""}
             resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
             onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
             disabled={saving}
           />
         </section>
@@ -883,6 +909,7 @@ function PlaceDialog({
             linkedId={place ? place.id : ""}
             resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
             onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
             disabled={saving}
             disabledReason={
               media.some((m) => mediaCategory(m.mediaType) === "track")
@@ -901,15 +928,16 @@ function PlaceDialog({
         open={open}
         title={isEdit ? PLACE_FORM.copy.editTitle : PLACE_FORM.copy.addTitle}
         size="large"
-        dismissible={!saving}
+        // A file still landing would miss the delete Discard does.
+        dismissible={!saving && uploading === 0}
         onClose={() => void handleRequestClose()}
         discard={isDirty ? abandonConfirm("place", !isEdit) : null}
         footer={(requestClose) => (
           <>
             <Button
               onClick={requestClose}
-              disabled={saving}
-              disabledReason="Saving…"
+              disabled={saving || uploading > 0}
+              disabledReason={saving ? "Saving…" : "Uploading…"}
             >
               Cancel
             </Button>

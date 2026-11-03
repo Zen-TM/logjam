@@ -161,6 +161,14 @@ export default function RoutesPanel({
     [sharedPlaces],
   );
 
+  // `places` is owned plus shared: what is not shared is owned, and a shared
+  // list still loading leaves those places out of both.
+  const ownPlaceIds = useMemo(
+    () =>
+      new Set(places.filter((p) => !sharedPlaceIds.has(p.id)).map((p) => p.id)),
+    [places, sharedPlaceIds],
+  );
+
   const ways = useMemo(
     () =>
       buildWays({
@@ -169,8 +177,16 @@ export default function RoutesPanel({
         placeTracks,
         currentUserId,
         sharedPlaceIds,
+        ownPlaceIds,
       }),
-    [routes, standaloneFiles, placeTracks, currentUserId, sharedPlaceIds],
+    [
+      routes,
+      standaloneFiles,
+      placeTracks,
+      currentUserId,
+      sharedPlaceIds,
+      ownPlaceIds,
+    ],
   );
 
   const searched = useMemo(

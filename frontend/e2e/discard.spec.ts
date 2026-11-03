@@ -97,3 +97,55 @@ test("editing a trip asks about the changes, and Cancel is Cancel", async ({
   await expect(confirm).toBeHidden();
   await expect(form.getByLabel("Title")).toHaveValue("Changed title");
 });
+
+// An upload is saved the moment it lands, so it counts as a change and Discard
+// takes it back out. Red when Cancel closes without asking, or the file is
+// still on the place after Discard.
+test("a track attached in the edit form goes again on Discard", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("canvas.maplibregl-canvas")).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Places", exact: true }).click();
+  const aside = page.locator("aside");
+  await aside
+    .getByRole("button", { name: /^Actions for / })
+    .first()
+    .click();
+  const editPlace = async () => {
+    await page.getByRole("menuitem", { name: "Edit place" }).click();
+    return page.getByRole("dialog", { name: "Edit place" });
+  };
+
+  let form = await editPlace();
+  await expect(form.getByText("No track yet.")).toBeVisible();
+  await form
+    .locator('input[type="file"]')
+    .last()
+    .setInputFiles({
+      name: "attached.gpx",
+      mimeType: "application/gpx+xml",
+      buffer: Buffer.from(
+        '<?xml version="1.0"?><gpx version="1.1" creator="t"><trk><trkseg>' +
+          '<trkpt lat="-33.7" lon="150.3"/><trkpt lat="-33.71" lon="150.31"/>' +
+          "</trkseg></trk></gpx>",
+      ),
+    });
+  await expect(form.getByText("No track yet.")).toBeHidden();
+
+  await form.getByRole("button", { name: "Cancel" }).click();
+  await page
+    .getByRole("alertdialog", { name: "Discard your changes?" })
+    .getByRole("button", { name: "Discard" })
+    .click();
+  await expect(form).toBeHidden();
+
+  await aside
+    .getByRole("button", { name: /^Actions for / })
+    .first()
+    .click();
+  form = await editPlace();
+  await expect(form.getByText("No track yet.")).toBeVisible();
+});
