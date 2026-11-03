@@ -40,6 +40,7 @@ import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION_LABEL } from "../config";
+import { LegalLinks } from "./LegalLinks";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -236,6 +237,7 @@ export function SettingsScreen({
       <>
         <SectionHeader title={copy.about} />
         <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
       </>
     ),
   };

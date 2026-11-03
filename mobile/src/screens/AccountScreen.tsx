@@ -43,6 +43,7 @@ import { deleteAccountEverywhere } from "../auth/deleteAccount";
 import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
 import { CLIENT_VERSION_LABEL, config } from "../config";
+import { LegalLinks } from "./LegalLinks";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -158,6 +159,7 @@ function GuestAccountScreen({
         </Text>
 
         <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
       </ScreenScroll>
     </View>
   );
@@ -361,7 +363,12 @@ function LinkedAccountScreen({
         />
       </>
     ),
-    footer: () => <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>,
+    footer: () => (
+      <>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
+      </>
+    ),
   };
   const keys = contractSectionKeys(ACCOUNT, "gps");
 

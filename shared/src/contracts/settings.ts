@@ -118,6 +118,20 @@ export function drawsYoursHeading(own: number, builtIn: number): boolean {
   return own > 0 && builtIn > 0;
 }
 
+/** "3 places" under a place type's name. */
+export function placeCountLabel(count: number): string {
+  return `${count} place${count === 1 ? "" : "s"}`;
+}
+
+/**
+ * Why Logjam GPS withholds Delete from a type with places. Logjam Web merges
+ * the type into another; Logjam GPS cannot yet (reassigning every place is a
+ * server call, not an offline write), so it names Logjam Web for that half.
+ */
+export function placeTypeInUseNote(count: number): string {
+  return `${placeCountLabel(count)} use${count === 1 ? "s" : ""} this type. Change ${count === 1 ? "it" : "them"} to another type, or merge it on Logjam Web, to delete it.`;
+}
+
 /** What deleting a place type costs. A type with places cannot be deleted. */
 export function placeTypeDeleteConfirm(name: string): {
   confirmTitle: string;

@@ -17,7 +17,7 @@ export const MAP_TERRAIN = {
       key: "sharpenedAreas",
       on: "web",
       reason:
-        "Making, sharing and deleting sharpened areas is planning, done at home: Logjam GPS draws the ones the account has and saves them from Saved.",
+        "Making a sharpened area, and deleting it from the account, is planning, done at home: Logjam GPS draws the ones the account has and, from Saved, shares one, saves it and deletes its device copy.",
     },
     {
       key: "slopeBands",
