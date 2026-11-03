@@ -138,7 +138,7 @@ export interface MapArtifact {
    */
   label?: string | null;
   /**
-   * The download run this came from — one "Save maps offline" tap covering one
+   * The download run this came from — one "Save an offline map" tap covering one
    * area with several basemaps. Saved groups its cards by this; `groupLabel` is
    * the name the user gave that area. Both absent on artifacts that predate
    * grouping (and on imports), which then stand alone. Display only, like

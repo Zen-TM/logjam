@@ -41,6 +41,9 @@ import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
+import AccountFailedPanel, {
+  waitsOnAccount,
+} from "./panels/AccountFailedPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
@@ -324,16 +327,26 @@ function SidebarPanel({
     );
   };
 
+  const accountFailed =
+    !currentUser && currentUserError !== null && waitsOnAccount(activePanel);
+
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
     <PanelCloseContext.Provider value={onClose}>
       <div className={classes.panelBody}>
-        {activePanel === "places" && (
+        {activePanel && accountFailed ? (
+          <AccountFailedPanel
+            panel={activePanel}
+            onRetry={onRetryCurrentUser}
+          />
+        ) : null}
+        {!accountFailed && activePanel === "places" && (
           <PlacesPanel
             places={places}
             placesLoaded={placesLoaded}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
+            friends={friends}
             placeTypes={placeTypes}
             onPlaceTypesChange={onPlaceTypesChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
@@ -358,7 +371,7 @@ function SidebarPanel({
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "friends" && (
+        {!accountFailed && activePanel === "friends" && (
           <FriendsPanel
             leaderboardOptIn={
               currentUser?.uiPreferences?.leaderboardOptIn ?? false
@@ -370,7 +383,7 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
           />
         )}
-        {activePanel === "inbox" && (
+        {!accountFailed && activePanel === "inbox" && (
           <NotificationsPanel
             notifications={notifications}
             notificationsLoaded={notificationsLoaded}
@@ -387,7 +400,7 @@ function SidebarPanel({
             onShowSharpened={onShowSharpened}
           />
         )}
-        {activePanel === "logs" && logsView === "stats" && (
+        {!accountFailed && activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
             onBack={backToLogs}
             tripLogs={tripLogs}
@@ -399,7 +412,7 @@ function SidebarPanel({
             placeTypes={placeTypes}
           />
         )}
-        {activePanel === "logs" && logsView === "logs" && (
+        {!accountFailed && activePanel === "logs" && logsView === "logs" && (
           <TripLogsPanel
             onOpenStats={() => onLogsViewChange("stats")}
             tripLogs={tripLogs}
@@ -419,14 +432,14 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && (
+        {!accountFailed && activePanel === "account" && (
           <AccountPanel
             currentUser={currentUser}
             error={currentUserError}
             onRetry={onRetryCurrentUser}
           />
         )}
-        {activePanel === "settings" && (
+        {!accountFailed && activePanel === "settings" && (
           <SettingsPanel
             currentUser={currentUser}
             customFieldDefs={customFieldDefs}
@@ -438,7 +451,7 @@ function SidebarPanel({
             onCurrentUserChange={onCurrentUserChange}
           />
         )}
-        {activePanel === "place-detail" && (
+        {!accountFailed && activePanel === "place-detail" && (
           <PlaceDetailPanel
             place={place}
             places={places}
@@ -469,7 +482,7 @@ function SidebarPanel({
             onAfterDelete={() => setActivePanel("places")}
           />
         )}
-        {activePanel === "trip-detail" && (
+        {!accountFailed && activePanel === "trip-detail" && (
           <TripDetailPanel
             tripLog={tripLogs.find((trip) => trip.id === selectedTripLogId)}
             places={places}
@@ -486,12 +499,12 @@ function SidebarPanel({
             onAfterDelete={() => setActivePanel("logs")}
           />
         )}
-        {activePanel === "way-detail" && wayDetail}
-        {activePanel === "plans" && plansPanel}
-        {activePanel === "plan-detail" && planDetail}
-        {activePanel === "way-draw" && drawPanel}
-        {activePanel === "measure" && measurePanel}
-        {activePanel === "ways" && (
+        {!accountFailed && activePanel === "way-detail" && wayDetail}
+        {!accountFailed && activePanel === "plans" && plansPanel}
+        {!accountFailed && activePanel === "plan-detail" && planDetail}
+        {!accountFailed && activePanel === "way-draw" && drawPanel}
+        {!accountFailed && activePanel === "measure" && measurePanel}
+        {!accountFailed && activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
             waysLoaded={waysLoaded}

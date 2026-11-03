@@ -7,7 +7,11 @@
 import { fieldValue } from "../fieldValues.js";
 import { SOURCES_FIELD_KEY } from "../placeTypes.js";
 import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
-import { PLACE_STATUS_LABELS, type PlaceStatus } from "../placeStatus.js";
+import {
+  incomingLabel,
+  PLACE_STATUS_LABELS,
+  type PlaceStatus,
+} from "../placeStatus.js";
 import type { PlaceVerbId } from "./placeVerbs.js";
 import type { ContractSection, ScreenContract } from "./types.js";
 
@@ -104,17 +108,18 @@ export const PLACE_PAGE_PRIMARY_VERBS = [
  * A section's title on the page. On the owner's page, a section with something
  * in it that a friend sees says so, so the owner never has to remember which
  * parts a share hands over (ADR 0002: the place record and its place-level
- * media, never the trips).
+ * media, never the trips). `shared` is whether anyone has the place: a marker
+ * on a place nobody was given says what no one can see.
  */
 export function placeSectionTitle(
   key: (typeof PLACE_PAGE.sections)[number]["key"],
   title: string,
-  view: { owned: boolean; filled: boolean },
+  view: { owned: boolean; filled: boolean; shared: boolean },
 ): string {
   const section: ContractSection | undefined = PLACE_PAGE.sections.find(
     (each) => each.key === key,
   );
-  return view.owned && view.filled && section?.shareeSees
+  return view.owned && view.filled && view.shared && section?.shareeSees
     ? `${title} · ${PLACE_PAGE.copy.sharedMarker}`
     : title;
 }
@@ -124,11 +129,14 @@ export function placeAttributesTitle(typeName: string | null): string {
   return `${typeName ?? "Place"} ${ATTRIBUTE_NOUN.many}`;
 }
 
-/** The status pill: the bucket's label, and for a visited place its tally. */
+/** The status pill: the bucket's label, and for a visited place its tally. A
+ *  shared place says whose it is (`owner`: the sharer's name, when known). */
 export function placeStatusLabel(
   status: PlaceStatus,
   tripCount: number,
+  owner?: string | null,
 ): string {
+  if (status === "shared") return incomingLabel(owner);
   if (status !== "done") return PLACE_STATUS_LABELS[status];
   return `${PLACE_STATUS_LABELS.done} · ${tripCount} ${tripCount === 1 ? "trip" : "trips"}`;
 }

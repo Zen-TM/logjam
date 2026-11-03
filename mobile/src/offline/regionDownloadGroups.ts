@@ -1,4 +1,4 @@
-// A running "Save maps offline" run, as ONE card.
+// A running "Save an offline map" run, as ONE card.
 //
 // The queue holds a job per basemap and they run one after another (the
 // politeness envelope is per-provider). The user asked for an AREA, so Saved

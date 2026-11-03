@@ -378,13 +378,15 @@ describe("a place's page", () => {
   });
 
   // Mutation: drop `shareeSees` from "photos", and the owner's page stops
-  // saying a friend sees the photos.
-  it("marks, on the owner's page only, each section a friend sees", () => {
-    const title = (owned: boolean, filled: boolean) =>
-      placeSectionTitle("photos", "Photos & videos", { owned, filled });
+  // saying a friend sees the photos; drop `view.shared` from the condition,
+  // and a place nobody has says its photos are visible to friends.
+  it("marks, on the owner's page only and once it is shared, each section a friend sees", () => {
+    const title = (owned: boolean, filled: boolean, shared = true) =>
+      placeSectionTitle("photos", "Photos & videos", { owned, filled, shared });
     expect(title(true, true)).toBe(
       "Photos & videos · visible to friends you share with",
     );
+    expect(title(true, true, false)).toBe("Photos & videos");
     expect(title(false, true)).toBe("Photos & videos");
     expect(title(true, false)).toBe("Photos & videos");
     // What a friend never sees is never marked, and is never also shown to them.
@@ -392,7 +394,11 @@ describe("a place's page", () => {
       if ("ownerOnly" in section) expect("shareeSees" in section).toBe(false);
     }
     expect(
-      placeSectionTitle("trips", "Your trips", { owned: true, filled: true }),
+      placeSectionTitle("trips", "Your trips", {
+        owned: true,
+        filled: true,
+        shared: true,
+      }),
     ).toBe("Your trips");
   });
 
@@ -409,7 +415,8 @@ describe("a place's page", () => {
     expect(placeStatusLabel("todo", 0)).toBe("Not visited");
     expect(placeStatusLabel("done", 1)).toBe("Visited · 1 trip");
     expect(placeStatusLabel("done", 3)).toBe("Visited · 3 trips");
-    expect(placeStatusLabel("shared", 0)).toBe("Shared");
+    expect(placeStatusLabel("shared", 0, "bob")).toBe("From bob");
+    expect(placeStatusLabel("shared", 0)).toBe("Shared with you");
   });
 });
 

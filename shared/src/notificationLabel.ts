@@ -184,7 +184,7 @@ export function notificationLabel(n: TNotification): NotificationLabel {
       };
     case "plan_join_approved":
       return {
-        text: `${who(p.approvedByUsername, "A leader")} let you into ${str(p.planName) ?? "a trip plan"}`,
+        text: `${who(p.approvedByUsername, "A leader")} accepted you into ${str(p.planName) ?? "a trip plan"}`,
       };
     case "plan_member_joined":
       return {

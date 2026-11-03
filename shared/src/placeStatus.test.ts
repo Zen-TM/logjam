@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { placeStatus, placeSummary, qualityLabel } from "./placeStatus.js";
+import {
+  incomingLabel,
+  placeStatus,
+  placeSummary,
+  qualityLabel,
+} from "./placeStatus.js";
 
 describe("placeStatus", () => {
   it("is done for an owned place with at least one of the viewer's trips", () => {
@@ -96,5 +101,15 @@ describe("qualityLabel", () => {
     expect(qualityLabel(undefined)).toBeNull();
     expect(qualityLabel(0)).toBe("★ 0");
     expect(qualityLabel(4)).toBe("★ 4");
+  });
+});
+
+describe("incomingLabel", () => {
+  // Mutation: return "Shared" for an unknown owner, and the fallback is the
+  // bare word again.
+  it("names the owner, and says whose it is even when the owner is unknown", () => {
+    expect(incomingLabel("bob")).toBe("From bob");
+    expect(incomingLabel(null)).toBe("Shared with you");
+    expect(incomingLabel(undefined)).toBe("Shared with you");
   });
 });

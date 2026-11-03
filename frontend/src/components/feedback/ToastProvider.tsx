@@ -69,6 +69,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   const push = useCallback((message: string, severity: ToastSeverity) => {
     setToasts((prev) => {
+      // One failure often reaches several hooks; the same words are said once.
+      if (prev.some((t) => t.message === message && t.severity === severity))
+        return prev;
       const next = [...prev, { id: nextId++, message, severity }];
       return next.length > MAX_TOASTS
         ? next.slice(next.length - MAX_TOASTS)

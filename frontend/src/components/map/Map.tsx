@@ -55,6 +55,7 @@ import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
+import { sheetCoverPx } from "../sidebar/sheetSnap";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
 import { useGauges } from "../gauges/useGauges";
 import {
@@ -1052,12 +1053,29 @@ function Map({
     geolocate.on("trackuserlocationend", () => {
       userFixRef.current = null;
     });
-    // Compact: it collapses to an (i) once the map is moved, which OSMF's
-    // attribution guideline allows while the credit stays one press away.
+    // Compact: the credit is an (i) that opens on a press, which OSMF's
+    // attribution guideline allows while it stays one press away.
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    // MapLibre opens a compact credit when the style's credits arrive; here it
+    // starts as the (i) at every width and opens on a press. Once.
+    const credit = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+    if (credit) {
+      const shut = () => {
+        if (!credit.classList.contains("maplibregl-compact-show")) return;
+        credit.classList.remove("maplibregl-compact-show");
+        creditWatch.disconnect();
+      };
+      const creditWatch = new MutationObserver(shut);
+      creditWatch.observe(credit, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+      map.once("remove", () => creditWatch.disconnect());
+      shut();
+    }
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
@@ -3153,7 +3171,12 @@ function Map({
     const [west, south, east, north] = flyToBounds;
     if ([west, south, east, north].every((value) => Number.isFinite(value))) {
       mapRef.current.fitBounds([west, south, east, north], {
-        padding: 80,
+        padding: {
+          top: 80,
+          left: 80,
+          right: 80,
+          bottom: 80 + sheetCoverPx(window.innerHeight),
+        },
         duration: 1200,
         maxZoom: 16,
       });
@@ -3184,6 +3207,8 @@ function Map({
         center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
+        // Centred in what the narrow sheet leaves, not behind it.
+        padding: { bottom: sheetCoverPx(window.innerHeight) },
       });
     } else {
       // The warning names no coordinate: they are the place's.

@@ -82,6 +82,8 @@ import {
   useMirrorMedia,
   useMirrorRoutes,
   useMirrorPlaceLinks,
+  useMirrorIncomingShareOwners,
+  useMirrorShareCounts,
   useMirrorPlaceTypes,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
@@ -199,6 +201,8 @@ export function PlaceDetailScreen({
   const [foreignKey, setForeignKey] = useState<string | null>(null);
   const [resolvingForeign, setResolvingForeign] = useState(false);
 
+  const shareOwners = useMirrorIncomingShareOwners();
+  const shareCounts = useMirrorShareCounts();
   const place = query.data;
 
   if (query.loading && !place) return <LoadingState />;
@@ -217,6 +221,7 @@ export function PlaceDetailScreen({
     trip.places.some((link) => link.id === placeId),
   );
   const status = placeStatus(place, linkedTrips.length);
+  const isShared = (shareCounts.data?.[placeId] ?? 0) > 0;
   const statusMeta = placeStatusMeta(theme)[status];
   const grade = formatCanyonGrade(place);
 
@@ -352,7 +357,11 @@ export function PlaceDetailScreen({
               v/a ("v4a4 III") — upcasing it renders a grade nobody writes. */}
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
-            label={placeStatusLabel(status, linkedTrips.length)}
+            label={placeStatusLabel(
+              status,
+              linkedTrips.length,
+              shareOwners.data?.[placeId],
+            )}
             icon={statusMeta.icon}
             hue={statusMeta.hue}
           />
@@ -412,6 +421,7 @@ export function PlaceDetailScreen({
           <SectionHeader
             title={placeSectionTitle("gauge", copy.gauge, {
               owned: isOwner,
+              shared: isShared,
               filled: Boolean(place.gaugeId),
             })}
           />
@@ -440,7 +450,7 @@ export function PlaceDetailScreen({
             title={placeSectionTitle(
               "attributes",
               placeAttributesTitle(placeTypeName),
-              { owned: isOwner, filled: true },
+              { owned: isOwner, shared: isShared, filled: true },
             )}
           />
           <AttributeTable rows={customFields} />
@@ -479,6 +489,7 @@ export function PlaceDetailScreen({
         <SectionHeader
           title={placeSectionTitle("notes", copy.notes, {
             owned: isOwner,
+            shared: isShared,
             filled: Boolean(place.notes),
           })}
         />
@@ -496,6 +507,7 @@ export function PlaceDetailScreen({
           <SectionHeader
             title={placeSectionTitle("sources", copy.sources, {
               owned: isOwner,
+              shared: isShared,
               filled: true,
             })}
             count={sources.length}
@@ -525,6 +537,7 @@ export function PlaceDetailScreen({
         <SectionHeader
           title={placeSectionTitle("photos", copy.photos, {
             owned: isOwner,
+            shared: isShared,
             filled: photoCount > 0,
           })}
           count={photoCount > 0 ? photoCount : undefined}
@@ -546,6 +559,7 @@ export function PlaceDetailScreen({
         <SectionHeader
           title={placeSectionTitle("route", copy.route, {
             owned: isOwner,
+            shared: isShared,
             filled: hasRoute,
           })}
         />

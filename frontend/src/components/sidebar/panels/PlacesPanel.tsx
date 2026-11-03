@@ -14,6 +14,7 @@ import {
   listSelectionLabel,
   numericFieldValue,
   passesPlaceFilters,
+  incomingLabel,
   PLACE_STATUS_LABELS,
   PLACES_ADD,
   PLACES_ADD_ICON,
@@ -42,8 +43,13 @@ import type {
   TPlace,
   TPlaceType,
   RefreshResult,
+  TFriend,
 } from "../../../placeUtils";
-import { bulkDeletePlaces, refreshFromRopeWiki } from "../../../placeUtils";
+import {
+  bulkDeletePlaces,
+  ownerUsername,
+  refreshFromRopeWiki,
+} from "../../../placeUtils";
 import { buildPlaceExport, type TExportFormat } from "../../../placeExport";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
@@ -67,6 +73,7 @@ import {
   Row,
   SearchField,
   SelectionBar,
+  StatusPill,
   TileCheckbox,
   type Glyph,
   type MenuEntry,
@@ -130,6 +137,7 @@ function PlacesPanel({
   placesLoaded,
   placesTotal,
   sharedPlaces,
+  friends,
   placeTypes,
   onPlaceTypesChange,
   placeCustomFieldDefs,
@@ -160,6 +168,8 @@ function PlacesPanel({
   /** The true owned-place total before the server's list cap; null until known. */
   placesTotal: number | null;
   sharedPlaces: TPlace[];
+  /** Names the owner of each shared place. */
+  friends: TFriend[];
   /** Every type the user has. The rail shows only those with places. */
   placeTypes: TPlaceType[];
   onPlaceTypesChange: (types: TPlaceType[]) => void;
@@ -704,6 +714,9 @@ function PlacesPanel({
           numericFieldValue(place.fieldValues, "quality"),
         );
         const shareCount = owned ? (place._count?.shares ?? 0) : 0;
+        const rowStatus = owned
+          ? PLACE_STATUS_LABELS[status]
+          : incomingLabel(ownerUsername(friends, place.ownerId));
         const tile = (
           <IconTile icon={STATUS_ICON[status]} hue={STATUS_HUE[status]} />
         );
@@ -713,7 +726,7 @@ function PlacesPanel({
             data-place-id={place.id}
             title={place.name}
             subtitle={subtitle || undefined}
-            description={PLACE_STATUS_LABELS[status]}
+            description={rowStatus}
             selected={isSelected}
             disabled={selecting && !owned}
             onOpen={() => openPlace(place)}
@@ -734,12 +747,13 @@ function PlacesPanel({
                 <IconTile
                   icon={STATUS_ICON[status]}
                   hue={STATUS_HUE[status]}
-                  label={PLACE_STATUS_LABELS[status]}
+                  label={rowStatus}
                 />
               )
             }
             trailing={
               <>
+                {!owned && <StatusPill label={rowStatus} tone="outline" />}
                 {quality && (
                   <span
                     className={classes.meta}

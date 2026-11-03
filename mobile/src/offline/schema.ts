@@ -176,7 +176,7 @@ export const ADDED_COLUMNS: {
   // User-facing rename of a downloaded region/overlay (Saved tab). Display
   // only — resolution still keys off `logicalKey`.
   { table: "map_artifact", column: "label", definition: "TEXT" },
-  // A "Save maps offline" run picks several basemaps for one area. Every
+  // A "Save an offline map" run picks several basemaps for one area. Every
   // artifact from the run shares a groupId, and `groupLabel` is the name the
   // user gave the area (Saved shows one card per group). Legacy rows lack
   // groupId/groupLabel and group by their own id (one card each).

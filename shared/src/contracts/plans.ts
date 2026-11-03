@@ -286,7 +286,7 @@ export function tripPlanRowSubtitle(
 }
 
 export function tripPlanWaitingLine(username: string): string {
-  return `Waiting for ${username} to let you in`;
+  return `Waiting for ${username} to accept you`;
 }
 
 /** How many plans wait on the caller: invites they have not answered. Drives
@@ -809,7 +809,7 @@ export function tripPlanInPlanNow(words: string): string {
 
 /** The toast after asking to join through a link. */
 export function tripPlanAskedMessage(leader: string): string {
-  return `Asked to join. ${leader} will let you in.`;
+  return `Asked to join. ${leader} will accept you.`;
 }
 
 /** What goes in the message a plan link is sent with. */
