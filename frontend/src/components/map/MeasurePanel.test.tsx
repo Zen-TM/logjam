@@ -129,7 +129,9 @@ describe("the measure tool's page", () => {
     ).toEqual(["Close", "Undo"]);
     cleanup();
     draw({ points: line, anchorCount: 2, canUndo: true }, "half");
-    expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Clear all points" }),
+    ).toBeTruthy();
   });
 
   it("undoes on Ctrl+Z, as the route tool does", () => {

@@ -2055,9 +2055,7 @@ function App() {
 
         <RouteNameDialog
           open={namingRoute}
-          initialName={
-            routes.find((r) => r.id === editingRouteId)?.name ?? "New route"
-          }
+          initialName={routes.find((r) => r.id === editingRouteId)?.name ?? ""}
           busy={savingRoute}
           onSave={(name) => void saveDrawnRoute(name)}
           onClose={() => setNamingRoute(false)}
