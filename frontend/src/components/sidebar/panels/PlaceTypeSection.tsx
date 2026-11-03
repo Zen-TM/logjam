@@ -438,7 +438,9 @@ function PlaceTypeDialog({
 }) {
   const [name, setName] = useState(editing?.name ?? "");
   const [iconKey, setIconKey] = useState(
-    editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
+    // Not the pin: the built-in Marker wears it, and a new type starting on it
+    // reads as Marker until someone changes it.
+    editing?.iconKey ?? "star",
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
   // A taken name shows as it is typed; a blank one only once Save was pressed.
