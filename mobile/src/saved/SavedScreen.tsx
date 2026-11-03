@@ -69,6 +69,7 @@ import {
   type TopoLayerFormat,
   type TopoLayerName,
   MAP_TERRAIN,
+  type ToastAction,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -506,9 +507,9 @@ export function SavedScreen({
     null,
   );
   const toastNonce = useRef(0);
-  const info = useCallback((text: string) => {
+  const info = useCallback((text: string, action?: ToastAction) => {
     toastNonce.current += 1;
-    setToast({ text, tone: "done", nonce: toastNonce.current });
+    setToast({ text, tone: "done", action, nonce: toastNonce.current });
   }, []);
   const fail = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -887,7 +888,15 @@ export function SavedScreen({
       });
       const outcome = await importVectorFileFromPicker();
       if (outcome.status === "imported") {
-        info("File imported.");
+        const { record } = outcome;
+        info(`“${record.name}” is saved under Imports.`, {
+          label: "Open",
+          onPress: () =>
+            onOpenMap(record.bbox, undefined, {
+              category: "import",
+              key: record.id,
+            }),
+        });
         // Land on the tab holding what was just added, so the new row is
         // visible instead of buried in a size-sorted "All".
         setFilter("import");
@@ -900,7 +909,7 @@ export function SavedScreen({
       setImportBusy(false);
       setActiveOp(null);
     }
-  }, [fail, info, refreshFreeSpace]);
+  }, [fail, info, onOpenMap, refreshFreeSpace]);
 
   // --- GeoPDF imports ---
   const { geoPdfImports } = useGeoPdfImports();
