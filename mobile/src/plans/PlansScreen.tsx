@@ -630,7 +630,8 @@ export function PlansScreen({
                   ? copy.loading
                   : TRIP_PLANS_LIST.title
           }
-          titleNumberOfLines={2}
+          // Unbounded: the date is the point of this title, and a clamp cuts it.
+          titleNumberOfLines={0}
           onBack={onBack}
           backLabel={backLabel}
           actions={

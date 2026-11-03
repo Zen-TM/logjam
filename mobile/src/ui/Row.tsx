@@ -1,5 +1,11 @@
 import type { ComponentProps } from "react";
-import { Pressable, Text, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 import {
   hitSlop,
@@ -9,10 +15,14 @@ import {
   withAlpha,
   makeStyles,
   muted,
+  textScale,
   useTheme,
 } from "../theme";
 import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
+
+/** Past this drawn text size a row's trailing column stops fitting beside its words. */
+const LARGE_TEXT = 1.3;
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -39,6 +49,7 @@ export function Row({
   hue,
   right,
   footer,
+  rightBelow = false,
   progress,
   onPress,
   onLongPress,
@@ -76,6 +87,12 @@ export function Row({
    * the row below.
    */
   footer?: React.ReactNode;
+  /**
+   * `right` is a column of several things (a size, glyphs, a ⋯). At a large
+   * text size it takes the line's width from the title, so it drops under the
+   * subtitle, right-aligned, and the words get the whole card.
+   */
+  rightBelow?: boolean;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
@@ -122,6 +139,16 @@ export function Row({
   // horizontal layout every row has always had. `progress` stays a direct child
   // of the card, not of the line: it is absolutely positioned against the card's
   // padding box, and nesting it would inset the bar by the card's padding.
+  // Our multiplier times the OS's: the size the words are actually drawn at.
+  const { fontScale } = useWindowDimensions();
+  const stackRight =
+    rightBelow && right != null && textScale * fontScale >= LARGE_TEXT;
+  const rightNode =
+    right != null ? (
+      <View style={[styles.right, stackRight && styles.rightBelow]}>
+        {right}
+      </View>
+    ) : null;
   const body = (
     <>
       <View style={styles.line}>
@@ -135,8 +162,9 @@ export function Row({
               {subtitle}
             </Text>
           ) : null}
+          {stackRight ? rightNode : null}
         </View>
-        {right != null ? <View style={styles.right}>{right}</View> : null}
+        {stackRight ? null : rightNode}
       </View>
       {footer != null ? <View style={styles.footer}>{footer}</View> : null}
       {progress != null ? (
@@ -272,6 +300,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(0.5),
   },
+  rightBelow: { alignSelf: "flex-end" },
   title: { ...textRole.rowTitle, color: theme.text },
   subtitle: muted(theme, textRole.detail),
   progressTrack: {
