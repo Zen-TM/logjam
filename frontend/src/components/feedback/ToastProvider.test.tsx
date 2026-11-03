@@ -1,14 +1,32 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ToastProvider, useToast } from "./ToastProvider";
 
 afterEach(cleanup);
 
-const grabbed: { toast?: ReturnType<typeof useToast> } = {};
-function Grab() {
-  grabbed.toast = useToast();
-  return null;
+function Buttons() {
+  const toast = useToast();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          toast.error("Couldn't load your account.");
+          toast.error("Couldn't load your account.");
+          toast.error("Couldn't load your account.");
+        }}
+      >
+        same
+      </button>
+      <button
+        type="button"
+        onClick={() => toast.error("Couldn't load places.")}
+      >
+        other
+      </button>
+    </>
+  );
 }
 
 describe("toasts", () => {
@@ -17,16 +35,12 @@ describe("toasts", () => {
   it("shows one toast for the same message said again while it is up", () => {
     render(
       <ToastProvider>
-        <Grab />
+        <Buttons />
       </ToastProvider>,
     );
-    act(() => {
-      grabbed.toast!.error("Couldn't load your account.");
-      grabbed.toast!.error("Couldn't load your account.");
-      grabbed.toast!.error("Couldn't load your account.");
-    });
+    fireEvent.click(screen.getByText("same"));
     expect(screen.getAllByText("Couldn't load your account.")).toHaveLength(1);
-    act(() => grabbed.toast!.error("Couldn't load places."));
+    fireEvent.click(screen.getByText("other"));
     expect(screen.getAllByRole("button", { name: /dismiss/i })).toHaveLength(2);
   });
 });
