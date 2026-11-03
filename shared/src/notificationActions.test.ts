@@ -7,7 +7,8 @@ import {
   notificationActions as actionsFor,
 } from "./notificationActions.js";
 
-const notificationActions = (n: TNotification) => actionsFor(n, "gps");
+const notificationActions = (n: TNotification, opts?: { failed?: boolean }) =>
+  actionsFor(n, "gps", opts);
 
 function notification(
   type: string,
@@ -122,6 +123,8 @@ describe("notificationActions", () => {
           fileSendStatus,
         }),
         "web",
+        // An accepted send offers an action only after a failed download.
+        { failed: true },
       );
       expect(web?.actions[0].failure).toBe("Couldn't download that file.");
       expect(web?.pill).toBe(
