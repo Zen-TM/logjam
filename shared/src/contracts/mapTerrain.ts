@@ -51,8 +51,8 @@ export const MAP_TERRAIN = {
     // One sentence under each switch. Slope's colours are the account's bands,
     // so its key is `slopeLegendRows`, behind the row's help button.
     contoursHint: "A line every 10 m of height",
-    slopeHint: "Steepness: steeper ground, stronger colour",
-    hillshadeHint: "Shaded relief: ridges and gullies stand out",
+    slopeHint: "Coloured by steepness",
+    hillshadeHint: "Ridges and gullies stand out",
     slopeAbout: "About slope",
     slopeLegend:
       "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.",
