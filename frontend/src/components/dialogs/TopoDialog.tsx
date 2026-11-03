@@ -21,7 +21,7 @@ import {
   classifyElvisEntries,
   ElvisZipError,
   estimateElvisTileCount,
-  formatCredits,
+  formatCreditsLike,
   formatCreditsOf,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
@@ -354,7 +354,7 @@ export default function TopoDialog({
           ? ` Allowance resets ${new Date(creditsResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
           : "";
         setError(
-          `Not enough processing credits. This job needs about ${formatCredits(jobCredits)} but only ${formatCredits(remaining)} remain.${resetStr}`,
+          `Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,
         );
         return;
       }
@@ -683,7 +683,7 @@ function ZipSummary({
       ? [
           "Credits",
           jobCredits !== null
-            ? `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCredits(jobCredits)} for this one`
+            ? `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCreditsLike(jobCredits, creditsQuota)} for this one`
             : `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · we can't tell yet what this one will cost`,
         ]
       : null,
