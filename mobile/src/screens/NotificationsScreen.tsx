@@ -1566,6 +1566,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "baseline",
     gap: spacing(1),
     paddingTop: spacing(1.5),
+    paddingBottom: spacing(1),
   },
   summaryTitle: { ...textRole.heading, color: theme.text },
   summaryTally: { ...muted(theme, textRole.detail) },
