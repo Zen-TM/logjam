@@ -152,7 +152,11 @@ import {
   overlayJobId,
   regionGroupKey,
 } from "../offline/artifactGroups";
-import { groupRegionJobs } from "../offline/regionDownloadGroups";
+import {
+  groupRegionJobs,
+  regionGroupStatusLine,
+  retryableJobs,
+} from "../offline/regionDownloadGroups";
 import {
   groupUnfinishedRegions,
   type UnfinishedRegionGroup,
@@ -164,6 +168,7 @@ import {
 } from "../offline/regionMbtiles";
 import {
   cancelRegionDownload,
+  resumeRegionDownload,
   enqueueRegionDownloads,
   useRegionDownloads,
 } from "../offline/regionDownloadQueue";
@@ -964,6 +969,9 @@ export function SavedScreen({
     // unrelated rows so the whole region can be deleted together. Legacy rows
     // (no groupId) group under their own id and stand alone, unchanged.
     for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
+      // A run still on screen as its card is one row, not two: its saved
+      // layers appear under the card's ⋯ and become this row when it is done.
+      if (downloadGroups.some((run) => run.groupId === group.key)) continue;
       const first = group.members[0];
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
@@ -1821,16 +1829,23 @@ export function SavedScreen({
               <Row
                 key={group.groupId}
                 title={group.label || "Saving maps"}
-                subtitle={
-                  group.settled
-                    ? `${countOf(group.unfinished, "map")} didn't finish`
-                    : `${group.ready} of ${countOf(group.mapCount, "map")} saved`
-                }
+                subtitle={regionGroupStatusLine(group)}
                 icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
                 right={
                   <View style={styles.rowActions}>
+                    {group.settled && retryableJobs(group.jobs).length > 0 ? (
+                      <Button
+                        label="Try again"
+                        variant="outlineAccent"
+                        compact
+                        onPress={() => {
+                          for (const job of retryableJobs(group.jobs))
+                            resumeRegionDownload(job.spec.id);
+                        }}
+                      />
+                    ) : null}
                     <IconButton
                       icon="close"
                       accessibilityLabel="Stop saving these maps"
@@ -1838,7 +1853,7 @@ export function SavedScreen({
                     />
                     <IconButton
                       icon="overflow"
-                      accessibilityLabel={`Maps in ${group.label || "this download"}`}
+                      accessibilityLabel={`Layers in ${group.label || "this download"}`}
                       onPress={() => setDownloadSheetId(group.groupId)}
                     />
                   </View>

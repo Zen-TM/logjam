@@ -6,7 +6,9 @@ import {
   downloadNotice,
   groupRegionJobs,
   mayResumeOnReconnect,
+  regionGroupStatusLine,
   regionGroupToastText,
+  retryableJobs,
 } from "./regionDownloadGroups";
 import type { RegionJob, RegionJobState } from "./regionDownloadQueue";
 
@@ -98,7 +100,6 @@ describe("the DEM that rides along with every run", () => {
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
       demJob({ kind: "downloading" }),
     ]);
-    expect(group.unfinished).toBe(0);
     expect(group.done).toBe(false);
     const [finished] = groupRegionJobs([
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
@@ -107,15 +108,16 @@ describe("the DEM that rides along with every run", () => {
     expect(finished.done).toBe(true);
   });
 
-  it("is work, but is not one of the maps", () => {
+  // The saved row counts the DEM among its layers, so the run counts it too:
+  // a card that said "5 of 6" over a row that says "7 layers" is the bug.
+  it("is a layer like the rest", () => {
     const [group] = groupRegionJobs([
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
       demJob({ kind: "downloading" }),
     ]);
-    expect(group.mapCount).toBe(1);
+    expect(group.layerCount).toBe(2);
     expect(group.ready).toBe(1);
-    expect(group.unfinished).toBe(0);
-    // Still half the run's progress, and still not finished.
+    expect(group.unfinished).toBe(1);
     expect(group.fraction).toBeCloseTo(0.5);
     expect(group.done).toBe(false);
   });
@@ -127,7 +129,7 @@ describe("the DEM that rides along with every run", () => {
     ]);
     expect(group.demUnfinished).toBe(true);
     expect(regionGroupToastText(group)).toBe(
-      "Test region saved · 1 map · no elevation data",
+      "Test region saved with 1 layer missing · no elevation data",
     );
   });
 });
@@ -140,19 +142,53 @@ describe("regionGroupToastText", () => {
   ])[0];
 
   it("names the area and the tally", () => {
-    expect(regionGroupToastText(base)).toBe("Test region saved · 3 maps");
+    expect(regionGroupToastText(base)).toBe("Test region saved · 3 layers");
   });
 
-  it("says how many didn't finish", () => {
+  it("does not say saved without saying what is missing", () => {
     expect(regionGroupToastText({ ...base, ready: 2, unfinished: 1 })).toBe(
-      "Test region saved · 2 maps · 1 map didn't finish",
+      "Test region saved with 1 layer missing",
     );
   });
 
   it("does not claim a save when nothing landed", () => {
     expect(regionGroupToastText({ ...base, ready: 0, unfinished: 3 })).toBe(
-      "Test region · nothing saved · 3 maps didn't finish",
+      "Test region · nothing saved",
     );
+  });
+});
+
+// The card and the toast are one run told twice. Mutation that turns it red:
+// count "maps" or leave the failed layers out of either line.
+describe("regionGroupStatusLine", () => {
+  const running = groupRegionJobs([
+    job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+    job("b", "run-1", { kind: "downloading" }),
+  ])[0];
+
+  it("counts layers while it runs", () => {
+    expect(regionGroupStatusLine(running)).toBe("1 of 2 layers saved");
+  });
+
+  it("says what is missing once it stops", () => {
+    const [stopped] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      job("b", "run-1", { kind: "failed", code: "unknown" }),
+    ]);
+    expect(regionGroupStatusLine(stopped)).toBe("Saved with 1 layer missing");
+  });
+});
+
+describe("retryableJobs", () => {
+  it("offers a retry for a dropped connection, not for a refused area", () => {
+    const failed = (id: string, code: "unknown" | "region-rejected") =>
+      job(id, "run-1", { kind: "failed", code });
+    expect(
+      retryableJobs([
+        failed("a", "unknown"),
+        failed("b", "region-rejected"),
+      ]).map((j) => j.spec.id),
+    ).toEqual(["a"]);
   });
 });
 

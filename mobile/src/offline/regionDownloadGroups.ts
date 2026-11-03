@@ -9,7 +9,7 @@
 // definition and a test beside it.
 import { DEM_SOURCE_ID } from "@logjam/shared";
 
-import { isJobSettled } from "./regionJobStatus";
+import { isJobSettled, isRetryableFailure } from "./regionJobStatus";
 import type { RegionJob } from "./regionDownloadQueue";
 
 export type RegionDownloadGroup = {
@@ -17,14 +17,13 @@ export type RegionDownloadGroup = {
   label: string;
   jobs: RegionJob[];
   /**
-   * How many of those jobs are MAPS. Every run also downloads the DEM, which is
-   * real work (it counts in `fraction`, `settled` and `done`) but is not a map
-   * the user picked — counting it would report three maps saved to someone who
-   * chose two.
+   * How many LAYERS the run saves: one per job, the elevation data included.
+   * One unit everywhere (the button names none, the card, the toast and the
+   * saved row count layers), and the same number the saved row will show.
    */
-  mapCount: number;
+  layerCount: number;
   ready: number;
-  /** Maps that will not become a saved map without the user asking again. */
+  /** Layers that will not be saved without the user asking again. */
   unfinished: number;
   /** The area saved, but its elevation data didn't. Worth saying out loud. */
   demUnfinished: boolean;
@@ -52,19 +51,16 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
     else groups.set(job.spec.groupId, [job]);
   }
   return [...groups.entries()].map(([groupId, groupJobs]) => {
-    const mapJobs = groupJobs.filter(
-      (job) => job.spec.basemapId !== DEM_SOURCE_ID,
-    );
-    const ready = mapJobs.filter((job) => job.state.kind === "ready").length;
+    const ready = groupJobs.filter((job) => job.state.kind === "ready").length;
     return {
       groupId,
       // Every job of a run carries the same label; the last write wins if a
       // rename landed mid-run.
       label: groupJobs[groupJobs.length - 1].spec.groupLabel,
       jobs: groupJobs,
-      mapCount: mapJobs.length,
+      layerCount: groupJobs.length,
       ready,
-      unfinished: mapJobs.length - ready,
+      unfinished: groupJobs.length - ready,
       demUnfinished: groupJobs.some(
         (job) =>
           job.spec.basemapId === DEM_SOURCE_ID && job.state.kind !== "ready",
@@ -73,31 +69,43 @@ export function groupRegionJobs(jobs: RegionJob[]): RegionDownloadGroup[] {
         groupJobs.reduce((sum, job) => sum + jobFraction(job), 0) /
         groupJobs.length,
       settled: groupJobs.every(isJobSettled),
-      // Over EVERY job, not `ready === mapCount`: `ready` counts maps only, so
-      // comparing it to the job count would leave a finished run permanently
-      // unfinished (a red "0 maps didn't finish" card).
       done: groupJobs.every((job) => job.state.kind === "ready"),
     };
   });
 }
 
-function maps(count: number): string {
-  return `${count} map${count === 1 ? "" : "s"}`;
+/** The failed jobs another go could help (not a refused area or a dead archive). */
+export function retryableJobs(jobs: RegionJob[]): RegionJob[] {
+  return jobs.filter(
+    (job) => job.state.kind === "failed" && isRetryableFailure(job.state.code),
+  );
 }
 
-/** What the finish toast says. Names the area and both tallies, never a bbox. */
+function layers(count: number): string {
+  return `${count} layer${count === 1 ? "" : "s"}`;
+}
+
+/** What the run's card says: progress while it runs, the outcome once it stops. */
+export function regionGroupStatusLine(group: RegionDownloadGroup): string {
+  if (!group.settled) {
+    return `${group.ready} of ${layers(group.layerCount)} saved`;
+  }
+  return group.ready > 0
+    ? `Saved with ${layers(group.unfinished)} missing`
+    : "Nothing saved";
+}
+
+/** What the finish toast says. Names the area and the outcome, never a bbox. */
 export function regionGroupToastText(group: RegionDownloadGroup): string {
   const saved =
-    group.ready > 0
-      ? `${group.label} saved · ${maps(group.ready)}`
-      : `${group.label} · nothing saved`;
-  const withMaps =
-    group.unfinished > 0
-      ? `${saved} · ${maps(group.unfinished)} didn't finish`
-      : saved;
-  // Named rather than folded into the map tally: the consequence is specific
-  // (no elevation profiles out there), and it is not fixed by re-picking maps.
-  return group.demUnfinished ? `${withMaps} · no elevation data` : withMaps;
+    group.ready === 0
+      ? `${group.label} · nothing saved`
+      : group.unfinished === 0
+        ? `${group.label} saved · ${layers(group.ready)}`
+        : `${group.label} saved with ${layers(group.unfinished)} missing`;
+  // Named as well as counted: the consequence is specific (no elevation
+  // profiles out there), and it is not fixed by picking maps again.
+  return group.demUnfinished ? `${saved} · no elevation data` : saved;
 }
 
 /**
