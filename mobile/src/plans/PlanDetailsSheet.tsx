@@ -37,7 +37,6 @@ import {
   DatePicker,
   ErrorBanner,
   FormStack,
-  Icon,
   Row,
   TextField,
   type ChipOption,
@@ -156,7 +155,7 @@ export function PlanDetailsSheet({
       icon="date"
       title={tripPlanDatesLabel(values.startDate, values.endDate)}
       subtitle={TRIP_PLAN_PAGE.copy.datesField}
-      right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+      chevron
       onPress={() => setMode("dates")}
     />
   );

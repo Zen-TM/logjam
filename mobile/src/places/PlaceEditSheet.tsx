@@ -31,16 +31,16 @@ import { placeTypeGlyph } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
+  ChipRail,
   DatePicker,
   ErrorBanner,
   Field,
   FormStack,
+  Icon,
   Row,
   SectionHeader,
-  ChipRail,
   TextField,
   type ChipOption,
-  Icon,
 } from "../ui";
 
 /**
@@ -622,7 +622,7 @@ export function PlaceEditSheet({
                 ? "Add your own — permits, access notes, anything."
                 : `${typeFieldDefs.length} on this type`
             }
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
             onPress={() => setMode("fields")}
           />
         </FormStack>

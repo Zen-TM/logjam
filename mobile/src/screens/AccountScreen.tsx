@@ -51,19 +51,18 @@ import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
-  Meter,
   ErrorBanner,
   ErrorState,
   Hero,
   IconButton,
   LoadingState,
+  Meter,
   Row,
   ScreenScroll,
   SectionHeader,
   TextField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 
 const copy = ACCOUNT.copy;
@@ -333,7 +332,7 @@ function LinkedAccountScreen({
             subtitle={online ? user.email : undefined}
             {...changeEmailRowProps(online, config.authMode)}
             onPress={() => setSheet("email")}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
           />
         ) : null}
         <Row
@@ -341,7 +340,7 @@ function LinkedAccountScreen({
           title="Friends"
           {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
       </>
     ),

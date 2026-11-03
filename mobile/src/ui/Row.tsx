@@ -39,6 +39,7 @@ export function Row({
   hue,
   right,
   footer,
+  chevron = false,
   progress,
   onPress,
   onLongPress,
@@ -76,6 +77,12 @@ export function Row({
    * the row below.
    */
   footer?: React.ReactNode;
+  /**
+   * "This opens something": the disclosure arrow, last on the line. An
+   * unavailable row opens nothing, so it draws none; always ask for it here,
+   * never draw the glyph in `right` (guard: disabledPressed.test.ts).
+   */
+  chevron?: boolean;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
@@ -148,6 +155,9 @@ export function Row({
           <View style={[styles.right, disabled && styles.disabled]}>
             {right}
           </View>
+        ) : null}
+        {chevron && !disabled ? (
+          <Icon idea="disclosure" size={20} color={theme.textMuted} />
         ) : null}
       </View>
       {footer != null ? (

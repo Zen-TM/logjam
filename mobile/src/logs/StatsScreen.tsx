@@ -77,7 +77,6 @@ import {
   ScreenScroll,
   SectionHeader,
   StatGrid,
-  Icon,
 } from "../ui";
 import { tripTypeMeta } from "./tripTypeMeta";
 
@@ -331,7 +330,7 @@ function Activities({
             hue={meta.hue}
             title={logbookActivityLabel(tally.type)}
             subtitle={activityTallySubtitle(tally)}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
             onPress={() => onOpenActivity(tally.type)}
           />
         );

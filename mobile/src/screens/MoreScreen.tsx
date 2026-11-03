@@ -49,10 +49,10 @@ import { spacing, makeStyles, makeThemed, useTheme, muted } from "../theme";
 import {
   Button,
   Hero,
+  Icon,
   Row,
   ScreenScroll,
   StatusPill,
-  Icon,
   Toast,
   todayDateKey,
   type Glyph,
@@ -191,14 +191,11 @@ export function MoreScreen({
           onPress={onOpenInbox}
           {...capabilityRowProps("inbox", accountState, online)}
           right={
-            <Trailing
-              badge={
-                unreadCount ? (
-                  <StatusPill label={String(unreadCount)} tone="accent" />
-                ) : null
-              }
-            />
+            unreadCount ? (
+              <StatusPill label={String(unreadCount)} tone="accent" />
+            ) : null
           }
+          chevron
         />
         {/* Read from the plans cache, which the shell's poll keeps fresh: the
             hub fetches nothing of its own. An invite is also an unread inbox
@@ -212,14 +209,11 @@ export function MoreScreen({
           onPress={onOpenPlans}
           {...capabilityRowProps("plans", accountState, online)}
           right={
-            <Trailing
-              badge={
-                plansWaiting ? (
-                  <StatusPill label={String(plansWaiting)} tone="accent" />
-                ) : null
-              }
-            />
+            plansWaiting ? (
+              <StatusPill label={String(plansWaiting)} tone="accent" />
+            ) : null
           }
+          chevron
         />
         <Row
           icon="friends"
@@ -229,7 +223,7 @@ export function MoreScreen({
           // the tap (DESIGN.md).
           onPress={onOpenFriends}
           {...capabilityRowProps("friends", accountState, online)}
-          right={<Trailing />}
+          chevron
         />
         {/* Sync issues can only exist once something has tried to sync. */}
         {isGuest ? null : (
@@ -240,21 +234,18 @@ export function MoreScreen({
             subtitle={syncIssuesSubtitle(issueCount)}
             onPress={onOpenSyncIssues}
             right={
-              <Trailing
-                badge={
-                  issueCount > 0 ? (
-                    <StatusPill label={String(issueCount)} tone="warning" />
-                  ) : null
-                }
-              />
+              issueCount > 0 ? (
+                <StatusPill label={String(issueCount)} tone="warning" />
+              ) : null
             }
+            chevron
           />
         )}
         <Row
           icon="settings"
           title="Settings"
           onPress={onOpenSettings}
-          right={<Trailing />}
+          chevron
         />
         <Row
           icon="account"
@@ -270,7 +261,7 @@ export function MoreScreen({
                 : undefined
           }
           onPress={onOpenAccount}
-          right={<Trailing />}
+          chevron
         />
       </ScreenScroll>
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -293,19 +284,6 @@ function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
   return plans;
 }
 
-/** Optional badge, then the chevron — the §5 trailing order. */
-function Trailing({ badge }: { badge?: React.ReactNode }) {
-  const theme = useTheme();
-  const styles = useStyles();
-
-  return (
-    <View style={styles.trailing}>
-      {badge}
-      <Icon idea="disclosure" size={20} color={theme.textMuted} />
-    </View>
-  );
-}
-
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
@@ -314,5 +292,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   healthText: { flex: 1, gap: spacing(0.25) },
   headline: { ...textRole.rowTitle },
   detail: { ...muted(theme, textRole.detail) },
-  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 }));
