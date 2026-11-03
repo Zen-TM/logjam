@@ -6118,7 +6118,7 @@ function RouteNameForm({
   return (
     <View style={styles.nameForm}>
       <TextField
-        label="Name"
+        label="Route name"
         value={draft}
         onChangeText={(text) => {
           setDraft(text);

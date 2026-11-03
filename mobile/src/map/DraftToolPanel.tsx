@@ -25,9 +25,10 @@
 // The colour palette is a DISCLOSURE, not a permanent strip: ten swatches is a
 // third of a phone's map, and this is a toolbar over the thing being worked in.
 //
-// The two destructive controls are deliberately different verbs:
-//   Clear  — empty the points, stay in the tool. Start the line again.
-//   Trash  — discard and leave. Route draw confirms first (in the caller);
+// Two controls that remove things, and the trash is only ever the first:
+//   Trash  — clear every point, stay in the tool, undoable.
+//            The same glyph, the same words and the same meaning on Logjam Web.
+//   ×      — leave the tool. Route draw confirms first (in the caller);
 //            measure does not, because a measurement is a question asked once.
 // Having these the other way round would read as "cancel throws my work away"
 // and leave the trash looking like the safer of the two.
@@ -133,7 +134,7 @@ export function DraftToolPanel({
             ? formatDistanceM(routeLengthM(points as [number, number][]))
             : "—"}
         </Text>
-        <Text style={styles.meta} numberOfLines={1}>
+        <Text style={styles.meta}>
           {anchorCount === 0
             ? tool === "measure"
               ? MAP_MEASURE_START_NOTE.gps
@@ -141,8 +142,8 @@ export function DraftToolPanel({
             : mapMeasurePointsLabel(anchorCount)}
         </Text>
         <View style={styles.spacer} />
-        <ElevationReadout profile={profile} loading={loading} />
       </View>
+      <ElevationReadout profile={profile} loading={loading} />
 
       {editingName ? (
         <Text style={styles.editing} numberOfLines={1}>
@@ -169,10 +170,9 @@ export function DraftToolPanel({
             disabledReason={saving ? SAVING : "Nothing to undo"}
             onPress={onUndo}
           />
-          <Button
-            label={VERBS.clear.label}
-            variant="outlineAccent"
-            compact
+          <IconButton
+            icon="delete"
+            accessibilityLabel={VERBS.clear.label}
             disabled={points.length === 0 || saving}
             disabledReason={saving ? SAVING : "Nothing to clear"}
             onPress={onClear}
@@ -214,12 +214,9 @@ export function DraftToolPanel({
             />
           ) : null}
           <IconButton
-            icon="delete"
-            color={theme.warning}
+            icon="close"
             accessibilityLabel={
-              tool === "measure"
-                ? VERBS.leave.label
-                : "Discard this route and close the tool"
+              tool === "measure" ? VERBS.leave.label : "Cancel drawing"
             }
             disabled={saving}
             disabledReason={SAVING}
@@ -259,7 +256,12 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingVertical: spacing(1),
     gap: spacing(1),
   },
-  readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
+  readoutRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    columnGap: spacing(1),
+  },
   distance: {
     ...textRole.heading,
     color: theme.text,
