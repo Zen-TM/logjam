@@ -85,8 +85,8 @@ export const PLACE_PAGE = {
     routeEmpty: "No route yet.",
     linkedPlacesEmpty: "No linked places.",
     tripsEmpty: "No trips logged here yet.",
-    // Trips are private to their owner, so a sharee sees none.
-    tripsShared: "Trips logged here are private to the place's owner.",
+    // Trips are private to their owner, so a sharee sees only their own.
+    tripsShared: "None of your trips are linked to this place.",
     sharedWithEmpty: "Not shared with anyone yet.",
     shareWithFriend: "Share with a friend",
     linkAPlace: "Link a place",

@@ -179,7 +179,7 @@ function App() {
   );
   // The trip whose page is open. A trip is READ on a page like a place and a
   // way (DESIGN.md), so it needs the same one piece of state.
-  const [selectedTripLogId, setSelectedTripLogId] = useState<string | null>(
+  const [selectedTripLogId, setSelectedTripLogIdRaw] = useState<string | null>(
     null,
   );
   const [activePanel, setActivePanel] = useState<PanelId | null>(null);
@@ -449,6 +449,24 @@ function App() {
     setSelectedPlaceIDRaw(id);
     const target = id && allPlacesRef.current.find((p) => p.id === id);
     if (target) setFlyToPlace({ lat: target.latitude, lng: target.longitude });
+  }, []);
+
+  // Opening a trip fits the map to its places, in the one setter every way to
+  // open a trip ends in (UX §3). A trip with no place on the map leaves the
+  // camera alone.
+  const tripLogsRef = useRef<{ id: string; places: { id: string }[] }[]>([]);
+  const setSelectedTripLogId = useCallback((id: string | null) => {
+    setSelectedTripLogIdRaw(id);
+    const trip = id && tripLogsRef.current.find((t) => t.id === id);
+    if (!trip) return;
+    const points = trip.places.flatMap(({ id: placeId }) => {
+      const place = allPlacesRef.current.find((p) => p.id === placeId);
+      return place
+        ? [[place.longitude, place.latitude] as [number, number]]
+        : [];
+    });
+    const bounds = boundsOfPoints(points);
+    if (bounds) setFlyToBounds(bounds);
   }, []);
 
   // A sharpened area's optional vegetation layer: every area's, newest first
@@ -854,6 +872,9 @@ function App() {
     error: tripLogsError,
     refetch: refetchTripLogs,
   } = useTripLogs(loadsUserData);
+  useEffect(() => {
+    tripLogsRef.current = tripLogs;
+  });
   // Every trip write also moves place state, not just trip state: a place's
   // map marker is green iff `_count.tripLogLinks > 0` (isPlaceDoneByViewer),
   // and that tally is computed server-side on the OWNED place list. Nothing in

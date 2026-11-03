@@ -1480,3 +1480,24 @@ describe("MAP_TOOLS", () => {
     expect(mapTools("gps")[0]!.label).toBe(MAP_MEASURE.title);
   });
 });
+
+describe("a trip's page reads like a place's page", () => {
+  // Red when TRIP_PAGE puts its files before its notes and attributes again,
+  // or a place's page reorders them.
+  it("orders the sections they share the same way", () => {
+    const keys = (page: { sections: readonly { key: string }[] }) =>
+      page.sections.map((section) => section.key);
+    const place = keys(contracts.PLACE_PAGE);
+    const trip = keys(contracts.TRIP_PAGE).map((key) =>
+      key === "routes" ? "route" : key,
+    );
+    const files = ["attributes", "notes", "photos", "route"];
+    expect(trip.filter((key) => files.includes(key))).toEqual(files);
+    expect(place.filter((key) => files.includes(key))).toEqual(files);
+  });
+
+  // Red when a sharee is told the owner-private sentence under their own trips.
+  it("gives a sharee words about their own trips", () => {
+    expect(contracts.PLACE_PAGE.copy.tripsShared).toMatch(/your trips/i);
+  });
+});

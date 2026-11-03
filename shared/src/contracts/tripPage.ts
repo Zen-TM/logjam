@@ -14,10 +14,12 @@ export const TRIP_PAGE = {
     // The linked places' river gauges, as they read on this trip's date and
     // now. Absent when no linked place has a gauge or no date has a value.
     { key: "gauge" },
+    // After the places, the order of a place's page: what was recorded, the
+    // notes, then the files.
+    { key: "attributes" },
+    { key: "notes" },
     { key: "photos" },
     { key: "routes" },
-    { key: "notes" },
-    { key: "attributes" },
   ],
   copy: {
     places: "Places",
