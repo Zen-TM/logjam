@@ -26,6 +26,7 @@ import {
   listSelectionLabel,
   sortTrips,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripFilterFieldDefs,
   tripsEmptyKind,
   tripsEmptyState,
@@ -410,9 +411,7 @@ function TripLogsPanel({
     try {
       if (ids.length === 1) await deleteTripLog(ids[0]);
       else await bulkDeleteTripLogs(ids);
-      toast.success(
-        ids.length === 1 ? "Trip deleted." : `Deleted ${ids.length} trips.`,
-      );
+      toast.success(tripDeleteDone(ids.length));
       setPendingDelete(null);
       clearSelection();
     } catch (err) {
