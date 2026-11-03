@@ -1,7 +1,7 @@
 // The signed-in account page: Logjam Web's `AccountPanel.tsx` and the dialogs
 // it opens, Logjam GPS's `screens/AccountScreen.tsx`. The hero is who you are:
 // the page's own answer (shared/DESIGN.md §2).
-import type { ScreenContract } from "./types.js";
+import type { ClientOnly, ScreenContract } from "./types.js";
 
 export const ACCOUNT = {
   id: "account.page",
@@ -42,6 +42,25 @@ export const ACCOUNT = {
     confirmEmail: "Confirm email",
   },
 } as const satisfies ScreenContract;
+
+/**
+ * What only Logjam GPS does around signing in and out. Neither is a section of
+ * the account page: the first is on the landing screen, the second a confirm.
+ */
+export const ACCOUNT_PHONE_ONLY = [
+  {
+    id: "guestMode",
+    on: "gps",
+    reason:
+      "A phone works in the field with no account, keeping everything on the phone. A browser tab keeps nothing, so Logjam Web always asks for an account.",
+  },
+  {
+    id: "signOutConfirm",
+    on: "gps",
+    reason:
+      "Logjam GPS holds work that is not synced, so signing out says how much would be lost. Logjam Web writes straight to the account, and signing out loses nothing.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** What deleting an account takes, and what it leaves. */
 export const ACCOUNT_DELETE_BODY =

@@ -15,6 +15,9 @@ import {
   leaderboardButtonLabel,
   leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
+  ACCOUNT_PHONE_ONLY,
+  SETTINGS_PHONE_ONLY,
+  SELECTION_GESTURES,
   noFriendsMatch,
   noFriendsMessage,
   sendCopyLabel,
@@ -81,6 +84,7 @@ import {
   PLACE_VERBS,
   placeDeleteConfirm,
   PLACES_ADD,
+  PLACES_ONBOARDING,
   PLACES_FILTER_SHEET,
   PLACE_STATUS_FILTER_OPTIONS,
   placesEmptyKind,
@@ -1110,6 +1114,23 @@ describe("abandonConfirm", () => {
       confirmLabel: "Discard",
       tone: "destructive",
     });
+  });
+});
+
+describe("the differences no section carries", () => {
+  // Mutation: drop a `reason`, or set it to "".
+  it.each([
+    ["ACCOUNT_PHONE_ONLY", ACCOUNT_PHONE_ONLY],
+    ["SETTINGS_PHONE_ONLY", SETTINGS_PHONE_ONLY],
+    ["PLACES_ONBOARDING", PLACES_ONBOARDING],
+    ["SELECTION_GESTURES", SELECTION_GESTURES],
+  ] as const)("%s: each names its one client and a reason", (_name, list) => {
+    const ids = list.map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const entry of list) {
+      expect(["web", "gps"], entry.id).toContain(entry.on);
+      expect(entry.reason.trim(), entry.id).not.toBe("");
+    }
   });
 });
 
