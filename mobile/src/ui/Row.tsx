@@ -1,4 +1,4 @@
-import { createContext, useContext, type ComponentProps } from "react";
+import type { ComponentProps } from "react";
 import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
@@ -13,20 +13,6 @@ import {
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
-
-const RowDisabled = createContext(false);
-
-/**
- * The "this opens something" mark at a row's right. A row that is unavailable
- * opens nothing, so it draws none; draw it through this, never `Icon`, so every
- * row follows (guard: disabledPressed.test.ts).
- */
-export function Chevron() {
-  const theme = useTheme();
-  return useContext(RowDisabled) ? null : (
-    <Icon idea="disclosure" size={20} color={theme.textMuted} />
-  );
-}
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -53,6 +39,7 @@ export function Row({
   hue,
   right,
   footer,
+  chevron = false,
   progress,
   onPress,
   onLongPress,
@@ -90,6 +77,12 @@ export function Row({
    * the row below.
    */
   footer?: React.ReactNode;
+  /**
+   * "This opens something": the disclosure arrow, last on the line. An
+   * unavailable row opens nothing, so it draws none; always ask for it here,
+   * never draw the glyph in `right` (guard: disabledPressed.test.ts).
+   */
+  chevron?: boolean;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
@@ -160,10 +153,11 @@ export function Row({
         </View>
         {right != null ? (
           <View style={[styles.right, disabled && styles.disabled]}>
-            <RowDisabled.Provider value={disabled}>
-              {right}
-            </RowDisabled.Provider>
+            {right}
           </View>
+        ) : null}
+        {chevron && !disabled ? (
+          <Icon idea="disclosure" size={20} color={theme.textMuted} />
         ) : null}
       </View>
       {footer != null ? (

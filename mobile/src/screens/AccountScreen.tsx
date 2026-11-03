@@ -64,7 +64,6 @@ import {
   Toast,
   type ToastMessage,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 
 const copy = ACCOUNT.copy;
 
@@ -333,7 +332,7 @@ function LinkedAccountScreen({
             subtitle={online ? user.email : undefined}
             {...changeEmailRowProps(online, config.authMode)}
             onPress={() => setSheet("email")}
-            right={<Chevron />}
+            chevron
           />
         ) : null}
         <Row
@@ -341,7 +340,7 @@ function LinkedAccountScreen({
           title="Friends"
           {...capabilityRowProps("friends", "linked", online)}
           onPress={onOpenFriends}
-          right={<Chevron />}
+          chevron
         />
       </>
     ),

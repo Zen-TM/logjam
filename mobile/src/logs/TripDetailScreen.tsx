@@ -47,7 +47,6 @@ import {
   Toast,
   type ToastMessage,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 import { TripEditSheet } from "./TripEditSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -142,7 +141,7 @@ export function TripDetailScreen({
               icon="place"
               hue={theme.accent}
               title={place.name}
-              right={<Chevron />}
+              chevron
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))

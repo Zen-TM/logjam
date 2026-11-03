@@ -46,7 +46,6 @@ import {
   todayDateKey,
   type ChipOption,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -610,7 +609,7 @@ export function TripEditSheet({
             icon="date"
             title={formatDateKey(`${dateKey}T00:00:00.000Z`)}
             subtitle="Date"
-            right={<Chevron />}
+            chevron
             onPress={() => setMode("date")}
           />
           <Row
@@ -620,7 +619,7 @@ export function TripEditSheet({
               selected.length === 1 ? "1 place" : `${selected.length} places`
             }
             titleNumberOfLines={2}
-            right={<Chevron />}
+            chevron
             onPress={() => setMode("places")}
           />
 
@@ -718,7 +717,7 @@ export function TripEditSheet({
                 ? "Add your own — water level, party size, anything"
                 : `${customFieldDefs.length} ${customFieldDefs.length === 1 ? ATTRIBUTE_NOUN.one : ATTRIBUTE_NOUN.many}`
             }
-            right={<Chevron />}
+            chevron
             onPress={() => setMode("fields")}
           />
         </FormStack>

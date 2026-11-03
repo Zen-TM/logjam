@@ -51,8 +51,8 @@ describe("a disabled row", () => {
 
 describe("a disabled row", () => {
   // Mutation: draw `<Icon idea="disclosure" …>` in a screen instead of
-  // `<Chevron />`, and an unavailable row ("Needs an account") keeps its arrow.
-  it("draws its chevron only through Chevron, which a disabled row omits", () => {
+  // Row's `chevron`, and an unavailable row ("Needs an account") keeps its arrow.
+  it("draws its chevron only through Row's `chevron`, which a disabled row omits", () => {
     const src = new URL("../", import.meta.url);
     const walk = (dir: URL): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -68,7 +68,7 @@ describe("a disabled row", () => {
         readFileSync(p, "utf8").includes('idea="disclosure"'),
     );
     expect(offenders).toEqual([]);
-    expect(source("Row.tsx")).toMatch(/useContext\(RowDisabled\) \? null/);
+    expect(source("Row.tsx")).toContain("chevron && !disabled");
   });
 });
 

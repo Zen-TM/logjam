@@ -68,7 +68,6 @@ import {
   Toggle,
   type Glyph,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
@@ -680,7 +679,7 @@ function OfflineTab({
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={<Chevron />}
+        chevron
       />
     </View>
   );

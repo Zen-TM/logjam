@@ -66,7 +66,6 @@ import {
   type Glyph,
   type ToastMessage,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 
 /** The sub-pages, in the order someone goes looking for them. */
 export type SettingsPage =
@@ -187,7 +186,7 @@ export function SettingsScreen({
               ? capabilityRowProps("serverPrefs", accountState, online)
               : {})}
             onPress={() => onOpenPage(page)}
-            right={<Chevron />}
+            chevron
           />
         ))}
       </>
@@ -208,7 +207,7 @@ export function SettingsScreen({
               .length,
           )}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={<Chevron />}
+          chevron
         />
       </>
     ),
@@ -220,14 +219,14 @@ export function SettingsScreen({
           title={copy.tripAttributes}
           subtitle={ownAttributeCountLabel(ownCount(tripFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={<Chevron />}
+          chevron
         />
         <Row
           icon="tag"
           title={copy.placeAttributes}
           subtitle={ownAttributeCountLabel(ownCount(placeFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={<Chevron />}
+          chevron
         />
       </>
     ),

@@ -30,7 +30,6 @@ import {
   TextField,
   type ChipOption,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -171,7 +170,7 @@ function CustomFieldValueInput({
           icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={<Chevron />}
+          chevron
           onPress={onPickDate}
         />
       </Beside>

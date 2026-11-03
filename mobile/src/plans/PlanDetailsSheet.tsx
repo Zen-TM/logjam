@@ -41,7 +41,6 @@ import {
   TextField,
   type ChipOption,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 
 const copy = TRIP_PLANS_LIST.copy;
 type Mode = "form" | "dates";
@@ -156,7 +155,7 @@ export function PlanDetailsSheet({
       icon="date"
       title={tripPlanDatesLabel(values.startDate, values.endDate)}
       subtitle={TRIP_PLAN_PAGE.copy.datesField}
-      right={<Chevron />}
+      chevron
       onPress={() => setMode("dates")}
     />
   );

@@ -42,7 +42,6 @@ import {
   TextField,
   type ChipOption,
 } from "../ui";
-import { Chevron } from "../ui/Row";
 
 /**
  * Add or edit a place — one sheet for both (DESIGN.md). The fields are
@@ -623,7 +622,7 @@ export function PlaceEditSheet({
                 ? "Add your own — permits, access notes, anything."
                 : `${typeFieldDefs.length} on this type`
             }
-            right={<Chevron />}
+            chevron
             onPress={() => setMode("fields")}
           />
         </FormStack>
