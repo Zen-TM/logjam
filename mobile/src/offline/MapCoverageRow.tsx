@@ -1,6 +1,7 @@
 // Whether an offline map covers a place or a way, with the one verb that saves
 // one framed on it (mobile/DESIGN.md §8). Drawn on the page of the thing, so
 // the answer to "will I have a map there?" is read before leaving signal.
+import { View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 import { BASEMAP_CATALOG } from "@logjam/shared";
@@ -56,23 +57,27 @@ export function MapCoverageRow({
       subtitle={
         online ? basemapName : unavailableReasonText("needs-connection")
       }
-      right={
-        <Button
-          compact
-          variant="outlineAccent"
-          label="Save map"
-          disabled={!online}
-          onPress={() => {
-            onSave?.();
-            // Every stack sits under the tabs, whose Map tab holds the framing
-            // screen (the plan page's "Download the map for this area" goes
-            // the same way).
-            navigation.getParent()?.navigate("Map", {
-              screen: "MapRegionDownload",
-              params: { bounds: bbox },
-            });
-          }}
-        />
+      // Under the text, not beside it: a button that takes the row's width
+      // leaves the sentence two lines and an ellipsis.
+      footer={
+        <View style={{ flexDirection: "row" }}>
+          <Button
+            compact
+            variant="outlineAccent"
+            label="Save map"
+            disabled={!online}
+            onPress={() => {
+              onSave?.();
+              // Every stack sits under the tabs, whose Map tab holds the framing
+              // screen (the plan page's "Download the map for this area" goes
+              // the same way).
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapRegionDownload",
+                params: { bounds: bbox },
+              });
+            }}
+          />
+        </View>
       }
     />
   );
