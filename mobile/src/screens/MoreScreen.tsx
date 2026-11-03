@@ -77,10 +77,15 @@ import { syncHealth, type SyncTone } from "./syncHealth";
 const useToneStyle = makeThemed(
   (theme): Record<SyncTone, { icon: Glyph; color: string }> => ({
     ok: { icon: "success", color: theme.accent },
+    info: { icon: "info", color: theme.textMuted },
     pending: { icon: "pending", color: theme.textMuted },
     problem: { icon: "warning", color: theme.warning },
   }),
 );
+
+// The row has the room to name the whole chooser; the hero's compact button
+// shares a line with "No account" and a longer label truncates it.
+const GUEST_SIGN_IN = "Sign in or create an account";
 
 /** The entries of More: every Logjam GPS destination that is not a tab. */
 type MoreId = Exclude<NavIdOn<"gps">, "places" | "logs" | "saved">;
@@ -107,7 +112,7 @@ export function MoreScreen({
   const theme = useTheme();
   const styles = useStyles();
 
-  const { accountState, linkAccount } = useAccountState();
+  const { accountState } = useAccountState();
   const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
   // fetch), so a failure costs one subtitle rather than the screen. A guest has
@@ -231,7 +236,7 @@ export function MoreScreen({
         // The Account row stays live for a guest: it is the way IN to an
         // account, so disabling it with "Needs an account" would be a joke at
         // the user's expense.
-        title={isGuest ? "Create an account" : navLabel("account")}
+        title={isGuest ? GUEST_SIGN_IN : navLabel("account")}
         subtitle={
           isGuest
             ? "Back up and share what's on this phone"
@@ -258,11 +263,13 @@ export function MoreScreen({
           // offer instead of the operation.
           isGuest ? (
             <Button
-              label="Create account"
-              icon="addFriend"
+              label="Sign in"
+              icon="signIn"
               variant="outlineAccent"
               compact
-              onPress={linkAccount}
+              // The Account page, like the row: its button asks before merging
+              // this phone's data into an account.
+              onPress={onOpenAccount}
             />
           ) : (
             <Button

@@ -43,7 +43,7 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
 import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION, config } from "../config";
+import { CLIENT_VERSION_LABEL, config } from "../config";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -162,7 +162,7 @@ function GuestAccountScreen({
           there&apos;s no way to un-upload it.
         </Text>
 
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
       </ScreenScroll>
     </View>
   );
@@ -188,12 +188,10 @@ export function AccountScreen({
   onBack,
   backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
   backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
   // A guest has no account record, no quotas and nothing to sign out of, so
@@ -206,7 +204,6 @@ export function AccountScreen({
       onBack={onBack}
       backLabel={backLabel}
       onSignOut={onSignOut}
-      onOpenFriends={onOpenFriends}
     />
   );
 }
@@ -215,12 +212,10 @@ function LinkedAccountScreen({
   onBack,
   backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
   backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -330,10 +325,11 @@ function LinkedAccountScreen({
         </Text>
       </>
     ),
-    signIn: () => (
-      <>
-        <SectionHeader title={copy.signIn} />
-        {COGNITO_ACCOUNT ? (
+    // Friends lives on More; the Email row is all that belongs under Sign-in.
+    signIn: () =>
+      COGNITO_ACCOUNT ? (
+        <>
+          <SectionHeader title={copy.signIn} />
           <Row
             icon="email"
             title={copy.email}
@@ -342,16 +338,8 @@ function LinkedAccountScreen({
             onPress={() => setSheet("email")}
             right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
           />
-        ) : null}
-        <Row
-          icon="friends"
-          title="Friends"
-          {...capabilityRowProps("friends", "linked", online)}
-          onPress={onOpenFriends}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-        />
-      </>
-    ),
+        </>
+      ) : null,
     leaving: () => (
       <>
         <SectionHeader title={copy.leaving} />
@@ -380,7 +368,7 @@ function LinkedAccountScreen({
         />
       </>
     ),
-    footer: () => <Text style={styles.version}>{CLIENT_VERSION}</Text>,
+    footer: () => <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>,
   };
   const keys = contractSectionKeys(ACCOUNT, "gps");
 

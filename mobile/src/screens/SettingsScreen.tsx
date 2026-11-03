@@ -39,7 +39,7 @@ import {
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION } from "../config";
+import { CLIENT_VERSION_LABEL } from "../config";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -235,7 +235,7 @@ export function SettingsScreen({
     about: () => (
       <>
         <SectionHeader title={copy.about} />
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
       </>
     ),
   };

@@ -96,7 +96,6 @@ export function ChoiceGroup<T extends string>({
         }
         value={value}
         onChange={onChange}
-        scroll
       />
       {disabledReason ? (
         <Hint text={disabledReason} />

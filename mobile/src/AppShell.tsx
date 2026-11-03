@@ -1489,7 +1489,6 @@ export function AppShell({
                           route.key,
                         )}
                         onSignOut={onSignOut}
-                        onOpenFriends={() => navigation.navigate("Friends")}
                       />
                     )}
                   </MoreStack.Screen>

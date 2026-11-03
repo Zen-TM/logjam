@@ -9,7 +9,7 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
-export type SyncTone = "ok" | "pending" | "problem";
+export type SyncTone = "ok" | "info" | "pending" | "problem";
 
 export type SyncHealth = {
   /** The answer, as a sentence. */
@@ -163,7 +163,8 @@ export function syncIssuesSubtitle(issueCount: number): string {
  * not that nothing is queued.
  */
 export function syncIssuesTitle(issueCount: number): string {
-  return issueCount > 0 ? "Some changes need you" : syncIssuesSubtitle(0);
+  if (issueCount === 0) return syncIssuesSubtitle(0);
+  return issueCount === 1 ? "A change needs you" : "Some changes need you";
 }
 
 export function syncHealth(input: SyncHealthInput): SyncHealth {
@@ -179,7 +180,9 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     return {
       headline: "Saved on this phone",
       detail: "You don't have an account, so nothing is uploaded or backed up.",
-      tone: "ok",
+      // Not "ok": a check beside "nothing is backed up" says done to a user who
+      // has a risk to know about.
+      tone: "info",
     };
   }
 

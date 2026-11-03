@@ -41,11 +41,6 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     reason: "the terms and the agreement are the service's, on both clients",
   },
   {
-    file: "screens/settings/NotificationSettingsScreen.tsx",
-    text: "Notifications from Logjam",
-    reason: "the service sends them, to every client",
-  },
-  {
     file: "saved/SavedScreen.tsx",
     text: "Couldn't reach Logjam",
     reason: "the service, in our words for a failed request",

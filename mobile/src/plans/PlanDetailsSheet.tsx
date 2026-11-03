@@ -155,8 +155,8 @@ export function PlanDetailsSheet({
   const datesRow = (
     <Row
       icon="date"
-      title={tripPlanDatesLabel(values.startDate, values.endDate)}
-      subtitle={TRIP_PLAN_PAGE.copy.datesField}
+      title={TRIP_PLAN_PAGE.copy.datesField}
+      subtitle={tripPlanDatesLabel(values.startDate, values.endDate)}
       right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
       onPress={() => setMode("dates")}
     />
