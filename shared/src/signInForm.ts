@@ -3,6 +3,34 @@
 // (ADR 0020). Each client draws the forms itself.
 import { USERNAME_RULE, isValidUsername } from "./username.js";
 
+/**
+ * The words both clients' sign-up, verify and reset forms draw. The age line
+ * is a legal attestation, so the two cannot word it differently. Guards:
+ * `AccountForms.test.ts` and the Logjam Web form tests read these, not a copy.
+ */
+export const SIGN_IN_COPY = {
+  createAccount: "Create account",
+  creatingAccount: "Creating account…",
+  /** The link from the sign-in form to the sign-up form. */
+  goToSignUp: "Create an account",
+  /** Before the link back to sign-in: "Have an account? Sign in". */
+  haveAccount: "Have an account?",
+  signIn: "Sign in",
+  resendCode: "Send a new code",
+  ageConfirm: "I confirm I am 18 or older.",
+  resetIntro: "Enter your email and we'll send you a reset code.",
+} as const;
+
+/** The verify form's intro: where the code went, and where it may be hiding. */
+export function verifyIntro(email: string): string {
+  return `We sent a code to ${email.trim()}. Check your spam folder too.`;
+}
+
+/** "Send a new code (30s)": the resend button while it cannot be pressed. */
+export function resendCodeWaiting(seconds: number): string {
+  return `${SIGN_IN_COPY.resendCode} (${seconds}s)`;
+}
+
 export const PASSWORD_HINT =
   "At least 8 characters, with an upper and a lower case letter, a number and a symbol.";
 

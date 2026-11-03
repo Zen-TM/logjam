@@ -37,7 +37,7 @@ describe("ConsentGate for a returning user", () => {
     show(false);
     expect(screen.getByText("Updated terms")).toBeTruthy();
     expect(screen.queryByLabelText("Username")).toBeNull();
-    expect(screen.queryByLabelText(/18 years/)).toBeNull();
+    expect(screen.queryByLabelText(/18 or older/)).toBeNull();
     tick(/updated Terms/);
     agree();
     await vi.waitFor(() => expect(onAccepted).toHaveBeenCalled());
@@ -54,7 +54,7 @@ describe("ConsentGate for a new account", () => {
       "alice.k",
     );
     expect(screen.getByLabelText(/I agree to the Terms of Use/)).toBeTruthy();
-    expect(screen.getByLabelText(/18 years/)).toBeTruthy();
+    expect(screen.getByLabelText(/18 or older/)).toBeTruthy();
   });
 
   // Mutation: drop the age check in handleAgree and this records consent.
@@ -64,7 +64,7 @@ describe("ConsentGate for a new account", () => {
     expect(recordConsent).not.toHaveBeenCalled();
     tick(/I agree to the Terms of Use/);
     agree();
-    expect(screen.getByText(/18 or older/)).toBeTruthy();
+    expect(screen.getByText(/Confirm you are 18 or older/)).toBeTruthy();
     expect(recordConsent).not.toHaveBeenCalled();
   });
 
@@ -76,7 +76,7 @@ describe("ConsentGate for a new account", () => {
       target: { value: "no spaces!" },
     });
     tick(/I agree to the Terms of Use/);
-    tick(/18 years/);
+    tick(/18 or older/);
     agree();
     expect(screen.getByText(/3 to 32 letters/)).toBeTruthy();
     expect(recordConsent).not.toHaveBeenCalled();
@@ -88,7 +88,7 @@ describe("ConsentGate for a new account", () => {
       target: { value: " bob_the-1 " },
     });
     tick(/I agree to the Terms of Use/);
-    tick(/18 years/);
+    tick(/18 or older/);
     agree();
     await vi.waitFor(() => expect(onAccepted).toHaveBeenCalled());
     expect(recordConsent).toHaveBeenCalledWith("2026-09-28", "bob_the-1");
@@ -108,7 +108,7 @@ describe("ConsentGate for a new account", () => {
     );
     show(true);
     tick(/I agree to the Terms of Use/);
-    tick(/18 years/);
+    tick(/18 or older/);
     agree();
     await screen.findByText("That username is taken. Choose another.");
     expect(onAccepted).not.toHaveBeenCalled();

@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { SIGN_IN_COPY } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 const source = readFileSync(join(__dirname, "AccountForms.tsx"), "utf8");
@@ -51,5 +52,19 @@ describe("AccountForms", () => {
   it("never logs or stores a password", () => {
     expect(source).not.toMatch(/console\.[a-z]+\([^)]*assword/);
     expect(source).not.toMatch(/AsyncStorage|SecureStore|setItem|Keychain/);
+  });
+});
+
+// Mutation: type "Create account" (or any value of `SIGN_IN_COPY`) back into
+// AccountForms.tsx or ConsentGate.tsx: the two clients then word it alone.
+describe("the sign-in words", () => {
+  const consent = readFileSync(join(__dirname, "ConsentGate.tsx"), "utf8");
+  it.each(
+    Object.values(SIGN_IN_COPY).filter(
+      (words) => words !== SIGN_IN_COPY.signIn,
+    ),
+  )("draws %s from the shared copy", (words) => {
+    expect(source).not.toContain(`"${words}"`);
+    expect(consent).not.toContain(`"${words}"`);
   });
 });

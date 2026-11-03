@@ -2,6 +2,7 @@ import {
   ACCOUNT,
   confirmEmailChange,
   requestEmailChange,
+  SIGN_IN_COPY,
 } from "@logjam/shared";
 import { useId, useState } from "react";
 import { accessToken, issuerUrl } from "../../auth/oidc";
@@ -161,7 +162,7 @@ function ChangeEmailForm({
                 disabled={busy}
                 disabledReason="Working…"
               >
-                Resend code
+                {SIGN_IN_COPY.resendCode}
               </Button>
             )}
             <Button type="submit" form={formId} variant="filled" busy={busy}>
