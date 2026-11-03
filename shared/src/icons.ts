@@ -74,6 +74,7 @@ export const ICONS = {
   northUp: { web: "arrow-up", gps: "arrow-up" },
   play: { web: "play", gps: "play" },
   pause: { web: "pause", gps: "pause" },
+  signIn: { web: "log-in", gps: "log-in" },
   signOut: { web: "log-out", gps: "log-out" },
   accept: { web: "user-check", gps: "user-check" },
   ignore: { web: "circle-x", gps: "x-circle" }, // decline an offer

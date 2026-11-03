@@ -107,7 +107,7 @@ export function MoreScreen({
   const theme = useTheme();
   const styles = useStyles();
 
-  const { accountState, linkAccount } = useAccountState();
+  const { accountState } = useAccountState();
   const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
   // fetch), so a failure costs one subtitle rather than the screen. A guest has
@@ -256,10 +256,12 @@ export function MoreScreen({
           isGuest ? (
             <Button
               label="Sign in"
-              icon="addFriend"
+              icon="signIn"
               variant="outlineAccent"
               compact
-              onPress={linkAccount}
+              // The Account page, like the row: its button asks before merging
+              // this phone's data into an account.
+              onPress={onOpenAccount}
             />
           ) : (
             <Button

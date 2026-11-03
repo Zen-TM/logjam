@@ -10,7 +10,7 @@ import {
 
 export const TRIP_PLAN_OFFLINE = {
   downloaded: "Downloaded",
-  changed: "Changed since you saved it",
+  changed: "Changed since you downloaded it",
   notDownloaded:
     "Not downloaded yet. Open it once with signal to read it here.",
   // The plan went while this phone held it, or a stale row or push opened it.

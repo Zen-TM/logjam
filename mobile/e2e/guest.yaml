@@ -60,6 +60,6 @@ appId: com.logjamnsw.mobile
 # The More hub tells the truth about where the data is, and offers the way out.
 - tapOn: "More"
 - assertVisible: "Saved on this phone"
-- assertVisible: "Create account"
+- assertVisible: "Sign in or create an account"
 # Friends is gated for the same reason sharing is.
 - assertVisible: "Needs an account"
