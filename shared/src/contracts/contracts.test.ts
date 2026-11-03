@@ -91,6 +91,7 @@ import {
   withRowUnit,
   PLACE_VERBS,
   placeDeleteConfirm,
+  placeDeleteDone,
   PLACES_ADD,
   PLACES_FILTER_SHEET,
   PLACE_STATUS_FILTER_OPTIONS,
@@ -106,6 +107,7 @@ import {
   TRIP_FORM,
   listSelectionLabel,
   tripDeleteConfirm,
+  tripDeleteDone,
   planDeleteConfirm,
   planFormDeleteConfirm,
   planItemDeleteConfirm,
@@ -305,6 +307,15 @@ describe("a place's verbs", () => {
       expect(ids("gps", "row", owned)).toContain("show");
       expect(ids("gps", "page", owned)).toContain("show");
     }
+  });
+
+  // Red when "exportPlace" is owner-only or leaves Logjam GPS: sharePromise
+  // tells a friend they can export the place, so their phone must be able to.
+  it("lets Logjam GPS export a place, owned or shared with you", () => {
+    for (const owned of [true, false])
+      for (const surface of ["row", "page", "pin"] as const)
+        expect(ids("gps", surface, owned)).toContain("exportPlace");
+    expect(placeVerbIds("web")).not.toContain("exportPlace");
   });
 
   it("never offers to edit, share, delete or log a trip at a place someone shared with you", () => {
@@ -1499,5 +1510,16 @@ describe("a trip's page reads like a place's page", () => {
   // Red when a sharee is told the owner-private sentence under their own trips.
   it("gives a sharee words about their own trips", () => {
     expect(contracts.PLACE_PAGE.copy.tripsShared).toMatch(/your trips/i);
+  });
+});
+
+// A page and a list say the same thing when a delete lands. Mutation: reword the
+// singular in one function, or type a toast in a client again.
+describe("delete done-toasts", () => {
+  it("say one noun the same way from a page and from a list", () => {
+    expect(placeDeleteDone(1)).toBe("Place deleted.");
+    expect(placeDeleteDone(3)).toBe("3 places deleted.");
+    expect(tripDeleteDone(1)).toBe("Trip deleted.");
+    expect(tripDeleteDone(3)).toBe("3 trips deleted.");
   });
 });

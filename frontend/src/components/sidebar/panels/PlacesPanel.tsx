@@ -21,8 +21,9 @@ import {
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
+  placeDeleteDone,
   placeMatchesSearch,
-  placesCountLabel,
+  PLACE_EXPORT_FORMATS,
   placesEmptyKind,
   placeTypeHasTab,
   placesEmptyState,
@@ -51,7 +52,7 @@ import {
   ownerUsername,
   refreshFromRopeWiki,
 } from "../../../placeUtils";
-import { buildPlaceExport, type TExportFormat } from "../../../placeExport";
+import { buildPlaceExport } from "../../../placeExport";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
 import type { PanelId } from "../panels";
@@ -393,14 +394,7 @@ function PlacesPanel({
   };
 
   const exportEntries = (targets: TPlace[]): MenuEntry[] =>
-    (
-      [
-        ["gpx", "GPX"],
-        ["kml", "KML"],
-        ["geojson", "GeoJSON"],
-        ["csv", "CSV"],
-      ] as [TExportFormat, string][]
-    ).map(([format, label]) => ({
+    PLACE_EXPORT_FORMATS.map(({ value: format, label }) => ({
       id: format,
       label,
       onSelect: () => {
@@ -449,7 +443,7 @@ function PlacesPanel({
     setDeleting(true);
     try {
       await bulkDeletePlaces(pendingDelete);
-      toast.done(`Deleted ${placesCountLabel(count)}.`);
+      toast.done(placeDeleteDone(count));
       setPendingDelete(null);
       clearSelection();
       onQuotaChanged();

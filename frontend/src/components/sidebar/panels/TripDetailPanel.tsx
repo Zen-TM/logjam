@@ -17,6 +17,7 @@ import {
   navLabel,
   TRIP_PAGE,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripTypeLabel,
   tripTitle,
   tripVerbs,
@@ -124,7 +125,7 @@ function TripDetailPanel({
       setConfirmingDelete(false);
       onRefetchTripLogs();
       onQuotaChanged();
-      toast.done("Trip deleted.");
+      toast.done(tripDeleteDone(1));
       onAfterDelete();
     } catch (err) {
       console.error(err);

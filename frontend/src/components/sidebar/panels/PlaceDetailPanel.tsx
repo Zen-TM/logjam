@@ -30,6 +30,7 @@ import {
   routeLengthM,
   primaryTripType,
   placeDeleteConfirm,
+  placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
   PLACE_PAGE,
@@ -501,7 +502,7 @@ function PlaceDetailPanel({
       setSelectedPlaceID(null);
       onRefetch();
       onQuotaChanged();
-      toast.done("Place deleted.");
+      toast.done(placeDeleteDone(1));
       // Return to the places list — the detail panel has nothing to show now.
       onAfterDelete();
     } catch (err) {
