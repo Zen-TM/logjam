@@ -78,7 +78,8 @@ const useToneStyle = makeThemed(
   }),
 );
 
-// Both guest calls open the chooser, so both say what it offers.
+// The row has the room to name the whole chooser; the hero's compact button
+// shares a line with "No account" and a longer label truncates it.
 const GUEST_SIGN_IN = "Sign in or create an account";
 
 /** The entries of More: every Logjam GPS destination that is not a tab. */
@@ -254,7 +255,7 @@ export function MoreScreen({
           // offer instead of the operation.
           isGuest ? (
             <Button
-              label={GUEST_SIGN_IN}
+              label="Sign in"
               icon="addFriend"
               variant="outlineAccent"
               compact
