@@ -490,7 +490,7 @@ function PlaceTypeDialog({
           data-autofocus
         />
 
-        <SectionHeader title="Icon" />
+        <span className={classes.fieldLabel}>Icon</span>
         <div className={classes.iconGrid} role="radiogroup" aria-label="Icon">
           {PLACE_TYPE_ICON_KEYS.map((key) => {
             const Icon = placeTypeLucideIcon(key);
