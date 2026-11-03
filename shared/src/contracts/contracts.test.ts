@@ -34,6 +34,8 @@ import {
   mapMeasureRange,
   mapMeasureVerbs,
   MAP_MEASURE,
+  MAP_TOOLS,
+  mapTools,
   MAP_MEASURE_START_NOTE,
   MAP_MEASURE_VERBS,
   MAP_SNAP_OPTIONS,
@@ -1099,6 +1101,7 @@ describe("a verb list's reason and gap", () => {
     ["FRIEND_SHARE_VERBS", FRIEND_SHARE_VERBS],
     ["MAP_POINT_VERBS", MAP_POINT_VERBS],
     ["MAP_MEASURE_VERBS", MAP_MEASURE_VERBS],
+    ["MAP_TOOLS", MAP_TOOLS],
     ...PLAN_VERB_LISTS.map((list, i): [string, readonly object[]] => [
       `PLAN_VERB_LISTS[${i}]`,
       list,
@@ -1127,4 +1130,27 @@ describe("a verb list's reason and gap", () => {
       }
     },
   );
+});
+
+describe("MAP_TOOLS", () => {
+  // Both clients' trays are `mapTools(platform)`: the web builder
+  // (`webMapTools`) and Logjam GPS's `TOOLS` read it, and their own tests pin
+  // that. Mutation: drop `on: "web"` from "makeMap" and the GPS list gains it;
+  // swap two entries and the orders below fail.
+  it("draws the same tools in the same order, less what one client lacks", () => {
+    expect(mapTools("web").map((tool) => tool.id)).toEqual([
+      "measure",
+      "route",
+      "place",
+      "makeMap",
+    ]);
+    expect(mapTools("gps").map((tool) => tool.id)).toEqual([
+      "measure",
+      "route",
+      "place",
+    ]);
+  });
+  it("names Measure by its own contract", () => {
+    expect(mapTools("gps")[0]!.label).toBe(MAP_MEASURE.title);
+  });
 });

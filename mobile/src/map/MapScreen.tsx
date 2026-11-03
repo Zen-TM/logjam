@@ -2132,6 +2132,16 @@ export function MapScreen({
         measureDraft.open();
         return;
       }
+      if (tool === "place") {
+        // The form opens on the middle of the map the user is looking at, as
+        // Logjam Web's tray opens its form for the map in view.
+        if (viewportBbox)
+          setAddPlaceAt({
+            latitude: (viewportBbox.south + viewportBbox.north) / 2,
+            longitude: (viewportBbox.west + viewportBbox.east) / 2,
+          });
+        return;
+      }
       if (routeDraft.active) {
         handleCancelRouteDraw();
         return;
@@ -2142,7 +2152,13 @@ export function MapScreen({
       routeDraft.open();
     },
     // handleCancelRouteDraw is declared below and is stable; see its useCallback.
-    [measureDraft, routeDraft, handleCancelRouteDraw, routes.data],
+    [
+      measureDraft,
+      routeDraft,
+      handleCancelRouteDraw,
+      routes.data,
+      viewportBbox,
+    ],
   );
 
   /** One entry point for both point-collecting tools, so every tap surface

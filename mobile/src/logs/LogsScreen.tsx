@@ -85,6 +85,7 @@ import {
   Button,
   ErrorState,
   Hero,
+  useHeroCollapse,
   ListEnd,
   IconButton,
   LoadingState,
@@ -116,6 +117,7 @@ export function LogsScreen({
   onOpenStats: () => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
   const styles = useStyles();
 
   const connectivity = useConnectivity();
@@ -404,58 +406,70 @@ export function LogsScreen({
   // not name cannot be drawn.
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "gps">, ReactNode> = {
     hero: (
-      <Hero
-        eyebrow="Logbook"
-        title={tripsHeroTitle(trips.length)}
-        actions={
-          <View style={styles.heroActions}>
-            {/* The retrospective lives one tap away rather than on this screen:
+      <View {...heroCollapse.heroProps}>
+        <Hero
+          compact={heroCollapse.compact}
+          eyebrow="Logbook"
+          title={
+            heroCollapse.compact
+              ? `Logbook · ${trips.length}`
+              : tripsHeroTitle(trips.length)
+          }
+          actions={
+            <View style={styles.heroActions}>
+              {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
                 (shared/DESIGN.md §2). */}
-            <IconButton
-              icon="stats"
-              accessibilityLabel={copy.stats}
-              color={theme.textMuted}
-              onPress={onOpenStats}
-            />
-            <IconButton
-              icon="filter"
-              accessibilityLabel={TRIPS_FILTER_SHEET.title}
-              color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={sheetFilterCount > 0}
-              onPress={() => {
-                // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
-                // over a live IME inherits KeyboardAvoidingView's shrunk frame
-                // and stops short of the bottom edge, leaving a stripe of the
-                // tab bar showing under it.
-                Keyboard.dismiss();
-                setSheetOpen(true);
-              }}
-            />
-            {/* One way in, so a button: Logjam Web's menu holds this and an
+              <IconButton
+                icon="stats"
+                accessibilityLabel={copy.stats}
+                color={theme.textMuted}
+                onPress={onOpenStats}
+              />
+              <IconButton
+                icon="filter"
+                accessibilityLabel={TRIPS_FILTER_SHEET.title}
+                color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
+                filled={sheetFilterCount > 0}
+                onPress={() => {
+                  // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
+                  // over a live IME inherits KeyboardAvoidingView's shrunk frame
+                  // and stops short of the bottom edge, leaving a stripe of the
+                  // tab bar showing under it.
+                  Keyboard.dismiss();
+                  setSheetOpen(true);
+                }}
+              />
+              {/* One way in, so a button: Logjam Web's menu holds this and an
                 import (`TRIPS_ADD`). */}
-            <Button
-              label={TRIPS_ADD.copy.add}
-              icon={TRIPS_ADD_ICON.add}
-              compact
-              onPress={() => setEditing({ trip: null })}
-            />
-          </View>
-        }
-      >
-        <ActivitySpark
-          buckets={spark}
-          caption={`${recentCount} in the last 12 months · ${placeCount} ${
-            placeCount === 1 ? "place" : "places"
-          }`}
-        />
+              <Button
+                label={TRIPS_ADD.copy.add}
+                icon={TRIPS_ADD_ICON.add}
+                compact
+                onPress={() => setEditing({ trip: null })}
+              />
+            </View>
+          }
+        >
+          {heroCollapse.compact ? undefined : (
+            <>
+              <ActivitySpark
+                buckets={spark}
+                caption={`${recentCount} in the last 12 months · ${placeCount} ${
+                  placeCount === 1 ? "place" : "places"
+                }`}
+              />
 
-        {/* State of the world, once, where it can be read at a glance. Offline
-            is not an error here — logging, editing and attaching all work — so
-            it is paired with what is waiting rather than with a warning. */}
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
+              {/* State of the world, once, where it can be read at a glance.
+                Offline is not an error here — logging, editing and attaching
+                all work — so it is paired with what is waiting rather than
+                with a warning. */}
+              <SyncStatusPills online={online} pendingCount={pendingCount} />
+            </>
+          )}
+        </Hero>
+      </View>
     ),
 
     typeRail: (
@@ -515,6 +529,7 @@ export function LogsScreen({
     list: (
       <SectionList
         style={styles.list}
+        {...heroCollapse.scrollProps}
         contentContainerStyle={styles.listContent}
         sections={yearSections}
         keyExtractor={keyExtractor}

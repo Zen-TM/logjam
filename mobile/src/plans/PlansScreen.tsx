@@ -62,6 +62,7 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  useHeroCollapse,
   IconButton,
   LoadingState,
   Row,
@@ -170,6 +171,7 @@ export function PlansScreen({
   onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
   const styles = useStyles();
   const { assetHue } = useHues();
   const { accountState } = useAccountState();
@@ -614,30 +616,49 @@ export function PlansScreen({
     ReactNode
   > = {
     hero: (
-      <Hero
-        title={
-          shown.kind === "list"
-            ? tripPlansHeroTitle(shown.plans, today)
-            : shown.kind === "loading"
-              ? copy.loading
-              : TRIP_PLANS_LIST.title
-        }
-        titleNumberOfLines={2}
-        onBack={onBack}
-        backLabel={backLabel}
-      >
-        <View style={styles.pills}>
-          <Button
-            label={copy.add}
-            icon="add"
-            compact
-            disabled={!online}
-            disabledReason={unavailableReasonText("needs-connection")}
-            onPress={() => setNewOpen(true)}
-          />
-          <SyncStatusPills online={online} pendingCount={0} />
-        </View>
-      </Hero>
+      <View {...heroCollapse.heroProps}>
+        <Hero
+          compact={heroCollapse.compact}
+          title={
+            heroCollapse.compact
+              ? `${TRIP_PLANS_LIST.title} · ${plans?.length ?? 0}`
+              : shown.kind === "list"
+                ? tripPlansHeroTitle(shown.plans, today)
+                : shown.kind === "loading"
+                  ? copy.loading
+                  : TRIP_PLANS_LIST.title
+          }
+          titleNumberOfLines={2}
+          onBack={onBack}
+          backLabel={backLabel}
+          actions={
+            heroCollapse.compact ? (
+              <Button
+                label={copy.add}
+                icon="add"
+                compact
+                disabled={!online}
+                disabledReason={unavailableReasonText("needs-connection")}
+                onPress={() => setNewOpen(true)}
+              />
+            ) : undefined
+          }
+        >
+          {heroCollapse.compact ? undefined : (
+            <View style={styles.pills}>
+              <Button
+                label={copy.add}
+                icon="add"
+                compact
+                disabled={!online}
+                disabledReason={unavailableReasonText("needs-connection")}
+                onPress={() => setNewOpen(true)}
+              />
+              <SyncStatusPills online={online} pendingCount={0} />
+            </View>
+          )}
+        </Hero>
+      </View>
     ),
     buckets: (
       <View style={styles.rail}>
@@ -690,6 +711,7 @@ export function PlansScreen({
       ) : (
         <FlatList
           style={styles.list}
+          {...heroCollapse.scrollProps}
           contentContainerStyle={styles.listContent}
           data={rows}
           keyExtractor={planKey}

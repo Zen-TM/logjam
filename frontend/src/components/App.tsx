@@ -53,7 +53,7 @@ import {
   getTopoExport,
 } from "../placeUtils";
 import LayersPopover from "./map/LayersPopover";
-import type { MapTool } from "./map/MapChrome";
+import { webMapTools } from "./map/mapToolList";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
 import { Button, IconButton, MapButton, Notice } from "../ui";
 import { consentGate, currentConsentVersionOf } from "../consent";
@@ -105,8 +105,6 @@ import {
   drawsNswHillshade,
   normalizeTerrainLayers,
   type TerrainSwitchKey,
-  MAP_MEASURE,
-  MAP_MEASURE_ICON,
   MAP_TERRAIN,
   LIDAR_JOB_COPY,
   opensPreview,
@@ -1420,30 +1418,12 @@ function App() {
     setSelectingGeoPdfExtent(true);
   };
 
-  // Verbs that START on the map, in Logjam GPS's order for the two it has.
-  const mapTools: MapTool[] = [
-    {
-      id: "measure",
-      label: MAP_MEASURE.title,
-      icon: MAP_MEASURE_ICON,
-      onSelect: () => startMeasuring(),
-    },
-    {
-      id: "route",
-      label: "Draw a route",
-      icon: "draw",
-      onSelect: startDrawingRoute,
-    },
-    {
-      id: "place",
-      label: "Add a place",
-      icon: "addPlace",
-      onSelect: () => setShowAdd(true),
-    },
-    {
-      id: "make-map",
-      label: "Make a map",
-      icon: "pickArea",
+  // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
+  const mapTools = webMapTools({
+    measure: { onSelect: () => startMeasuring() },
+    route: { onSelect: startDrawingRoute },
+    place: { onSelect: () => setShowAdd(true) },
+    makeMap: {
       menu: [
         {
           id: "topo",
@@ -1466,7 +1446,7 @@ function App() {
         },
       ],
     },
-  ];
+  });
   // Mobile: any map-selection flow needs the bottom sheet out of the way so the
   // map is tappable. Collapses the sheet to peek; restored when the flow ends.
   const mapInteractionActive =

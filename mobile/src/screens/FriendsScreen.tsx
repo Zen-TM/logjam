@@ -86,6 +86,7 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  useHeroCollapse,
   IconButton,
   LoadingState,
   Row,
@@ -129,6 +130,7 @@ export function FriendsScreen({
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -344,29 +346,36 @@ export function FriendsScreen({
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
-      <Hero
-        title={FRIENDS.title}
-        value={friendsHeroSubtitle(requests.length, friends.length)}
-        onBack={onBack}
-        backLabel={backLabel}
-        actions={
-          <View style={styles.heroActions}>
-            {/* Nothing at all until the user joins: Settings is the only way in. */}
-            {leaderboardOptIn && board?.joined !== false ? (
-              <LeaderboardButton
-                standing={board?.joined ? selfStanding(board) : null}
-                onPress={onOpenLeaderboard}
+      <View {...heroCollapse.heroProps}>
+        <Hero
+          compact={heroCollapse.compact}
+          title={
+            heroCollapse.compact
+              ? `${FRIENDS.title} · ${friends.length}`
+              : FRIENDS.title
+          }
+          value={friendsHeroSubtitle(requests.length, friends.length)}
+          onBack={onBack}
+          backLabel={backLabel}
+          actions={
+            <View style={styles.heroActions}>
+              {/* Nothing at all until the user joins: Settings is the only way in. */}
+              {leaderboardOptIn && board?.joined !== false ? (
+                <LeaderboardButton
+                  standing={board?.joined ? selfStanding(board) : null}
+                  onPress={onOpenLeaderboard}
+                />
+              ) : null}
+              <Button
+                label={copy.add}
+                icon="addFriend"
+                compact
+                onPress={() => setAddOpen(true)}
               />
-            ) : null}
-            <Button
-              label={copy.add}
-              icon="addFriend"
-              compact
-              onPress={() => setAddOpen(true)}
-            />
-          </View>
-        }
-      />
+            </View>
+          }
+        />
+      </View>
     ),
     buckets: () => (
       <View style={styles.rail}>
@@ -390,6 +399,7 @@ export function FriendsScreen({
 
         <FlatList
           style={styles.list}
+          {...heroCollapse.scrollProps}
           contentContainerStyle={styles.listContent}
           data={items}
           keyExtractor={keyExtractor}

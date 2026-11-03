@@ -45,6 +45,7 @@ export * from "./mapLayers.js";
 export * from "./mapOverlays.js";
 export * from "./mapTerrain.js";
 export * from "./mapMeasure.js";
+export * from "./mapTools.js";
 export * from "./mapPoint.js";
 export * from "./share.js";
 export * from "./stats.js";

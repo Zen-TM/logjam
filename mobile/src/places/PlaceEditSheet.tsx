@@ -576,9 +576,7 @@ export function PlaceEditSheet({
           {!editing && initialCoords ? (
             <View style={styles.fixNote}>
               <Icon idea="place" size={14} color={theme.accent} />
-              <Text style={styles.hint}>
-                Filled in from the point you pressed.
-              </Text>
+              <Text style={styles.hint}>Filled in from the map.</Text>
             </View>
           ) : null}
 
