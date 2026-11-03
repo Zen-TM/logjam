@@ -36,13 +36,13 @@ describe("Saved's compact title", () => {
 });
 
 // A row's trailing column drops under its words at large text. Mutation: drop
-// `textScale >= 1.3` from Row, or `rightBelow` from the Saved or Place row.
+// the `LARGE_TEXT` test from Row, or `rightBelow` from the Saved or Place row.
 describe("Row's trailing column at large text", () => {
   it("stacks under the title for the rows that opt in", () => {
     const read = (path: string) =>
       readFileSync(new URL(path, import.meta.url), "utf8");
     expect(read("./Row.tsx")).toMatch(
-      /rightBelow && right != null && textScale >= 1\.3/,
+      /rightBelow && right != null && textScale \* fontScale >= LARGE_TEXT/,
     );
     expect(read("../saved/SavedScreen.tsx")).toContain("rightBelow");
     expect(read("../places/PlacesScreen.tsx")).toContain("rightBelow");

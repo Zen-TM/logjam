@@ -286,7 +286,6 @@ export function AddCopySheet({
           icon="route"
           hue={assetHue.route}
           title={planAddVerbLabel("route")}
-          subtitle="Opens the map to draw a way for this plan"
           disabled={busy}
           onPress={() => {
             onClose();

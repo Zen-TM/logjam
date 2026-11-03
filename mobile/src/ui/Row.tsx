@@ -1,5 +1,11 @@
 import type { ComponentProps } from "react";
-import { Pressable, Text, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 import {
   hitSlop,
@@ -14,6 +20,9 @@ import {
 } from "../theme";
 import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
+
+/** Past this drawn text size a row's trailing column stops fitting beside its words. */
+const LARGE_TEXT = 1.3;
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -130,7 +139,10 @@ export function Row({
   // horizontal layout every row has always had. `progress` stays a direct child
   // of the card, not of the line: it is absolutely positioned against the card's
   // padding box, and nesting it would inset the bar by the card's padding.
-  const stackRight = rightBelow && right != null && textScale >= 1.3;
+  // Our multiplier times the OS's: the size the words are actually drawn at.
+  const { fontScale } = useWindowDimensions();
+  const stackRight =
+    rightBelow && right != null && textScale * fontScale >= LARGE_TEXT;
   const rightNode =
     right != null ? (
       <View style={[styles.right, stackRight && styles.rightBelow]}>

@@ -1669,6 +1669,7 @@ export function SavedScreen({
         title={
           filter === "all" ? "Saved" : `Saved · ${CATEGORY_META[filter].plural}`
         }
+        titleNumberOfLines={2}
         actions={
           <Button
             label="Add"
@@ -1828,7 +1829,6 @@ export function SavedScreen({
                 icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
-                rightBelow
                 right={
                   <View style={styles.rowActions}>
                     <IconButton
@@ -1927,6 +1927,7 @@ export function SavedScreen({
                 onPress={
                   selecting ? () => selectItem(item) : () => openItem(item)
                 }
+                rightBelow
                 /* ONE trailing slot for both modes, and every child of it keeps its
                 place when the mode changes. The circle takes the ⋯ button's 40pt box
                 rather than replacing it, and the pill stays put while buttons stop
