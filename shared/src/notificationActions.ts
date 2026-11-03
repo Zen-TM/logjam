@@ -56,6 +56,11 @@ export type NotificationInlineAction = {
    * staying silent and reading as "the button did nothing".
    */
   success: string;
+  /**
+   * A second go at something already done, not an answer: a row draws it as a
+   * quiet button, not the filled pair.
+   */
+  quiet?: boolean;
 };
 
 export type NotificationActions = {
@@ -120,9 +125,6 @@ export function friendRequestAnswers(
  * The actions this notification offers, or null for the reporting kinds (a
  * finished topo, an accepted request) which have nothing to answer.
  *
- * `failed`: the caller's own download of this already-accepted send failed, so
- * the row offers "Try again" instead of nothing.
- *
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
  *
@@ -132,7 +134,6 @@ export function friendRequestAnswers(
 export function notificationActions(
   n: TNotification,
   platform: ContractPlatform,
-  { failed = false }: { failed?: boolean } = {},
 ): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
@@ -229,36 +230,36 @@ export function notificationActions(
     // sends the inbox endpoint drops.
     if (payload.fileSendStatus === "expired") return null;
     // `accepted` means the download URL was ISSUED, not that the bytes landed,
-    // so accept stays on offer as a retry and there is nothing left to turn
-    // down.
-    const accepted = payload.fileSendStatus === "accepted";
-    const web = platform === "web";
-    // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
-    // there is a download and its words say so.
-    const acceptFailure = web
-      ? "Couldn't download that file."
-      : "Couldn't save that file.";
-    if (accepted) {
+    // and no client can tell whether they did: a browser download cancelled
+    // after the URL came back is invisible, a GeoPDF is stored only on the
+    // device that took it, and the other device never saw it. So a second fetch
+    // stays on offer, quietly, whatever happened in this session. Guard:
+    // notificationActions.test.ts.
+    if (payload.fileSendStatus === "accepted") {
+      const web = platform === "web";
+      // The phone keeps a copy in Saved; Logjam Web has no Saved, so accepting
+      // there is a download and its words say so.
+      const acceptFailure = web
+        ? "Couldn't download that file."
+        : "Couldn't save that file.";
       return {
         type: "file_sent",
         targetId: fileSendId,
         requesterId: null,
         pill: web ? "Downloaded" : "Saved",
         sender,
-        // Nothing to press once it worked: a second Download is the loudest
-        // control on a finished row. Only a download that FAILED here offers
-        // another go.
-        actions: failed
-          ? [
-              {
-                kind: "accept",
-                label: "Try again",
-                confirm: null,
-                failure: acceptFailure,
-                success: web ? "Downloaded." : "Saved — find it in Saved.",
-              },
-            ]
-          : [],
+        actions: [
+          {
+            kind: "accept",
+            label: "Download again",
+            confirm: null,
+            failure: acceptFailure,
+            success: web
+              ? "Downloaded again."
+              : "Downloaded again — find it in Saved.",
+            quiet: true,
+          },
+        ],
       };
     }
     return {

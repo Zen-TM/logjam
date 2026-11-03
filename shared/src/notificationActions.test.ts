@@ -7,8 +7,7 @@ import {
   notificationActions as actionsFor,
 } from "./notificationActions.js";
 
-const notificationActions = (n: TNotification, opts?: { failed?: boolean }) =>
-  actionsFor(n, "gps", opts);
+const notificationActions = (n: TNotification) => actionsFor(n, "gps");
 
 function notification(
   type: string,
@@ -123,8 +122,6 @@ describe("notificationActions", () => {
           fileSendStatus,
         }),
         "web",
-        // An accepted send offers an action only after a failed download.
-        { failed: true },
       );
       expect(web?.actions[0].failure).toBe("Couldn't download that file.");
       expect(web?.pill).toBe(
@@ -133,22 +130,22 @@ describe("notificationActions", () => {
     }
   });
 
-  // `accepted` means the URL was issued, not that the bytes landed. Once it
-  // worked there is nothing to press; only a download that failed here offers
-  // another go. Mutation that turns it red: make the accepted branch return the
-  // retry action whatever `failed` says.
-  it("offers nothing once accepted, and Try again only after a failure", () => {
+  // `accepted` means the URL was issued, not that the bytes landed, and a
+  // client cannot always tell they did not (a cancelled browser download, a
+  // GeoPDF kept only on another device). Mutation that turns it red: return
+  // `actions: []` for an accepted send, as it did when only an in-session
+  // failure offered a retry.
+  it("still offers a quiet fetch once a send is accepted", () => {
     const accepted = notification("file_sent", {
       fileSendId: "s1",
       filename: "Claustral.gpx",
       fileSendStatus: "accepted",
     });
-    expect(notificationActions(accepted)?.actions).toEqual([]);
-    expect(notificationActions(accepted)?.pill).toBe("Saved");
-    const retry = notificationActions(accepted, { failed: true });
-    expect(retry?.actions.map((a) => [a.kind, a.label])).toEqual([
-      ["accept", "Try again"],
-    ]);
+    const target = notificationActions(accepted);
+    expect(target?.pill).toBe("Saved");
+    expect(
+      target?.actions.map((a) => [a.kind, a.label, a.quiet, a.confirm]),
+    ).toEqual([["accept", "Download again", true, null]]);
   });
 
   // Every decline is a dialog, the friend request's included (ADR 0016), and
@@ -184,7 +181,7 @@ describe("notificationActions", () => {
         fileSendStatus: "accepted",
       }),
     ]) {
-      for (const action of notificationActions(n, { failed: true })!.actions) {
+      for (const action of notificationActions(n)!.actions) {
         expect(action.success.length).toBeGreaterThan(0);
         expect(action.failure.length).toBeGreaterThan(0);
       }
