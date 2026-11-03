@@ -1012,19 +1012,59 @@ export function NotificationsScreen({
 
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
+  // The answer to "what happened while I was away?" is a NUMBER of things that
+  // did (shared/DESIGN.md §2), rather than a line that says the same words for
+  // one notification and for forty. The tally beside it stays the whole inbox,
+  // so the two never restate each other.
+  const listHead = (
+    <View>
+      <View style={styles.summary}>
+        <Text style={styles.summaryTitle}>
+          {inboxHeroTitle(unreadCount, notifications.length)}
+        </Text>
+        <Text style={styles.summaryTally}>
+          {tally.total} {tally.total === 1 ? "notification" : "notifications"}
+        </Text>
+      </View>
+      {notifications.length > 0 ? (
+        <View style={styles.rail}>
+          <ChipRail
+            options={buckets}
+            value={bucket}
+            onChange={changeBucket}
+            scroll
+          />
+          {/* Inert while picking rather than unmounted — a keystroke could
+              narrow a selected row out of the list — and dimmed to say so, the
+              treatment Saved's field already uses. */}
+          <View style={styles.searchField}>
+            <SearchField
+              label={INBOX.copy.searchField}
+              value={search}
+              onChangeText={setSearch}
+              editable={!selecting}
+            />
+          </View>
+        </View>
+      ) : null}
+      {truncated ? (
+        <Text style={styles.truncation}>
+          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
+        </Text>
+      ) : null}
+    </View>
+  );
+
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
+    // Only this row is pinned: the unread line, chips and search ride in the
+    // list's header and scroll away with it. A multi-select's bar takes the
+    // row's slot, so the list does not jump when picking starts (DESIGN.md).
     hero: () => (
       <Hero
-        // The answer to "what happened while I was away?" is a NUMBER of things
-        // that did (shared/DESIGN.md §2), rather than a boolean marketing line
-        // that says the same words for one notification and for forty. The
-        // tally below it stays the whole inbox, so the two lines never restate
-        // each other.
-        title={inboxHeroTitle(unreadCount, notifications.length)}
+        compact
+        title={INBOX.title}
         onBack={onBack}
         backLabel={backLabel}
-        value={String(tally.total)}
-        valueSuffix={tally.total === 1 ? "notification" : "notifications"}
         actions={
           <IconButton
             icon="overflow"
@@ -1032,65 +1072,33 @@ export function NotificationsScreen({
             onPress={() => setActionsOpen(true)}
           />
         }
-      />
+      >
+        {selecting && readAction ? (
+          <SelectionBar
+            countLabel={selectionCountLabel(selectedNotifications)}
+            showSelectAll={selectedItems.length < selectableItems.length}
+            // ONE read/unread button, not a pair: which way it goes follows the
+            // selection (all read → unread, anything unread → read), and the
+            // bar's count line states the unread tally so the direction can be
+            // read off the screen rather than remembered.
+            extra={
+              <IconButton
+                icon={readAction.icon}
+                accessibilityLabel={readAction.label}
+                color={theme.accent}
+                onPress={applyReadAction}
+              />
+            }
+            onClear={clearSelection}
+            onSelectAll={selectAll}
+            onDelete={deleteSelected}
+          />
+        ) : undefined}
+      </Hero>
     ),
-    buckets: () => (
-      <>
-        {/* The bulk bar takes the ChipRail's slot and only that slot, so
-            the rail's height cannot change when a selection starts (DESIGN.md). */}
-        {notifications.length > 0 ? (
-          <View style={styles.rail}>
-            {selecting && readAction ? (
-              <SelectionBar
-                countLabel={selectionCountLabel(selectedNotifications)}
-                showSelectAll={selectedItems.length < selectableItems.length}
-                // ONE read/unread button, not a pair: which way it goes follows the
-                // selection (all read → unread, anything unread → read), and the
-                // bar's count line states the unread tally so the direction can be
-                // read off the screen rather than remembered.
-                extra={
-                  <IconButton
-                    icon={readAction.icon}
-                    accessibilityLabel={readAction.label}
-                    color={theme.accent}
-                    onPress={applyReadAction}
-                  />
-                }
-                onClear={clearSelection}
-                onSelectAll={selectAll}
-                onDelete={deleteSelected}
-              />
-            ) : (
-              <ChipRail
-                options={buckets}
-                value={bucket}
-                onChange={changeBucket}
-                scroll
-              />
-            )}
-            {/* The name search, in the SAME place in both states so the rail's
-                height cannot differ between them (DESIGN.md). It goes inert rather than
-                unmounting while picking — a keystroke could narrow a selected row
-                out of the list — and dims to say so, the treatment Saved's field
-                and the waypoint tag rail already use. */}
-            <View style={styles.searchField}>
-              <SearchField
-                label={INBOX.copy.searchField}
-                value={search}
-                onChangeText={setSearch}
-                editable={!selecting}
-              />
-            </View>
-          </View>
-        ) : null}
-      </>
-    ),
-    truncated: () =>
-      truncated ? (
-        <Text style={styles.truncation}>
-          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
-        </Text>
-      ) : null,
+    // Drawn inside the list's header, below.
+    buckets: () => null,
+    truncated: () => null,
     list: () => (
       <SectionList
         style={styles.list}
@@ -1101,6 +1109,7 @@ export function NotificationsScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        ListHeaderComponent={listHead}
         refreshControl={
           <RefreshControl
             refreshing={false}
@@ -1552,11 +1561,16 @@ function EmptyPanel({
 const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
-  rail: {
-    paddingHorizontal: spacing(2),
+  summary: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: spacing(1),
     paddingTop: spacing(1.5),
-    paddingBottom: spacing(1.5),
   },
+  summaryTitle: { ...textRole.heading, color: theme.text },
+  summaryTally: { ...muted(theme, textRole.detail) },
+  // The chips run off the right edge, so the rail bleeds past the list's gutter.
+  rail: { marginHorizontal: -spacing(2), paddingLeft: spacing(2) },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),

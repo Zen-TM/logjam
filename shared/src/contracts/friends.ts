@@ -70,11 +70,11 @@ export const FRIENDS = {
 export type FriendsBucket = "all" | "friends" | "requests";
 
 /**
- * Logjam GPS's hero. A request outranks the count: it is the one thing
- * waiting on the user. Logjam Web's hero is `FRIENDS.title`: its chips show
- * both counts.
+ * The line under Logjam GPS's "Friends" title. A request outranks the count:
+ * it is the one thing waiting on the user. Logjam Web's chips show both
+ * counts.
  */
-export function friendsHeroTitle(requests: number, friends: number): string {
+export function friendsHeroSubtitle(requests: number, friends: number): string {
   if (requests > 0)
     return `${requests} ${requests === 1 ? "request" : "requests"}`;
   if (friends === 0) return "No friends yet";

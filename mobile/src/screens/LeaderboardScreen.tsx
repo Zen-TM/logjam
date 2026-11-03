@@ -81,8 +81,9 @@ export const LEADERBOARD_SECTIONS: Record<
     const { rank, size } = selfStanding(board);
     return (
       <Hero
-        title={leaderboardHeroTitle(rank, size)}
-        value={leaderboardSeasonLine(board.season)}
+        title={LEADERBOARD.title}
+        // The rank, then the season, as Logjam Web's line under the title.
+        value={`${leaderboardHeroTitle(rank, size)} · ${leaderboardSeasonLine(board.season)}`}
         onBack={onBack}
         backLabel={backLabel}
         actions={

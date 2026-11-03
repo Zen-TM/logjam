@@ -99,7 +99,8 @@ import { PROTOMAPS_FLAVOR } from "./basemap/protomapsLayers";
 import { useShellStyle } from "./basemap/shellStyle";
 import { readLastMapCamera } from "./lastCamera";
 import { DEFAULT_CENTER, DEFAULT_ZOOM } from "./mapChrome";
-import { nextRegionName } from "./regionName";
+import { useMirrorPlaces } from "../sync/useSyncQueries";
+import { defaultRegionName } from "./regionName";
 import { ResolvedSource, sourceIdFor } from "./ResolvedSource";
 import {
   bboxToFrame,
@@ -283,21 +284,11 @@ export function RegionDownloadScreen({
   } | null>(null);
   const nameInputRef = useRef<TextInputInstance>(null);
 
-  // "Region 3", numbered off what this phone already holds plus what is still
-  // downloading. Nothing in it needs the network or says where the area is
-  // (see regionName.ts).
+  // The nearest of the user's own places, else "Region 3" (regionName.ts):
+  // worked out on the phone, never from the network.
   const { artifacts } = useMapArtifacts();
   const runningJobs = useRegionDownloads();
-  const defaultName = useMemo(
-    () =>
-      nextRegionName([
-        ...artifacts
-          .filter((artifact) => artifact.kind === "basemap-region")
-          .map((artifact) => artifact.groupLabel),
-        ...runningJobs.map((job) => job.spec.groupLabel),
-      ]),
-    [artifacts, runningJobs],
-  );
+  const { data: ownPlaces } = useMirrorPlaces();
 
   // Preview the map they are about to save — the LAST one they picked, which
   // is the one the tap was about. Deselecting the previewed map falls back to
@@ -456,6 +447,23 @@ export function RegionDownloadScreen({
   const canDownload = bbox != null && caps?.ok === true && gate.canSave;
 
   const centreLat = bbox ? (bbox.north + bbox.south) / 2 : 0;
+  const centreLng = bbox ? (bbox.east + bbox.west) / 2 : 0;
+  const hasBbox = bbox != null;
+  const defaultName = useMemo(
+    () =>
+      defaultRegionName(
+        hasBbox ? { lat: centreLat, lng: centreLng } : null,
+        (ownPlaces ?? []).filter((place) => place.syncRole === "owner"),
+        [
+          ...artifacts
+            .filter((artifact) => artifact.kind === "basemap-region")
+            .map((artifact) => artifact.groupLabel),
+          ...runningJobs.map((job) => job.spec.groupLabel),
+        ],
+      ),
+    // `bbox` is a fresh object each render: its centre is what matters.
+    [centreLat, centreLng, hasBbox, ownPlaces, artifacts, runningJobs],
+  );
   // BASEMAP pyramids only. The DEM is in `perSource` too but its zoom is a
   // fixed internal detail, and the caption is about what the user will see.
   // (This list is EMPTY for a vector-only selection — the clip is one file, not

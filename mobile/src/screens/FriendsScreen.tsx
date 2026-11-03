@@ -48,10 +48,9 @@ import {
   friendRemoveConfirm,
   friendRequestMadeFriend,
   friendsEmptyKind,
-  friendsHeroTitle,
+  friendsHeroSubtitle,
   FRIENDS,
   friendVerb,
-  leaderboardBadge,
   leaderboardButtonLabel,
   selfStanding,
   type LeaderboardResponse,
@@ -79,14 +78,7 @@ import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import {
-  spacing,
-  makeStyles,
-  radius,
-  useTheme,
-  useHues,
-  muted,
-} from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -94,7 +86,6 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
-  ListEnd,
   IconButton,
   LoadingState,
   Row,
@@ -354,7 +345,8 @@ export function FriendsScreen({
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
       <Hero
-        title={friendsHeroTitle(requests.length, friends.length)}
+        title={FRIENDS.title}
+        value={friendsHeroSubtitle(requests.length, friends.length)}
         onBack={onBack}
         backLabel={backLabel}
         actions={
@@ -369,7 +361,6 @@ export function FriendsScreen({
             <Button
               label={copy.add}
               icon="addFriend"
-              variant="outlineAccent"
               compact
               onPress={() => setAddOpen(true)}
             />
@@ -410,19 +401,6 @@ export function FriendsScreen({
             />
           }
           renderItem={renderItem}
-          ListFooterComponent={
-            // The list ends with the button its empty state offers.
-            items.length > 0 ? (
-              <ListEnd>
-                <Button
-                  label={copy.addTitle}
-                  icon="addFriend"
-                  variant="outlineAccent"
-                  onPress={() => setAddOpen(true)}
-                />
-              </ListEnd>
-            ) : undefined
-          }
           ListEmptyComponent={
             <EmptyPanel
               kind={friendsEmptyKind({
@@ -740,9 +718,9 @@ function EmptyPanel({
   );
 }
 
-/** The way into the leaderboard, wearing the user's rank as the More tab's
- *  Inbox row wears its unread count, in the accent: a rank is news, not a
- *  warning. The badge is hidden; its number is in the name (shared/DESIGN.md). */
+/** The way into the leaderboard. No numeric badge: a number on a button reads
+ *  as an unread count, and a rank is not one. Its rank is in the name, and the
+ *  board's own hero says it. */
 function LeaderboardButton({
   standing,
   onPress,
@@ -750,45 +728,18 @@ function LeaderboardButton({
   standing: { rank: number; size: number } | null;
   onPress: () => void;
 }) {
-  const styles = useStyles();
-  const badge = standing && leaderboardBadge(standing.rank, standing.size);
   return (
-    <View>
-      <IconButton
-        icon="leaderboard"
-        accessibilityLabel={leaderboardButtonLabel(standing)}
-        onPress={onPress}
-      />
-      {badge ? (
-        <View
-          style={styles.rankBadge}
-          pointerEvents="none"
-          importantForAccessibility="no-hide-descendants"
-          accessibilityElementsHidden
-        >
-          <Text style={styles.rankBadgeText}>{badge}</Text>
-        </View>
-      ) : null}
-    </View>
+    <IconButton
+      icon="leaderboard"
+      accessibilityLabel={leaderboardButtonLabel(standing)}
+      onPress={onPress}
+    />
   );
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  rankBadge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: spacing(0.5),
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.accent,
-  },
-  rankBadgeText: { ...textRole.caption, color: theme.onFill },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
