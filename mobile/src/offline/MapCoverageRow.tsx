@@ -8,7 +8,7 @@ import { BASEMAP_CATALOG } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { readBasemapPreference } from "../map/basemapPreference";
-import { Button, Row } from "../ui";
+import { Button, CardActions, Row } from "../ui";
 import {
   coveredByOfflineMaps,
   routeCoveredByOfflineMaps,
@@ -56,24 +56,26 @@ export function MapCoverageRow({
       subtitle={
         online ? basemapName : unavailableReasonText("needs-connection")
       }
-      right={
-        <Button
-          compact
-          variant="outlineAccent"
-          label="Save an offline map"
-          disabled={!online}
-          disabledReason={unavailableReasonText("needs-connection")}
-          onPress={() => {
-            onSave?.();
-            // Every stack sits under the tabs, whose Map tab holds the framing
-            // screen (the plan page's "Download the map for this area" goes
-            // the same way).
-            navigation.getParent()?.navigate("Map", {
-              screen: "MapRegionDownload",
-              params: { bounds: bbox },
-            });
-          }}
-        />
+      // Under the text, not beside it, so the sentence keeps the row's width.
+      footer={
+        <CardActions>
+          <Button
+            variant="outlineAccent"
+            label="Save an offline map"
+            disabled={!online}
+            disabledReason={unavailableReasonText("needs-connection")}
+            onPress={() => {
+              onSave?.();
+              // Every stack sits under the tabs, whose Map tab holds the framing
+              // screen (the plan page's "Download the map for this area" goes
+              // the same way).
+              navigation.getParent()?.navigate("Map", {
+                screen: "MapRegionDownload",
+                params: { bounds: bbox },
+              });
+            }}
+          />
+        </CardActions>
       }
     />
   );
