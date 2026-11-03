@@ -3,8 +3,11 @@ import {
   failureStaysOnForm,
   isValidEmailFormat,
   isValidPassword,
+  resendCodeWaiting,
+  SIGN_IN_COPY,
   signUpFormProblem,
   usernameAvailable,
+  verifyIntro,
 } from "./signInForm.js";
 import { passwordSignIn } from "./cognitoAccount.js";
 
@@ -157,5 +160,24 @@ describe("a call can be bounded", () => {
     expect(
       (f.mock.calls[0] as unknown as [string, RequestInit])[1].signal,
     ).toBe(signal);
+  });
+});
+
+describe("the words both sign-in forms draw", () => {
+  // Mutation: reword `ageConfirm` back to "I confirm I am 18 years of age or
+  // older." The form's own refusal ("Confirm you are 18 or older") then names
+  // an age the tick no longer says.
+  it("words the age tick as the refusal does", () => {
+    expect(SIGN_IN_COPY.ageConfirm).toContain("18 or older");
+    expect(
+      signUpFormProblem({ ...good, ageConfirmed: false })?.message,
+    ).toContain("18 or older");
+  });
+
+  it("says where the code went and counts down the resend", () => {
+    expect(verifyIntro(" a@b.co ")).toBe(
+      "We sent a code to a@b.co. Check your spam folder too.",
+    );
+    expect(resendCodeWaiting(30)).toBe("Send a new code (30s)");
   });
 });

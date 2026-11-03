@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  SIGN_IN_COPY,
   USERNAME_HINT,
 } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
@@ -119,7 +120,7 @@ function ConsentGate({
         />
         {newAccount && (
           <Checkbox
-            label="I confirm I am 18 years of age or older."
+            label={SIGN_IN_COPY.ageConfirm}
             checked={ageConfirmed}
             onChange={(next) => {
               setAgeConfirmed(next);

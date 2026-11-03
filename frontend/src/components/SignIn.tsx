@@ -31,10 +31,13 @@ import {
   isValidUsername,
   NSW_5M,
   PASSWORD_HINT,
+  resendCodeWaiting,
+  SIGN_IN_COPY,
   TRIP_PLAN_JOIN,
   signUpFormProblem,
   USERNAME_HINT,
   USERNAME_TAKEN,
+  verifyIntro,
 } from "@logjam/shared";
 import { usernameAvailable } from "../placeUtils";
 import { friendInvite, planInvite } from "../pendingInvite";
@@ -372,9 +375,7 @@ function CognitoForms({
       <Frame>
         <form className={classes.form} noValidate onSubmit={handleConfirm}>
           <Brand />
-          <p className={classes.subtitle}>
-            Check your email for a verification code (check spam)
-          </p>
+          <p className={classes.subtitle}>{verifyIntro(email)}</p>
           <TextField
             label="Verification code"
             value={code}
@@ -406,8 +407,8 @@ function CognitoForms({
             className={classes.submit}
           >
             {resendCooldown > 0
-              ? `Resend code (${resendCooldown}s)`
-              : "Resend code"}
+              ? resendCodeWaiting(resendCooldown)
+              : SIGN_IN_COPY.resendCode}
           </Button>
         </form>
       </Frame>
@@ -423,9 +424,7 @@ function CognitoForms({
           onSubmit={handleForgotPassword}
         >
           <Brand />
-          <p className={classes.subtitle}>
-            Enter your email and we&apos;ll send you a reset code
-          </p>
+          <p className={classes.subtitle}>{SIGN_IN_COPY.resetIntro}</p>
           <TextField
             label="Email"
             type="email"
@@ -586,7 +585,7 @@ function CognitoForms({
           <div className={classes.consent}>
             <TermsTick checked={consented} onChange={setConsented} />
             <Checkbox
-              label="I confirm I am 18 years of age or older."
+              label={SIGN_IN_COPY.ageConfirm}
               checked={ageConfirmed}
               onChange={setAgeConfirmed}
             />
@@ -598,16 +597,18 @@ function CognitoForms({
             busy={submitting}
             className={classes.submit}
           >
-            {submitting ? "Creating account…" : "Sign up"}
+            {submitting
+              ? SIGN_IN_COPY.creatingAccount
+              : SIGN_IN_COPY.createAccount}
           </Button>
           <p className={classes.switchText}>
-            Already have an account?{" "}
+            {SIGN_IN_COPY.haveAccount}{" "}
             <button
               type="button"
               className={classes.link}
               onClick={() => goTo("signIn")}
             >
-              Sign in
+              {SIGN_IN_COPY.signIn}
             </button>
           </p>
         </form>
@@ -668,13 +669,12 @@ function CognitoForms({
           </button>
         </p>
         <p className={classes.switchText}>
-          Don&apos;t have an account?{" "}
           <button
             type="button"
             className={classes.link}
             onClick={() => goTo("signUp")}
           >
-            Sign up
+            {SIGN_IN_COPY.goToSignUp}
           </button>
         </p>
       </form>

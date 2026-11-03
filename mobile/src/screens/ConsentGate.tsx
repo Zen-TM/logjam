@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  SIGN_IN_COPY,
   USERNAME_HINT,
 } from "@logjam/shared";
 
@@ -131,7 +132,7 @@ export function ConsentGate({
       />
       {newAccount ? (
         <SwitchRow
-          title="I am 18 or older"
+          title={SIGN_IN_COPY.ageConfirm}
           checked={ageConfirmed}
           onChange={(next) => {
             setAgeConfirmed(next);

@@ -1986,15 +1986,20 @@ test.describe("surfaces fake auth never shows", () => {
     // Sign-up is where the two ticks live. The Terms and Privacy links are in
     // the first one's sentence, which is not a <label>, so reading the terms
     // doesn't answer the question about them (TermsTick.tsx).
-    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Create an account", exact: true })
+      .click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);
     // The way in is never disabled: pressing it says what is missing
     // (shared/DESIGN.md §5).
-    const create = page.getByRole("button", { name: "Sign up", exact: true });
+    const create = page.getByRole("button", {
+      name: "Create account",
+      exact: true,
+    });
     await expect(create).toBeEnabled();
     await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
-    await page.getByRole("checkbox", { name: /18 years of age/ }).check();
+    await page.getByRole("checkbox", { name: /18 or older/ }).check();
     await expect(create).toBeEnabled();
 
     // And back out to the reset form, which is the third reachable state.
@@ -2045,7 +2050,7 @@ test.describe("surfaces fake auth never shows", () => {
       page.getByRole("checkbox", { name: /agree to the Terms of Use/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("checkbox", { name: /18 years of age/ }),
+      page.getByRole("checkbox", { name: /18 or older/ }),
     ).toBeVisible();
     await expectNoViolations(page);
   });
