@@ -240,39 +240,22 @@ export function usePlaceTypeForm({
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
-    // THE SERVER REFUSES A TYPE THAT STILL HAS PLACES ON IT (409, "Move them to
-    // another type first"), so the count is taken here and the delete is
-    // refused here. Queuing it anyway would park a dead push whose reason the
-    // user never sees — the same rule the place form follows by validating
-    // before it enqueues.
-    listMirrorPlaces()
-      .then(async (places) => {
-        const inUse = places.filter(
-          (place) => place.placeTypeId === editing.id,
-        ).length;
-        if (inUse > 0) {
-          setFormError(
-            `“${editing.name}” is still in use. ${inUse} place${inUse === 1 ? "" : "s"} ${inUse === 1 ? "is" : "are"} this type. Change ${inUse === 1 ? "it" : "them"} to another type first.`,
-          );
-          return;
-        }
-        if (!(await confirm(placeTypeDeleteConfirm(editing.name)))) return;
-        deletePlaceTypeLocal(editing.id)
-          .then(() => {
-            onSaved("Type deleted.");
-            onDone();
-          })
-          .catch((err: unknown) => {
-            console.error(err);
-            // Same reasoning as `save`'s catch: the sheet is still up,
-            // so this is the banner, not a toast under it.
-            setFormError("Couldn't delete that type.");
-          });
-      })
-      .catch((err: unknown) => {
-        console.error(err);
-        setFormError("Couldn't check which places use this type.");
-      });
+    // Delete is not offered while a place is on the type (the server refuses
+    // it), so there is no count to take here.
+    void confirm(placeTypeDeleteConfirm(editing.name)).then((yes) => {
+      if (!yes) return;
+      deletePlaceTypeLocal(editing.id)
+        .then(() => {
+          onSaved("Type deleted.");
+          onDone();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          // Same reasoning as `save`'s catch: the sheet is still up,
+          // so this is the banner, not a toast under it.
+          setFormError("Couldn't delete that type.");
+        });
+    });
   }, [editing, onDone, onSaved]);
 
   const body = (
