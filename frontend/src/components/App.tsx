@@ -769,6 +769,11 @@ function App() {
     [sharedPlaces],
   );
 
+  const ownPlaceIds = useMemo(
+    () => new Set(places.map((place) => place.id)),
+    [places],
+  );
+
   // The overlay's count is the SAME list the Ways page builds — including its
   // de-duplication of a file that both endpoints return — so the number on the
   // layer row and the number in the page's heading cannot drift. A line pressed
@@ -781,8 +786,16 @@ function App() {
         placeTracks,
         currentUserId: currentUser?.id ?? null,
         sharedPlaceIds,
+        ownPlaceIds,
       }),
-    [routes, standaloneFiles, placeTracks, currentUser?.id, sharedPlaceIds],
+    [
+      routes,
+      standaloneFiles,
+      placeTracks,
+      currentUser?.id,
+      sharedPlaceIds,
+      ownPlaceIds,
+    ],
   );
   const wayCount = allWays.length;
 

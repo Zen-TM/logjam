@@ -84,7 +84,7 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * one verb that makes a copy of its own.
  */
 export function wayVerbs(
-  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin">,
   surface: WaySurface,
 ): WayVerb[] {
   const owned = !way.shared;
@@ -118,7 +118,7 @@ export function wayVerbs(
   // route is a row `POST /shares` can grant, a file is not and is handed over
   // as a copy instead (`POST /file-sends/from-media`, owner only).
   if (owned && WAY_SHARE_VERB[way.kind] === "share") verbs.push(verb("share"));
-  if (owned && WAY_SHARE_VERB[way.kind] === "sendCopy") {
+  if (owned && way.hasOrigin && WAY_SHARE_VERB[way.kind] === "sendCopy") {
     verbs.push(verb("sendCopy"));
   }
   if (EXPORTABLE_KINDS.includes(way.kind)) {
@@ -130,7 +130,9 @@ export function wayVerbs(
   // file on someone else's place is not the caller's to pull.
   if (owned && way.kind !== "route") verbs.push(verb("download"));
   // A route is renamed by the form that named it; a file is renamed in place.
-  if (owned && way.kind !== "route") verbs.push(verb("rename"));
+  if (owned && way.hasOrigin && way.kind !== "route") {
+    verbs.push(verb("rename"));
+  }
 
   // Below the rule: the ways this stops being something the user carries.
   // "Save to my Ways and remove" sits with Remove rather than with Copy because
@@ -150,7 +152,7 @@ export function wayVerbs(
  * being a habit each panel follows differently.
  */
 export function wayProperties(
-  way: Pick<WayItem, "kind" | "shared" | "placeId">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "hasOrigin">,
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
@@ -158,7 +160,9 @@ export function wayProperties(
     // can be changed from here; a recording's lives on the phone that made it
     // (its own table), so a picker here would paint a line that phone never
     // redraws.
-    colour: owned && (way.kind === "route" || way.kind === "import"),
+    colour:
+      owned &&
+      (way.kind === "route" || (way.kind === "import" && way.hasOrigin)),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

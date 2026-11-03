@@ -60,6 +60,13 @@ export type WayItem = {
    * PLACE, and offering Remove here would be a button that cannot work.
    */
   viaPlace: boolean;
+  /**
+   * The file says what it is (a recording or an import). The edit and send-a-copy
+   * endpoints take only such files, so a file attached in a place's edit form,
+   * which has none, is downloaded and deleted but not renamed, recoloured or
+   * sent. A route has no file, so it is true.
+   */
+  hasOrigin: boolean;
   /** The place this way belongs to, where it belongs to one. */
   placeId: string | null;
   /**
@@ -128,6 +135,7 @@ export function wayFromRoute(
     distanceM: routeLengthM(route.points),
     color: route.color,
     shared,
+    hasOrigin: true,
     viaPlace:
       shared && route.placeId !== null && sharedPlaceIds.has(route.placeId),
     placeId: route.placeId,
@@ -142,6 +150,7 @@ export function buildWays({
   placeTracks,
   currentUserId,
   sharedPlaceIds,
+  ownPlaceIds,
 }: {
   routes: readonly TRoute[];
   standaloneFiles: readonly StandaloneFile[];
@@ -150,6 +159,10 @@ export function buildWays({
   /** Ids of the places shared WITH the user — what tells a route shared on its
    *  own from one seen through somebody's place (`WayItem.viaPlace`). */
   sharedPlaceIds: ReadonlySet<string>;
+  /** Ids of the places the user owns. A file on any other place is somebody
+   *  else's until this says otherwise, so a list still loading cannot show a
+   *  friend's file with the owner's verbs. */
+  ownPlaceIds: ReadonlySet<string>;
 }): WayItem[] {
   const fileIds = new Set(standaloneFiles.map((file) => file.id));
   // NEWEST FIRST, across every source: a recording made this morning
@@ -174,6 +187,7 @@ export function buildWays({
         // scoped to the caller, and a friend's file arrives as a copy.
         shared: false,
         viaPlace: false,
+        hasOrigin: true,
         placeId: file.linkedPlaceId,
         createdAt: file.createdAt,
         bounds: file.metadata.bbox ?? null,
@@ -194,11 +208,13 @@ export function buildWays({
           // What is left after the de-duplication above is a file on a place:
           // the user's own (an upload through the place's edit form has no
           // `origin`, so `/media/standalone` never lists it) or one on a place
-          // shared with them. Only the place's share makes it someone else's.
-          shared: sharedPlaceIds.has(track.placeId),
+          // shared with them. Own is proved by owning the place, never assumed
+          // from the place not being known to be shared.
+          shared: !ownPlaceIds.has(track.placeId),
           // `/places/tracks` is the place's endpoint: a file here has no share
           // row of its own, and the place's share is the only thing holding it.
-          viaPlace: sharedPlaceIds.has(track.placeId),
+          viaPlace: !ownPlaceIds.has(track.placeId),
+          hasOrigin: track.origin !== null,
           placeId: track.placeId,
           // `/places/tracks` carries no date; these sort last (see WayItem).
           createdAt: null,

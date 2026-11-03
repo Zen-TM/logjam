@@ -60,6 +60,7 @@ const way: WayItem = {
   color: route.color,
   shared: true,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
   createdAt: route.createdAt,
   bounds: [150.3, -33.71, 150.31, -33.7],

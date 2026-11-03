@@ -5,12 +5,13 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import TripLogDialog, { type TripLogPrefill } from "./TripLogDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
 import { deleteMedia } from "../../placeUtils";
+import { ApiError } from "../../errors/ApiError";
 import type { TPlace, TTripLog } from "../../placeUtils";
 
 vi.mock("../../placeUtils", async (importOriginal) => ({
@@ -18,15 +19,33 @@ vi.mock("../../placeUtils", async (importOriginal) => ({
   getTripLog: vi.fn(async () => ({ media: [] })),
   deleteMedia: vi.fn(async () => {}),
 }));
-// The real one needs a file chooser; this one "uploads" on a press.
+// The real one needs a file chooser: this one "uploads" (m1, m2, ...) on a
+// press, and reports a slow one on another.
+const upload = vi.hoisted(() => ({ n: 0 }));
 vi.mock("../media/MediaUpload", () => ({
-  default: ({ onUploaded }: { onUploaded: (item: unknown) => void }) => (
-    <button
-      type="button"
-      onClick={() => onUploaded({ id: "m1", mediaType: "image/jpeg" })}
-    >
-      Fake upload
-    </button>
+  default: ({
+    onUploaded,
+    onBusyChange,
+  }: {
+    onUploaded: (item: unknown) => void;
+    onBusyChange: (busy: boolean) => void;
+  }) => (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          onUploaded({ id: `m${++upload.n}`, mediaType: "image/jpeg" })
+        }
+      >
+        Fake upload
+      </button>
+      <button type="button" onClick={() => onBusyChange(true)}>
+        Start slow upload
+      </button>
+      <button type="button" onClick={() => onBusyChange(false)}>
+        Finish slow upload
+      </button>
+    </>
   ),
 }));
 
@@ -112,25 +131,34 @@ describe("a trip log started from a plan", () => {
 });
 
 // Uploads land on the server the moment they finish, so Discard has to take
-// them back out. Mutation: drop `uploadedIds` from `isDirty`, or the delete
-// loop from `handleRequestClose`.
+// them back out. Mutations: drop `uploadedIds` from `isDirty`; move
+// `onGone` out of `discardUploads`'s loop (a retry then deletes the first file
+// twice); treat a 404 as a failure; drop `uploading` from the Cancel button.
 describe("a trip log being edited, after an upload", () => {
-  it("asks before closing, and deletes the upload on Discard", async () => {
-    const onClose = vi.fn();
-    const trip = {
-      id: "t1",
-      date: "2026-11-07",
-      notes: null,
-      places: [],
-      displayName: "Wollangambe trip",
-      types: [],
-      customFields: {},
-    } as unknown as TTripLog;
+  const onClose = vi.fn();
+  beforeEach(() => {
+    upload.n = 0;
+    onClose.mockClear();
+    vi.mocked(deleteMedia).mockReset();
+    vi.mocked(deleteMedia).mockResolvedValue(undefined);
+  });
+
+  const open = () => {
     render(
       <ToastProvider>
         <TripLogDialog
           open
-          tripLog={trip}
+          tripLog={
+            {
+              id: "t1",
+              date: "2026-11-07",
+              notes: null,
+              places: [],
+              displayName: "Wollangambe trip",
+              types: [],
+              customFields: {},
+            } as unknown as TTripLog
+          }
           onClose={onClose}
           onSaved={() => {}}
           places={[]}
@@ -140,13 +168,68 @@ describe("a trip log being edited, after an upload", () => {
         />
       </ToastProvider>,
     );
-    fireEvent.click(screen.getAllByText("Fake upload")[0]);
+  };
+  const upload1 = () => fireEvent.click(screen.getAllByText("Fake upload")[0]);
+  const cancel = () =>
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  const discard = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+  it("asks before closing, and deletes the upload on Discard", async () => {
+    open();
+    upload1();
+    cancel();
     expect(onClose).not.toHaveBeenCalled();
     expect(deleteMedia).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    discard();
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(deleteMedia).toHaveBeenCalledWith("m1");
+  });
+
+  it("stays open when a delete fails, and a retry deletes only what is left", async () => {
+    open();
+    upload1();
+    upload1();
+    vi.mocked(deleteMedia)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("offline"));
+    cancel();
+    discard();
+    await screen.findByText(/Couldn't discard uploaded files/);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(vi.mocked(deleteMedia).mock.calls).toEqual([["m1"], ["m2"]]);
+
+    cancel();
+    discard();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(vi.mocked(deleteMedia).mock.calls).toEqual([["m1"], ["m2"], ["m2"]]);
+  });
+
+  it("counts a file the server no longer has as deleted", async () => {
+    open();
+    upload1();
+    vi.mocked(deleteMedia).mockRejectedValueOnce(
+      new ApiError(404, "/media/m1", "DELETE"),
+    );
+    cancel();
+    discard();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("holds Cancel while a file is still uploading", () => {
+    open();
+    fireEvent.click(screen.getAllByText("Start slow upload")[0]);
+    expect(
+      screen
+        .getByRole("button", { name: "Cancel" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+    fireEvent.click(screen.getAllByText("Finish slow upload")[0]);
+    expect(
+      screen
+        .getByRole("button", { name: "Cancel" })
+        .getAttribute("aria-disabled"),
+    ).toBeNull();
   });
 });
