@@ -1664,7 +1664,11 @@ export function SavedScreen({
           with the list so it gets the screen. */}
       <Hero
         compact
-        title="Saved"
+        // The chips scroll away with the list, so the pinned row keeps naming
+        // the filter (an Inbox tap lands on Routes already scrolled).
+        title={
+          filter === "all" ? "Saved" : `Saved · ${CATEGORY_META[filter].plural}`
+        }
         actions={
           <Button
             label="Add"
@@ -1824,6 +1828,7 @@ export function SavedScreen({
                 icon="saveOffline"
                 hue={group.settled ? theme.warning : assetHue.region}
                 progress={group.fraction}
+                rightBelow
                 right={
                   <View style={styles.rowActions}>
                     <IconButton

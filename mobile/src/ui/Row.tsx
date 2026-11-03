@@ -9,6 +9,7 @@ import {
   withAlpha,
   makeStyles,
   muted,
+  textScale,
   useTheme,
 } from "../theme";
 import { holdTick } from "./holdTick";
@@ -39,6 +40,7 @@ export function Row({
   hue,
   right,
   footer,
+  rightBelow = false,
   progress,
   onPress,
   onLongPress,
@@ -76,6 +78,12 @@ export function Row({
    * the row below.
    */
   footer?: React.ReactNode;
+  /**
+   * `right` is a column of several things (a size, glyphs, a ⋯). At a large
+   * text size it takes the line's width from the title, so it drops under the
+   * subtitle, right-aligned, and the words get the whole card.
+   */
+  rightBelow?: boolean;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
@@ -122,6 +130,13 @@ export function Row({
   // horizontal layout every row has always had. `progress` stays a direct child
   // of the card, not of the line: it is absolutely positioned against the card's
   // padding box, and nesting it would inset the bar by the card's padding.
+  const stackRight = rightBelow && right != null && textScale >= 1.3;
+  const rightNode =
+    right != null ? (
+      <View style={[styles.right, stackRight && styles.rightBelow]}>
+        {right}
+      </View>
+    ) : null;
   const body = (
     <>
       <View style={styles.line}>
@@ -135,8 +150,9 @@ export function Row({
               {subtitle}
             </Text>
           ) : null}
+          {stackRight ? rightNode : null}
         </View>
-        {right != null ? <View style={styles.right}>{right}</View> : null}
+        {stackRight ? null : rightNode}
       </View>
       {footer != null ? <View style={styles.footer}>{footer}</View> : null}
       {progress != null ? (
@@ -272,6 +288,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(0.5),
   },
+  rightBelow: { alignSelf: "flex-end" },
   title: { ...textRole.rowTitle, color: theme.text },
   subtitle: muted(theme, textRole.detail),
   progressTrack: {
