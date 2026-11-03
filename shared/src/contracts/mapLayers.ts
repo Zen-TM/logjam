@@ -29,7 +29,9 @@ export const MAP_LAYERS = {
     tabOffline: "Offline",
     places: "Places",
     ways: "Ways",
-    // The overlays list ends with the way to add one (Logjam Web).
+    // The overlays list ends with the way to add one. On Logjam GPS the row
+    // takes GPX, KML and GeoJSON; on Logjam Web it opens the CSV importer.
     importFile: "Import a file",
+    importFileWeb: "Import from CSV",
   },
 } as const satisfies ScreenContract;

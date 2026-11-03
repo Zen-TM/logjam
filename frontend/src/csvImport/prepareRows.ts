@@ -218,6 +218,7 @@ export function buildPlaceInput(
 export function preparePlaceRows(
   rows: Record<string, string>[],
   placeAssignments: Record<string, PlaceFieldRole>,
+  lines?: number[],
 ): {
   rows: PreparedPlaceRow[];
   warnings: string[];
@@ -239,8 +240,9 @@ export function preparePlaceRows(
       row,
       placeAssignments,
     );
-    // CSV line number: header is line 1, so the first data row is line 2.
-    const line = rowIndex + 2;
+    // The file's own line when the parser knew it; else header is line 1, so
+    // the first data row is line 2.
+    const line = lines?.[rowIndex] ?? rowIndex + 2;
     const dropReason = describeDroppedPlaceRow({
       name: input.name,
       latitude: input.latitude,
@@ -284,6 +286,8 @@ export function prepareTripRows(args: {
   >;
   customFieldDefs: TripLogCustomFieldDef[];
   dateFormat: DateFormat;
+  /** The file line each row starts on (`parseCsv`'s `lines`). */
+  lines?: number[];
 }): {
   rows: PreparedTripRow[];
   warnings: string[];
@@ -296,6 +300,7 @@ export function prepareTripRows(args: {
     tripNewCfForms,
     customFieldDefs,
     dateFormat,
+    lines,
   } = args;
   const nameCol = headers.find((h) => tripAssignments[h] === "name");
   const dateCol = headers.find((h) => tripAssignments[h] === "date");
@@ -351,7 +356,7 @@ export function prepareTripRows(args: {
     if (!isoDate) {
       droppedRows += 1;
       warnings.push(
-        `Row ${rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)}${SKIPPED_ROW_SUFFIX}`,
+        `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)}${SKIPPED_ROW_SUFFIX}`,
       );
       return;
     }
@@ -364,7 +369,7 @@ export function prepareTripRows(args: {
       } else {
         const typeWord = cf.type === "integer" ? "whole number" : "number";
         warnings.push(
-          `Row ${rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
+          `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
         );
       }
     }

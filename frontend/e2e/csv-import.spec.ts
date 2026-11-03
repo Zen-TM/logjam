@@ -197,10 +197,10 @@ test("a logbook: the match review, import, Undo", async ({ page }) => {
     // 10 rows, one with a date nobody can read, two discarded.
     await expectTallies(dialog, {
       Imported: "7",
-      "Couldn't be read": "1",
       "Linked to a place": "7",
       Discarded: "2",
     });
+    await expect(dialog.getByText("Skipped rows")).toBeVisible();
 
     await undoWhatWasImported(page, dialog);
     await expect(

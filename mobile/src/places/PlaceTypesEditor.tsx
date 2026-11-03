@@ -33,6 +33,7 @@ import {
 import {
   drawsYoursHeading,
   isSystemPlaceTypeId,
+  NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
@@ -407,13 +408,13 @@ type PlaceTypeDraft = {
   color: string;
 };
 
-/** A NEW type starts on the neutral pin and the first palette entry rather than
+/** A NEW type starts on the shared default glyph and the first palette entry rather than
  *  on nothing: a form whose preview is blank until two more taps reads as
  *  broken, and both defaults are valid answers. */
 function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
   return {
     name: editing?.name ?? "",
-    iconKey: (editing?.iconKey as PlaceTypeIconKey) ?? PLACE_TYPE_ICON_KEYS[0],
+    iconKey: (editing?.iconKey as PlaceTypeIconKey) ?? NEW_PLACE_TYPE_ICON_KEY,
     color: editing?.color ?? PLACE_TYPE_COLORS[0],
   };
 }

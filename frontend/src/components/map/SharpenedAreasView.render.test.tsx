@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../feedback/ToastProvider";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import SharpenedAreasView from "./SharpenedAreasView";
+import type { TopoJob } from "../dialogs/TopoDialog";
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn(async () => ({})) }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
@@ -58,11 +59,15 @@ const job = (over: Partial<CompletedTopoJob>): CompletedTopoJob => ({
   ...over,
 });
 
-function draw(jobs: CompletedTopoJob[], loaded = true) {
+function draw(
+  jobs: CompletedTopoJob[],
+  loaded = true,
+  activeTopoJobs: TopoJob[] = [],
+) {
   const props = {
     onBack: vi.fn(),
     onClose: vi.fn(),
-    activeTopoJobs: [],
+    activeTopoJobs,
     completedTopoJobs: jobs,
     friends: [],
     loaded,
@@ -124,6 +129,27 @@ describe("the sharpened areas view", () => {
     draw([], false);
     expect(screen.getByText("Loading your sharpened areas…")).toBeTruthy();
     expect(screen.queryByText(/None yet/)).toBeNull();
+  });
+
+  // Mutation: drop `beingMade.length === 0` from the empty line's condition.
+  it('does not say "None yet" above a job that is queued', () => {
+    draw([], true, [
+      {
+        id: "q1",
+        status: "pending",
+        name: "Made-up gully",
+        footprint: null,
+        tileCount: 1,
+        estimatedSeconds: null,
+        layerOptions: null,
+        errorMessage: null,
+        createdAt: "2026-10-01T00:00:00Z",
+        updatedAt: "2026-10-01T00:00:00Z",
+        syncRole: "owner",
+      },
+    ]);
+    expect(screen.queryByText(/None yet/)).toBeNull();
+    expect(screen.getByText("Queued")).toBeTruthy();
   });
 
   it("arms the pick from the Sharpen an area button", () => {

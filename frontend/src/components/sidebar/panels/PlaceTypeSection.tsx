@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   drawsYoursHeading,
   PLACE_TYPE_COLORS,
+  NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
   placeTypeDeleteConfirm,
@@ -438,9 +439,7 @@ function PlaceTypeDialog({
 }) {
   const [name, setName] = useState(editing?.name ?? "");
   const [iconKey, setIconKey] = useState(
-    // Not the pin: the built-in Marker wears it, and a new type starting on it
-    // reads as Marker until someone changes it.
-    editing?.iconKey ?? "star",
+    editing?.iconKey ?? NEW_PLACE_TYPE_ICON_KEY,
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
   // A taken name shows as it is typed; a blank one only once Save was pressed.

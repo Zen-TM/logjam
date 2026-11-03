@@ -107,6 +107,8 @@ type LoadedFile = {
   fileName: string;
   headers: string[];
   rows: Record<string, string>[];
+  /** The file line each row starts on, for "Row 4" in what was skipped. */
+  lines: number[];
   kind: FileKind;
 };
 
@@ -556,6 +558,7 @@ function UnifiedImportDialog({
       fileName: file.name,
       headers: parsed.headers,
       rows: parsed.rows,
+      lines: parsed.lines,
       kind,
     };
 
@@ -665,7 +668,7 @@ function UnifiedImportDialog({
 
   function buildPlaceRows() {
     if (!placeFile) return { rows: [], warnings: [], droppedRows: 0 };
-    return preparePlaceRows(placeFile.rows, placeAssignments);
+    return preparePlaceRows(placeFile.rows, placeAssignments, placeFile.lines);
   }
 
   function buildTripRows() {
@@ -673,6 +676,7 @@ function UnifiedImportDialog({
     return prepareTripRows({
       headers: tripFile.headers,
       rows: tripFile.rows,
+      lines: tripFile.lines,
       tripAssignments,
       tripNewCfForms,
       customFieldDefs,
@@ -1724,15 +1728,13 @@ function UnifiedImportDialog({
           ? [
               { count: outcome.created, label: "created" },
               { count: outcome.merged, label: "merged" },
-              // Row-level parse failures — distinct from `skipped`
-              // below, which is the server's merge-policy skip count.
-              { count: outcome.droppedRows, label: "couldn't be read" },
-              { count: outcome.skipped, label: "skipped" },
+              // Rows that couldn't be read are the "Skipped rows" section under
+              // the tiles, counted there once. `skipped` is the server's
+              // merge-policy count, a different thing.
+              { count: outcome.skipped, label: "kept as they were" },
             ]
           : [
               { count: outcome.imported, label: "imported" },
-              // Row-level parse failures, reported next to imported.
-              { count: outcome.droppedRows, label: "couldn't be read" },
               { count: outcome.updated, label: "updated" },
               { count: outcome.linked, label: "linked to a place" },
               { count: outcome.noPlace, label: "without a place" },
@@ -1756,9 +1758,7 @@ function UnifiedImportDialog({
       );
       const warnings = leftEmpty.length > 0 ? leftEmpty : undefined;
       // ImportResultSummary hides the Undo button when every headline count is
-      // zero — but `droppedRows` now sits in that same headline
-      // array and is never itself undoable, so it must not be what keeps the
-      // button visible when nothing was actually created/imported.
+      // zero, so only what the import changed decides it.
       const hasUndoableChange =
         outcome.kind === "place"
           ? outcome.created > 0 || outcome.merged > 0
