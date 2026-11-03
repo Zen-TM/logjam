@@ -27,6 +27,7 @@ import {
   isReservedFieldKey,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  placeLinkedToast,
   formatPlacePosition,
   placeAttributesTitle,
   placeSectionTitle,
@@ -842,10 +843,10 @@ export function PlaceDetailScreen({
                     onPress={() => {
                       setLinking(false);
                       createPlaceLinkLocal(placeId, row.id)
-                        .then(() => notify(`Linked to ${row.name}.`, "done"))
+                        .then(() => notify(placeLinkedToast(row.name), "done"))
                         .catch((err: unknown) => {
                           console.error(err);
-                          notify("Couldn't link that place.", "error");
+                          notify(copy.linkFailed, "error");
                         });
                     }}
                   />
@@ -872,8 +873,8 @@ export function PlaceDetailScreen({
           <Row
             icon="link"
             hue={theme.warning}
-            title="Unlink from this place"
-            subtitle="Both places are kept."
+            title={copy.unlinkFromPlace}
+            subtitle={copy.unlinkHint}
             onPress={() => {
               const target = (placeLinks.data ?? []).find(
                 (link) =>
@@ -883,10 +884,10 @@ export function PlaceDetailScreen({
               setLinkMenuId(null);
               if (!target) return;
               deletePlaceLinkLocal(target.id)
-                .then(() => notify("Unlinked.", "done"))
+                .then(() => notify(copy.unlinked, "done"))
                 .catch((err: unknown) => {
                   console.error(err);
-                  notify("Couldn't unlink that place.", "error");
+                  notify(copy.unlinkFailed, "error");
                 });
             }}
           />
