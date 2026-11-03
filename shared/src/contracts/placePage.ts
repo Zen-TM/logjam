@@ -87,6 +87,11 @@ export const PLACE_PAGE = {
     shareWithFriend: "Share with a friend",
     linkAPlace: "Link a place",
     linkAPlaceHint: "A carpark, a campsite, the exit.",
+    unlinkFromPlace: "Unlink from this place",
+    unlinkHint: "Both places are kept.",
+    unlinked: "Unlinked.",
+    linkFailed: "Couldn't link that place.",
+    unlinkFailed: "Couldn't unlink that place.",
 
     // Both clients open a parked value to decide what to do with it.
     doesntFitCopied:
@@ -95,6 +100,11 @@ export const PLACE_PAGE = {
       "These are left over from when you changed this place's type. Open one to decide what to do with it.",
   },
 } as const satisfies ScreenContract;
+
+/** The done-toast for a new link, on both clients. */
+export function placeLinkedToast(name: string): string {
+  return `Linked to ${name}.`;
+}
 
 /** The two verbs the page draws as buttons, in order; the ⋯ holds the rest. */
 export const PLACE_PAGE_PRIMARY_VERBS = [

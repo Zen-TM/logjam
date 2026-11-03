@@ -11,7 +11,14 @@ import { Icon } from "../../ui";
 // opens the full-res lightbox. Callers pass visual-only media (no tracks).
 const MAX_DOTS = 7;
 
-export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
+export default function PlaceSlideshow({
+  media,
+  onDelete,
+}: {
+  media: MediaItem[];
+  /** Owner-only: asks the caller to delete the slide on show. */
+  onDelete?: (item: MediaItem) => void;
+}) {
   const [index, setIndex] = useState(0);
   const [lightbox, setLightbox] = useState<MediaItem | null>(null);
   // Slides that failed to load (e.g. a 404'd S3 object). Tracked by
@@ -65,6 +72,15 @@ export default function PlaceSlideshow({ media }: { media: MediaItem[] }) {
             </span>
           )}
         </button>
+        {onDelete && (
+          <button
+            className={classes.deleteBtn}
+            onClick={() => onDelete(current)}
+            aria-label={`Delete ${current.filename}`}
+          >
+            <Icon idea="delete" size={16} />
+          </button>
+        )}
         {media.length > 1 && (
           <>
             <button

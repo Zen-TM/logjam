@@ -27,6 +27,7 @@ import {
   mediaCategory,
   primaryTripType,
   placeDeleteConfirm,
+  placeLinkedToast,
   removeShareConfirm,
   contractSectionsFor,
   PLACE_PAGE,
@@ -75,6 +76,8 @@ import {
   updatePlace,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
+import MediaUpload from "../../media/MediaUpload";
+import PlacePicker from "../../common/PlacePicker";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
@@ -231,8 +234,8 @@ function PlaceDetailPanel({
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
-  const [deletingTrack, setDeletingTrack] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
@@ -584,25 +587,37 @@ function PlaceDetailPanel({
     onRefetchTripLogs();
   }
 
-  async function handleDeleteTrack() {
-    if (!trackToDelete) return;
-    setDeletingTrack(true);
+  async function handleDeleteFile() {
+    if (!fileToDelete) return;
+    setDeletingFile(true);
     try {
-      await deleteMedia(trackToDelete.id);
-      setPlaceMedia((prev) => prev.filter((m) => m.id !== trackToDelete.id));
-      setTrackToDelete(null);
+      await deleteMedia(fileToDelete.id);
+      setPlaceMedia((prev) => prev.filter((m) => m.id !== fileToDelete.id));
+      setFileToDelete(null);
       onQuotaChanged();
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete track. Please try again."),
+        messageFromError(err, "Couldn't delete file. Please try again."),
       );
     } finally {
-      setDeletingTrack(false);
+      setDeletingFile(false);
     }
   }
 
   const busy = copying || deleting || removing;
+
+  // The API takes the WHOLE list of links on a place PATCH.
+  async function writeLinks(ids: string[], done: string, failed: string) {
+    try {
+      await updatePlace(current.id, { linkedPlaceIds: ids });
+      toast.success(done);
+      onRefetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, failed));
+    }
+  }
 
   async function setGauge(gaugeId: string | null) {
     try {
@@ -846,9 +861,23 @@ function PlaceDetailPanel({
           count={visualMedia.length > 0 ? visualMedia.length : undefined}
         />
         {visualMedia.length > 0 ? (
-          <PlaceSlideshow media={visualMedia} />
+          <PlaceSlideshow
+            media={visualMedia}
+            onDelete={isOwnedPlace ? setFileToDelete : undefined}
+          />
         ) : (
           <p className={classes.muted}>{copy.photosEmpty}</p>
+        )}
+        {isOwnedPlace && (
+          <MediaUpload
+            category="visual"
+            linkedType="place"
+            linkedId={current.id}
+            onUploaded={(item) => {
+              setPlaceMedia((prev) => [...prev, item]);
+              onQuotaChanged();
+            }}
+          />
         )}
       </section>
     ),
@@ -873,7 +902,7 @@ function PlaceDetailPanel({
                   icon="delete"
                   label={`Delete the track ${track.filename}`}
                   tone="danger"
-                  onClick={() => setTrackToDelete(track)}
+                  onClick={() => setFileToDelete(track)}
                 />
               ) : undefined
             }
@@ -911,10 +940,55 @@ function PlaceDetailPanel({
                 }
                 title={linked.name}
                 onOpen={() => setSelectedPlaceID(linked.id)}
+                trailing={
+                  <Menu
+                    label={`Actions for ${linked.name}`}
+                    title={linked.name}
+                    placement="bottom-end"
+                    entries={[
+                      {
+                        id: "unlink",
+                        label: copy.unlinkFromPlace,
+                        icon: "unlink",
+                        onSelect: () =>
+                          void writeLinks(
+                            linkedPlaces
+                              .filter((row) => row.id !== linked.id)
+                              .map((row) => row.id),
+                            copy.unlinked,
+                            copy.unlinkFailed,
+                          ),
+                      },
+                    ]}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Actions for ${linked.name}`}
+                      />
+                    )}
+                  />
+                }
               />
             );
           })
         )}
+        <PlacePicker
+          label={copy.linkAPlace}
+          places={places.filter(
+            (row) =>
+              row.id !== current.id &&
+              !linkedPlaces.some((l) => l.id === row.id),
+          )}
+          onSelect={(picked) =>
+            void writeLinks(
+              [...linkedPlaces.map((row) => row.id), picked.id],
+              placeLinkedToast(picked.name),
+              copy.linkFailed,
+            )
+          }
+        />
+        <p className={classes.muted}>{copy.linkAPlaceHint}</p>
       </section>
     ),
 
@@ -1085,18 +1159,18 @@ function PlaceDetailPanel({
       />
 
       <ConfirmDialog
-        open={trackToDelete != null}
+        open={fileToDelete != null}
         copy={
-          trackToDelete && {
-            confirmTitle: `Delete ${trackToDelete.filename}?`,
-            confirmBody: "The track is deleted and can't be brought back.",
+          fileToDelete && {
+            confirmTitle: `Delete ${fileToDelete.filename}?`,
+            confirmBody: "The file is deleted and can't be brought back.",
             confirmLabel: "Delete",
             tone: "destructive",
           }
         }
-        busy={deletingTrack}
-        onConfirm={handleDeleteTrack}
-        onClose={() => setTrackToDelete(null)}
+        busy={deletingFile}
+        onConfirm={handleDeleteFile}
+        onClose={() => setFileToDelete(null)}
       />
 
       {isOwnedPlace && (

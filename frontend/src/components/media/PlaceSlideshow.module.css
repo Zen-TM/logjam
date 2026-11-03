@@ -128,3 +128,25 @@
 .active {
   background-color: var(--color-accent);
 }
+
+.deleteBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-sm);
+  min-height: var(--control-sm);
+  padding: 3px;
+  border: none;
+  border-radius: var(--radius-sm);
+  /* On the user's photograph, not a surface: no scheme to answer to. */
+  background-color: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.deleteBtn:hover {
+  background-color: var(--color-warning);
+}
