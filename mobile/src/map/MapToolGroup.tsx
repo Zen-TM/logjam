@@ -1,199 +1,169 @@
-// The action column's tool group: one `+` button that expands SIDEWAYS into the
-// map tools.
+// The action column's tool group: one `+` button that opens the map tools as a
+// short list of LABELLED pills beside the column, one per row, from the + row
+// down. The tools themselves are declared once (`MAP_TOOLS`, @logjam/shared),
+// so both clients' trays hold the same ones in the same order with the same
+// words; Logjam GPS draws the ones it has. Guard: `mapTools.test.ts`.
 //
-// Sideways, not upward, because the column is bottom-anchored against a
-// CHROME_BOTTOM that is deliberately a constant (mapChrome.ts) — growing
-// upward walks the tools into the search pill, and growing the column itself
-// is exactly the "every pinned element is a piece of map the user can't see"
-// tax shared/DESIGN.md §11 warns about. One button costs one button's worth of map no
-// matter how many tools live behind it.
+// Beside the column, not above it: the column is bottom-anchored against a
+// CHROME_BOTTOM that is deliberately a constant (mapChrome.ts), so growing
+// upward walks into the search pill and growing the column is the "every pinned
+// element is a piece of map the user can't see" tax shared/DESIGN.md §11 warns
+// about. Beside it, the tray sits on the rows of the layers and locate buttons
+// and costs only map the pills themselves cover, and a pill grows with the
+// system text size instead of clipping.
 //
 // The group closes as soon as a tool arms: the HUD in the top notice stack is
 // then the thing telling the user what mode they are in, and leaving an open
 // tray behind it would be two answers to the same question.
 import { useEffect, useState } from "react";
-import { Animated, Easing, Pressable, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Pressable,
+  Text,
+  useWindowDimensions,
+} from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
-import { MAP_MEASURE, MAP_MEASURE_ICON, type IconIdea } from "@logjam/shared";
+import { mapTools, type MapToolIdOn } from "@logjam/shared";
 
-import { makeStyles, useTheme } from "../theme";
-import { Icon, useReducedMotion } from "../ui";
+import { makeStyles, spacing, useTheme } from "../theme";
+import { Icon, useReduceMotion } from "../ui";
 
-export type MapTool = "measure" | "route";
+export type MapTool = MapToolIdOn<"gps">;
 
-const TOOLS: { id: MapTool; label: string; icon: IconIdea }[] = [
-  { id: "measure", label: MAP_MEASURE.title, icon: MAP_MEASURE_ICON },
-  { id: "route", label: "Draw a route", icon: "draw" },
-];
+export const TOOLS = mapTools("gps");
 
-/** Time to slide one tool across one button + gap. */
-const SLOT_MS = 100;
+/** Time for the tray to slide out from under the + button. */
+const SLIDE_MS = 160;
 
+/** The `+` button, at the top of the action column. */
 export function MapToolGroup({
   open,
   activeTool,
-  side = "right",
   onToggleOpen,
+}: {
+  open: boolean;
+  /** The armed tool, if any — the button stays lit while it runs. */
+  activeTool: MapTool | null;
+  onToggleOpen: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={open ? "Hide map tools" : "Map tools"}
+      accessibilityState={{ expanded: open }}
+      style={[
+        styles.controlButton,
+        (open || activeTool) && styles.controlActive,
+      ]}
+      onPress={onToggleOpen}
+    >
+      <Icon
+        idea={open ? "close" : "add"}
+        size={FAB_ICON}
+        color={open || activeTool ? theme.onFill : theme.text}
+      />
+    </Pressable>
+  );
+}
+
+/**
+ * The tools themselves, drawn beside the action column from its top row down,
+ * as a SIBLING of the column rather than inside it: Android hands a touch only
+ * to a view inside its parent's bounds, and a pill hanging out of the column
+ * fell through to the map beneath, which took the press as a point.
+ * `top` is the column's own top edge; `side` is the column's edge, and the tray
+ * opens away from it.
+ */
+export function MapToolTray({
+  open,
+  activeTool,
+  side,
+  top,
   onPickTool,
 }: {
   open: boolean;
-  /** The armed tool, if any — its button stays lit while it runs. */
   activeTool: MapTool | null;
-  /**
-   * Which edge the action column is on (Settings → Map). The tray opens AWAY
-   * from it — sideways is only free space in one direction, and a tray that
-   * opened off the screen edge would be a column with invisible tools.
-   */
-  side?: "right" | "left";
-  onToggleOpen: () => void;
+  side: "right" | "left";
+  top: number;
   onPickTool: (tool: MapTool) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  // The room beside the column: each pill keeps its own width and sits against
+  // the column, so a label never squeezes to an ellipsis.
+  const { width: windowWidth } = useWindowDimensions();
+  const room = windowWidth - FAB_SIZE - CHROME_GAP * 2 - spacing(1);
 
-  // Each tool slides out from directly UNDER the + button, one after the
-  // next, and translateX runs on the native driver — no width animation, no
-  // fade.
-  //
-  // k is MOVE ORDER, not final position: TOOLS[0] (measure) is always the
-  // one that starts moving first when OPENING — first to slide out. Because
-  // it leads, it also travels the farthest: it doesn't stop when it draws
-  // level with where a single tool would rest, it carries on outward while
-  // the next tool sets off k slots' worth of time behind it, and the two
-  // land in their final slots together. A tool's final rest slot is
-  // therefore the REVERSE of k (restSlot, below) — the one that led the
-  // whole way out ends up farthest from the +, not nearest — and its travel
-  // distance/duration follows the slot it's actually going to, not its move
-  // order.
-  //
-  // CLOSING does not mirror this stagger: every tool sets off at once, at
-  // the same speed (duration still scales with the distance a tool has to
-  // cover, so px/ms is constant across tools) — each one just stops the
-  // moment it reaches behind the +, independently, rather than all landing
-  // together on a delay.
-  const [values] = useState(() => TOOLS.map(() => new Animated.Value(0)));
-  const dir = side === "right" ? 1 : -1;
-  const reduced = useReducedMotion();
+  const reduceMotion = useReduceMotion();
+
+  // One value drives the whole tray: it slides out from the column and fades
+  // in on the native driver, or just appears under reduced motion.
+  const [progress] = useState(() => new Animated.Value(0));
   useEffect(() => {
-    const anims = TOOLS.map((_, k) =>
-      Animated.timing(values[k], {
-        toValue: open ? 1 : 0,
-        duration: reduced ? 0 : (TOOLS.length - k) * SLOT_MS,
-        delay: open && !reduced ? k * SLOT_MS : 0,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    );
-    Animated.parallel(anims).start();
-  }, [open, reduced, values]);
-
-  // restSlot is where a tool actually RESTS when open (0 = nearest the +) —
-  // the reverse of k, per the move-order comment above. It drives both how
-  // far this value has to travel to hide fully behind the + (outputRange)
-  // and its resting inset (below — each tool is its own absolutely
-  // positioned sibling of the +, not flex-packed inside a shared tray).
-  const rendered = TOOLS.map((tool, k) => {
-    const restSlot = TOOLS.length - 1 - k;
-    return {
-      ...tool,
-      k,
-      restSlot,
-      translateX: values[k].interpolate({
-        inputRange: [0, 1],
-        outputRange: [dir * (restSlot + 1) * (FAB_SIZE + CHROME_GAP), 0],
-      }),
-    };
+    Animated.timing(progress, {
+      toValue: open ? 1 : 0,
+      duration: reduceMotion ? 0 : SLIDE_MS,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [open, progress, reduceMotion]);
+  const dir = side === "right" ? 1 : -1;
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [dir * (FAB_SIZE + CHROME_GAP), 0],
   });
 
   return (
-    <View style={styles.row}>
-      {rendered.map((tool) => (
-        <Animated.View
-          key={tool.id}
-          pointerEvents={open ? "auto" : "none"}
-          style={[
-            styles.toolSlot,
-            side === "left"
-              ? { left: (tool.restSlot + 1) * (FAB_SIZE + CHROME_GAP) }
-              : { right: (tool.restSlot + 1) * (FAB_SIZE + CHROME_GAP) },
-            // While retracted, the ARMED tool ends up sitting exactly where
-            // the + is (translateX carries every tool there, open or not) —
-            // it needs to paint ABOVE the + so the user sees which tool is
-            // running instead of a bare +, not the other way round. An
-            // unarmed tool needs no such promotion: it only ever overlaps
-            // the + while closed, when it's fully hidden either way.
-            activeTool === tool.id && styles.armedToolSlot,
-            { transform: [{ translateX: tool.translateX }] },
-          ]}
-        >
+    <Animated.View
+      pointerEvents={open ? "box-none" : "none"}
+      style={[
+        styles.tray,
+        { top, width: room, [side]: CHROME_GAP + FAB_SIZE + spacing(1) },
+        {
+          opacity: progress,
+          transform: [{ translateX }],
+        },
+      ]}
+    >
+      {TOOLS.map((tool) => {
+        const armed = activeTool === tool.id;
+        return (
           <Pressable
+            key={tool.id}
             accessibilityRole="button"
             accessibilityLabel={tool.label}
             style={[
-              styles.controlButton,
-              activeTool === tool.id && styles.controlActive,
+              styles.pill,
+              { alignSelf: side === "left" ? "flex-start" : "flex-end" },
+              armed && styles.controlActive,
             ]}
             onPress={() => onPickTool(tool.id)}
           >
             <Icon
               idea={tool.icon}
               size={FAB_ICON}
-              color={activeTool === tool.id ? theme.onFill : theme.text}
+              color={armed ? theme.onFill : theme.text}
             />
+            <Text
+              style={[styles.pillLabel, armed && { color: theme.onFill }]}
+              numberOfLines={1}
+            >
+              {tool.label}
+            </Text>
           </Pressable>
-        </Animated.View>
-      ))}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={open ? "Hide map tools" : "Map tools"}
-        accessibilityState={{ expanded: open }}
-        style={[
-          styles.controlButton,
-          (open || activeTool) && styles.controlActive,
-          styles.plusButton,
-        ]}
-        onPress={onToggleOpen}
-      >
-        <Icon
-          idea={open ? "close" : "add"}
-          size={FAB_ICON}
-          color={open || activeTool ? theme.onFill : theme.text}
-        />
-      </Pressable>
-    </View>
+        );
+      })}
+    </Animated.View>
   );
 }
 
-const useStyles = makeStyles((theme) => ({
-  // The group occupies exactly one button's width in the column. Every
-  // child (each tool, the +) is its own ABSOLUTE sibling so opening the
-  // group can't widen the row: laid out in flow, growth would push the whole
-  // action column leftward, causing every other button to visibly jump when the
-  // tools open. No overflow:hidden either — a closed tool's translateX
-  // target lands it exactly on the + button's own box, and it's zIndex
-  // (below), not a clip, that decides which one of the three shows.
-  row: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Each tool's RESTING inset (left/right, set at the call site from
-  // restSlot) avoids flex-packing inside a shared tray, allowing the + button
-  // to remain a plain sibling (see plusButton) without a parent tray's
-  // stacking context swallowing the tool's own zIndex.
-  toolSlot: {
-    position: "absolute",
-    top: 0,
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    zIndex: 0,
-    elevation: 0,
-  },
-  // Mirrors MapScreen's controlButton/controlActive exactly — the tools have
-  // to read as the same column, not a lookalike.
+const useStyles = makeStyles((theme, textRole) => ({
+  // Mirrors MapScreen's controlButton/controlActive exactly — the + has to
+  // read as the same column.
   controlButton: {
     width: FAB_SIZE,
     height: FAB_SIZE,
@@ -204,25 +174,16 @@ const useStyles = makeStyles((theme) => ({
     alignItems: "center",
     justifyContent: "center",
   },
-  controlActive: {
-    backgroundColor: theme.accent,
-    borderColor: theme.accent,
+  controlActive: { backgroundColor: theme.accent },
+  tray: { position: "absolute", gap: spacing(1) },
+  pill: {
+    minHeight: FAB_SIZE,
+    borderRadius: FAB_SIZE / 2,
+    backgroundColor: theme.card,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing(1),
+    paddingHorizontal: spacing(2),
   },
-  // The + sits between the two: above an unarmed tool retreating past it
-  // (so the bare + shows, not a stray dark circle), below the ARMED one
-  // (armedToolSlot) so the running tool's icon is what's left showing once
-  // it settles, not the +. All three need the SAME positioning scheme
-  // (absolute, explicit zIndex/elevation) for Android to honour the order —
-  // leaving one as a plain flow sibling would paint it on top
-  // regardless of zIndex.
-  plusButton: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1,
-    elevation: 1,
-  },
-  armedToolSlot: { zIndex: 2, elevation: 2 },
+  pillLabel: { ...textRole.body, color: theme.text },
 }));

@@ -87,9 +87,11 @@ import {
 } from "../sync/useSyncQueries";
 import {
   BottomSheet,
-  Button,
   Meter,
   Hero,
+  useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   Icon,
   IconButton,
   LoadingState,
@@ -142,6 +144,9 @@ type Countable = MirrorPlace & {
   _count?: { tripLogLinks: number; shares: number };
 };
 
+/** The page's name: the full hero's eyebrow and the compact row's title. */
+const PAGE_NAME = "Places";
+
 export function PlacesScreen({
   onOpenPlace,
   onShowOnMap,
@@ -165,6 +170,7 @@ export function PlacesScreen({
   onPickArea: () => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -660,41 +666,52 @@ export function PlacesScreen({
     ReactNode
   > = {
     hero: (
-      <Hero
-        eyebrow="Places"
-        title={placesHeroTitle(places.length)}
-        actions={
-          <View style={styles.heroActions}>
-            <IconButton
-              icon="filter"
-              accessibilityLabel={PLACES_FILTER_SHEET.title}
-              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={hiddenFilterCount > 0}
-              onPress={() => {
-                // Drop the keyboard BEFORE the sheet mounts: a sheet opening
-                // over a live IME inherits the shrunk frame and stops short of
-                // the bottom edge.
-                Keyboard.dismiss();
-                setSheet("filters");
-              }}
-            />
-            {/* One way in on this client, so a button and no menu. */}
-            {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
-              <Button
-                key={key}
-                label={PLACES_ADD.copy[key]}
-                icon={PLACES_ADD_ICON[key]}
-                compact
-                onPress={() => startEditing(null)}
+      <View {...heroCollapse.heroProps}>
+        <Hero
+          compact={heroCollapse.compact}
+          eyebrow={PAGE_NAME}
+          title={
+            heroCollapse.compact
+              ? compactHeroTitle(PAGE_NAME, places.length)
+              : placesHeroTitle(places.length)
+          }
+          actions={
+            <View style={styles.heroActions}>
+              <IconButton
+                icon="filter"
+                accessibilityLabel={PLACES_FILTER_SHEET.title}
+                color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+                filled={hiddenFilterCount > 0}
+                onPress={() => {
+                  // Drop the keyboard BEFORE the sheet mounts: a sheet opening
+                  // over a live IME inherits the shrunk frame and stops short of
+                  // the bottom edge.
+                  Keyboard.dismiss();
+                  setSheet("filters");
+                }}
               />
-            ))}
-          </View>
-        }
-      >
-        <Meter segments={heroSegments} />
+              {/* One way in on this client, so a button and no menu. */}
+              {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+                <HeroAdd
+                  key={key}
+                  label={PLACES_ADD.copy[key]}
+                  icon={PLACES_ADD_ICON[key]}
+                  compact={heroCollapse.compact}
+                  onPress={() => startEditing(null)}
+                />
+              ))}
+            </View>
+          }
+        >
+          {heroCollapse.compact ? undefined : (
+            <>
+              <Meter segments={heroSegments} />
 
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
+              <SyncStatusPills online={online} pendingCount={pendingCount} />
+            </>
+          )}
+        </Hero>
+      </View>
     ),
 
     // ALWAYS ON SCREEN: the rail carries the only way to create a type from
@@ -779,6 +796,7 @@ export function PlacesScreen({
     list: (
       <FlatList
         style={styles.list}
+        {...heroCollapse.scrollProps}
         contentContainerStyle={styles.listContent}
         data={visible}
         keyExtractor={keyExtractor}

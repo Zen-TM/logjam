@@ -262,7 +262,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
-import { MapToolGroup, type MapTool } from "./MapToolGroup";
+import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import {
@@ -2127,6 +2127,15 @@ export function MapScreen({
         measureDraft.open();
         return;
       }
+      if (tool === "place") {
+        // Logjam GPS has no empty "Add a place" form from the map, so the form
+        // opens seeded on the middle of the map in view.
+        setAddPlaceAt({
+          latitude: camera.latitude,
+          longitude: camera.longitude,
+        });
+        return;
+      }
       if (routeDraft.active) {
         handleCancelRouteDraw();
         return;
@@ -2137,7 +2146,14 @@ export function MapScreen({
       routeDraft.open();
     },
     // handleCancelRouteDraw is declared below and is stable; see its useCallback.
-    [measureDraft, routeDraft, handleCancelRouteDraw, routes.data],
+    [
+      measureDraft,
+      routeDraft,
+      handleCancelRouteDraw,
+      routes.data,
+      camera.latitude,
+      camera.longitude,
+    ],
   );
 
   /** One entry point for both point-collecting tools, so every tap surface
@@ -5678,11 +5694,9 @@ export function MapScreen({
             least-reached button of the five, so the three that are reached
             (layers, locate, record) keep the thumb end of the column. */}
         <MapToolGroup
-          side={controlsOnLeft ? "left" : "right"}
           open={toolsOpen}
           activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
           onToggleOpen={() => setToolsOpen((open) => !open)}
-          onPickTool={handlePickTool}
         />
         <Pressable
           accessibilityRole="button"
@@ -5726,6 +5740,15 @@ export function MapScreen({
           <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
+      {columnTop !== null ? (
+        <MapToolTray
+          open={toolsOpen}
+          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+          side={controlsOnLeft ? "left" : "right"}
+          top={columnTop}
+          onPickTool={handlePickTool}
+        />
+      ) : null}
 
       {/* The map's own instruments, stacked along the bottom edge opposite the
           buttons: which way the user is facing, then how far things are. */}

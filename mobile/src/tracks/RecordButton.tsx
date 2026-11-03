@@ -14,17 +14,11 @@
 // finishing never waits on finding the panel first. Wet hands, cold hands, and
 // nothing in Logjam GPS is worse than a recording that will not stop.
 import { useEffect, useState } from "react";
-import {
-  AccessibilityInfo,
-  Animated,
-  Easing,
-  Pressable,
-  View,
-} from "react-native";
+import { Animated, Easing, Pressable, View } from "react-native";
 
 import { SEARCH_SIZE } from "../map/mapChrome";
 import { radius, makeStyles } from "../theme";
-import { holdTick } from "../ui";
+import { holdTick, useReduceMotion } from "../ui";
 
 /** One breath. Slow on purpose: at the map's scale this reads as alive rather
  *  than as an alarm, and it is a redraw every two seconds, not every frame of
@@ -63,21 +57,7 @@ export function RecordButton({
 
   // The system's Remove animations setting. The recording stays a light, not a
   // beat: the halo holds still and the ring and core carry the state.
-  const [reduceMotion, setReduceMotion] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((on) => alive && setReduceMotion(on))
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener(
-      "reduceMotionChanged",
-      setReduceMotion,
-    );
-    return () => {
-      alive = false;
-      subscription.remove();
-    };
-  }, []);
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
     if (!recording || !animate) {
