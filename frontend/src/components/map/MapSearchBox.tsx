@@ -5,6 +5,7 @@ import {
   GAUGES,
   parseCoordinates,
   RECENT_SEARCHES_HEADING,
+  SEARCH_STATUS,
   type RecentSearch,
   type SearchPin,
   searchPinAfter,
@@ -142,7 +143,7 @@ export default function MapSearchBox({
         // geocoder row stay.
         .catch((err) => {
           if (!controller.signal.aborted)
-            settle([], messageFromError(err, "Couldn't search locations."));
+            settle([], messageFromError(err, SEARCH_STATUS.searchFailed));
         });
     }, PLACE_SEARCH_DEBOUNCE_MS);
     return () => {
@@ -159,7 +160,7 @@ export default function MapSearchBox({
       .catch((err) => {
         if (controller.signal.aborted) return;
         console.error(err);
-        setError(messageFromError(err, "Couldn't search locations."));
+        setError(messageFromError(err, SEARCH_STATUS.searchFailed));
         setLocations([]);
       })
       .finally(() => {
@@ -240,13 +241,13 @@ export default function MapSearchBox({
   const open = focused && (trimmed !== "" || options.length > 0);
   const activeIndex = options.findIndex((option) => option.id === activeId);
   const status = loading
-    ? "Searching locations…"
+    ? SEARCH_STATUS.searching
     : (error ??
       answer?.failure ??
       (options.length === 0
-        ? "No places match."
+        ? SEARCH_STATUS.noPlaces
         : locationQuery === trimmed && locations.length === 0
-          ? "No locations found."
+          ? SEARCH_STATUS.noLocations
           : null));
 
   const reset = () => {

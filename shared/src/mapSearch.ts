@@ -8,6 +8,16 @@
 import { fromEastingNorthing } from "./geoPdfExtent.js";
 
 export const RECENT_SEARCHES_HEADING = "Recent searches";
+/** What the search box says while it works, finds nothing or fails: one set of
+ *  words for Logjam Web's box and Logjam GPS's bar (mapSearch.test.ts). */
+export const SEARCH_STATUS = {
+  searching: "Searching locations…",
+  noPlaces: "No places match.",
+  noLocations: "No locations found.",
+  searchFailed: "Couldn't search locations.",
+  namesFailed: "Couldn't load place names.",
+} as const;
+
 export const COORDINATE_RESULT_KIND = "Coordinates";
 
 export interface SearchPoint {

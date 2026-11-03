@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   addRecentSearch,
   MAX_RECENT_SEARCHES,
   parseCoordinates,
   readRecentSearches,
+  SEARCH_STATUS,
   searchPinAfter,
 } from "./mapSearch";
 import { toEastingNorthing } from "./geoPdfExtent";
@@ -119,5 +123,24 @@ describe("searchPinAfter", () => {
     expect(searchPinAfter("tap")).toBeNull();
     expect(searchPinAfter("clear")).toBeNull();
     expect(searchPinAfter({ pick: null })).toBeNull();
+  });
+});
+
+describe("search status words", () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
+  const clients = [
+    "frontend/src/components/map/MapSearchBox.tsx",
+    "mobile/src/map/MapSearchBar.tsx",
+    "mobile/src/map/placeSearch.ts",
+  ];
+
+  // Mutation: type one of the five sentences back into a client's search file.
+  it("are read from SEARCH_STATUS, never typed in a client", () => {
+    for (const file of clients) {
+      const source = readFileSync(join(root, file), "utf8");
+      for (const sentence of Object.values(SEARCH_STATUS)) {
+        expect(source, `${file}: ${sentence}`).not.toContain(`"${sentence}"`);
+      }
+    }
   });
 });
