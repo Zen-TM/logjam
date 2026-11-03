@@ -92,6 +92,14 @@ export const COPY_RULES: readonly CopyRule[] = [
     say: 'Say "offline map"; the verb is "Save an offline map".',
   },
   {
+    id: "offline-map",
+    // The old spellings of one act. Not "Download the map as a PDF" or "Save
+    // map style", which are other acts.
+    pattern:
+      /\bsave (?:maps? (?:offline|for offline)|offline maps|maps)\b|\bsave map\b(?! \w)|\bdownload (?:the |a )?maps? (?:for|of) (?:this )?(?:area|trip)\b|\bdownload maps\b|\bmap downloaded\b/i,
+    say: 'One verb for it: "Save an offline map"; once saved, "Offline map saved".',
+  },
+  {
     id: "unshare",
     pattern: /\bunshar(?:e|es|ed|ing)\b/i,
     say: 'The owner "Stop sharing"; a sharee "Remove from my account"; a friend "Remove friend".',
@@ -103,7 +111,7 @@ export const COPY_RULES: readonly CopyRule[] = [
   },
   {
     id: "turn-down",
-    pattern: /\bturn(?:ed)? down\b|\blet in\b/i,
+    pattern: /\bturn(?:ed)? down\b|\blet(?:s|ting)? (?:in\b|you in(?:to)?\b)/i,
     say: 'Answer an offer "Accept" or "Decline" (a plan invite: "Join" or "Decline").',
   },
   {

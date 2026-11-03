@@ -670,6 +670,7 @@ function PlaceDetailPanel({
       : placeStatus({ syncRole: "owner" }, tripLogs.length)
     : placeStatus({ syncRole: "shared" }, 0);
   const grade = formatCanyonGrade(current.fieldValues);
+  const isShared = placeShares.length > 0;
   const primaryVerbs = placeVerbs("web", "page", isOwnedPlace).filter((verb) =>
     (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
   );
@@ -697,7 +698,11 @@ function PlaceDetailPanel({
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           {placeStatusKey ? (
             <StatusPill
-              label={placeStatusLabel(placeStatusKey, tripLogs.length)}
+              label={placeStatusLabel(
+                placeStatusKey,
+                tripLogs.length,
+                ownerUsername(friends, current.ownerId),
+              )}
               tone={placeStatusKey === "done" ? "accent" : "outline"}
             />
           ) : null}
@@ -767,6 +772,7 @@ function PlaceDetailPanel({
           <SectionHeader
             title={placeSectionTitle("gauge", copy.gauge, {
               owned: isOwnedPlace,
+              shared: isShared,
               filled: Boolean(current.gaugeId),
             })}
           />
@@ -788,7 +794,7 @@ function PlaceDetailPanel({
             title={placeSectionTitle(
               "attributes",
               placeAttributesTitle(placeType?.name ?? null),
-              { owned: isOwnedPlace, filled: true },
+              { owned: isOwnedPlace, shared: isShared, filled: true },
             )}
           />
           <dl className={classes.table}>
@@ -837,6 +843,7 @@ function PlaceDetailPanel({
           <SectionHeader
             title={placeSectionTitle("notes", copy.notes, {
               owned: isOwnedPlace,
+              shared: isShared,
               filled: hasNotes,
             })}
           />
@@ -853,6 +860,7 @@ function PlaceDetailPanel({
           <SectionHeader
             title={placeSectionTitle("sources", copy.sources, {
               owned: isOwnedPlace,
+              shared: isShared,
               filled: true,
             })}
             count={sources.length}
@@ -880,6 +888,7 @@ function PlaceDetailPanel({
         <SectionHeader
           title={placeSectionTitle("photos", copy.photos, {
             owned: isOwnedPlace,
+            shared: isShared,
             filled: visualMedia.length > 0,
           })}
           count={visualMedia.length > 0 ? visualMedia.length : undefined}
@@ -901,6 +910,7 @@ function PlaceDetailPanel({
         <SectionHeader
           title={placeSectionTitle("route", copy.route, {
             owned: isOwnedPlace,
+            shared: isShared,
             filled: Boolean(track || drawnRoute),
           })}
         />

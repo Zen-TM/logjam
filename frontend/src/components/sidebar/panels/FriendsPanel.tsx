@@ -408,9 +408,12 @@ function FriendsPanel({
                             request.requester.username,
                           )[1];
                           askDecline({
-                            title: decline.confirm!.title,
-                            message: decline.confirm!.body,
-                            confirmLabel: decline.confirm!.confirmLabel,
+                            copy: {
+                              confirmTitle: decline.confirm!.title,
+                              confirmBody: decline.confirm!.body,
+                              confirmLabel: decline.confirm!.confirmLabel,
+                              tone: "destructive",
+                            },
                             run: () =>
                               runAction(
                                 request.id,

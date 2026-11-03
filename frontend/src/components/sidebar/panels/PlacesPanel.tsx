@@ -14,6 +14,7 @@ import {
   listSelectionLabel,
   numericFieldValue,
   passesPlaceFilters,
+  incomingLabel,
   PLACE_STATUS_LABELS,
   PLACES_ADD,
   PLACES_ADD_ICON,
@@ -43,8 +44,13 @@ import type {
   TPlace,
   TPlaceType,
   RefreshResult,
+  TFriend,
 } from "../../../placeUtils";
-import { bulkDeletePlaces, refreshFromRopeWiki } from "../../../placeUtils";
+import {
+  bulkDeletePlaces,
+  ownerUsername,
+  refreshFromRopeWiki,
+} from "../../../placeUtils";
 import { buildPlaceExport, type TExportFormat } from "../../../placeExport";
 import { useStoredState } from "../../../useStoredState";
 import { useIsMobile } from "../../../useIsMobile";
@@ -132,6 +138,7 @@ function PlacesPanel({
   placesError,
   placesTotal,
   sharedPlaces,
+  friends,
   placeTypes,
   onPlaceTypesChange,
   placeCustomFieldDefs,
@@ -165,6 +172,8 @@ function PlacesPanel({
   /** The true owned-place total before the server's list cap; null until known. */
   placesTotal: number | null;
   sharedPlaces: TPlace[];
+  /** Names the owner of each shared place. */
+  friends: TFriend[];
   /** Every type the user has. The rail shows only those with places. */
   placeTypes: TPlaceType[];
   onPlaceTypesChange: (types: TPlaceType[]) => void;
@@ -749,7 +758,11 @@ function PlacesPanel({
                 <>
                   {STATUS_PILL[status] && (
                     <StatusPill
-                      label={PLACE_STATUS_LABELS[status]}
+                      label={
+                        owned
+                          ? PLACE_STATUS_LABELS[status]
+                          : incomingLabel(ownerUsername(friends, place.ownerId))
+                      }
                       icon={STATUS_PILL[status]}
                       tone={status === "done" ? "accent" : "outline"}
                     />

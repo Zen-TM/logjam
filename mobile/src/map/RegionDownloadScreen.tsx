@@ -1,4 +1,4 @@
-// "Save maps offline" — frame an area, pick which maps and how much detail, see
+// "Save an offline map" — frame an area, pick which maps and how much detail, see
 // what it costs, download it.
 //
 // The screen answers ONE question and answers it in the hero: what is this going
@@ -641,7 +641,7 @@ export function RegionDownloadScreen({
         <Hero
           onBack={onBack}
           backLabel={backLabel}
-          title="Save maps offline"
+          title="Save an offline map"
           // TWO stats, equal weight, one line — the two things the decision is
           // actually made on. Showing additional stats would overflow the
           // line without changing what the user does next. The hero carries no

@@ -1,6 +1,6 @@
 // One CARD per thing the user saved, not one per file we wrote.
 //
-// A "Save maps offline" run downloads a basemap per selected source and a
+// A "Save an offline map" run downloads a basemap per selected source and a
 // generated LiDAR topo job lands as one artifact per layer — five of them.
 // Grouping keeps related rows together so an area or job is managed as one card.
 //

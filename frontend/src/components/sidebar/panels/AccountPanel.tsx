@@ -120,7 +120,7 @@ function AccountPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      toast.success(
+      toast.done(
         "Your data was downloaded as a JSON file. Photos and videos aren't in it.",
       );
     } catch (err) {

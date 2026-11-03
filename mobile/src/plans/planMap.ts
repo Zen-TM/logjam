@@ -27,7 +27,7 @@ export function planBbox(
 }
 
 /** Whether one saved map region already holds the whole of a plan's area,
- *  so "Download the map for this area" has nothing left to save. */
+ *  so "Save an offline map of this area" has nothing left to save. */
 export const planMapSaved = coveredByOfflineMaps;
 
 /** Whether a pressed pin is one of the plan's places, not one of the user's:

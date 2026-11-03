@@ -60,6 +60,7 @@ import { useBoxDraw } from "./useBoxDraw";
 import MapHoldMenu from "./MapHoldMenu";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
+import { sheetCoverPx } from "../sidebar/sheetSnap";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
 import { useGauges } from "../gauges/useGauges";
 import {
@@ -1090,19 +1091,14 @@ function Map({
     geolocate.on("trackuserlocationend", () => {
       userFixRef.current = null;
     });
-    // Compact: it collapses to an (i) once the map is moved, which OSMF's
-    // attribution guideline allows while the credit stays one press away. On a
-    // phone the open box would sit over a quarter of the map and the compass and
-    // scale bar, so there it starts as the (i); wider maps keep MapLibre's open
-    // credits until the first drag.
+    // Compact: the credit is an (i) that opens on a press, which OSMF's
+    // attribution guideline allows while it stays one press away.
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
     const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
-    if (credits && window.innerWidth <= MOBILE_MAX_WIDTH_PX) {
-      collapseCreditsOnce(credits);
-    }
+    if (credits) collapseCreditsOnce(credits);
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
@@ -3207,6 +3203,12 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
+  // A way's fit keeps its extent above the narrow sheet (and 80 px on wide).
+  const fitBottom = () => {
+    const cover = sheetCoverPx(window.innerHeight, 80 + 24);
+    return cover > 0 ? cover + 24 : 80;
+  };
+
   const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
   useEffect(() => {
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
@@ -3220,7 +3222,12 @@ function Map({
     const [west, south, east, north] = flyToBounds;
     if ([west, south, east, north].every((value) => Number.isFinite(value))) {
       mapRef.current.fitBounds([west, south, east, north], {
-        padding: 80,
+        padding: {
+          top: 80,
+          left: 80,
+          right: 80,
+          bottom: fitBottom(),
+        },
         duration: 1200,
         maxZoom: 16,
       });
@@ -3251,6 +3258,10 @@ function Map({
         center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
+        // Centred in what the narrow sheet leaves, not behind it. An offset,
+        // not `padding`: MapLibre keeps a flyTo's padding on the camera, and
+        // every later fit would start from it.
+        offset: [0, -sheetCoverPx(window.innerHeight) / 2],
       });
     } else {
       // The warning names no coordinate: they are the place's.

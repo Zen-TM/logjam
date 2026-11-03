@@ -14,6 +14,7 @@ import {
   exportFilename,
   formatDistanceM,
   GPX_MIME_TYPE,
+  incomingLabel,
   KML_MIME_TYPE,
   routeToGpx,
   routeToKml,
@@ -426,7 +427,7 @@ export default function RoutesPanel({
               <>
                 {way.shared && (
                   <StatusPill
-                    label={owner ? `From ${owner}` : "Shared"}
+                    label={incomingLabel(owner)}
                     icon="friends"
                     tone="outline"
                   />

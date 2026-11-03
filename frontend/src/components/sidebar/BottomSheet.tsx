@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import classes from "./BottomSheet.module.css";
-import { SheetSnapContext } from "./sheetSnap";
+import { BOTTOM_SHEET_ATTR, SheetSnapContext } from "./sheetSnap";
 import { useViewport, type Viewport } from "./useViewport";
 
 export type SheetSnap = "peek" | "half" | "full";
@@ -168,6 +168,7 @@ function BottomSheet({
       <aside
         className={classes.sheet}
         aria-label={title}
+        {...{ [BOTTOM_SHEET_ATTR]: "" }}
         style={{
           transform: `translateY(${translate}px)`,
           transition: dragTranslate !== null ? "none" : undefined,

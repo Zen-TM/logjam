@@ -950,7 +950,7 @@ export function SavedScreen({
   const items = ((): SavedItem[] => {
     const rows: SavedItem[] = [];
 
-    // ONE card per saved AREA, not per basemap: a "Save maps offline" run
+    // ONE card per saved AREA, not per basemap: a "Save an offline map" run
     // downloads a file per selected map; grouping by area prevents separate
     // unrelated rows so the whole region can be deleted together. Legacy rows
     // (no groupId) group under their own id and stand alone, unchanged.

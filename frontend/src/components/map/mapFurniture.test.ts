@@ -5,11 +5,10 @@ import { describe, expect, it } from "vitest";
 const read = (file: string) => readFileSync(join(__dirname, file), "utf8");
 
 describe("the map's furniture", () => {
-  // Mutation: drop the narrow-width guard, and a desktop starts with its
-  // credits closed too; drop the call, and a phone opens them over the map.
-  it("collapses the credits on a narrow map only", () => {
+  // Mutation: drop the call, and the credits open over the map at any width.
+  it("collapses the credits at every width", () => {
     expect(read("Map.tsx")).toMatch(
-      /window\.innerWidth <= MOBILE_MAX_WIDTH_PX\)\s*{\s*collapseCreditsOnce\(credits\)/,
+      /if \(credits\) collapseCreditsOnce\(credits\)/,
     );
   });
 

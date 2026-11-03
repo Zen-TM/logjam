@@ -90,10 +90,19 @@ describe("contract copy", () => {
     ["lidar-topo", "Open the topo", "Open the sharpened area"],
     ["lidar-topo", "Use a topo", "OSM Topo"],
     ["region", "Download a map region", "Save an offline map"],
+    ["offline-map", "Save maps offline", "Save an offline map"],
+    ["offline-map", "Download the map for this area", "Save an offline map"],
+    ["offline-map", "Map downloaded", "Offline map saved"],
+    ["offline-map", "Save map", "Save an offline map"],
     ["unshare", "Unshare", "Stop sharing"],
     ["recipients", "Visible to recipients", "Friends you pick can see it"],
     ["turn-down", "Turn down", "Decline"],
     ["turn-down", "Let in", "Accept"],
+    [
+      "turn-down",
+      "Waiting for mira to let you in",
+      "Waiting for mira to accept you",
+    ],
     ["attach-to-place", "Attach to a place", "Link to a place"],
   ])("flags %s in %j and passes %j", (id, bad, good) => {
     expect(copyViolations(bad)).toContain(id);
@@ -103,6 +112,28 @@ describe("contract copy", () => {
   // One word, then a name: the name's own capital makes it read as Title
   // Case ("Join Ranon"). Mutation: empty this set, and the title is flagged.
   const verbThenName = new Set(["tripPlanJoinTitle(Ranon)"]);
+
+  // Mutation: widen the offline-map or turn-down pattern back to a bare
+  // "download the map" / "let you in", and one of these goes red.
+  it.each([
+    "Download the map as a PDF",
+    "Save map style",
+    "This lets you invite a friend",
+    "It lets you install it",
+  ])("leaves %j alone", (text) => {
+    expect(copyViolations(text)).not.toContain("offline-map");
+    expect(copyViolations(text)).not.toContain("turn-down");
+  });
+
+  it.each([
+    "Save maps",
+    "Save offline maps",
+    "Download maps",
+    "Save maps for offline use",
+    "Download the map of this area",
+  ])("flags %j", (text) => {
+    expect(copyViolations(text)).toContain("offline-map");
+  });
 
   it("breaks no copy rule", () => {
     const offenders = all

@@ -1,7 +1,7 @@
 // Elevation from the DEM: the tiles saved on this phone first, then the public
 // tile set over the network.
 //
-// Every "save maps offline" run writes a `dem-region` MBTiles of a DEM
+// Every "Save an offline map" run writes a `dem-region` MBTiles of a DEM
 // source's tiles at its `sampleZoom` (regionTileDownload.ts), filed under the
 // source's id; the nsw-5m clip also holds z8-14 for the hillshade
 // (`demClipMinZoom`), which this never reads. This reads them back, so a

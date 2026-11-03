@@ -23,6 +23,15 @@ export const PLACE_STATUS_LABELS: Record<PlaceStatus, string> = {
   shared: "Shared",
 };
 
+/**
+ * What anything a friend shared with the viewer says about whose it is: a
+ * place, a way, a place page. The owner's name when it is known; never the bare
+ * "Shared", which a row on the owner's side also says of what they gave away.
+ */
+export function incomingLabel(owner: string | null | undefined): string {
+  return owner ? `From ${owner}` : "Shared with you";
+}
+
 /** Rail order: the question the list answers, then the friend's places. */
 export const PLACE_STATUS_ORDER: readonly PlaceStatus[] = [
   "todo",

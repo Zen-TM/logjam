@@ -185,7 +185,7 @@ describe("the plans list", () => {
           waitingFor: { id: "u", username: "mira" },
         }),
       ),
-    ).toBe("Waiting for mira to let you in");
+    ).toBe("Waiting for mira to accept you");
   });
 
   it("badges the invites the caller has not answered", () => {

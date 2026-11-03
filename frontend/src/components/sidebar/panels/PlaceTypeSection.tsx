@@ -339,7 +339,7 @@ function PlaceTypeSection({
           }, "Couldn't merge those types.");
           if (ok) {
             setMergingFrom(null);
-            toast.success(`${moved} moved to ${mergeTarget?.name}`);
+            toast.done(`${moved} moved to ${mergeTarget?.name}`);
           }
         }}
         onClose={() => {

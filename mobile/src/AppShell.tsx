@@ -177,9 +177,9 @@ type MapStackParams = {
     | undefined;
   MapPlaceDetail: { placeId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
-  // Where the map was looking when "Save maps for offline use" was tapped, so
+  // Where the map was looking when "Save an offline map" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
-  // A plan's Download the map for this area passes its items' bounds.
+  // A plan's Save an offline map of this area passes its items' bounds.
   MapRegionDownload: RegionDownloadParams;
 };
 
@@ -263,7 +263,7 @@ type MoreStackParams = {
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
-  // A plan's Download the map for this area, pushed here so Back is the plan.
+  // A plan's Save an offline map of this area, pushed here so Back is the plan.
   MoreRegionDownload: RegionDownloadParams;
   MoreTripDetail: { trip: MirrorTrip };
   // A plan left or deleted comes back here with what happened.
@@ -343,7 +343,7 @@ const useStackScreenOptions = makeThemed(
 );
 
 // One download screen for two stacks: the Map tab's, and the More tab's for a
-// plan's "Download the map for this area", so Back returns to that plan, named
+// plan's "Save an offline map of this area", so Back returns to that plan, named
 // by `backLabelOf`, instead of the Map tab.
 function RegionDownloadRoute({
   navigation,
