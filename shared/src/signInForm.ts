@@ -17,7 +17,7 @@ export const SIGN_IN_COPY = {
   haveAccount: "Have an account?",
   signIn: "Sign in",
   resendCode: "Send a new code",
-  ageConfirm: "I confirm I am 18 or older.",
+  ageConfirm: "I am 18 or older",
   resetIntro: "Enter your email and we'll send you a reset code.",
 } as const;
 
