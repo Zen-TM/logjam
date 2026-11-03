@@ -43,7 +43,7 @@ export const WAY_VERBS = [
   },
   { id: "removeShare", label: "Remove from my account" },
   // A route's menu item on both clients. A recording and an import keep the
-  // noun they are known by on Logjam GPS ("Delete track", "Delete from device").
+  // noun they are known by on Logjam GPS ("Delete track", "Delete").
   { id: "delete", label: "Delete way" },
 ] as const satisfies readonly WayVerbDeclaration[];
 

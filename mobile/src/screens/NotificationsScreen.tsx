@@ -769,9 +769,9 @@ export function NotificationsScreen({
       if (kind !== "accept") {
         const who = batch.sender ?? "them";
         const ok = await confirm({
-          confirmTitle: `Turn down ${pending.length} files?`,
+          confirmTitle: `Decline ${pending.length} files?`,
           confirmBody: `You won't get copies of any of them. If you want them, you'd have to ask ${who} to send them again.`,
-          confirmLabel: "Turn down",
+          confirmLabel: "Decline",
           tone: "destructive",
         });
         if (!ok) return;

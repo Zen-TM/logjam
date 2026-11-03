@@ -146,6 +146,20 @@ describe("copy on Logjam GPS", () => {
     expect(first.text).toBe("Open it");
   });
 
+  // The words of a confirm are read by the user too. Mutation: drop
+  // `confirmBody` from COPY_PROPS in shared/src/copyRules.ts.
+  it("reads a confirm's title and body, templates included", () => {
+    const found = userFacingStrings(
+      ts,
+      "x.ts",
+      "const a = { confirmTitle: `Delete ${n}?`, confirmBody: `The ${k} tiles go.` };",
+    );
+    expect(found.map(({ text }) => text)).toEqual([
+      "Delete ?",
+      "The  tiles go.",
+    ]);
+  });
+
   it("names the surface where it means this client", () => {
     const offenders = [...sources(SRC), APP].flatMap((path) =>
       userFacingStrings(ts, path, readFileSync(path, "utf8"))

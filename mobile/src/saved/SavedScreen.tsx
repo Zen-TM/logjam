@@ -173,6 +173,7 @@ import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
+  deleteLabel,
   geoPdfActions,
   remoteTrackActions,
   trackActions,
@@ -377,6 +378,7 @@ type SavedItem = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    synced?: true;
     run: () => Promise<unknown>;
   };
   /** Present on an editable route — the map's draw tool reopens this id. */
@@ -980,8 +982,8 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this region?",
-          confirmBody: `The offline tiles for this area (${countOf(basemapMembers.length, "map")}) are removed from the device.`,
+          confirmTitle: `Delete ${group.label ?? "this region"}?`,
+          confirmBody: `The map data for this area (${countOf(group.members.length, "layer")}) is removed from the device.`,
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -1061,7 +1063,7 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this topo?",
+          confirmTitle: "Delete this LiDAR map?",
           confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
           run: async () => {
             for (const artifact of group.members) {
@@ -1488,7 +1490,7 @@ export function SavedScreen({
       const ok = await confirm({
         confirmTitle: `Delete ${member.title}?`,
         confirmBody:
-          "This map is removed from the device. The rest of this region stays.",
+          "This offline map is removed from the device. The rest of this area stays.",
         confirmLabel: "Delete",
         tone: "destructive",
       });
@@ -2267,17 +2269,11 @@ export function SavedScreen({
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
-              {/* Every asset that still reaches THIS sheet is a file on this
-                  handset. Routes, tracks, imports and waypoints left for their
-                  own sheets, which is what keeps this label from growing a
-                  branch per kind. */}
+              {/* A recording made on another device also reaches this sheet and
+                  is synced, so the label comes from the descriptor. */}
               {menuItem.delete ? (
                 <Row
-                  title={
-                    menuItem.members && menuItem.members.length > 1
-                      ? "Delete all from device"
-                      : "Delete from device"
-                  }
+                  title={deleteLabel(menuItem.delete, menuItem.members?.length)}
                   icon="delete"
                   hue={theme.warning}
                   onPress={() => {

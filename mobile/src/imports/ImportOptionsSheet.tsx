@@ -31,7 +31,7 @@ import {
   RenameForm,
   Row,
 } from "../ui";
-import { vectorImportActions } from "../saved/assetActions";
+import { deleteLabel, vectorImportActions } from "../saved/assetActions";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
@@ -325,11 +325,11 @@ export function ImportOptionsSheet({
               onPress={() => setRenaming(true)}
             />
           ) : null}
-          {/* "From device", not "Delete import": an import never syncs, so this
-              is a statement about this handset and nothing else. */}
+          {/* An import syncs, so deleting it reaches the account and every
+              device: the label is just "Delete" (`deleteLabel`). */}
           {actions.delete ? (
             <Row
-              title="Delete from device"
+              title={deleteLabel(actions.delete)}
               icon="delete"
               hue={theme.warning}
               disabled={busy}

@@ -506,6 +506,7 @@ export function PlaceDetailScreen({
           linkedId={placeId}
           media={attachments}
           emptyHint={copy.photosEmpty}
+          readOnly={!isOwner}
           onFailed={(text) => notify(text, "error")}
         />
       </>
@@ -556,6 +557,7 @@ export function PlaceDetailScreen({
             linkedId={placeId}
             media={attachments}
             emptyHint={copy.routeEmpty}
+            readOnly={!isOwner}
             onFailed={(text) => notify(text, "error")}
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({

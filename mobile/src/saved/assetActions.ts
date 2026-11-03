@@ -109,6 +109,19 @@ function removeConfirmFields(
   return { confirmTitle: title, confirmBody: body };
 }
 
+/**
+ * The words on a delete row, by what the delete reaches. A row that also
+ * removes the account's copy says "Delete"; "from device" is only true of a
+ * file that lives on this phone alone.
+ */
+export function deleteLabel(
+  removal: { synced?: true },
+  memberCount = 1,
+): string {
+  if (removal.synced) return "Delete";
+  return memberCount > 1 ? "Delete all from device" : "Delete from device";
+}
+
 export type AssetActions = {
   /**
    * Someone else owns this — the reason every write verb below is absent.
@@ -171,6 +184,8 @@ export type AssetActions = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    /** Set where the delete reaches the account, not only this phone. */
+    synced?: true;
     run: () => Promise<unknown>;
   };
   /**
@@ -283,9 +298,8 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete this GeoPDF?",
-      confirmBody:
-        "The imported map and its tiles are removed from the device.",
+      confirmTitle: `Delete ${geoPdf.label}?`,
+      confirmBody: "The imported map is removed from the device.",
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
   };
@@ -378,9 +392,10 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     attachToPlace: (placeId: string) =>
       linkStandaloneMediaLocal(imported.id, placeId),
     delete: {
-      confirmTitle: "Delete this import?",
+      confirmTitle: `Delete ${imported.name}?`,
       // Imports sync across devices, so deletion removes the file from the
       // account and therefore from every device.
+      synced: true,
       confirmBody:
         "This deletes the file from your account, so it goes from Logjam Web and your other devices too.",
       run: () => deleteVectorImport(imported.id),
@@ -408,7 +423,8 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
     // phone (`needsConnection` says so, for the sheet that offers it).
     logTrip: syncedTrackSource({ ...file, title: mediaDisplayName(file) }),
     delete: {
-      confirmTitle: "Delete this recording?",
+      confirmTitle: `Delete ${mediaDisplayName(file)}?`,
+      synced: true,
       confirmBody:
         "This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.",
       run: () => deleteMediaLocal(file),

@@ -209,6 +209,8 @@ const COPY_PROPS = new Set([
   "emptyBody",
   "body",
   "note",
+  "confirmTitle",
+  "confirmBody",
   "caption",
 ]);
 

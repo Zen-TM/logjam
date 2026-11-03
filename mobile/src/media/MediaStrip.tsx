@@ -31,6 +31,7 @@ import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { savesCapturesToGallery } from "./galleryPreference";
+import { stripOffers } from "./stripOffers";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
 import { listTracks, type Track } from "../tracks/tracksDb";
@@ -116,6 +117,7 @@ export function MediaStrip({
   onFailed,
   onShowRoute,
   onAddWay,
+  readOnly,
 }: {
   /**
    * Which family of attachment this strip owns. Photos/videos and route files
@@ -162,6 +164,8 @@ export function MediaStrip({
    * nothing, and keeps the two file sources below.
    */
   onAddWay?: () => void;
+  /** Someone else owns the row: no Add, no press-and-hold delete. */
+  readOnly?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -355,6 +359,7 @@ export function MediaStrip({
   }, []);
 
   const atLimit = limit != null && shown.length >= limit;
+  const offers = stripOffers({ readOnly, atLimit, hasAddWay: !!onAddWay });
 
   return (
     <View>
@@ -363,7 +368,7 @@ export function MediaStrip({
           {/* The slot's panel can REPLACE what is in it, so its tile outlives
               the limit; a strip with no such panel still stops offering "Add"
               at the limit rather than failing on upload. */}
-          {atLimit && !onAddWay ? null : (
+          {offers.add ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -391,7 +396,7 @@ export function MediaStrip({
                 {atLimit ? "Replace" : "Add"}
               </Text>
             </Pressable>
-          )}
+          ) : null}
 
           {shown.map((item, itemIndex) => (
             <AttachmentTile
@@ -402,7 +407,9 @@ export function MediaStrip({
                   ? onShowRoute(item)
                   : setViewerIndex(itemIndex)
               }
-              onLongPress={() => void confirmDelete(item)}
+              onLongPress={
+                offers.remove ? () => void confirmDelete(item) : undefined
+              }
               online={online}
             />
           ))}
@@ -410,7 +417,7 @@ export function MediaStrip({
           {shown.length === 0 && emptyHint ? (
             <Text style={styles.emptyHint}>{emptyHint}</Text>
           ) : null}
-          {atLimit ? (
+          {atLimit && !readOnly ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
                 ? `This holds up to ${limit} attachments.`
@@ -549,7 +556,7 @@ function AttachmentTile({
   item: MirrorMedia;
   online: boolean;
   onPress: () => void;
-  onLongPress: () => void;
+  onLongPress?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();

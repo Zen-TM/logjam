@@ -32,7 +32,9 @@ import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
 import { Avatar, confirm, ErrorBanner, IconButton, Row } from "../ui";
+import { requestSync } from "../sync/syncEngine";
 import { useTheme } from "../theme";
+import { isNotInAccount, NOT_IN_ACCOUNT_SENTENCE } from "./notOnServer";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -87,6 +89,8 @@ export function useSharing({
   const [recipients, setRecipients] = useState<ShareRecipient[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // The grant 404ed for the sharer's own item: offer the sync that fixes it.
+  const [syncFixes, setSyncFixes] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { accountState } = useAccountState();
@@ -120,13 +124,20 @@ export function useSharing({
     async (friend: Friend) => {
       setBusyId(friend.id);
       setActionError(null);
+      setSyncFixes(false);
       try {
         await calls.grant(friend.id);
         await load();
         return true;
       } catch (err) {
         console.error(err);
-        setActionError(messageFromError(err, "Couldn't share that."));
+        const missing = isNotInAccount(err);
+        setSyncFixes(missing);
+        setActionError(
+          missing
+            ? NOT_IN_ACCOUNT_SENTENCE
+            : messageFromError(err, "Couldn't share that."),
+        );
         return false;
       } finally {
         setBusyId(null);
@@ -163,6 +174,7 @@ export function useSharing({
     sharedIds: new Set((recipients ?? []).map((r) => r.sharedWith.id)),
     busyId,
     actionError,
+    syncFixes,
     loadFailed,
     canShare,
     shareStatus,
@@ -217,6 +229,10 @@ export function RecipientRows({
 /** Whatever went wrong with the last grant/revoke, in our words. */
 export function SharingError({ sharing }: { sharing: Sharing }) {
   return sharing.actionError ? (
-    <ErrorBanner message={sharing.actionError} />
+    <ErrorBanner
+      message={sharing.actionError}
+      onRetry={sharing.syncFixes ? () => void requestSync() : undefined}
+      retryLabel="Sync now"
+    />
   ) : null;
 }

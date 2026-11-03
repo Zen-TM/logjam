@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 // `vi.mock` is hoisted above these by the transform, so the descriptor still
 // loads against the stubs below.
 import {
+  deleteLabel,
   remoteTrackActions,
   routeActions,
   trackActions,
@@ -440,5 +441,29 @@ describe("deleting a recording", () => {
     const recording = { ...track(3), mediaId: "m1" } as unknown as Track;
     await expect(trackActions(recording).delete?.run()).rejects.toThrow();
     expect(deleteTrack).not.toHaveBeenCalled();
+  });
+});
+
+// A delete that reaches the account must not read as a local one. Mutation:
+// drop `synced: true` from the import's delete in `vectorImportActions`.
+describe("deleteLabel", () => {
+  it("says plain Delete for a synced import and a recording made elsewhere", () => {
+    const file = {
+      id: "m1",
+      filename: "Creek.gpx",
+      displayName: "Creek",
+      mediaType: "application/gpx+xml",
+      origin: "track",
+      metadata: {},
+    } as unknown as Parameters<typeof remoteTrackActions>[0];
+    const imported = vectorImportActions(importRow());
+    expect(deleteLabel(imported.delete!)).toBe("Delete");
+    expect(imported.delete!.confirmTitle).toBe(`Delete ${importRow().name}?`);
+    expect(deleteLabel(remoteTrackActions(file).delete!)).toBe("Delete");
+  });
+
+  it("keeps from device for a file that lives on this phone alone", () => {
+    expect(deleteLabel({})).toBe("Delete from device");
+    expect(deleteLabel({}, 3)).toBe("Delete all from device");
   });
 });
