@@ -9,7 +9,14 @@
 // Local storage is untouched by that distinction: guest mutations still write
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Alert, View } from "react-native";
 import {
   DarkTheme,
@@ -97,7 +104,7 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { backLabelOf, Icon, LoadingState } from "./ui";
+import { backLabelOf, Hero, Icon, LoadingState } from "./ui";
 
 // Said in one place because it is said from two: the tab bar and the
 // notification-response listener are both ways off the map, and two copies of
@@ -290,9 +297,8 @@ type MoreStackParams = {
   Leaderboard: undefined;
   SyncIssues: undefined;
   Settings: undefined;
-  // Settings sub-pages. One route each rather than one parameterised route: a
-  // native header wants its own title per screen, and the back stack reads
-  // Settings › Map the way the user got there.
+  // Settings sub-pages. One route each rather than one parameterised route: the
+  // back stack reads Settings › Map the way the user got there.
   SettingsDisplay: undefined;
   SettingsMap: undefined;
   SettingsNotifications: undefined;
@@ -344,6 +350,33 @@ const useStackScreenOptions = makeThemed(
       contentStyle: { backgroundColor: theme.page },
     }) as const,
 );
+
+// A settings page under the same in-page Hero as the rest of More.
+function SettingsPageRoute({
+  title,
+  navigation,
+  route,
+  children,
+}: {
+  title: string;
+  navigation: {
+    goBack: () => void;
+    getState: () => Parameters<typeof backLabelOf>[0];
+  };
+  route: { key: string };
+  children: ReactNode;
+}) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Hero
+        title={title}
+        onBack={() => navigation.goBack()}
+        backLabel={backLabelOf(navigation.getState(), route.key)}
+      />
+      {children}
+    </View>
+  );
+}
 
 // One download screen for two stacks: the Map tab's, and the More tab's for a
 // plan's "Download the map for this area", so Back returns to that plan, named
@@ -1206,11 +1239,8 @@ export function AppShell({
             >
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
-                  {/* Every screen here except Settings leads with its own
-                  Hero, which owns the back affordance (DESIGN.md).
-                  Settings is a plain settings list, so it keeps the native
-                  header — the rule that a bare-label hero is the pattern being
-                  replaced cuts both ways. */}
+                  {/* Every screen here leads with its own Hero, which owns the
+                  back affordance (DESIGN.md). */}
                   <MoreStack.Screen
                     name="MoreHome"
                     options={{ headerShown: false }}
@@ -1553,54 +1583,102 @@ export function AppShell({
                       />
                     )}
                   </MoreStack.Screen>
-                  {/* Settings and its sub-pages are plain preference lists, so they
-                  keep the native header and its back button (DESIGN.md). */}
+                  {/* Settings and its sub-pages lead with the same in-page Hero
+                  as the rest of More, so the way back reads alike. */}
                   <MoreStack.Screen
                     name="Settings"
-                    options={{ title: "Settings" }}
+                    options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <SettingsScreen
-                        onOpenPage={(page) =>
-                          navigation.navigate(SETTINGS_ROUTES[page])
-                        }
-                      />
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={navLabel("settings")}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <SettingsScreen
+                          onOpenPage={(page) =>
+                            navigation.navigate(SETTINGS_ROUTES[page])
+                          }
+                        />
+                      </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsDisplay"
-                    component={DisplaySettingsScreen}
-                    options={{ title: "Display" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title="Display"
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <DisplaySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsMap"
-                    component={MapSettingsScreen}
-                    options={{ title: "Map" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title="Map"
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <MapSettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsNotifications"
-                    component={NotificationSettingsScreen}
-                    options={{ title: "Notifications" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title="Notifications"
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <NotificationSettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsOffline"
-                    options={{ title: "Offline and storage" }}
+                    options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <OfflineSettingsScreen
-                        onOpenSaved={() =>
-                          navigation
-                            .getParent()
-                            ?.navigate("Saved", { screen: "SavedHome" })
-                        }
-                      />
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title="Offline and storage"
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <OfflineSettingsScreen
+                          onOpenSaved={() =>
+                            navigation
+                              .getParent()
+                              ?.navigate("Saved", { screen: "SavedHome" })
+                          }
+                        />
+                      </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsPrivacy"
-                    component={PrivacySettingsScreen}
-                    options={{ title: "Privacy and security" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title="Privacy and security"
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <PrivacySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                 </MoreStack.Navigator>
               )}
             </Tabs.Screen>

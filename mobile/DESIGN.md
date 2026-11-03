@@ -49,8 +49,10 @@ BottomSheet     acquisition, per-item verbs, forms
 ```
 
 - **A screen with a hero sets `headerShown: false`**; `Hero` carries the top
-  inset and, on a pushed screen, the back arrow (`onBack`). A plain form or
-  settings list keeps `Screen`/`ScreenScroll` and the native header.
+  inset and, on a pushed screen, the back arrow (`onBack`). Every destination
+  under More, Settings and its pages included, leads with its `Hero`, so Back
+  reads the same on all of them; a plain form or list is `Screen`/`ScreenScroll`
+  under it.
 - **Body padding is `spacing(2)` across, `spacing(1)` between rows,
   `spacing(4)` at the bottom.**
 - **A control under the rail stays mounted** (dimmed and inert during a

@@ -11,10 +11,8 @@
 // outbox (`customFields/fieldDefsStore.ts`), so they do not gate on connection
 // or an account.
 //
-// LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
-// native header rather than being given a hero. There is no headline metric
-// here; a hero whose only content is the word "Settings" is exactly the pattern
-// the hero rule exists to replace.
+// LAYOUT: a plain list under the title-and-back Hero `AppShell` draws, as on
+// every destination in More.
 //
 // Row subtitles: none on the page rows (§7 — a navigation row's subtitle is live
 // STATE, never an explanation of what is behind it). The field rows keep theirs

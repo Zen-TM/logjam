@@ -24,6 +24,7 @@ const LABELS: Record<string, string | Param> = {
   FriendShares: param("username"),
   Leaderboard: LEADERBOARD.title,
   Account: navLabel("account"),
+  Settings: navLabel("settings"),
   SyncIssues: navLabel("syncIssues"),
   TripStats: "Stats",
   MapPlaceDetail: "Place",

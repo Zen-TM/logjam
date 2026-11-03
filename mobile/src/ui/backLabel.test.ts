@@ -27,6 +27,12 @@ describe("backLabelOf", () => {
     ).toBe("Trips");
   });
 
+  it("names Settings as the way back from one of its pages", () => {
+    expect(
+      backLabelOf({ routes: [r("a", "Settings"), r("b", "SettingsMap")] }, "b"),
+    ).toBe("Settings");
+  });
+
   it("takes a plan's or friend's own name from its params", () => {
     const s = {
       routes: [
