@@ -32,9 +32,9 @@ export type NotificationInlineAction = {
    * Non-null means raise this dialog first (DESIGN.md — destructive actions
    * confirm in a dialog, which is where the explanation goes).
    *
-   * A friend-request decline never carries one (the requester can ask again);
-   * a file decline always does, because side by side in a list row there is no
-   * overflow sheet left to keep "no" a step away from "yes".
+   * Both declines carry one, on every surface (ADR 0016): side by side with
+   * Accept in a list row there is no overflow sheet left to keep "no" a step
+   * away from "yes".
    */
   confirm: { title: string; body: string; confirmLabel: string } | null;
   /**
@@ -92,9 +92,16 @@ export function friendRequestAnswers(
       label: "Decline",
       failure: "Couldn't decline that request.",
       success: "Request declined.",
-      // Never asks, on any surface: the requester is not told and can ask
-      // again, so nothing is lost. Guard: notificationActions.test.ts.
-      confirm: null,
+      // Asked on every surface, the Friends lists included (ADR 0016):
+      // side by side with Accept there is no overflow sheet to keep "no" a step
+      // away. Guard: notificationActions.test.ts.
+      confirm: {
+        title: `Decline ${username}'s request?`,
+        // The two things the user actually needs: it is not announced, and
+        // it is not final.
+        body: `${username} won't be told, and can send another request later.`,
+        confirmLabel: "Decline",
+      },
     },
   ];
 }

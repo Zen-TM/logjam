@@ -284,15 +284,25 @@ export function FriendsScreen({
       item: Extract<FriendItem, { kind: "request" }>,
       action: ReturnType<typeof friendRequestAnswers>[number],
     ) => {
-      void runAction(
-        item.requestId,
-        () =>
-          action.kind === "accept"
-            ? acceptFriendRequest(item.requestId)
-            : declineFriendRequest(item.requestId),
-        action.failure,
-        action.success,
-      );
+      const run = () =>
+        void runAction(
+          item.requestId,
+          () =>
+            action.kind === "accept"
+              ? acceptFriendRequest(item.requestId)
+              : declineFriendRequest(item.requestId),
+          action.failure,
+          action.success,
+        );
+      if (!action.confirm) return run();
+      Alert.alert(action.confirm.title, action.confirm.body, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: action.confirm.confirmLabel,
+          style: "destructive",
+          onPress: run,
+        },
+      ]);
     },
     [runAction],
   );

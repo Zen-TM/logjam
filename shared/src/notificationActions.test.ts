@@ -83,25 +83,23 @@ describe("notificationActions", () => {
     ]);
   });
 
-  // A file decline is a dialog; a friend-request decline never asks, since the
-  // requester can ask again. Mutation that turns it red: give the friend
-  // decline in `friendRequestAnswers` a confirm.
-  it("confirms a file decline and never a friend decline or an accept", () => {
-    const friend = notificationActions(
+  // Every decline is a dialog, the friend request's included (ADR 0016), and
+  // no accept is. Mutation that turns it red: take the confirm off the friend
+  // decline in `friendRequestAnswers`.
+  it("confirms every decline and no accept", () => {
+    for (const n of [
       notification("friend_request", {
         friendshipId: "f1",
         requesterUsername: "bob",
       }),
-    )!;
-    expect(friend.actions.map((a) => a.confirm)).toEqual([null, null]);
-    const file = notificationActions(
       notification("file_sent", {
         fileSendId: "s1",
         filename: "Claustral.gpx",
       }),
-    )!;
-    for (const action of file.actions) {
-      expect(Boolean(action.confirm)).toBe(action.kind === "decline");
+    ]) {
+      for (const action of notificationActions(n)!.actions) {
+        expect(Boolean(action.confirm)).toBe(action.kind === "decline");
+      }
     }
   });
 

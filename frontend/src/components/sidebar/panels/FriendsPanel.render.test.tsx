@@ -8,7 +8,11 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FRIENDS } from "@logjam/shared";
 
-import { getLeaderboard, sendFriendRequest } from "../../../placeUtils";
+import {
+  declineFriendRequest,
+  getLeaderboard,
+  sendFriendRequest,
+} from "../../../placeUtils";
 import FriendsPanel, { AddFriendDialog, InviteLink } from "./FriendsPanel";
 
 const toast = { done: vi.fn(), error: vi.fn() };
@@ -21,6 +25,7 @@ vi.mock("../../../placeUtils", async (importOriginal) => ({
     total: 1,
   })),
   sendFriendRequest: vi.fn(),
+  declineFriendRequest: vi.fn(async () => {}),
   getLeaderboard: vi.fn(async () => ({
     joined: true,
     season: "2026–27",
@@ -192,5 +197,36 @@ describe("the leaderboard button on Friends", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Back to friends" }));
     expect(screen.getByRole("heading", { name: FRIENDS.title })).toBeTruthy();
+  });
+});
+
+// ADR 0016: every decline confirms, the friend request's included. Mutation:
+// run the decline straight from the button, as before.
+describe("declining a friend request on Friends", () => {
+  it("asks first, and declines only on confirm", async () => {
+    render(
+      <FriendsPanel
+        leaderboardOptIn={false}
+        friends={[]}
+        friendRequests={
+          [
+            { id: "q1", requester: { id: "c", username: "carol" } },
+          ] as unknown as React.ComponentProps<
+            typeof FriendsPanel
+          >["friendRequests"]
+        }
+        onRefetchFriends={() => {}}
+        onRefetchShared={() => {}}
+        onRefetchNotifications={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    expect(declineFriendRequest).not.toHaveBeenCalled();
+    expect(await screen.findByText("Decline carol's request?")).toBeTruthy();
+    // The dialog's confirm is the second Decline on the page.
+    fireEvent.click(screen.getAllByRole("button", { name: "Decline" })[1]);
+    await waitFor(() =>
+      expect(declineFriendRequest).toHaveBeenCalledWith("q1"),
+    );
   });
 });
