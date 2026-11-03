@@ -36,6 +36,9 @@ export function redactTilePathPatterns(message: string): string {
       // access or refresh token, or an authorization code, must not leave the
       // phone in a crash report (Guard: scrubEvent.test.ts).
       .replace(/\blogjam(?:dev)?:\/\/\S+/gi, "[redacted-url]")
+      // A file-system error embeds the URI it failed on, and an exported
+      // file's URI ends in the place's name (Guard: scrubEvent.test.ts).
+      .replace(/\b(?:content|file):\/\/\S+/gi, "[redacted-url]")
       .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]*/g, "[redacted-token]")
       .replace(COORDINATE_PAIR, "[redacted-coords]")
       .replace(/\b\d+\/\d+\/\d+\b/g, "[redacted-tile]")

@@ -324,6 +324,24 @@ describe("a forecast request", () => {
   });
 });
 
+describe("a file-system error from an export", () => {
+  // Mutation that turns it red: drop the `content|file` pattern from
+  // `redactTilePathPatterns`, and the place's name in the URI reaches Sentry.
+  it("reaches a breadcrumb without the exported file's URI", () => {
+    const uri =
+      "content://com.android.externalstorage.documents/tree/primary%3ADownload/document/primary%3ADownload%2FSecret%20Falls.gpx";
+    const crumb = scrubBreadcrumb({
+      category: "console",
+      message: `Location '${uri}' isn't writable. file:///data/user/0/au.logjam/cache/Secret%20Falls.gpx`,
+    });
+    expect(JSON.stringify(crumb)).not.toContain("Secret");
+    expect(JSON.stringify(crumb)).not.toContain("externalstorage");
+    expect(crumb.message).toBe(
+      "Location '[redacted-url] isn't writable. [redacted-url]",
+    );
+  });
+});
+
 describe("the typed search query", () => {
   // Mutation that turns it red: drop "q" or "query" from SENSITIVE_KEYS.
   it("never reaches a breadcrumb or an event", () => {

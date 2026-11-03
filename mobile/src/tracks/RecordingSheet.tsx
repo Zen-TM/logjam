@@ -21,15 +21,16 @@ import {
   BottomSheet,
   closedSheet,
   Button,
-  confirm,
   ErrorBanner,
   FieldError,
   IconButton,
 } from "../ui";
-import { confirmFinishRecording } from "./finishRecordingPrompt";
+import {
+  confirmDiscardRecording,
+  confirmFinishRecording,
+} from "./finishRecordingPrompt";
 import { TrackStatsBody } from "./TrackStatsBody";
 import {
-  discardTrackRecording,
   pauseTrackRecording,
   resumeTrackRecording,
   trackDurationMs,
@@ -166,27 +167,10 @@ export function RecordingSheet({
     confirmFinishRecording(activeTrack.id, close, setError);
   }, [activeTrack, close]);
 
-  const handleDiscard = useCallback(async () => {
+  const handleDiscard = useCallback(() => {
     if (!activeTrack) return;
-    const trackId = activeTrack.id;
     setError(null);
-    const discard = await confirm({
-      confirmTitle: "Discard this recording?",
-      confirmBody:
-        "Every point recorded so far is deleted. This can't be undone.",
-      confirmLabel: "Discard",
-      tone: "destructive",
-    });
-    if (!discard) return;
-    // A discard that silently fails to delete leaves the user on a sheet whose
-    // subject may still exist, with nothing telling them it didn't work.
-    discardTrackRecording(trackId).then(
-      () => close(),
-      (err: unknown) => {
-        console.error(err);
-        setError("Couldn't delete the recording.");
-      },
-    );
+    confirmDiscardRecording(activeTrack.id, close, setError);
   }, [activeTrack, close]);
 
   if (!activeTrack) return closedSheet;
