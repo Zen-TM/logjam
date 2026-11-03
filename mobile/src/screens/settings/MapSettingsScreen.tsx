@@ -304,6 +304,7 @@ export function MapSettingsScreen() {
           }}
         />
 
+        <SectionHeader title="On the map" />
         <PreferenceRow
           icon="northUp"
           title="Map always north-up"
@@ -404,6 +405,7 @@ export function MapSettingsScreen() {
         />
 
         {/* ── Recording ─────────────────────────────────────────────────── */}
+        <SectionHeader title="Recording" />
         <ChoiceGroup
           label="Track detail"
           options={(Object.keys(FIX_RATE_LABELS) as FixRate[]).map((rate) => ({
