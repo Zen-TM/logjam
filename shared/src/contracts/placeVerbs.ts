@@ -41,9 +41,6 @@ const NO_MAP_FROM_A_PLACE =
 const EXPORTED_AT_A_DESK =
   "A GeoPDF is printed and a GIS file is opened at a desk, so both are made on Logjam Web. Logjam GPS saves an area for offline use from its map.";
 
-const EXPORTED_FROM_SHARE_DIALOG =
-  "Logjam Web exports a place from its Share or export… dialog and from the selection bar; Logjam GPS draws it as a row of its own.";
-
 const OPENING_SHOWS_IT_ON_WEB =
   "On Logjam Web the map sits beside the page, and opening a place already flies it there.";
 
@@ -92,8 +89,6 @@ export const PLACE_VERBS = [
     icon: "export",
     label: "Export…",
     for: "both",
-    on: "gps",
-    reason: EXPORTED_FROM_SHARE_DIALOG,
   },
   {
     id: "share",

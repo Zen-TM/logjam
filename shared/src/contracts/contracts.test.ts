@@ -332,11 +332,13 @@ describe("a place's verbs", () => {
 
   // Red when "exportPlace" is owner-only or leaves Logjam GPS: sharePromise
   // tells a friend they can export the place, so their phone must be able to.
-  it("lets Logjam GPS export a place, owned or shared with you", () => {
-    for (const owned of [true, false])
-      for (const surface of ["row", "page", "pin"] as const)
-        expect(ids("gps", surface, owned)).toContain("exportPlace");
-    expect(placeVerbIds("web")).not.toContain("exportPlace");
+  // Red when either client loses "Export…" (the share promise says friends can
+  // export a place), for a place that is yours or shared with you.
+  it("lets both clients export a place, owned or shared with you", () => {
+    for (const platform of ["web", "gps"] as const)
+      for (const owned of [true, false])
+        for (const surface of ["row", "page", "pin"] as const)
+          expect(ids(platform, surface, owned)).toContain("exportPlace");
   });
 
   it("never offers to edit, share, delete or log a trip at a place someone shared with you", () => {
