@@ -1641,7 +1641,12 @@ export function SavedScreen({
           with the list so it gets the screen. */}
       <Hero
         compact
-        title="Saved"
+        // The chips scroll away with the list, so the pinned row keeps naming
+        // the filter (an Inbox tap lands on Routes already scrolled).
+        title={
+          filter === "all" ? "Saved" : `Saved · ${CATEGORY_META[filter].plural}`
+        }
+        titleNumberOfLines={2}
         actions={
           <Button
             label="Add"
@@ -1900,6 +1905,7 @@ export function SavedScreen({
                 onPress={
                   selecting ? () => selectItem(item) : () => openItem(item)
                 }
+                rightBelow
                 /* ONE trailing slot for both modes, and every child of it keeps its
                 place when the mode changes. The circle takes the ⋯ button's 40pt box
                 rather than replacing it, and the pill stays put while buttons stop

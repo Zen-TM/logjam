@@ -1010,6 +1010,7 @@ const PlaceRow = memo(function PlaceRow({
       disabled={selecting && !deletable}
       onLongPress={onToggle}
       onPress={selecting ? onToggle : () => onOpen(place)}
+      rightBelow
       right={
         <View style={styles.rowTrailing}>
           {place.syncRole === "shared" ? (

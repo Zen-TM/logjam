@@ -800,29 +800,15 @@ function Items({
   // The button only dims: the words go under it (ui/Button.tsx).
   const add = canAdd ? (
     <ListEnd>
-      {/* One size, sharing the width, as a card's buttons do. */}
-      <View style={styles.addBoth}>
-        <CardActions>
-          <Button
-            label={planAddVerbLabel("copy")}
-            icon="add"
-            variant="outlineAccent"
-            disabled={!online}
-            disabledReason={OFFLINE}
-            reasonShown
-            onPress={() => setAdding(true)}
-          />
-          <Button
-            label={planAddVerbLabel("route")}
-            icon="route"
-            variant="outlineAccent"
-            disabled={!online}
-            disabledReason={OFFLINE}
-            reasonShown
-            onPress={onDrawRoute}
-          />
-        </CardActions>
-      </View>
+      <Button
+        label={planAddVerbLabel("copy")}
+        icon="add"
+        variant="outlineAccent"
+        disabled={!online}
+        disabledReason={OFFLINE}
+        reasonShown
+        onPress={() => setAdding(true)}
+      />
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
         <AddCopySheet
@@ -832,6 +818,7 @@ function Items({
           me={me}
           onClose={() => setAdding(false)}
           onDone={onInfo}
+          onDrawRoute={onDrawRoute}
         />
       ) : null}
     </ListEnd>
@@ -1113,7 +1100,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   formFooter: { gap: spacing(0.5) },
   age: { ...muted(theme, textRole.detail) },
   offline: { ...muted(theme, textRole.detail), textAlign: "center" },
-  addBoth: { alignSelf: "stretch" },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",
