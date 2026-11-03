@@ -10,7 +10,7 @@ const NUMBER = String.raw`[+-]?(?:\d+(?:\.\d*)?|\.\d+)`;
 const HEMISPHERE = "[NSEWnsew]";
 // One half: a hemisphere letter before or after its number, or neither.
 const PART = `(?:(${HEMISPHERE})\\s*(${NUMBER})|(${NUMBER})\\s*(${HEMISPHERE})?)`;
-const PAIR = new RegExp(`^${PART}(?:\\s*[,;\\t]\\s*|\\s+)${PART}$`);
+const PAIR = new RegExp(`^${PART}(\\s*[,;\\t]\\s*|\\s+)${PART}$`);
 
 function half(
   letterBefore: string | undefined,
@@ -44,8 +44,11 @@ export function parseCoordinatePair(text: string): CoordinatePair | null {
   const match = PAIR.exec(plain);
   if (!match) return null;
   const first = half(match[1], match[2], match[3], match[4]);
-  const second = half(match[5], match[6], match[7], match[8]);
+  const second = half(match[6], match[7], match[8], match[9]);
   if (!first || !second) return null;
+  // "S33 52.512" is a degrees-minutes latitude, not a pair: with only spaces
+  // between, a letter on one half and not the other is not enough to tell.
+  if (!/[,;\t]/.test(match[5]) && !first.axis !== !second.axis) return null;
   // Two latitudes, or two longitudes.
   if (first.axis && first.axis === second.axis) return null;
   // A letter on one half names the other half's axis too.

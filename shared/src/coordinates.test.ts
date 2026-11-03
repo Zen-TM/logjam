@@ -50,6 +50,19 @@ describe("parseCoordinatePair", () => {
     expect(parseCoordinatePair(text)).toBeNull();
   });
 
+  // Mutation: drop the space-only both-or-neither letter check, and the
+  // degrees-minutes latitude "S33 52.512" splits into lat -33, lng 52.512.
+  it.each(["S33 52.512", "s33 52.512", "33 52.512 S", "S 33 52.512"])(
+    "does not read the degrees-minutes latitude %j as a pair",
+    (text) => {
+      expect(parseCoordinatePair(text)).toBeNull();
+    },
+  );
+
+  it("splits a pair with one letter when a comma says it is a pair", () => {
+    expect(parseCoordinatePair("S 33.6290, 150.3156")).toEqual(pair);
+  });
+
   it("still splits whole numbers that have a space or a point", () => {
     expect(parseCoordinatePair("-33, 15")).toEqual({
       latitude: -33,
