@@ -120,7 +120,7 @@ test("a track attached in the edit form goes again on Discard", async ({
   };
 
   let form = await editPlace();
-  await expect(form.getByText("No track yet.")).toBeVisible();
+  await expect(form.getByText("No route yet.")).toBeVisible();
   await form
     .locator('input[type="file"]')
     .last()
@@ -133,7 +133,7 @@ test("a track attached in the edit form goes again on Discard", async ({
           "</trkseg></trk></gpx>",
       ),
     });
-  await expect(form.getByText("No track yet.")).toBeHidden();
+  await expect(form.getByText("No route yet.")).toBeHidden();
 
   await form.getByRole("button", { name: "Cancel" }).click();
   await page
@@ -147,5 +147,5 @@ test("a track attached in the edit form goes again on Discard", async ({
     .first()
     .click();
   form = await editPlace();
-  await expect(form.getByText("No track yet.")).toBeVisible();
+  await expect(form.getByText("No route yet.")).toBeVisible();
 });
