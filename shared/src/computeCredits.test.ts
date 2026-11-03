@@ -4,6 +4,7 @@ import {
   estimateCredits,
   quotaState,
   formatCredits,
+  formatCreditsLike,
   formatCreditsOf,
   WORKER_SPECS,
   DEFAULT_MONTHLY_COMPUTE_CREDITS,
@@ -98,6 +99,15 @@ describe("formatCredits", () => {
 
   it("never renders a negative balance", () => {
     expect(formatCredits(-10)).toBe("0 credits");
+  });
+});
+
+describe("formatCreditsLike", () => {
+  // Mutation that turns it red: formatCredits(jobCredits) beside a
+  // credit-hours allowance, which printed "36 credits" next to "20 credit-hours".
+  it("puts a quantity in the allowance's unit", () => {
+    expect(formatCreditsLike(36, 1200)).toBe("0.6 credit-hours");
+    expect(formatCreditsLike(36, 60)).toBe("36 credits");
   });
 });
 
