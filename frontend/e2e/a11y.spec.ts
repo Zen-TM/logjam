@@ -1036,11 +1036,11 @@ test.describe("desktop", () => {
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
-    await page.getByRole("menuitem", { name: "Import a file" }).click();
+    await page.getByRole("menuitem", { name: "Import from CSV" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Import data" }),
+      dialog.getByRole("heading", { name: "Import from CSV" }),
     ).toBeVisible();
     // Nothing dropped yet: the zone is a real <button>, not a div with a click.
     await expect(

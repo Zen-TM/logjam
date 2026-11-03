@@ -35,11 +35,11 @@ async function openImportDialog(page: Page) {
   });
   await page.getByRole("button", { name: "Places", exact: true }).click();
   await page.getByRole("button", { name: /^Add/ }).first().click();
-  await page.getByRole("menuitem", { name: "Import a file" }).click();
+  await page.getByRole("menuitem", { name: "Import from CSV" }).click();
   // Not the Undo confirm: that one is an alertdialog.
   const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("heading", { name: "Import data" }),
+    dialog.getByRole("heading", { name: "Import from CSV" }),
   ).toBeVisible();
   return dialog;
 }

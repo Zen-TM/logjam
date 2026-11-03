@@ -77,6 +77,8 @@ import {
   placeRowDecision,
   preparePlaceRows,
   prepareTripRows,
+  skippedRowsNote,
+  splitSkippedRows,
   tripRowDecision,
   type PreparedPlaceRow,
   type PreparedTripRow,
@@ -490,6 +492,12 @@ function UnifiedImportDialog({
 
   async function loadFile(file: File) {
     setError(null);
+    if (/\.(gpx|kml|kmz|geojson)$/i.test(file.name)) {
+      setError(
+        `"${file.name}" isn't a CSV. This importer reads CSV files of places and trips. To add a GPX or KML track on Logjam Web, open a place, choose Edit and add it under Route. Logjam GPS imports GPX, KML and GeoJSON from Saved.`,
+      );
+      return;
+    }
     // PapaParse reads the whole file into memory with no streaming — an
     // accidentally-picked huge file (a photo mis-selected as CSV, an export of
     // something else entirely) would otherwise freeze the tab before any of
@@ -526,7 +534,7 @@ function UnifiedImportDialog({
     // from here on, so flag it rather than staying silent.
     if (parsed.parseErrors.length > 0) {
       toast.info(
-        `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} (see console) — some fields may be misaligned. Check the column mapping before importing.`,
+        `"${file.name}" had ${parsed.parseErrors.length} parsing ${parsed.parseErrors.length === 1 ? "issue" : "issues"} — some fields may be misaligned. Check the column mapping before importing.`,
       );
       console.error("CSV parse issues in", file.name, parsed.parseErrors);
     }
@@ -534,7 +542,7 @@ function UnifiedImportDialog({
     const kind = detectFileKind(parsed.headers);
     if (kind === "unknown") {
       setError(
-        "This file doesn't look like a place list or a trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.",
+        "This file doesn't look like a CSV place list or trip list. We couldn't find a coordinates column (for places) or a date column (for trips). Places need name, latitude, longitude; trip lists need a place name and date.",
       );
       return;
     }
@@ -1263,7 +1271,7 @@ function UnifiedImportDialog({
       : importing
         ? "Importing…"
         : (step === "map"
-            ? "Import data"
+            ? "Import from CSV"
             : step === "review"
               ? "Review matches"
               : "Confirm import") + stageSuffix;
@@ -1332,7 +1340,8 @@ function UnifiedImportDialog({
           />
           <span>
             Drop a CSV here, or click to browse. You can add a place list and a
-            trip list together.
+            trip list together. Every place in a file gets the one place type
+            you choose.
           </span>
         </button>
         <input
@@ -1742,8 +1751,10 @@ function UnifiedImportDialog({
           outcome.merges.length === 1 ? "place" : "places"
         } merged into existing entries`;
       }
-      const warnings =
-        outcome.warnings.length > 0 ? outcome.warnings : undefined;
+      const { skipped: skippedRows, leftEmpty } = splitSkippedRows(
+        outcome.warnings,
+      );
+      const warnings = leftEmpty.length > 0 ? leftEmpty : undefined;
       // ImportResultSummary hides the Undo button when every headline count is
       // zero — but `droppedRows` now sits in that same headline
       // array and is never itself undoable, so it must not be what keeps the
@@ -1760,6 +1771,7 @@ function UnifiedImportDialog({
           details={details.length > 0 ? details : undefined}
           detailsLabel={detailsLabel}
           warnings={warnings}
+          skippedRows={skippedRows}
           errors={outcome.errors.length > 0 ? outcome.errors : undefined}
           onUndo={hasUndoableChange ? () => setConfirmingUndo(true) : undefined}
           undoing={undoing}
@@ -1768,10 +1780,22 @@ function UnifiedImportDialog({
     }
 
     // Pre-import preview
-    const preview =
+    const ready =
       activeKind === "place"
         ? `${preparedPlaceRows.length} place row${preparedPlaceRows.length !== 1 ? "s" : ""} ready to import.`
         : `${preparedTripRows.length} trip${preparedTripRows.length !== 1 ? "s" : ""} ready to import.`;
+    const skippedNote = skippedRowsNote(
+      splitSkippedRows(activeKind === "place" ? placeWarnings : tripWarnings)
+        .skipped,
+    );
+    const preview = skippedNote ? `${ready} ${skippedNote}` : ready;
+
+    // Merge settings only mean something when a row folds into a place.
+    const willMerge =
+      Object.keys(reviewState.autoMergeId).length +
+        Object.values(reviewState.decisions).filter((d) => d.kind === "link")
+          .length >
+      0;
 
     // How many fields take the file's value rather than keeping the existing
     // one — the answer the settings row is asked for, on the row itself.
@@ -1783,7 +1807,7 @@ function UnifiedImportDialog({
       <div className={classes.step}>
         <p className={classes.lede}>{preview}</p>
 
-        {activeKind === "place" && (
+        {activeKind === "place" && willMerge && (
           <Row
             title="Merge settings"
             subtitle={
@@ -1947,7 +1971,7 @@ function UnifiedImportDialog({
         open={confirmingUndo}
         title="Undo this import?"
         message="Every place and trip this import created is deleted. For a day after the import, places and trips it changed also go back to the values they had before it, except fields you've changed since, which stay as you left them. This can't be undone."
-        confirmLabel="Undo the import"
+        confirmLabel="Undo this import"
         confirmColor="error"
         busy={undoing}
         onConfirm={() => void handleUndo()}

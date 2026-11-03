@@ -271,7 +271,7 @@ export default function RoutesPanel({
             },
             {
               id: "import",
-              label: "Import a file",
+              label: "Import from CSV",
               icon: "upload",
               onSelect: onOpenUnifiedImport,
             },
@@ -342,7 +342,7 @@ export default function RoutesPanel({
         icon="upload"
         onClick={onOpenUnifiedImport}
       >
-        Import
+        Import from CSV
       </Button>
     </>
   );
