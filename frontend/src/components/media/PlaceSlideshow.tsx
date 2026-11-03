@@ -3,7 +3,7 @@ import { mediaCategory, type MediaItem } from "@logjam/shared";
 import Lightbox from "./Lightbox";
 import { slideshowDots } from "./slideshowDots";
 import classes from "./PlaceSlideshow.module.css";
-import { Icon } from "../../ui";
+import { Button, Icon } from "../../ui";
 
 // Square photo/video slideshow shown at the top of the place detail panel.
 // Images render in their native aspect ratio, letterboxed on black. Videos show
@@ -72,15 +72,6 @@ export default function PlaceSlideshow({
             </span>
           )}
         </button>
-        {onDelete && (
-          <button
-            className={classes.deleteBtn}
-            onClick={() => onDelete(current)}
-            aria-label={`Delete ${current.filename}`}
-          >
-            <Icon idea="delete" size={16} />
-          </button>
-        )}
         {media.length > 1 && (
           <>
             <button
@@ -119,6 +110,12 @@ export default function PlaceSlideshow({
             />
           ))}
         </div>
+      )}
+
+      {onDelete && (
+        <Button compact icon="delete" onClick={() => onDelete(current)}>
+          Delete this photo
+        </Button>
       )}
 
       {lightbox && (

@@ -108,7 +108,7 @@ test("an owner links and unlinks places, and adds photos, on the place's page", 
   await page.getByRole("option", { name: other, exact: true }).first().click();
   await expect(page.getByText(`Linked to ${other}.`)).toBeVisible();
 
-  await aside.getByRole("button", { name: `Actions for ${other}` }).click();
+  await aside.getByRole("button", { name: `Options for ${other}` }).click();
   await page.getByRole("menuitem", { name: "Unlink from this place" }).click();
   await expect(page.getByText("Unlinked.")).toBeVisible();
 });

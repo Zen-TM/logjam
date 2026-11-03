@@ -942,7 +942,7 @@ function PlaceDetailPanel({
                 onOpen={() => setSelectedPlaceID(linked.id)}
                 trailing={
                   <Menu
-                    label={`Actions for ${linked.name}`}
+                    label={`Options for ${linked.name}`}
                     title={linked.name}
                     placement="bottom-end"
                     entries={[
@@ -964,7 +964,7 @@ function PlaceDetailPanel({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${linked.name}`}
+                        label={`Options for ${linked.name}`}
                       />
                     )}
                   />
