@@ -51,6 +51,7 @@ import {
   friendsHeroTitle,
   FRIENDS,
   friendVerb,
+  LEADERBOARD_SETTING,
   leaderboardBadge,
   leaderboardButtonLabel,
   selfStanding,
@@ -451,16 +452,22 @@ export function FriendsScreen({
           }
           renderItem={renderItem}
           ListFooterComponent={
-            // The list ends with the button its empty state offers.
             items.length > 0 ? (
-              <ListEnd>
-                <Button
-                  label={copy.addTitle}
-                  icon="addFriend"
-                  variant="outlineAccent"
-                  onPress={() => setAddOpen(true)}
-                />
-              </ListEnd>
+              <>
+                {friends.length > 0 &&
+                !(leaderboardOptIn && board?.joined !== false) ? (
+                  <Text style={styles.hint}>{LEADERBOARD_SETTING.offer}</Text>
+                ) : null}
+                {/* The list ends with the button its empty state offers. */}
+                <ListEnd>
+                  <Button
+                    label={copy.addTitle}
+                    icon="addFriend"
+                    variant="outlineAccent"
+                    onPress={() => setAddOpen(true)}
+                  />
+                </ListEnd>
+              </>
             ) : undefined
           }
           ListEmptyComponent={

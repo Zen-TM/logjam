@@ -29,7 +29,6 @@ import {
   Hero,
   IconButton,
   IconTile,
-  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -250,7 +249,6 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
-            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>
