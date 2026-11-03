@@ -1,7 +1,6 @@
 // Whether an offline map covers a place or a way, with the one verb that saves
 // one framed on it (mobile/DESIGN.md §8). Drawn on the page of the thing, so
 // the answer to "will I have a map there?" is read before leaving signal.
-import { View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 
 import { BASEMAP_CATALOG } from "@logjam/shared";
@@ -9,7 +8,7 @@ import { BASEMAP_CATALOG } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { readBasemapPreference } from "../map/basemapPreference";
-import { Button, Row } from "../ui";
+import { Button, CardActions, Row } from "../ui";
 import {
   coveredByOfflineMaps,
   routeCoveredByOfflineMaps,
@@ -57,12 +56,10 @@ export function MapCoverageRow({
       subtitle={
         online ? basemapName : unavailableReasonText("needs-connection")
       }
-      // Under the text, not beside it: a button that takes the row's width
-      // leaves the sentence two lines and an ellipsis.
+      // Under the text, not beside it, so the sentence keeps the row's width.
       footer={
-        <View style={{ flexDirection: "row" }}>
+        <CardActions>
           <Button
-            compact
             variant="outlineAccent"
             label="Save map"
             disabled={!online}
@@ -77,7 +74,7 @@ export function MapCoverageRow({
               });
             }}
           />
-        </View>
+        </CardActions>
       }
     />
   );
