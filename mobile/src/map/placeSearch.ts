@@ -18,6 +18,7 @@ import {
   type PlaceResult,
   type PlaceSearchRequest,
   type PlaceSearchResponse,
+  SEARCH_STATUS,
 } from "@logjam/shared";
 
 import { apiFetch } from "../api/apiFetch";
@@ -85,7 +86,7 @@ export function askPlacesOnline(
         settle({
           query,
           results: [],
-          error: messageFromError(err, "Couldn't search locations."),
+          error: messageFromError(err, SEARCH_STATUS.searchFailed),
         });
       });
   }, PLACE_SEARCH_DEBOUNCE_MS);

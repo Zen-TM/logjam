@@ -50,6 +50,7 @@ import {
   geocode,
   parseCoordinates,
   RECENT_SEARCHES_HEADING,
+  SEARCH_STATUS,
   type SearchPoint,
   GEOCODE_MIN_QUERY_LENGTH,
   messageFromError,
@@ -231,7 +232,7 @@ export function MapSearchBar({
         ? devicePlaces
         : registry.loadFailed
           ? {
-              error: "Couldn't load place names.",
+              error: SEARCH_STATUS.namesFailed,
               retry: () => void loadPlaceIndex(),
             }
           : "loading"
@@ -266,7 +267,7 @@ export function MapSearchBar({
         setSearch({
           query: asked,
           results: [],
-          error: messageFromError(err, "Couldn't search for that place."),
+          error: messageFromError(err, SEARCH_STATUS.searchFailed),
         });
       });
     return () => controller.abort();
@@ -564,7 +565,9 @@ export function MapSearchBar({
                   );
               }
             })}
-            {loading ? <Text style={styles.status}>Searching…</Text> : null}
+            {loading ? (
+              <Text style={styles.status}>{SEARCH_STATUS.searching}</Text>
+            ) : null}
             {error !== null ? (
               <View style={styles.statusBox}>
                 <FieldError message={error} />
