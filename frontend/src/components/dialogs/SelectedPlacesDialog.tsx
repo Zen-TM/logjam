@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   noFriendsMessage,
+  PLACE_EXPORT_FORMATS,
   placeDeleteConfirm,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -25,13 +26,6 @@ import {
   Icon,
 } from "../../ui";
 import classes from "./SelectedPlacesDialog.module.css";
-
-const EXPORT_FORMATS: { value: TExportFormat; label: string }[] = [
-  { value: "gpx", label: "GPX" },
-  { value: "kml", label: "KML" },
-  { value: "geojson", label: "GeoJSON" },
-  { value: "csv", label: "CSV" },
-];
 
 const plural = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
@@ -297,7 +291,7 @@ function SelectedPlacesDialog({
                   setExportFormat(event.target.value as TExportFormat)
                 }
               >
-                {EXPORT_FORMATS.map((format) => (
+                {PLACE_EXPORT_FORMATS.map((format) => (
                   <option key={format.value} value={format.value}>
                     {format.label}
                   </option>

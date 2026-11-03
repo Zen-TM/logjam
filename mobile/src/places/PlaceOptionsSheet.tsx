@@ -10,8 +10,8 @@
 // sheet only says how each one runs here. "Show on map" is the one row the
 // list has and the pin does not: on the map you are already looking at it.
 //
-// Share is a SUB-MODE of this sheet rather than a second sheet (§6 — swap the
-// content, never stack), so no caller can be the surface that forgot it. The
+// Share and Export are SUB-MODES of this sheet rather than second sheets (§6 —
+// swap the content, never stack), so no caller can be the surface that forgot it. The
 // two verbs that need a FORM (a trip, an edit) are the caller's, because a
 // form is a sheet of its own: the caller closes this one and opens that one.
 //
@@ -23,10 +23,12 @@ import { Fragment, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import {
+  PLACE_EXPORT_FORMATS,
   placeDeleteConfirm,
   placeVerbs,
   removeShareConfirm,
   type PlaceVerbIdOn,
+  type TExportFormat,
   copyAndRemoveOutcomeMessage,
   copyOutcomeMessage,
 } from "@logjam/shared";
@@ -46,6 +48,8 @@ import { useConnectivity } from "../map/connectivity";
 import { useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
+import { useFieldDefs } from "../customFields/useFieldDefs";
+import { exportPlace, ExportUnsupportedError } from "../fileExport";
 
 type GpsPlaceVerbId = PlaceVerbIdOn<"gps">;
 
@@ -98,6 +102,8 @@ export function PlaceOptionsSheet({
   const styles = useStyles();
 
   const [sharing, setSharing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const { defs: fieldDefs } = useFieldDefs("place");
   const online = useConnectivity() === "online";
   const trips = useMirrorTrips();
 
@@ -142,6 +148,7 @@ export function PlaceOptionsSheet({
     setWasVisible(visible);
     if (!visible) {
       setSharing(false);
+      setExporting(false);
       setCopyMode(null);
     }
   }
@@ -207,8 +214,32 @@ export function PlaceOptionsSheet({
 
   const close = () => {
     setSharing(false);
+    setExporting(false);
     setCopyMode(null);
     onClose();
+  };
+
+  // Same path as a route's export: the user picks a folder and the file is
+  // written there. A shared place exports too, as the share promise says.
+  const save = (format: TExportFormat) => {
+    close();
+    exportPlace(place, format, [
+      ...fieldDefs,
+      ...(place.fieldDefsSnapshot ?? []),
+    ])
+      .then((filename) => {
+        // Null = the user backed out of the folder picker, not a failure.
+        if (filename) onInfo(`Saved ${filename}.`);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof ExportUnsupportedError) {
+          onError(err.message);
+          return;
+        }
+        // Our own copy, never the error's: it may carry the name.
+        console.error(err);
+        onError("Couldn't save that file.");
+      });
   };
 
   const confirmRemoveShare = async () => {
@@ -274,6 +305,7 @@ export function PlaceOptionsSheet({
     show: leaveFor((target) => onShowOnMap?.(target)),
     logTrip: leaveFor(onLogTrip),
     edit: leaveFor(onEdit),
+    exportPlace: () => setExporting(true),
     share: () => setSharing(true),
     copy: () => setCopyMode("copy"),
     copyAndRemove: () => setCopyMode("copyAndRemove"),
@@ -281,30 +313,45 @@ export function PlaceOptionsSheet({
     delete: () => void confirmDelete(),
   };
 
+  const leaveSubMode = sharing
+    ? () => setSharing(false)
+    : exporting
+      ? () => setExporting(false)
+      : copyMode
+        ? () => setCopyMode(null)
+        : null;
+
   return (
     <BottomSheet
       visible={visible}
-      // Either sub-mode backs out to the verb list; only the list closes the
+      // Any sub-mode backs out to the verb list; only the list closes the
       // sheet.
-      onClose={
+      onClose={leaveSubMode ?? close}
+      title={
         sharing
-          ? () => setSharing(false)
-          : copyMode
-            ? () => setCopyMode(null)
-            : close
+          ? share.title
+          : exporting
+            ? "Export place"
+            : copyMode
+              ? copy.title
+              : place.name
       }
-      title={sharing ? share.title : copyMode ? copy.title : place.name}
-      onBack={
-        sharing
-          ? () => setSharing(false)
-          : copyMode
-            ? () => setCopyMode(null)
-            : undefined
-      }
+      onBack={leaveSubMode ?? undefined}
       footer={copyMode ? copy.footer : undefined}
     >
       {sharing ? (
         share.body
+      ) : exporting ? (
+        <View style={styles.body}>
+          {PLACE_EXPORT_FORMATS.map(({ value, label }) => (
+            <Row
+              key={value}
+              icon="export"
+              title={label}
+              onPress={() => save(value)}
+            />
+          ))}
+        </View>
       ) : copyMode ? (
         copy.body
       ) : (
