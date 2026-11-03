@@ -5698,7 +5698,6 @@ export function MapScreen({
           }
           saving={savingRoute}
           onSubmit={(name) => void handleSaveRoute(name)}
-          onCancel={() => setNamingRoute(false)}
         />
       </BottomSheet>
 
@@ -5999,12 +5998,10 @@ function RouteNameForm({
   initialName,
   saving,
   onSubmit,
-  onCancel,
 }: {
   initialName: string;
   saving: boolean;
   onSubmit: (name: string) => void;
-  onCancel: () => void;
 }) {
   const styles = useStyles();
 
@@ -6062,23 +6059,12 @@ function RouteNameForm({
               : undefined
         }
       />
-      {/* Cancel and Save, as on Logjam Web's "Name this route". */}
-      <View style={styles.nameButtons}>
-        <Button
-          label="Cancel"
-          variant="outlineAccent"
-          grow
-          disabled={saving}
-          onPress={onCancel}
-        />
-        <Button
-          label={saving ? "Saving…" : "Save"}
-          icon="done"
-          grow
-          disabled={saving}
-          onPress={commit}
-        />
-      </View>
+      <Button
+        label={saving ? "Saving…" : "Save"}
+        icon="done"
+        disabled={saving}
+        onPress={commit}
+      />
     </View>
   );
 }
@@ -6126,7 +6112,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   // Separates the field and its Save button so they do not read as one control.
   nameForm: { gap: spacing(2) },
-  nameButtons: { flexDirection: "row", gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
   map: { flex: 1 },
   noticeStack: {
