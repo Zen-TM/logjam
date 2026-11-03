@@ -13,7 +13,7 @@ import { reassignPlaceType } from "../../../placeUtils";
 import PlaceTypeSection from "./PlaceTypeSection";
 
 const { toast } = vi.hoisted(() => ({
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toast: { done: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 
@@ -170,7 +170,7 @@ describe("merging a place type", () => {
       expect(reassignPlaceType).toHaveBeenCalledWith(HUT.id, CAVE.id),
     );
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith("2 places moved to Cave"),
+      expect(toast.done).toHaveBeenCalledWith("2 places moved to Cave"),
     );
   });
 });
