@@ -17,7 +17,8 @@ export const ACCOUNT = {
       gap: "Logjam GPS has no data export yet.",
     },
     { key: "leaving" },
-    // The version and the Terms.
+    // Terms · Privacy · Report a bug on both clients (ACCOUNT_FOOTER_LINKS), and
+    // on Logjam GPS the installed version, which a bug report quotes.
     { key: "footer" },
   ],
   copy: {
@@ -42,6 +43,20 @@ export const ACCOUNT = {
     confirmEmail: "Confirm email",
   },
 } as const satisfies ScreenContract;
+
+export const SOURCE_URL = "https://github.com/Zen-TM/logjam";
+
+export const BUG_REPORT_URL = `${SOURCE_URL}/issues/new?template=bug.yml`;
+
+/** The links under the account, in order. Each client supplies where it opens
+ *  one; a client's table is typed by the id, so a new link cannot be left out. */
+export const ACCOUNT_FOOTER_LINKS = [
+  { id: "terms", label: "Terms" },
+  { id: "privacy", label: "Privacy" },
+  { id: "reportBug", label: "Report a bug" },
+] as const;
+
+export type AccountFooterLinkId = (typeof ACCOUNT_FOOTER_LINKS)[number]["id"];
 
 /**
  * What only Logjam GPS does around signing in and out. Neither is a section of

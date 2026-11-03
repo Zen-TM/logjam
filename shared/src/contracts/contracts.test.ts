@@ -67,7 +67,9 @@ import {
   NOTIFICATION_PREFERENCES,
   ownAttributeCountLabel,
   ownTypeCountLabel,
+  placeCountLabel,
   placeTypeDeleteConfirm,
+  placeTypeInUseNote,
   FRIEND_SHARE_VERBS,
   PLAN_VERB_LISTS,
   friendRemoveConfirm,
@@ -92,6 +94,8 @@ import {
   placeStatusLabel,
   withFieldUnit,
   withRowUnit,
+  ACCOUNT_FOOTER_LINKS,
+  BUG_REPORT_URL,
   PLACE_VERBS,
   placeDeleteConfirm,
   placeDeleteDone,
@@ -275,6 +279,19 @@ describe("the places list", () => {
     expect(placesEmptyState("filtered", { platform: "web" }).action).toBe(
       "clear",
     );
+  });
+});
+
+// Red when a link is dropped from the account footer: Terms and Privacy are the
+// documents a signed-in user agreed to, so they stay one tap from Account.
+describe("the account footer", () => {
+  it("names the Terms, the Privacy policy and where to report a bug", () => {
+    expect(ACCOUNT_FOOTER_LINKS.map((link) => link.label)).toEqual([
+      "Terms",
+      "Privacy",
+      "Report a bug",
+    ]);
+    expect(BUG_REPORT_URL).toMatch(/\/issues\/new\?template=bug\.yml$/);
   });
 });
 
@@ -724,6 +741,15 @@ describe("settings", () => {
     expect(stepAfterPlaceTypeSave(true)).toBe("attributes");
     expect(stepAfterPlaceTypeSave(false)).toBe("list");
     expect(NEW_TYPE_ATTRIBUTES.done).toBe("Done");
+  });
+
+  // Red when the note stops naming Logjam Web: a user with 40 places on a type
+  // has no merge on the phone and must be told where it is.
+  it("counts a type's places and says where to merge one", () => {
+    expect(placeCountLabel(1)).toBe("1 place");
+    expect(placeCountLabel(40)).toBe("40 places");
+    expect(placeTypeInUseNote(1)).toContain("Change it");
+    expect(placeTypeInUseNote(40)).toContain("merge it on Logjam Web");
   });
 
   it("says what deleting a type or an attribute costs", () => {

@@ -30,8 +30,10 @@ import {
   NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
+  placeCountLabel,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  placeTypeInUseNote,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
   SETTINGS_LIST,
@@ -42,7 +44,8 @@ import {
 import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
-import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
+import { listMirrorPlaceTypes } from "../sync/mirrorStore";
+import { useMirrorPlaces } from "../sync/useSyncQueries";
 import {
   createPlaceTypeLocal,
   deletePlaceTypeLocal,
@@ -79,6 +82,9 @@ export function PlaceTypeList({
   onEdit: (type: MirrorPlaceType) => void;
 }) {
   const styles = useStyles();
+  const places = useMirrorPlaces();
+  const countOf = (type: MirrorPlaceType) =>
+    (places.data ?? []).filter((place) => place.placeTypeId === type.id).length;
 
   // BUILT-INS LAST, the same way the attribute list orders itself: the user's
   // own types are the half with verbs on them, and the three that ship with the
@@ -99,6 +105,7 @@ export function PlaceTypeList({
           icon={placeTypeGlyph(type.iconKey)}
           hue={type.color}
           title={type.name}
+          subtitle={placeCountLabel(countOf(type))}
           onPress={() => onEdit(type)}
         />
       ))}
@@ -109,6 +116,7 @@ export function PlaceTypeList({
           icon={placeTypeGlyph(type.iconKey)}
           hue={type.color}
           title={type.name}
+          subtitle={placeCountLabel(countOf(type))}
         />
       ))}
     </View>
@@ -144,6 +152,14 @@ export function usePlaceTypeForm({
 }): { body: ReactNode; footer: ReactNode } {
   const theme = useTheme();
   const styles = useStyles();
+  const places = useMirrorPlaces();
+  // THE SERVER REFUSES A TYPE THAT STILL HAS PLACES ON IT (409), and queuing
+  // the delete anyway would park a dead push whose reason the user never sees.
+  // So Delete is not offered while any place is on it.
+  const inUse = editing
+    ? (places.data ?? []).filter((place) => place.placeTypeId === editing.id)
+        .length
+    : 0;
 
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
@@ -324,7 +340,9 @@ export function usePlaceTypeForm({
         A ring around a pin means the place was shared with you by a friend.
       </Text>
 
-      {editing ? (
+      {editing && inUse > 0 ? (
+        <Text style={styles.hint}>{placeTypeInUseNote(inUse)}</Text>
+      ) : editing ? (
         <Row
           icon="delete"
           hue={theme.warning}

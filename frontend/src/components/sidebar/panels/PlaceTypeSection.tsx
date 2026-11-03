@@ -5,6 +5,7 @@ import {
   NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeCountLabel,
   placeTypeDeleteConfirm,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
@@ -531,10 +532,6 @@ function PlaceTypeDialog({
       </div>
     </Dialog>
   );
-}
-
-function placeCountLabel(count: number): string {
-  return `${count} place${count === 1 ? "" : "s"}`;
 }
 
 export default PlaceTypeSection;
