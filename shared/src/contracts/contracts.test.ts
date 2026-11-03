@@ -239,7 +239,8 @@ describe("the places filter sheet", () => {
 
 describe("the places list", () => {
   it("answers the hero's question with the collection's size", () => {
-    expect(placesHeroTitle(0)).toBe("No places yet");
+    // Mutation: returning the first-run title for 0 repeats it under the hero.
+    expect(placesHeroTitle(0)).toBe("0 places");
     expect(placesHeroTitle(1)).toBe("1 place");
     expect(placesHeroTitle(37)).toBe("37 places");
   });
@@ -579,7 +580,7 @@ describe("a trip's verbs", () => {
 
 describe("the logbook", () => {
   it("answers the hero's question with the logbook's size", () => {
-    expect(tripsHeroTitle(0)).toBe("No trips yet");
+    expect(tripsHeroTitle(0)).toBe("0 trips");
     expect(tripsHeroTitle(1)).toBe("1 trip");
     expect(tripsHeroTitle(127)).toBe("127 trips");
   });

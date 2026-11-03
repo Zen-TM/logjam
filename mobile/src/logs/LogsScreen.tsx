@@ -486,13 +486,16 @@ export function LogsScreen({
                 }}
               />
               {/* One way in, so a button: Logjam Web's menu holds this and an
-                import (`TRIPS_ADD`). */}
-              <HeroAdd
-                label={TRIPS_ADD.copy.add}
-                icon={TRIPS_ADD_ICON.add}
-                compact={heroCollapse.compact}
-                onPress={() => setEditing({ trip: null })}
-              />
+                import (`TRIPS_ADD`). With no trips the empty state carries
+                the one add. */}
+              {trips.length > 0 && (
+                <HeroAdd
+                  label={TRIPS_ADD.copy.add}
+                  icon={TRIPS_ADD_ICON.add}
+                  compact={heroCollapse.compact}
+                  onPress={() => setEditing({ trip: null })}
+                />
+              )}
             </View>
           }
         >

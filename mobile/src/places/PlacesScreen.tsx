@@ -691,16 +691,18 @@ export function PlacesScreen({
                   setSheet("filters");
                 }}
               />
-              {/* One way in on this client, so a button and no menu. */}
-              {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
-                <HeroAdd
-                  key={key}
-                  label={PLACES_ADD.copy[key]}
-                  icon={PLACES_ADD_ICON[key]}
-                  compact={heroCollapse.compact}
-                  onPress={() => startEditing(null)}
-                />
-              ))}
+              {/* One way in on this client, so a button and no menu. With no
+                  places the empty state carries the one add. */}
+              {places.length > 0 &&
+                contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+                  <HeroAdd
+                    key={key}
+                    label={PLACES_ADD.copy[key]}
+                    icon={PLACES_ADD_ICON[key]}
+                    compact={heroCollapse.compact}
+                    onPress={() => startEditing(null)}
+                  />
+                ))}
             </View>
           }
         >
