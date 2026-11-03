@@ -120,6 +120,9 @@ function AccountPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      toast.success(
+        "Your data was downloaded as a JSON file. Photos and videos aren't in it.",
+      );
     } catch (err) {
       console.error(err);
       toast.error(
@@ -237,6 +240,10 @@ function AccountPanel({
           >
             Download my data
           </Button>
+          <p className={classes.state}>
+            A JSON file of your places, trips and shares for this account.
+            Photos and videos aren't in it, so it isn't a full backup.
+          </p>
         </>
       ) : null,
     leaving: () =>
