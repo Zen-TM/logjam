@@ -28,7 +28,7 @@ import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
 import { mapTools, type MapToolIdOn } from "@logjam/shared";
 
 import { makeStyles, spacing, useTheme } from "../theme";
-import { Icon, useReduceMotion } from "../ui";
+import { Icon, useReducedMotion } from "../ui";
 
 export type MapTool = MapToolIdOn<"gps">;
 
@@ -98,7 +98,7 @@ export function MapToolTray({
   const { width: windowWidth } = useWindowDimensions();
   const room = windowWidth - FAB_SIZE - CHROME_GAP * 2 - spacing(1);
 
-  const reduceMotion = useReduceMotion();
+  const reduceMotion = useReducedMotion();
 
   // One value drives the whole tray: it slides out from the column and fades
   // in on the native driver, or just appears under reduced motion.

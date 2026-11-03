@@ -7,7 +7,7 @@ import {
 } from "react-native";
 
 import { COMPACT_ROW, nextCompact } from "./heroCollapseRule";
-import { useReduceMotionRef } from "./useReduceMotion";
+import { useReducedMotionRef } from "./useReducedMotion";
 
 /**
  * Whether a list's pinned hero is full or compact, from the list's own scroll,
@@ -19,7 +19,7 @@ import { useReduceMotionRef } from "./useReduceMotion";
 export function useHeroCollapse() {
   const [compact, setCompact] = useState(false);
   const state = useRef(false);
-  const reduceMotion = useReduceMotionRef();
+  const reduceMotion = useReducedMotionRef();
   const metrics = useRef({
     y: 0,
     contentHeight: 0,
