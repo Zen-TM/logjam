@@ -1,14 +1,19 @@
 import { ApiError } from "@logjam/shared";
-
-/** What a share answers when the account has no such row (ADR 0002: 404, not 403). */
-export const NOT_IN_ACCOUNT_SENTENCE =
-  "This isn't in your account yet. Sync, then try again.";
+import { unavailableReasonText } from "../auth/capabilities";
 
 /**
- * A grant the sharer's own item 404s: the phone holds a row the server does
- * not, so syncing is the way out. The API's wording ("Couldn't find that
- * place.") names no next step.
+ * What a grant that the API 404s means for the sharer's own item (ADR 0002:
+ * 404, not 403). If this phone still holds the row, the account has not
+ * received it yet and syncing is the way out, in the wording the sheet already
+ * uses for that state. If the mirror no longer holds it, it was deleted
+ * elsewhere and a sync would only confirm that. Null for any other failure.
  */
-export function isNotInAccount(err: unknown): boolean {
-  return err instanceof ApiError && err.status === 404;
+export function shareGrantNotFound(
+  err: unknown,
+  stillHeld: boolean,
+): { message: string; syncFixes: boolean } | null {
+  if (!(err instanceof ApiError) || err.status !== 404) return null;
+  return stillHeld
+    ? { message: `${unavailableReasonText("needs-upload")}.`, syncFixes: true }
+    : { message: "This was deleted.", syncFixes: false };
 }

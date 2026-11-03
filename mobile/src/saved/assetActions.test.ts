@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // loads against the stubs below.
 import {
   deleteLabel,
+  geoPdfActions,
   remoteTrackActions,
   routeActions,
   trackActions,
@@ -13,6 +14,7 @@ import { WAY_SHARE_VERB } from "@logjam/shared";
 import type { Track } from "../tracks/tracksDb";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import type { VectorImport } from "../imports/importsDb";
+import type { GeoPdfImport } from "../geopdf/geoPdfImportsDb";
 
 // The descriptor's own modules all reach SQLite / the filesystem; this test is
 // about which verbs the descriptor OFFERS, so they are stubbed wholesale.
@@ -444,26 +446,50 @@ describe("deleting a recording", () => {
   });
 });
 
-// A delete that reaches the account must not read as a local one. Mutation:
-// drop `synced: true` from the import's delete in `vectorImportActions`.
-describe("deleteLabel", () => {
-  it("says plain Delete for a synced import and a recording made elsewhere", () => {
-    const file = {
-      id: "m1",
-      filename: "Creek.gpx",
-      displayName: "Creek",
-      mediaType: "application/gpx+xml",
-      origin: "track",
-      metadata: {},
-    } as unknown as Parameters<typeof remoteTrackActions>[0];
-    const imported = vectorImportActions(importRow());
-    expect(deleteLabel(imported.delete!)).toBe("Delete");
-    expect(imported.delete!.confirmTitle).toBe(`Delete ${importRow().name}?`);
-    expect(deleteLabel(remoteTrackActions(file).delete!)).toBe("Delete");
+// A delete that reaches the account must not read as a local one, and the
+// descriptor has to say which it is: `synced` is required, so a new kind
+// cannot default into the device-only wording. Mutation: drop `synced` from
+// any one of these descriptors (tsc catches the type, this the value).
+describe("delete reach, for every descriptor", () => {
+  const remote = {
+    id: "m1",
+    filename: "Creek.gpx",
+    displayName: "Creek",
+    mediaType: "application/gpx+xml",
+    origin: "track",
+    metadata: {},
+  } as unknown as Parameters<typeof remoteTrackActions>[0];
+  const geoPdf = {
+    id: "g1",
+    label: "Kanangra map",
+    state: "ready",
+    dirPath: "/g1",
+  } as unknown as GeoPdfImport;
+
+  it.each([
+    ["GeoPDF", false, "Delete from device", geoPdfActions(geoPdf).delete],
+    ["import", true, "Delete", vectorImportActions(importRow()).delete],
+    [
+      "recording from elsewhere",
+      true,
+      "Delete",
+      remoteTrackActions(remote).delete,
+    ],
+    ["recording made here", true, "Delete", trackActions(track(5)).delete],
+    ["owned route", true, "Delete", routeActions(route("owner")).delete],
+  ])("%s: synced=%s, row reads %s", (_kind, synced, label, removal) => {
+    expect(removal?.synced).toBe(synced);
+    expect(deleteLabel(removal!)).toBe(label);
   });
 
-  it("keeps from device for a file that lives on this phone alone", () => {
-    expect(deleteLabel({})).toBe("Delete from device");
-    expect(deleteLabel({}, 3)).toBe("Delete all from device");
+  it("names the file in the import's confirm", () => {
+    expect(vectorImportActions(importRow()).delete!.confirmTitle).toBe(
+      `Delete ${importRow().name}?`,
+    );
+  });
+
+  it("says from device for a device-only group", () => {
+    expect(deleteLabel({ synced: false })).toBe("Delete from device");
+    expect(deleteLabel({ synced: false }, 3)).toBe("Delete all from device");
   });
 });

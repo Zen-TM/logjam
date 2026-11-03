@@ -187,10 +187,14 @@ export default function SlopeSettings({ value, onChange }: Props) {
         type="button"
         className={styles.insertRow}
         title={
-          room ? "Add a band here" : "Eight bands is the most a topo can have"
+          room
+            ? "Add a band here"
+            : "Eight bands is the most a LiDAR map can have"
         }
         aria-label={
-          room ? "Add a band here" : "Eight bands is the most a topo can have"
+          room
+            ? "Add a band here"
+            : "Eight bands is the most a LiDAR map can have"
         }
         disabled={!room}
         onClick={() => insertAt(position)}

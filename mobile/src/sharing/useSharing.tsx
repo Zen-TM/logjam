@@ -32,9 +32,9 @@ import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
 import { Avatar, confirm, ErrorBanner, IconButton, Row } from "../ui";
-import { requestSync } from "../sync/syncEngine";
+import { getSyncStatus, requestSync } from "../sync/syncEngine";
 import { useTheme } from "../theme";
-import { isNotInAccount, NOT_IN_ACCOUNT_SENTENCE } from "./notOnServer";
+import { shareGrantNotFound } from "./notOnServer";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -68,6 +68,7 @@ export function useSharing({
   enabled = true,
   itemLabel,
   revokeBody,
+  stillHeld,
 }: {
   calls: SharingCalls;
   online: boolean;
@@ -83,6 +84,8 @@ export function useSharing({
   enabled?: boolean;
   /** The item's name, for the revoke confirm. */
   itemLabel: string;
+  /** Whether this phone's mirror still holds the item, for a grant that 404s. */
+  stillHeld?: () => Promise<boolean>;
   /** What the recipient loses, in this kind's words. */
   revokeBody: (username: string) => string;
 }) {
@@ -120,30 +123,37 @@ export function useSharing({
     if (canShare && enabled) void load();
   }, [load, canShare, enabled]);
 
+  // Every new attempt starts clean, so a banner and its Sync now never outlive
+  // the failure they were raised for.
+  const clearError = useCallback(() => {
+    setActionError(null);
+    setSyncFixes(false);
+  }, []);
+
   const grant = useCallback(
     async (friend: Friend) => {
       setBusyId(friend.id);
-      setActionError(null);
-      setSyncFixes(false);
+      clearError();
       try {
         await calls.grant(friend.id);
         await load();
         return true;
       } catch (err) {
         console.error(err);
-        const missing = isNotInAccount(err);
-        setSyncFixes(missing);
+        const missing = shareGrantNotFound(
+          err,
+          stillHeld ? await stillHeld().catch(() => true) : true,
+        );
+        setSyncFixes(missing?.syncFixes ?? false);
         setActionError(
-          missing
-            ? NOT_IN_ACCOUNT_SENTENCE
-            : messageFromError(err, "Couldn't share that."),
+          missing?.message ?? messageFromError(err, "Couldn't share that."),
         );
         return false;
       } finally {
         setBusyId(null);
       }
     },
-    [calls, load],
+    [calls, load, stillHeld, clearError],
   );
 
   const confirmRevoke = useCallback(
@@ -156,7 +166,7 @@ export function useSharing({
       });
       if (!ok) return;
       setBusyId(recipient.id);
-      setActionError(null);
+      clearError();
       Promise.resolve(calls.revoke(recipient.sharedWith.id))
         .then(() => load())
         .catch((err: unknown) => {
@@ -165,7 +175,7 @@ export function useSharing({
         })
         .finally(() => setBusyId(null));
     },
-    [calls, load, revokeBody],
+    [calls, load, revokeBody, clearError],
   );
 
   return {
@@ -175,6 +185,7 @@ export function useSharing({
     busyId,
     actionError,
     syncFixes,
+    clearError,
     loadFailed,
     canShare,
     shareStatus,
@@ -228,11 +239,26 @@ export function RecipientRows({
 
 /** Whatever went wrong with the last grant/revoke, in our words. */
 export function SharingError({ sharing }: { sharing: Sharing }) {
+  const [syncing, setSyncing] = useState(false);
+  // A clean cycle clears the banner, so the user can share again; a failed one
+  // keeps it, and the sync's own health line says why.
+  const syncNow = async () => {
+    setSyncing(true);
+    await requestSync();
+    setSyncing(false);
+    if (getSyncStatus().state !== "error") sharing.clearError();
+  };
   return sharing.actionError ? (
     <ErrorBanner
       message={sharing.actionError}
-      onRetry={sharing.syncFixes ? () => void requestSync() : undefined}
-      retryLabel="Sync now"
+      onRetry={
+        sharing.syncFixes
+          ? syncing
+            ? () => {}
+            : () => void syncNow()
+          : undefined
+      }
+      retryLabel={syncing ? "Syncing…" : "Sync now"}
     />
   ) : null;
 }

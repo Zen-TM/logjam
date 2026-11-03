@@ -696,7 +696,7 @@ export function TripEditSheet({
             }
             hint={
               types.length > 1
-                ? "The starred type sets the trip’s icon."
+                ? "The starred type sets the trip's icon."
                 : undefined
             }
           />

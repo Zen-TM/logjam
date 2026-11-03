@@ -68,6 +68,7 @@ import {
   statusRowProps,
   unavailableReasonText,
 } from "../auth/capabilities";
+import { getMirrorPlace } from "../sync/mirrorStore";
 import { usePendingCreateIds } from "../sync/useSyncQueries";
 import {
   getFriends,
@@ -277,6 +278,8 @@ export function useSharePanel({
     calls,
     online,
     onServer,
+    stillHeld: async () =>
+      placeId ? (await getMirrorPlace(placeId)) !== null : true,
     // Neither a copy nor a bulk has ONE item whose recipients could be listed,
     // so neither ever loads share state.
     enabled: enabled && target != null && !isCopy && bulkPlan === null,

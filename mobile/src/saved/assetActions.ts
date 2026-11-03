@@ -115,7 +115,7 @@ function removeConfirmFields(
  * file that lives on this phone alone.
  */
 export function deleteLabel(
-  removal: { synced?: true },
+  removal: { synced: boolean },
   memberCount = 1,
 ): string {
   if (removal.synced) return "Delete";
@@ -184,8 +184,12 @@ export type AssetActions = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
-    /** Set where the delete reaches the account, not only this phone. */
-    synced?: true;
+    /**
+     * Whether the delete reaches the account (and so Logjam Web and other
+     * devices), not only this phone. Required, so no kind defaults into the
+     * "from device" wording; `assetActions.test.ts` holds each descriptor's.
+     */
+    synced: boolean;
     run: () => Promise<unknown>;
   };
   /**
@@ -299,6 +303,7 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
       : {}),
     delete: {
       confirmTitle: `Delete ${geoPdf.label}?`,
+      synced: false,
       confirmBody: "The imported map is removed from the device.",
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
@@ -492,7 +497,8 @@ export function routeActions(
           rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
           delete: {
-            confirmTitle: "Delete route?",
+            confirmTitle: `Delete ${route.name}?`,
+            synced: true,
             confirmBody:
               "The route is removed from every device on your account. This can't be undone.",
             run: () => deleteRouteLocal(route.id),
@@ -582,7 +588,8 @@ export function trackActions(track: Track): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete track?",
+      confirmTitle: `Delete ${track.name}?`,
+      synced: true,
       // A finished recording is backed up to the account as a file; leaving
       // the backup behind would put the same trip straight back in this list as a
       // recorded-elsewhere row, which reads as the delete having failed.

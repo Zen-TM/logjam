@@ -146,18 +146,20 @@ describe("copy on Logjam GPS", () => {
     expect(first.text).toBe("Open it");
   });
 
-  // The words of a confirm are read by the user too. Mutation: drop
-  // `confirmBody` from COPY_PROPS in shared/src/copyRules.ts.
-  it("reads a confirm's title and body, templates included", () => {
+  // The words of a confirm are read by the user too, and a string behind a
+  // `??`, a ternary, a `+` or a `${}` is still read. Mutation: drop
+  // `confirmBody` from COPY_PROPS in shared/src/copyRules.ts, or make `stringOf`
+  // stop at the top of the initializer again.
+  it("reads a confirm's words wherever they sit in the value", () => {
     const found = userFacingStrings(
       ts,
       "x.ts",
-      "const a = { confirmTitle: `Delete ${n}?`, confirmBody: `The ${k} tiles go.` };",
-    );
-    expect(found.map(({ text }) => text)).toEqual([
-      "Delete ?",
-      "The  tiles go.",
-    ]);
+      'const a = { confirmTitle: `Delete ${g.label ?? "this region"}?`, confirmBody: ok ? `The ${k} tiles go.` : "No " + "tiles here.", title: g.label ?? "Offline map region" };',
+    ).map(({ text }) => text);
+    expect(found.join("|")).toContain("this region");
+    expect(found.join("|")).toContain("tiles go");
+    expect(found.join("|")).toContain("tiles here");
+    expect(found.join("|")).toContain("Offline map region");
   });
 
   it("names the surface where it means this client", () => {
@@ -241,5 +243,19 @@ describe("copy on Logjam GPS", () => {
       ),
     );
     expect(offenders).toEqual([]);
+  });
+
+  // A sharee's strips offer no Add and no delete, because the API refuses both
+  // (`assertOwnsTarget`). The pure rule is `media/stripOffers.test.ts`; this is
+  // the wiring. Mutation: drop `readOnly={!isOwner}` from either strip in
+  // `places/PlaceDetailScreen.tsx`.
+  it("passes readOnly={!isOwner} to every place media strip", () => {
+    const source = readFileSync(
+      join(SRC, "places", "PlaceDetailScreen.tsx"),
+      "utf8",
+    );
+    const strips = source.match(/<MediaStrip\b[\s\S]*?\n\s*\/>/g) ?? [];
+    expect(strips.length).toBeGreaterThanOrEqual(2);
+    for (const strip of strips) expect(strip).toContain("readOnly={!isOwner}");
   });
 });
