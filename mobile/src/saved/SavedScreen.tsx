@@ -2083,9 +2083,6 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
-
-        {/* The list ends with the button its empty state offers (the same one),
-            so adding is where the eye ends up after scrolling to the bottom. */}
       </ScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,

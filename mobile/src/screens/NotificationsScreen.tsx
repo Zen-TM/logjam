@@ -1016,45 +1016,23 @@ export function NotificationsScreen({
   // did (shared/DESIGN.md §2), rather than a line that says the same words for
   // one notification and for forty. The tally beside it stays the whole inbox,
   // so the two never restate each other.
-  const listHead = (
-    <View>
-      <View style={styles.summary}>
-        <Text style={styles.summaryTitle}>
-          {inboxHeroTitle(unreadCount, notifications.length)}
-        </Text>
-        <Text style={styles.summaryTally}>
-          {tally.total} {tally.total === 1 ? "notification" : "notifications"}
-        </Text>
-      </View>
-      {notifications.length > 0 ? (
-        <View style={styles.rail}>
-          <ChipRail
-            options={buckets}
-            value={bucket}
-            onChange={changeBucket}
-            scroll
-          />
-          {/* Inert while picking rather than unmounted — a keystroke could
-              narrow a selected row out of the list — and dimmed to say so, the
-              treatment Saved's field already uses. */}
-          <View style={styles.searchField}>
-            <SearchField
-              label={INBOX.copy.searchField}
-              value={search}
-              onChangeText={setSearch}
-              editable={!selecting}
-            />
-          </View>
-        </View>
-      ) : null}
-      {truncated ? (
-        <Text style={styles.truncation}>
-          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
-        </Text>
-      ) : null}
+  const summary = (
+    <View style={styles.summary}>
+      <Text style={styles.summaryTitle}>
+        {inboxHeroTitle(unreadCount, notifications.length)}
+      </Text>
+      <Text style={styles.summaryTally}>
+        {tally.total} {tally.total === 1 ? "notification" : "notifications"}
+      </Text>
     </View>
   );
 
+  // The chips and the truncation note scroll in the list's header, in the
+  // contract's order; every other section is drawn in place.
+  const headKeys: readonly string[] = ["buckets", "truncated"];
+  const head = contractSectionKeys(INBOX, "gps").filter((key) =>
+    headKeys.includes(key),
+  );
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
     // Only this row is pinned: the unread line, chips and search ride in the
     // list's header and scroll away with it. A multi-select's bar takes the
@@ -1096,9 +1074,34 @@ export function NotificationsScreen({
         ) : undefined}
       </Hero>
     ),
-    // Drawn inside the list's header, below.
-    buckets: () => null,
-    truncated: () => null,
+    buckets: () =>
+      notifications.length > 0 ? (
+        <View style={styles.rail}>
+          <ChipRail
+            options={buckets}
+            value={bucket}
+            onChange={changeBucket}
+            scroll
+          />
+          {/* Inert while picking rather than unmounted — a keystroke could
+              narrow a selected row out of the list — and dimmed to say so, the
+              treatment Saved's field already uses. */}
+          <View style={styles.searchField}>
+            <SearchField
+              label={INBOX.copy.searchField}
+              value={search}
+              onChangeText={setSearch}
+              editable={!selecting}
+            />
+          </View>
+        </View>
+      ) : null,
+    truncated: () =>
+      truncated ? (
+        <Text style={styles.truncation}>
+          {inboxTruncatedNote(query.notifications.length, query.total ?? 0)}
+        </Text>
+      ) : null,
     list: () => (
       <SectionList
         style={styles.list}
@@ -1109,7 +1112,15 @@ export function NotificationsScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
-        ListHeaderComponent={listHead}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            {summary}
+            {head.map((key) => (
+              <Fragment key={key}>{page[key]()}</Fragment>
+            ))}
+          </View>
+        }
         refreshControl={
           <RefreshControl
             refreshing={false}
@@ -1135,9 +1146,11 @@ export function NotificationsScreen({
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(INBOX, "gps").map((key) => (
-        <Fragment key={key}>{page[key]()}</Fragment>
-      ))}
+      {contractSectionKeys(INBOX, "gps")
+        .filter((key) => !head.includes(key))
+        .map((key) => (
+          <Fragment key={key}>{page[key]()}</Fragment>
+        ))}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}

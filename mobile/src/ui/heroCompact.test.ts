@@ -7,12 +7,18 @@ import { describe, expect, it } from "vitest";
 // half the screen again.
 describe("Hero compact", () => {
   const source = readFileSync(new URL("./Hero.tsx", import.meta.url), "utf8");
-  const branch = source.slice(
-    source.indexOf("function CompactHero"),
-    source.indexOf("const useStyles"),
-  );
+  const branch = source
+    .slice(
+      source.indexOf("function CompactHero"),
+      source.indexOf("const useStyles"),
+    )
+    .replace(/\{\/\*[\s\S]*?\*\/\}|\/\/.*|\/\*[\s\S]*?\*\//g, "");
   it("draws the row only", () => {
     expect(branch).toContain("styles.compactRow");
     expect(branch).not.toMatch(/eyebrow|\bvalue\b|secondaryValue/);
+  });
+  // Mutation: drop the accessibilityLabel, and the icon-only back has no name.
+  it("keeps the back button's accessible name", () => {
+    expect(branch).toContain("accessibilityLabel={`Back to ${backLabel}`}");
   });
 });
