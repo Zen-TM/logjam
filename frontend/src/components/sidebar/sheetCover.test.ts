@@ -19,14 +19,23 @@ describe("how much of the map the bottom sheet covers", () => {
   // Mutation: read nothing from the transform (return 0), and the pin sits
   // under the half-height sheet again.
   it("is the viewport below the sheet's top edge, where the sheet is going", () => {
-    sheet("translateY(272.5px)");
-    expect(sheetCoverPx(844)).toBe(571.5);
+    sheet("translateY(472.5px)");
+    expect(sheetCoverPx(844)).toBe(371.5);
   });
 
   // Mutation: drop the cap, and a full-height sheet pads the fit past the map.
   it("never asks for more than most of the map", () => {
     sheet("translateY(0px)");
-    expect(sheetCoverPx(844)).toBeCloseTo(844 * 0.7);
+    expect(sheetCoverPx(844)).toBeCloseTo(844 * 0.65);
+  });
+
+  // Mutation: drop `fitPadding` from the cap, and a 375 px landscape phone's
+  // way fit has no room left (80 + cover + 24 passes the height).
+  it("leaves room for the fit's own padding on a short viewport", () => {
+    sheet("translateY(100px)");
+    const cover = sheetCoverPx(375, 104);
+    expect(cover + 104).toBeLessThanOrEqual(375 * 0.65);
+    expect(cover).toBeGreaterThan(0);
   });
 
   it("is nothing on wide Logjam Web, where the page sits beside the map", () => {

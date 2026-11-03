@@ -60,6 +60,7 @@ import {
   placesEmptyState,
   placesFilterNote,
   placesHeroTitle,
+  incomingLabel,
   placeStatus,
   placeSummary,
   qualityLabel,
@@ -84,6 +85,7 @@ import { useConnectivity } from "../map/connectivity";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
+  useMirrorIncomingShareOwners,
   useMirrorShareCounts,
   useMirrorTrips,
   usePendingSyncCount,
@@ -104,6 +106,7 @@ import {
   ChipRail,
   SelectionBar,
   SearchField,
+  StatusPill,
   SyncStatusPills,
   Toast,
   useBulkSelection,
@@ -177,6 +180,7 @@ export function PlacesScreen({
   const query = useMirrorPlaces();
   const tripsQuery = useMirrorTrips();
   const shareCounts = useMirrorShareCounts();
+  const shareOwners = useMirrorIncomingShareOwners();
   const typesQuery = useMirrorPlaceTypes();
   const syncStatus = useSyncStatus();
   const places = useMemo(() => query.data ?? [], [query.data]);
@@ -620,6 +624,7 @@ export function PlacesScreen({
         status={statusOf(item)}
         typeLabel={typeLabelOf(item.placeTypeId)}
         sharedWith={item._count?.shares ?? 0}
+        owner={shareOwners.data?.[item.id]}
         onOpen={openPlace}
         onMenu={openMenu}
         selecting={selecting}
@@ -636,6 +641,7 @@ export function PlacesScreen({
       selectedKeys,
       selectItem,
       typeLabelOf,
+      shareOwners.data,
     ],
   );
 
@@ -963,6 +969,7 @@ const PlaceRow = memo(function PlaceRow({
   status,
   typeLabel,
   sharedWith,
+  owner,
   onOpen,
   onMenu,
   selecting,
@@ -975,6 +982,8 @@ const PlaceRow = memo(function PlaceRow({
   /** The place's type name, or null while a type tab is filtering the list. */
   typeLabel: string | null;
   sharedWith: number;
+  /** The sharer's username, when this place is shared with the viewer. */
+  owner: string | undefined;
   onOpen: (place: MirrorPlace) => void;
   onMenu: (place: MirrorPlace) => void;
   selecting: boolean;
@@ -1009,6 +1018,9 @@ const PlaceRow = memo(function PlaceRow({
       onPress={selecting ? onToggle : () => onOpen(place)}
       right={
         <View style={styles.rowTrailing}>
+          {place.syncRole === "shared" ? (
+            <StatusPill label={incomingLabel(owner)} tone="outline" />
+          ) : null}
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
           {sharedWith > 0 ? (
             <View style={styles.badge}>

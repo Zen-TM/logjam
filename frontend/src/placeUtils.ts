@@ -801,7 +801,10 @@ export function useCurrentUser(enabled: boolean) {
   const [wasEnabled, setWasEnabled] = useState(enabled);
   if (wasEnabled !== enabled) {
     setWasEnabled(enabled);
-    if (!enabled) setCurrentUser(null);
+    if (!enabled) {
+      setCurrentUser(null);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -830,7 +833,10 @@ export function useCurrentUser(enabled: boolean) {
     };
   }, [enabled, fetchCount]);
 
-  const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetchCurrentUser = useCallback(() => {
+    setError(null);
+    setFetchCount((n) => n + 1);
+  }, []);
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.

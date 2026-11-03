@@ -113,6 +113,28 @@ describe("contract copy", () => {
   // Case ("Join Ranon"). Mutation: empty this set, and the title is flagged.
   const verbThenName = new Set(["tripPlanJoinTitle(Ranon)"]);
 
+  // Mutation: widen the offline-map or turn-down pattern back to a bare
+  // "download the map" / "let you in", and one of these goes red.
+  it.each([
+    "Download the map as a PDF",
+    "Save map style",
+    "This lets you invite a friend",
+    "It lets you install it",
+  ])("leaves %j alone", (text) => {
+    expect(copyViolations(text)).not.toContain("offline-map");
+    expect(copyViolations(text)).not.toContain("turn-down");
+  });
+
+  it.each([
+    "Save maps",
+    "Save offline maps",
+    "Download maps",
+    "Save maps for offline use",
+    "Download the map of this area",
+  ])("flags %j", (text) => {
+    expect(copyViolations(text)).toContain("offline-map");
+  });
+
   it("breaks no copy rule", () => {
     const offenders = all
       .filter(([path]) => !verbThenName.has(path))

@@ -3158,6 +3158,12 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
+  // A way's fit keeps its extent above the narrow sheet (and 80 px on wide).
+  const fitBottom = () => {
+    const cover = sheetCoverPx(window.innerHeight, 80 + 24);
+    return cover > 0 ? cover + 24 : 80;
+  };
+
   const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
   useEffect(() => {
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
@@ -3175,7 +3181,7 @@ function Map({
           top: 80,
           left: 80,
           right: 80,
-          bottom: 80 + sheetCoverPx(window.innerHeight),
+          bottom: fitBottom(),
         },
         duration: 1200,
         maxZoom: 16,
@@ -3207,8 +3213,10 @@ function Map({
         center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
-        // Centred in what the narrow sheet leaves, not behind it.
-        padding: { bottom: sheetCoverPx(window.innerHeight) },
+        // Centred in what the narrow sheet leaves, not behind it. An offset,
+        // not `padding`: MapLibre keeps a flyTo's padding on the camera, and
+        // every later fit would start from it.
+        offset: [0, -sheetCoverPx(window.innerHeight) / 2],
       });
     } else {
       // The warning names no coordinate: they are the place's.
