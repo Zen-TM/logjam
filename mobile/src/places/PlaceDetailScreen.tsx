@@ -365,7 +365,6 @@ export function PlaceDetailScreen({
               linkedTrips.length,
               shareOwners.data?.[placeId],
             )}
-            icon={statusMeta.icon}
             hue={statusMeta.hue}
           />
         </View>
