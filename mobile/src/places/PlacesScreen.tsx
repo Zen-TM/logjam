@@ -45,7 +45,6 @@ import {
   PLACES_LIST,
   placeDeleteConfirm,
   placeDeleteDone,
-  placesCountLabel,
   placesEmptyKind,
   placeTypeHasTab,
   isSystemPlaceTypeId,
