@@ -20,7 +20,7 @@ export function MapCoverageRow({
   route,
   onSave,
 }: {
-  /** The ground to cover, `[west, south, east, north]`: what Save map frames. */
+  /** The ground to cover, `[west, south, east, north]`: what Save an offline map frames. */
   bbox: [number, number, number, number];
   /** A way's points: covered only when every point along it is. */
   route?: [number, number][];
@@ -60,7 +60,7 @@ export function MapCoverageRow({
         <Button
           compact
           variant="outlineAccent"
-          label="Save map"
+          label="Save an offline map"
           disabled={!online}
           disabledReason={unavailableReasonText("needs-connection")}
           onPress={() => {
