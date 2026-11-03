@@ -685,15 +685,28 @@ export function PlacesScreen({
                 }}
               />
               {/* One way in on this client, so a button and no menu. */}
-              {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
-                <Button
-                  key={key}
-                  label={PLACES_ADD.copy[key]}
-                  icon={PLACES_ADD_ICON[key]}
-                  compact
-                  onPress={() => startEditing(null)}
-                />
-              ))}
+              {contractSectionKeys(PLACES_ADD, "gps").map((key) =>
+                // The title carries the count in the compact row, and the
+                // button's words would squeeze it to an ellipsis.
+                heroCollapse.compact ? (
+                  <IconButton
+                    key={key}
+                    icon={PLACES_ADD_ICON[key]}
+                    accessibilityLabel={PLACES_ADD.copy[key]}
+                    color={theme.accent}
+                    filled
+                    onPress={() => startEditing(null)}
+                  />
+                ) : (
+                  <Button
+                    key={key}
+                    label={PLACES_ADD.copy[key]}
+                    icon={PLACES_ADD_ICON[key]}
+                    compact
+                    onPress={() => startEditing(null)}
+                  />
+                ),
+              )}
             </View>
           }
         >

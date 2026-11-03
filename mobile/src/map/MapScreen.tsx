@@ -261,7 +261,7 @@ import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { offlineCoverageMask, offlineMaskBoxes } from "./offlineMask";
 import { DraftToolPanel } from "./DraftToolPanel";
 import { FocusPulse } from "./FocusPulse";
-import { MapToolGroup, type MapTool } from "./MapToolGroup";
+import { MapToolGroup, MapToolTray, type MapTool } from "./MapToolGroup";
 import { RouteDraftLayer } from "./RouteDraftLayer";
 import { RoutesLayer } from "./RoutesLayer";
 import {
@@ -5636,11 +5636,9 @@ export function MapScreen({
             least-reached button of the five, so the three that are reached
             (layers, locate, record) keep the thumb end of the column. */}
         <MapToolGroup
-          side={controlsOnLeft ? "left" : "right"}
           open={toolsOpen}
           activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
           onToggleOpen={() => setToolsOpen((open) => !open)}
-          onPickTool={handlePickTool}
         />
         <Pressable
           accessibilityRole="button"
@@ -5684,6 +5682,15 @@ export function MapScreen({
           <Icon idea="info" size={MINI_FAB_ICON} color={theme.text} />
         </Pressable>
       </View>
+      {columnTop !== null ? (
+        <MapToolTray
+          open={toolsOpen}
+          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+          side={controlsOnLeft ? "left" : "right"}
+          top={columnTop}
+          onPickTool={handlePickTool}
+        />
+      ) : null}
 
       {/* The map's own instruments, stacked along the bottom edge opposite the
           buttons: which way the user is facing, then how far things are. */}

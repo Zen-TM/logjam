@@ -443,12 +443,22 @@ export function LogsScreen({
               />
               {/* One way in, so a button: Logjam Web's menu holds this and an
                 import (`TRIPS_ADD`). */}
-              <Button
-                label={TRIPS_ADD.copy.add}
-                icon={TRIPS_ADD_ICON.add}
-                compact
-                onPress={() => setEditing({ trip: null })}
-              />
+              {heroCollapse.compact ? (
+                <IconButton
+                  icon={TRIPS_ADD_ICON.add}
+                  accessibilityLabel={TRIPS_ADD.copy.add}
+                  color={theme.accent}
+                  filled
+                  onPress={() => setEditing({ trip: null })}
+                />
+              ) : (
+                <Button
+                  label={TRIPS_ADD.copy.add}
+                  icon={TRIPS_ADD_ICON.add}
+                  compact
+                  onPress={() => setEditing({ trip: null })}
+                />
+              )}
             </View>
           }
         >

@@ -23,6 +23,7 @@ import {
   Pressable,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import { FAB_ICON, FAB_SIZE, CHROME_GAP } from "./mapChrome";
@@ -38,26 +39,66 @@ export const TOOLS = mapTools("gps");
 /** Time for the tray to slide out from under the + button. */
 const SLIDE_MS = 160;
 
+/** The `+` button, at the top of the action column. */
 export function MapToolGroup({
   open,
   activeTool,
-  side = "right",
   onToggleOpen,
+}: {
+  open: boolean;
+  /** The armed tool, if any — the button stays lit while it runs. */
+  activeTool: MapTool | null;
+  onToggleOpen: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={open ? "Hide map tools" : "Map tools"}
+      accessibilityState={{ expanded: open }}
+      style={[
+        styles.controlButton,
+        (open || activeTool) && styles.controlActive,
+      ]}
+      onPress={onToggleOpen}
+    >
+      <Icon
+        idea={open ? "close" : "add"}
+        size={FAB_ICON}
+        color={open || activeTool ? theme.onFill : theme.text}
+      />
+    </Pressable>
+  );
+}
+
+/**
+ * The tools themselves, drawn beside the action column from its top row down,
+ * as a SIBLING of the column rather than inside it: Android hands a touch only
+ * to a view inside its parent's bounds, and a pill hanging out of the column
+ * fell through to the map beneath, which took the press as a point.
+ * `top` is the column's own top edge; `side` is the column's edge, and the tray
+ * opens away from it.
+ */
+export function MapToolTray({
+  open,
+  activeTool,
+  side,
+  top,
   onPickTool,
 }: {
   open: boolean;
-  /** The armed tool, if any — its pill stays lit while it runs. */
   activeTool: MapTool | null;
-  /**
-   * Which edge the action column is on (Settings → Map). The tray opens AWAY
-   * from it: the other side is the only free map.
-   */
-  side?: "right" | "left";
-  onToggleOpen: () => void;
+  side: "right" | "left";
+  top: number;
   onPickTool: (tool: MapTool) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
+  // The room beside the column: each pill keeps its own width and sits against
+  // the column, so a label never squeezes to an ellipsis.
+  const { width: windowWidth } = useWindowDimensions();
+  const room = windowWidth - FAB_SIZE - CHROME_GAP * 2 - spacing(1);
 
   const [reduceMotion, setReduceMotion] = useState(false);
   useEffect(() => {
@@ -75,8 +116,8 @@ export function MapToolGroup({
     };
   }, []);
 
-  // One value drives the whole tray: it slides out from behind the + and
-  // fades in on the native driver, or just appears under reduced motion.
+  // One value drives the whole tray: it slides out from the column and fades
+  // in on the native driver, or just appears under reduced motion.
   const [progress] = useState(() => new Animated.Value(0));
   useEffect(() => {
     Animated.timing(progress, {
@@ -93,78 +134,51 @@ export function MapToolGroup({
   });
 
   return (
-    <View style={styles.row}>
-      {TOOLS.map((tool, k) => {
+    <Animated.View
+      pointerEvents={open ? "box-none" : "none"}
+      style={[
+        styles.tray,
+        { top, width: room, [side]: CHROME_GAP + FAB_SIZE + spacing(1) },
+        {
+          height: TOOLS.length * FAB_SIZE + (TOOLS.length - 1) * spacing(1),
+          opacity: progress,
+          transform: [{ translateX }],
+        },
+      ]}
+    >
+      {TOOLS.map((tool) => {
         const armed = activeTool === tool.id;
         return (
-          <Animated.View
+          <Pressable
             key={tool.id}
-            pointerEvents={open ? "auto" : "none"}
+            accessibilityRole="button"
+            accessibilityLabel={tool.label}
             style={[
-              styles.toolSlot,
-              // Level with the + (k = 0) or the buttons below it, and clear of
-              // the column by one gap.
-              { top: k * (FAB_SIZE + spacing(1)) },
-              side === "left"
-                ? { left: FAB_SIZE + spacing(1) }
-                : { right: FAB_SIZE + spacing(1) },
-              { opacity: progress, transform: [{ translateX }] },
+              styles.pill,
+              { alignSelf: side === "left" ? "flex-start" : "flex-end" },
+              armed && styles.controlActive,
             ]}
+            onPress={() => onPickTool(tool.id)}
           >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={tool.label}
-              style={[styles.pill, armed && styles.controlActive]}
-              onPress={() => onPickTool(tool.id)}
+            <Icon
+              idea={tool.icon}
+              size={FAB_ICON}
+              color={armed ? theme.onFill : theme.text}
+            />
+            <Text
+              style={[styles.pillLabel, armed && { color: theme.onFill }]}
+              numberOfLines={1}
             >
-              <Icon
-                idea={tool.icon}
-                size={FAB_ICON}
-                color={armed ? theme.onFill : theme.text}
-              />
-              <Text
-                style={[styles.pillLabel, armed && { color: theme.onFill }]}
-                numberOfLines={1}
-              >
-                {tool.label}
-              </Text>
-            </Pressable>
-          </Animated.View>
+              {tool.label}
+            </Text>
+          </Pressable>
         );
       })}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={open ? "Hide map tools" : "Map tools"}
-        accessibilityState={{ expanded: open }}
-        style={[
-          styles.controlButton,
-          (open || activeTool) && styles.controlActive,
-        ]}
-        onPress={onToggleOpen}
-      >
-        <Icon
-          idea={open ? "close" : "add"}
-          size={FAB_ICON}
-          color={open || activeTool ? theme.onFill : theme.text}
-        />
-      </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
-  // The group occupies exactly one button's width in the column. The pills are
-  // ABSOLUTE children hanging off its side, so opening the tray can't widen the
-  // row and make the rest of the action column jump.
-  row: {
-    width: FAB_SIZE,
-    height: FAB_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1,
-  },
-  toolSlot: { position: "absolute", height: FAB_SIZE },
   // Mirrors MapScreen's controlButton/controlActive exactly — the + has to
   // read as the same column.
   controlButton: {
@@ -176,6 +190,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
   },
   controlActive: { backgroundColor: theme.accent },
+  tray: { position: "absolute", gap: spacing(1) },
   pill: {
     minHeight: FAB_SIZE,
     borderRadius: FAB_SIZE / 2,
