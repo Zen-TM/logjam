@@ -17,6 +17,13 @@
   }
 }
 
+/* The form phase's fields, spaced like every other dialog's. */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--form-field);
+}
+
 /* Where the ZIP lands. The one place in the dialog with a dashed edge, because
    it is the one place that takes something from outside the app. */
 .drop {

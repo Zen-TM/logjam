@@ -512,7 +512,7 @@ export default function TopoDialog({
             warnCredits={jobWouldExceed && stats === null}
           />
         ) : (
-          <>
+          <div className={classes.form}>
             <p className={classes.wideHint}>
               This is easier on a bigger screen.
             </p>
@@ -631,7 +631,7 @@ export default function TopoDialog({
                 onChange={setVegetation}
               />
             )}
-          </>
+          </div>
         )}
       </Dialog>
 

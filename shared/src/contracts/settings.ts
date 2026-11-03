@@ -25,7 +25,7 @@ export const SETTINGS = {
     },
   ],
   copy: {
-    categories: "Your own categories",
+    categories: "Your own place types",
     attributes: `Your own ${ATTRIBUTE_NOUN.many}`,
     placeTypes: "Place types",
     tripAttributes: "Trip attributes",
@@ -103,6 +103,8 @@ export const SETTINGS_LIST = {
   copy: {
     yours: "Yours",
     builtIn: "Built in",
+    // Under a "Built in" attributes heading, beside the lock on each row.
+    builtInAttributesWhy: `Built-in ${ATTRIBUTE_NOUN.many} come with Logjam, so they can't be changed or deleted.`,
     addPlaceType: "Add a place type",
     addAttribute: ATTRIBUTE_NOUN.add,
     editType: "Edit type",
@@ -160,7 +162,7 @@ export function attributeDeleteConfirm(
   };
 }
 
-/** An attributes list with none of the user's own says what they are for. */
-export function attributesEmptyHint(row: string): string {
-  return `Add your own ${ATTRIBUTE_NOUN.one} to record on every ${row} — e.g. water level or party size.`;
+/** The line an attributes list always carries: what they are for. */
+export function attributesHint(row: string): string {
+  return `Add your own ${ATTRIBUTE_NOUN.one} to record on a ${row}, e.g. water level or party size.`;
 }

@@ -5,7 +5,7 @@ import {
   ATTRIBUTE_NOUN,
   buildCustomFieldDef,
   attributeDeleteConfirm,
-  attributesEmptyHint,
+  attributesHint,
   CUSTOM_FIELD_TYPES,
   distinctTripTypes,
   drawsYoursHeading,
@@ -105,11 +105,11 @@ export function CustomFieldList({
   const builtIn = defs.filter(isSystemFieldDef);
   return (
     <View style={styles.list}>
-      {own.length === 0 ? (
-        <Text style={styles.hint}>
-          {emptyHint ?? attributesEmptyHint(noun.one)}
-        </Text>
-      ) : null}
+      {own.length === 0 && emptyHint ? (
+        <Text style={styles.hint}>{emptyHint}</Text>
+      ) : (
+        <Text style={styles.hint}>{attributesHint(noun.one)}</Text>
+      )}
       {drawsYoursHeading(own.length, builtIn.length) ? (
         <SectionHeader title={listCopy.yours} count={own.length} />
       ) : null}
@@ -123,7 +123,10 @@ export function CustomFieldList({
         />
       ))}
       {builtIn.length > 0 ? (
-        <SectionHeader title={listCopy.builtIn} count={builtIn.length} />
+        <>
+          <SectionHeader title={listCopy.builtIn} count={builtIn.length} />
+          <Text style={styles.hint}>{listCopy.builtInAttributesWhy}</Text>
+        </>
       ) : null}
       {builtIn.map((def) => (
         // A BUILT-IN gets no verbs, the same way a system place type does:
