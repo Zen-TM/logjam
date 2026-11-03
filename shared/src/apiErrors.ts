@@ -32,7 +32,7 @@ export class ApiError extends Error {
 // ── Cognito account-call error mapping ────────────────────────────────────────
 
 export const AUTH_ERROR_CODES: Record<string, string> = {
-  NotAuthorizedException: "Incorrect username or password.",
+  NotAuthorizedException: "Incorrect email or password.",
   UserNotConfirmedException: "Confirm your email address before signing in.",
   UserNotFoundException: "No account found with that email address.",
   UsernameExistsException: "An account with that email already exists.",

@@ -100,14 +100,14 @@ describe("SignIn under Cognito", () => {
   });
 
   it("keeps the form and shows what Cognito refused", async () => {
-    const refused = new Error("Incorrect username or password.");
+    const refused = new Error("Incorrect email or password.");
     refused.name = "NotAuthorizedException";
     onPasswordSignIn.mockRejectedValueOnce(refused);
     draw();
     type("Email", EMAIL);
     type("Password", PASSWORD);
     press("Sign in");
-    await screen.findByText("Incorrect username or password.");
+    await screen.findByText("Incorrect email or password.");
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
   });
 
