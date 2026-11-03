@@ -21,7 +21,20 @@
 }
 
 @media (max-width: 768px) {
+  /* On a phone the map's action column runs up the right edge, so the toast
+     sits against the left edge and stops short of the column instead of
+     covering the zoom buttons. */
   .stack {
+    left: var(--space-2);
+    transform: none;
+    align-items: flex-start;
+    max-width: calc(
+      100vw -
+      var(--space-2) -
+      var(--map-button-size) -
+      2 *
+      var(--space-2)
+    );
     bottom: calc(var(--bottom-nav-height) + 64px);
   }
 }
