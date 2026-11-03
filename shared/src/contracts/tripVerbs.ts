@@ -53,6 +53,11 @@ export function tripVerbs(surface: TripVerbSurface): TripVerb[] {
     }));
 }
 
+/** The done-toast after deleting trips, from a page and a list alike. */
+export function tripDeleteDone(count: number): string {
+  return count === 1 ? "Trip deleted." : `${count} trips deleted.`;
+}
+
 /**
  * What deleting trips costs, said once for every surface that offers Delete:
  * what goes, and what stays.

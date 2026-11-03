@@ -45,6 +45,7 @@ import {
   reconcileCustomFieldFilters,
   sortTrips,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
@@ -260,8 +261,7 @@ export function LogsScreen({
       }
     }
     clearSelection();
-    if (failures === 0)
-      info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
+    if (failures === 0) info(tripDeleteDone(count));
     else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 

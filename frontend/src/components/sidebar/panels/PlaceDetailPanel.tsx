@@ -27,6 +27,7 @@ import {
   mediaCategory,
   primaryTripType,
   placeDeleteConfirm,
+  placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
   PLACE_PAGE,
@@ -483,7 +484,7 @@ function PlaceDetailPanel({
       setSelectedPlaceID(null);
       onRefetch();
       onQuotaChanged();
-      toast.success("Place deleted.");
+      toast.success(placeDeleteDone(1));
       // Return to the places list — the detail panel has nothing to show now.
       onAfterDelete();
     } catch (err) {
