@@ -82,12 +82,12 @@ function draw(jobs: CompletedTopoJob[], loaded = true) {
 }
 
 describe("the sharpened areas view", () => {
-  it("lists areas with a Shared pill on one shared with you, and flies to a row", () => {
+  it("lists areas with a pill on one shared with you, and flies to a row", () => {
     const props = draw([
       job({}),
       job({ jobId: "j2", name: "Friend's ridge", syncRole: "shared" }),
     ]);
-    expect(screen.getAllByText("Shared")).toHaveLength(1);
+    expect(screen.getAllByText("Shared with you")).toHaveLength(1);
     fireEvent.click(screen.getAllByText("Made-up gully")[0]!);
     expect(props.onFlyTo).toHaveBeenCalledWith(footprint);
   });

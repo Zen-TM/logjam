@@ -3,6 +3,7 @@
 // unchanged: the confirm copy, the share promise, the refetch and quota refresh.
 import { useMemo, useState } from "react";
 import {
+  incomingLabel,
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
@@ -226,7 +227,7 @@ export default function SharpenedAreasView({
               trailing={
                 <>
                   {job.syncRole !== "owner" && (
-                    <StatusPill label="Shared" tone="outline" />
+                    <StatusPill label={incomingLabel(null)} tone="outline" />
                   )}
                   <Menu
                     label={`Actions for ${label}`}

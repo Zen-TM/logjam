@@ -385,8 +385,11 @@ export default function RoutesPanel({
     <div className={classes.list}>
       {visible.map((way) => {
         const identity = KIND_IDENTITY[way.kind];
+        // A file seen through a shared place is the place owner's.
         const ownerId =
-          way.kind === "route" ? routeById.get(way.id)?.ownerId : undefined;
+          way.kind === "route"
+            ? routeById.get(way.id)?.ownerId
+            : placeById.get(way.placeId ?? "")?.ownerId;
         const owner =
           way.shared && ownerId ? ownerUsername(friends, ownerId) : null;
         return (
