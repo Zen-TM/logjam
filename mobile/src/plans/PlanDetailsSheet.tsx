@@ -37,11 +37,11 @@ import {
   DatePicker,
   ErrorBanner,
   FormStack,
-  Icon,
   Row,
   TextField,
   type ChipOption,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 
 const copy = TRIP_PLANS_LIST.copy;
 type Mode = "form" | "dates";
@@ -156,7 +156,7 @@ export function PlanDetailsSheet({
       icon="date"
       title={tripPlanDatesLabel(values.startDate, values.endDate)}
       subtitle={TRIP_PLAN_PAGE.copy.datesField}
-      right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+      right={<Chevron />}
       onPress={() => setMode("dates")}
     />
   );

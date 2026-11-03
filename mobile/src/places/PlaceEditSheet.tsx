@@ -31,17 +31,18 @@ import { placeTypeGlyph } from "./placeTypeIcon";
 import {
   BottomSheet,
   Button,
+  ChipRail,
   DatePicker,
   ErrorBanner,
   Field,
   FormStack,
+  Icon,
   Row,
   SectionHeader,
-  ChipRail,
   TextField,
   type ChipOption,
-  Icon,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 
 /**
  * Add or edit a place — one sheet for both (DESIGN.md). The fields are
@@ -622,7 +623,7 @@ export function PlaceEditSheet({
                 ? "Add your own — permits, access notes, anything."
                 : `${typeFieldDefs.length} on this type`
             }
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            right={<Chevron />}
             onPress={() => setMode("fields")}
           />
         </FormStack>

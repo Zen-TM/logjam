@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { createContext, useContext, type ComponentProps } from "react";
 import { Pressable, Text, View, type ViewStyle } from "react-native";
 
 import {
@@ -13,6 +13,20 @@ import {
   useTheme,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
+
+const RowDisabled = createContext(false);
+
+/**
+ * The "this opens something" mark at a row's right. A row that is unavailable
+ * opens nothing, so it draws none; draw it through this, never `Icon`, so every
+ * row follows (guard: disabledPressed.test.ts).
+ */
+export function Chevron() {
+  const theme = useTheme();
+  return useContext(RowDisabled) ? null : (
+    <Icon idea="disclosure" size={20} color={theme.textMuted} />
+  );
+}
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -146,7 +160,9 @@ export function Row({
         </View>
         {right != null ? (
           <View style={[styles.right, disabled && styles.disabled]}>
-            {right}
+            <RowDisabled.Provider value={disabled}>
+              {right}
+            </RowDisabled.Provider>
           </View>
         ) : null}
       </View>

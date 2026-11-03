@@ -46,8 +46,8 @@ import {
   StatusPill,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 import { TripEditSheet } from "./TripEditSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -142,9 +142,7 @@ export function TripDetailScreen({
               icon="place"
               hue={theme.accent}
               title={place.name}
-              right={
-                <Icon idea="disclosure" size={20} color={theme.textMuted} />
-              }
+              right={<Chevron />}
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))

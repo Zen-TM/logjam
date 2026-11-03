@@ -21,16 +21,16 @@ import {
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, muted } from "../theme";
+import { spacing, makeStyles, muted } from "../theme";
 import {
+  ChipRail,
   Field,
   IconButton,
   Row,
-  ChipRail,
   TextField,
   type ChipOption,
-  Icon,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 
 /**
  * A yes/no answer has THREE states, and "—" is the one a form starts on.
@@ -129,8 +129,6 @@ function CustomFieldValueInput({
   /** Drawn beside the CONTROL, centred on it — not beside the label above it. */
   trailing?: React.ReactNode;
 }) {
-  const theme = useTheme();
-
   const label = customFieldDisplayLabel(def);
   // A BOUNDED INTEGER IS A RAIL. Unset has to stay reachable — most imported
   // places have gaps, and a picker with no way back to blank turns "I don't
@@ -173,7 +171,7 @@ function CustomFieldValueInput({
           icon="date"
           title={value ? formatDateKey(`${value}T00:00:00.000Z`) : "Not set"}
           subtitle={label}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          right={<Chevron />}
           onPress={onPickDate}
         />
       </Beside>

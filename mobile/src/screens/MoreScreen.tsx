@@ -49,15 +49,16 @@ import { spacing, makeStyles, makeThemed, useTheme, muted } from "../theme";
 import {
   Button,
   Hero,
+  Icon,
   Row,
   ScreenScroll,
   StatusPill,
-  Icon,
   Toast,
   todayDateKey,
   type Glyph,
   type ToastMessage,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
@@ -295,13 +296,12 @@ function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
 
 /** Optional badge, then the chevron — the §5 trailing order. */
 function Trailing({ badge }: { badge?: React.ReactNode }) {
-  const theme = useTheme();
   const styles = useStyles();
 
   return (
     <View style={styles.trailing}>
       {badge}
-      <Icon idea="disclosure" size={20} color={theme.textMuted} />
+      <Chevron />
     </View>
   );
 }

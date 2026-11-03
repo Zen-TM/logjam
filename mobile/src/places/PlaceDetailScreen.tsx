@@ -90,6 +90,7 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  Icon,
   IconButton,
   LoadingState,
   Row,
@@ -98,8 +99,8 @@ import {
   TextField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
 import { placeStatusMeta } from "./placeMeta";
@@ -450,9 +451,7 @@ export function PlaceDetailScreen({
               icon="help"
               title={item.label}
               subtitle={foreignValueText(item.value)}
-              right={
-                <Icon idea="disclosure" size={20} color={theme.textMuted} />
-              }
+              right={<Chevron />}
               onPress={() => setForeignKey(item.key)}
             />
           ))}
@@ -654,9 +653,7 @@ export function PlaceDetailScreen({
                 hue={theme.accent}
                 title={tripTitle(trip)}
                 subtitle={formatTripDate(trip.date)}
-                right={
-                  <Icon idea="disclosure" size={20} color={theme.textMuted} />
-                }
+                right={<Chevron />}
                 onPress={() => onOpenTrip(trip)}
               />
             ))

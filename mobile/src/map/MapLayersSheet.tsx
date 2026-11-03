@@ -60,14 +60,15 @@ import {
 } from "../theme";
 import {
   BottomSheet,
+  ChipRail,
+  Icon,
   Row,
   SectionHeader,
-  ChipRail,
-  Toggle,
-  Icon,
-  type Glyph,
   SwitchRow,
+  Toggle,
+  type Glyph,
 } from "../ui";
+import { Chevron } from "../ui/Row";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
@@ -631,7 +632,6 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
-  const theme = useTheme();
   const { assetHue } = useHues();
   const styles = useStyles();
 
@@ -680,7 +680,7 @@ function OfflineTab({
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+        right={<Chevron />}
       />
     </View>
   );
