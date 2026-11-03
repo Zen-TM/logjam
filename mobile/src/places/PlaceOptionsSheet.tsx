@@ -25,6 +25,7 @@ import { StyleSheet, View } from "react-native";
 import {
   PLACE_EXPORT_FORMATS,
   placeDeleteConfirm,
+  placeDeleteDone,
   placeVerbs,
   removeShareConfirm,
   type PlaceVerbIdOn,
@@ -283,7 +284,7 @@ export function PlaceOptionsSheet({
     if (!(await confirm(copy))) return;
     deletePlaceLocal(place.id)
       .then(() => {
-        onInfo("Place deleted.");
+        onInfo(placeDeleteDone(1));
         onGone?.();
       })
       .catch((err: unknown) => {

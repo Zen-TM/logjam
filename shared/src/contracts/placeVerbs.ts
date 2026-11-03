@@ -178,6 +178,11 @@ export function placeVerbs<P extends ContractPlatform>(
     }));
 }
 
+/** The done-toast after deleting places, from a page and a list alike. */
+export function placeDeleteDone(count: number): string {
+  return count === 1 ? "Place deleted." : `${count} places deleted.`;
+}
+
 /**
  * What deleting places costs, said once for every surface that offers Delete:
  * what goes, and what stays.

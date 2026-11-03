@@ -20,8 +20,8 @@ import {
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
+  placeDeleteDone,
   placeMatchesSearch,
-  placesCountLabel,
   placesEmptyKind,
   placeTypeHasTab,
   placesEmptyState,
@@ -427,7 +427,7 @@ function PlacesPanel({
     setDeleting(true);
     try {
       await bulkDeletePlaces(pendingDelete);
-      toast.success(`Deleted ${placesCountLabel(count)}.`);
+      toast.success(placeDeleteDone(count));
       setPendingDelete(null);
       clearSelection();
       onQuotaChanged();

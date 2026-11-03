@@ -3,6 +3,7 @@ import {
   noFriendsMessage,
   PLACE_EXPORT_FORMATS,
   placeDeleteConfirm,
+  placeDeleteDone,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
 import type { TPlace, TFriend } from "../../placeUtils";
@@ -171,7 +172,7 @@ function SelectedPlacesDialog({
       onQuotaChanged?.();
       onDeleted();
       onClose();
-      toast.success(`Deleted ${plural(ownedPlaces.length, "place")}.`);
+      toast.success(placeDeleteDone(ownedPlaces.length));
     } catch (err) {
       console.error(err);
       toast.error(

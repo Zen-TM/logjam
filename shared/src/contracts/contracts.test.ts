@@ -80,6 +80,7 @@ import {
   placeStatusLabel,
   PLACE_VERBS,
   placeDeleteConfirm,
+  placeDeleteDone,
   PLACES_ADD,
   PLACES_FILTER_SHEET,
   PLACE_STATUS_FILTER_OPTIONS,
@@ -93,6 +94,7 @@ import {
   SCREEN_CONTRACTS,
   listSelectionLabel,
   tripDeleteConfirm,
+  tripDeleteDone,
   planDeleteConfirm,
   planFormDeleteConfirm,
   planItemDeleteConfirm,
@@ -1203,4 +1205,15 @@ describe("a verb list's reason and gap", () => {
       }
     },
   );
+});
+
+// A page and a list say the same thing when a delete lands. Mutation: reword the
+// singular in one function, or type a toast in a client again.
+describe("delete done-toasts", () => {
+  it("say one noun the same way from a page and from a list", () => {
+    expect(placeDeleteDone(1)).toBe("Place deleted.");
+    expect(placeDeleteDone(3)).toBe("3 places deleted.");
+    expect(tripDeleteDone(1)).toBe("Trip deleted.");
+    expect(tripDeleteDone(3)).toBe("3 trips deleted.");
+  });
 });
