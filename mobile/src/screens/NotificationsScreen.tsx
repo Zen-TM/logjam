@@ -91,7 +91,10 @@ import {
   type BatchFileActionKind,
   type BatchFileActionProgress,
 } from "../notifications/batchFileAction";
-import type { NotificationDestination } from "../notifications/notificationDestination";
+import {
+  notificationDestination,
+  type NotificationDestination,
+} from "../notifications/notificationDestination";
 import { AnnouncementSheet } from "../notifications/AnnouncementSheet";
 import { NotificationOptionsSheet } from "../notifications/NotificationOptionsSheet";
 import type { SavedCategory } from "../saved/savedKeys";
@@ -117,6 +120,7 @@ import {
   Hero,
   IconButton,
   ListBody,
+  RequestRow,
   Row,
   ChipRail,
   SelectionBar,
@@ -297,6 +301,8 @@ export function NotificationsScreen({
   // list itself reads from the cache offline, so the row is there either way
   // and a vanishing button would read as "this one can't be answered".
   const online = useConnectivity() === "online";
+  /** Sends whose download failed here: their finished row offers Try again. */
+  const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState<{
     id: string;
     kind: NotificationActionKind;
@@ -627,8 +633,8 @@ export function NotificationsScreen({
    *
    * Which call runs is the descriptor's `type`; nothing here knows what a
    * friendship or a send IS beyond the id to pass. Only a file accept leaves
-   * the notification alive (as the "Download again" retry — the download URL
-   * is issued before the bytes land); the other three are purged server-side,
+   * the notification alive (as a finished row, or "Try again" if the bytes
+   * did not land: the download URL is issued before they do); the other three are purged server-side,
    * so the row is hidden the moment the call succeeds.
    *
    * `silent` is for a batch run, which answers eight rows through this same
@@ -659,6 +665,11 @@ export function NotificationsScreen({
           await declineFileSend(target.targetId);
         }
         if (survives) {
+          setFailedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(n.id);
+            return next;
+          });
           // Answering a notification IS reading it. Both patches go to the
           // CACHE and there is deliberately no refetch: `GET /notifications` is
           // the authority on `read`, so re-fetching here would race the outbox
@@ -678,6 +689,7 @@ export function NotificationsScreen({
         if (!silent) notify(action.success);
       } catch (err) {
         console.error(err);
+        if (survives) setFailedIds((prev) => new Set(prev).add(n.id));
         if (!silent) notify(messageFromError(err, action.failure), "error");
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (the Friends screen, the web, another
@@ -822,10 +834,15 @@ export function NotificationsScreen({
       void markRead(n);
       const placeId = notificationPlaceId(n);
       const plan = notificationPlanTarget(n);
-      if (placeId) onOpenPlace(placeId);
-      else if (plan) onOpenPlan(plan);
+      if (placeId) return onOpenPlace(placeId);
+      if (plan) return onOpenPlan(plan);
+      // Every other row opens what it is about, as its ⋯ sheet's "View in" does.
+      const destination = notificationDestination(n);
+      if (!destination) return;
+      if (destination.tab === "friends") onOpenFriends();
+      else onOpenSaved(destination.filter, destination.highlightKey);
     },
-    [markRead, onOpenPlace, onOpenPlan],
+    [markRead, onOpenFriends, onOpenPlace, onOpenPlan, onOpenSaved],
   );
 
   const closeMessage = useCallback(() => {
@@ -926,6 +943,7 @@ export function NotificationsScreen({
           selected={selectedKeys.includes(item.id)}
           onToggle={selectItem}
           busyKind={busy?.id === item.id ? busy.kind : null}
+          failed={failedIds.has(item.id)}
           // The row's own accept / decline go inert while a selection is running:
           // a tap meant for a checkbox must not answer a friend request, and the
           // pair stays mounted (dimmed) so the row cannot change height mid-mode.
@@ -943,6 +961,7 @@ export function NotificationsScreen({
       batches,
       busy,
       expandedBatches,
+      failedIds,
       online,
       openMenu,
       openNotification,
@@ -1227,6 +1246,7 @@ const NotificationRow = memo(function NotificationRow({
   selected,
   onToggle,
   busyKind,
+  failed,
   actionsDisabled,
   online,
 }: {
@@ -1260,6 +1280,8 @@ const NotificationRow = memo(function NotificationRow({
   onToggle: (item: TNotification) => void;
   /** Which of this row's actions is in flight, if any. */
   busyKind: NotificationActionKind | null;
+  /** This send's download failed here, so a finished row offers Try again. */
+  failed: boolean;
   /** Any action anywhere in the list is running, or there is no connection. */
   actionsDisabled: boolean;
   online: boolean;
@@ -1286,7 +1308,7 @@ const NotificationRow = memo(function NotificationRow({
   }
   const label = notificationLabel(item);
   const meta = notificationMeta(item, theme);
-  const target = notificationActions(item);
+  const target = notificationActions(item, { failed });
   const subtitle = [label.detail, formatTime(item.createdAt)]
     .filter(Boolean)
     .join(" · ");
@@ -1297,8 +1319,13 @@ const NotificationRow = memo(function NotificationRow({
   ) : !item.read ? (
     <StatusPill label={INBOX.copy.unreadMark} tone="accent" />
   ) : undefined;
+  // A finished send has nothing to answer: a quiet way to its copy instead.
+  const showInSaved =
+    target?.type === "file_sent" && target.actions.length === 0
+      ? notificationDestination(item)
+      : null;
   return (
-    <Row
+    <RequestRow
       icon={meta.icon}
       hue={meta.hue}
       title={label.text}
@@ -1341,30 +1368,26 @@ const NotificationRow = memo(function NotificationRow({
       ]}
       // INSIDE the card. Sitting below it, the pair would read as a caption for
       // the next notification down.
+      answers={(target?.actions ?? []).map((action) => ({
+        key: action.kind,
+        label: action.label,
+        decline: action.kind === "decline",
+        loading: busyKind === action.kind,
+        onPress: () => onAction(item, target!, action),
+      }))}
+      disabled={actionsDisabled}
+      // The reason on the thing that is dimmed, not on the screen (DESIGN.md).
+      hint={!online ? "Needs a connection" : undefined}
       footer={
-        target ? (
-          <>
-            <CardActions>
-              {target.actions.map((action) => (
-                <Button
-                  key={action.kind}
-                  label={action.label}
-                  // Decline is the outline: two filled buttons side by side
-                  // make "no" look like the thing to press.
-                  variant={
-                    action.kind === "decline" ? "outlineAccent" : undefined
-                  }
-                  disabled={actionsDisabled}
-                  loading={busyKind === action.kind}
-                  onPress={() => onAction(item, target, action)}
-                />
-              ))}
-            </CardActions>
-            {/* The reason on the thing that is dimmed, not on the screen (DESIGN.md). */}
-            {!online ? (
-              <Text style={styles.actionHint}>Needs a connection</Text>
-            ) : null}
-          </>
+        showInSaved ? (
+          <CardActions>
+            <Button
+              label={showInSaved.label}
+              variant="ghost"
+              disabled={selecting}
+              onPress={() => onPress(item)}
+            />
+          </CardActions>
         ) : notificationAnnouncement(item) ? (
           // A button, not only the row: nothing else says a row opens a message.
           <CardActions>
@@ -1375,7 +1398,7 @@ const NotificationRow = memo(function NotificationRow({
               onPress={() => onPress(item)}
             />
           </CardActions>
-        ) : null
+        ) : undefined
       }
     />
   );

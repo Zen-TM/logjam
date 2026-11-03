@@ -32,8 +32,6 @@ import {
   notificationHaystack,
   notificationKind,
   notificationLabel,
-  notificationPlaceId,
-  notificationPlanTarget,
   type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
@@ -158,6 +156,7 @@ function NotificationsPanel({
   setActivePanel,
   onTopoFlyTarget,
   onOpenPlan,
+  onOpenRoute,
   onShowSharpened,
 }: {
   notifications: TNotification[];
@@ -173,6 +172,8 @@ function NotificationsPanel({
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onOpenPlan: (target: NotificationPlanTarget) => void;
+  /** Open a route's page; false when the user no longer holds it. */
+  onOpenRoute: (routeId: string) => boolean;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
 }) {
@@ -188,6 +189,8 @@ function NotificationsPanel({
   // does not sit with live buttons until the server says it has gone.
   const [hiddenIds, setHiddenIds] = useState<ReadonlySet<string>>(NO_KEYS);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Sends whose download failed here, so an accepted row offers "Try again". */
+  const [failedIds, setFailedIds] = useState<ReadonlySet<string>>(new Set());
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(
     null,
   );
@@ -368,14 +371,10 @@ function NotificationsPanel({
       setMessageOf(n);
       return;
     }
-    if (!n.read) void setRead([n.id], true);
-    const placeId = notificationPlaceId(n);
-    if (placeId) {
-      setSelectedPlaceID(placeId);
-      setActivePanel("place-detail");
-    }
-    const plan = notificationPlanTarget(n);
-    if (plan) onOpenPlan(plan);
+    // Every row opens what it is about, as its ⋯ menu's first entry does.
+    const destination = inboxDestination(n);
+    if (destination) goTo(n, destination);
+    else if (!n.read) void setRead([n.id], true);
   };
 
   // In Unread, the read row leaves as the dialog closes and takes the focus
@@ -417,6 +416,10 @@ function NotificationsPanel({
       return;
     }
     if (destination.kind === "plan") return onOpenPlan(destination.target);
+    if (destination.kind === "way") {
+      if (!onOpenRoute(destination.routeId)) toast.error(copy.removed);
+      return;
+    }
     if (destination.kind === "sharpened") {
       onShowSharpened();
     } else {
@@ -527,7 +530,7 @@ function NotificationsPanel({
   ) => {
     const run = async () => {
       setBusyId(n.id);
-      // Only a file ACCEPT leaves the notification alive (as "Download again");
+      // Only a file ACCEPT leaves the notification alive (as the finished "Saved" row);
       // the server purges the notification on the other three.
       const survives = target.type === "file_sent" && action.kind === "accept";
       try {
@@ -548,6 +551,11 @@ function NotificationsPanel({
           await declineFileSend(target.targetId);
         }
         if (survives) {
+          setFailedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(n.id);
+            return next;
+          });
           // Answering it is reading it.
           if (!n.read) void setRead([n.id], true);
         } else {
@@ -557,6 +565,8 @@ function NotificationsPanel({
       } catch (err) {
         console.error(err);
         toast.error(messageFromError(err, action.failure));
+        // Only a failed download of an already-accepted send shows "Try again".
+        if (survives) setFailedIds((prev) => new Set(prev).add(n.id));
         if (isResolvedElsewhereError(err)) {
           // Answered somewhere else (Friends, Logjam GPS, another tab), or the
           // send is gone: the buttons are dead, not retryable, so clear the row
@@ -656,7 +666,7 @@ function NotificationsPanel({
   // The row's own answer, inside the card. Inert while a selection runs: a
   // press meant for a checkbox must not accept a friend request.
   const rowFooter = (n: TNotification): ReactNode => {
-    const target = notificationActions(n);
+    const target = notificationActions(n, { failed: failedIds.has(n.id) });
     if (target) {
       return target.actions.map((action) => (
         <Button
@@ -745,7 +755,7 @@ function NotificationsPanel({
       title = label.text;
       subtitle = [
         label.detail,
-        notificationActions(row)?.pill,
+        notificationActions(row, { failed: failedIds.has(row.id) })?.pill,
         formatTime(row.createdAt),
       ]
         .filter(Boolean)

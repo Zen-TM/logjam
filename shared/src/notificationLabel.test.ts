@@ -6,6 +6,7 @@ import {
   notificationKind,
   notificationLabel,
   notificationPlanTarget,
+  notificationWayTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -382,6 +383,31 @@ describe("a plan notification", () => {
     ).toBeNull();
     expect(
       notificationPlanTarget(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
+  });
+
+  // Mutation that turns it red: drop the entityType check, and a shared place
+  // or LiDAR map opens the Ways list for an id that is not a route.
+  it("names the route a route share is about, and nothing else", () => {
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toBe("r1");
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "topoJob", entityId: "j1" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("place_shared", { entityType: "route", entityId: "r1" }),
+      ),
     ).toBeNull();
   });
 });

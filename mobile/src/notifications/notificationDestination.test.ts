@@ -2,6 +2,7 @@
 // rules that are easy to lose: a notification about something that does not
 // exist has NO destination, and a file send only has one once it was kept.
 import { describe, expect, it } from "vitest";
+import { notificationWayTarget } from "@logjam/shared";
 
 import type { TNotification } from "../api/types";
 import { notificationDestination } from "./notificationDestination";
@@ -122,5 +123,18 @@ describe("notificationDestination", () => {
     expect(
       notificationDestination(notification("place_shared", { placeId: "c1" })),
     ).toBeNull();
+  });
+
+  // Parity with Logjam Web, which opens a shared route by the same function:
+  // both must point at the same route. Mutation that turns it red: key the
+  // Saved row by anything but the payload's entity id.
+  it("points at the route notificationWayTarget names", () => {
+    const n = notification("item_shared", {
+      entityType: "route",
+      entityId: "r9",
+    });
+    expect(notificationDestination(n)).toMatchObject({
+      highlightKey: notificationWayTarget(n),
+    });
   });
 });

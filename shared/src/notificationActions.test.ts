@@ -65,19 +65,22 @@ describe("notificationActions", () => {
     expect(actions?.pill).toBeNull();
   });
 
-  // `accepted` means the URL was issued, not that the bytes landed, so the
-  // retry survives and there is nothing left to decline.
-  it("keeps the download on offer once accepted, and drops decline", () => {
-    const actions = notificationActions(
-      notification("file_sent", {
-        fileSendId: "s1",
-        filename: "Claustral.gpx",
-        fileSendStatus: "accepted",
-      }),
-    );
-    expect(actions?.actions.map((a) => a.kind)).toEqual(["accept"]);
-    expect(actions?.actions[0].label).toBe("Download again");
-    expect(actions?.pill).toBe("Saved");
+  // `accepted` means the URL was issued, not that the bytes landed. Once it
+  // worked there is nothing to press; only a download that failed here offers
+  // another go. Mutation that turns it red: make the accepted branch return the
+  // retry action whatever `failed` says.
+  it("offers nothing once accepted, and Try again only after a failure", () => {
+    const accepted = notification("file_sent", {
+      fileSendId: "s1",
+      filename: "Claustral.gpx",
+      fileSendStatus: "accepted",
+    });
+    expect(notificationActions(accepted)?.actions).toEqual([]);
+    expect(notificationActions(accepted)?.pill).toBe("Saved");
+    const retry = notificationActions(accepted, { failed: true });
+    expect(retry?.actions.map((a) => [a.kind, a.label])).toEqual([
+      ["accept", "Try again"],
+    ]);
   });
 
   // Every decline is a dialog: side by side in a row there is no overflow sheet
@@ -113,7 +116,7 @@ describe("notificationActions", () => {
         fileSendStatus: "accepted",
       }),
     ]) {
-      for (const action of notificationActions(n)!.actions) {
+      for (const action of notificationActions(n, { failed: true })!.actions) {
         expect(action.success.length).toBeGreaterThan(0);
         expect(action.failure.length).toBeGreaterThan(0);
       }

@@ -2,6 +2,7 @@ import {
   notificationPlaceId,
   notificationPlanTarget,
   notificationVerb,
+  notificationWayTarget,
   type NotificationPlanTarget,
   type TNotification,
 } from "@logjam/shared";
@@ -20,6 +21,8 @@ export type InboxDestination =
   | { kind: "place"; label: string; placeId: string }
   | { kind: "plan"; label: string; target: NotificationPlanTarget }
   | { kind: "page"; label: string; panel: PanelId }
+  /** The received route's own page, with the map centred on it. */
+  | { kind: "way"; label: string; routeId: string }
   /** Layers → Terrain → Sharpened areas, over the map. */
   | { kind: "sharpened"; label: string };
 
@@ -36,6 +39,8 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
       label: notificationVerb("openPlan").label,
       target: plan,
     };
+  const routeId = notificationWayTarget(n);
+  if (routeId) return { kind: "way", label: "View in Ways", routeId };
   const failed = n.payload.status === "failed";
   switch (n.type) {
     case "friend_request":
@@ -48,8 +53,6 @@ export function inboxDestination(n: TNotification): InboxDestination | null {
       return null;
     case "item_shared":
       switch (n.payload.entityType) {
-        case "route":
-          return { kind: "page", label: "View in Ways", panel: "ways" };
         case "topoJob":
           return SHARPENED;
         default:

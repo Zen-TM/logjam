@@ -106,6 +106,7 @@ function SidebarPanel({
   standaloneFilesError,
   onRetryStandaloneFiles,
   onOpenWay,
+  onOpenRoute,
   wayDetail,
   plansPanel,
   planDetail,
@@ -200,6 +201,8 @@ function SidebarPanel({
   onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
+  /** Open a route's page by id (an Inbox row); false when it is gone. */
+  onOpenRoute: (routeId: string) => boolean;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -390,6 +393,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onTopoFlyTarget={onTopoFlyTarget}
             onOpenPlan={onOpenPlan}
+            onOpenRoute={onOpenRoute}
             onShowSharpened={onShowSharpened}
           />
         )}

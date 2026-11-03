@@ -295,6 +295,19 @@ export function notificationPlaceId(n: TNotification): string | null {
 }
 
 /**
+ * The way (a route) a notification is ABOUT, as its id: the id an `item_shared`
+ * names when what was shared is a route. Null for every other notification, and
+ * for a share whose payload names no entity.
+ *
+ * PRIVACY: an id only, resolved against the signed-in user's own Ways, where a
+ * share since revoked is simply absent. Guard: notificationLabel.test.ts.
+ */
+export function notificationWayTarget(n: TNotification): string | null {
+  if (n.type !== "item_shared" || n.payload.entityType !== "route") return null;
+  return str(n.payload.entityId);
+}
+
+/**
  * The maintainer announcement a notification carries, as `GET /notifications`
  * resolved it: null for any other type, or one whose announcement is gone.
  * `body` is Markdown source, drawn through `parseMessageMarkdown`, never as

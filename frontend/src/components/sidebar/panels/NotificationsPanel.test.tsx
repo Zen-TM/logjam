@@ -66,7 +66,13 @@ const announcement: TNotification = {
 const noop = () => {};
 
 // Read marks really apply, as App's do, so a row read in Unread leaves it.
-function Harness({ rows }: { rows: TNotification[] }) {
+function Harness({
+  rows,
+  onOpenRoute = () => true,
+}: {
+  rows: TNotification[];
+  onOpenRoute?: (routeId: string) => boolean;
+}) {
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     new Map(),
   );
@@ -95,6 +101,7 @@ function Harness({ rows }: { rows: TNotification[] }) {
         onShowSharpened={noop}
         onTopoFlyTarget={noop}
         onOpenPlan={noop}
+        onOpenRoute={onOpenRoute}
       />
     </ToastProvider>
   );
@@ -196,5 +203,35 @@ describe("NotificationsPanel: an announcement", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: INBOX.title }),
     );
+  });
+});
+
+describe("NotificationsPanel: a shared route", () => {
+  const shared: TNotification = {
+    id: "n2",
+    type: "item_shared",
+    payload: { entityType: "route", entityId: "r1", sharedByUsername: "bob" },
+    read: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Mutation: drop the `way` branch from `goTo`, and the tap opens nothing.
+  it("opens the route when the row is tapped, and reads it", () => {
+    const onOpenRoute = vi.fn(() => true);
+    render(<Harness rows={[shared]} onOpenRoute={onOpenRoute} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "bob shared a route with you" }),
+    );
+    expect(onOpenRoute).toHaveBeenCalledWith("r1");
+    expect(api.markNotificationRead).toHaveBeenCalledWith("n2", true);
+  });
+
+  // Mutation: ignore the false return, and a revoked share fails silently.
+  it("says so when the route is gone", async () => {
+    render(<Harness rows={[shared]} onOpenRoute={() => false} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "bob shared a route with you" }),
+    );
+    expect(await screen.findByText("This was removed.")).toBeTruthy();
   });
 });

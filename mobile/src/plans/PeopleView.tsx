@@ -38,6 +38,7 @@ import {
   Button,
   IconButton,
   ListEnd,
+  RequestRow,
   Row,
   SectionHeader,
   StatusPill,
@@ -223,33 +224,31 @@ export function PeopleView({
         <SectionHeader title={copy.peopleAsking} count={asking.length} />
       ) : null}
       {asking.map((member) => (
-        <Row
+        <RequestRow
           key={member.user.id}
           icon="account"
           title={member.user.username}
           subtitle={online ? undefined : OFFLINE}
           onPress={() => setPersonId(member.user.id)}
-          right={
-            <View style={styles.right}>
-              {/* An archived plan takes no one in; turning down still works. */}
-              {archived ? null : (
-                <IconButton
-                  icon="accept"
-                  filled
-                  color={theme.accent}
-                  accessibilityLabel={copy.letIn}
-                  disabled={!online || busyId === member.user.id}
-                  onPress={() => letIn(member)}
-                />
-              )}
-              <IconButton
-                icon="ignore"
-                accessibilityLabel={copy.turnDown}
-                disabled={!online || busyId === member.user.id}
-                onPress={() => turnDown(member)}
-              />
-            </View>
-          }
+          // An archived plan takes no one in; turning down still works.
+          answers={[
+            ...(archived
+              ? []
+              : [
+                  {
+                    key: "letIn",
+                    label: copy.letIn,
+                    onPress: () => letIn(member),
+                  },
+                ]),
+            {
+              key: "turnDown",
+              label: copy.turnDown,
+              decline: true,
+              onPress: () => turnDown(member),
+            },
+          ]}
+          disabled={!online || busyId === member.user.id}
         />
       ))}
       {headed && going.length > 0 ? (

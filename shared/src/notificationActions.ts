@@ -20,6 +20,7 @@
 // treats it.
 import { ApiError } from "./apiErrors.js";
 import type { TNotification } from "./apiTypes.js";
+import { friendAcceptedMessage } from "./contracts/friends.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -73,14 +74,50 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 }
 
 /**
+ * A friend request's two answers, for any surface that draws them as a pair:
+ * the Inbox row, the Friends list and Logjam Web's Friends page all say the same
+ * words and ask the same decline question. Guard: notificationActions.test.ts.
+ */
+export function friendRequestAnswers(
+  username: string,
+): NotificationInlineAction[] {
+  return [
+    {
+      kind: "accept",
+      label: "Accept",
+      confirm: null,
+      failure: "Couldn't accept that request.",
+      success: friendAcceptedMessage(username),
+    },
+    {
+      kind: "decline",
+      label: "Decline",
+      failure: "Couldn't decline that request.",
+      success: "Request declined.",
+      confirm: {
+        title: `Decline ${username}'s request?`,
+        // The two things the user actually needs: it is not announced, and
+        // it is not final.
+        body: `${username} won't be told, and can send another request later.`,
+        confirmLabel: "Decline",
+      },
+    },
+  ];
+}
+
+/**
  * The actions this notification offers, or null for the reporting kinds (a
  * finished topo, an accepted request) which have nothing to answer.
+ *
+ * `failed`: the caller's own download of this already-accepted send failed, so
+ * the row offers "Try again" instead of nothing.
  *
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
  */
 export function notificationActions(
   n: TNotification,
+  { failed = false }: { failed?: boolean } = {},
 ): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
@@ -92,30 +129,7 @@ export function notificationActions(
       targetId: friendshipId,
       pill: null,
       sender: null,
-      actions: [
-        {
-          kind: "accept",
-          label: "Accept",
-          confirm: null,
-          failure: "Couldn't accept that request.",
-          // The same sentence the Friends screen uses, deliberately: one voice
-          // for one outcome, whichever surface it was answered from.
-          success: `${username} is now a friend.`,
-        },
-        {
-          kind: "decline",
-          label: "Decline",
-          failure: "Couldn't decline that request.",
-          success: "Request declined.",
-          confirm: {
-            title: `Decline ${username}'s request?`,
-            // The two things the user actually needs: it is not announced, and
-            // it is not final.
-            body: `${username} won't be told, and can send another request later.`,
-            confirmLabel: "Decline",
-          },
-        },
-      ],
+      actions: friendRequestAnswers(username),
     };
   }
 
@@ -141,15 +155,20 @@ export function notificationActions(
         targetId: fileSendId,
         pill: "Saved",
         sender,
-        actions: [
-          {
-            kind: "accept",
-            label: "Download again",
-            confirm: null,
-            failure: "Couldn't save that file.",
-            success: "Downloaded again — find it in Saved.",
-          },
-        ],
+        // Nothing to press once it worked: a second Download is the loudest
+        // control on a finished row. Only a download that FAILED here offers
+        // another go.
+        actions: failed
+          ? [
+              {
+                kind: "accept",
+                label: "Try again",
+                confirm: null,
+                failure: "Couldn't save that file.",
+                success: "Saved — find it in Saved.",
+              },
+            ]
+          : [],
       };
     }
     return {

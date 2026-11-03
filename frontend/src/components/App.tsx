@@ -1249,6 +1249,15 @@ function App() {
     setActivePanel("way-detail");
   };
 
+  /** Open a route by id; false when the user no longer holds it (a share
+   *  since revoked or a route since deleted). */
+  const openRoute = (routeId: string): boolean => {
+    const route = routes.find((r) => r.id === routeId);
+    if (!route) return false;
+    openWay(wayFromRoute(route, currentUser?.id ?? null, sharedPlaceIds));
+    return true;
+  };
+
   /**
    * A friend's route has just been copied into the user's own Ways — show them
    * the copy.
@@ -1581,6 +1590,7 @@ function App() {
             standaloneFilesError={standaloneFilesError}
             onRetryStandaloneFiles={refetchStandaloneFiles}
             onOpenWay={openWay}
+            onOpenRoute={openRoute}
             currentUserId={currentUser?.id ?? null}
             wayDetail={
               selectedWay ? (

@@ -40,12 +40,12 @@ import {
 } from "react-native";
 import {
   contractSectionKeys,
-  friendAcceptedMessage,
   friendInviteMessage,
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
   friendRemoveConfirm,
+  friendRequestAnswers,
   friendRequestMadeFriend,
   friendsEmptyKind,
   friendsHeroTitle,
@@ -97,6 +97,7 @@ import {
   ListEnd,
   IconButton,
   ListBody,
+  RequestRow,
   Row,
   ChipRail,
   StatusPill,
@@ -277,6 +278,34 @@ export function FriendsScreen({
     [onOpenShares],
   );
   const openMenu = useCallback((item: FriendItem) => setMenuItem(item), []);
+  // The same two answers, words and decline question as the Inbox row.
+  const answerRequest = useCallback(
+    (
+      item: Extract<FriendItem, { kind: "request" }>,
+      action: ReturnType<typeof friendRequestAnswers>[number],
+    ) => {
+      const run = () =>
+        void runAction(
+          item.requestId,
+          () =>
+            action.kind === "accept"
+              ? acceptFriendRequest(item.requestId)
+              : declineFriendRequest(item.requestId),
+          action.failure,
+          action.success,
+        );
+      if (!action.confirm) return run();
+      Alert.alert(action.confirm.title, action.confirm.body, [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: action.confirm.confirmLabel,
+          style: "destructive",
+          onPress: run,
+        },
+      ]);
+    },
+    [runAction],
+  );
   const keyExtractor = useCallback((item: FriendItem) => item.key, []);
   const renderItem = useCallback(
     ({ item }: { item: FriendItem }) => (
@@ -288,9 +317,10 @@ export function FriendsScreen({
         }
         onOpen={openFriend}
         onMenu={openMenu}
+        onAnswer={answerRequest}
       />
     ),
-    [busyId, openFriend, openMenu],
+    [answerRequest, busyId, openFriend, openMenu],
   );
 
   const items = useMemo<FriendItem[]>(() => {
@@ -494,38 +524,6 @@ export function FriendsScreen({
             />
           </View>
         ) : null}
-        {menuItem?.kind === "request" ? (
-          <View style={styles.menuBody}>
-            <Row
-              icon={friendVerb("accept").icon}
-              title={friendVerb("accept").label}
-              onPress={() => {
-                const request = menuItem;
-                setMenuItem(null);
-                void runAction(
-                  request.requestId,
-                  () => acceptFriendRequest(request.requestId),
-                  copy.acceptFailed,
-                  friendAcceptedMessage(request.username),
-                );
-              }}
-            />
-            <Row
-              icon={friendVerb("decline").icon}
-              title={friendVerb("decline").label}
-              onPress={() => {
-                const request = menuItem;
-                setMenuItem(null);
-                void runAction(
-                  request.requestId,
-                  () => declineFriendRequest(request.requestId),
-                  copy.declineFailed,
-                  copy.declined,
-                );
-              }}
-            />
-          </View>
-        ) : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -537,9 +535,8 @@ export function FriendsScreen({
  * The card every list in this app uses (DESIGN.md): the row's body opens the thing, the
  * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
- * request has nowhere to open to, so both its body and its ⋯ reach the same
- * accept/decline sheet; it carries no inline Accept, because one trailing
- * control is what makes this the same card as a place's.
+ * request has nowhere to open to, so it answers in the row, with the same
+ * Accept and Decline as the Inbox.
  *
  * Memoised, with callbacks that take the item rather than closing over it — §9.
  */
@@ -548,23 +545,42 @@ const FriendRow = memo(function FriendRow({
   busy,
   onOpen,
   onMenu,
+  onAnswer,
 }: {
   item: FriendItem;
   busy: boolean;
   onOpen: (item: FriendItem) => void;
   onMenu: (item: FriendItem) => void;
+  onAnswer: (
+    item: Extract<FriendItem, { kind: "request" }>,
+    action: ReturnType<typeof friendRequestAnswers>[number],
+  ) => void;
 }) {
   const theme = useTheme();
   const { placeHue } = useHues();
 
-  const request = item.kind === "request";
+  if (item.kind === "request") {
+    return (
+      <RequestRow
+        icon="addFriend"
+        hue={placeHue.shared}
+        title={item.username}
+        subtitle={copy.requestSubtitle}
+        answers={friendRequestAnswers(item.username).map((action) => ({
+          key: action.kind,
+          label: action.label,
+          decline: action.kind === "decline",
+          onPress: () => onAnswer(item, action),
+        }))}
+        disabled={busy}
+      />
+    );
+  }
   return (
     <Row
-      icon={request ? "addFriend" : "account"}
-      hue={request ? placeHue.shared : undefined}
+      icon="account"
       title={item.username}
-      subtitle={request ? copy.requestSubtitle : undefined}
-      onPress={() => (request ? onMenu(item) : onOpen(item))}
+      onPress={() => onOpen(item)}
       right={
         busy ? (
           <ActivityIndicator color={theme.accent} />

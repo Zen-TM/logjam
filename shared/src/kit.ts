@@ -86,6 +86,9 @@ export const KIT_COMPONENTS = {
   CardActions: gps(
     "a card footer's buttons share its width; Logjam Web's cards are wide enough that buttons keep their natural size (Row.module.css)",
   ),
+  RequestRow: gps(
+    "a Row that answers a request with Accept and Decline in its card; Logjam Web's rows carry the same pair as footer Buttons (NotificationsPanel)",
+  ),
   SyncStatusPills: gps(
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
   ),

@@ -75,10 +75,15 @@ describe("inboxDestination", () => {
     ).toBeNull();
   });
 
-  it("follows a shared item to the page that lists its kind", () => {
+  it("follows a shared route to its own page, and an unnamed one nowhere", () => {
+    expect(
+      inboxDestination(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toMatchObject({ kind: "way", routeId: "r1" });
     expect(
       inboxDestination(notification("item_shared", { entityType: "route" })),
-    ).toMatchObject({ panel: "ways" });
+    ).toBeNull();
     expect(
       inboxDestination(
         notification("item_shared", { entityType: "somethingNew" }),
