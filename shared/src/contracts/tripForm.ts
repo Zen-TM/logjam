@@ -1,6 +1,6 @@
 // Logging and editing a trip: Logjam Web's `TripLogDialog.tsx` and Logjam GPS's
 // `logs/TripEditSheet.tsx`. One form for both modes.
-import { ATTRIBUTE_NOUN } from "../tripLogFields.js";
+import { ATTRIBUTE_NOUN, ROUTE_NOUN } from "../tripLogFields.js";
 import type { ScreenContract } from "./types.js";
 
 export const TRIP_FORM = {
@@ -53,7 +53,7 @@ export const TRIP_FORM = {
     leftover: `Leftover ${ATTRIBUTE_NOUN.many}`,
     leftoverNote: `These ${ATTRIBUTE_NOUN.many} are left over from when this trip was saved as a different type.`,
     photos: "Photos & videos",
-    routes: "Routes",
+    routes: ROUTE_NOUN.many,
   },
 } as const satisfies ScreenContract;
 

@@ -2,6 +2,7 @@
 // `places/PlaceEditSheet.tsx`. One form for both modes; only the title, the
 // submit label and the done toast differ.
 import { LATITUDE_RANGE, LONGITUDE_RANGE } from "../placeValidation.js";
+import { ROUTE_NOUN } from "../tripLogFields.js";
 import type { ScreenContract } from "./types.js";
 
 export const PLACE_FORM = {
@@ -64,6 +65,6 @@ export const PLACE_FORM = {
       "Visible to anyone you share the place with. Per-trip notes stay private.",
     sources: "Sources",
     photos: "Photos & videos",
-    route: "Route",
+    route: ROUTE_NOUN.one,
   },
 } as const satisfies ScreenContract;

@@ -6,7 +6,6 @@
 
 .empty {
   composes: detail from "../../textRoles.generated.module.css";
-  font-style: italic;
   color: var(--color-text-muted);
 }
 

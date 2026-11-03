@@ -42,6 +42,10 @@ export const ATTRIBUTE_NOUN = {
   add: "Add an attribute",
 } as const;
 
+/** A route section's title on every page and form: a place holds one route, a
+ *  trip any number. */
+export const ROUTE_NOUN = { one: "Route", many: "Routes" } as const;
+
 export type TripLogCustomFieldType =
   | "string"
   | "integer"
