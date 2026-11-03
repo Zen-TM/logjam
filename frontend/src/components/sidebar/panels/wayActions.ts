@@ -129,8 +129,8 @@ export function wayVerbs(
   // `POST /media/download-urls`, which is where the egress gate lives, and a
   // file on someone else's place is not the caller's to pull.
   if (owned && way.kind !== "route") verbs.push(verb("download"));
-  // A route is renamed by the form that named it; a file is renamed in place.
-  if (owned && way.hasOrigin && way.kind !== "route") {
+  // A file with no origin was attached in a place's form, which names it.
+  if (owned && (way.kind === "route" || way.hasOrigin)) {
     verbs.push(verb("rename"));
   }
 

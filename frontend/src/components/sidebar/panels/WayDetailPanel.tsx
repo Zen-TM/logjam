@@ -776,15 +776,21 @@ export default function WayDetailPanel({
         />
       )}
 
-      {renaming && file && (
+      {renaming && (route || file) && (
         <RenameWayDialog
-          file={file}
+          noun={route ? "route" : "file"}
+          currentName={route ? route.name : mediaDisplayName(file!)}
           busy={busy}
           onSave={(name) => {
             setRenaming(false);
             void run(
-              () => renameMedia(file.id, name),
-              "Couldn't rename that file.",
+              () =>
+                route
+                  ? updateRoute(route.id, { name })
+                  : renameMedia(file!.id, name),
+              route
+                ? "Couldn't rename that route."
+                : "Couldn't rename that file.",
             );
           }}
           onClose={() => setRenaming(false)}
@@ -861,27 +867,30 @@ export default function WayDetailPanel({
   );
 }
 
-/** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md). */
+/** Renaming a file or a route, as a form with a Cancel — never a live field
+ *  that commits on blur (DESIGN.md). */
 function RenameWayDialog({
-  file,
+  noun,
+  currentName,
   busy,
   onSave,
   onClose,
 }: {
-  file: StandaloneFile;
+  noun: "file" | "route";
+  currentName: string;
   busy: boolean;
   onSave: (name: string) => void;
   onClose: () => void;
 }) {
-  const current = mediaDisplayName(file);
+  const current = currentName;
+  const label = noun === "route" ? "Route name" : "File name";
   const [name, setName] = useState(current);
   const [error, setError] = useState<string | null>(null);
 
   function save() {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      setError("File name is required");
+      setError(`${label} is required`);
       return;
     }
     if (trimmed === current) {
@@ -894,7 +903,7 @@ function RenameWayDialog({
   return (
     <Dialog
       open
-      title="Rename this file"
+      title={`Rename this ${noun}`}
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -909,7 +918,7 @@ function RenameWayDialog({
       }
     >
       <TextField
-        label="File name"
+        label={label}
         value={name}
         error={error}
         onChange={(event) => {

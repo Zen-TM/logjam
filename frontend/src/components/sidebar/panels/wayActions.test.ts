@@ -200,9 +200,10 @@ describe("wayVerbs", () => {
     ).not.toContain("download");
   });
 
-  it("renames a file in place, and leaves a route to its own form", () => {
+  // Mutation: restore the `kind !== "route"` exclusion in `wayVerbs`.
+  it("renames a file or a route in place", () => {
     expect(ids(importFile())).toContain("rename");
-    expect(ids(route())).not.toContain("rename");
+    expect(ids(route())).toContain("rename");
   });
 
   it("offers its place only when it has one", () => {
