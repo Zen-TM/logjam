@@ -42,3 +42,5 @@ export const config = {
 export const CLIENT_VERSION_HEADER = "x-logjam-client";
 export const CLIENT_SEMVER: string = packageJson.version;
 export const CLIENT_VERSION = `mobile/${CLIENT_SEMVER}`;
+/** The version as a person reads it; `CLIENT_VERSION` is a header value. */
+export const CLIENT_VERSION_LABEL = `Logjam GPS ${CLIENT_SEMVER}`;

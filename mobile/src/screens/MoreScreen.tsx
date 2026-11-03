@@ -72,10 +72,14 @@ import { syncHealth, type SyncTone } from "./syncHealth";
 const useToneStyle = makeThemed(
   (theme): Record<SyncTone, { icon: Glyph; color: string }> => ({
     ok: { icon: "success", color: theme.accent },
+    info: { icon: "info", color: theme.textMuted },
     pending: { icon: "pending", color: theme.textMuted },
     problem: { icon: "warning", color: theme.warning },
   }),
 );
+
+// Both guest calls open the chooser, so both say what it offers.
+const GUEST_SIGN_IN = "Sign in or create an account";
 
 /** The entries of More: every Logjam GPS destination that is not a tab. */
 type MoreId = Exclude<NavIdOn<"gps">, "places" | "logs" | "saved">;
@@ -223,7 +227,7 @@ export function MoreScreen({
         // The Account row stays live for a guest: it is the way IN to an
         // account, so disabling it with "Needs an account" would be a joke at
         // the user's expense.
-        title={isGuest ? "Create an account" : navLabel("account")}
+        title={isGuest ? GUEST_SIGN_IN : navLabel("account")}
         subtitle={
           isGuest
             ? "Back up and share what's on this phone"
@@ -250,7 +254,7 @@ export function MoreScreen({
           // offer instead of the operation.
           isGuest ? (
             <Button
-              label="Create account"
+              label={GUEST_SIGN_IN}
               icon="addFriend"
               variant="outlineAccent"
               compact

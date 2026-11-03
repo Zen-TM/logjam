@@ -106,7 +106,7 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
   waypoint: "Drop a marker",
   navigate: "Navigate",
-  route: "Draw route",
+  route: "Draw a route",
   measure: "Measure",
   place: "Add place",
 };

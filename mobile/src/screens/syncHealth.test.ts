@@ -280,7 +280,8 @@ describe("syncHealth", () => {
       );
       expect(health.headline).toBe("Saved on this phone");
       expect(health.detail).toContain("nothing is uploaded or backed up");
-      expect(health.tone).toBe("ok");
+      // Mutation: tone "ok" brings back the success check on a risk.
+      expect(health.tone).toBe("info");
     });
 
     it("says the same thing offline", () => {
@@ -341,7 +342,12 @@ describe("syncIssuesSubtitle", () => {
 
 describe("syncIssuesTitle", () => {
   it("says changes need the user when some do", () => {
-    expect(syncIssuesTitle(1)).toBe("Some changes need you");
+    expect(syncIssuesTitle(2)).toBe("Some changes need you");
+  });
+
+  it("is singular for one change", () => {
+    // Mutation: return the plural for every count above zero.
+    expect(syncIssuesTitle(1)).toBe("A change needs you");
   });
 
   it("says the same as More's row when the list is empty", () => {

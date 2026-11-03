@@ -144,7 +144,7 @@ export const ICONS = {
   colour: { web: "palette", gps: "mci:palette-outline" },
   sensors: { web: "cpu", gps: "cpu" },
   elevation: { web: "trending-up", gps: "trending-up" },
-  scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square-compass" },
+  scaleBar: { web: "ruler-dimension-line", gps: "mci:arrow-expand-horizontal" },
   weather: { web: "umbrella", gps: "umbrella" }, // the forecast for a spot
 
   // — weather: one per `WEATHER_CONDITIONS` entry. Feather's plain cloud is

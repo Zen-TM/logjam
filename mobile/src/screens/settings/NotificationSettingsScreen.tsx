@@ -181,12 +181,12 @@ export function NotificationSettingsScreen() {
             it can be changed. A toggle here would be a lie. */}
         <Row
           icon="phone"
-          title="Notifications from Logjam"
+          title="Notifications from Logjam GPS"
           subtitle={
             pushAllowed === null
               ? undefined
               : pushAllowed
-                ? "Allowed"
+                ? "Allowed — tap to change in your phone's settings"
                 : canAskPush
                   ? "Not allowed yet — tap to allow"
                   : "Blocked in your phone's settings"
