@@ -38,6 +38,13 @@ describe("how much of the map the bottom sheet covers", () => {
     expect(cover).toBeGreaterThan(0);
   });
 
+  // Mutation: apply the place cap to a fit, and a half-height sheet's cover is
+  // cut short of the sheet's real top, so the extent lands under it again.
+  it("covers the real sheet for a fit, leaving only a thin strip clear", () => {
+    sheet("translateY(202px)");
+    expect(sheetCoverPx(844, 104, 96)).toBe(642);
+  });
+
   it("is nothing on wide Logjam Web, where the page sits beside the map", () => {
     expect(sheetCoverPx(900)).toBe(0);
   });

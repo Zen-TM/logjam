@@ -28,13 +28,22 @@ const MIN_VISIBLE = 0.35;
  * the caller adds around it; the cap leaves `MIN_VISIBLE` of the height beyond
  * both, so a short (landscape) viewport still has room to fit.
  */
-export function sheetCoverPx(viewportHeight: number, fitPadding = 0): number {
+export function sheetCoverPx(
+  viewportHeight: number,
+  fitPadding = 0,
+  /** A fit wants the extent in the strip the sheet leaves, however thin: this
+   *  many px stay clear instead of `MIN_VISIBLE` of the height. */
+  keepVisiblePx?: number,
+): number {
   const sheet = document.querySelector<HTMLElement>(`[${BOTTOM_SHEET_ATTR}]`);
   const top = /translateY\((-?[\d.]+)px\)/.exec(sheet?.style.transform ?? "");
   if (!top) return 0;
-  const cap = Math.min(
-    viewportHeight * 0.7,
-    viewportHeight * (1 - MIN_VISIBLE) - fitPadding,
-  );
+  const cap =
+    keepVisiblePx === undefined
+      ? Math.min(
+          viewportHeight * 0.7,
+          viewportHeight * (1 - MIN_VISIBLE) - fitPadding,
+        )
+      : viewportHeight - fitPadding - keepVisiblePx;
   return Math.max(0, Math.min(viewportHeight - Number(top[1]), cap));
 }
