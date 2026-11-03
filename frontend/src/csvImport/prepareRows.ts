@@ -218,6 +218,7 @@ export function buildPlaceInput(
 export function preparePlaceRows(
   rows: Record<string, string>[],
   placeAssignments: Record<string, PlaceFieldRole>,
+  lines?: number[],
 ): {
   rows: PreparedPlaceRow[];
   warnings: string[];
@@ -239,8 +240,9 @@ export function preparePlaceRows(
       row,
       placeAssignments,
     );
-    // CSV line number: header is line 1, so the first data row is line 2.
-    const line = rowIndex + 2;
+    // The file's own line when the parser knew it; else header is line 1, so
+    // the first data row is line 2.
+    const line = lines?.[rowIndex] ?? rowIndex + 2;
     const dropReason = describeDroppedPlaceRow({
       name: input.name,
       latitude: input.latitude,
@@ -250,7 +252,7 @@ export function preparePlaceRows(
     });
     if (dropReason) {
       droppedRows += 1;
-      warnings.push(`Row ${line}: ${dropReason} — skipped`);
+      warnings.push(`Row ${line}: ${dropReason}${SKIPPED_ROW_SUFFIX}`);
       return;
     }
     for (const warning of rowWarnings) warnings.push(`Row ${line}: ${warning}`);
@@ -284,6 +286,8 @@ export function prepareTripRows(args: {
   >;
   customFieldDefs: TripLogCustomFieldDef[];
   dateFormat: DateFormat;
+  /** The file line each row starts on (`parseCsv`'s `lines`). */
+  lines?: number[];
 }): {
   rows: PreparedTripRow[];
   warnings: string[];
@@ -296,6 +300,7 @@ export function prepareTripRows(args: {
     tripNewCfForms,
     customFieldDefs,
     dateFormat,
+    lines,
   } = args;
   const nameCol = headers.find((h) => tripAssignments[h] === "name");
   const dateCol = headers.find((h) => tripAssignments[h] === "date");
@@ -351,7 +356,7 @@ export function prepareTripRows(args: {
     if (!isoDate) {
       droppedRows += 1;
       warnings.push(
-        `Row ${rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)} — skipped`,
+        `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${describeDroppedTripRow(null, rawDate)}${SKIPPED_ROW_SUFFIX}`,
       );
       return;
     }
@@ -364,7 +369,7 @@ export function prepareTripRows(args: {
       } else {
         const typeWord = cf.type === "integer" ? "whole number" : "number";
         warnings.push(
-          `Row ${rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
+          `Row ${lines?.[rowIndex] ?? rowIndex + 2}: ${cf.label} "${rawCell.trim()}" isn't a valid ${typeWord} — left empty`,
         );
       }
     }
@@ -409,4 +414,34 @@ export function placeRowDecision(
 // A logbook: auto links, the rest is reviewed.
 export function tripRowDecision(result: MatchResult): "link" | "review" {
   return result.confidence === "auto" && result.best ? "link" : "review";
+}
+
+/** What a dropped row's line ends with, so the result can list those lines
+ *  apart from the fields that were only left empty. */
+export const SKIPPED_ROW_SUFFIX = " — skipped";
+
+/** Splits the preparation warnings into dropped rows and left-empty fields. */
+export function splitSkippedRows(warnings: string[]): {
+  skipped: string[];
+  leftEmpty: string[];
+} {
+  const skipped = warnings.filter((w) => w.endsWith(SKIPPED_ROW_SUFFIX));
+  return {
+    skipped,
+    leftEmpty: warnings.filter((w) => !w.endsWith(SKIPPED_ROW_SUFFIX)),
+  };
+}
+
+/** The confirm step's line about dropped rows: "1 row can't be read and will
+ *  be skipped (row 4)." Empty when none were dropped. */
+export function skippedRowsNote(skipped: string[]): string {
+  if (skipped.length === 0) return "";
+  const rows = skipped.map((w) => /^Row (\d+)/.exec(w)?.[1]).filter(Boolean);
+  const where =
+    rows.length === 0
+      ? ""
+      : ` (${rows.length === 1 ? "row" : "rows"} ${rows.join(", ")})`;
+  return skipped.length === 1
+    ? `1 row can't be read and will be skipped${where}.`
+    : `${skipped.length} rows can't be read and will be skipped${where}.`;
 }

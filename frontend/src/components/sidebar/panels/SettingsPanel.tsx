@@ -293,6 +293,28 @@ function SettingsPanel({
           every panel has, which is where its × lives. */}
       <Hero title={SETTINGS.title} />
       <div className={classes.root}>
+        <p className={classes.privacy}>
+          Only you see your places unless you share one with a friend. Nothing
+          here leaves your account. Read the{" "}
+          <a
+            className={classes.privacyLink}
+            href="/tos.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Terms
+          </a>{" "}
+          and{" "}
+          <a
+            className={classes.privacyLink}
+            href="/privacy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy policy
+          </a>
+          .
+        </p>
         {contractSectionKeys(SETTINGS, "web").map((key) => (
           <Fragment key={key}>{sections[key]()}</Fragment>
         ))}

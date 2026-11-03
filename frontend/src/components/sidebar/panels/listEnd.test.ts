@@ -36,7 +36,7 @@ describe("a list ends with its empty state's add button", () => {
       join(DIR, "../../map/LayersPopover.tsx"),
       "utf8",
     );
-    expect(source).toContain("copy.importFile");
+    expect(source).toContain("copy.importFileWeb");
     expect(source).toContain("onImportFile()");
   });
 });

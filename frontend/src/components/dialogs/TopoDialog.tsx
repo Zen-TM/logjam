@@ -22,6 +22,7 @@ import {
   estimateElvisTileCount,
   formatCredits,
   formatCreditsOf,
+  formatMinutes,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
@@ -143,6 +144,7 @@ export default function TopoDialog({
   // the ZIP has been validated (the tile count is the estimator's only input),
   // or when the server has too little history to have an opinion.
   const [jobCredits, setJobCredits] = useState<number | null>(null);
+  const [jobSeconds, setJobSeconds] = useState<number | null>(null);
   // The server's own verdict on whether this submission would be refused.
   // Preferred over recomputing used + cost > quota on the client, so there is
   // one rule for the decision rather than two that can disagree.
@@ -218,6 +220,7 @@ export default function TopoDialog({
     setEstimateKey({ open, activeTileCount });
     if (!open || !activeTileCount) {
       setJobCredits(null);
+      setJobSeconds(null);
       setJobWouldExceed(false);
     }
   }
@@ -228,6 +231,7 @@ export default function TopoDialog({
       .then((estimate) => {
         if (cancelled) return;
         setJobCredits(estimate.credits);
+        setJobSeconds(estimate.estimatedSeconds);
         setJobWouldExceed(estimate.wouldExceed);
         // The estimate response carries a fresher balance than the one loaded
         // when the dialog opened, so adopt it rather than keeping two views.
@@ -498,6 +502,7 @@ export default function TopoDialog({
               {stats?.tileCount
                 ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
+              {jobSeconds ? `It takes ${formatMinutes(jobSeconds)}. ` : ""}
               We'll let you know when it's ready. You can close this.
             </p>
           </div>

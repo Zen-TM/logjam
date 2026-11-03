@@ -221,6 +221,12 @@ export const PLACE_TYPE_ICON_KEYS = [
   "square",
 ] as const;
 
+/** The glyph a NEW type starts on, in both clients. Not the pin: the built-in
+ *  Marker wears it, and a type that starts there reads as Marker until its icon
+ *  is changed. Guard: `placeTypes.test.ts`. */
+export const NEW_PLACE_TYPE_ICON_KEY =
+  "star" as const satisfies (typeof PLACE_TYPE_ICON_KEYS)[number];
+
 export type PlaceTypeIconKey = (typeof PLACE_TYPE_ICON_KEYS)[number];
 
 export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {

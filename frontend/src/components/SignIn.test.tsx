@@ -100,14 +100,14 @@ describe("SignIn under Cognito", () => {
   });
 
   it("keeps the form and shows what Cognito refused", async () => {
-    const refused = new Error("Incorrect username or password.");
+    const refused = new Error("Incorrect email or password.");
     refused.name = "NotAuthorizedException";
     onPasswordSignIn.mockRejectedValueOnce(refused);
     draw();
     type("Email", EMAIL);
     type("Password", PASSWORD);
     press("Sign in");
-    await screen.findByText("Incorrect username or password.");
+    await screen.findByText("Incorrect email or password.");
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
   });
 
@@ -290,5 +290,19 @@ describe("the terms tick", () => {
     expect(tick.checked).toBe(false);
     fireEvent.click(screen.getByText(/I agree to the/));
     expect(tick.checked).toBe(true);
+  });
+});
+
+// Mutation: delete the `setPassword("")` in `goTo`.
+describe("SignIn, going from Sign in to Sign up", () => {
+  afterEach(cleanup);
+  it("does not carry the password typed on Sign in", () => {
+    draw();
+    type("Email", EMAIL);
+    type("Password", "wrong-password");
+    press("Sign up");
+    for (const field of screen.getAllByLabelText(/password/i)) {
+      expect((field as HTMLInputElement).value).toBe("");
+    }
   });
 });

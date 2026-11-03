@@ -331,7 +331,7 @@ export default function LayersPopover({
                     leading={
                       <IconTile icon="upload" hue="var(--color-neutral)" />
                     }
-                    title={copy.importFile}
+                    title={copy.importFileWeb}
                     onOpen={() => {
                       onClose();
                       onImportFile();

@@ -137,3 +137,47 @@ describe("UnifiedImportDialog, while open", () => {
     );
   });
 });
+
+// Mutation that turns these red: send a GPX through parseCsv again, or put
+// "(see console)" back in the parse-warning toast.
+describe("UnifiedImportDialog, files that are not a CSV", () => {
+  it("refuses a GPX with a message that says what is accepted and where GPX goes", async () => {
+    render(dialog(user()));
+    const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+    const file = new File(["<gpx></gpx>"], "route.gpx", {
+      type: "application/gpx+xml",
+    });
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+    const text = document.querySelector("dialog")!.textContent!;
+    expect(text).toContain('"route.gpx" isn\'t a CSV');
+    expect(text).toContain("add it under Route");
+    expect(text).not.toContain("see console");
+  });
+});
+
+describe("UnifiedImportDialog, confirm step", () => {
+  it("names the skipped row and hides Merge settings when nothing matches", async () => {
+    render(dialog(user()));
+    const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+    const file = new File(
+      [
+        "name,latitude,longitude\n" +
+          "Test Bravo Chasm,-33.9202,150.5203\n" +
+          "Test Charlie Cave,not-a-number,150.1\n",
+      ],
+      "places.csv",
+      { type: "text/csv" },
+    );
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+    await screen.findByRole("heading", { name: /^Place columns/ });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/ready to import/);
+    const text = document.querySelector("dialog")!.textContent!;
+    expect(text).toContain("1 row can't be read and will be skipped (row 3).");
+    expect(text).not.toContain("Merge settings");
+  });
+});

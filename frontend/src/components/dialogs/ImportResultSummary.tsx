@@ -38,6 +38,9 @@ export type ImportResultSummaryProps = {
    */
   detailsLabel?: string;
 
+  /** Rows dropped before the import, one line each ("Row 4: … — skipped"). */
+  skippedRows?: string[];
+
   /** Errors that occurred during import. */
   errors?: string[];
 
@@ -78,6 +81,7 @@ function ImportResultSummary({
   detailsLabel = "Details",
   errors,
   warnings,
+  skippedRows,
   onUndo,
   undoing,
 }: ImportResultSummaryProps): React.JSX.Element {
@@ -86,6 +90,7 @@ function ImportResultSummary({
     (section) => section.items.length > 0,
   );
   const hasErrors = errors !== undefined && errors.length > 0;
+  const hasSkipped = skippedRows !== undefined && skippedRows.length > 0;
   const hasWarnings = warnings !== undefined && warnings.length > 0;
 
   return (
@@ -94,6 +99,20 @@ function ImportResultSummary({
         <StatGrid stats={stats} />
       ) : (
         <p className={classes.nothing}>No changes made.</p>
+      )}
+
+      {hasSkipped && (
+        <section className={classes.section}>
+          <SectionHeader title="Skipped rows" count={skippedRows!.length} />
+          <ul className={`${classes.detailList} ${classes.warningList}`}>
+            {skippedRows!.map((line, i) => (
+              <li key={i} className={classes.detailItem}>
+                <span className={classes.detailBullet} />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {hasWarnings && (

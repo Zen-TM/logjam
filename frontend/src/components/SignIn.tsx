@@ -204,6 +204,8 @@ function CognitoForms({
   function goTo(next: Screen) {
     setLocalError(null);
     setCode("");
+    // A wrong password typed on Sign in is not carried into a new account's form.
+    if (next === "signUp" && screen === "signIn") setPassword("");
     setScreen(next);
   }
 

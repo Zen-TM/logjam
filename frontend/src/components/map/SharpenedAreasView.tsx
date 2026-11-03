@@ -206,7 +206,7 @@ export default function SharpenedAreasView({
       </div>
       <div className={classes.body}>
         {!loaded && <LoadingState label="Loading your sharpened areas…" />}
-        {loaded && completedTopoJobs.length === 0 && (
+        {loaded && completedTopoJobs.length === 0 && beingMade.length === 0 && (
           <div className={classes.emptyLine}>
             <span>None yet. Pick an area and sharpen it.</span>
           </div>

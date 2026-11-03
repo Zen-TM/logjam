@@ -74,7 +74,7 @@ export const TRIPS_ADD = {
   ],
   copy: {
     add: "Log a trip",
-    importFile: "Import a file",
+    importFile: "Import from CSV",
     menu: "Add trips",
   },
 } as const satisfies ScreenContract;
