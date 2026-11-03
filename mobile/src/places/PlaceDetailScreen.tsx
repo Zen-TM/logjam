@@ -351,7 +351,6 @@ export function PlaceDetailScreen({
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
             label={placeStatusLabel(status, linkedTrips.length)}
-            icon={statusMeta.icon}
             hue={statusMeta.hue}
           />
         </View>
