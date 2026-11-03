@@ -20,7 +20,11 @@ import {
   needsTrackBackupNotice,
 } from "./recordingPreferences";
 import { retryTrackBackup, TrackBackupError } from "./trackBackup";
-import { finishTrackRecording } from "./trackRecorder";
+import {
+  discardTrackRecording,
+  finishTrackRecording,
+  isActiveRecording,
+} from "./trackRecorder";
 
 type Listener = (message: Omit<ToastMessage, "nonce">) => void;
 const listeners = new Set<Listener>();
@@ -94,8 +98,9 @@ export function confirmFinishRecording(
     confirmBody: "The track is saved on this phone.",
     confirmLabel: "Finish",
     tone: "filled",
-  }).then((finish) => {
-    if (!finish) return;
+  }).then(async (finish) => {
+    // Answered after another dialog (a queued Discard) already ended it.
+    if (!finish || !(await isActiveRecording(trackId))) return;
     finishTrackRecording(trackId).then(
       (mediaId) => {
         onFinished?.();
@@ -116,5 +121,33 @@ export function confirmFinishRecording(
         else toast(message, "error");
       },
     );
+  });
+}
+
+/**
+ * Ask, then delete the recording. A discard that fails is reported to
+ * `onError`, which the caller shows inside its own modal.
+ */
+export function confirmDiscardRecording(
+  trackId: string,
+  onDiscarded: () => void,
+  onError: (message: string) => void,
+) {
+  void confirm({
+    confirmTitle: "Discard this recording?",
+    confirmBody:
+      "Every point recorded so far is deleted. This can't be undone.",
+    confirmLabel: "Discard",
+    tone: "destructive",
+  }).then(async (discard) => {
+    // Answered after another dialog (a queued Finish) already ended it: the
+    // track is then a finished one, which this question was never about.
+    if (!discard || !(await isActiveRecording(trackId))) return;
+    // A discard that silently fails to delete leaves the user on a sheet whose
+    // subject may still exist, with nothing telling them it didn't work.
+    discardTrackRecording(trackId).then(onDiscarded, (err: unknown) => {
+      console.error(err);
+      onError("Couldn't delete the recording.");
+    });
   });
 }
