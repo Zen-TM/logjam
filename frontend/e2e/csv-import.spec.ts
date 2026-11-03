@@ -67,7 +67,7 @@ async function undoWhatWasImported(page: Page, dialog: Locator) {
   await undo.click();
   await page
     .getByRole("alertdialog", { name: "Undo this import?" })
-    .getByRole("button", { name: "Undo the import" })
+    .getByRole("button", { name: "Undo this import" })
     .click();
   await expect(dialog).toHaveCount(0);
 }

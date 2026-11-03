@@ -1033,6 +1033,26 @@ test.describe("desktop", () => {
   test("the importer: the drop zone, the column map and the confirm", async ({
     page,
   }) => {
+    // Merge settings appear only when a row matches a place you have, and the
+    // seed has none of the fixture's names: the list gains one, read-only.
+    await page.route("**/places", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const places: { id: string; name: string }[] = await response.json();
+      await route.fulfill({
+        response,
+        json: [
+          ...places,
+          {
+            ...places[0],
+            id: "00000000-0000-4000-8000-00000000a11a",
+            name: "Test Alpha Gorge",
+            latitude: -33.7101,
+            longitude: 150.3102,
+          },
+        ],
+      });
+    });
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
