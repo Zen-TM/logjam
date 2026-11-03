@@ -3158,9 +3158,10 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
-  // A way's fit keeps its extent above the narrow sheet (and 80 px on wide).
+  // A fit (a way, a plan) keeps its extent in the strip above the narrow
+  // sheet, however thin, and 80 px from the edge on wide.
   const fitBottom = () => {
-    const cover = sheetCoverPx(window.innerHeight, 80 + 24);
+    const cover = sheetCoverPx(window.innerHeight, 80 + 24, 96);
     return cover > 0 ? cover + 24 : 80;
   };
 
