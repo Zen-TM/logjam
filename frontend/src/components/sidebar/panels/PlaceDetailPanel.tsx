@@ -628,7 +628,7 @@ function PlaceDetailPanel({
   async function writeLinks(ids: string[], done: string, failed: string) {
     try {
       await updatePlace(current.id, { linkedPlaceIds: ids });
-      toast.success(done);
+      toast.done(done);
       onRefetch();
     } catch (err) {
       console.error(err);
