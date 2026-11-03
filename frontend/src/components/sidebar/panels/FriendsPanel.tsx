@@ -38,6 +38,7 @@ import {
   contractSectionKeys,
   FRIENDS,
   friendAcceptedMessage,
+  friendRequestAnswers,
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
@@ -58,6 +59,7 @@ import {
 } from "@logjam/shared";
 import classes from "./FriendsPanel.module.css";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useConfirm } from "./useConfirm";
 import FriendSharingSection from "./FriendSharingSection";
 import LeaderboardPage from "./LeaderboardPage";
 import { useRowSelection } from "./useRowSelection";
@@ -156,6 +158,8 @@ function FriendsPanel({
     onRefetchFriends();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const { ask: askDecline, dialog: declineDialog } = useConfirm();
 
   async function runAction(
     id: string,
@@ -385,8 +389,10 @@ function FriendsPanel({
                           void runAction(
                             request.id,
                             () => acceptFriendRequest(request.id),
-                            copy.acceptFailed,
-                            friendAcceptedMessage(request.requester.username),
+                            friendRequestAnswers(request.requester.username)[0]
+                              .failure,
+                            friendRequestAnswers(request.requester.username)[0]
+                              .success,
                           ).then(onRefetchNotifications)
                         }
                       >
@@ -397,14 +403,23 @@ function FriendsPanel({
                         variant="outline"
                         disabled={busyId === request.id}
                         disabledReason="Replying…"
-                        onClick={() =>
-                          void runAction(
-                            request.id,
-                            () => declineFriendRequest(request.id),
-                            copy.declineFailed,
-                            copy.declined,
-                          )
-                        }
+                        onClick={() => {
+                          const decline = friendRequestAnswers(
+                            request.requester.username,
+                          )[1];
+                          askDecline({
+                            title: decline.confirm!.title,
+                            message: decline.confirm!.body,
+                            confirmLabel: decline.confirm!.confirmLabel,
+                            run: () =>
+                              runAction(
+                                request.id,
+                                () => declineFriendRequest(request.id),
+                                decline.failure,
+                                decline.success,
+                              ),
+                          });
+                        }}
                       >
                         {friendVerb("decline").label}
                       </Button>
@@ -486,6 +501,7 @@ function FriendsPanel({
         onFriended={onRefetchNotifications}
       />
 
+      {declineDialog}
       <ConfirmDialog
         open={removing != null}
         copy={

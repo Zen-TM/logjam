@@ -1,6 +1,33 @@
 import { describe, expect, it } from "vitest";
-import type { TNotification } from "@logjam/shared";
-import { inboxDestination } from "./inboxModel";
+import {
+  NOTIFICATION_DESTINATIONS,
+  NOTIFICATION_TYPES,
+  SHARABLE_ENTITY_TYPES,
+  type TNotification,
+} from "@logjam/shared";
+import { findRouteById, inboxDestination } from "./inboxModel";
+
+type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+const SAMPLE_PAYLOADS = {
+  friend_request: {},
+  friend_request_accepted: {},
+  place_shared: { placeId: "p1" },
+  item_shared: { entityType: "route", entityId: "r1" },
+  file_sent: { fileSendStatus: "accepted", filename: "x.gpx" },
+  topo_complete: { jobId: "j1" },
+  topo_failed: {},
+  topo_export_complete: {},
+  topo_export_skipped: {},
+  egress_quota_warning: {},
+  egress_quota_exceeded: {},
+  announcement: {},
+  plan_invited: { planId: "pl1" },
+  plan_join_request: { planId: "pl1" },
+  plan_join_approved: { planId: "pl1" },
+  plan_member_joined: { planId: "pl1" },
+  plan_access_ended: { planId: "pl1", reason: "removed" },
+} satisfies Record<NotificationType, Record<string, unknown>>;
 
 function notification(
   type: string,
@@ -75,14 +102,64 @@ describe("inboxDestination", () => {
     ).toBeNull();
   });
 
-  it("follows a shared item to the page that lists its kind", () => {
+  it("follows a shared route to its own page, and an unnamed one nowhere", () => {
+    expect(
+      inboxDestination(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toMatchObject({ kind: "way", routeId: "r1" });
     expect(
       inboxDestination(notification("item_shared", { entityType: "route" })),
-    ).toMatchObject({ panel: "ways" });
+    ).toBeNull();
     expect(
       inboxDestination(
         notification("item_shared", { entityType: "somethingNew" }),
       ),
     ).toBeNull();
+  });
+
+  // Mutation that turns it red: add a type to NOTIFICATION_TYPES whose
+  // declared destination this router does not reach (or drop a branch here).
+  it("reaches a destination for every type that declares one", () => {
+    // Logjam Web has no Saved, so a kept file send stays in its row, and an
+    // announcement opens its own dialog.
+    const none = new Set(["file", "message", "none"]);
+    for (const type of NOTIFICATION_TYPES) {
+      const kind = NOTIFICATION_DESTINATIONS[type];
+      const n = notification(type, SAMPLE_PAYLOADS[type]);
+      expect(inboxDestination(n) === null, type).toBe(none.has(kind));
+    }
+  });
+
+  // Mutation that turns it red: add a SHARABLE_ENTITY_TYPES entry the switch
+  // in `inboxDestination` does not name.
+  it("opens every kind of shared item", () => {
+    for (const entityType of SHARABLE_ENTITY_TYPES) {
+      expect(
+        inboxDestination(
+          notification("item_shared", { entityType, entityId: "e1" }),
+        ),
+        entityType,
+      ).not.toBeNull();
+    }
+  });
+});
+
+describe("findRouteById", () => {
+  // Mutation that turns it red: return null on the first miss, which tells
+  // someone their live share "was removed" when the list just hasn't loaded it.
+  it("asks the server when the cached list lacks the route", async () => {
+    const fresh = [{ id: "r1" }];
+    const fetchAll = async () => fresh;
+    expect(await findRouteById([], "r1", fetchAll)).toBe(fresh[0]);
+    expect(await findRouteById([], "gone", fetchAll)).toBeNull();
+  });
+
+  it("does not fetch when the cached list has it", async () => {
+    const cached = [{ id: "r1" }];
+    const fetchAll = async () => {
+      throw new Error("fetched");
+    };
+    expect(await findRouteById(cached, "r1", fetchAll)).toBe(cached[0]);
   });
 });

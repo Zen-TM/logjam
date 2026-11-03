@@ -28,6 +28,7 @@ import {
   tripPlanLetInMessage,
 } from "./contracts/plans.js";
 import { planTurnDownConfirm } from "./contracts/planVerbs.js";
+import { friendAcceptedMessage } from "./contracts/friends.js";
 
 /** The two answers. `decline` is always the destructive one. */
 export type NotificationActionKind = "accept" | "decline";
@@ -39,11 +40,9 @@ export type NotificationInlineAction = {
    * Non-null means raise this dialog first (DESIGN.md — destructive actions
    * confirm in a dialog, which is where the explanation goes).
    *
-   * Both declines carry one, and the friend-request decline carries one even
-   * though neither Logjam Web nor the Friends screen asks: on THOSE surfaces decline
-   * lives behind an overflow sheet, which is the house rule that "no" is never
-   * a mis-tap away from "yes" (FriendsScreen's own note). Side by side in a
-   * list row there is no sheet left to be that guard, so the dialog is.
+   * Both declines carry one, on every surface (ADR 0016): side by side with
+   * Accept in a list row there is no overflow sheet left to keep "no" a step
+   * away from "yes".
    */
   confirm: { title: string; body: string; confirmLabel: string } | null;
   /**
@@ -83,8 +82,46 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 }
 
 /**
+ * A friend request's two answers, for every surface that draws them: the
+ * Inbox row and both Friends lists say the same words. Guard:
+ * notificationActions.test.ts.
+ */
+export function friendRequestAnswers(
+  username: string,
+): NotificationInlineAction[] {
+  return [
+    {
+      kind: "accept",
+      label: "Accept",
+      confirm: null,
+      failure: "Couldn't accept that request.",
+      success: friendAcceptedMessage(username),
+    },
+    {
+      kind: "decline",
+      label: "Decline",
+      failure: "Couldn't decline that request.",
+      success: "Request declined.",
+      // Asked on every surface, the Friends lists included (ADR 0016):
+      // side by side with Accept there is no overflow sheet to keep "no" a step
+      // away. Guard: notificationActions.test.ts.
+      confirm: {
+        title: `Decline ${username}'s request?`,
+        // The two things the user actually needs: it is not announced, and
+        // it is not final.
+        body: `${username} won't be told, and can send another request later.`,
+        confirmLabel: "Decline",
+      },
+    },
+  ];
+}
+
+/**
  * The actions this notification offers, or null for the reporting kinds (a
  * finished topo, an accepted request) which have nothing to answer.
+ *
+ * `failed`: the caller's own download of this already-accepted send failed, so
+ * the row offers "Try again" instead of nothing.
  *
  * Returns null when the id the calls need is missing, rather than rendering
  * buttons that cannot be wired to anything.
@@ -95,6 +132,7 @@ function str(payload: Record<string, unknown>, key: string): string | null {
 export function notificationActions(
   n: TNotification,
   platform: ContractPlatform,
+  { failed = false }: { failed?: boolean } = {},
 ): NotificationActions | null {
   const payload = n.payload;
   if (n.type === "friend_request") {
@@ -107,30 +145,7 @@ export function notificationActions(
       requesterId: null,
       pill: null,
       sender: null,
-      actions: [
-        {
-          kind: "accept",
-          label: "Accept",
-          confirm: null,
-          failure: "Couldn't accept that request.",
-          // The same sentence the Friends screen uses, deliberately: one voice
-          // for one outcome, whichever surface it was answered from.
-          success: `${username} is now a friend.`,
-        },
-        {
-          kind: "decline",
-          label: "Decline",
-          failure: "Couldn't decline that request.",
-          success: "Request declined.",
-          confirm: {
-            title: `Decline ${username}'s request?`,
-            // The two things the user actually needs: it is not announced, and
-            // it is not final.
-            body: `${username} won't be told, and can send another request later.`,
-            confirmLabel: "Decline",
-          },
-        },
-      ],
+      actions: friendRequestAnswers(username),
     };
   }
 
@@ -230,17 +245,20 @@ export function notificationActions(
         requesterId: null,
         pill: web ? "Downloaded" : "Saved",
         sender,
-        actions: [
-          {
-            kind: "accept",
-            label: "Download again",
-            confirm: null,
-            failure: acceptFailure,
-            success: web
-              ? "Downloaded again."
-              : "Downloaded again — find it in Saved.",
-          },
-        ],
+        // Nothing to press once it worked: a second Download is the loudest
+        // control on a finished row. Only a download that FAILED here offers
+        // another go.
+        actions: failed
+          ? [
+              {
+                kind: "accept",
+                label: "Try again",
+                confirm: null,
+                failure: acceptFailure,
+                success: web ? "Downloaded." : "Saved — find it in Saved.",
+              },
+            ]
+          : [],
       };
     }
     return {

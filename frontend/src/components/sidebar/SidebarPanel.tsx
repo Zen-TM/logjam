@@ -127,6 +127,7 @@ function SidebarPanel({
   onFocusBounds,
   onOpenRoute,
   onRoutesChanged,
+  onOpenRouteById,
   wayDetail,
   plansPanel,
   planDetail,
@@ -228,6 +229,8 @@ function SidebarPanel({
   onFocusBounds: (bounds: [number, number, number, number]) => void;
   onOpenRoute: (route: TRoute) => void;
   onRoutesChanged: () => void;
+  /** Open a route's page by id (an Inbox row); false when it is gone. */
+  onOpenRouteById: (routeId: string) => Promise<boolean>;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -420,6 +423,7 @@ function SidebarPanel({
             setActivePanel={setActivePanel}
             onTopoFlyTarget={onTopoFlyTarget}
             onOpenPlan={onOpenPlan}
+            onOpenRoute={onOpenRoute}
             onShowSharpened={onShowSharpened}
           />
         )}

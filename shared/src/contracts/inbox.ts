@@ -30,6 +30,8 @@ export const INBOX = {
 
     // The row's mark while any of it is unread.
     unreadMark: "New",
+    // A row's subject is gone: a share since revoked, a route since deleted.
+    removed: "This was removed.",
     collapseGroup: "Collapse this group",
     expandGroup: "Show each one",
 

@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+  NOTIFICATION_DESTINATIONS,
   NOTIFICATION_TYPES,
+  notificationPlaceId,
   notificationAnnouncement,
   notificationHaystack,
   notificationKind,
   notificationLabel,
   notificationPlanTarget,
+  notificationWayTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -321,6 +324,26 @@ describe("NOTIFICATION_TYPES", () => {
   });
 });
 
+// Mutation that turns this red: add a type to NOTIFICATION_TYPES without an
+// entry in NOTIFICATION_DESTINATIONS (it fails to compile too), or declare
+// `place` / `plan` for a type whose payload names neither.
+describe("NOTIFICATION_DESTINATIONS", () => {
+  it("declares exactly the stored types", () => {
+    expect(Object.keys(NOTIFICATION_DESTINATIONS).sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
+  });
+
+  it("agrees with the place and plan targets the payload names", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, { placeId: "p1", planId: "pl1" });
+      const kind = NOTIFICATION_DESTINATIONS[type];
+      if (kind === "place") expect(notificationPlaceId(n), type).not.toBeNull();
+      expect(notificationPlanTarget(n) !== null, type).toBe(kind === "plan");
+    }
+  });
+});
+
 // Mutation that turns this red: word a plan_access_ended reason as another's,
 // or drop the planName the payload carries for it.
 describe("plan notifications", () => {
@@ -382,6 +405,31 @@ describe("a plan notification", () => {
     ).toBeNull();
     expect(
       notificationPlanTarget(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
+  });
+
+  // Mutation that turns it red: drop the entityType check, and a shared place
+  // or LiDAR map opens the Ways list for an id that is not a route.
+  it("names the route a route share is about, and nothing else", () => {
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toBe("r1");
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "topoJob", entityId: "j1" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("place_shared", { entityType: "route", entityId: "r1" }),
+      ),
     ).toBeNull();
   });
 });

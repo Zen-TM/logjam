@@ -130,23 +130,27 @@ describe("notificationActions", () => {
     }
   });
 
-  // `accepted` means the URL was issued, not that the bytes landed, so the
-  // retry survives and there is nothing left to decline.
-  it("keeps the download on offer once accepted, and drops decline", () => {
-    const actions = notificationActions(
-      notification("file_sent", {
-        fileSendId: "s1",
-        filename: "Claustral.gpx",
-        fileSendStatus: "accepted",
-      }),
-    );
-    expect(actions?.actions.map((a) => a.kind)).toEqual(["accept"]);
-    expect(actions?.actions[0].label).toBe("Download again");
-    expect(actions?.pill).toBe("Saved");
+  // `accepted` means the URL was issued, not that the bytes landed. Once it
+  // worked there is nothing to press; only a download that failed here offers
+  // another go. Mutation that turns it red: make the accepted branch return the
+  // retry action whatever `failed` says.
+  it("offers nothing once accepted, and Try again only after a failure", () => {
+    const accepted = notification("file_sent", {
+      fileSendId: "s1",
+      filename: "Claustral.gpx",
+      fileSendStatus: "accepted",
+    });
+    expect(notificationActions(accepted)?.actions).toEqual([]);
+    expect(notificationActions(accepted)?.pill).toBe("Saved");
+    const retry = notificationActions(accepted, { failed: true });
+    expect(retry?.actions.map((a) => [a.kind, a.label])).toEqual([
+      ["accept", "Try again"],
+    ]);
   });
 
-  // Every decline is a dialog: side by side in a row there is no overflow sheet
-  // left to keep "no" away from "yes".
+  // Every decline is a dialog, the friend request's included (ADR 0016), and
+  // no accept is. Mutation that turns it red: take the confirm off the friend
+  // decline in `friendRequestAnswers`.
   it("confirms every decline and no accept", () => {
     for (const n of [
       notification("friend_request", {
@@ -158,8 +162,7 @@ describe("notificationActions", () => {
         filename: "Claustral.gpx",
       }),
     ]) {
-      const actions = notificationActions(n);
-      for (const action of actions!.actions) {
+      for (const action of notificationActions(n)!.actions) {
         expect(Boolean(action.confirm)).toBe(action.kind === "decline");
       }
     }
@@ -178,7 +181,7 @@ describe("notificationActions", () => {
         fileSendStatus: "accepted",
       }),
     ]) {
-      for (const action of notificationActions(n)!.actions) {
+      for (const action of notificationActions(n, { failed: true })!.actions) {
         expect(action.success.length).toBeGreaterThan(0);
         expect(action.failure.length).toBeGreaterThan(0);
       }
