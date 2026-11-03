@@ -48,6 +48,14 @@ export const MAP_TERRAIN = {
     landCaveat:
       "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
     slopeBands: "Slope bands",
+    // One sentence under each switch. Slope's colours are the account's bands,
+    // so its key is `slopeLegendRows`, behind the row's help button.
+    contoursHint: "A line every 10 m of height",
+    slopeHint: "Coloured by steepness",
+    hillshadeHint: "Ridges and gullies stand out",
+    slopeAbout: "About slope",
+    slopeLegend:
+      "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
     // The Hillshade switch over imagery.

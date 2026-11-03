@@ -5,7 +5,11 @@
 // tiny synchronous store, for the same reason — the map's FIRST frame has to be
 // the right one, and a basemap that swaps a beat after the screen appears
 // re-fetches every tile it just drew.
-import { normalizeTerrainLayers, type TerrainSwitchKey } from "@logjam/shared";
+import {
+  MAP_OVERLAY_DEFAULTS,
+  normalizeTerrainLayers,
+  type TerrainSwitchKey,
+} from "@logjam/shared";
 
 import { readPref, writePref } from "../prefsDb";
 import { DEFAULT_BASEMAP, MOBILE_BASEMAPS } from "./basemapMeta";
@@ -40,11 +44,16 @@ export function setTerrainLayers(
   return writePref(TERRAIN_LAYERS_PREF_KEY, JSON.stringify(layers));
 }
 
+const readOverlay = (key: string, fallback: boolean): boolean => {
+  const stored = readPref(key);
+  return stored === null ? fallback : stored === "on";
+};
+
 const GAUGES_PREF_KEY = "mapGaugesLayer";
 
 /** The river gauge layer, off until the user switches it on. */
 export const readGaugesLayer = (): boolean =>
-  readPref(GAUGES_PREF_KEY) === "on";
+  readOverlay(GAUGES_PREF_KEY, MAP_OVERLAY_DEFAULTS.gauges);
 
 export const setGaugesLayer = (on: boolean): boolean =>
   writePref(GAUGES_PREF_KEY, on ? "on" : "off");
@@ -53,7 +62,7 @@ const MGA_GRID_PREF_KEY = "mapMgaGrid";
 
 /** The MGA grid overlay, off until the user switches it on. */
 export const readMgaGridLayer = (): boolean =>
-  readPref(MGA_GRID_PREF_KEY) === "on";
+  readOverlay(MGA_GRID_PREF_KEY, MAP_OVERLAY_DEFAULTS.mgaGrid);
 
 export const setMgaGridLayer = (on: boolean): boolean =>
   writePref(MGA_GRID_PREF_KEY, on ? "on" : "off");

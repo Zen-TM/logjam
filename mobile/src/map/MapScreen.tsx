@@ -76,6 +76,7 @@ import {
   MAP_OVERLAY_REFINEMENTS,
   GAUGES,
   MAP_OVERLAYS,
+  MAP_OVERLAY_DEFAULTS,
   messageFromError,
   pickNextTrackColor,
   ROUTE_NAME_MAX_LENGTH,
@@ -1155,7 +1156,7 @@ export function MapScreen({
   // and a switch whose value comes back from an async DB write lags the thumb.
   // The per-item columns still exist and are still ANDed in below — they are
   // written from Saved now rather than from the map.
-  const [showPlaces, setShowPlaces] = useState(true);
+  const [showPlaces, setShowPlaces] = useState(MAP_OVERLAY_DEFAULTS.places);
   const [showSharedPlaces, setShowSharedPlaces] = useState(true);
   // Types whose pins are OFF, held as the exceptions rather than as the
   // allowed set: types arrive from the server and one created on another
