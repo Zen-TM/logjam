@@ -214,13 +214,15 @@ const COPY_PROPS = new Set([
   "emptyBody",
   "body",
   "note",
+  "confirmTitle",
+  "confirmBody",
   "caption",
 ]);
 
 /**
  * The strings in a source file that a user reads: JSX text, a JSX attribute
  * named in `COPY_PROPS`, and an object property named in it. A template's
- * `${}` holes are left out. Not every user-facing string is one of these (a
+ * `${}` holes' own strings are read, their code is not. Not every user-facing string is one of these (a
  * `throw new Error("…")` reaches the user through a screen that may reword it),
  * which is why the net is words, not files: a miss is a gap in the net, never a
  * licence.
@@ -241,37 +243,51 @@ export function userFacingStrings(
     fileName.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const found: { line: number; text: string }[] = [];
-  const stringOf = (node: TypeScript.Node): string | null => {
-    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
-      return node.text;
-    if (ts.isTemplateExpression(node))
-      return (
-        node.head.text + node.templateSpans.map((s) => s.literal.text).join("")
-      );
-    return null;
+  // Every string literal and template part anywhere under the value: a `??`
+  // fallback, a ternary branch, a `+` and a `${}` hole's own strings are all
+  // read by the user, so none may hide from the net. A call's arguments are
+  // not: `friendShareVerb("unshare")` passes an id, and the words it returns
+  // are declared where the call's callee is.
+  const stringsOf = (node: TypeScript.Node): string[] => {
+    const parts: string[] = [];
+    const collect = (n: TypeScript.Node): void => {
+      if (ts.isCallExpression(n)) return;
+      if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n))
+        parts.push(n.text);
+      else if (
+        ts.isTemplateHead(n) ||
+        ts.isTemplateMiddle(n) ||
+        ts.isTemplateTail(n)
+      )
+        parts.push(n.text);
+      ts.forEachChild(n, collect);
+    };
+    collect(node);
+    return parts.filter((part) => part.trim() !== "");
   };
   const visit = (node: TypeScript.Node): void => {
-    let text: string | null = null;
-    if (ts.isJsxText(node)) text = node.text.trim();
+    let texts: string[] = [];
+    if (ts.isJsxText(node)) texts = [node.text.trim()];
     else if (
       ts.isJsxAttribute(node) &&
       node.initializer &&
       COPY_PROPS.has(node.name.getText())
     ) {
       const init = node.initializer;
-      text = stringOf(
+      texts = stringsOf(
         ts.isJsxExpression(init) && init.expression ? init.expression : init,
       );
     } else if (
       ts.isPropertyAssignment(node) &&
       COPY_PROPS.has(node.name.getText().replace(/["']/g, ""))
     )
-      text = stringOf(node.initializer);
-    if (text)
-      found.push({
-        line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-        text,
-      });
+      texts = stringsOf(node.initializer);
+    for (const text of texts)
+      if (text)
+        found.push({
+          line: sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+          text,
+        });
     ts.forEachChild(node, visit);
   };
   visit(sf);

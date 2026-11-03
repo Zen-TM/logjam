@@ -693,12 +693,8 @@ function StuckMenu({
       {canRecreate(op) ? (
         <Row
           icon="retry"
-          title={op.entity === "place" ? "Recreate place" : "Recreate place"}
-          subtitle={
-            op.entity === "place"
-              ? "Makes a new place from this phone's copy, with your change."
-              : "Makes a new place, with your change."
-          }
+          title="Recreate place"
+          subtitle="Makes a new place from this phone's copy, with your change."
           onPress={() => onRecreate(op)}
         />
       ) : null}

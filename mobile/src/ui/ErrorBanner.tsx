@@ -13,6 +13,8 @@ import { Icon } from "./Icon";
 type ErrorBannerProps = {
   message: string;
   onRetry?: () => void;
+  /** The retry action's words when "Try again" is not what it does. */
+  retryLabel?: string;
   onDismiss?: () => void;
 };
 
@@ -20,7 +22,12 @@ type ErrorBannerProps = {
 // same component as Logjam Web's `ErrorBanner` (never raw err.message; callers
 // pass output of messageFromError). The warning is the edge and the glyph; the
 // words are `text`.
-export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
+export function ErrorBanner({
+  message,
+  onRetry,
+  retryLabel = "Try again",
+  onDismiss,
+}: ErrorBannerProps) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -37,7 +44,7 @@ export function ErrorBanner({ message, onRetry, onDismiss }: ErrorBannerProps) {
                 accessibilityRole="button"
                 hitSlop={16}
               >
-                <Text style={styles.action}>Try again</Text>
+                <Text style={styles.action}>{retryLabel}</Text>
               </Pressable>
             ) : null}
             {onDismiss ? (
