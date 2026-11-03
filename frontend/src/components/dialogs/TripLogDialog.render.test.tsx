@@ -1,10 +1,34 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import TripLogDialog, { type TripLogPrefill } from "./TripLogDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
-import type { TPlace } from "../../placeUtils";
+import { deleteMedia } from "../../placeUtils";
+import type { TPlace, TTripLog } from "../../placeUtils";
+
+vi.mock("../../placeUtils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../placeUtils")>()),
+  getTripLog: vi.fn(async () => ({ media: [] })),
+  deleteMedia: vi.fn(async () => {}),
+}));
+// The real one needs a file chooser; this one "uploads" on a press.
+vi.mock("../media/MediaUpload", () => ({
+  default: ({ onUploaded }: { onUploaded: (item: unknown) => void }) => (
+    <button
+      type="button"
+      onClick={() => onUploaded({ id: "m1", mediaType: "image/jpeg" })}
+    >
+      Fake upload
+    </button>
+  ),
+}));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
 vi.stubGlobal(
@@ -84,5 +108,45 @@ describe("a trip log started from a plan", () => {
     expect(
       screen.getByRole("button", { name: /canyoning/i, pressed: true }),
     ).toBeTruthy();
+  });
+});
+
+// Uploads land on the server the moment they finish, so Discard has to take
+// them back out. Mutation: drop `uploadedIds` from `isDirty`, or the delete
+// loop from `handleRequestClose`.
+describe("a trip log being edited, after an upload", () => {
+  it("asks before closing, and deletes the upload on Discard", async () => {
+    const onClose = vi.fn();
+    const trip = {
+      id: "t1",
+      date: "2026-11-07",
+      notes: null,
+      places: [],
+      displayName: "Wollangambe trip",
+      types: [],
+      customFields: {},
+    } as unknown as TTripLog;
+    render(
+      <ToastProvider>
+        <TripLogDialog
+          open
+          tripLog={trip}
+          onClose={onClose}
+          onSaved={() => {}}
+          places={[]}
+          customFieldDefs={[]}
+          onCustomFieldDefsChange={() => {}}
+          existingTripTypes={[]}
+        />
+      </ToastProvider>,
+    );
+    fireEvent.click(screen.getAllByText("Fake upload")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(deleteMedia).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(deleteMedia).toHaveBeenCalledWith("m1");
   });
 });

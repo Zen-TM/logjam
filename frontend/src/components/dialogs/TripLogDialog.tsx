@@ -46,6 +46,7 @@ import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
+  deleteMedia,
   getMediaDownloadUrls,
   getTripLog,
   createPlace,
@@ -253,6 +254,9 @@ function TripLogDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftTripId, setDraftTripId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   // Set once the trip has been saved/committed, so closing won't delete it.
   const committedRef = useRef(false);
   // De-dupes concurrent draft creation when several files upload at once.
@@ -494,6 +498,7 @@ function TripLogDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftTripId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
   }
 
@@ -542,14 +547,12 @@ function TripLogDialog({
   );
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
-  // dialog was (re)populated — not just "the dialog is open". Media
-  // is excluded: uploads persist immediately (or via the self-cleaning draft
-  // trip in create mode), so they're never "unsaved" by the time a close is
-  // attempted.
+  // dialog was (re)populated — not just "the dialog is open". Uploads persist
+  // at once, but only Discard can undo them, so they count too.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    currentFingerprint !== initialFormSnapshot;
+    (uploadedIds.length > 0 || currentFingerprint !== initialFormSnapshot);
 
   // Whether there's anything in the form worth keeping. Measured against the
   // pristine baseline, so a restored draft still counts as worth keeping even
@@ -721,10 +724,12 @@ function TripLogDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
   }
 
   // "Log a trip" on a track: the track goes into the form as a copy of its file
@@ -780,6 +785,24 @@ function TripLogDialog({
     if (draftTripId && !committedRef.current) {
       try {
         await deleteTripLog(draftTripId);
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded files. Please try again.",
+          ),
+        );
+        return;
+      }
+    }
+    if (tripLog && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        // One at a time, so a failure leaves only the files still there to retry.
+        for (const id of uploadedIds) {
+          await deleteMedia(id);
+          handleMediaDeleted(id);
+        }
       } catch (err) {
         console.error(err);
         setError(

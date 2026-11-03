@@ -191,13 +191,14 @@ export function buildWays({
           title: mediaDisplayName(track),
           distanceM: track.metadata.distanceM ?? null,
           color: track.color,
-          // Everything left after the de-duplication above is a track on a
-          // place the user does not own — their own come back from
-          // `/media/standalone` as well, and that row wins.
-          shared: true,
+          // What is left after the de-duplication above is a file on a place:
+          // the user's own (an upload through the place's edit form has no
+          // `origin`, so `/media/standalone` never lists it) or one on a place
+          // shared with them. Only the place's share makes it someone else's.
+          shared: sharedPlaceIds.has(track.placeId),
           // `/places/tracks` is the place's endpoint: a file here has no share
           // row of its own, and the place's share is the only thing holding it.
-          viaPlace: true,
+          viaPlace: sharedPlaceIds.has(track.placeId),
           placeId: track.placeId,
           // `/places/tracks` carries no date; these sort last (see WayItem).
           createdAt: null,

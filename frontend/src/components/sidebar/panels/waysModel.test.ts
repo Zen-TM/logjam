@@ -153,6 +153,7 @@ describe("buildWays", () => {
   // and titled by its own name — not a kind named for where it lives.
   it("sorts a place's track by its origin and titles it by its name", () => {
     const ways = build({
+      sharedPlaceIds: ["p1"],
       placeTracks: [
         placeTrack({
           mediaId: "a",
@@ -200,6 +201,7 @@ describe("buildWays", () => {
   it("keeps a track on a place a friend shared", () => {
     const ways = build({
       standaloneFiles: [file({ id: "mine" })],
+      sharedPlaceIds: ["p1"],
       placeTracks: [placeTrack({ mediaId: "theirs" })],
     });
     expect(ways.map((way) => way.shared)).toEqual([false, true]);
@@ -241,9 +243,25 @@ describe("buildWays", () => {
 
   // `/places/tracks` IS the place's endpoint: nothing it returns has a share
   // row of its own.
-  it("reaches every one of a place's tracks through that place", () => {
-    const [way] = build({ placeTracks: [placeTrack()] });
+  it("reaches a track on a shared place through that place", () => {
+    const [way] = build({
+      sharedPlaceIds: ["p1"],
+      placeTracks: [placeTrack()],
+    });
     expect(way).toMatchObject({ shared: true, viaPlace: true });
+  });
+
+  // A file attached in the place's edit form has no `origin`, so only
+  // `/places/tracks` returns it. Red when `shared` goes back to true for every
+  // row from that endpoint: the owner then sees their own upload as someone
+  // else's, with no Download, Rename or Delete.
+  it("calls a track on a place the user holds no share of their own", () => {
+    const [way] = build({ placeTracks: [placeTrack()] });
+    expect(way).toMatchObject({
+      shared: false,
+      viaPlace: false,
+      placeId: "p1",
+    });
   });
 
   // Routes, files, and tracks are ordered together newest first.

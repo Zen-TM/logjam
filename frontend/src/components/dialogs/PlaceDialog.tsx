@@ -38,6 +38,7 @@ import {
   updatePlace,
   createPlace,
   deletePlace,
+  deleteMedia,
   getPlaceDetail,
   createCustomField,
   isHttpUrl,
@@ -171,6 +172,9 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
 
@@ -288,6 +292,7 @@ function PlaceDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
@@ -300,22 +305,22 @@ function PlaceDialog({
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
-  // Media/custom-field-def edits are excluded: both persist immediately
-  // (media uploads, and add/delete-field through their own endpoints), so
-  // they're never "unsaved" by the time a close is attempted.
+  // Custom-field-def edits are excluded: they persist through their own
+  // endpoint. Uploads persist too, but only Discard can undo them.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    JSON.stringify({
-      name,
-      altNames,
-      latitude,
-      longitude,
-      notes,
-      sources,
-      fieldValues,
-      placeTypeId,
-    }) !== initialFormSnapshot;
+    (uploadedIds.length > 0 ||
+      JSON.stringify({
+        name,
+        altNames,
+        latitude,
+        longitude,
+        notes,
+        sources,
+        fieldValues,
+        placeTypeId,
+      }) !== initialFormSnapshot);
 
   // In edit mode, fetch the place's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -379,11 +384,13 @@ function PlaceDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
     onMediaChanged?.();
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
     onMediaChanged?.();
   }
 
@@ -401,6 +408,24 @@ function PlaceDialog({
           messageFromError(
             err,
             "Couldn't discard uploaded media. Please try again.",
+          ),
+        );
+        return;
+      }
+    }
+    if (isEdit && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        // One at a time, so a failure leaves only the files still there to retry.
+        for (const id of uploadedIds) {
+          await deleteMedia(id);
+          handleMediaDeleted(id);
+        }
+      } catch (err) {
+        console.error(err);
+        setError(
+          messageFromError(
+            err,
+            "Couldn't discard uploaded files. Please try again.",
           ),
         );
         return;

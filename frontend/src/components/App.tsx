@@ -1764,6 +1764,10 @@ function App() {
             openFiltersRequested={openFiltersRequested}
             onOpenFiltersConsumed={consumeOpenFilters}
             onQuotaChanged={refetchCurrentUser}
+            onWaysChanged={() => {
+              refetchStandaloneFiles();
+              refetchPlaceTracks();
+            }}
             currentUser={currentUser}
             currentUserError={currentUserError}
             onRetryCurrentUser={refetchCurrentUser}
