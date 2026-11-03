@@ -109,10 +109,12 @@ export function placesCountLabel(count: number): string {
 
 /**
  * Logjam GPS's hero: the size of the whole collection, whatever is filtered.
+ * Empty it is "0 places", so the first-run empty state's "No places yet" is
+ * the only line saying so.
  * Logjam Web's hero is `PLACES_LIST.title`.
  */
 export function placesHeroTitle(count: number): string {
-  return count === 0 ? PLACES_LIST.copy.firstRunTitle : placesCountLabel(count);
+  return placesCountLabel(count);
 }
 
 /**

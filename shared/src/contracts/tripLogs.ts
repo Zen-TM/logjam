@@ -122,10 +122,12 @@ export function tripsCountLabel(count: number): string {
 
 /**
  * Logjam GPS's hero: the size of the whole logbook, whatever is filtered.
+ * Empty it is "0 trips", so the first-run empty state's "No trips yet" is the
+ * only line saying so.
  * Logjam Web's hero is `TRIPS_LIST.title`: its chips already show the counts.
  */
 export function tripsHeroTitle(count: number): string {
-  return count === 0 ? TRIPS_LIST.copy.firstRunTitle : tripsCountLabel(count);
+  return tripsCountLabel(count);
 }
 
 /**
