@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { attachBatch, attachSummary } from "./attachBatch";
+import {
+  attachBatch,
+  attachSummary,
+  libraryPickerOptions,
+} from "./attachBatch";
 
 const photo = (n: number) => ({ uri: `file:///p${n}`, mimeType: "image/jpeg" });
 const video = (n: number) => ({ uri: `file:///v${n}`, mimeType: "video/mp4" });
@@ -43,37 +47,55 @@ describe("attachBatch", () => {
 });
 
 describe("attachSummary", () => {
-  // Mutation: drop the plural `s` in noun() and "3 photos" becomes "3 photo".
+  // Mutation: drop the plural `s` in whatWasAdded() and "3 photos" becomes
+  // "3 photo".
   it("reads as one action when everything went in", () => {
     expect(attachSummary([photo(1), photo(2), photo(3)], 0)).toEqual({
-      text: "3 photos added.",
-      tone: "info",
+      message: "3 photos added.",
+      tone: "done",
     });
-    expect(attachSummary([photo(1)], 0)?.text).toBe("1 photo added.");
-    expect(attachSummary([video(1), video(2)], 0)?.text).toBe(
+    expect(attachSummary([photo(1)], 0)?.message).toBe("1 photo added.");
+    expect(attachSummary([video(1), video(2)], 0)?.message).toBe(
       "2 videos added.",
     );
   });
 
-  it("calls a mixed pick items", () => {
-    expect(attachSummary([photo(1), video(1)], 0)?.text).toBe("2 items added.");
+  // Mutation: revert the mixed case to a generic "items" and this fails (and
+  // copyRules.test.ts bans the word).
+  it("names each kind in a mixed pick", () => {
+    expect(attachSummary([photo(1), photo(2), video(1)], 0)?.message).toBe(
+      "2 photos and 1 video added.",
+    );
   });
 
   // Mutation: report only `added` (or only `failed`) and the "2 of 3" or the
-  // "1 couldn't be read" half disappears.
+  // "1 couldn't be added" half disappears.
   it("says how many went in and how many did not", () => {
     expect(attachSummary([photo(1), photo(2)], 1)).toEqual({
-      text: "2 of 3 added. 1 couldn't be read.",
+      message: "2 of 3 added. 1 couldn't be added.",
       tone: "error",
     });
   });
 
   it("names a total failure, single or many", () => {
-    expect(attachSummary([], 1)?.text).toBe("That file couldn't be attached.");
-    expect(attachSummary([], 3)?.text).toBe("None of the 3 could be read.");
+    expect(attachSummary([], 1)?.message).toBe(
+      "That file couldn't be attached.",
+    );
+    expect(attachSummary([], 3)?.message).toBe("Couldn't add any of the 3.");
   });
 
   it("stays silent when nothing was picked", () => {
     expect(attachSummary([], 0)).toBeNull();
+  });
+});
+
+describe("libraryPickerOptions", () => {
+  // Mutation: delete `allowsMultipleSelection` from libraryPickerOptions and
+  // the picker goes back to one photo at a time.
+  it("lets the library pick take several", () => {
+    expect(libraryPickerOptions(["images", "videos"])).toMatchObject({
+      allowsMultipleSelection: true,
+      mediaTypes: ["images", "videos"],
+    });
   });
 });

@@ -35,7 +35,11 @@ import {
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { savesCapturesToGallery } from "./galleryPreference";
-import { attachBatch, attachSummary } from "./attachBatch";
+import {
+  attachBatch,
+  attachSummary,
+  libraryPickerOptions,
+} from "./attachBatch";
 import { stripOffers } from "./stripOffers";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
@@ -207,8 +211,8 @@ export function MediaStrip({
           attachMediaLocal(linkedType, linkedId, file),
         );
         const summary = attachSummary(added, failed);
-        if (summary?.tone === "error") onFailed(summary.text);
-        else if (summary) onAdded(summary.text);
+        if (summary?.tone === "error") onFailed(summary.message);
+        else if (summary) onAdded(summary.message);
       } finally {
         setBusy(false);
       }
@@ -252,13 +256,9 @@ export function MediaStrip({
         result =
           source === "camera"
             ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
-            : await ImagePicker.launchImageLibraryAsync({
-                mediaTypes,
-                quality: 1,
-                // Unlimited (selectionLimit 0): a photo is only queued, and the
-                // outbox uploads when there is signal.
-                allowsMultipleSelection: true,
-              });
+            : await ImagePicker.launchImageLibraryAsync(
+                libraryPickerOptions(mediaTypes),
+              );
       } catch (err) {
         // launchCameraAsync REJECTS when CAMERA is denied (its own native
         // ensureCameraPermissionsAreGranted), so reading the status here
@@ -318,9 +318,9 @@ export function MediaStrip({
     async (track: Track) => {
       setBusy(true);
       try {
-        if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
-          onFailed("That track has too few points to attach.");
-        }
+        if (await attachRecordedTrack(linkedType, linkedId, track))
+          onAdded("1 route added.");
+        else onFailed("That track has too few points to attach.");
       } catch (err) {
         console.error(err);
         onFailed("That track couldn't be attached.");
@@ -328,7 +328,7 @@ export function MediaStrip({
         setBusy(false);
       }
     },
-    [onFailed, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   // Loaded when the picker opens, not on mount — most visits never attach.
@@ -391,20 +391,30 @@ export function MediaStrip({
                       : "Add a way"
                     : "Add a route"
               }
-              onPress={() => (onAddWay ? onAddWay() : setSourceMode("sources"))}
+              accessibilityState={{ busy }}
+              // A second batch would run beside the first.
+              onPress={() => {
+                if (busy) return;
+                if (onAddWay) onAddWay();
+                else setSourceMode("sources");
+              }}
               style={({ pressed }) => [
                 styles.tile,
                 styles.addTile,
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Icon
-                idea={atLimit ? "replace" : "add"}
-                size={20}
-                color={theme.accent}
-              />
+              {busy ? (
+                <ActivityIndicator color={theme.accent} />
+              ) : (
+                <Icon
+                  idea={atLimit ? "replace" : "add"}
+                  size={20}
+                  color={theme.accent}
+                />
+              )}
               <Text style={styles.addTileLabel}>
-                {atLimit ? "Replace" : "Add"}
+                {busy ? "Adding…" : atLimit ? "Replace" : "Add"}
               </Text>
             </Pressable>
           ) : null}
