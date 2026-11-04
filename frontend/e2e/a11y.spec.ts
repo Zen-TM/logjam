@@ -1248,6 +1248,26 @@ test.describe("desktop", () => {
     await expect(tray).toHaveCount(0);
     await expect(tools).toBeFocused();
 
+    // Closing fades EVERY pill (100 ms): sampled mid-way, none is at full
+    // opacity. Mutation: put the fade back on the tray's container, or drop it.
+    await tools.click();
+    await expect(tray).toBeVisible();
+    await page.waitForTimeout(400);
+    const midFade = await page.evaluate(async () => {
+      (
+        document.querySelector("button[aria-label='Tools']") as HTMLElement
+      ).click();
+      await new Promise((resolve) => setTimeout(resolve, 45));
+      return [
+        ...document.querySelectorAll(
+          "[role='group'][aria-label='Tools'] > button",
+        ),
+      ].map((item) => Number(getComputedStyle(item).opacity));
+    });
+    expect(midFade).toHaveLength(4);
+    expect(midFade.every((opacity) => opacity < 0.95)).toBe(true);
+    await expect(tray).toHaveCount(0);
+
     await tools.click();
     await tray.getByRole("button", { name: "Measure distance" }).click();
     await expect(tray).toHaveCount(0);
