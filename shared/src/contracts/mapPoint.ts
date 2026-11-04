@@ -231,6 +231,19 @@ export function mapHoldVerbs(
     .map(asVerb(savedHereOnly));
 }
 
+/** The point panel's layers: the facts, Options over them, the forecast over those. */
+export type MapPointView = "point" | "options" | "weather";
+
+/**
+ * Where a way out goes from `view`, one layer at a time (shared/DESIGN.md §3):
+ * the forecast backs out to Options, Options to the facts, and from the facts
+ * there is no layer left, so null: close. Escape and the back arrow on Logjam
+ * Web, the back gesture, the scrim, the swipe and the arrow on Logjam GPS.
+ */
+export function mapPointStepBack(view: MapPointView): MapPointView | null {
+  return view === "weather" ? "options" : view === "options" ? "point" : null;
+}
+
 /** A bare lat/lng, as a map hands one back from a press. */
 export type MapPointCoord = { latitude: number; longitude: number };
 

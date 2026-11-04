@@ -6,7 +6,9 @@ import {
   WEATHER,
   mapPointFacts,
   mapPointPosition,
+  mapPointStepBack,
   mapPointVerbs,
+  type MapPointView,
   type MapPointCoord,
   type MapPointVerbId,
 } from "@logjam/shared";
@@ -78,7 +80,7 @@ export default function MapPointPopover({
 
   // Options and the weather swap the body in place and back out one step
   // (shared/DESIGN.md §10). The press is what fetches the weather.
-  const [view, setView] = useState<"point" | "options" | "weather">("point");
+  const [view, setView] = useState<MapPointView>("point");
   const online = useOnline();
   const weather = useWeather(point, metres);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -162,7 +164,13 @@ export default function MapPointPopover({
         placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
-        swallowOutsidePress
+        swallowWithin={map.getContainer()}
+        // Escape undoes one layer: the forecast, then Options, then the panel.
+        onEscape={() => {
+          const back = mapPointStepBack(view);
+          if (back) setView(back);
+          else close();
+        }}
         closeButton={false}
       >
         <div className={classes.body} ref={bodyRef}>
@@ -190,9 +198,7 @@ export default function MapPointPopover({
                       ? "Back to options"
                       : MAP_POINT.copy.backToPoint
                   }
-                  onClick={() =>
-                    setView(view === "weather" ? "options" : "point")
-                  }
+                  onClick={() => setView(mapPointStepBack(view) ?? "point")}
                 />
                 <span className={classes.viewTitle}>
                   {view === "weather" ? WEATHER.title : MAP_POINT.copy.options}

@@ -845,20 +845,13 @@ function Map({
   // The latest fix, in memory only: it feeds the distance and bearing in that
   // panel and goes nowhere else (see the GeolocateControl note below).
   const userFixRef = useRef<MapPointCoord | null>(null);
-  // When the panel last closed, so the press that closed it (a click elsewhere
-  // on the map) is not also read as a new question.
-  const askedClosedAt = useRef(0);
-  const closeAsked = useCallback(() => {
-    askedClosedAt.current = Date.now();
-    setAsked(null);
-  }, []);
+  // The press that closes the panel (a click elsewhere on the map) is not also
+  // read as a new question: the panel's `swallowWithin` stops that click.
+  const closeAsked = useCallback(() => setAsked(null), []);
   // "What goes here?": a right-click or long-press, which commits where a
-  // press only asks. Closing it counts as closing the question too.
+  // press only asks.
   const [held, setHeld] = useState<MapPointCoord | null>(null);
-  const closeHeld = useCallback(() => {
-    askedClosedAt.current = Date.now();
-    setHeld(null);
-  }, []);
+  const closeHeld = useCallback(() => setHeld(null), []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
@@ -2031,8 +2024,6 @@ function Map({
     const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
-    // Pressing the panel's own dismissal and the map in one gesture.
-    const JUST_CLOSED_MS = 300;
     let pending: ReturnType<typeof setTimeout> | null = null;
     const cancel = () => {
       if (pending) clearTimeout(pending);
@@ -2046,8 +2037,7 @@ function Map({
       });
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (armed() || Date.now() - askedClosedAt.current < JUST_CLOSED_MS)
-        return;
+      if (armed()) return;
       const layers = PRESSABLE.filter((id) => map.getLayer(id));
       if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
       cancel();

@@ -19,9 +19,11 @@ import {
   WEATHER,
   mapPointFacts,
   mapPointPosition,
+  mapPointStepBack,
   mapPointVerbs,
   type MapPointCoord,
   type MapPointElevation,
+  type MapPointView,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
@@ -85,13 +87,17 @@ export function MapPointSheet({
     point: MapPoint;
     view: "options" | "weather";
   } | null>(null);
-  const view = point !== null && step?.point === point ? step.view : "point";
-  const show = (next: "options" | "weather" | "point") =>
+  const view: MapPointView =
+    point !== null && step?.point === point ? step.view : "point";
+  const show = (next: MapPointView) =>
     setStep(point && next !== "point" ? { point, view: next } : null);
+  // The back gesture, the scrim and the swipe undo one layer, as the arrow
+  // does (shared/DESIGN.md §3); from the facts they close.
+  const back = mapPointStepBack(view);
   return (
     <BottomSheet
       visible={point !== null}
-      onClose={onClose}
+      onClose={back ? () => show(back) : onClose}
       onClosed={onClosed}
       title={
         view === "weather"
@@ -102,13 +108,7 @@ export function MapPointSheet({
               ? MAP_POINT.copy.fixTitle
               : MAP_POINT.title
       }
-      onBack={
-        view === "weather"
-          ? () => show("options")
-          : view === "options"
-            ? () => show("point")
-            : undefined
-      }
+      onBack={back ? () => show(back) : undefined}
     >
       {/* Mounted only with a point, so the elevation request inside is tied to
           the sheet being open rather than firing for a stale coordinate every
@@ -224,8 +224,8 @@ function PointDetail({
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
   savedHereOnly?: boolean;
-  view: "point" | "options" | "weather";
-  onView: (view: "point" | "options" | "weather") => void;
+  view: MapPointView;
+  onView: (view: MapPointView) => void;
 }) {
   const styles = useStyles();
 

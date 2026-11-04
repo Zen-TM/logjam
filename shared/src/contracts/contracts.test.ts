@@ -39,6 +39,7 @@ import {
   MAP_SNAP_OPTIONS,
   mapPointFacts,
   mapHoldVerbs,
+  mapPointStepBack,
   mapPointVerbs,
   fixAgeLabel,
   MAP_SEARCH_PLACEHOLDER,
@@ -916,6 +917,25 @@ describe("the map point panel", () => {
       label: "Navigate to this point",
       subtitle: "Live distance and bearing — nothing saved",
     });
+  });
+
+  // Mutation: add a verb to Options that the hold lacks and that is not the
+  // weather: `run[...]` on each client is a `Record` over the hold's ids, so
+  // that verb would reach it as `undefined` and do nothing.
+  it("gives every Options verb but the weather a flow from the hold's list", () => {
+    for (const platform of ["gps", "web"] as const) {
+      const hold = mapHoldVerbs(platform).map((verb) => verb.id);
+      for (const verb of mapPointVerbs(platform))
+        if (verb.id !== "weather") expect(hold, verb.id).toContain(verb.id);
+    }
+  });
+
+  // Mutation: let weather back out to the facts, or Options close the panel:
+  // Escape and the back gesture would undo two layers, or none.
+  it("backs the point panel out one layer at a time", () => {
+    expect(mapPointStepBack("weather")).toBe("options");
+    expect(mapPointStepBack("options")).toBe("point");
+    expect(mapPointStepBack("point")).toBeNull();
   });
 
   // Mutation: declare a copy verb again, and a client draws a Copy coordinates

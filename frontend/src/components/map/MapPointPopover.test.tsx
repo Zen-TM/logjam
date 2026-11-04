@@ -42,9 +42,12 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 
 const point = { latitude: -33.71234, longitude: 150.31188 };
+// The map's own element: a press on it is a press on the map.
+const mapElement = document.createElement("div");
 const map = {
   on: vi.fn(),
   off: vi.fn(),
+  getContainer: () => mapElement,
   getCanvas: () => ({ focus: vi.fn() }),
   project: () => ({ x: 10, y: 20 }),
   getLayer: () => undefined,
@@ -77,6 +80,7 @@ function openOptions() {
 }
 
 beforeEach(() => {
+  document.body.appendChild(mapElement);
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -96,6 +100,7 @@ beforeEach(() => {
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
 });
 afterEach(() => {
+  mapElement.remove();
   terrain.checking = false;
   terrain.reading = { elevationM: 1013, slopeDegrees: null, demSourceIds: [] };
   cleanup();
@@ -226,6 +231,55 @@ describe("the point popover's first paint", () => {
     measure.mockRestore();
     expect(placed.order[0]).toBe("marker");
     expect(placed.order).toContain("measure");
+  });
+});
+
+describe("the point popover's way out", () => {
+  // Mutation: drop `swallowWithin` (or `dismissOnOutsidePress`) from the panel,
+  // and the press that closes it also reaches the map, which asks about a new
+  // point.
+  it("closes on a press on the map and swallows the click it ends in", () => {
+    const onClose = vi.fn();
+    const heard = vi.fn();
+    document.body.addEventListener("click", heard);
+    mount({ onClose });
+    fireEvent.pointerDown(mapElement);
+    fireEvent.pointerUp(mapElement);
+    fireEvent.click(mapElement);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(heard).not.toHaveBeenCalled();
+    document.body.removeEventListener("click", heard);
+  });
+
+  // Mutation: let Escape close the panel from Options or the forecast, instead
+  // of undoing one layer.
+  it("undoes one layer per Escape: forecast, Options, facts, closed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(forecastJson)),
+    );
+    const onClose = vi.fn();
+    mount({ onClose });
+    const escape = () =>
+      fireEvent.keyDown(screen.getByRole("dialog", { hidden: true }), {
+        key: "Escape",
+      });
+    openOptions();
+    fireEvent.click(
+      screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
+    );
+    await act(async () => {});
+    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeTruthy();
+    escape();
+    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
+    ).toBeTruthy();
+    escape();
+    expect(screen.getByText(MAP_POINT.copy.position)).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
+    escape();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 

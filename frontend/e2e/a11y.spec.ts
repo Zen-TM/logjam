@@ -1227,8 +1227,45 @@ test.describe("desktop", () => {
     // middle of what is visible, and Tab walks the panel's own controls: the
     // coordinates copy where they are pressed, and Options holds the verbs.
     const panel = page.getByRole("dialog", { name: "This point" });
+    // Where the panel and its dot are the first frame it is on screen, read in
+    // the page before anything can settle it: the panel opens beside its dot,
+    // never in the top left to jump there later.
+    await page.evaluate(() => {
+      const seen = window as unknown as { firstFrame?: unknown };
+      const watch = new MutationObserver(() => {
+        const element = document.querySelector(
+          "[role='dialog'][aria-label='This point']",
+        );
+        if (!element) return;
+        watch.disconnect();
+        requestAnimationFrame(() => {
+          const box = (target: Element | null) => {
+            const rect = target?.getBoundingClientRect();
+            return rect && { x: rect.x, y: rect.y, bottom: rect.bottom };
+          };
+          seen.firstFrame = {
+            panel: box(element),
+            dot: box(document.querySelector(".maplibregl-marker")),
+          };
+        });
+      });
+      watch.observe(document.body, { childList: true, subtree: true });
+    });
     await page.keyboard.press("Enter");
     await expect(panel).toBeVisible();
+    const first = await page.waitForFunction(
+      () => (window as unknown as { firstFrame?: unknown }).firstFrame,
+    );
+    const { panel: at, dot } = (await first.jsonValue()) as {
+      panel: { x: number; y: number; bottom: number };
+      dot: { x: number; y: number; bottom: number } | null;
+    };
+    expect(dot).not.toBeNull();
+    // Beside the dot (8 px gap, clamped to the viewport), above or below it.
+    expect(Math.abs(at.x - dot!.x)).toBeLessThanOrEqual(24);
+    expect(
+      Math.min(Math.abs(at.y - dot!.bottom), Math.abs(at.bottom - dot!.y)),
+    ).toBeLessThanOrEqual(24);
     await expect(panel.getByRole("button", { name: "Close" })).toHaveCount(0);
     await page.keyboard.press("Tab");
     await expect(
@@ -1240,6 +1277,30 @@ test.describe("desktop", () => {
     await expect(
       panel.getByRole("button", { name: "Add a place here" }),
     ).toBeVisible();
+  });
+
+  test("What is here?: a press on the map closes the panel and asks nothing new", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const box = (await canvas.boundingBox())!;
+    const panel = page.getByRole("dialog", { name: "This point" });
+    // Empty map, away from the seeded pins at the left and from the panel.
+    const press = () =>
+      page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.2);
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeVisible();
+    await press();
+    await expect(panel).toHaveCount(0);
+    // Past the single-press delay a swallowed click would have asked after.
+    await page.waitForTimeout(600);
+    await expect(panel).toHaveCount(0);
+    // The next press is the map's again.
+    await press();
+    await expect(panel).toBeVisible();
   });
 
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({

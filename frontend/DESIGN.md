@@ -101,7 +101,10 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 - **`Popover`** is non-modal. Whether an outside press closes it is the
   caller's call, and Layers and a value picker both close (so does the Tools
   tray); a press on the map closes them too. More than a switch inside opens a sub-view, never a second popover
-  or an accordion.
+  or an accordion. The map point panels (the tap panel and the right-click
+  menu) are the exception to the × (shared/DESIGN.md §3): no ×, a press on the
+  map outside one closes it and is swallowed (`swallowWithin`), a press on any
+  other control closes it and still acts, and Escape undoes one layer.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
   current answer as the subtitle. Inside a `Dialog`, two ways of setting one

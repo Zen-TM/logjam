@@ -89,12 +89,15 @@ describe("a press outside a floating element", () => {
 });
 
 describe("a Popover that swallows the press that dismisses it", () => {
+  // `map` stands for the element whose presses are swallowed; `other` for a
+  // control outside it.
   function open(swallow: boolean) {
     const onClose = vi.fn();
     const heard = vi.fn();
     document.body.addEventListener("click", heard);
-    const anchor = document.createElement("div");
-    document.body.appendChild(anchor);
+    const anchor = document.body.appendChild(document.createElement("div"));
+    const map = document.body.appendChild(document.createElement("div"));
+    const other = document.body.appendChild(document.createElement("button"));
     render(
       <Popover
         open
@@ -102,7 +105,7 @@ describe("a Popover that swallows the press that dismisses it", () => {
         anchorRef={{ current: anchor }}
         label="Panel"
         dismissOnOutsidePress
-        swallowOutsidePress={swallow}
+        swallowWithin={swallow ? map : null}
       >
         <p>Inside</p>
       </Popover>,
@@ -110,27 +113,60 @@ describe("a Popover that swallows the press that dismisses it", () => {
     return {
       onClose,
       heard,
-      done: () => document.body.removeEventListener("click", heard),
+      map,
+      other,
+      done: () => {
+        document.body.removeEventListener("click", heard);
+        for (const element of [anchor, map, other]) element.remove();
+      },
     };
   }
+  const click = (target: Element) => {
+    fireEvent.pointerDown(target);
+    fireEvent.pointerUp(target);
+    fireEvent.click(target);
+  };
+  afterEach(() => vi.useRealTimers());
 
-  // Mutation: stop passing `swallow` to useOutsidePress, and the click that
-  // closes the panel also reaches the map under it and asks about a new point.
-  it("closes on the press and lets the click that follows nowhere else", () => {
-    const { onClose, heard, done } = open(true);
-    fireEvent.pointerDown(document.body);
-    fireEvent.click(document.body);
+  // Mutation: stop passing `swallowWithin` to useOutsidePress, and the click
+  // that closes the panel also reaches the map under it.
+  it("closes on a press on the map and lets the click that follows nowhere else", () => {
+    const { onClose, heard, map, done } = open(true);
+    click(map);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(heard).not.toHaveBeenCalled();
-    // Only that one click: a later, separate press is the page's again.
+    // Only that one click: the next one is the page's again.
+    fireEvent.click(map);
+    expect(heard).toHaveBeenCalledTimes(1);
+    done();
+  });
+
+  // Mutation: swallow every outside press, and a control (a tab, Layers) does
+  // nothing on the press that closes the panel.
+  it("lets a press on a control outside the map close the panel and still act", () => {
+    const { onClose, heard, other, done } = open(true);
+    click(other);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(heard).toHaveBeenCalledTimes(1);
+    done();
+  });
+
+  // Mutation: drop the timer, and a click with no press before it (Enter on a
+  // focused button) after a drag that never clicked is eaten.
+  it("expires after a press that never clicked, so a later click is not eaten", () => {
+    vi.useFakeTimers();
+    const { heard, map, done } = open(true);
+    fireEvent.pointerDown(map);
+    fireEvent.pointerUp(map);
+    vi.advanceTimersByTime(500);
     fireEvent.click(document.body);
     expect(heard).toHaveBeenCalledTimes(1);
     done();
   });
 
-  it("does not eat a click after a press that never clicked (a drag)", () => {
-    const { heard, done } = open(true);
-    fireEvent.pointerDown(document.body);
+  it("does not eat a click after a press that never clicked and a press inside", () => {
+    const { heard, map, done } = open(true);
+    fireEvent.pointerDown(map);
     // The next press lands inside the panel (the mock keeps it open).
     fireEvent.pointerDown(screen.getByText("Inside"));
     fireEvent.click(document.body);
@@ -139,11 +175,33 @@ describe("a Popover that swallows the press that dismisses it", () => {
   });
 
   it("leaves the click alone unless asked", () => {
-    const { onClose, heard, done } = open(false);
-    fireEvent.pointerDown(document.body);
-    fireEvent.click(document.body);
+    const { onClose, heard, map, done } = open(false);
+    click(map);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(heard).toHaveBeenCalledTimes(1);
     done();
+  });
+
+  // Mutation: ignore `onEscape`, and Escape closes the panel from a layer
+  // inside it instead of undoing that layer.
+  it("hands Escape to the panel's own layers first", () => {
+    const onEscape = vi.fn();
+    const onClose = vi.fn();
+    const anchor = document.body.appendChild(document.createElement("div"));
+    render(
+      <Popover
+        open
+        onClose={onClose}
+        anchorRef={{ current: anchor }}
+        label="Panel"
+        onEscape={onEscape}
+      >
+        <button type="button">Inside</button>
+      </Popover>,
+    );
+    fireEvent.keyDown(screen.getByText("Inside"), { key: "Escape" });
+    expect(onEscape).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    anchor.remove();
   });
 });

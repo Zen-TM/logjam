@@ -59,32 +59,51 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
   }, [open, ref]);
 }
 
+/** How long after a press is released its click can still arrive. The click
+ *  follows the release at once; this is only slack. */
+const CLICK_AFTER_RELEASE_MS = 400;
+
 /** Stops the click this press ends in, in the capture phase, before the map or
- *  a control under it hears it. A press that never clicks (a drag) leaves the
- *  catcher for the next press to clear, so it cannot eat a later, separate click. */
+ *  a control under it hears it. The catcher is for THIS press only: it is
+ *  cleared once the press is released and its click has had time to come
+ *  (a drag, a touch pan, a right-click that never clicks), or by the next
+ *  press. So a later click with no press before it (Enter or Space on a
+ *  focused button, a screen reader's activation) is never eaten. */
 function swallowNextClick() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = (event: Event) => {
     event.stopPropagation();
     event.preventDefault();
     clear();
   };
+  const released = () => {
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
+    timer = setTimeout(clear, CLICK_AFTER_RELEASE_MS);
+  };
   const clear = () => {
+    clearTimeout(timer);
     window.removeEventListener("click", stop, true);
     window.removeEventListener("pointerdown", clear, true);
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
   };
   window.addEventListener("click", stop, true);
   window.addEventListener("pointerdown", clear, true);
+  window.addEventListener("pointerup", released, true);
+  window.addEventListener("pointercancel", released, true);
 }
 
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. With `swallow`, the click that press ends in
- *  goes nowhere else: it closes the panel and does nothing more. */
+ *  and reopening in one click. With `swallowWithin`, a press that lands inside
+ *  that element closes the panel and the click it ends in goes nowhere else;
+ *  a press anywhere else closes it and still acts. */
 export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
-  swallow = false,
+  swallowWithin: Element | null = null,
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -102,7 +121,7 @@ export function useOutsidePress(
       )
         return;
       handleOutside();
-      if (swallow) swallowNextClick();
+      if (swallowWithin?.contains(target)) swallowNextClick();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>
@@ -269,7 +288,7 @@ export function Menu({
  * A press OUTSIDE it (the map included) dismisses it only when the caller
  * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
  * look away, and one that hangs around reads as stuck. The press is not
- * swallowed unless the caller asks with `swallowOutsidePress`, so focus goes
+ * swallowed unless the caller asks with `swallowWithin`, so focus goes
  * where the user pressed.
  */
 export function Popover({
@@ -281,7 +300,8 @@ export function Popover({
   className,
   fit = false,
   dismissOnOutsidePress = false,
-  swallowOutsidePress = false,
+  swallowWithin = null,
+  onEscape,
   closeButton = true,
   children,
 }: {
@@ -298,12 +318,17 @@ export function Popover({
   fit?: boolean;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
-  /** With `dismissOnOutsidePress`: that press closes the panel and does
-   *  nothing else, so looking away from a point on the map never asks about
-   *  another. */
-  swallowOutsidePress?: boolean;
+  /** With `dismissOnOutsidePress`: a press inside this element (the map)
+   *  closes the panel and does nothing else, so looking away from a point on
+   *  the map never asks about another. A press elsewhere (a control, a link)
+   *  closes it and still acts. */
+  swallowWithin?: Element | null;
+  /** Escape undoes one layer of the panel's own, and this is told first;
+   *  without it Escape closes the panel and returns focus to the anchor. */
+  onEscape?: () => void;
   /** The × at the top right (UX §3: every surface carries its way out). Off
-   *  only for a popover whose own header already ends in one. */
+   *  only for a popover whose own header already ends in one, and for a map
+   *  point panel, which is left by a press outside it and by Escape. */
   closeButton?: boolean;
   children: ReactNode;
 }) {
@@ -316,9 +341,10 @@ export function Popover({
     open && dismissOnOutsidePress,
     [ref, anchorRef],
     onClose,
-    swallowOutsidePress,
+    swallowWithin,
   );
   useEscape(open ? ref : null, () => {
+    if (onEscape) return onEscape();
     onClose();
     anchorRef.current?.focus();
   });

@@ -54,7 +54,7 @@ export default function MapHoldMenu({
         placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
-        swallowOutsidePress
+        swallowWithin={map.getContainer()}
         closeButton={false}
       >
         <div className={classes.body}>

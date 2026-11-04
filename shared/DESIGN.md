@@ -118,7 +118,9 @@ renumber.
   close. A form has Cancel beside its submit; on Logjam GPS a form in a sheet
   is left by the sheet's ×, and its footer holds only the submit. A root tab
   on Logjam GPS has neither. Never leave only a gesture, a system button or a
-  second press on a nav icon.
+  second press on a nav icon. One exemption: a map point panel on Logjam Web
+  (the tap panel and the right-click menu) has no ×; a press on the map
+  outside it closes it and is swallowed, and Escape undoes one layer of it.
 - **A tab opens at its root**, not the sub-page the user was last on.
 - **The way out undoes one layer.** A sub-view inside a sheet or dialog backs
   out to its parent, and the title names the step. Escape, the back gesture

@@ -36,4 +36,17 @@ describe("the tap sheet", () => {
     expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
     expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
   });
+
+  // Mutation: give the sheet a plain `onClose={onClose}` again, and the back
+  // gesture, the scrim and the swipe close the whole sheet from the forecast
+  // or Options instead of undoing one layer. The steps themselves are
+  // `mapPointStepBack`'s, held by its shared test.
+  it("steps back one layer on the back gesture, the scrim and the arrow alike", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet).toContain("const back = mapPointStepBack(view);");
+    expect(sheet).toMatch(/onClose=\{back \? \(\) => show\(back\) : onClose\}/);
+    expect(sheet).toMatch(
+      /onBack=\{back \? \(\) => show\(back\) : undefined\}/,
+    );
+  });
 });
