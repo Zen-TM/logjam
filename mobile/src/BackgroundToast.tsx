@@ -9,19 +9,15 @@
 // of them overlap in the same dock, and the user does not care which
 // subsystem is talking.
 //
-// It docks clear of the tab bar so an outcome doesn't land on top of the
-// navigation the user is about to use.
+// It draws nothing itself: `ToastHost` (ui/Toast.tsx) is the one place a toast
+// shows, centred above the tab bar, whichever screen or job raised it.
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 
 import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
 import { onPlaceRegistryToast } from "./offline/placeRegistry";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 import { onPlanDownloadToast } from "./plans/planDownloads";
-
-/** Bottom tab bar height plus a little air — the toast sits above both. */
-const TAB_BAR_CLEARANCE = 64;
 
 export function BackgroundToast() {
   const [message, setMessage] = useState<ToastMessage | null>(null);
@@ -41,19 +37,5 @@ export function BackgroundToast() {
     };
   }, []);
 
-  return (
-    <View style={styles.dock} pointerEvents="box-none">
-      <Toast message={message} onDismissed={() => setMessage(null)} />
-    </View>
-  );
+  return <Toast message={message} onDismissed={() => setMessage(null)} />;
 }
-
-const styles = StyleSheet.create({
-  dock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: TAB_BAR_CLEARANCE,
-  },
-});
