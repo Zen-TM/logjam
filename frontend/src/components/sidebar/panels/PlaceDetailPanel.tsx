@@ -93,6 +93,7 @@ import {
   Menu,
   Row,
   SectionHeader,
+  StatGrid,
   StatusPill,
 } from "../../../ui";
 import { formatCanyonGrade } from "../../../placeUtils";
@@ -237,7 +238,6 @@ function PlaceDetailPanel({
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
   const [deletingFile, setDeletingFile] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
@@ -422,13 +422,11 @@ function PlaceDetailPanel({
   const coordinates = formatPlacePosition(current.latitude, current.longitude);
 
   /** The one thing a coordinate is FOR: getting it into whatever the user is
-   *  navigating with. The glyph answers for two seconds — a toast for a copy
-   *  is a notification about something the user is watching happen. */
+   *  navigating with, so the coordinates are the control. */
   async function handleCopyCoordinates() {
     try {
       await navigator.clipboard.writeText(coordinates);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      toast.success(PLACE_PAGE.copy.copyPosition);
     } catch (err) {
       // A browser that refuses the clipboard (no permission, no secure
       // context) must say so rather than looking like it worked.
@@ -731,16 +729,15 @@ function PlaceDetailPanel({
     position: () => (
       <section className={classes.section}>
         <SectionHeader title={copy.position} />
-        <Row
-          leading={<IconTile icon="place" hue="var(--color-accent)" />}
-          title={coordinates}
-          trailing={
-            <IconButton
-              icon={copied ? "done" : "copy"}
-              label={`Copy the coordinates of ${current.name}`}
-              onClick={() => void handleCopyCoordinates()}
-            />
-          }
+        <StatGrid
+          stats={[
+            {
+              label: "Coordinates",
+              value: coordinates,
+              span: true,
+              onCopy: () => void handleCopyCoordinates(),
+            },
+          ]}
         />
       </section>
     ),
