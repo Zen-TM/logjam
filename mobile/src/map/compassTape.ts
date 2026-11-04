@@ -74,6 +74,29 @@ export function compassTicks(
 }
 
 /**
+ * Whether a label centred on `x` sits wholly inside a `widthPx` tape. The tape
+ * clips at its ends, so a label that straddles one reads as a fragment of a
+ * bearing (a "24" for 240); its mark still draws, the number waits until it is
+ * in full.
+ */
+export function compassLabelFits(
+  x: number,
+  widthPx: number,
+  labelWidthPx: number,
+): boolean {
+  return x - labelWidthPx / 2 >= 0 && x + labelWidthPx / 2 <= widthPx;
+}
+
+/**
+ * How wide the tape is at a text size: 176 px at 1.0, wider as the labels
+ * grow, so a window that holds the labels in full still holds two of them
+ * (labels sit 30° apart: 66 px).
+ */
+export function compassStripWidth(textScale: number): number {
+  return 176 + Math.round(30 * Math.max(0, textScale - 1));
+}
+
+/**
  * The heading to DRAW, given the true-north heading the sensor produced and the
  * north the user reads bearings from (Settings → Map).
  *
