@@ -27,14 +27,9 @@ describe("NAV", () => {
       "places",
       "logs",
       "ways",
-    ]);
-    expect(more("web")).toEqual([
-      "inbox",
       "plans",
-      "friends",
-      "settings",
-      "account",
     ]);
+    expect(more("web")).toEqual(["inbox", "friends", "settings", "account"]);
   });
 
   it("runs Logjam GPS's tabs and More", () => {
@@ -57,6 +52,15 @@ describe("NAV", () => {
     for (const entry of NAV as readonly { on?: string; reason?: string }[])
       expect(Boolean(entry.on), JSON.stringify(entry)).toBe(
         Boolean(entry.reason),
+      );
+  });
+
+  // Mutation: set `tab: true` on `plans` (Logjam GPS would grow a fourth tab),
+  // or drop its `tabReason`.
+  it("gives a tab only one client has its reason, and no other", () => {
+    for (const entry of NAV as readonly { tab?: unknown; tabReason?: string }[])
+      expect(Boolean(entry.tabReason), JSON.stringify(entry)).toBe(
+        entry.tab === "web" || entry.tab === "gps",
       );
   });
 

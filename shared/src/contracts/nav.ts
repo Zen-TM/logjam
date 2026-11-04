@@ -3,8 +3,8 @@
 // hub, are each this list filtered for one client. `nav.test.ts` holds the
 // order; the clients' own tests hold that they draw it.
 //
-// Not here: the Map. It is a tab on Logjam GPS and what a page closes back to
-// on Logjam Web, and it is first on both.
+// Not here: the Map. It is a tab on Logjam GPS, whose pages are full screen,
+// and what a panel closes back to on Logjam Web, which has no Map tab.
 import type { IconIdea } from "../icons.js";
 import type { ContractPlatform } from "./types.js";
 
@@ -15,8 +15,11 @@ type NavDeclaration = {
   icon: IconIdea;
   /** `page` is the rail's top group, `personal` the one below its spacer. */
   group: "page" | "personal";
-  /** A tab on narrow Logjam Web and on Logjam GPS; the rest are in More. */
-  tab?: true;
+  /** A tab on narrow Logjam Web and on Logjam GPS (`true`) or on one of them;
+   *  the rest are in More. `tabReason` says why a one-client tab is not on
+   *  the other. */
+  tab?: true | ContractPlatform;
+  tabReason?: string;
   /** What its badge counts, in its accessible name: "Plans, 1 invited". */
   badgeNoun?: string;
   /** Only one client has it; `reason` says what about the medium rules it out
@@ -56,14 +59,17 @@ export const NAV = [
       "A browser keeps no offline copies to manage; its lines are the Ways page.",
   },
   { id: "inbox", label: "Inbox", icon: "notifications", group: "personal" },
-  // An invite waiting on the user is what its badge counts. A page on a wide
-  // screen, in More on a narrow one.
+  // An invite waiting on the user is what its badge counts. A tab on narrow
+  // Logjam Web, in More on Logjam GPS.
   {
     id: "plans",
     label: "Plans",
     icon: "plan",
     group: "page",
     badgeNoun: "invited",
+    tab: "web",
+    tabReason:
+      "Logjam GPS keeps a Map tab because its pages are full screen. Logjam Web's panels open over the map and close back to it, so the tab goes to the next page a user reaches for.",
   },
   { id: "friends", label: "Friends", icon: "friends", group: "page" },
   {
@@ -101,9 +107,16 @@ export type NavEntry = {
 export function navFor<P extends ContractPlatform>(
   platform: P,
 ): (NavEntry & { id: NavIdOn<P> })[] {
-  return (NAV as readonly (NavEntry & { on?: ContractPlatform })[]).filter(
-    (entry) => entry.on == null || entry.on === platform,
-  ) as (NavEntry & { id: NavIdOn<P> })[];
+  return (
+    NAV as readonly (Omit<NavEntry, "tab"> & {
+      on?: ContractPlatform;
+      tab?: true | ContractPlatform;
+    })[]
+  )
+    .filter((entry) => entry.on == null || entry.on === platform)
+    .map(({ tab, ...entry }) =>
+      tab === true || tab === platform ? { ...entry, tab: true } : entry,
+    ) as (NavEntry & { id: NavIdOn<P> })[];
 }
 
 /** The word for one destination. */

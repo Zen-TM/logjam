@@ -27,9 +27,9 @@ const PERSONAL_ITEMS: NavItem[] = WEB.filter(
 
 const ALL_ITEMS: NavItem[] = [...PAGE_ITEMS, ...PERSONAL_ITEMS];
 
-/** Narrow web keeps Logjam GPS's tab bar — Map · Places · Trips · Ways · More —
- *  so a user who knows one knows the other. `Map` is not a page (it closes the
- *  open one), so it is not in `NAV`. */
+/** Narrow web's tab bar: Places · Trips · Ways · Plans · More. It has no Map
+ *  tab (Logjam GPS does): a panel is a sheet over the map, so closing it is
+ *  how a user gets there. */
 const TAB_ITEMS: NavItem[] = WEB.filter((item) => item.tab);
 
 /** The More menu, in `NAV`'s order: Inbox first, the badged item. */
@@ -45,7 +45,7 @@ export type NavPartition = {
 };
 
 /** Split the nav into rail items and More items. The 84px desktop rail holds
- *  all eight; narrow web holds three tabs beside Map and More. */
+ *  all eight; narrow web holds four tabs beside More. */
 export function partitionNavItems(isNarrow: boolean): NavPartition {
   if (!isNarrow) {
     return {

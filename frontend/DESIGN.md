@@ -61,9 +61,17 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 - **One "add" per page**: a compact filled `Add ▾` in the hero, opening a
   menu. A page's housekeeping verbs (Mark all as read) are behind the hero's
   ⋯. A list's search bar sits under its rail (`shared/DESIGN.md` §2).
-- **Narrow web (≤768px) is Logjam GPS's tab bar.** One breakpoint:
-  `useIsMobile()` for behaviour, `@media` for layout. A narrow branch changes
-  the furniture, never a thing's landmark, name, roles or keys.
+- **Narrow web (≤768px) is Logjam GPS's tab bar, less its Map tab.** Places,
+  Trips, Ways, Plans, then More. A page is a sheet over the map, so closing it
+  is how a user gets back to the map, and a tab for it would be a second way to
+  do the same thing. Logjam GPS keeps one because its pages fill the screen.
+  One breakpoint: `useIsMobile()` for behaviour, `@media` for layout. A narrow
+  branch changes the furniture, never a thing's landmark, name, roles or keys.
+- **A narrow sheet has two heights, half (a bit under half the screen) and
+  full, and a way out.** Swiping it down from half closes it, as its × does.
+  It is dragged by its grab bar (a hit area at least 44px tall) or by a pull
+  down anywhere on a page that is scrolled to its top, as on Logjam GPS. There
+  is no peek to rest at: it showed a title and nothing to read.
 - **Chrome over the map is placed from `--map-inset-left`** (CSS, from
   `data-panel-open` and `data-sheet-open`). Never pass a width from JS.
 - **An armed map tool is a page in the panel**, never a card over the map.
@@ -72,7 +80,8 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   out; a measurement is not kept, so leaving it asks nothing.
   Narrow, its sheet opens at the peek (the note, the distance and Undo:
   `DraftPeek`) so the map is there to press; dragging it up brings back the
-  rest.
+  rest. The peek is only for a tool, or a map flow that holds the sheet there:
+  a swipe never closes it, because the × asks first.
 - **MapLibre's controls are restyled, not rebuilt**: kit buttons on the map's
   public API; the scale bar and attribution stay MapLibre's.
 - **Hovering a row lights its pin; pressing a pin opens the place**, from any
