@@ -87,11 +87,12 @@ const useStyles = makeStyles((theme, textRole) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing(0.5),
-    alignSelf: "flex-start",
     // A pill is never narrower than it is tall (UX §4). Guard: pill.test.ts.
     minHeight: PILL_HEIGHT,
     minWidth: PILL_HEIGHT,
-    justifyContent: "center",
+    // Not `alignSelf`: that pinned the pill to the top of a row's trailing slot
+    // (guard: pill.test.ts). Unfilled, a stretched pill looks the same, so the
+    // parent decides, and the words start at the left of a column.
   },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   label: { ...textRole.caption },
