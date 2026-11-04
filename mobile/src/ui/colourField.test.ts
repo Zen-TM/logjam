@@ -31,15 +31,28 @@ describe("a palette", () => {
   });
 });
 
-// Settings > Map is a stack of card rows, so its colour is one too. Mutation:
-// drop `icon="colour"` from the marker colour in MapSettingsScreen, and it is a
-// bare row between cards again.
-describe("the marker colour in Map settings", () => {
-  it("is drawn as a settings row", () => {
-    const screen = readFileSync(
-      join(SRC, "screens/settings/MapSettingsScreen.tsx"),
-      "utf8",
+// A colour among card rows is a card row too (`icon="colour"`), so a new options
+// sheet or settings page cannot bring back a bare label-and-disc between cards.
+// The only bare ones are listed here, each with why. Mutation: add
+// `<ColourField label="Colour" ... />` to any screen, or drop `icon="colour"`
+// from TrackOptionsSheet, ImportOptionsSheet or MapSettingsScreen.
+const BARE_COLOUR_FIELDS: Record<string, string> = {
+  "map/DraftToolPanel.tsx": "the route toolbar's disc, among icon buttons",
+  "places/PlaceTypesEditor.tsx": "a field in a form, among fields not cards",
+};
+
+describe("a colour in a stack of card rows", () => {
+  it("is a settings row everywhere but where listed", () => {
+    const bare = sources(SRC)
+      .flatMap((path) => {
+        const text = readFileSync(path, "utf8");
+        const count = [...text.matchAll(/<ColourField(?!\s+icon="colour")/g)]
+          .length;
+        return count ? [[relative(SRC, path), count] as const] : [];
+      })
+      .filter(([path]) => !path.endsWith("ui/ColourField.tsx"));
+    expect(Object.fromEntries(bare)).toEqual(
+      Object.fromEntries(Object.keys(BARE_COLOUR_FIELDS).map((p) => [p, 1])),
     );
-    expect(screen).toMatch(/<ColourField\s+icon="colour"/);
   });
 });
