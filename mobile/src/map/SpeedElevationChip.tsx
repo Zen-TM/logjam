@@ -23,18 +23,23 @@
 // PRIVACY: two numbers, no position, and — like every instrument here — never
 // logged.
 import { memo, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
 import {
   fontSize,
   radius,
+  textScale,
   spacing,
   withAlpha,
   makeStyles,
   muted,
 } from "../theme";
 import { keepWithValue, readoutFigures, useLiveReadout } from "./liveReadout";
+import {
+  readoutChipHeight as chipHeight,
+  readoutChipMinWidth,
+} from "./readoutChipSize";
 
 // The height of one line of each text, as the font draws it (the same estimate
 // the scale bar makes): the chip is a fixed box around them.
@@ -47,11 +52,9 @@ const VALUE_LINE = Math.round(fontSize.sm * 1.35);
  *  stack (see MapScreen's `ornamentMarginY`). */
 export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
-/** Wide enough for the longest pair either column produces ("12.5 km/h",
- *  "1234 m") and the longest label ("12 min ago") without the
- *  columns touching, and never wider. A glance figure, not a hero: it sits
- *  beside the scale bar and must not outweigh the map. */
-const CHIP_MIN_WIDTH = 168;
+/** The chip's height at the system text size `fontScale`. */
+export const readoutChipHeight = (fontScale: number): number =>
+  chipHeight(LABEL_LINE + VALUE_LINE, spacing(1), fontScale);
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -68,6 +71,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   active: boolean;
 }) {
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
 
   const readout = useLiveReadout();
   const [now, setNow] = useState(() => Date.now());
@@ -95,7 +99,13 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   const grey = figures.quality === "stale";
 
   return (
-    <View style={styles.chip} pointerEvents="none">
+    <View
+      style={[
+        styles.chip,
+        { minWidth: readoutChipMinWidth(fontScale, textScale) },
+      ]}
+      pointerEvents="none"
+    >
       <View style={styles.column}>
         <Text style={styles.label} numberOfLines={1}>
           {note && figures.speedMps != null ? note : "Speed"}
@@ -136,7 +146,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    minWidth: CHIP_MIN_WIDTH,
     minHeight: READOUT_CHIP_HEIGHT,
     backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
