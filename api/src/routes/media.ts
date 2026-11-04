@@ -153,10 +153,11 @@ async function assertOwnsTarget(
   }
 }
 
-// A place may have at most one track (GPX/KML). Trip logs are unconstrained.
 // A trip's copy may only name one of the caller's own recordings. A foreign
 // id, a missing one and a non-recording all answer the same 400, so the status
-// is no oracle for other people's media ids.
+// is no oracle for other people's media ids. Guards: "refuses another account's
+// recording…" and "refuses a source on confirm…" in
+// src/__tests__/tripTrackLink.test.ts.
 async function assertOwnsSourceTrack(
   userId: string,
   sourceMediaId: string | null,
@@ -171,6 +172,7 @@ async function assertOwnsSourceTrack(
   }
 }
 
+// A place may have at most one track (GPX/KML). Trip logs are unconstrained.
 // Checked in both presign (fail fast) and confirm (authoritative — the presign
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
 async function assertPlaceTrackSlotFree(
@@ -290,7 +292,6 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertOwnsSourceTrack(user.id, sourceMediaId);
     // Optional client-minted mediaId. A client id whose row
     // already exists means the whole three-phase flow already completed —
     // return the existing item (200), never fresh upload URLs. Foreign id →
@@ -318,6 +319,10 @@ router.post(
         return;
       }
     }
+    // After the replay above: a copy that already exists is returned even if
+    // its recording has since been deleted (guard: "answers a replay…" in
+    // tripTrackLink.test.ts).
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
     await assertPlaceTrackSlotFree(linkedType, linkedId, category);
     // Headroom pre-check including the declared upload; the authoritative
     // quota charge still happens on confirm against the real S3 size.
@@ -375,7 +380,6 @@ router.post(
       body.filename,
     );
     await assertOwnsTarget(user.id, linkedType, linkedId);
-    await assertOwnsSourceTrack(user.id, sourceMediaId);
 
     // Idempotent confirm: if the row already exists, this confirm
     // already succeeded — return it (handled below) before the track-slot guard
@@ -392,6 +396,9 @@ router.post(
       return;
     }
 
+    // Authoritative: presign may not have carried the source at all. After the
+    // replay above, for the reason given at presign.
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
     await assertPlaceTrackSlotFree(linkedType, linkedId, category);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
@@ -633,14 +640,15 @@ router.get(
       where: { ownerId: user.id, origin: { not: null } },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
-    // The recordings a trip has been logged from: one query for the page, so
-    // "Log a trip" is offered only on the rest.
+    // The recordings a trip has been logged from: one query bounded by the
+    // account's trip files, however many recordings it has.
     const withTrip = new Set(
       (
         await prisma.media.findMany({
           where: {
             ownerId: user.id,
-            sourceMediaId: { in: rows.map((row) => row.id) },
+            linkedType: "tripLog",
+            sourceMediaId: { not: null },
           },
           select: { sourceMediaId: true },
         })

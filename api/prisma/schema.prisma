@@ -426,7 +426,8 @@ model Media {
   // row with origin "track") it was copied from, so the track stops offering
   // "Log a trip". Null on everything else. Deliberately no foreign key, as with
   // linkedId: the route layer checks the source is the caller's own recording
-  // when the copy is made, and a copy outliving its source is harmless (the id
+  // when the copy is made (guard: src/__tests__/tripTrackLink.test.ts), and a
+  // copy outliving its source is harmless (the id
   // just matches nothing). A SetNull FK would clear the column without
   // bumping updatedAt, so the delta would never tell the phone.
   sourceMediaId  String?   @map("source_media_id")

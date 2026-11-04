@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { describe, it, expect } from "vitest";
 import request from "supertest";
 
+import prisma from "../services/prisma";
 import { API_URL, as, ALICE_SUB, BOB_SUB, SHARED_PLACE_ID } from "./_actors";
 
 const CLIENT = { "x-logjam-client": "mobile/0.1.0-test" } as const;
@@ -223,6 +224,164 @@ describe("a trip's copy of a recording names it", () => {
     } finally {
       await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
       await cleanup(ALICE_SUB, source.mediaId);
+    }
+  });
+
+  // The authoritative check is confirm's: a client can presign with no source,
+  // PUT, then confirm naming one. Mutation: delete assertOwnsSourceTrack from
+  // the confirm route and every case below returns 201.
+  it("refuses a source on confirm that presign never saw, and creates no row", async () => {
+    const bobs = await recording(BOB_SUB);
+    const imported = await uploadGpx(ALICE_SUB, {
+      linkedType: "none",
+      origin: "import",
+      metadata: {
+        bbox: [150.4, -33.51, 150.41, -33.5],
+        featureCount: 1,
+        positionCount: 2,
+      },
+    });
+    const tripId = await newTrip(ALICE_SUB);
+    const mediaId = randomUUID();
+    try {
+      const target = { linkedType: "tripLog", linkedId: tripId };
+      const presign = await request(API_URL)
+        .post("/media/presign")
+        .set(as(ALICE_SUB))
+        .send({
+          mediaId,
+          filename: "t.gpx",
+          mediaType: GPX_MIME,
+          sizeBytes: GPX_BYTES.length,
+          ...target,
+        });
+      expect(presign.status).toBe(201);
+      await put(presign.body.displayUploadUrl);
+      const confirm = (extra: Record<string, unknown>) =>
+        request(API_URL)
+          .post(`/media/${mediaId}/confirm`)
+          .set(as(ALICE_SUB))
+          .send({
+            filename: "t.gpx",
+            mediaType: GPX_MIME,
+            ...target,
+            ...extra,
+          });
+
+      const foreign = await confirm({ sourceMediaId: bobs.mediaId });
+      const missing = await confirm({ sourceMediaId: randomUUID() });
+      const notATrack = await confirm({ sourceMediaId: imported.mediaId });
+      for (const res of [foreign, missing, notATrack]) {
+        expect(res.status).toBe(400);
+        expect(res.body.detail).toBe(foreign.body.detail);
+      }
+      const onPlace = await confirm({
+        linkedType: "place",
+        linkedId: SHARED_PLACE_ID,
+        sourceMediaId: bobs.mediaId,
+      });
+      expect(onPlace.status).toBe(400);
+
+      // Nothing was created by the refusals: the first accepted confirm is a
+      // create (201), not the replay (200) a stray row would have made it.
+      const ok = await confirm({});
+      expect(ok.status).toBe(201);
+      expect(ok.body.sourceMediaId).toBeNull();
+    } finally {
+      await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
+      await cleanup(BOB_SUB, bobs.mediaId);
+      await cleanup(ALICE_SUB, imported.mediaId, mediaId);
+    }
+  });
+
+  // A lost confirm reply is retried after the recording was deleted: the copy
+  // exists, so it is returned. Mutation: move assertOwnsSourceTrack above the
+  // replay returns in presign or confirm, and the retry answers 400.
+  it("answers a replay of an existing copy even after its recording is deleted", async () => {
+    const source = await recording(ALICE_SUB);
+    const tripId = await newTrip(ALICE_SUB);
+    const copyId = randomUUID();
+    try {
+      const body = {
+        linkedType: "tripLog",
+        linkedId: tripId,
+        sourceMediaId: source.mediaId,
+      };
+      const first = await uploadGpx(ALICE_SUB, body, copyId);
+      expect(first.confirm?.status).toBe(201);
+      await cleanup(ALICE_SUB, source.mediaId);
+
+      const presign = await request(API_URL)
+        .post("/media/presign")
+        .set(as(ALICE_SUB))
+        .send({
+          mediaId: copyId,
+          filename: "t.gpx",
+          mediaType: GPX_MIME,
+          sizeBytes: GPX_BYTES.length,
+          ...body,
+        });
+      expect(presign.status).toBe(200);
+      const confirm = await request(API_URL)
+        .post(`/media/${copyId}/confirm`)
+        .set(as(ALICE_SUB))
+        .send({ filename: "t.gpx", mediaType: GPX_MIME, ...body });
+      expect(confirm.status).toBe(200);
+    } finally {
+      await request(API_URL).delete(`/trips/${tripId}`).set(as(ALICE_SUB));
+      await cleanup(ALICE_SUB, source.mediaId, copyId);
+    }
+  });
+});
+
+// The link is the owner's alone. The API never stores a source on a place's
+// file, so the only way the read guard matters is a row that already has one:
+// this builds one directly. Mutation: serialise `row.sourceMediaId` in
+// toMediaItem (lib/mediaPresign.ts) or in the delta (routes/sync.ts) and bob
+// sees it.
+describe("a sharee never sees a source recording", () => {
+  it("on a shared place's file, in the place record or the delta", async () => {
+    const placeFile = await uploadGpx(ALICE_SUB, {
+      linkedType: "place",
+      linkedId: SHARED_PLACE_ID,
+    });
+    expect(placeFile.confirm?.status).toBe(201);
+    const planted = randomUUID();
+    try {
+      await prisma.media.update({
+        where: { id: placeFile.mediaId },
+        data: { sourceMediaId: planted },
+      });
+
+      const place = await request(API_URL)
+        .get(`/places/${SHARED_PLACE_ID}`)
+        .set(as(BOB_SUB));
+      expect(place.status).toBe(200);
+      const item = place.body.media.find(
+        (m: { id: string }) => m.id === placeFile.mediaId,
+      );
+      expect(item).toBeDefined();
+      expect(item.sourceMediaId).toBeNull();
+
+      // Bob's delta carries the file (a shared place's media); drain it.
+      const rows: { id: string; sourceMediaId?: string | null }[] = [];
+      let cursor: string | undefined;
+      for (;;) {
+        const page = await request(API_URL)
+          .get("/sync/delta")
+          .query(cursor ? { cursor } : {})
+          .set(as(BOB_SUB))
+          .set(CLIENT);
+        expect(page.status).toBe(200);
+        rows.push(...page.body.changes.media);
+        cursor = page.body.cursor as string;
+        if (!page.body.hasMore) break;
+      }
+      const row = rows.find((m) => m.id === placeFile.mediaId);
+      expect(row).toBeDefined();
+      expect(row?.sourceMediaId ?? null).toBeNull();
+    } finally {
+      await cleanup(ALICE_SUB, placeFile.mediaId);
     }
   });
 });
