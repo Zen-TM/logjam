@@ -12,6 +12,8 @@ export type GeoPdfRenderInput = {
   vegetationUrls: readonly string[];
   /** For the statewide archives, which are same-origin. */
   origin: string;
+  /** The name the user typed for the file; absent, the title names it. */
+  fileName?: string;
 };
 
 export type GeoPdfProgress = {

@@ -107,9 +107,14 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   other control closes it and still acts, and Escape undoes one layer.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
-  current answer as the subtitle. Inside a `Dialog`, two ways of setting one
-  thing are a `ChipRail` that swaps the view under it (Export an area's On the
-  map · Type the edges), never a disclosure.
+  current answer as the subtitle. Inside a `Dialog`, two views of one thing
+  are a `ChipRail` that swaps the view under it (Coordinates' Lat/Lon · E/N),
+  never a disclosure. Two _ways of entering_ one thing are not views: Export
+  an area's Area row has Pick on the map, an action that leaves the dialog
+  for the map, beside Type the coordinates, which opens the edges beneath the
+  row. Both take the filled look when they hold the answer (Pick once the
+  area was drawn on the map, Type while the edges are open). An area picker
+  with only the map way (Sharpen an area) is a single button.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
   field) or `useToast().error` (background).

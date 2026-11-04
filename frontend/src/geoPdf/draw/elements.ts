@@ -489,6 +489,40 @@ export function drawPlaceMarkers(
 }
 
 /**
+ * Text pieces side by side on one baseline, each with a white halo so a grid
+ * label reads over any basemap. Every halo goes down before any fill, or a
+ * piece's halo would cover its neighbour. Guard: elements.test.ts.
+ */
+function drawHaloed(
+  ctx: Ctx,
+  pieces: readonly (readonly [text: string, font: string])[],
+  x: number,
+  y: number,
+  haloPx: number,
+) {
+  ctx.save();
+  let curX = x;
+  const xs = pieces.map(([text, font]) => {
+    ctx.font = font;
+    const at = curX;
+    curX += ctx.measureText(text).width;
+    return at;
+  });
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = haloPx;
+  ctx.lineJoin = "round";
+  pieces.forEach(([text, font], i) => {
+    ctx.font = font;
+    ctx.strokeText(text, xs[i]!, y);
+  });
+  pieces.forEach(([text, font], i) => {
+    ctx.font = font;
+    ctx.fillText(text, xs[i]!, y);
+  });
+  ctx.restore();
+}
+
+/**
  * Draw an MGA grid label with the principal 2-digit grid reference in a
  * larger bold font, following standard topographic map conventions.
  */
@@ -502,26 +536,21 @@ export function drawGridLabel(
   largeFontSize: number,
 ) {
   const km = Math.round(value / 1000);
-  const principal = String(km % 100).padStart(2, "0");
-  const prefix = String(Math.floor(km / 100));
-
-  let curX = x;
-
-  ctx.font = `${smallFontSize}px ${MAP_FONT}`;
-  ctx.fillText(prefix, curX, y);
-  curX += ctx.measureText(prefix).width;
-
-  ctx.font = `bold ${largeFontSize}px ${MAP_FONT}`;
-  ctx.fillText(principal, curX, y);
-  curX += ctx.measureText(principal).width;
-
-  if (interval < 10000) {
-    ctx.font = `${smallFontSize}px ${MAP_FONT}`;
-    ctx.fillText("000", curX, y);
-  }
-
-  // Restore font
-  ctx.font = `${smallFontSize}px ${MAP_FONT}`;
+  const small = `${smallFontSize}px ${MAP_FONT}`;
+  drawHaloed(
+    ctx,
+    [
+      [String(Math.floor(km / 100)), small],
+      [
+        String(km % 100).padStart(2, "0"),
+        `bold ${largeFontSize}px ${MAP_FONT}`,
+      ],
+      ...(interval < 10000 ? [["000", small] as const] : []),
+    ],
+    x,
+    y,
+    smallFontSize * 0.3,
+  );
 }
 
 export function drawGridLines(
@@ -626,7 +655,13 @@ export function drawGridLines(
       ctx.moveTo(0, y);
       ctx.lineTo(widthPx, y);
       ctx.stroke();
-      ctx.fillText(lat.toFixed(4) + "°", 2, y - 2);
+      drawHaloed(
+        ctx,
+        [[lat.toFixed(4) + "°", ctx.font]],
+        2,
+        y - 2,
+        fontPx * 0.3,
+      );
     }
 
     // Vertical lines (longitudes)
@@ -638,7 +673,13 @@ export function drawGridLines(
       ctx.moveTo(x, 0);
       ctx.lineTo(x, heightPx);
       ctx.stroke();
-      ctx.fillText(lon.toFixed(4) + "°", x + 2, fontPx + 6);
+      drawHaloed(
+        ctx,
+        [[lon.toFixed(4) + "°", ctx.font]],
+        x + 2,
+        fontPx + 6,
+        fontPx * 0.3,
+      );
     }
   }
 }

@@ -159,11 +159,28 @@ describe("fetchBytes", () => {
 });
 
 describe("geoPdfFileName", () => {
-  it("names the file from the title, safely, with a default", () => {
-    expect(geoPdfFileName("My trip / 2026!")).toBe("My trip 2026.pdf");
+  it("names the file from the title, with a default", () => {
+    expect(geoPdfFileName("My trip / 2026!")).toBe("My trip 2026!.pdf");
     expect(geoPdfFileName(undefined)).toBe("logjam-geopdf.pdf");
     expect(geoPdfFileName("???")).toBe("logjam-geopdf.pdf");
     expect(geoPdfFileName("a".repeat(200))).toBe(`${"a".repeat(80)}.pdf`);
+  });
+
+  // Mutation: strip every character outside [a-zA-Z0-9 _-], as the first
+  // version did, or append .pdf without checking for one.
+  it("keeps dots and letters of any script, and does not double .pdf", () => {
+    expect(geoPdfFileName("trip.pdf")).toBe("trip.pdf");
+    expect(geoPdfFileName("Trip.PDF")).toBe("Trip.pdf");
+    expect(geoPdfFileName("v1.2")).toBe("v1.2.pdf");
+    expect(geoPdfFileName("Lézard 蜥蜴")).toBe("Lézard 蜥蜴.pdf");
+  });
+
+  it("drops what a path or a file system rejects", () => {
+    expect(geoPdfFileName('a/b\\c<d>e:f"g|h?i*j\u0007k')).toBe(
+      "abcdefghijk.pdf",
+    );
+    expect(geoPdfFileName("../.hidden. ")).toBe("hidden.pdf");
+    expect(geoPdfFileName(".pdf")).toBe("logjam-geopdf.pdf");
   });
 });
 

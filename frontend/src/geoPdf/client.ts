@@ -21,14 +21,26 @@ export type {
 
 const PROGRESS_EVERY_MS = 100;
 
-/** `Title` → `Title.pdf`, with the characters the server's names allowed. */
+/**
+ * `Title` → `Title.pdf`. A typed `.pdf` is not doubled and dots, spaces and
+ * any script stay; what goes is what a path or a file system rejects: path
+ * separators, control characters and `< > : " | ? *`, then dots and spaces at
+ * either end (a hidden file, or a name Windows trims).
+ */
 export function geoPdfFileName(title: string | undefined): string {
   const safe =
-    (title ?? "")
-      .replace(/[^a-zA-Z0-9 _-]+/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 80) || "logjam-geopdf";
+    Array.from(
+      (title ?? "")
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u001f\u007f/\\<>:"|?*]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\.pdf$/i, "")
+        .replace(/^[. ]+|[. ]+$/g, ""),
+    )
+      .slice(0, 80)
+      .join("")
+      .trim() || "logjam-geopdf";
   return `${safe}.pdf`;
 }
 
@@ -103,7 +115,9 @@ export function runGeoPdfRender(
           finish({
             ok: true,
             pdf: new Blob([m.pdf], { type: "application/pdf" }),
-            fileName: geoPdfFileName(input.config.elements.title),
+            fileName: geoPdfFileName(
+              input.fileName ?? input.config.elements.title,
+            ),
             timings: m.timings,
             pixels: m.pixels,
           });
