@@ -18,6 +18,7 @@ describe("mapDrawing", () => {
 
   it("stays off for a pan that finishes quickly", () => {
     markMapDrawing();
+    expect(isMapDrawing()).toBe(false);
     vi.advanceTimersByTime(SHOW_AFTER_MS - 1);
     markMapDrawn();
     vi.advanceTimersByTime(SHOW_AFTER_MS);
@@ -27,6 +28,7 @@ describe("mapDrawing", () => {
   it("does not restart its wait on every partly drawn frame", () => {
     markMapDrawing();
     vi.advanceTimersByTime(SHOW_AFTER_MS - 100);
+    expect(isMapDrawing()).toBe(false);
     markMapDrawing();
     vi.advanceTimersByTime(100);
     expect(isMapDrawing()).toBe(true);
@@ -34,7 +36,9 @@ describe("mapDrawing", () => {
 
   it("goes off the moment the map is drawn", () => {
     markMapDrawing();
-    vi.advanceTimersByTime(SHOW_AFTER_MS);
+    vi.advanceTimersByTime(SHOW_AFTER_MS - 1);
+    expect(isMapDrawing()).toBe(false);
+    vi.advanceTimersByTime(1);
     expect(isMapDrawing()).toBe(true);
     markMapDrawn();
     expect(isMapDrawing()).toBe(false);
