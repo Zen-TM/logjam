@@ -161,7 +161,7 @@ import {
   SHARED_PLACE_COLOR,
   toPlaceFeatureCollection,
 } from "./PlacePinsLayer";
-import { SpeedElevationChip, READOUT_CHIP_HEIGHT } from "./SpeedElevationChip";
+import { SpeedElevationChip, readoutChipHeight } from "./SpeedElevationChip";
 import { sampleElevations } from "../offline/demLookup";
 import { setOfflineOnly as setOfflineOnlyMode } from "../offline/offlineOnlyMode";
 import {
@@ -1243,7 +1243,11 @@ export function MapScreen({
   /** Set once the user has panned/zoomed themselves — see the open-on-location effect. */
   const userMovedCamera = useRef(false);
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const {
+    width: windowWidth,
+    height: windowHeight,
+    fontScale,
+  } = useWindowDimensions();
   /**
    * How tall the map is, for course-up's forward camera offset. The window,
    * not a measured view: the Map is the whole screen behind the chrome, and
@@ -4839,7 +4843,7 @@ export function MapScreen({
     instrumentsBottom +
     (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
     (compassEnabled ? COMPASS_STRIP_HEIGHT + INSTRUMENT_GAP : 0) +
-    (speedElevationEnabled ? READOUT_CHIP_HEIGHT + INSTRUMENT_GAP : 0);
+    (speedElevationEnabled ? readoutChipHeight(fontScale) + INSTRUMENT_GAP : 0);
   /**
    * When the location marker has to be re-inserted to stay on top.
    *

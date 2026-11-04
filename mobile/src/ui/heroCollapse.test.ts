@@ -16,21 +16,21 @@ const list = {
   compactHeight: 56,
 };
 
+const GIVES = list.fullHeight - list.compactHeight;
+
 describe("nextCompact", () => {
   // Mutation: remove the `gives` term and the short list below collapses.
   it("never collapses a list that would stop scrolling once the hero shrinks", () => {
-    const short = { ...list, contentHeight: 800 + 204 + 20 };
-    expect(nextCompact({ ...short, compact: false, y: 200 })).toBe(false);
-    expect(nextCompact({ ...list, compact: false, y: 200 })).toBe(true);
+    const short = { ...list, contentHeight: 800 + GIVES + 20 };
+    expect(nextCompact({ ...short, compact: false, y: 400 })).toBe(false);
+    expect(nextCompact({ ...list, compact: false, y: 400 })).toBe(true);
   });
-  // Mutation: swap the two thresholds, or compare with `<` instead of `>`.
-  it("collapses past COLLAPSE_AT, holds between, and expands at EXPAND_AT", () => {
-    expect(nextCompact({ ...list, compact: false, y: COLLAPSE_AT })).toBe(
-      false,
-    );
-    expect(nextCompact({ ...list, compact: false, y: COLLAPSE_AT + 1 })).toBe(
-      true,
-    );
+  // Mutation: swap the two thresholds, compare with `<` instead of `>`, or
+  // drop `gives` from the collapse line (the old logic: collapse at 32).
+  it("collapses past what the hero gives plus COLLAPSE_AT, holds between, and expands at EXPAND_AT", () => {
+    const line = GIVES + COLLAPSE_AT;
+    expect(nextCompact({ ...list, compact: false, y: line })).toBe(false);
+    expect(nextCompact({ ...list, compact: false, y: line + 1 })).toBe(true);
     expect(nextCompact({ ...list, compact: true, y: EXPAND_AT + 1 })).toBe(
       true,
     );
@@ -43,6 +43,69 @@ describe("nextCompact", () => {
       nextCompact({ ...list, compact: true, y: 100, contentHeight: 700 }),
     ).toBe(false);
   });
+});
+
+// The swap changes the list's height, and the platform moves the offset to
+// match: it clamps it by what the hero gave up, and may add it back when the
+// hero returns. A scroll that goes one way must swap once, whatever the offset
+// does at the swap. Mutation: collapse at COLLAPSE_AT alone, or expand above
+// EXPAND_AT, and the "follow" model flaps (full, compact, full, compact).
+describe("a swipe swaps the hero exactly once", () => {
+  // What the swap itself does to the offset, per platform behaviour.
+  const MODELS = {
+    // The rows stay where they were on screen: the offset moves by `gives`.
+    follow: (y: number, gives: number, nowCompact: boolean) =>
+      nowCompact ? Math.max(0, y - gives) : y + gives,
+    // The offset is left alone.
+    keep: (y: number) => y,
+    // Only a collapse moves it (a clamp to the new, shorter maximum).
+    clamp: (y: number, gives: number, nowCompact: boolean) =>
+      nowCompact ? Math.max(0, y - gives) : y,
+  };
+
+  function swipe(
+    model: keyof typeof MODELS,
+    fullHeight: number,
+    from: { y: number; compact: boolean },
+    step: number,
+  ) {
+    const gives = fullHeight - list.compactHeight;
+    let { y, compact } = from;
+    const swaps: boolean[] = [];
+    for (let frame = 0; frame < 400; frame++) {
+      y = Math.max(0, y + step);
+      // The swap's own scroll event arrives before the finger moves again.
+      for (let settle = 0; settle < 4; settle++) {
+        const next = nextCompact({
+          compact,
+          y,
+          contentHeight: list.contentHeight,
+          viewHeight: list.viewHeight + (compact ? gives : 0),
+          fullHeight,
+          compactHeight: list.compactHeight,
+        });
+        if (next === compact) break;
+        compact = next;
+        swaps.push(next);
+        y = MODELS[model](y, gives, next);
+      }
+    }
+    return swaps;
+  }
+
+  const heroes = [120, 260, 380];
+  for (const model of Object.keys(MODELS) as (keyof typeof MODELS)[]) {
+    for (const fullHeight of heroes) {
+      it(`up, then down: collapse once, expand once (${model}, hero ${fullHeight})`, () => {
+        expect(swipe(model, fullHeight, { y: 0, compact: false }, 6)).toEqual([
+          true,
+        ]);
+        expect(
+          swipe(model, fullHeight, { y: 2400, compact: true }, -6),
+        ).toEqual([false]);
+      });
+    }
+  }
 });
 
 describe("compactHeroTitle", () => {

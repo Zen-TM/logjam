@@ -98,11 +98,16 @@
   animation-name: traySlide;
 }
 
-/* Closing: one quick fade of the whole tray, as Logjam GPS's pills do. Keep
-   the 100ms in step with TRAY_CLOSE_MS (MapChrome.tsx). */
+/* Closing: every pill fades together, as Logjam GPS's do (on each item, so each
+   one's own opacity animates). Keep the 100ms in step with TRAY_CLOSE_MS
+   (MapChrome.tsx). */
 .trayClosing {
   pointer-events: none;
+}
+
+.trayClosing .trayItem {
   animation: trayOut 100ms ease-out both;
+  animation-delay: 0ms;
 }
 
 @keyframes trayOut {
@@ -180,7 +185,7 @@
     animation: none;
   }
 
-  .trayClosing {
+  .trayClosing .trayItem {
     animation: none;
   }
 }

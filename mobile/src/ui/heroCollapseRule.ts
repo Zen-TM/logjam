@@ -13,11 +13,21 @@ export function compactHeroTitle(name: string, count: number): string {
 /**
  * Whether a list's pinned hero is compact, given where the list is.
  *
- * It collapses only when the list would still scroll once the hero hands back
- * its height: otherwise the list would clamp to the top and expand the hero
- * again, over and over. It expands at the top, or whenever the list no longer
- * overflows its view (a search narrowed it), when there is nothing left to
- * scroll back with. Between EXPAND_AT and COLLAPSE_AT it stays as it was.
+ * Swapping the hero changes the list's own height, and the platform may move
+ * the scroll offset by what the hero gave up or took (it clamps, or keeps the
+ * rows where they were). So the two thresholds must hold either way, or the
+ * swap itself crosses the other one and the hero flaps:
+ *
+ * - it collapses only once the list has scrolled past what the hero gives up
+ *   (`gives`) plus COLLAPSE_AT, so an offset that drops by `gives` is still
+ *   past EXPAND_AT, and the list would still scroll afterwards (else it would
+ *   clamp to the top and expand the hero again);
+ * - it expands at the top (EXPAND_AT), or when the list no longer overflows
+ *   its view (a search narrowed it), when there is nothing left to scroll back
+ *   with. An offset that grows by `gives` after that stays under the collapse
+ *   line. Between the two it stays as it was.
+ *
+ * Guard: heroCollapse.test.ts simulates both offset moves.
  */
 export function nextCompact(input: {
   compact: boolean;
@@ -31,5 +41,5 @@ export function nextCompact(input: {
   const overflow = contentHeight - viewHeight;
   if (compact) return !(y <= EXPAND_AT || overflow <= 0);
   const gives = Math.max(0, input.fullHeight - input.compactHeight);
-  return y > COLLAPSE_AT && overflow > gives + COLLAPSE_AT;
+  return y > gives + COLLAPSE_AT && overflow > gives + COLLAPSE_AT;
 }

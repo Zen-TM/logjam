@@ -12,6 +12,12 @@ import { useReducedMotionRef } from "./useReducedMotion";
 /** How long the swap between the full and the compact hero eases. */
 const SWAP_MS = 100;
 
+/** After a swap the list's offset is in flux (the layout moved under it) and
+ *  scroll events already in flight carry the old one: they are read for their
+ *  numbers but not acted on until this has passed, and the next scroll or the
+ *  end of the gesture decides. */
+const SETTLE_MS = 200;
+
 /**
  * Whether a list's pinned hero is full or compact, from the list's own scroll,
  * size and layout (`nextCompact` holds the rule; guard: `heroCollapse.test.ts`).
@@ -36,10 +42,12 @@ export function useHeroCollapse() {
     compactHeight: COMPACT_ROW,
   });
 
+  const settledAt = useRef(0);
   const evaluate = useCallback(() => {
     const next = nextCompact({ compact: state.current, ...metrics.current });
     if (next === state.current) return;
     state.current = next;
+    settledAt.current = Date.now() + SETTLE_MS;
     if (!reduceMotion.current)
       LayoutAnimation.configureNext(
         LayoutAnimation.create(SWAP_MS, "easeOut", "opacity"),
@@ -63,10 +71,13 @@ export function useHeroCollapse() {
         contentHeight: contentSize.height,
         viewHeight: layoutMeasurement.height,
       });
-      evaluate();
+      if (Date.now() >= settledAt.current) evaluate();
     },
     [evaluate],
   );
+
+  // The gesture ending is the moment to take a decision a settling list held.
+  const onScrollEnd = useCallback(() => evaluate(), [evaluate]);
 
   // A search or a filter can shorten the list without a scroll event.
   const onContentSizeChange = useCallback(
@@ -98,6 +109,8 @@ export function useHeroCollapse() {
       onScroll,
       // One event a frame: the swap lands on the frame that crossed it.
       scrollEventThrottle: 16,
+      onScrollEndDrag: onScrollEnd,
+      onMomentumScrollEnd: onScrollEnd,
       onContentSizeChange,
       onLayout: onListLayout,
     },
