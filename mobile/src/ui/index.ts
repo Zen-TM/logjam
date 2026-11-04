@@ -20,7 +20,8 @@ export {
 export { confirm } from "./confirm";
 export { Hero } from "./Hero";
 export { HeroAdd } from "./HeroAdd";
-export { CollapsingHero } from "./CollapsingHero";
+export { CollapsingHeader, CollapsingHero } from "./CollapsingHero";
+export { HeroFlatList, HeroScrollView, HeroSectionList } from "./HeroLists";
 export { useHeroCollapse } from "./useHeroCollapse";
 export { compactHeroTitle } from "./heroCollapseRule";
 export { useReduceMotion } from "./useReduceMotion";

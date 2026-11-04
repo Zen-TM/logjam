@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import {
   contractSectionKeys,
   LEADERBOARD,
@@ -45,7 +45,9 @@ import {
   Avatar,
   BottomSheet,
   Button,
+  CollapsingHeader,
   CollapsingHero,
+  HeroScrollView,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -232,13 +234,19 @@ export function LeaderboardScreen({
   return (
     <View style={styles.root}>
       {/* The hero is pinned; everything under it scrolls (shared/DESIGN.md §2). */}
-      {LEADERBOARD_SECTIONS[hero](props)}
-      <ScrollView
+      <CollapsingHeader collapse={heroCollapse}>
+        {LEADERBOARD_SECTIONS[hero](props)}
+      </CollapsingHeader>
+      <HeroScrollView
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          heroCollapse.inset(spacing(1.5)),
+        ]}
         {...heroCollapse.scrollProps}
         refreshControl={
           <RefreshControl
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={theme.accent}
@@ -251,7 +259,7 @@ export function LeaderboardScreen({
         {rest.map((key) => (
           <Fragment key={key}>{LEADERBOARD_SECTIONS[key](props)}</Fragment>
         ))}
-      </ScrollView>
+      </HeroScrollView>
       <BottomSheet
         visible={rulesOpen}
         onClose={() => setRulesOpen(false)}
@@ -352,7 +360,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
-    paddingTop: spacing(1.5),
     gap: spacing(1),
     paddingBottom: spacing(4),
   },

@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { Alert, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -62,7 +62,9 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  CollapsingHeader,
   CollapsingHero,
+  HeroFlatList,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -708,21 +710,28 @@ export function PlansScreen({
     ),
     list:
       shown.kind === "loading" ? (
-        <LoadingState label={copy.loading} />
+        <View style={[styles.list, heroCollapse.inset()]}>
+          <LoadingState label={copy.loading} />
+        </View>
       ) : shown.kind === "neverFetched" ? (
-        <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.noPlansOffline} />
+        <View style={[styles.list, heroCollapse.inset()]}>
+          <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.noPlansOffline} />
+        </View>
       ) : shown.kind === "failed" ? (
-        <ErrorState message={shown.message} onRetry={() => void poll()} />
+        <View style={[styles.list, heroCollapse.inset()]}>
+          <ErrorState message={shown.message} onRetry={() => void poll()} />
+        </View>
       ) : (
-        <FlatList
+        <HeroFlatList
           style={styles.list}
           {...heroCollapse.scrollProps}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
           data={rows}
           keyExtractor={planKey}
           renderItem={renderItem}
           refreshControl={
             <RefreshControl
+              progressViewOffset={heroCollapse.headerHeight}
               refreshing={refreshing}
               onRefresh={() => void poll()}
               tintColor={theme.accent}
@@ -743,9 +752,14 @@ export function PlansScreen({
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(TRIP_PLANS_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(TRIP_PLANS_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
       <PlanDetailsSheet
         visible={newOpen}
         onClose={() => setNewOpen(false)}

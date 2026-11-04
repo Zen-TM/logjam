@@ -82,10 +82,12 @@ renumber.
   reduced to the glyph. It returns at the top, and when the list is too short
   to scroll. The rail and the search stay pinned. A detail page (a place, a
   trip, a plan) does not collapse: its header is the item itself, and there is
-  no list to give the screen back to. The swap is `CollapsingHero`, which
-  re-renders the hero alone and eases for 100 ms: a collapse that waits on the
-  whole screen reads as lag. Guard: `heroCollapse.test.ts`, which fails for a
-  screen that draws a `Hero` and is on neither of its lists.
+  no list to give the screen back to. The collapse follows the scroll offset
+  frame by frame (`CollapsingHeader`, `useHeroCollapse`): the header floats
+  over the list and slides, fades and cross-fades on the UI thread, nothing
+  re-lays-out, and a list let go halfway settles to the nearer end. With
+  reduced motion it swaps in one step instead. Guard: `heroCollapse.test.ts`,
+  which fails for a screen that draws a `Hero` and is on neither of its lists.
 - **Between the hero and the list, only what narrows the list** (the rail, a
   search bar, a selection bar). A way elsewhere is a hero action; a number it carries is its
   badge.

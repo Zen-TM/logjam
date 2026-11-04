@@ -32,7 +32,6 @@ import {
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   RefreshControl,
   Share,
   Text,
@@ -86,7 +85,9 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  CollapsingHeader,
   CollapsingHero,
+  HeroFlatList,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -393,49 +394,54 @@ export function FriendsScreen({
       </View>
     ),
     list: () => (
-      <>
-        {/* Stays inline with a retry, because a stale list IS the problem and it
-            persists until the fetch works (DESIGN.md). */}
-        {loadError ? (
-          <View style={styles.banner}>
-            <ErrorBanner message={loadError} onRetry={() => void load()} />
-          </View>
-        ) : null}
-
-        <FlatList
-          style={styles.list}
-          {...heroCollapse.scrollProps}
-          contentContainerStyle={styles.listContent}
-          data={items}
-          keyExtractor={keyExtractor}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.accent}
-            />
-          }
-          renderItem={renderItem}
-          ListEmptyComponent={
-            <EmptyPanel
-              kind={friendsEmptyKind({
-                friends: friends.length,
-                requests: requests.length,
-                bucket,
-              })}
-              onAdd={() => setAddOpen(true)}
-            />
-          }
-        />
-      </>
+      <HeroFlatList
+        style={styles.list}
+        {...heroCollapse.scrollProps}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
+        // Stays inline with a retry, because a stale list IS the problem and
+        // it persists until the fetch works (DESIGN.md).
+        ListHeaderComponent={
+          loadError ? (
+            <View style={styles.banner}>
+              <ErrorBanner message={loadError} onRetry={() => void load()} />
+            </View>
+          ) : undefined
+        }
+        data={items}
+        keyExtractor={keyExtractor}
+        refreshControl={
+          <RefreshControl
+            progressViewOffset={heroCollapse.headerHeight}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.accent}
+          />
+        }
+        renderItem={renderItem}
+        ListEmptyComponent={
+          <EmptyPanel
+            kind={friendsEmptyKind({
+              friends: friends.length,
+              requests: requests.length,
+              bucket,
+            })}
+            onAdd={() => setAddOpen(true)}
+          />
+        }
+      />
     ),
   };
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(FRIENDS, "gps").map((key) => (
-        <Fragment key={key}>{page[key]()}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(FRIENDS, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{page[key]()}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {page.list()}
 
       <BottomSheet
         visible={addOpen}
@@ -760,7 +766,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
-  banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
+  banner: { paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),

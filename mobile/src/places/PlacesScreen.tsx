@@ -26,14 +26,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  RefreshControl,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Keyboard, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -92,7 +85,9 @@ import {
   BottomSheet,
   Meter,
   Hero,
+  CollapsingHeader,
   CollapsingHero,
+  HeroFlatList,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -797,10 +792,10 @@ export function PlacesScreen({
     ) : null,
 
     list: (
-      <FlatList
+      <HeroFlatList
         style={styles.list}
         {...heroCollapse.scrollProps}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={visible}
         keyExtractor={keyExtractor}
         keyboardShouldPersistTaps="handled"
@@ -812,6 +807,7 @@ export function PlacesScreen({
         removeClippedSubviews
         refreshControl={
           <RefreshControl
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
@@ -843,9 +839,14 @@ export function PlacesScreen({
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(PLACES_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(PLACES_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
 
       {/* Per-place actions, titled with the place so a mis-tap can't destroy
           the wrong one — the SAME sheet the map opens on a place pin, so the
