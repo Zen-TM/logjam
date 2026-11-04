@@ -9,13 +9,13 @@
 // Local storage is untouched by that distinction: guest mutations still write
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
+  createNavigationContainerRef,
   NavigationContainer,
-  type NavigationContainerRef,
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
@@ -53,6 +53,7 @@ import { canRunNow } from "./offline/networkPolicy";
 import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
+import { createTapIntake } from "./notifications/tapIntake";
 import { notificationTapTarget } from "./notifications/tapTarget";
 import { PLACE_FOCUS_DEGREES } from "./saved/bboxOfPoints";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
@@ -878,6 +879,90 @@ function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
   return <Icon idea={idea} size={22} color={color} />;
 }
 
+// Module-level: the intake outlives a shell remount (a sign-in change), which
+// is what keeps one tap from being followed twice. The ref is untyped across
+// nested navigators; runtime routes are the tab/screen names registered below.
+const navigationRef = createNavigationContainerRef<never>();
+type TapNav = { navigate: (name: string, params?: object) => void };
+
+/** Where a tapped notification goes. Cold start, warm start and the app in the
+ *  foreground all end here, via `tapIntake`. */
+function openNotificationTap(nav: TapNav, data: unknown) {
+  // Where the tap goes — including the guard the tab bar applies, for the
+  // same reason. The precedence lives in notifications/tapTarget, pure and
+  // tested, because nothing in mobile/ can run this component.
+  const target = notificationTapTarget({
+    data,
+    routeEditing: isRouteEditing(),
+  });
+  if (target.kind === "blocked") {
+    // With the Alert, so the tap is answered rather than silently ignored.
+    alertFinishRouteFirst();
+    return;
+  }
+  // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
+  // glance, often from a lock screen, whereas read means "seen, nothing
+  // left to do here". The unread list is the queue of things the user
+  // still has to deal with, and emptying it on the strength of a
+  // tap-through takes rows out of the one list they are looked for in.
+  // Opening the row is what reads it. An announcement push opens its
+  // message on the inbox, and the message is read when the user closes it.
+  if (target.kind === "place") {
+    nav.navigate("Places", {
+      screen: "PlaceDetail",
+      params: { placeId: target.placeId, name: "Place" },
+    });
+  } else if (target.kind === "plan") {
+    nav.navigate("More", {
+      screen: "Plan",
+      params: {
+        planId: target.planId,
+        name: TRIP_PLANS_LIST.title,
+        view: target.view,
+        invited: target.invited,
+      },
+    });
+  } else if (target.kind === "announcement") {
+    nav.navigate("More", {
+      screen: "Inbox",
+      params: {
+        openAnnouncement: {
+          announcementId: target.announcementId,
+          nonce: Date.now(),
+        },
+      },
+    });
+  } else if (target.kind === "friends") {
+    nav.navigate("More", { screen: "Friends" });
+  } else if (target.kind === "saved") {
+    // The tab, on its filter, with the row pulsed: where the Inbox row's
+    // "View in Saved" goes.
+    nav.navigate("Saved", {
+      screen: "SavedHome",
+      params: {
+        filter: target.filter,
+        nonce: Date.now(),
+        ...(target.highlightKey ? { highlightKey: target.highlightKey } : {}),
+      },
+    });
+  } else {
+    // Inbox lives inside the More stack.
+    nav.navigate("More", { screen: "Inbox" });
+  }
+}
+
+const tapIntake = createTapIntake<unknown>(
+  () => navigationRef.isReady(),
+  (data) => openNotificationTap(navigationRef as unknown as TapNav, data),
+);
+
+function offerTap(response: Notifications.NotificationResponse) {
+  tapIntake.offer(
+    response.notification.request.identifier,
+    response.notification.request.content.data,
+  );
+}
+
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -909,7 +994,6 @@ export function AppShell({
   );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
-  const navigationRef = useRef<NavigationContainerRef<never>>(null);
   const tabBarHeight = useTabBarHeight();
 
   // Register this device for pushes once authenticated (best-effort), and
@@ -964,65 +1048,12 @@ export function AppShell({
     // This registers the token only when notification permission is ALREADY
     // granted; it never prompts (Settings → Notifications asks).
     if (!isGuest) void registerForPushNotifications();
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        // The ref is untyped across nested navigators; runtime routes are
-        // the tab/screen names registered below.
-        const nav = navigationRef.current as unknown as {
-          navigate: (name: string, params?: object) => void;
-        } | null;
-        if (!nav) return;
-        // Where the tap goes — including the guard the tab bar applies, for the
-        // same reason. The precedence lives in
-        // notifications/tapTarget, pure and tested, because this listener is
-        // inside a component and nothing in mobile/ can run one.
-        const target = notificationTapTarget({
-          data: response.notification.request.content.data,
-          routeEditing: isRouteEditing(),
-        });
-        if (target.kind === "blocked") {
-          // With the Alert, so the tap is answered rather than silently ignored.
-          alertFinishRouteFirst();
-          return;
-        }
-        // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
-        // glance, often from a lock screen, whereas read means "seen, nothing
-        // left to do here". The unread list is the queue of things the user
-        // still has to deal with, and emptying it on the strength of a
-        // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it. An announcement push opens its
-        // message on the inbox, and the message is read when the user closes it.
-        if (target.kind === "place") {
-          nav.navigate("Places", {
-            screen: "PlaceDetail",
-            params: { placeId: target.placeId, name: "Place" },
-          });
-        } else if (target.kind === "plan") {
-          nav.navigate("More", {
-            screen: "Plan",
-            params: {
-              planId: target.planId,
-              name: TRIP_PLANS_LIST.title,
-              view: target.view,
-              invited: target.invited,
-            },
-          });
-        } else if (target.kind === "announcement") {
-          nav.navigate("More", {
-            screen: "Inbox",
-            params: {
-              openAnnouncement: {
-                announcementId: target.announcementId,
-                nonce: Date.now(),
-              },
-            },
-          });
-        } else {
-          // Inbox lives inside the More stack.
-          nav.navigate("More", { screen: "Inbox" });
-        }
-      },
-    );
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener(offerTap);
+    // A tap that STARTED the app is not delivered to a listener added after it:
+    // it waits in the last-response slot until the shell mounts.
+    const launching = Notifications.getLastNotificationResponse();
+    if (launching) offerTap(launching);
     // A plan push while Logjam GPS is open: the list and that plan are
     // fetched again, so neither reads stale, if the connection rule allows.
     const received = Notifications.addNotificationReceivedListener(
@@ -1112,7 +1143,11 @@ export function AppShell({
         on any tab, so their outcome has no screen of its own to be announced
         from. */}
       <View style={{ flex: 1 }}>
-        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+        <NavigationContainer
+          ref={navigationRef}
+          theme={navigationTheme}
+          onReady={tapIntake.flush}
+        >
           <Tabs.Navigator
             // A route being drawn or edited owns the map's taps and has no home
             // anywhere else, so the tab bar refuses to take you off it. The draft

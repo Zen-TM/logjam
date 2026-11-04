@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NOTIFICATION_DESTINATIONS, NOTIFICATION_TYPES } from "@logjam/shared";
 
 import { notificationTapTarget } from "./tapTarget";
 
@@ -105,6 +106,83 @@ describe("notificationTapTarget", () => {
     );
     expect(notificationTapTarget({ data, routeEditing: false }).kind).toBe(
       "place",
+    );
+  });
+
+  // What the API and the topo worker actually put in each push (type plus
+  // opaque ids): api/src/services/push.ts and topo/push_send.py.
+  const PUSH_DATA = {
+    friend_request: { friendshipId: "f1" },
+    friend_request_accepted: { friendshipId: "f1" },
+    place_shared: { placeId: "p1" },
+    item_shared: { entityType: "route", entityId: "r1" },
+    file_sent: { fileSendId: "s1" },
+    topo_complete: { jobId: "j1" },
+    topo_failed: { jobId: "j1" },
+    topo_export_complete: { exportId: "e1" },
+    topo_export_skipped: {},
+    egress_quota_warning: {},
+    egress_quota_exceeded: {},
+    announcement: { announcementId: "a1" },
+    plan_invited: { planId: "pl1" },
+    plan_join_request: { planId: "pl1" },
+    plan_join_approved: { planId: "pl1" },
+    plan_member_joined: { planId: "pl1" },
+    plan_access_ended: { planId: "pl1" },
+  } satisfies Record<(typeof NOTIFICATION_TYPES)[number], object>;
+
+  // Mutation: route a push by anything but its Inbox row's destination (drop
+  // the notificationDestination branch, say) and a friend or shared-item push
+  // lands on the bare inbox; a new type with no PUSH_DATA does not compile.
+  const KIND_OF = {
+    place: "place",
+    plan: "plan",
+    friends: "friends",
+    item: "saved",
+    topo: "saved",
+    // A push cannot say the send was kept, so it lands where it is answered.
+    file: "inbox",
+    message: "announcement",
+    none: "inbox",
+  } as const;
+
+  it.each(NOTIFICATION_TYPES)(
+    "sends a %s push where its Inbox row goes",
+    (type) => {
+      const target = notificationTapTarget({
+        data: { type, ...PUSH_DATA[type] },
+        routeEditing: false,
+      });
+      expect(target.kind).toBe(KIND_OF[NOTIFICATION_DESTINATIONS[type]]);
+    },
+  );
+
+  // bulk_shared is a push-only type (no row), so the table above cannot hold it.
+  it("sends a bulk share to the inbox, which lists what arrived", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "bulk_shared", batchId: "b1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "inbox" });
+  });
+
+  // Mutation: drop the highlight key and the shared route opens its filter with
+  // no row pulsed.
+  it("points a shared item and a finished topo at their Saved row", () => {
+    expect(
+      notificationTapTarget({
+        data: { type: "item_shared", entityType: "route", entityId: "r1" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "saved", filter: "route", highlightKey: "r1" });
+    const topo = notificationTapTarget({
+      data: { type: "topo_complete", jobId: "j1" },
+      routeEditing: false,
+    });
+    expect(topo).toMatchObject({ kind: "saved", filter: "overlay" });
+    expect((topo as { highlightKey: string | null }).highlightKey).toContain(
+      "j1",
     );
   });
 });
