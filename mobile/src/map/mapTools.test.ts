@@ -24,17 +24,23 @@ describe("MapToolGroup", () => {
   });
 });
 
-// Mutation: drop the backdrop Pressable from MapScreen, or let its onPress do
-// more than close the tray, and a press that closes the tray also reaches the
-// map or a button under it.
-describe("MapScreen's tools backdrop", () => {
+// Mutation: drop the backdrop Pressable (a press on the map then also reaches
+// the map), drop `onTouchEnd={closeToolsAfterOutsideTouch}` (a press elsewhere
+// leaves the tray open), or move the backdrop over the controls (a tab or a map
+// button then stops acting).
+describe("MapScreen's tools tray and an outside press", () => {
   const source = readFileSync(
     new URL("./MapScreen.tsx", import.meta.url),
     "utf8",
   );
-  it("closes the open tray and nothing else", () => {
+  it("catches a press on the map only, under every control", () => {
     expect(source).toMatch(
-      /\{toolsOpen \? \(\s*<Pressable\s+style=\{StyleSheet\.absoluteFill\}\s+accessible=\{false\}\s+onPress=\{\(\) => setToolsOpen\(false\)\}\s*\/>/,
+      /<\/Map>\s*\{\/\*[\s\S]*?\*\/\}\s*\{toolsOpen \? \(\s*<Pressable\s+style=\{StyleSheet\.absoluteFill\}\s+accessible=\{false\}\s+onPress=\{\(\) => \{\}\}\s*\/>/,
     );
+  });
+  it("closes on any touch that did not start on the + or the tray", () => {
+    expect(source).toContain("onTouchEnd={closeToolsAfterOutsideTouch}");
+    expect(source).toContain("<View onTouchStart={markToolsTouch}>");
+    expect(source).toContain("onTouchStart={markToolsTouch}");
   });
 });

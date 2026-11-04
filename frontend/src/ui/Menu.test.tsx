@@ -89,29 +89,49 @@ describe("a press outside a floating element", () => {
   });
 });
 
-describe("useOutsidePress with swallow", () => {
-  function Host({ onOutside }: { onOutside: () => void }) {
+describe("useOutsidePress with swallowWithin", () => {
+  function Host({
+    onOutside,
+    within,
+  }: {
+    onOutside: () => void;
+    within: Element;
+  }) {
     const ref = useRef<HTMLDivElement>(null);
-    useOutsidePress(true, [ref], onOutside, { swallow: true });
+    useOutsidePress(true, [ref], onOutside, within);
     return <div ref={ref}>inside</div>;
   }
 
-  // Mutation: drop the one-shot click listener, and the press that closed the
-  // tools tray also reaches the map under it.
-  it("closes on the press and eats the click that follows", () => {
+  // Mutation: swallow every outside press (drop the `swallowWithin?.contains`
+  // test), and a tab or another map button stops acting when it closes the
+  // tools tray; drop the swallow, and the press also reaches the map.
+  it("eats the click of a press on the map, and only that one", () => {
+    const map = document.body.appendChild(document.createElement("div"));
+    const onMapClick = vi.fn();
+    map.addEventListener("click", onMapClick);
     const onOutside = vi.fn();
-    const onClick = vi.fn();
-    render(<Host onOutside={onOutside} />);
-    const elsewhere = document.body.appendChild(
-      document.createElement("button"),
-    );
-    elsewhere.addEventListener("click", onClick);
-    fireEvent.pointerDown(elsewhere);
-    fireEvent.click(elsewhere);
+    render(<Host onOutside={onOutside} within={map} />);
+    fireEvent.pointerDown(map);
+    fireEvent.click(map);
     expect(onOutside).toHaveBeenCalledTimes(1);
-    expect(onClick).not.toHaveBeenCalled();
-    fireEvent.click(elsewhere);
-    expect(onClick).toHaveBeenCalledTimes(1);
-    elsewhere.remove();
+    expect(onMapClick).not.toHaveBeenCalled();
+    fireEvent.click(map);
+    expect(onMapClick).toHaveBeenCalledTimes(1);
+    map.remove();
+  });
+
+  it("closes on a press elsewhere and lets that control act", () => {
+    const map = document.body.appendChild(document.createElement("div"));
+    const tab = document.body.appendChild(document.createElement("button"));
+    const onTab = vi.fn();
+    tab.addEventListener("click", onTab);
+    const onOutside = vi.fn();
+    render(<Host onOutside={onOutside} within={map} />);
+    fireEvent.pointerDown(tab);
+    fireEvent.click(tab);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onTab).toHaveBeenCalledTimes(1);
+    map.remove();
+    tab.remove();
   });
 });

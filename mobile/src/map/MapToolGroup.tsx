@@ -90,12 +90,15 @@ export function MapToolTray({
   side,
   top,
   onPickTool,
+  onTouchStart,
 }: {
   open: boolean;
   activeTool: MapTool | null;
   side: "right" | "left";
   top: number;
   onPickTool: (tool: MapTool) => void;
+  /** A touch starting on any pill: the screen tells it from one outside. */
+  onTouchStart: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -127,6 +130,7 @@ export function MapToolTray({
 
   return (
     <View
+      onTouchStart={onTouchStart}
       pointerEvents={open ? "box-none" : "none"}
       style={[
         styles.tray,

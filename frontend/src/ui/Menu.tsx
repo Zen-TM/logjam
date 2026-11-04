@@ -59,16 +59,51 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
   }, [open, ref]);
 }
 
+/** How long after a press is released its click can still arrive. The click
+ *  follows the release at once; this is only slack. */
+const CLICK_AFTER_RELEASE_MS = 400;
+
+/** Stops the click this press ends in, in the capture phase, before the map or
+ *  a control under it hears it. The catcher is for THIS press only: it is
+ *  cleared once the press is released and its click has had time to come
+ *  (a drag, a touch pan, a right-click that never clicks), or by the next
+ *  press. So a later click with no press before it (Enter or Space on a
+ *  focused button, a screen reader's activation) is never eaten. */
+function swallowNextClick() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stop = (event: Event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    clear();
+  };
+  const released = () => {
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
+    timer = setTimeout(clear, CLICK_AFTER_RELEASE_MS);
+  };
+  const clear = () => {
+    clearTimeout(timer);
+    window.removeEventListener("click", stop, true);
+    window.removeEventListener("pointerdown", clear, true);
+    window.removeEventListener("pointerup", released, true);
+    window.removeEventListener("pointercancel", released, true);
+  };
+  window.addEventListener("click", stop, true);
+  window.addEventListener("pointerdown", clear, true);
+  window.addEventListener("pointerup", released, true);
+  window.addEventListener("pointercancel", released, true);
+}
+
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. With `swallow`, the click that press ends in is
- *  eaten as well, so the press only closes (the map tools tray). Guard:
- *  Menu.test.tsx. */
+ *  and reopening in one click. With `swallowWithin`, a press that lands inside
+ *  that element closes the panel and the click it ends in goes nowhere else;
+ *  a press anywhere else closes it and still acts. */
 export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
-  { swallow = false }: { swallow?: boolean } = {},
+  swallowWithin: Element | null = null,
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -86,15 +121,7 @@ export function useOutsidePress(
       )
         return;
       handleOutside();
-      if (swallow) {
-        const eat = (click: Event) => {
-          click.stopPropagation();
-          click.preventDefault();
-        };
-        document.addEventListener("click", eat, { capture: true, once: true });
-        // A press that became a drag ends in no click: don't eat the next one.
-        setTimeout(() => document.removeEventListener("click", eat, true), 600);
-      }
+      if (swallowWithin?.contains(target)) swallowNextClick();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>

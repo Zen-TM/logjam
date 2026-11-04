@@ -100,7 +100,7 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   nothing is. The menu item that leads to it is `danger`, without the fill.
 - **`Popover`** is non-modal. Whether an outside press closes it is the
   caller's call, and Layers and a value picker both close (so does the Tools
-  tray, and the press that closes the tray does nothing else); a press on the
+  tray; a press on the map that closes it does nothing more); a press on the
   map closes them too. More than a switch inside opens a sub-view, never a
   second popover or an accordion.
 - **`Menu`** is titled with the thing it acts on.

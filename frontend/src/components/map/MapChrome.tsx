@@ -140,9 +140,14 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
-  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false), {
-    swallow: true,
-  });
+  // Closes on any press elsewhere; one on the map does nothing more, one on a
+  // control (a tab, another map button) still acts.
+  useOutsidePress(
+    toolsOpen,
+    [toolsLineRef],
+    () => setToolsOpen(false),
+    map?.getContainer() ?? null,
+  );
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);

@@ -399,8 +399,9 @@ renumber.
   it. Each tool is a pill with its label and a one-line description from
   `MAP_TOOLS`. The first slides out from under the +, the rest fall out from
   under the one above, staggered, 200 ms in all, and not at all under
-  reduced motion. A press anywhere else closes the tray and does nothing
-  more. A tool a client lacks is absent, not disabled. A tool's own settings
+  reduced motion. A press anywhere else closes the tray; one on the map does
+  nothing more, one on a control (a tab, another map button) still acts. A
+  tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now. A notice
   about data being lost right now is `tone="critical"` (the warning fill,

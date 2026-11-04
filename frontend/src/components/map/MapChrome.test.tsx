@@ -14,6 +14,7 @@ const stubMap = {
   getZoom: () => 10,
   getMinZoom: () => 0,
   getMaxZoom: () => 20,
+  getContainer: () => document.createElement("div"),
 } as unknown as maplibregl.Map;
 
 function chrome(selectingArea = false, map: maplibregl.Map | null = null) {

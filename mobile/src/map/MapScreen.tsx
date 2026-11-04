@@ -1047,6 +1047,17 @@ export function MapScreen({
     [],
   );
   const [toolsOpen, setToolsOpen] = useState(false);
+  // Set by a touch that starts on the + or the tray; the root clears it as the
+  // touch ends. Any other touch that ends while the tray is open closes it.
+  const touchedTools = useRef(false);
+  const markToolsTouch = useCallback(() => {
+    touchedTools.current = true;
+  }, []);
+  const closeToolsAfterOutsideTouch = useCallback(() => {
+    const onTools = touchedTools.current;
+    touchedTools.current = false;
+    if (!onTools) setToolsOpen(false);
+  }, []);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
   /** The draft the map's taps belong to, or null when no tool is armed. */
@@ -4881,6 +4892,8 @@ export function MapScreen({
       onResponderTerminate={endPinch}
       // Nothing takes a pinch off us halfway through.
       onResponderTerminationRequest={() => false}
+      onTouchEnd={closeToolsAfterOutsideTouch}
+      onTouchCancel={closeToolsAfterOutsideTouch}
     >
       <Map
         ref={mapRef}
@@ -5397,6 +5410,19 @@ export function MapScreen({
         ) : null}
       </Map>
 
+      {/* An open tools tray is closed by any press that is not on it (the root
+          View's onTouchEnd below). A press on the MAP also does nothing else:
+          this catches it, and sits under every control, so a tab, a map button
+          or the search still acts as well as closing the tray. Guard:
+          mapTools.test.ts. */}
+      {toolsOpen ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessible={false}
+          onPress={() => {}}
+        />
+      ) : null}
+
       {/* Map banners: modes with a way out, in the top row beside the search
           pill (a search bar that expands covers the first). Any
           more stack under it, and the notice stack below moves down by them.
@@ -5621,17 +5647,6 @@ export function MapScreen({
         ) : null}
       </ScrollView>
 
-      {/* An open tools tray ends with the next press anywhere else, and that
-          press does nothing more: this sits over the map and every notice, and
-          under the column and the tray. Guard: mapTools.test.ts. */}
-      {toolsOpen ? (
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          accessible={false}
-          onPress={() => setToolsOpen(false)}
-        />
-      ) : null}
-
       {/* One column of actions on one edge; the OTHER edge belongs to the map's
           own instruments (native compass + compass tape + scale bar). Which is
           which is the user's (Settings → Map): the two swap as a pair, because
@@ -5648,11 +5663,13 @@ export function MapScreen({
             chip; from the top it clears the whole stack. It is also the
             least-reached button of the five, so the three that are reached
             (layers, locate, record) keep the thumb end of the column. */}
-        <MapToolGroup
-          open={toolsOpen}
-          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
-          onToggleOpen={() => setToolsOpen((open) => !open)}
-        />
+        <View onTouchStart={markToolsTouch}>
+          <MapToolGroup
+            open={toolsOpen}
+            activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+            onToggleOpen={() => setToolsOpen((open) => !open)}
+          />
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -5702,6 +5719,7 @@ export function MapScreen({
           side={controlsOnLeft ? "left" : "right"}
           top={columnTop}
           onPickTool={handlePickTool}
+          onTouchStart={markToolsTouch}
         />
       ) : null}
 
