@@ -398,15 +398,6 @@ export function FriendsScreen({
         style={styles.list}
         {...heroCollapse.scrollProps}
         contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
-        // Stays inline with a retry, because a stale list IS the problem and
-        // it persists until the fetch works (DESIGN.md).
-        ListHeaderComponent={
-          loadError ? (
-            <View style={styles.banner}>
-              <ErrorBanner message={loadError} onRetry={() => void load()} />
-            </View>
-          ) : undefined
-        }
         data={items}
         keyExtractor={keyExtractor}
         refreshControl={
@@ -440,6 +431,14 @@ export function FriendsScreen({
           .map((key) => (
             <Fragment key={key}>{page[key]()}</Fragment>
           ))}
+        {/* Stays inline with a retry, because a stale list IS the problem and it
+            persists until the fetch works (DESIGN.md); pinned, so a long scroll
+            still shows it. */}
+        {loadError ? (
+          <View style={styles.banner}>
+            <ErrorBanner message={loadError} onRetry={() => void load()} />
+          </View>
+        ) : null}
       </CollapsingHeader>
       {page.list()}
 
@@ -766,7 +765,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingTop: spacing(1.5),
     paddingBottom: spacing(1.5),
   },
-  banner: { paddingBottom: spacing(1) },
+  banner: { paddingHorizontal: spacing(2), paddingBottom: spacing(1) },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),

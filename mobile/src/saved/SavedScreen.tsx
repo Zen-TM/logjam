@@ -556,8 +556,9 @@ export function SavedScreen({
   const scrollToPulse = useCallback(
     (y: number) => {
       if (scrolledForNonce.current === highlightNonce) return;
-      scrolledForNonce.current = highlightNonce;
-      scrollToRow(y, spacing(2));
+      // Not until the list is padded for the header: the row lays out again
+      // after that, and this is called again with the offset that counts.
+      if (scrollToRow(y, spacing(2))) scrolledForNonce.current = highlightNonce;
     },
     [highlightNonce, scrollToRow],
   );
