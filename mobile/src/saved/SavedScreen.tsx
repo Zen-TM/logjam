@@ -1673,7 +1673,7 @@ export function SavedScreen({
     <View style={styles.screen}>
       {/* The storage summary is the hero; once the list scrolls it folds to
           the title row (and the bulk bar, which takes its slot while picking),
-          and the chips and search scroll with the list. */}
+          and the chips and search stay pinned under it. */}
       <CollapsingHero collapse={heroCollapse}>
         {(compact) => (
           <Hero
@@ -1684,8 +1684,8 @@ export function SavedScreen({
                 ? `used · ${formatBytes(freeBytes)} free`
                 : "used"
             }
-            // The chips scroll away with the list, so the pinned row keeps naming
-            // the filter (an Inbox tap lands on Routes already scrolled).
+            // The pinned row names the filter even when it is compact (an Inbox
+            // tap lands on Routes).
             title={(() => {
               const name =
                 filter === "all"
@@ -1742,13 +1742,8 @@ export function SavedScreen({
         )}
       </CollapsingHero>
 
-      <ScrollView
-        ref={scrollRef}
-        {...heroCollapse.scrollProps}
-        contentContainerStyle={styles.body}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
+      {/* Pinned with the hero (shared/DESIGN.md: only the list scrolls). */}
+      <View style={styles.pinnedRail}>
         <View style={styles.rail}>
           <ChipRail
             options={filterOptions}
@@ -1781,7 +1776,15 @@ export function SavedScreen({
             </View>
           ) : null}
         </View>
+      </View>
 
+      <ScrollView
+        ref={scrollRef}
+        {...heroCollapse.scrollProps}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {activeOp ? (
           <Row
             title={activeOp.label}
@@ -2672,6 +2675,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     marginHorizontal: -spacing(2),
     paddingLeft: spacing(2),
   },
+  pinnedRail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
   body: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),
