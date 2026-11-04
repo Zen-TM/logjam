@@ -24,42 +24,43 @@
 // screen where every pixel of chrome is a pixel of terrain — and in magnetic it
 // carries a single "M", because a tape that silently reads 12° low is worth
 // declaring.
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { compassPointFor } from "@logjam/shared";
 
 import { radius, spacing, textScale, withAlpha, makeStyles } from "../theme";
 import type { NorthReference } from "./mapPreferences";
 import {
   compassLabelFits,
+  compassLabelWidth,
+  compassStripHeight,
   compassStripWidth,
   compassTicks,
   displayHeading,
 } from "./compassTape";
 
 /**
- * Fixed height, and exported: the native MapLibre compass ornament shares this
- * corner, and its margin is a static number that has to clear this box (see
- * mapChrome.CHROME_BOTTOM's use in MapScreen).
- *
- * It grows with the type, because the box exists to hold the labels: at a large
+ * What the type is drawn at: Logjam's size times the system's font scale.
+ * The boxes below exist to hold the labels, so they grow with it: at a large
  * text size a 38 px strip clips its own bearings, and an instrument that can't
  * be read is worse than one that takes another eight pixels of map.
  */
-export const COMPASS_STRIP_HEIGHT = Math.round(38 * textScale);
+const drawnScale = (fontScale: number) => textScale * fontScale;
+
+/**
+ * Exported with the width: the native MapLibre compass ornament shares this
+ * corner, and its margin has to clear this box (see mapChrome.CHROME_BOTTOM's
+ * use in MapScreen).
+ */
+export const stripHeight = (fontScale: number) =>
+  compassStripHeight(drawnScale(fontScale));
 
 /**
  * How wide the tape may be. Deliberately modest: it is a reference you glance
  * at, and every pixel of it is terrain you can't see (DESIGN.md — the map has
  * no chrome it can do without).
  */
-export const COMPASS_STRIP_WIDTH = compassStripWidth(textScale);
-
-/**
- * Room for a three-digit label centred on its tick, scaled with the type for
- * the same reason as the height. Labels sit 30° apart — 66 px at the tape's
- * scale — so even at the largest multiplier the slots stay clear of each other.
- */
-const LABEL_WIDTH = Math.round(30 * textScale);
+export const stripWidth = (fontScale: number) =>
+  compassStripWidth(drawnScale(fontScale));
 
 export function CompassStrip({
   heading,
@@ -77,6 +78,8 @@ export function CompassStrip({
   reference?: NorthReference;
 }) {
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
+  const labelWidth = compassLabelWidth(drawnScale(fontScale));
 
   if (heading == null || width <= 0) return null;
   // Applied once, here, to the whole tape: shifting the heading shifts every
@@ -88,16 +91,22 @@ export function CompassStrip({
 
   return (
     <View
-      style={[styles.frame, { width, height: COMPASS_STRIP_HEIGHT }]}
+      style={[styles.frame, { width, height: stripHeight(fontScale) }]}
       pointerEvents="none"
       accessibilityRole="image"
       accessibilityLabel={`Facing ${compassPointFor(shown)}, ${rounded} degrees ${reference}`}
     >
       <View style={styles.tape}>
         {ticks.map((tick) => (
-          <View key={tick.bearing} style={[styles.tick, { left: tick.x }]}>
+          <View
+            key={tick.bearing}
+            style={[
+              styles.tick,
+              { left: tick.x, width: labelWidth, marginLeft: -labelWidth / 2 },
+            ]}
+          >
             <View style={tick.major ? styles.markMajor : styles.markMinor} />
-            {tick.label && compassLabelFits(tick.x, width, LABEL_WIDTH) ? (
+            {tick.label && compassLabelFits(tick.x, width, labelWidth) ? (
               <Text style={styles.label} numberOfLines={1}>
                 {tick.label}
               </Text>
@@ -138,8 +147,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     position: "absolute",
     top: 0,
     bottom: 0,
-    width: LABEL_WIDTH,
-    marginLeft: -LABEL_WIDTH / 2,
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: spacing(0.5),
