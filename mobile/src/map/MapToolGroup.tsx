@@ -1,6 +1,6 @@
 // The action column's tool group: one `+` button that opens the map tools as a
-// short list of LABELLED pills beside the column, one per row, from the + row
-// down. The tools themselves are declared once (`MAP_TOOLS`, @logjam/shared),
+// short list of LABELLED pills (a label and a line saying what it does) beside
+// the column, one per row, from the + row down. The tools themselves are declared once (`MAP_TOOLS`, @logjam/shared),
 // so both clients' trays hold the same ones in the same order with the same
 // words; Logjam GPS draws the ones it has. Guard: `mapTools.test.ts`.
 //
@@ -21,6 +21,7 @@ import {
   Easing,
   Pressable,
   Text,
+  View,
   useWindowDimensions,
 } from "react-native";
 
@@ -34,8 +35,13 @@ export type MapTool = MapToolIdOn<"gps">;
 
 export const TOOLS = mapTools("gps");
 
-/** Time for the tray to slide out from under the + button. */
-const SLIDE_MS = 160;
+/** One pill's slide or fold. The first pill slides out from under the +, each
+ *  next one falls out from under the one above, a STAGGER_MS apart: the last of
+ *  four lands by 200 ms (shared/DESIGN.md §15). Closing is one
+ *  quick fade, together. Logjam Web's tray runs the same numbers in CSS. */
+const PILL_MS = 110;
+const STAGGER_MS = 30;
+const CLOSE_MS = 100;
 
 /** The `+` button, at the top of the action column. */
 export function MapToolGroup({
@@ -84,12 +90,15 @@ export function MapToolTray({
   side,
   top,
   onPickTool,
+  onTouchStart,
 }: {
   open: boolean;
   activeTool: MapTool | null;
   side: "right" | "left";
   top: number;
   onPickTool: (tool: MapTool) => void;
+  /** A touch starting on any pill: the screen tells it from one outside. */
+  onTouchStart: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -100,64 +109,92 @@ export function MapToolTray({
 
   const reduceMotion = useReducedMotion();
 
-  // One value drives the whole tray: it slides out from the column and fades
-  // in on the native driver, or just appears under reduced motion.
-  const [progress] = useState(() => new Animated.Value(0));
+  // One value per pill, all on the native driver; none under reduced motion.
+  const [progress] = useState(() => TOOLS.map(() => new Animated.Value(0)));
   useEffect(() => {
-    Animated.timing(progress, {
-      toValue: open ? 1 : 0,
-      duration: reduceMotion ? 0 : SLIDE_MS,
-      easing: Easing.out(Easing.quad),
-      useNativeDriver: true,
-    }).start();
+    const run = Animated.parallel(
+      progress.map((value, i) =>
+        Animated.timing(value, {
+          toValue: open ? 1 : 0,
+          duration: reduceMotion ? 0 : open ? PILL_MS : CLOSE_MS,
+          delay: reduceMotion || !open ? 0 : i * STAGGER_MS,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ),
+    );
+    run.start();
+    return () => run.stop();
   }, [open, progress, reduceMotion]);
   const dir = side === "right" ? 1 : -1;
-  const translateX = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [dir * (FAB_SIZE + CHROME_GAP), 0],
-  });
 
   return (
-    <Animated.View
+    <View
+      onTouchStart={onTouchStart}
       pointerEvents={open ? "box-none" : "none"}
       style={[
         styles.tray,
         { top, width: room, [side]: CHROME_GAP + FAB_SIZE + spacing(1) },
-        {
-          opacity: progress,
-          transform: [{ translateX }],
-        },
       ]}
     >
-      {TOOLS.map((tool) => {
+      {TOOLS.map((tool, i) => {
         const armed = activeTool === tool.id;
+        const value = progress[i]!;
+        const slide = value.interpolate({
+          inputRange: [0, 1],
+          outputRange: [dir * (FAB_SIZE + CHROME_GAP), 0],
+        });
+        const fold = value.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-(FAB_SIZE + spacing(1)), 0],
+        });
         return (
-          <Pressable
+          <Animated.View
             key={tool.id}
-            accessibilityRole="button"
-            accessibilityLabel={tool.label}
-            style={[
-              styles.pill,
-              { alignSelf: side === "left" ? "flex-start" : "flex-end" },
-              armed && styles.controlActive,
-            ]}
-            onPress={() => onPickTool(tool.id)}
+            style={{
+              alignSelf: side === "left" ? "flex-start" : "flex-end",
+              // Earlier pills over later ones, so a pill falls out from
+              // UNDER the one above it.
+              zIndex: TOOLS.length - i,
+              opacity: value,
+              transform: [
+                i === 0 ? { translateX: slide } : { translateY: fold },
+              ],
+            }}
           >
-            <Icon
-              idea={tool.icon}
-              size={FAB_ICON}
-              color={armed ? theme.onFill : theme.text}
-            />
-            <Text
-              style={[styles.pillLabel, armed && { color: theme.onFill }]}
-              numberOfLines={1}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tool.label}
+              accessibilityHint={tool.description}
+              style={[styles.pill, armed && styles.controlActive]}
+              onPress={() => onPickTool(tool.id)}
             >
-              {tool.label}
-            </Text>
-          </Pressable>
+              <Icon
+                idea={tool.icon}
+                size={FAB_ICON}
+                color={armed ? theme.onFill : theme.text}
+              />
+              <View style={styles.pillText}>
+                <Text
+                  style={[styles.pillLabel, armed && { color: theme.onFill }]}
+                  numberOfLines={1}
+                >
+                  {tool.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.pillDescription,
+                    armed && { color: theme.onFill },
+                  ]}
+                >
+                  {tool.description}
+                </Text>
+              </View>
+            </Pressable>
+          </Animated.View>
         );
       })}
-    </Animated.View>
+    </View>
   );
 }
 
@@ -184,6 +221,9 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     gap: spacing(1),
     paddingHorizontal: spacing(2),
+    paddingVertical: spacing(0.5),
   },
+  pillText: { flexShrink: 1 },
   pillLabel: { ...textRole.body, color: theme.text },
+  pillDescription: { ...textRole.meta, color: theme.textMuted },
 }));

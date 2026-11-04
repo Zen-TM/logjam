@@ -89,6 +89,7 @@ import {
   BottomSheet,
   Meter,
   Hero,
+  CollapsingHero,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -666,54 +667,56 @@ export function PlacesScreen({
     ReactNode
   > = {
     hero: (
-      <View {...heroCollapse.heroProps}>
-        <Hero
-          compact={heroCollapse.compact}
-          eyebrow={PAGE_NAME}
-          title={
-            heroCollapse.compact
-              ? compactHeroTitle(PAGE_NAME, places.length)
-              : placesHeroTitle(places.length)
-          }
-          actions={
-            <View style={styles.heroActions}>
-              <IconButton
-                icon="filter"
-                accessibilityLabel={PLACES_FILTER_SHEET.title}
-                color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
-                filled={hiddenFilterCount > 0}
-                onPress={() => {
-                  // Drop the keyboard BEFORE the sheet mounts: a sheet opening
-                  // over a live IME inherits the shrunk frame and stops short of
-                  // the bottom edge.
-                  Keyboard.dismiss();
-                  setSheet("filters");
-                }}
-              />
-              {/* One way in on this client, so a button and no menu. With no
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            eyebrow={PAGE_NAME}
+            title={
+              compact
+                ? compactHeroTitle(PAGE_NAME, places.length)
+                : placesHeroTitle(places.length)
+            }
+            actions={
+              <View style={styles.heroActions}>
+                <IconButton
+                  icon="filter"
+                  accessibilityLabel={PLACES_FILTER_SHEET.title}
+                  color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+                  filled={hiddenFilterCount > 0}
+                  onPress={() => {
+                    // Drop the keyboard BEFORE the sheet mounts: a sheet opening
+                    // over a live IME inherits the shrunk frame and stops short of
+                    // the bottom edge.
+                    Keyboard.dismiss();
+                    setSheet("filters");
+                  }}
+                />
+                {/* One way in on this client, so a button and no menu. With no
                   places the empty state carries the one add. */}
-              {places.length > 0 &&
-                contractSectionKeys(PLACES_ADD, "gps").map((key) => (
-                  <HeroAdd
-                    key={key}
-                    label={PLACES_ADD.copy[key]}
-                    icon={PLACES_ADD_ICON[key]}
-                    compact={heroCollapse.compact}
-                    onPress={() => startEditing(null)}
-                  />
-                ))}
-            </View>
-          }
-        >
-          {heroCollapse.compact ? undefined : (
-            <>
-              <Meter segments={heroSegments} />
+                {places.length > 0 &&
+                  contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+                    <HeroAdd
+                      key={key}
+                      label={PLACES_ADD.copy[key]}
+                      icon={PLACES_ADD_ICON[key]}
+                      compact={compact}
+                      onPress={() => startEditing(null)}
+                    />
+                  ))}
+              </View>
+            }
+          >
+            {compact ? undefined : (
+              <>
+                <Meter segments={heroSegments} />
 
-              <SyncStatusPills online={online} pendingCount={pendingCount} />
-            </>
-          )}
-        </Hero>
-      </View>
+                <SyncStatusPills online={online} pendingCount={pendingCount} />
+              </>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
 
     // ALWAYS ON SCREEN: the rail carries the only way to create a type from

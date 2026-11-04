@@ -45,6 +45,7 @@ import {
   Avatar,
   BottomSheet,
   Button,
+  CollapsingHero,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -54,6 +55,7 @@ import {
   LoadingState,
   Row,
   Toast,
+  useHeroCollapse,
   type ToastMessage,
 } from "../ui";
 import { dismissPodium, isPodiumDismissed } from "./leaderboard";
@@ -67,6 +69,8 @@ type SectionProps = {
   podiumShown: boolean;
   onBack: () => void;
   backLabel: string;
+  /** The board's scroll, which folds the hero to its one row. */
+  heroCollapse: ReturnType<typeof useHeroCollapse>;
   onDismissPodium: () => void;
   onOpenRules: () => void;
 };
@@ -77,23 +81,31 @@ export const LEADERBOARD_SECTIONS: Record<
   SectionKeysOn<typeof LEADERBOARD, "gps">,
   (props: SectionProps) => ReactNode
 > = {
-  hero: ({ board, onBack, backLabel, onOpenRules }) => {
+  hero: ({ board, onBack, backLabel, onOpenRules, heroCollapse }) => {
     const { rank, size } = selfStanding(board);
+    const standing = leaderboardHeroTitle(rank, size);
     return (
-      <Hero
-        title={LEADERBOARD.title}
-        // The rank, then the season, as Logjam Web's line under the title.
-        value={`${leaderboardHeroTitle(rank, size)} · ${leaderboardSeasonLine(board.season)}`}
-        onBack={onBack}
-        backLabel={backLabel}
-        actions={
-          <IconButton
-            icon="help"
-            accessibilityLabel={copy.rulesTitle}
-            onPress={onOpenRules}
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
+              compact ? `${LEADERBOARD.title} · ${standing}` : LEADERBOARD.title
+            }
+            // The rank, then the season, as Logjam Web's line under the title.
+            value={`${standing} · ${leaderboardSeasonLine(board.season)}`}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              <IconButton
+                icon="help"
+                accessibilityLabel={copy.rulesTitle}
+                onPress={onOpenRules}
+              />
+            }
           />
-        }
-      />
+        )}
+      </CollapsingHero>
     );
   },
   podium: ({ board, podiumShown, onDismissPodium }) =>
@@ -182,6 +194,7 @@ export function LeaderboardScreen({
   }, [season]);
 
   const [rulesOpen, setRulesOpen] = useState(false);
+  const heroCollapse = useHeroCollapse();
 
   // Every state but the board keeps a hero, so the back arrow is always there.
   const gate = (body: ReactNode) => (
@@ -211,6 +224,7 @@ export function LeaderboardScreen({
     podiumShown,
     onBack,
     backLabel,
+    heroCollapse,
     onDismissPodium,
     onOpenRules: () => setRulesOpen(true),
   };
@@ -222,6 +236,7 @@ export function LeaderboardScreen({
       <ScrollView
         style={styles.list}
         contentContainerStyle={styles.listContent}
+        {...heroCollapse.scrollProps}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

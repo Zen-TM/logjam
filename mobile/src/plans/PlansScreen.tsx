@@ -61,6 +61,7 @@ import {
   ChipRail,
   EmptyState,
   Hero,
+  CollapsingHero,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -601,50 +602,52 @@ export function PlansScreen({
     ReactNode
   > = {
     hero: (
-      <View {...heroCollapse.heroProps}>
-        <Hero
-          compact={heroCollapse.compact}
-          title={
-            heroCollapse.compact
-              ? compactHeroTitle(TRIP_PLANS_LIST.title, plans?.length ?? 0)
-              : shown.kind === "list"
-                ? tripPlansHeroTitle(shown.plans, today)
-                : shown.kind === "loading"
-                  ? copy.loading
-                  : TRIP_PLANS_LIST.title
-          }
-          // Unbounded: the date is the point of this title, and a clamp cuts it.
-          titleNumberOfLines={0}
-          onBack={onBack}
-          backLabel={backLabel}
-          actions={
-            heroCollapse.compact ? (
-              <HeroAdd
-                label={copy.add}
-                icon="add"
-                compact
-                disabled={!online}
-                disabledReason={unavailableReasonText("needs-connection")}
-                onPress={() => setNewOpen(true)}
-              />
-            ) : undefined
-          }
-        >
-          {heroCollapse.compact ? undefined : (
-            <View style={styles.pills}>
-              <Button
-                label={copy.add}
-                icon="add"
-                compact
-                disabled={!online}
-                disabledReason={unavailableReasonText("needs-connection")}
-                onPress={() => setNewOpen(true)}
-              />
-              <SyncStatusPills online={online} pendingCount={0} />
-            </View>
-          )}
-        </Hero>
-      </View>
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
+              compact
+                ? compactHeroTitle(TRIP_PLANS_LIST.title, plans?.length ?? 0)
+                : shown.kind === "list"
+                  ? tripPlansHeroTitle(shown.plans, today)
+                  : shown.kind === "loading"
+                    ? copy.loading
+                    : TRIP_PLANS_LIST.title
+            }
+            // Unbounded: the date is the point of this title, and a clamp cuts it.
+            titleNumberOfLines={0}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              compact ? (
+                <HeroAdd
+                  label={copy.add}
+                  icon="add"
+                  compact
+                  disabled={!online}
+                  disabledReason={unavailableReasonText("needs-connection")}
+                  onPress={() => setNewOpen(true)}
+                />
+              ) : undefined
+            }
+          >
+            {compact ? undefined : (
+              <View style={styles.pills}>
+                <Button
+                  label={copy.add}
+                  icon="add"
+                  compact
+                  disabled={!online}
+                  disabledReason={unavailableReasonText("needs-connection")}
+                  onPress={() => setNewOpen(true)}
+                />
+                <SyncStatusPills online={online} pendingCount={0} />
+              </View>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
     buckets: (
       <View style={styles.rail}>

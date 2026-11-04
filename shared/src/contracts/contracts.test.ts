@@ -1552,6 +1552,13 @@ describe("MAP_TOOLS", () => {
       "place",
     ]);
   });
+  // Mutation: leave a description empty or let one run to a second sentence.
+  it("gives every tool a one-line description", () => {
+    for (const tool of MAP_TOOLS) {
+      expect(tool.description.trim(), tool.id).not.toBe("");
+      expect(tool.description, tool.id).not.toMatch(/\.\s+\S/);
+    }
+  });
   it("names Measure by its own contract", () => {
     expect(mapTools("gps")[0]!.label).toBe(MAP_MEASURE.title);
   });

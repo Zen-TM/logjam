@@ -38,12 +38,14 @@ async function settled(page: Page) {
       [...document.querySelectorAll("dialog[open]")].every(
         (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
       ) &&
-      // A button's 150 ms background-color transition otherwise lets axe read
-      // a half-way colour.
+      // A button's 150 ms background-color transition, or the Tools tray
+      // folding out, otherwise lets axe read a half-way colour.
       document
         .getAnimations()
         .every(
-          (a) => !(a instanceof CSSTransition) || a.playState !== "running",
+          (a) =>
+            !(a instanceof CSSTransition || a instanceof CSSAnimation) ||
+            a.playState !== "running",
         ),
   );
 }

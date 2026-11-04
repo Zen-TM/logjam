@@ -93,9 +93,10 @@ handler or a camera write, read
   fresh-looking number from an old fix. No accuracy halo. One constant,
   `FIX_STALE_MS`, sets the cliff.
 - **A number read while moving is `instrument`** (28, bold, tabular):
-  distance, bearing, speed, elevation and a recording's time (`m:ss`). The
-  navigation readout is `NavReadout`, first in the notice stack after a
-  critical notice; a place's name is its second line.
+  distance, bearing and a recording's time (`m:ss`). The navigation readout
+  is `NavReadout`, first in the notice stack after a critical notice; a
+  place's name is its second line. Speed and elevation are a glance beside
+  the scale bar, a compact `control` chip, never a hero.
 - **A running recording is a light, on screen in every map mode**: the record
   button pulses (a steady halo under Remove animations), its numbers are a
   sheet one tap away, and a recorder that is not saving points says so on the

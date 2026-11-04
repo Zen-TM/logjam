@@ -91,6 +91,7 @@ import {
   Button,
   ErrorState,
   Hero,
+  CollapsingHero,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -450,83 +451,85 @@ export function LogsScreen({
   // not name cannot be drawn.
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "gps">, ReactNode> = {
     hero: (
-      <View {...heroCollapse.heroProps}>
-        <Hero
-          compact={heroCollapse.compact}
-          eyebrow={PAGE_NAME}
-          title={
-            heroCollapse.compact
-              ? compactHeroTitle(PAGE_NAME, trips.length)
-              : tripsHeroTitle(trips.length)
-          }
-          actions={
-            <View style={styles.heroActions}>
-              {/* The retrospective lives one tap away rather than on this screen:
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            eyebrow={PAGE_NAME}
+            title={
+              compact
+                ? compactHeroTitle(PAGE_NAME, trips.length)
+                : tripsHeroTitle(trips.length)
+            }
+            actions={
+              <View style={styles.heroActions}>
+                {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
                 (shared/DESIGN.md §2). */}
-              <IconButton
-                icon="stats"
-                accessibilityLabel={copy.stats}
-                color={theme.textMuted}
-                onPress={onOpenStats}
-              />
-              <IconButton
-                icon="filter"
-                accessibilityLabel={TRIPS_FILTER_SHEET.title}
-                color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
-                filled={sheetFilterCount > 0}
-                onPress={() => {
-                  // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
-                  // over a live IME inherits KeyboardAvoidingView's shrunk frame
-                  // and stops short of the bottom edge, leaving a stripe of the
-                  // tab bar showing under it.
-                  Keyboard.dismiss();
-                  setSheetOpen(true);
-                }}
-              />
-              {/* One way in, so a button: Logjam Web's menu holds this and an
+                <IconButton
+                  icon="stats"
+                  accessibilityLabel={copy.stats}
+                  color={theme.textMuted}
+                  onPress={onOpenStats}
+                />
+                <IconButton
+                  icon="filter"
+                  accessibilityLabel={TRIPS_FILTER_SHEET.title}
+                  color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
+                  filled={sheetFilterCount > 0}
+                  onPress={() => {
+                    // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
+                    // over a live IME inherits KeyboardAvoidingView's shrunk frame
+                    // and stops short of the bottom edge, leaving a stripe of the
+                    // tab bar showing under it.
+                    Keyboard.dismiss();
+                    setSheetOpen(true);
+                  }}
+                />
+                {/* One way in, so a button: Logjam Web's menu holds this and an
                 import (`TRIPS_ADD`). With no trips the empty state carries
                 the one add. */}
-              {trips.length > 0 && (
-                <HeroAdd
-                  label={TRIPS_ADD.copy.add}
-                  icon={TRIPS_ADD_ICON.add}
-                  compact={heroCollapse.compact}
-                  onPress={() => setEditing({ trip: null })}
-                />
-              )}
-            </View>
-          }
-        >
-          {heroCollapse.compact ? undefined : (
-            <>
-              {toLog.length > 0 ? (
-                <Button
-                  label={recordingsToLogLabel(toLog.length)}
-                  icon="track"
-                  variant="outlineAccent"
-                  compact
-                  onPress={() => setToLogOpen(true)}
-                />
-              ) : null}
+                {trips.length > 0 && (
+                  <HeroAdd
+                    label={TRIPS_ADD.copy.add}
+                    icon={TRIPS_ADD_ICON.add}
+                    compact={compact}
+                    onPress={() => setEditing({ trip: null })}
+                  />
+                )}
+              </View>
+            }
+          >
+            {compact ? undefined : (
+              <>
+                {toLog.length > 0 ? (
+                  <Button
+                    label={recordingsToLogLabel(toLog.length)}
+                    icon="track"
+                    variant="outlineAccent"
+                    compact
+                    onPress={() => setToLogOpen(true)}
+                  />
+                ) : null}
 
-              <ActivitySpark
-                buckets={spark}
-                caption={`${recentCount} in the last 12 months · ${placeCount} ${
-                  placeCount === 1 ? "place" : "places"
-                }`}
-              />
+                <ActivitySpark
+                  buckets={spark}
+                  caption={`${recentCount} in the last 12 months · ${placeCount} ${
+                    placeCount === 1 ? "place" : "places"
+                  }`}
+                />
 
-              {/* State of the world, once, where it can be read at a glance.
+                {/* State of the world, once, where it can be read at a glance.
                 Offline is not an error here — logging, editing and attaching
                 all work — so it is paired with what is waiting rather than
                 with a warning. */}
-              <SyncStatusPills online={online} pendingCount={pendingCount} />
-            </>
-          )}
-        </Hero>
-      </View>
+                <SyncStatusPills online={online} pendingCount={pendingCount} />
+              </>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
 
     typeRail: (

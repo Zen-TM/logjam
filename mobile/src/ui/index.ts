@@ -26,6 +26,7 @@ export {
 export { Hero } from "./Hero";
 export { tabBadgeLabel, tabBadgeStyle } from "./tabBadgeStyle";
 export { HeroAdd } from "./HeroAdd";
+export { CollapsingHero } from "./CollapsingHero";
 export { useHeroCollapse } from "./useHeroCollapse";
 export { compactHeroTitle } from "./heroCollapseRule";
 export { toDateKey, fromDateKey, todayDateKey } from "./monthGrid";

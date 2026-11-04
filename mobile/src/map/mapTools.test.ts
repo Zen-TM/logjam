@@ -15,4 +15,54 @@ describe("MapToolGroup", () => {
   it("shows each tool's label, not a glyph alone", () => {
     expect(source).toContain("{tool.label}");
   });
+  it("shows each tool's description under it", () => {
+    expect(source).toContain("{tool.description}");
+  });
+  it("moves with native-driver timings that reduced motion zeroes", () => {
+    expect(source).toContain("useNativeDriver: true");
+    // Mutation: drop `reduceMotion` from the duration OR from the delay (the
+    // stagger then still waits). Only an early open, before
+    // `useReduceMotion` has read the setting, can still animate.
+    expect(source).toMatch(/duration: reduceMotion \? 0 :/);
+    expect(source).toMatch(/delay: reduceMotion \|\|/);
+  });
+});
+
+// Mutation: drop `onTouchStart={handleRootTouchStart}`, the focus effect, or
+// the `ignoreMapPress` line in one of the press handlers; or put a backdrop back
+// over the map (a pan with the tray open is then swallowed whole). The decision
+// itself is `toolsTouch.test.ts`.
+describe("MapScreen's tools tray and a touch outside it", () => {
+  const source = readFileSync(
+    new URL("./MapScreen.tsx", import.meta.url),
+    "utf8",
+  );
+  it("closes on a touch start, and shuts when the map loses focus", () => {
+    expect(source).toContain("onTouchStart={handleRootTouchStart}");
+    expect(source).toContain("<View onTouchStart={markToolsTouch}>");
+    expect(source).toContain("onTouchStart={markToolsTouch}");
+    expect(source).toContain(
+      "useFocusEffect(useCallback(() => () => setToolsOpen(false), []));",
+    );
+  });
+  it("ignores the press and long-press that started with the tray open", () => {
+    const handlers = [
+      "const handleMapPress = useCallback(",
+      "const handleMapLongPress = useCallback(",
+      "const handlePlacePress = useCallback(",
+      "const handleGaugePress = useCallback(",
+      "const handleImportPress = useCallback(",
+      "const pressRoute = useCallback(",
+    ];
+    for (const handler of handlers) {
+      const at = source.indexOf(handler);
+      expect(at, handler).toBeGreaterThan(-1);
+      expect(source.slice(at, at + 400), handler).toContain(
+        "if (ignoreMapPress.current) return;",
+      );
+    }
+  });
+  it("has no backdrop over the map", () => {
+    expect(source).not.toContain("StyleSheet.absoluteFill");
+  });
 });

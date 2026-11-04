@@ -21,9 +21,19 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
+/** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
+const TRAY_CLOSE_MS = 100;
+
+type MapToolBase = {
+  id: string;
+  label: string;
+  /** The one line under the label. */
+  description: string;
+  icon: Glyph;
+};
 export type MapTool =
-  | { id: string; label: string; icon: Glyph; onSelect: () => void }
-  | { id: string; label: string; icon: Glyph; menu: readonly MenuEntry[] };
+  | (MapToolBase & { onSelect: () => void })
+  | (MapToolBase & { menu: readonly MenuEntry[] });
 
 type LocateState = "off" | "waiting" | "on" | "error";
 
@@ -79,6 +89,21 @@ export default function MapChrome({
   const [locate, setLocate] = useState<LocateState>("off");
   const [toolsOpenState, setToolsOpen] = useState(false);
   const toolsOpen = toolsOpenState && !selectingArea;
+  // The tray stays drawn for `TRAY_CLOSE_MS` after it closes, to fade; under
+  // reduced motion it goes at once.
+  const [trayDrawn, setTrayDrawn] = useState(false);
+  if (toolsOpen && !trayDrawn) setTrayDrawn(true);
+  useEffect(() => {
+    if (toolsOpen || !trayDrawn) return;
+    const still = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = setTimeout(
+      () => setTrayDrawn(false),
+      still ? 0 : TRAY_CLOSE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [toolsOpen, trayDrawn]);
   const trayId = useId();
   // The tray AND its button: opening the tray leaves focus on the button, so
   // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
@@ -133,7 +158,14 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
-  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false));
+  // Closes on any press elsewhere; one on the map does nothing more, one on a
+  // control (a tab, another map button) still acts.
+  useOutsidePress(
+    toolsOpen,
+    [toolsLineRef],
+    () => setToolsOpen(false),
+    map?.getContainer() ?? null,
+  );
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);
@@ -152,15 +184,35 @@ export default function MapChrome({
 
       <div className={classes.actions}>
         <div ref={toolsLineRef} className={classes.toolsLine}>
-          {toolsOpen && (
+          {trayDrawn && (
             <div
               id={trayId}
               role="group"
               aria-label="Tools"
-              className={classes.tray}
+              inert={!toolsOpen}
+              className={`${classes.tray} ${toolsOpen ? "" : classes.trayClosing}`}
             >
-              {tools.map((tool) =>
-                "menu" in tool ? (
+              {tools.map((tool, index) => {
+                const item = {
+                  className: `${classes.trayItem} ${index === 0 ? classes.trayFirst : ""}`,
+                  style: { "--i": index } as CSSProperties,
+                };
+                const face = (
+                  <>
+                    <Icon
+                      idea={tool.icon}
+                      size={18}
+                      className={classes.trayGlyph}
+                    />
+                    <span className={classes.trayText}>
+                      <span className={classes.trayLabel}>{tool.label}</span>{" "}
+                      <span className={classes.trayDescription}>
+                        {tool.description}
+                      </span>
+                    </span>
+                  </>
+                );
+                return "menu" in tool ? (
                   <Menu
                     key={tool.id}
                     label={tool.label}
@@ -171,17 +223,8 @@ export default function MapChrome({
                         : { ...entry, onSelect: () => runTool(entry.onSelect) },
                     )}
                     trigger={(props) => (
-                      <button
-                        {...props}
-                        type="button"
-                        className={classes.trayItem}
-                      >
-                        <Icon
-                          idea={tool.icon}
-                          size={18}
-                          className={classes.trayGlyph}
-                        />
-                        {tool.label}
+                      <button {...props} type="button" {...item}>
+                        {face}
                       </button>
                     )}
                   />
@@ -189,18 +232,13 @@ export default function MapChrome({
                   <button
                     key={tool.id}
                     type="button"
-                    className={classes.trayItem}
+                    {...item}
                     onClick={() => runTool(tool.onSelect)}
                   >
-                    <Icon
-                      idea={tool.icon}
-                      size={18}
-                      className={classes.trayGlyph}
-                    />
-                    {tool.label}
+                    {face}
                   </button>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
           <MapButton

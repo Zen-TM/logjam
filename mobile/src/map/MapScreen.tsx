@@ -132,7 +132,9 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { LayersGlyph, markMapDrawing, markMapDrawn } from "./mapLoading";
+import { LayersGlyph } from "./mapLoading";
+import { isOutsideToolsTouch } from "./toolsTouch";
+import { markMapDrawing, markMapDrawn } from "./mapDrawing";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -1064,6 +1066,21 @@ export function MapScreen({
     [],
   );
   const [toolsOpen, setToolsOpen] = useState(false);
+  // Set by a touch that starts on the + or the tray (bubbling, so before the
+  // root sees it). A touch that starts anywhere else with the tray open closes
+  // it at once, and the tap or long-press it may become is ignored by the map's
+  // press handlers: a pan, pinch or drag carries on. Guard: toolsTouch.test.ts.
+  const touchedTools = useRef(false);
+  const markToolsTouch = useCallback(() => {
+    touchedTools.current = true;
+  }, []);
+  const ignoreMapPress = useRef(false);
+  const handleRootTouchStart = useCallback(() => {
+    const outside = isOutsideToolsTouch(toolsOpen, touchedTools.current);
+    touchedTools.current = false;
+    ignoreMapPress.current = outside;
+    if (outside) setToolsOpen(false);
+  }, [toolsOpen]);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
   /** The draft the map's taps belong to, or null when no tool is armed. */
@@ -2232,6 +2249,7 @@ export function MapScreen({
 
   const handleMapPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
+      if (ignoreMapPress.current) return;
       const [lon, lat] = event.nativeEvent.lngLat;
       setSearchPin(searchPinAfter("tap"));
       // The second tap of a double tap already did its work (it zoomed); it
@@ -2298,6 +2316,7 @@ export function MapScreen({
   const handleGaugePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
+      if (ignoreMapPress.current) return;
       const [lon, lat] = event.nativeEvent.lngLat;
       const id = event.nativeEvent.features[0]?.properties?.id;
       // Both sources hear one press, in either order: after the pin has had
@@ -2324,6 +2343,7 @@ export function MapScreen({
   const handlePlacePress = useCallback(
     (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
       stopSourcePress(event);
+      if (ignoreMapPress.current) return;
       pinPressedAt.current = Date.now();
       setGaugeId(null);
       // The pin no longer swallows the press for us (MLRN 11 bubbles it), so
@@ -2628,6 +2648,7 @@ export function MapScreen({
   // A plan's way has no options sheet of the user's.
   const pressRoute = useCallback(
     (routeId: string) => {
+      if (ignoreMapPress.current) return;
       if (!planRoutes?.some((route) => route.id === routeId))
         setOptionsRouteId(routeId);
     },
@@ -2650,6 +2671,8 @@ export function MapScreen({
   // itself needs none of this — the foreground service keeps it alive with the
   // screen off — which is why the default is `off`.
   const mapFocused = useIsFocused();
+  // The tab bar is outside this screen's touches: leaving the map shuts the tray.
+  useFocusEffect(useCallback(() => () => setToolsOpen(false), []));
   const keepAwakeReason =
     keepAwakeMode === "map"
       ? mapFocused
@@ -4262,6 +4285,7 @@ export function MapScreen({
    */
   const handleMapLongPress = useCallback(
     (event: NativeSyntheticEvent<PressEvent>) => {
+      if (ignoreMapPress.current) return;
       const [lon, lat] = event.nativeEvent.lngLat;
       // While either point tool is armed, press-and-hold near the line means
       // "add a point here" — the mobile stand-in for dragging the line on web.
@@ -4428,6 +4452,7 @@ export function MapScreen({
       // map as well, so a handler that bails without this leaks the tap into
       // the map's own handler (map/sourcePress.ts).
       stopSourcePress(event);
+      if (ignoreMapPress.current) return;
       // Same rule as a place pin and a track line: while a point-collecting
       // tool is armed the feature under the thumb has to place the point
       // itself, or tapping near an import does nothing and reads as broken.
@@ -4930,6 +4955,7 @@ export function MapScreen({
       onResponderTerminate={endPinch}
       // Nothing takes a pinch off us halfway through.
       onResponderTerminationRequest={() => false}
+      onTouchStart={handleRootTouchStart}
     >
       <Map
         ref={mapRef}
@@ -5694,11 +5720,13 @@ export function MapScreen({
             chip; from the top it clears the whole stack. It is also the
             least-reached button of the five, so the three that are reached
             (layers, locate, record) keep the thumb end of the column. */}
-        <MapToolGroup
-          open={toolsOpen}
-          activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
-          onToggleOpen={() => setToolsOpen((open) => !open)}
-        />
+        <View onTouchStart={markToolsTouch}>
+          <MapToolGroup
+            open={toolsOpen}
+            activeTool={measuring ? "measure" : drawingRoute ? "route" : null}
+            onToggleOpen={() => setToolsOpen((open) => !open)}
+          />
+        </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
@@ -5748,6 +5776,7 @@ export function MapScreen({
           side={controlsOnLeft ? "left" : "right"}
           top={columnTop}
           onPickTool={handlePickTool}
+          onTouchStart={markToolsTouch}
         />
       ) : null}
 

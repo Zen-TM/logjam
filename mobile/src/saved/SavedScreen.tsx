@@ -101,6 +101,8 @@ import {
   BottomSheet,
   Button,
   Meter,
+  CollapsingHero,
+  compactHeroTitle,
   Hero,
   IconButton,
   RenameForm,
@@ -119,6 +121,7 @@ import {
   Icon,
   EmptyState,
   confirm,
+  useHeroCollapse,
 } from "../ui";
 import {
   GEOPDF_ERRORS,
@@ -559,6 +562,7 @@ export function SavedScreen({
   const [pulsingKey, setPulsingKey] = useState<string | null>(null);
   const [pulse] = useState(() => new Animated.Value(1));
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const heroCollapse = useHeroCollapse();
   /** One scroll per arrival — `onLayout` fires again on every relayout. */
   const scrolledForNonce = useRef<number | null>(null);
   const scrollToPulse = useCallback(
@@ -1653,76 +1657,84 @@ export function SavedScreen({
 
   return (
     <View style={styles.screen}>
-      {/* Only the title row is pinned (and the bulk bar, which takes its
-          slot while picking): the storage summary, chips and search scroll
-          with the list so it gets the screen. */}
-      <Hero
-        compact
-        // The chips scroll away with the list, so the pinned row keeps naming
-        // the filter (an Inbox tap lands on Routes already scrolled).
-        title={
-          filter === "all" ? "Saved" : `Saved · ${CATEGORY_META[filter].plural}`
-        }
-        titleNumberOfLines={2}
-        actions={
-          <Button
-            label="Add"
-            icon="addSaved"
-            compact
-            onPress={() => setAddSheetOpen(true)}
-          />
-        }
-      >
-        {selecting ? (
-          <SelectionBar
-            countLabel={`${countOf(selectedItems.length, "item")} selected${
-              selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
-            }`}
-            // "Everything" means everything a selection can act on — a shared
-            // route or waypoint is skipped rather than picked and then refused.
-            showSelectAll={selectedItems.length < selectableItems.length}
-            extra={
-              <BulkShareButton
-                online={online}
-                onPress={() => setBulkShareOpen(true)}
+      {/* The storage summary is the hero; once the list scrolls it folds to
+          the title row (and the bulk bar, which takes its slot while picking),
+          and the chips and search scroll with the list. */}
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            value={formatBytes(usedBytes)}
+            valueSuffix={
+              freeBytes != null
+                ? `used · ${formatBytes(freeBytes)} free`
+                : "used"
+            }
+            // The chips scroll away with the list, so the pinned row keeps naming
+            // the filter (an Inbox tap lands on Routes already scrolled).
+            title={(() => {
+              const name =
+                filter === "all"
+                  ? "Saved"
+                  : `Saved · ${CATEGORY_META[filter].plural}`;
+              return compact
+                ? compactHeroTitle(name, activeCategoryCount)
+                : name;
+            })()}
+            titleNumberOfLines={2}
+            actions={
+              <Button
+                label="Add"
+                icon="addSaved"
+                compact
+                onPress={() => setAddSheetOpen(true)}
               />
             }
-            onClear={clearSelection}
-            onSelectAll={() =>
-              setSelectedKeys(selectableItems.map((item) => item.key))
-            }
-            onDelete={deleteSelected}
-          />
-        ) : undefined}
-      </Hero>
+          >
+            {selecting ? (
+              <SelectionBar
+                countLabel={`${countOf(selectedItems.length, "item")} selected${
+                  selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
+                }`}
+                // "Everything" means everything a selection can act on — a shared
+                // route or waypoint is skipped rather than picked and then refused.
+                showSelectAll={selectedItems.length < selectableItems.length}
+                extra={
+                  <BulkShareButton
+                    online={online}
+                    onPress={() => setBulkShareOpen(true)}
+                  />
+                }
+                onClear={clearSelection}
+                onSelectAll={() =>
+                  setSelectedKeys(selectableItems.map((item) => item.key))
+                }
+                onDelete={deleteSelected}
+              />
+            ) : compact ? undefined : (
+              <>
+                {/* One kind on the phone: its legend would say the line above again. */}
+                <Meter
+                  segments={segments}
+                  legend={segments.filter((s) => s.value > 0).length > 1}
+                />
+                {/* Offline is a normal state here — everything already on the device
+                still works — so it sits beside what is still waiting to leave
+                rather than reading as an error. */}
+                <SyncStatusPills online={online} pendingCount={pendingCount} />
+              </>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
 
       <ScrollView
         ref={scrollRef}
+        {...heroCollapse.scrollProps}
         contentContainerStyle={styles.body}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.summary}>
-          <Text style={styles.used}>
-            {formatBytes(usedBytes)}
-            <Text style={styles.usedSuffix}>
-              {" "}
-              {freeBytes != null
-                ? `used · ${formatBytes(freeBytes)} free`
-                : "used"}
-            </Text>
-          </Text>
-          {/* One kind on the phone: its legend would say the line above again. */}
-          <Meter
-            segments={segments}
-            legend={segments.filter((s) => s.value > 0).length > 1}
-          />
-          {/* Offline is a normal state here — everything already on the device
-              still works — so it sits beside what is still waiting to leave
-              rather than reading as an error. */}
-          <SyncStatusPills online={online} pendingCount={pendingCount} />
-        </View>
-
         <View style={styles.rail}>
           <ChipRail
             options={filterOptions}
@@ -2643,9 +2655,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     marginHorizontal: -spacing(2),
     paddingLeft: spacing(2),
   },
-  summary: { gap: spacing(1) },
-  used: { ...textRole.heading, color: theme.text },
-  usedSuffix: { ...muted(theme, textRole.detail) },
   body: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),

@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Menu } from "./Menu";
+import { Menu, useOutsidePress } from "./Menu";
 
 // jsdom has no Popover API, and a closed `popover` counts as unrendered
 // there, so showing one drops the attribute.
@@ -85,5 +86,52 @@ describe("a press outside a floating element", () => {
     dialog.remove();
     fireEvent.pointerDown(document.body);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("useOutsidePress with swallowWithin", () => {
+  function Host({
+    onOutside,
+    within,
+  }: {
+    onOutside: () => void;
+    within: Element;
+  }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useOutsidePress(true, [ref], onOutside, within);
+    return <div ref={ref}>inside</div>;
+  }
+
+  // Mutation: swallow every outside press (drop the `swallowWithin?.contains`
+  // test), and a tab or another map button stops acting when it closes the
+  // tools tray; drop the swallow, and the press also reaches the map.
+  it("eats the click of a press on the map, and only that one", () => {
+    const map = document.body.appendChild(document.createElement("div"));
+    const onMapClick = vi.fn();
+    map.addEventListener("click", onMapClick);
+    const onOutside = vi.fn();
+    render(<Host onOutside={onOutside} within={map} />);
+    fireEvent.pointerDown(map);
+    fireEvent.click(map);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onMapClick).not.toHaveBeenCalled();
+    fireEvent.click(map);
+    expect(onMapClick).toHaveBeenCalledTimes(1);
+    map.remove();
+  });
+
+  it("closes on a press elsewhere and lets that control act", () => {
+    const map = document.body.appendChild(document.createElement("div"));
+    const tab = document.body.appendChild(document.createElement("button"));
+    const onTab = vi.fn();
+    tab.addEventListener("click", onTab);
+    const onOutside = vi.fn();
+    render(<Host onOutside={onOutside} within={map} />);
+    fireEvent.pointerDown(tab);
+    fireEvent.click(tab);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onTab).toHaveBeenCalledTimes(1);
+    map.remove();
+    tab.remove();
   });
 });

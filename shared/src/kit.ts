@@ -128,6 +128,9 @@ export const KIT_COMPONENTS = {
   HeroAdd: gps(
     "a list hero's one add: labelled, then the glyph alone in the compact row",
   ),
+  CollapsingHero: gps(
+    "a phone list's pinned hero, folding to its title row on scroll; the desktop screen has room for the full one",
+  ),
   DataTable: web(
     "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",
   ),
