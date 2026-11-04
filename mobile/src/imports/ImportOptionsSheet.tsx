@@ -16,6 +16,7 @@
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
+  ADD_WAY,
   ELEVATION_TRACK_MAX_SAMPLES,
   messageFromError,
   TRACK_COLORS,
@@ -125,11 +126,11 @@ export function ImportOptionsSheet({
   const placePicker = usePlacePicker({
     source: "import",
     active: attaching,
-    attach: async (placeId, placeName) => {
+    attach: async (placeId) => {
       if (!actions?.attachToPlace)
         throw new Error("This import has no original file.");
       await actions.attachToPlace(placeId);
-      onInfo(`Attached a copy as ${placeName}'s route.`);
+      onInfo(ADD_WAY.copy.linkedDone);
     },
     onDone: () => {
       setAttaching(false);

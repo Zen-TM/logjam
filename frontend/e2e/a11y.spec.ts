@@ -651,6 +651,35 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("a place's Add a way dialog: its sources and a route list", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const list = page.locator("aside");
+    await list
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await list
+      .getByRole("button", { name: /^(Add a way|Replace this place's route)$/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Add a way" });
+    await expectNoViolations(page, "dialog");
+
+    // A source opens a sub-view; Escape undoes that one layer, then the dialog.
+    await dialog
+      .getByRole("button", { name: /^Choose a route you drew/ })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Choose a route you drew" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("a selection of places, and what can be done with it", async ({
     page,
   }) => {
@@ -1543,6 +1572,28 @@ test.describe("narrow web", () => {
     // It really is full-bleed here, rather than a desktop dialog squeezed.
     const box = (await form.boundingBox())!;
     expect(box.width).toBe(390);
+    await page.keyboard.press("Escape");
+  });
+
+  test("a place's Add a way dialog stays inside the phone", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await sheet
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    const place = page.locator("aside");
+    await place
+      .getByRole("button", { name: /^(Add a way|Replace this place's route)$/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Add a way" });
+    await expect(dialog).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    const box = (await dialog.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
     await page.keyboard.press("Escape");
   });
 

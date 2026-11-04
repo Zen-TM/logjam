@@ -7,7 +7,7 @@
 // (mobile/AGENTS.md).
 //
 //   a route you drew   → the Route row is linked (Route.placeId)
-//   an import          → a COPY of its stored original is uploaded as media
+//   an import          → the stored import is linked to the place
 //   a recorded track   → a Route is CREATED from it and that is linked; the
 //                        recording is an observation and is never linked
 //   a .gpx/.kml file   → uploaded as media
@@ -30,6 +30,11 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import {
+  ADD_WAY,
+  addWayFileRow,
+  addWayImportSubtitle,
+  addWayNoImports,
+  addWayNoTracks,
   formatDistanceM,
   messageFromError,
   routeLengthM,
@@ -178,9 +183,7 @@ export function AddWaySheet({
           // UNDER an open sheet, so a failure reported with this one still up
           // is a failure the user never sees.
           close();
-          onError(
-            messageFromError(err, "Couldn't set that as this place's route."),
-          );
+          onError(messageFromError(err, ADD_WAY.copy.failed));
         })
         .finally(() => setBusy(false));
     },
@@ -207,7 +210,7 @@ export function AddWaySheet({
     const asset = result.assets[0];
     const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
-      onError("Pick a .gpx or .kml file.");
+      onError(ADD_WAY.copy.notRouteFile);
       return;
     }
     // The confirm comes AFTER the file is chosen: a user who backs out of the
@@ -220,7 +223,7 @@ export function AddWaySheet({
     fill("file", async () => {
       const record = await importVectorSource(asset.uri, asset.name);
       await linkStandaloneMediaLocal(record.id, placeId);
-      return "Route file linked to this place.";
+      return ADD_WAY.copy.fileDone;
     });
   }, [placeId, fill, onError]);
 
@@ -262,18 +265,18 @@ export function AddWaySheet({
       }}
       title={
         mode === "routes"
-          ? "Choose a route you drew"
+          ? ADD_WAY.copy.routeTitle
           : mode === "imports"
-            ? "Use an imported file"
+            ? ADD_WAY.copy.importTitle
             : mode === "tracks"
-              ? "Use a recorded track"
-              : "Add a way"
+              ? ADD_WAY.copy.trackTitle
+              : ADD_WAY.copy.title
       }
       header={
         mode === "routes" ? (
           <View style={styles.header}>
             <TextField
-              label="Find a route"
+              label={ADD_WAY.copy.findRoute}
               value={query}
               onChangeText={setQuery}
             />
@@ -297,8 +300,8 @@ export function AddWaySheet({
           <Row
             icon="route"
             hue={assetHue.route}
-            title="Choose a route you drew"
-            subtitle="One of your saved routes"
+            title={ADD_WAY.copy.routeTitle}
+            subtitle={ADD_WAY.copy.routeSubtitle}
             disabled={busy}
             onPress={() => setMode("routes")}
           />
@@ -306,8 +309,8 @@ export function AddWaySheet({
             <Row
               icon="draw"
               hue={assetHue.route}
-              title="Draw a route on the map"
-              subtitle="Opens the map to draw a route"
+              title={ADD_WAY.copy.drawTitle}
+              subtitle={ADD_WAY.copy.drawSubtitle}
               disabled={busy}
               onPress={() => {
                 close();
@@ -318,24 +321,24 @@ export function AddWaySheet({
           <Row
             icon="track"
             hue={assetHue.track}
-            title="Use a recorded track"
-            subtitle="A track you recorded in Logjam GPS"
+            title={ADD_WAY.copy.trackTitle}
+            subtitle={ADD_WAY.copy.trackSubtitle}
             disabled={busy}
             onPress={() => setMode("tracks")}
           />
           <Row
             icon="importedFile"
             hue={assetHue.import}
-            title="Use an imported file"
-            subtitle="A GPX or KML already in Saved"
+            title={ADD_WAY.copy.importTitle}
+            subtitle={addWayImportSubtitle("gps")}
             disabled={busy}
             onPress={() => setMode("imports")}
           />
           <Row
             icon="importedFile"
             hue={assetHue.import}
-            title="Import a new file"
-            subtitle="A .gpx or .kml from this phone"
+            title={addWayFileRow("gps").title}
+            subtitle={addWayFileRow("gps").subtitle}
             disabled={busy}
             onPress={() => runAfterSheet(pickFile)}
           />
@@ -347,9 +350,7 @@ export function AddWaySheet({
         <View style={styles.body}>
           {drawnRoutes.length === 0 ? (
             <Text style={styles.hint}>
-              {query
-                ? "No route of yours matches that."
-                : "You haven't drawn any routes yet."}
+              {query ? ADD_WAY.copy.noRouteMatch : ADD_WAY.copy.noRoutes}
             </Text>
           ) : (
             drawnRoutes.map((route) => {
@@ -360,7 +361,7 @@ export function AddWaySheet({
                   title={route.name}
                   subtitle={
                     here
-                      ? "Already this place's route"
+                      ? ADD_WAY.copy.alreadyHere
                       : formatDistanceM(routeLengthM(route.points))
                   }
                   icon={here ? "done" : "route"}
@@ -369,7 +370,7 @@ export function AddWaySheet({
                   onPress={() =>
                     fill("route", async () => {
                       await updateRouteLocal(route.id, { placeId });
-                      return "Route attached to this place.";
+                      return ADD_WAY.copy.routeDone;
                     })
                   }
                 />
@@ -385,10 +386,7 @@ export function AddWaySheet({
           {imports === null ? (
             <ActivityIndicator color={theme.accent} />
           ) : attachableImports.length === 0 ? (
-            <Text style={styles.hint}>
-              No imported GPX or KML on this phone. Import one from Saved and it
-              shows up here.
-            </Text>
+            <Text style={styles.hint}>{addWayNoImports("gps")}</Text>
           ) : (
             attachableImports.map((row) => (
               <Row
@@ -400,7 +398,7 @@ export function AddWaySheet({
                 onPress={() =>
                   fill("import", async () => {
                     await vectorImportActions(row).attachToPlace!(placeId);
-                    return "Attached a copy as this place's route.";
+                    return ADD_WAY.copy.linkedDone;
                   })
                 }
               />
@@ -415,10 +413,7 @@ export function AddWaySheet({
           {tracks === null ? (
             <ActivityIndicator color={theme.accent} />
           ) : convertibleTracks.length === 0 ? (
-            <Text style={styles.hint}>
-              No finished recording here is long enough to make a route from.
-              Start one from the map and it shows up here once you stop it.
-            </Text>
+            <Text style={styles.hint}>{addWayNoTracks("gps")}</Text>
           ) : (
             <>
               <SectionHeader title={`${convertibleTracks.length} finished`} />

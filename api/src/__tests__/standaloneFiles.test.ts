@@ -245,6 +245,45 @@ describe("linking a standalone file as a place's way", () => {
     }
   });
 
+  // The place page's "Add a way" offers a way to the place's owner only. The API
+  // is what holds that: a sharee sees the place and may own ways of their own,
+  // but neither a file nor a drawn route of theirs can be put on it.
+  // Mutation: drop `requirePlaceOwnerAccess` from `assertOwnsTarget`, or
+  // `resolveRoutePlaceId`'s owner count, and the matching call here turns 200.
+  it("refuses a sharee's own file (403) or route (400) onto the owner's place", async () => {
+    const mediaId = await createStandaloneImport(BOB_SUB);
+    let routeId: string | undefined;
+    try {
+      const file = await request(API_URL)
+        .patch(`/media/${mediaId}/link`)
+        .set(as(BOB_SUB))
+        .send({ linkedType: "place", linkedId: SHARED_PLACE_ID });
+      expect(file.status).toBe(403);
+
+      const created = await request(API_URL)
+        .post("/routes")
+        .set(as(BOB_SUB))
+        .send({
+          name: "Bob's line",
+          points: [
+            [150.3, -33.7],
+            [150.31, -33.71],
+          ],
+        });
+      expect(created.status).toBe(201);
+      routeId = created.body.id;
+      const route = await request(API_URL)
+        .patch(`/routes/${routeId}`)
+        .set(as(BOB_SUB))
+        .send({ placeId: SHARED_PLACE_ID });
+      expect(route.status).toBe(400);
+    } finally {
+      await deleteMedia(BOB_SUB, mediaId);
+      if (routeId)
+        await request(API_URL).delete(`/routes/${routeId}`).set(as(BOB_SUB));
+    }
+  });
+
   it("refuses to link onto a place whose way is already taken", async () => {
     const placeId = SHARED_PLACE_ID;
     const first = await createStandaloneImport(ALICE_SUB);

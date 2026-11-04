@@ -19,13 +19,17 @@
 //
 // PRIVACY: the place name and the attachment's filename appear only in a
 // confirm the user opened for that place — never in a log or an error string.
-import { mediaCategory, mediaDisplayName } from "@logjam/shared";
-
-import type { ConfirmCopy } from "@logjam/shared";
+import {
+  IMPORT_TO_PLACE_PROMISE,
+  mediaCategory,
+  mediaDisplayName,
+  routeSlotDisplaceConfirm as sharedDisplaceConfirm,
+  type ConfirmCopy,
+  type WaySource,
+} from "@logjam/shared";
 import type { MirrorMedia } from "../sync/mirrorStore";
 
-/** Where a new way comes from. The panel that offers all five is AddWaySheet. */
-export type WaySource = "route" | "track" | "import" | "file" | "draw";
+export { IMPORT_TO_PLACE_PROMISE, type WaySource };
 
 /**
  * What a source actually WRITES into the slot. A recorded track is converted
@@ -41,14 +45,11 @@ export function waySourceWrites(source: WaySource): "route" | "media" {
 }
 
 /**
- * The two sentences a source has to say BEFORE the fact, because what it does
- * is not what its verb sounds like. Written once, on the SharePanel rule: a
- * promise argued at each call site is a promise that drifts.
+ * The sentence a recorded track says BEFORE the fact, because what it does is
+ * not what its verb sounds like. The import's is shared with Logjam Web.
  */
 export const TRACK_TO_ROUTE_PROMISE =
   "A route is created from the recording and linked to the place. The recording itself is left alone.";
-export const IMPORT_TO_PLACE_PROMISE =
-  "The file is linked to the place, so anyone you share it with can see it. It stays in Saved, and unlinking it later leaves it there.";
 
 export type RouteSlotOccupant =
   | { kind: "route"; id: string; name: string }
@@ -103,16 +104,13 @@ export function routeSlotDisplaceConfirm(
   occupant: RouteSlotOccupant,
 ): ConfirmCopy | null {
   if (!occupant) return null;
-  return {
-    confirmTitle: `${placeName} already has a route`,
-    confirmBody:
+  return sharedDisplaceConfirm("gps", placeName, {
+    kind: occupant.kind,
+    name:
       occupant.kind === "route"
-        ? `“${occupant.name}” will be unlinked, but the route is kept.`
-        : `“${mediaDisplayName(occupant.media)}” will be unlinked, but the file is kept in Saved.`,
-    confirmLabel: "Replace",
-    // Both occupants are unlinked and both survive: nothing is lost.
-    tone: "filled",
-  };
+        ? occupant.name
+        : mediaDisplayName(occupant.media),
+  });
 }
 
 /**

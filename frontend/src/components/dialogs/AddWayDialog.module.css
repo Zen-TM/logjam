@@ -1,0 +1,15 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.hint {
+  composes: meta from "../../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.file {
+  display: none;
+}
