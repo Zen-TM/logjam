@@ -12,6 +12,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library/legacy";
 import {
+  attachSummary,
   categoryHasThumbnail,
   mediaCategory,
   type MediaCategory,
@@ -36,11 +37,7 @@ import {
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { savesCapturesToGallery } from "./galleryPreference";
-import {
-  attachBatch,
-  attachSummary,
-  libraryPickerOptions,
-} from "./attachBatch";
+import { attachBatch, libraryPickerOptions } from "./attachBatch";
 import { stripOffers } from "./stripOffers";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
@@ -211,7 +208,10 @@ export function MediaStrip({
         const { added, failed } = await attachBatch(files, (file) =>
           attachMediaLocal(linkedType, linkedId, file),
         );
-        const summary = attachSummary(added, failed);
+        const summary = attachSummary(
+          added.map((file) => mediaCategory(file.mimeType ?? "image/jpeg")),
+          failed,
+        );
         if (summary?.tone === "error") onFailed(summary.message);
         else if (summary) onAdded(summary.message);
       } finally {

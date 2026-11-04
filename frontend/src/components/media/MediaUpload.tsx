@@ -1,10 +1,16 @@
 import { useRef, useState } from "react";
-import type { MediaItem, MediaLinkedType } from "@logjam/shared";
+import {
+  attachSummary,
+  type MediaCategory,
+  type MediaItem,
+  type MediaLinkedType,
+} from "@logjam/shared";
 import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
 import { FieldError, Icon } from "../../ui";
+import { useToast } from "../feedback/ToastProvider";
 
 // One uploader serves both surfaces; the category narrows what's accepted.
 //   visual → photos + videos      track → GPX/KML only      (undefined → all)
@@ -57,6 +63,7 @@ export default function MediaUpload({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const toast = useToast();
 
   const accept = category ? ACCEPT_BY_CATEGORY[category] : ACCEPT_ALL;
   const subHint = category
@@ -79,6 +86,7 @@ export default function MediaUpload({
     const selected = Array.from(files);
     setErrors([]);
     const failures: string[] = [];
+    const added: MediaCategory[] = [];
     if (maxFiles != null && selected.length > maxFiles) {
       setErrors([
         `You can upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} here.`,
@@ -111,6 +119,7 @@ export default function MediaUpload({
             thumbnail,
           });
           onUploaded(item);
+          added.push(resolved.category);
         } catch (err) {
           console.error(err);
           failures.push(
@@ -125,6 +134,12 @@ export default function MediaUpload({
     setErrors(failures);
     setBusy(false);
     onBusyChange?.(false);
+    // The failures stay listed by name under the dropzone; this is the one
+    // line for the pick, the same sentence Logjam GPS shows.
+    const summary =
+      added.length > 0 ? attachSummary(added, failures.length) : null;
+    if (summary?.tone === "done") toast.success(summary.message);
+    else if (summary) toast.error(summary.message);
   }
 
   return (
