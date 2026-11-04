@@ -193,7 +193,9 @@ function BottomSheet({
   // scroll, which would then fight the drag.
   const contentRef = useRef<HTMLDivElement>(null);
   const latest = useRef({ begin, move, end });
-  latest.current = { begin, move, end };
+  useLayoutEffect(() => {
+    latest.current = { begin, move, end };
+  });
   useEffect(() => {
     const root = contentRef.current;
     if (!root) return;
