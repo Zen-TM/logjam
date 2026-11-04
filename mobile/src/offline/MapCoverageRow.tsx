@@ -5,7 +5,6 @@ import { useNavigation } from "@react-navigation/native";
 
 import { BASEMAP_CATALOG } from "@logjam/shared";
 
-import { unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { readBasemapPreference } from "../map/basemapPreference";
 import { Row } from "../ui";
@@ -13,6 +12,7 @@ import {
   coveredByOfflineMaps,
   routeCoveredByOfflineMaps,
 } from "./coveredByOfflineMaps";
+import { coverageSubtitle } from "./coverageSubtitle";
 import { useMapArtifacts } from "./useMapArtifacts";
 
 export function MapCoverageRow({
@@ -20,7 +20,7 @@ export function MapCoverageRow({
   route,
   onSave,
 }: {
-  /** The ground to cover, `[west, south, east, north]`: what Save map frames. */
+  /** The ground to cover, `[west, south, east, north]`: what Save an offline map frames. */
   bbox: [number, number, number, number];
   /** A way's points: covered only when every point along it is. */
   route?: [number, number][];
@@ -55,11 +55,7 @@ export function MapCoverageRow({
     <Row
       icon="saveOffline"
       title="Save an offline map"
-      subtitle={
-        online
-          ? `No offline map for this area${basemapName ? ` · ${basemapName}` : ""}`
-          : `No offline map for this area · ${unavailableReasonText("needs-connection")}`
-      }
+      subtitle={coverageSubtitle(online, basemapName)}
       disabled={!online}
       onPress={() => {
         onSave?.();
