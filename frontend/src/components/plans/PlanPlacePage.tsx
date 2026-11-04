@@ -22,6 +22,7 @@ import { Hero, SectionHeader, StatGrid, type Stat } from "../../ui";
 import { useToast } from "../feedback/ToastProvider";
 import { PlaceTypeIcon } from "../sidebar/panels/placeTypeIcon";
 import PlaceSlideshow from "../media/PlaceSlideshow";
+import { NoteBody } from "./WriteUpBody";
 import classes from "./plans.module.css";
 
 const copy = PLACE_PAGE.copy;
@@ -83,7 +84,7 @@ export default function PlanPlacePage({
             {copy.alsoKnownAs} {place.altNames.join(", ")}
           </p>
         )}
-        {place.notes && <p className={classes.body}>{place.notes}</p>}
+        {place.notes && <NoteBody notes={place.notes} />}
         {photos.length > 0 && <PlaceSlideshow media={photos} />}
         <SectionHeader title={copy.position} />
         <StatGrid stats={positionStats} />

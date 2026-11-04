@@ -4,6 +4,11 @@
   overflow-wrap: anywhere;
 }
 
+/* A note reads at the paragraph role's line height, as plain notes did. */
+.note {
+  composes: paragraph from "../../textRoles.generated.module.css";
+}
+
 /* The first block sits under the section title as plain text did. */
 .body > * {
   margin: 0;

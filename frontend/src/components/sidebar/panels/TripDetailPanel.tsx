@@ -32,6 +32,7 @@ import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import MediaGallery from "../../media/MediaGallery";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import { TripGaugeReading } from "../../gauges/TripGaugeReading";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -289,7 +290,7 @@ function TripDetailPanel({
       <section className={classes.section}>
         <SectionHeader title={copy.notes} />
         {trip.notes ? (
-          <p className={classes.notes}>{trip.notes}</p>
+          <NoteBody notes={trip.notes} />
         ) : (
           <p className={classes.muted}>{copy.notesEmpty}</p>
         )}

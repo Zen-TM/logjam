@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planWriteUpBlocks } from "./planWriteUp.js";
+import { noteBlocks, planWriteUpBlocks } from "./planWriteUp.js";
 
 const bold = (t: string) => ({
   type: "paragraph",
@@ -33,5 +33,53 @@ describe("planWriteUpBlocks", () => {
     ]);
     expect(JSON.stringify(blocks)).not.toMatch(/"type":"(image|html)"/);
     expect(JSON.stringify(blocks[0])).toContain('"type":"link"');
+  });
+});
+
+describe("noteBlocks", () => {
+  const text = (t: string) => ({ type: "text", text: t });
+  const br = { type: "break" };
+
+  it("keeps every line break of a note with no Markdown in it", () => {
+    // Red if `breaks` is dropped from the parse: a plain note typed on three
+    // lines would run together on one.
+    expect(
+      noteBlocks("Rope 2 x 60 m\nBring a wetsuit\n\nCar park is full"),
+    ).toEqual([
+      {
+        type: "paragraph",
+        children: [text("Rope 2 x 60 m"), br, text("Bring a wetsuit")],
+      },
+      { type: "paragraph", children: [text("Car park is full")] },
+    ]);
+  });
+
+  it("draws a heading as a bold line", () => {
+    // Red if a heading reaches the clients, where it would rival the section title.
+    expect(noteBlocks("# Gear")).toEqual([bold("Gear")]);
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,x",
+    "vbscript:x",
+    "//evil.test",
+  ])("never links %s", (href) => {
+    // Red if the scheme allowlist in parseMessageMarkdown loosens: a note a
+    // sharee reads would carry a live script link.
+    expect(JSON.stringify(noteBlocks(`[open](${href}) ${href}`))).not.toContain(
+      '"type":"link"',
+    );
+  });
+
+  it("draws raw HTML and an image as text, never as a tree node", () => {
+    // Red if an html or image token maps to anything but plain text: a remote
+    // image would load for whoever opens the note.
+    const blocks = noteBlocks(
+      'Hi <img src=x onerror="alert(1)"> ![p](https://x.test/a.png)\n\n<script>x</script>',
+    );
+    const json = JSON.stringify(blocks);
+    expect(json).not.toMatch(/"type":"(image|html|link)"/);
+    expect(json).toContain("<script>x</script>");
   });
 });
