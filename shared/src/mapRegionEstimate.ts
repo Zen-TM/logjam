@@ -362,43 +362,6 @@ export function planDemDownload(
 }
 
 /**
- * Rectangles [west, south, east, north] known to be NSW land the 5 m DEM
- * covers whole, drawn well inside the state: clear of the coast, the Victorian
- * and Queensland borders and the Murray. `NSW_5M.coverage` is not that: its
- * rectangle also holds sea, eastern Victoria and the Gold Coast hinterland,
- * where a position falls through to the worldwide tiles (ADR 0028). Widen
- * these as the archive's real extent is checked; a miss only keeps the
- * worldwide tiles, which is the safe side.
- * Guard: shared/src/mapRegionEstimate.test.ts
- */
-export const NSW_5M_SOLID: readonly (readonly [
-  number,
-  number,
-  number,
-  number,
-])[] = [
-  [142.0, -34.0, 151.0, -29.5],
-  [150.5, -32.5, 152.0, -29.5],
-  [147.0, -35.0, 150.5, -33.5],
-  [147.0, -35.5, 150.0, -34.0],
-  [148.0, -36.0, 150.0, -35.0],
-];
-
-/**
- * Whether the 5 m DEM answers everywhere in the area, so the worldwide tiles
- * would never be read there and an offline map need not save them.
- */
-export function nsw5mCoversArea(bbox: RegionBbox): boolean {
-  return NSW_5M_SOLID.some(
-    ([west, south, east, north]) =>
-      bbox.west >= west &&
-      bbox.east <= east &&
-      bbox.south >= south &&
-      bbox.north <= north,
-  );
-}
-
-/**
  * MEASURED bytes of one tile of the statewide contours at each zoom a clip
  * holds, from single-zoom clips of the Katoomba and Port Hacking sheets. A
  * clip is whole tiles, so a small area costs far more per square kilometre
@@ -549,17 +512,13 @@ export function planRegionForBasemaps(
         size: estimateRegionSize(plan, basemapId),
       };
     }),
-    ...(nsw5mCoversArea(bbox)
-      ? []
-      : [
-          {
-            basemapId: DEM_SOURCE_ID as DownloadableTileSourceId,
-            zMin: DEM_ZOOM,
-            zMax: DEM_ZOOM,
-            plan: demPlan,
-            size: estimateRegionSize(demPlan, DEM_SOURCE_ID),
-          },
-        ]),
+    {
+      basemapId: DEM_SOURCE_ID as DownloadableTileSourceId,
+      zMin: DEM_ZOOM,
+      zMax: DEM_ZOOM,
+      plan: demPlan,
+      size: estimateRegionSize(demPlan, DEM_SOURCE_ID),
+    },
   ];
   const totalTiles = perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0);
   const bytes = (key: keyof RegionSizeEstimate) =>

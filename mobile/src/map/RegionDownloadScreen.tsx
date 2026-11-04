@@ -200,7 +200,7 @@ const BOUNDS_PADDING = { top: 72, bottom: 64, left: 32, right: 32 };
  * row rather than scroll it. Measure and raise this number if that turns
  * up in the field; making the panel scrollable again just hides the Save button.
  */
-const PANEL_HEIGHT = 220;
+const PANEL_HEIGHT = 250;
 
 export function RegionDownloadScreen({
   onBack,
