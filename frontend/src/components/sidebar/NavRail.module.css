@@ -17,6 +17,23 @@
   border-right: var(--hairline);
 }
 
+/* Short windows (150% zoom on a laptop): tighter, so all eight fit; shorter
+   than this the rail still scrolls. */
+@media (max-height: 640px) {
+  .rail {
+    gap: var(--space-0-25);
+    padding-top: var(--space-1);
+  }
+
+  .rail .item {
+    min-height: 52px; /* intrinsic: a pill and a label */
+  }
+
+  .rail .brand {
+    margin-bottom: var(--space-1);
+  }
+}
+
 .brand {
   flex: none;
   width: 44px;

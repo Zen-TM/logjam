@@ -170,3 +170,13 @@
   display: flex;
   gap: var(--space-1);
 }
+
+.rail[data-wrap="true"] .scroller {
+  overflow: visible;
+  mask-image: none;
+}
+
+.rail[data-wrap="true"] .group {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

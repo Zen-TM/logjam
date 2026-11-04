@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode, PointerEvent as ReactPointerEvent } from "react";
 import classes from "./BottomSheet.module.css";
 import { SheetSnapContext } from "./sheetSnap";
+import { useViewport, type Viewport } from "./useViewport";
 
 export type SheetSnap = "peek" | "half" | "full";
 
@@ -30,7 +31,7 @@ function sheetHeightPx(viewportHeight: number): number {
 /** translateY (px from fully-open) for each snap point, given the viewport height. */
 function snapTranslate(
   snap: SheetSnap,
-  viewportHeight: number,
+  { height: viewportHeight, short }: Viewport,
   peekReveal: number,
 ): number {
   const sheetHeight = sheetHeightPx(viewportHeight);
@@ -38,7 +39,7 @@ function snapTranslate(
     case "full":
       return 0;
     case "half":
-      return sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
+      return short ? 0 : sheetHeight - viewportHeight * HALF_REVEAL_FRACTION;
     case "peek":
       return sheetHeight - peekReveal;
   }
@@ -47,31 +48,16 @@ function snapTranslate(
 /** Snap point whose translate is nearest the given drag translate. */
 function nearestSnap(
   translate: number,
-  viewportHeight: number,
+  viewport: Viewport,
   peekReveal: number,
 ): SheetSnap {
   const snaps: SheetSnap[] = ["full", "half", "peek"];
   return snaps.reduce((best, snap) =>
-    Math.abs(snapTranslate(snap, viewportHeight, peekReveal) - translate) <
-    Math.abs(snapTranslate(best, viewportHeight, peekReveal) - translate)
+    Math.abs(snapTranslate(snap, viewport, peekReveal) - translate) <
+    Math.abs(snapTranslate(best, viewport, peekReveal) - translate)
       ? snap
       : best,
   );
-}
-
-/** Track window.innerHeight reactively (orientation change, address-bar toggle). */
-function useViewportHeight(): number {
-  const [vh, setVh] = useState(() =>
-    typeof window === "undefined" ? 800 : window.innerHeight,
-  );
-  useEffect(() => {
-    function onResize() {
-      setVh(window.innerHeight);
-    }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  return vh;
 }
 
 /** Draggable bottom sheet for mobile panels. Controlled snap point so callers
@@ -97,7 +83,7 @@ function BottomSheet({
   peekReveal?: number;
   children: ReactNode;
 }) {
-  const viewportHeight = useViewportHeight();
+  const viewport = useViewport();
 
   // Live drag translate in px; null when not dragging (snap drives transform).
   const [dragTranslate, setDragTranslate] = useState<number | null>(null);
@@ -119,15 +105,15 @@ function BottomSheet({
     event.currentTarget.setPointerCapture(event.pointerId);
     dragStart.current = {
       pointerY: event.clientY,
-      baseTranslate: snapTranslate(snap, viewportHeight, peekReveal),
+      baseTranslate: snapTranslate(snap, viewport, peekReveal),
     };
-    setDragTranslate(snapTranslate(snap, viewportHeight, peekReveal));
+    setDragTranslate(snapTranslate(snap, viewport, peekReveal));
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (!dragStart.current) return;
     const delta = event.clientY - dragStart.current.pointerY;
-    const maxTranslate = sheetHeightPx(viewportHeight) - peekReveal;
+    const maxTranslate = sheetHeightPx(viewport.height) - peekReveal;
     const next = Math.min(
       Math.max(dragStart.current.baseTranslate + delta, 0),
       maxTranslate,
@@ -137,7 +123,7 @@ function BottomSheet({
 
   function handlePointerUp() {
     if (dragTranslate !== null) {
-      onSnapChange(nearestSnap(dragTranslate, viewportHeight, peekReveal));
+      onSnapChange(nearestSnap(dragTranslate, viewport, peekReveal));
     }
     dragStart.current = null;
     setDragTranslate(null);
@@ -159,8 +145,7 @@ function BottomSheet({
     if (clamped !== index) onSnapChange(SNAP_ORDER[clamped]);
   }
 
-  const translate =
-    dragTranslate ?? snapTranslate(snap, viewportHeight, peekReveal);
+  const translate = dragTranslate ?? snapTranslate(snap, viewport, peekReveal);
 
   // The sheet element is always full-height and slides down via translateY.
   // Size the content region to only the *visible* portion so overflow-y: auto
@@ -168,7 +153,7 @@ function BottomSheet({
   // off-screen lower half of the sheet.
   const visibleContentHeight = Math.max(
     0,
-    sheetHeightPx(viewportHeight) - translate - handleHeight,
+    sheetHeightPx(viewport.height) - translate - handleHeight,
   );
 
   return (
