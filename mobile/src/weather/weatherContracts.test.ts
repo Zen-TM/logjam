@@ -51,9 +51,9 @@ describe("the press is what asks for the weather", () => {
   it("swaps the map panel's body and keeps the panel open", () => {
     const source = read("../map/MapPointSheet.tsx");
     expect(source).toMatch(
-      /onShowWeather\(\);\s*weather\.refresh\(\);\s*return;/,
+      /onView\("weather"\);\s*weather\.refresh\(\);\s*return;/,
     );
-    expect(source).toContain("if (weatherOpen) return <WeatherView");
+    expect(source).toContain('if (view === "weather") return <WeatherView');
   });
 
   it("asks mayFetch before sending anything", () => {
