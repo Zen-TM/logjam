@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   groupArtifacts,
+  isBundledRegionMember,
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
@@ -179,5 +180,24 @@ describe("REGION_ARTIFACT_KINDS", () => {
     );
     for (const kind of kinds) expect(isRegionArtifact({ kind })).toBe(true);
     expect(isRegionArtifact({ kind: "topo-overlay" })).toBe(false);
+  });
+});
+
+describe("isBundledRegionMember", () => {
+  // Mutation: test only the kind, and the vector map (a basemap-region file
+  // filed under "protomaps") gets a delete button of its own again; test only
+  // the key, and the elevation and contours clips do.
+  it("lets the user delete only the raster maps they picked", () => {
+    const member = (kind: MapArtifact["kind"], logicalKey: string) =>
+      isBundledRegionMember({ kind, logicalKey });
+    expect(member("basemap-region", "six-topo")).toBe(false);
+    expect(member("basemap-region", "six-imagery")).toBe(false);
+    expect(member("basemap-region", "protomaps")).toBe(true);
+    expect(member("dem-region", "terrarium")).toBe(true);
+    expect(member("dem-region", "nsw-5m")).toBe(true);
+    expect(member("contours-region", "nsw-contours")).toBe(true);
+    expect(member("slope-region", "nsw-slope")).toBe(true);
+    expect(member("land-region", "nsw-land")).toBe(true);
+    expect(member("dem-region", "lidar-abc")).toBe(true);
   });
 });

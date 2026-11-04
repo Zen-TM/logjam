@@ -157,6 +157,7 @@ import { renameArtifact, renameArtifactGroup } from "../offline/registryDb";
 import { useMapArtifacts } from "../offline/useMapArtifacts";
 import {
   groupArtifacts,
+  isBundledRegionMember,
   isRegionArtifact,
   overlayJobId,
   regionGroupKey,
@@ -370,7 +371,8 @@ type SavedItem = {
     id: string;
     title: string;
     sizeBytes: number;
-    delete: () => Promise<unknown>;
+    /** Absent on a file the area brings itself (`isBundledRegionMember`). */
+    delete?: () => Promise<unknown>;
   }[];
   /** Someone else owns it — see `AssetActions.sharedWithYou`. Drives the
    *  read-only hint, and is why the write verbs below are missing. */
@@ -1005,7 +1007,9 @@ export function SavedScreen({
           id: artifact.id,
           title: regionMemberName(artifact),
           sizeBytes: artifact.sizeBytes,
-          delete: () => deleteDownloadedArtifact(artifact.id),
+          ...(isBundledRegionMember(artifact)
+            ? {}
+            : { delete: () => deleteDownloadedArtifact(artifact.id) }),
         })),
         delete: {
           confirmTitle: `Delete ${title}?`,
@@ -1513,7 +1517,9 @@ export function SavedScreen({
 
   /** Delete ONE file out of a grouped card (a basemap, a topo layer). */
   const deleteMember = useCallback(
-    async (member: { title: string; delete: () => Promise<unknown> }) => {
+    async (member: { title: string; delete?: () => Promise<unknown> }) => {
+      const remove = member.delete;
+      if (!remove) return;
       const ok = await confirm({
         confirmTitle: `Delete ${member.title}?`,
         confirmBody:
@@ -1522,8 +1528,7 @@ export function SavedScreen({
         tone: "destructive",
       });
       if (!ok) return;
-      member
-        .delete()
+      remove()
         .then(refreshFreeSpace)
         .catch((err: unknown) => {
           console.error(err);
@@ -2369,15 +2374,17 @@ export function SavedScreen({
                           <Text style={styles.size}>
                             {formatBytes(member.sizeBytes)}
                           </Text>
-                          <IconButton
-                            icon="delete"
-                            accessibilityLabel={`Delete ${member.title} from device`}
-                            color={theme.warning}
-                            onPress={() => {
-                              closeItemSheet();
-                              deleteMember(member);
-                            }}
-                          />
+                          {member.delete ? (
+                            <IconButton
+                              icon="delete"
+                              accessibilityLabel={`Delete ${member.title} from device`}
+                              color={theme.warning}
+                              onPress={() => {
+                                closeItemSheet();
+                                deleteMember(member);
+                              }}
+                            />
+                          ) : null}
                         </View>
                       }
                     />
