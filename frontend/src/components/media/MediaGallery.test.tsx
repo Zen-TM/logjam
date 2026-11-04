@@ -38,6 +38,7 @@ const track: MediaItem = {
   origin: null,
   displayName: null,
   metadata: {},
+  sourceMediaId: null,
 };
 
 // frontend/DESIGN.md §3: a file to download is a `Row` with an href, and its

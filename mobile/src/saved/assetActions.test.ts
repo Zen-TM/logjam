@@ -316,6 +316,34 @@ describe("the share / send-a-copy verb matrix", () => {
     expect(trackActions(track(0)).logTrip).toBeUndefined();
   });
 
+  // Once a trip has been logged from a recording, the offer is spent. Parity
+  // with Logjam Web's wayActions.test.ts. Mutation: drop the `loggedTrackIds`
+  // test from either action builder, and the offer comes back.
+  it("stops offering Log a trip on a recording a trip was logged from", () => {
+    const logged = new Set(["m1"]);
+    expect(
+      trackActions({ ...track(3), mediaId: "m1" }, logged).logTrip,
+    ).toBeUndefined();
+    // Another recording's trip, or a recording with no account copy yet.
+    expect(
+      trackActions({ ...track(3), mediaId: "m2" }, logged).logTrip,
+    ).toBeDefined();
+    expect(
+      trackActions({ ...track(3), mediaId: null }, logged).logTrip,
+    ).toBeDefined();
+    const file = {
+      id: "m1",
+      filename: "Creek.gpx",
+      displayName: "Creek",
+      mediaType: "application/gpx+xml",
+      origin: "track",
+      metadata: {},
+      localDisplayPath: null,
+    } as unknown as Parameters<typeof remoteTrackActions>[0];
+    expect(remoteTrackActions(file, logged).logTrip).toBeUndefined();
+    expect(remoteTrackActions(file, new Set()).logTrip).toBeDefined();
+  });
+
   // A recording made on another device is in the account as a file, and goes
   // into a trip like one made here; with its bytes off the phone it needs a
   // connection to attach. Mutation: drop `logTrip` from `remoteTrackActions`.

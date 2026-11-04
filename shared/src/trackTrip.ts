@@ -101,3 +101,19 @@ export function tripPrefillFromTrack(
       : [],
   };
 }
+
+/**
+ * The recordings a trip has already been logged from, given the account's trip
+ * attachments (each copy names its source in `sourceMediaId`). "Log a trip" is
+ * offered on a recording only when its media id is not in this set. A copy made
+ * before the link existed names nothing, so its recording is offered again.
+ */
+export function tripLoggedTrackIds(
+  tripMedia: readonly { sourceMediaId?: string | null }[],
+): Set<string> {
+  const ids = new Set<string>();
+  for (const media of tripMedia) {
+    if (media.sourceMediaId) ids.add(media.sourceMediaId);
+  }
+  return ids;
+}

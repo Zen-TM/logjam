@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   gpxEnds,
   placesNearTrackEnds,
+  tripLoggedTrackIds,
   tripPrefillFromTrack,
 } from "./trackTrip.js";
 
@@ -91,5 +92,19 @@ describe("gpxEnds", () => {
       { latitude: -33.3, longitude: 150.4 },
     ]);
     expect(gpxEnds("<gpx/>")).toEqual([]);
+  });
+});
+
+describe("tripLoggedTrackIds", () => {
+  // Mutation: also add copies with no sourceMediaId (an old copy), or drop the
+  // null check, and the old-copy case below fails.
+  it("collects the recordings trips were logged from, and skips old copies", () => {
+    const logged = tripLoggedTrackIds([
+      { sourceMediaId: "rec-1" },
+      { sourceMediaId: "rec-1" },
+      { sourceMediaId: null },
+      {},
+    ]);
+    expect([...logged]).toEqual(["rec-1"]);
   });
 });

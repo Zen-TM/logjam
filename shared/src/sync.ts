@@ -338,6 +338,9 @@ export type SyncDeltaMediaRow = {
   origin: string | null;
   displayName: string | null;
   metadata: unknown;
+  /** A trip attachment's source recording (`MediaItem.sourceMediaId`). Absent
+   *  from a server that predates it. Only ever on the owner's own trip media. */
+  sourceMediaId?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -571,6 +574,8 @@ const MEDIA_ROW_SPEC: Record<string, FieldCheck> = {
   // object would stop syncing everything else too. Readers go through
   // readMediaMetadata, which degrades to {}.
   metadata: isPlainObject,
+  // Optional: a server that predates it omits it (the protocol is additive).
+  sourceMediaId: (value) => value === undefined || nullable(isString)(value),
   createdAt: isString,
   updatedAt: isString,
 };

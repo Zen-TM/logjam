@@ -136,11 +136,19 @@ const db = {
     else run(sql, args);
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
-  getFirstAsync: (sql: string) =>
+  getFirstAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve({
       n: sql.includes("'retrying'")
         ? rows.filter((row) => row.state === "retrying").length
-        : 0,
+        : sql.includes("op = 'create' AND entity_id = ?")
+          ? rows.filter(
+              (row) =>
+                row.entity === "media" &&
+                row.op === "create" &&
+                row.entity_id === args[0] &&
+                (row.state === "queued" || row.state === "inflight"),
+            ).length
+          : 0,
     }),
   getAllAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve(
@@ -550,6 +558,27 @@ describe("push result correlation", () => {
 });
 
 describe("media pass", () => {
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen. Mutation: drop the `sourceMediaId` wait from isLinkPending and
+  // the copy runs (and is parked by a 400) before its recording is up.
+  it("runs a trip's copy only after the recording it names has uploaded", async () => {
+    rows = [
+      mediaRow(1, {
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "t-1",
+          sourceMediaId: "media-2",
+        }),
+      }),
+      mediaRow(2),
+    ];
+
+    await flushOutbox();
+
+    // The copy was queued first but waited for the pass after its recording.
+    expect(mediaRuns).toEqual([2, 1]);
+  });
+
   it("keeps going past a dead op instead of aborting the pass", async () => {
     rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
     deadMedia.add(1);

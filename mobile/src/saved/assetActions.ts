@@ -397,7 +397,11 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
  * a feature nobody has asked for — what this row is for is knowing the trip is
  * safe, being able to name it, and being able to get rid of it.
  */
-export function remoteTrackActions(file: MirrorMedia): AssetActions {
+export function remoteTrackActions(
+  file: MirrorMedia,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   const bbox = file.metadata.bbox ?? null;
   return {
     locatable: bbox !== null,
@@ -406,7 +410,14 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
     // The file is a recording of the account's own, so it can go into a trip
     // like one made here: its bytes are fetched once if they are not on the
     // phone (`needsConnection` says so, for the sheet that offers it).
-    logTrip: syncedTrackSource({ ...file, title: mediaDisplayName(file) }),
+    ...(loggedTrackIds?.has(file.id)
+      ? {}
+      : {
+          logTrip: syncedTrackSource({
+            ...file,
+            title: mediaDisplayName(file),
+          }),
+        }),
     delete: {
       confirmTitle: "Delete this recording?",
       confirmBody:
@@ -486,7 +497,11 @@ export function routeActions(
   };
 }
 
-export function trackActions(track: Track): AssetActions {
+export function trackActions(
+  track: Track,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   return {
     locatable: track.pointCount > 0,
     // A track's extent isn't stored; derive it from its points on demand.
@@ -494,7 +509,11 @@ export function trackActions(track: Track): AssetActions {
     rename: (name) => updateTrack(track.id, { name }),
     setColor: (color: string) => updateTrack(track.id, { color }),
     // Attaching writes the points out as a GPX, which needs a line to write.
-    ...(track.pointCount >= 2 ? { logTrip: recordedTrackSource(track) } : {}),
+    // Not offered again once a trip has been logged from it.
+    ...(track.pointCount >= 2 &&
+    !(track.mediaId && loggedTrackIds?.has(track.mediaId))
+      ? { logTrip: recordedTrackSource(track) }
+      : {}),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS

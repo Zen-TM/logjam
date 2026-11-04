@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   MediaMetadataError,
   parseMediaMetadata,
+  parseSourceMediaId,
+  SourceMediaIdError,
   parseTrackClimb,
   readMediaMetadata,
 } from "./mediaMetadata";
@@ -139,6 +141,26 @@ describe("parseTrackClimb", () => {
     ).toThrow(MediaMetadataError);
     expect(() => parseTrackClimb({ ...CLIMB, elevationLossM: -1 })).toThrow(
       MediaMetadataError,
+    );
+  });
+});
+
+describe("parseSourceMediaId", () => {
+  const ID = "6f1c2b7e-3a4d-4e8f-9a1b-2c3d4e5f6a7b";
+
+  // Mutation: return `value` unchecked, and the non-id cases stop throwing.
+  it("accepts a media id and treats absent as no link", () => {
+    expect(parseSourceMediaId(ID)).toBe(ID);
+    expect(parseSourceMediaId(undefined)).toBeNull();
+    expect(parseSourceMediaId(null)).toBeNull();
+  });
+
+  it("refuses anything else, without echoing it", () => {
+    for (const bad of ["", "not-an-id", 7, {}, [ID]]) {
+      expect(() => parseSourceMediaId(bad)).toThrow(SourceMediaIdError);
+    }
+    expect(() => parseSourceMediaId("secret-looking-text")).toThrow(
+      /^sourceMediaId must be a media id$/,
     );
   });
 });

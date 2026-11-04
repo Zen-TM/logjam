@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   noticeDue: false,
   pointCount: 10,
   mediaId: "media-1" as string | null,
+  logged: [] as string[],
 }));
 
 vi.mock("../ui", () => ({ confirm: vi.fn(async () => true) }));
@@ -32,8 +33,15 @@ vi.mock("./trackRecorder", () => ({
   finishTrackRecording: vi.fn(async () => state.mediaId),
   isActiveRecording: vi.fn(async () => true),
 }));
+vi.mock("../sync/mirrorStore", () => ({
+  listLoggedTrackIds: async () => new Set(state.logged),
+}));
 vi.mock("./tracksDb", () => ({
-  getTrack: vi.fn(async () => ({ id: "t1", pointCount: state.pointCount })),
+  getTrack: vi.fn(async () => ({
+    id: "t1",
+    pointCount: state.pointCount,
+    mediaId: state.mediaId,
+  })),
 }));
 vi.mock("./tripTrackSource", () => ({
   recordedTrackSource: (track: { id: string }) => ({ name: track.id }),
@@ -55,6 +63,7 @@ beforeEach(() => {
   state.noticeDue = false;
   state.pointCount = 10;
   state.mediaId = "media-1";
+  state.logged = [];
 });
 
 describe("finishing a recording", () => {
@@ -76,6 +85,15 @@ describe("finishing a recording", () => {
   it("offers nothing for a recording with under 2 points: nothing to attach", async () => {
     state.pointCount = 1;
     expect((await finish()).action).toBeUndefined();
+  });
+
+  // Mutation: drop the `logged.has` test from announceFinished and the toast
+  // offers a trip for a recording that has one.
+  it("offers nothing for a recording a trip was already logged from", async () => {
+    state.logged = ["media-1"];
+    expect((await finish()).action).toBeUndefined();
+    state.logged = ["another-recording"];
+    expect((await finish()).action?.label).toBe("Log a trip");
   });
 
   // Mutation: drop `queued &&` from `notice` and the unqueued case reads the
