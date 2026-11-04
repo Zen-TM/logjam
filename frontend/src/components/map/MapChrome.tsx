@@ -21,6 +21,9 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
+/** How long the closing tray fades: `trayOut` in MapChrome.module.css. */
+const TRAY_CLOSE_MS = 100;
+
 type MapToolBase = {
   id: string;
   label: string;
@@ -86,6 +89,21 @@ export default function MapChrome({
   const [locate, setLocate] = useState<LocateState>("off");
   const [toolsOpenState, setToolsOpen] = useState(false);
   const toolsOpen = toolsOpenState && !selectingArea;
+  // The tray stays drawn for `TRAY_CLOSE_MS` after it closes, to fade; under
+  // reduced motion it goes at once.
+  const [trayDrawn, setTrayDrawn] = useState(false);
+  if (toolsOpen && !trayDrawn) setTrayDrawn(true);
+  useEffect(() => {
+    if (toolsOpen || !trayDrawn) return;
+    const still = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const timer = setTimeout(
+      () => setTrayDrawn(false),
+      still ? 0 : TRAY_CLOSE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [toolsOpen, trayDrawn]);
   const trayId = useId();
   // The tray AND its button: opening the tray leaves focus on the button, so
   // Escape has to be heard there too (`e2e/a11y.spec.ts`, the Tools tray).
@@ -166,12 +184,13 @@ export default function MapChrome({
 
       <div className={classes.actions}>
         <div ref={toolsLineRef} className={classes.toolsLine}>
-          {toolsOpen && (
+          {trayDrawn && (
             <div
               id={trayId}
               role="group"
               aria-label="Tools"
-              className={classes.tray}
+              inert={!toolsOpen}
+              className={`${classes.tray} ${toolsOpen ? "" : classes.trayClosing}`}
             >
               {tools.map((tool, index) => {
                 const item = {

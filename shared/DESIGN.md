@@ -398,10 +398,11 @@ renumber.
 - **Tools share one button whose tray opens sideways**; arming one closes
   it. Each tool is a pill with its label and a one-line description from
   `MAP_TOOLS`. The first slides out from under the +, the rest fall out from
-  under the one above, staggered, 200 ms in all, and not at all under
-  reduced motion. A press anywhere else closes the tray; one on the map does
-  nothing more, one on a control (a tab, another map button) still acts. A
-  tool a client lacks is absent, not disabled. A tool's own settings
+  under the one above, staggered, 200 ms in all; it closes in a 100 ms
+  fade, and neither moves under reduced motion. Anything else touched closes
+  the tray (leaving the map does too). A tap or long-press on the map that
+  does so does nothing more, one on a control (a tab, another map button)
+  still acts, and a pan, pinch or drag carries on. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now. A notice
   about data being lost right now is `tone="critical"` (the warning fill,

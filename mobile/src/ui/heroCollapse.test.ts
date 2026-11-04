@@ -52,7 +52,7 @@ describe("compactHeroTitle", () => {
 });
 
 // Every top-level list page pins a hero that gives way to the compact row once
-// the list scrolls (mobile/DESIGN.md). Mutation: drop the `CollapsingHero` or the
+// the list scrolls (shared/DESIGN.md §2). Mutation: drop the `CollapsingHero` or the
 // `scrollProps` spread from one screen, re-literal a compact title or add
 // button, or add a screen with a `<Hero` to neither list below.
 const COLLAPSING = [
@@ -87,15 +87,34 @@ describe("list screens collapse their hero", () => {
     expect(source).toContain("compact={compact}");
     expect(source).not.toMatch(/`[^`]*\$\{[^}]*\.length[^}]*\}`\s*:/);
   });
+  // Mutation: put a compact title back to the bare name ("Saved", "Inbox"), or
+  // drop an add's compact form, and the pinned row stops saying how many.
   it.each([
     "../places/PlacesScreen.tsx",
     "../logs/LogsScreen.tsx",
     "../plans/PlansScreen.tsx",
     "../screens/FriendsScreen.tsx",
-  ])("%s names its compact title and add", (file) => {
+    "../saved/SavedScreen.tsx",
+    "../screens/NotificationsScreen.tsx",
+  ])("%s says its count in the compact row", (file) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("compactHeroTitle(");
+  });
+  it.each([
+    "../places/PlacesScreen.tsx",
+    "../logs/LogsScreen.tsx",
+    "../plans/PlansScreen.tsx",
+    "../screens/FriendsScreen.tsx",
+  ])("%s draws its add through HeroAdd", (file) => {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<HeroAdd");
+  });
+  it("Leaderboard's compact row says the standing", () => {
+    const source = readFileSync(
+      new URL("../screens/LeaderboardScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toContain("`${LEADERBOARD.title} · ${standing}`");
   });
   it("sorts every screen that draws a Hero", () => {
     const dir = fileURLToPath(new URL("..", import.meta.url));

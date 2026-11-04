@@ -101,6 +101,7 @@ import {
   Button,
   Meter,
   CollapsingHero,
+  compactHeroTitle,
   Hero,
   IconButton,
   RenameForm,
@@ -1685,11 +1686,15 @@ export function SavedScreen({
             }
             // The chips scroll away with the list, so the pinned row keeps naming
             // the filter (an Inbox tap lands on Routes already scrolled).
-            title={
-              filter === "all"
-                ? "Saved"
-                : `Saved · ${CATEGORY_META[filter].plural}`
-            }
+            title={(() => {
+              const name =
+                filter === "all"
+                  ? "Saved"
+                  : `Saved · ${CATEGORY_META[filter].plural}`;
+              return compact
+                ? compactHeroTitle(name, activeCategoryCount)
+                : name;
+            })()}
             titleNumberOfLines={2}
             actions={
               <Button

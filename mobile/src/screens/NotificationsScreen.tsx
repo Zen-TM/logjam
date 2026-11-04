@@ -113,6 +113,7 @@ import {
   Button,
   CardActions,
   CollapsingHero,
+  compactHeroTitle,
   EmptyState,
   ErrorState,
   Hero,
@@ -1035,7 +1036,12 @@ export function NotificationsScreen({
         {(compact) => (
           <Hero
             compact={compact}
-            title={INBOX.title}
+            // The unread count is what the row says once the summary is gone.
+            title={
+              compact && unreadCount > 0
+                ? compactHeroTitle(INBOX.title, unreadCount)
+                : INBOX.title
+            }
             value={inboxHeroTitle(unreadCount, notifications.length)}
             valueSuffix={`${tally.total} ${tally.total === 1 ? "notification" : "notifications"}`}
             onBack={onBack}

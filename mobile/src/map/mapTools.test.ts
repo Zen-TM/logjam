@@ -20,27 +20,49 @@ describe("MapToolGroup", () => {
   });
   it("moves with native-driver timings that reduced motion zeroes", () => {
     expect(source).toContain("useNativeDriver: true");
-    expect(source).toContain("reduceMotion ? 0");
+    // Mutation: drop `reduceMotion` from the duration OR from the delay (the
+    // stagger then still waits). Only an early open, before
+    // `useReduceMotion` has read the setting, can still animate.
+    expect(source).toMatch(/duration: reduceMotion \? 0 :/);
+    expect(source).toMatch(/delay: reduceMotion \|\|/);
   });
 });
 
-// Mutation: drop the backdrop Pressable (a press on the map then also reaches
-// the map), drop `onTouchEnd={closeToolsAfterOutsideTouch}` (a press elsewhere
-// leaves the tray open), or move the backdrop over the controls (a tab or a map
-// button then stops acting).
-describe("MapScreen's tools tray and an outside press", () => {
+// Mutation: drop `onTouchStart={handleRootTouchStart}`, the focus effect, or
+// the `ignoreMapPress` line in one of the press handlers; or put a backdrop back
+// over the map (a pan with the tray open is then swallowed whole). The decision
+// itself is `toolsTouch.test.ts`.
+describe("MapScreen's tools tray and a touch outside it", () => {
   const source = readFileSync(
     new URL("./MapScreen.tsx", import.meta.url),
     "utf8",
   );
-  it("catches a press on the map only, under every control", () => {
-    expect(source).toMatch(
-      /<\/Map>\s*\{\/\*[\s\S]*?\*\/\}\s*\{toolsOpen \? \(\s*<Pressable\s+style=\{StyleSheet\.absoluteFill\}\s+accessible=\{false\}\s+onPress=\{\(\) => \{\}\}\s*\/>/,
-    );
-  });
-  it("closes on any touch that did not start on the + or the tray", () => {
-    expect(source).toContain("onTouchEnd={closeToolsAfterOutsideTouch}");
+  it("closes on a touch start, and shuts when the map loses focus", () => {
+    expect(source).toContain("onTouchStart={handleRootTouchStart}");
     expect(source).toContain("<View onTouchStart={markToolsTouch}>");
     expect(source).toContain("onTouchStart={markToolsTouch}");
+    expect(source).toContain(
+      "useFocusEffect(useCallback(() => () => setToolsOpen(false), []));",
+    );
+  });
+  it("ignores the press and long-press that started with the tray open", () => {
+    const handlers = [
+      "const handleMapPress = useCallback(",
+      "const handleMapLongPress = useCallback(",
+      "const handlePlacePress = useCallback(",
+      "const handleGaugePress = useCallback(",
+      "const handleImportPress = useCallback(",
+      "const pressRoute = useCallback(",
+    ];
+    for (const handler of handlers) {
+      const at = source.indexOf(handler);
+      expect(at, handler).toBeGreaterThan(-1);
+      expect(source.slice(at, at + 400), handler).toContain(
+        "if (ignoreMapPress.current) return;",
+      );
+    }
+  });
+  it("has no backdrop over the map", () => {
+    expect(source).not.toContain("StyleSheet.absoluteFill");
   });
 });
