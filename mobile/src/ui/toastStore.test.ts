@@ -117,6 +117,39 @@ describe("the toast queue", () => {
     unmount();
     expect(queue.hosted()).toBe(false);
   });
+
+  // Mutation: make `topHost` the oldest mounted host (hosts[0]), and a toast
+  // raised while a sheet is open is drawn by the shell's host, under the
+  // sheet's native Modal where nobody sees it.
+  it("hands the toast to the newest host, and back when it unmounts", () => {
+    const queue = createToastQueue();
+    const shell = Symbol("shell");
+    const sheet = Symbol("sheet");
+    const other = Symbol("other sheet");
+    const unmountShell = queue.mountHost(shell);
+    expect(queue.topHost()).toBe(shell);
+    const unmountSheet = queue.mountHost(sheet);
+    expect(queue.topHost()).toBe(sheet);
+    // A sheet opened over a sheet, then closed out of order.
+    const unmountOther = queue.mountHost(other);
+    expect(queue.topHost()).toBe(other);
+    unmountSheet();
+    expect(queue.topHost()).toBe(other);
+    unmountOther();
+    expect(queue.topHost()).toBe(shell);
+    unmountShell();
+    expect(queue.topHost()).toBeNull();
+    expect(queue.hosted()).toBe(false);
+  });
+
+  it("notifies subscribers when the top host changes", () => {
+    const queue = createToastQueue();
+    const heard = vi.fn();
+    queue.subscribe(heard);
+    const unmount = queue.mountHost();
+    unmount();
+    expect(heard).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("where the dock sits", () => {

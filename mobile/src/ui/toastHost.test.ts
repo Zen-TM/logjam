@@ -19,6 +19,22 @@ describe("toasts have one host and one anchor", () => {
     expect(shell.match(/<ToastHost \/>/g)).toHaveLength(1);
   });
 
+  // Mutation: drop `<ToastHost sheet />` from BottomSheet, and a toast raised
+  // while a sheet is open (copying the position) is drawn under its native
+  // Modal, where nobody sees it. The routing is held by toastStore.test.ts.
+  it("mounts one more ToastHost inside BottomSheet's Modal, and nowhere else", () => {
+    const hosts = sources(src).filter((file) =>
+      /<ToastHost[ />]/.test(readFileSync(file, "utf8")),
+    );
+    expect(hosts.map((file) => file.slice(src.length + 1)).sort()).toEqual([
+      "AppShell.tsx",
+      join("ui", "BottomSheet.tsx"),
+    ]);
+    expect(readFileSync(join(src, "ui", "BottomSheet.tsx"), "utf8")).toContain(
+      "<ToastHost sheet />",
+    );
+  });
+
   // Mutation: draw a toast pill in a screen (a second use of `toastGlyph`)
   // instead of raising it through `<Toast>`.
   it("draws the pill only in ui/Toast.tsx", () => {
