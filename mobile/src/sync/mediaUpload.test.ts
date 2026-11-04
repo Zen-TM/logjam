@@ -95,9 +95,11 @@ vi.mock("expo-file-system/legacy", () => ({
 
 const {
   attachMediaLocal,
+  linkStandaloneMediaLocal,
   reclimbStandaloneMediaLocal,
   recolourStandaloneMediaLocal,
   runMediaCreateOp,
+  runMediaLinkOp,
   runMediaReclimbOp,
   runMediaRecolourOp,
 } = await import("./mediaUpload");
@@ -429,6 +431,78 @@ describe("recolouring a standalone file", () => {
     });
     apiFetch.mockRejectedValueOnce({ status: 404 });
     expect(await runMediaRecolourOp(row)).toBe("done");
+  });
+});
+
+describe("linking a file over an uploaded one", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({});
+  });
+  const op = (fields: object) => ({
+    seq: 7,
+    entity_id: "imp",
+    op: "link",
+    fields_json: JSON.stringify(fields),
+    media_phase: null,
+    attempts: 0,
+  });
+
+  // Mutation: leave `replaces` out of the queued fields, and the flush links
+  // without it and the API answers 409 over the upload it was to replace.
+  it("queues the replaced id with the link and hides that row meanwhile", async () => {
+    await linkStandaloneMediaLocal("imp", "place-1", "old");
+    const insert = calls.find(
+      (c) => c.sql.includes("'link'") && c.sql.includes("INSERT"),
+    );
+    expect(insert?.args[2]).toBe(
+      JSON.stringify({ placeId: "place-1", replaces: "old" }),
+    );
+    const hide = calls.find((c) => c.sql.includes("'pendingDelete'"));
+    expect(hide?.args).toEqual(["old"]);
+  });
+
+  it("hides nothing for a plain link", async () => {
+    await linkStandaloneMediaLocal("imp", "place-1");
+    expect(calls.some((c) => c.sql.includes("'pendingDelete'"))).toBe(false);
+  });
+
+  it("sends the replaced id on the PATCH", async () => {
+    await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" }));
+    expect(apiFetch).toHaveBeenCalledWith("/media/imp/link", {
+      method: "PATCH",
+      body: { linkedType: "place", linkedId: "place-1", replaces: "old" },
+    });
+  });
+
+  // Mutation: drop the retry, and a link whose replaced file was deleted on
+  // another device parks as a sync issue and the place never gets its way.
+  it("links without a replaced file the API no longer knows, once", async () => {
+    apiFetch.mockRejectedValueOnce({ status: 400 });
+    expect(
+      await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" })),
+    ).toBe("done");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(apiFetch.mock.calls[1][1]).toEqual({
+      method: "PATCH",
+      body: { linkedType: "place", linkedId: "place-1", replaces: undefined },
+    });
+    const rewrite = calls.find((c) =>
+      c.sql.startsWith("UPDATE outbox SET fields_json"),
+    );
+    expect(rewrite?.args[0]).toBe(JSON.stringify({ placeId: "place-1" }));
+  });
+
+  it("parks a 400 that has no replaced file to blame, and a second one", async () => {
+    apiFetch.mockRejectedValue({ status: 400 });
+    expect(await runMediaLinkOp(op({ placeId: "place-1" }))).toBe("blocked");
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+
+    apiFetch.mockClear();
+    expect(
+      await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" })),
+    ).toBe("blocked");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
   });
 });
 

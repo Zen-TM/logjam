@@ -179,8 +179,9 @@ async function assertPlaceTrackSlotFree(
   linkedType: string,
   linkedId: string | null,
   category: MediaCategory,
-  /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
-  ignoreMediaId?: string,
+  /** The row being MOVED, on a re-link, and the one being REPLACED: each is
+   *  otherwise an incumbent that refuses the write. */
+  ignoreMediaIds: string[] = [],
 ) {
   if (linkedType !== "place" || linkedId === null || category !== "track")
     return;
@@ -189,11 +190,93 @@ async function assertPlaceTrackSlotFree(
       linkedType: "place",
       linkedId,
       mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
-      ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
+      ...(ignoreMediaIds.length > 0 ? { id: { notIn: ignoreMediaIds } } : {}),
     },
   });
   if (existing > 0)
     throw new AppError(409, say`This place already has a track.`);
+}
+
+/**
+ * `replaces`: the track a new one takes over from, swapped in the same
+ * transaction that lands the new one (see `dropReplaced`). It must be the
+ * caller's own file uploaded onto this same place (no origin: an import or a
+ * recording lives on elsewhere and is unlinked, never deleted). A foreign id, a
+ * missing one and one that is not that all answer the same 400, so the status
+ * is no oracle for other people's media ids. Guard: "answers the same
+ * 400…" in src/__tests__/replaceTrack.test.ts.
+ */
+async function assertOwnsReplaced(
+  userId: string,
+  replaces: unknown,
+  linkedType: string,
+  linkedId: string | null,
+  category: MediaCategory,
+): Promise<string | null> {
+  if (replaces === undefined || replaces === null) return null;
+  const refusal = "replaces must name your own uploaded track on this place";
+  if (typeof replaces !== "string" || !replaces) throw malformed(refusal);
+  if (linkedType !== "place" || category !== "track") throw malformed(refusal);
+  const old = await prisma.media.findUnique({
+    where: { id: replaces },
+    select: {
+      ownerId: true,
+      linkedType: true,
+      linkedId: true,
+      origin: true,
+      mediaType: true,
+    },
+  });
+  if (
+    !old ||
+    old.ownerId !== userId ||
+    old.linkedType !== "place" ||
+    old.linkedId !== linkedId ||
+    old.origin !== null ||
+    mediaCategory(old.mediaType) !== "track"
+  ) {
+    throw malformed(refusal);
+  }
+  return replaces;
+}
+
+/**
+ * Delete the track a write replaces, inside that write's transaction: the row,
+ * its quota and the tombstones (owner and the place's sharees), as for a
+ * DELETE. A sharee's next delta therefore unlinks the old file and carries the
+ * new one. Returns the blob keys to remove once the transaction has committed,
+ * or throws 400 if the old row went in the meantime, which rolls the write back.
+ */
+async function dropReplaced(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  replacesId: string,
+): Promise<string[]> {
+  const old = await tx.media.findFirst({
+    where: { id: replacesId, ownerId: userId },
+  });
+  if (!old) throw malformed("replaces must name your own uploaded track");
+  const placeId = placeIdOfMedia(old);
+  const sharees =
+    placeId !== null
+      ? await tx.placeShare.findMany({
+          where: { placeId },
+          select: { sharedWithId: true },
+        })
+      : [];
+  await tx.media.delete({ where: { id: replacesId } });
+  await decrementStorageUsed(userId, old.fileSizeBytes, tx);
+  await writeTombstones(
+    tx,
+    mediaDeleteTombstones({
+      ownerId: userId,
+      mediaId: replacesId,
+      shareeIds: sharees.map((s) => s.sharedWithId),
+    }),
+  );
+  return [old.s3KeyDisplay, old.s3KeyThumbnail].filter((k): k is string =>
+    Boolean(k),
+  );
 }
 
 /**
@@ -323,7 +406,19 @@ router.post(
     // its recording has since been deleted (guard: "answers a replay…" in
     // tripTrackLink.test.ts).
     await assertOwnsSourceTrack(user.id, sourceMediaId);
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    const replaces = await assertOwnsReplaced(
+      user.id,
+      body.replaces,
+      linkedType,
+      linkedId,
+      category,
+    );
+    await assertPlaceTrackSlotFree(
+      linkedType,
+      linkedId,
+      category,
+      replaces ? [replaces] : [],
+    );
     // Headroom pre-check including the declared upload; the authoritative
     // quota charge still happens on confirm against the real S3 size.
     await assertHasStorageQuota(
@@ -399,7 +494,21 @@ router.post(
     // Authoritative: presign may not have carried the source at all. After the
     // replay above, for the reason given at presign.
     await assertOwnsSourceTrack(user.id, sourceMediaId);
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    // After the replay above: a swap that already landed has deleted the old
+    // file, and its retry must get the new one back, not a 400.
+    const replaces = await assertOwnsReplaced(
+      user.id,
+      body.replaces,
+      linkedType,
+      linkedId,
+      category,
+    );
+    await assertPlaceTrackSlotFree(
+      linkedType,
+      linkedId,
+      category,
+      replaces ? [replaces] : [],
+    );
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -449,8 +558,15 @@ router.post(
     // together. No crash window can leave the quota charged without a row,
     // and an over-quota throw undoes the charge without a manual decrement.
     let media;
+    let replacedKeys: string[] = [];
     try {
       media = await prisma.$transaction(async (tx) => {
+        // The old file goes first so its bytes are freed before the new ones
+        // are charged: replacing a file near the quota must not need room for
+        // both.
+        replacedKeys = replaces
+          ? await dropReplaced(tx, user.id, replaces)
+          : [];
         await incrementStorageUsed(user.id, totalBytes, tx);
         const { used, quota } = await getStorageUsage(user.id, tx);
         if (used > quota) {
@@ -503,8 +619,11 @@ router.post(
         });
       });
     } catch (err) {
-      if (err instanceof AppError && err.statusCode === 507) {
-        // Transaction rolled back (charge undone); remove the uploaded
+      if (
+        err instanceof AppError &&
+        (err.statusCode === 507 || err.statusCode === 400)
+      ) {
+        // Transaction rolled back (charge undone, the old file kept); remove the uploaded
         // objects best-effort so the 507 is not masked by a cleanup failure.
         await deleteS3KeysBestEffort(
           MEDIA_BUCKET,
@@ -529,6 +648,11 @@ router.post(
       throw err;
     }
 
+    // The swap committed: the old blobs are unreachable now. Best-effort, as
+    // the orphan sweeper reclaims any this misses.
+    if (replacedKeys.length > 0) {
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, replacedKeys);
+    }
     res.status(201).json(await toMediaItem(media));
   },
 );
@@ -791,7 +915,24 @@ router.patch(
     const category = mediaCategory(media.mediaType);
     if (!category) throw malformed("Unsupported media type");
     await assertOwnsTarget(user.id, linkedType, nextLinkedId);
-    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, id);
+    const replaces =
+      linkedType === "place"
+        ? await assertOwnsReplaced(
+            user.id,
+            body.replaces,
+            linkedType,
+            nextLinkedId,
+            category,
+          )
+        : null;
+    if (replaces === id) throw malformed("A file cannot replace itself");
+    if (linkedType === "none" && body.replaces != null) {
+      throw malformed("Unlinking must not carry replaces");
+    }
+    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, [
+      id,
+      ...(replaces ? [replaces] : []),
+    ]);
 
     // Whoever could see this file only through its OLD place must be told to
     // forget it, in the same transaction as the move (the tombstone rule). A
@@ -803,7 +944,9 @@ router.patch(
         ? previousPlaceId
         : null;
 
+    let replacedKeys: string[] = [];
     const updated = await prisma.$transaction(async (tx) => {
+      replacedKeys = replaces ? await dropReplaced(tx, user.id, replaces) : [];
       const row = await tx.media.update({
         where: { id },
         data: { linkedType, linkedId: nextLinkedId },
@@ -824,6 +967,9 @@ router.patch(
       return row;
     });
 
+    if (replacedKeys.length > 0) {
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, replacedKeys);
+    }
     res.json(await toMediaItem(updated));
   },
 );

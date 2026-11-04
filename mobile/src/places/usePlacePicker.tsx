@@ -65,7 +65,11 @@ export function usePlacePicker({
   /** Offered as the first row when the asset is already linked somewhere. */
   onUnlink?: () => Promise<unknown>;
   /** Write the new way into this place. The caller says what happened. */
-  attach: (placeId: string, placeName: string) => Promise<unknown>;
+  attach: (
+    placeId: string,
+    placeName: string,
+    replaces?: string,
+  ) => Promise<unknown>;
   /** Filled — leave the sub-mode. */
   onDone: () => void;
   onError: (message: string) => void;
@@ -129,7 +133,7 @@ export function usePlacePicker({
           placeName,
           source,
           occupant,
-          write: () => attach(placeId, placeName),
+          write: (replaces) => attach(placeId, placeName, replaces),
         }).then((filled) => {
           if (filled) onDone();
         }),

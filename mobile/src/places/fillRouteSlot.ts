@@ -10,6 +10,7 @@ import { confirm } from "../ui";
 import {
   occupantKind,
   removeOccupantFirst,
+  replacedUploadId,
   routeSlotDisplaceConfirm,
   waySourceWrites,
   type RouteSlotOccupant,
@@ -29,8 +30,9 @@ import { updateRouteLocal } from "../sync/outbox";
  * confirm — never swallows a failure, which is the caller's to report.
  *
  * `write` is whatever the source does: link a Route row, create one from a
- * recording, or upload a copy of a file as place media. It is called at most
- * once.
+ * recording, or link a file as place media. It is called at most once, and is
+ * given the uploaded file it replaces, if any, to name in a media link: the API
+ * deletes that file in the same step, so a link that is refused leaves it.
  */
 export async function fillRouteSlot({
   placeName,
@@ -41,30 +43,32 @@ export async function fillRouteSlot({
   placeName: string;
   source: WaySource;
   occupant: RouteSlotOccupant;
-  write: () => Promise<unknown>;
+  write: (replaces?: string) => Promise<unknown>;
 }): Promise<boolean> {
   const displace = routeSlotDisplaceConfirm(placeName, occupant);
   if (displace && !(await confirm(displace))) return false;
 
-  const remove = occupant
-    ? () =>
-        occupant.kind === "route"
-          ? // Written explicitly rather than left to the server's own
-            // routeLink rule: the mirror is what this device renders from, and
-            // until the next delta pull it would otherwise show two routes on
-            // the one place — the state the confirm just said would not exist.
-            updateRouteLocal(occupant.id, { placeId: null })
-          : occupantKind(occupant) === "upload"
-            ? // Uploaded onto the place (no origin): there is nothing to unlink
-              // to, and the confirm said it would be deleted.
-              deleteMediaLocal(occupant.media)
-            : // UNLINK, never delete: an import or recording lives on in Saved.
-              linkStandaloneMediaLocal(occupant.media.id, null)
-    : null;
-
   const writes = waySourceWrites(source);
+  const replaces = replacedUploadId(writes, occupant);
+  const remove =
+    occupant && !replaces
+      ? () =>
+          occupant.kind === "route"
+            ? // Written explicitly rather than left to the server's own
+              // routeLink rule: the mirror is what this device renders from, and
+              // until the next delta pull it would otherwise show two routes on
+              // the one place — the state the confirm just said would not exist.
+              updateRouteLocal(occupant.id, { placeId: null })
+            : occupantKind(occupant) === "upload"
+              ? // Uploaded onto the place (no origin): there is nothing to unlink
+                // to, and the confirm said it would be deleted.
+                deleteMediaLocal(occupant.media)
+              : // UNLINK, never delete: an import or recording lives on in Saved.
+                linkStandaloneMediaLocal(occupant.media.id, null)
+      : null;
+
   if (remove && removeOccupantFirst(writes, occupant)) await remove();
-  await write();
+  await write(replaces);
   if (remove && !removeOccupantFirst(writes, occupant)) {
     // The new way is in: say that, not that nothing happened.
     await remove().catch((err: unknown) => {
