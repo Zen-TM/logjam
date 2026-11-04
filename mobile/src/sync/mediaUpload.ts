@@ -473,7 +473,8 @@ export async function linkStandaloneMediaLocal(
   placeId: string | null,
   /** The file uploaded onto that place that this one takes over from. The API
    *  deletes it in the same step as the move, so a link that is refused leaves
-   *  it on the place. */
+   *  it on the place. The mirror keeps showing it until the delta that follows
+   *  the swap drops it: hiding it here would strand it if the link never lands. */
   replaces?: string,
 ): Promise<void> {
   const db = await getSyncDb();
@@ -484,14 +485,6 @@ export async function linkStandaloneMediaLocal(
       placeId,
       mediaId,
     );
-    if (replaces) {
-      // Hidden, not deleted: the API removes it with the link, and the next
-      // delta either drops it or, if the link was refused, brings it back.
-      await db.runAsync(
-        "UPDATE media SET sync_state = 'pendingDelete' WHERE id = ?",
-        replaces,
-      );
-    }
     await db.runAsync(
       `DELETE FROM outbox
        WHERE entity = 'media' AND op = 'link' AND entity_id = ?
@@ -868,36 +861,28 @@ export async function runMediaReclimbOp(
  */
 export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
-  let fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
-  const send = () =>
+  const fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
+  const send = (replaces: string | undefined) =>
     apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
       method: "PATCH",
       body:
         fields.placeId === null
           ? { linkedType: "none" }
-          : {
-              linkedType: "place",
-              linkedId: fields.placeId,
-              replaces: fields.replaces,
-            },
+          : { linkedType: "place", linkedId: fields.placeId, replaces },
     });
   try {
     try {
-      await send();
+      await send(fields.replaces);
     } catch (err) {
-      // The file this one was to replace has gone (deleted on another device)
-      // and the API refuses the name. Link without it, once: the slot is free
-      // now, and parking over a convenience would leave the way unset. Guard:
-      // "links without a replaced file…" in mediaUpload.test.ts.
+      // The file this one was to replace may have gone (deleted on another
+      // device), and the API refuses the name with a 400. Send the link once
+      // more without it, in memory only: the op keeps `replaces`, so if that
+      // fails too (the 400 had another cause) the op parks as it was and a
+      // manual retry can still swap. Guard: "keeps `replaces` on the op…" in
+      // mediaUpload.test.ts.
       if ((err as { status?: number }).status !== 400 || !fields.replaces)
         throw err;
-      fields = { placeId: fields.placeId };
-      await db.runAsync(
-        "UPDATE outbox SET fields_json = ? WHERE seq = ?",
-        JSON.stringify(fields),
-        row.seq,
-      );
-      await send();
+      await send(undefined);
     }
   } catch (err) {
     const status = (err as { status?: number }).status;

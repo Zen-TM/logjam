@@ -4,13 +4,12 @@
 // Split from `routeSlot.ts` (which is pure and tested) only because this half
 // reaches the confirm, the mirror and the outbox. The DECISIONS still live there;
 // nothing here re-derives an occupant or re-words a sentence.
-import { WayRemovalError } from "@logjam/shared";
+import { WayRemovalError, replacedUploadId } from "@logjam/shared";
 import { confirm } from "../ui";
 
 import {
   occupantKind,
   removeOccupantFirst,
-  replacedUploadId,
   routeSlotDisplaceConfirm,
   waySourceWrites,
   type RouteSlotOccupant,
@@ -49,7 +48,13 @@ export async function fillRouteSlot({
   if (displace && !(await confirm(displace))) return false;
 
   const writes = waySourceWrites(source);
-  const replaces = replacedUploadId(writes, occupant);
+  const replaces = replacedUploadId(
+    writes,
+    occupant && {
+      kind: occupantKind(occupant),
+      id: occupant.kind === "route" ? occupant.id : occupant.media.id,
+    },
+  );
   const remove =
     occupant && !replaces
       ? () =>

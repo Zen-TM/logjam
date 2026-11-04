@@ -5,7 +5,8 @@
 // Mutations that turn it red: type "Choose a route you drew" into either
 // client's file instead of `ADD_WAY.copy.routeTitle`; reword the
 // uploaded-file confirm to say "kept"; make `routeSlotDisplaceConfirm` return
-// a confirm for a free slot.
+// a confirm for a free slot; name an import, or a route write's incumbent, in
+// `replacedUploadId`; type that rule into either client instead of calling it.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -17,6 +18,7 @@ import {
   attachableRoutes,
   wayFailureMessage,
   addWayImportSubtitle,
+  replacedUploadId,
   routeSlotDisplaceConfirm,
 } from "./addWay.js";
 import { contractSectionKeys } from "./types.js";
@@ -161,5 +163,38 @@ describe("telling a failure", () => {
     expect(read("frontend/src/components/dialogs/addWayModel.ts")).toContain(
       "WayRemovalError",
     );
+  });
+});
+
+describe("which incumbent a write names as `replaces`", () => {
+  const upload = { kind: "upload", id: "u" } as const;
+
+  // Mutation: drop the kind test, and an import is named and the API refuses it
+  // (it is unlinked, never deleted); drop the writes test, and a route write
+  // names a file it never replaces.
+  it("names an uploaded file for a file write and nothing else", () => {
+    expect(replacedUploadId("media", upload)).toBe("u");
+    expect(
+      replacedUploadId("media", { kind: "file", id: "f" }),
+    ).toBeUndefined();
+    expect(
+      replacedUploadId("media", { kind: "route", id: "r" }),
+    ).toBeUndefined();
+    expect(replacedUploadId("route", upload)).toBeUndefined();
+    expect(replacedUploadId("media", null)).toBeUndefined();
+  });
+
+  // Mutation: declare the rule again in either client (or stop calling the
+  // shared one), and the two can drift.
+  it("is called by both clients and declared by neither", () => {
+    const clients = [
+      read("frontend/src/components/dialogs/addWayModel.ts"),
+      read("mobile/src/places/fillRouteSlot.ts"),
+      read("mobile/src/places/routeSlot.ts"),
+    ];
+    expect(clients[0]).toContain("replacedUploadId(");
+    expect(clients[1]).toContain("replacedUploadId(");
+    for (const source of clients)
+      expect(source).not.toContain("function replacedUploadId");
   });
 });

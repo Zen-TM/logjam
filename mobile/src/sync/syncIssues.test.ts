@@ -42,4 +42,20 @@ describe("discardParkedOp", () => {
     ]);
     expect(sql).toContainEqual(["DELETE FROM outbox WHERE seq = ?", [5]]);
   });
+
+  // Mutation: restore or hide the replaced upload on discard, and a link the
+  // user gave up on touches a file it never replaced. The discard must only
+  // drop the op.
+  it("discards a parked link that names a replaced upload without touching media", async () => {
+    runAsync.mockClear();
+    db.getFirstAsync.mockResolvedValueOnce({
+      seq: 9,
+      entity: "media",
+      op: "link",
+      entity_id: "imp",
+    });
+    await discardParkedOp(9);
+    const sql = runAsync.mock.calls.map(([statement]) => String(statement));
+    expect(sql).toEqual(["DELETE FROM outbox WHERE seq = ?"]);
+  });
 });

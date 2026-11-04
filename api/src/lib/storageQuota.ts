@@ -27,15 +27,19 @@ export async function getStorageUsage(userId: string, db: DbClient = prisma) {
  * check covers a declared upcoming upload (`used + pendingBytes > quota`);
  * without it the legacy "already at/over quota" semantics apply. The
  * authoritative charge still happens at confirm against the real S3 size.
+ * `freedBytes` is credited first: a write that deletes a file as it lands.
  */
 export async function assertHasStorageQuota(
   userId: string,
   pendingBytes = 0n,
   db: DbClient = prisma,
+  /** Bytes the same write frees first (a file it replaces). */
+  freedBytes = 0n,
 ) {
-  const { used, quota } = await getStorageUsage(userId, db);
+  const { used: charged, quota } = await getStorageUsage(userId, db);
+  const used = charged - freedBytes;
   if (used >= quota || used + pendingBytes > quota)
-    throw storageFull(used, quota);
+    throw storageFull(charged, quota);
 }
 
 /** The 507 a write past the storage quota answers with. */
