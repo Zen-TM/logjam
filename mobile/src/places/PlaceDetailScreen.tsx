@@ -65,6 +65,7 @@ import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
+import { NoteBody } from "../plans/WriteUpBody";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -471,7 +472,7 @@ export function PlaceDetailScreen({
           title={place.notes && isOwner ? copy.notesVisible : copy.notes}
         />
         {place.notes ? (
-          <Text style={styles.notes}>{place.notes}</Text>
+          <NoteBody notes={place.notes} />
         ) : (
           <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
@@ -1078,10 +1079,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   action: { flex: 1 },
   muted: { ...muted(theme, textRole.detail) },
-  notes: {
-    ...textRole.paragraph,
-    color: theme.text,
-  },
   spinner: { alignSelf: "flex-start" },
   sheetBody: { gap: spacing(1) },
   // A table, not a card: a filled card reads as a tappable control, which

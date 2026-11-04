@@ -34,7 +34,12 @@ export function planWriteUpBlocks(body: string, title: string): MessageBlock[] {
     plainText(first.children) === title.trim().toLowerCase()
       ? rest
       : blocks;
-  return kept.map((block) =>
+  return boldHeadings(kept);
+}
+
+/** A heading in text under someone's own title is a bold line instead. */
+export function boldHeadings(blocks: MessageBlock[]): MessageBlock[] {
+  return blocks.map((block) =>
     block.type === "heading"
       ? {
           type: "paragraph",
@@ -42,4 +47,14 @@ export function planWriteUpBlocks(body: string, title: string): MessageBlock[] {
         }
       : block,
   );
+}
+
+/**
+ * The blocks to draw for a place's or a trip's free-text notes: the same
+ * Markdown subset, with every line break kept as it was typed. Nothing in the
+ * tree is markup, and a link is https, http or mailto only. Guard:
+ * planWriteUp.test.ts ("noteBlocks").
+ */
+export function noteBlocks(notes: string): MessageBlock[] {
+  return boldHeadings(parseMessageMarkdown(notes, { breaks: true }).blocks);
 }

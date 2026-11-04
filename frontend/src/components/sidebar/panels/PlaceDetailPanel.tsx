@@ -54,6 +54,7 @@ import { PlaceGauge } from "../../gauges/PlaceGauge";
 import { PlaceWeather } from "../../weather/PlaceWeather";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 import type {
@@ -825,9 +826,11 @@ function PlaceDetailPanel({
           <SectionHeader
             title={hasNotes && isOwnedPlace ? copy.notesVisible : copy.notes}
           />
-          <p className={hasNotes ? classes.notes : classes.muted}>
-            {hasNotes ? current.notes : copy.notesEmpty}
-          </p>
+          {hasNotes ? (
+            <NoteBody notes={current.notes ?? ""} />
+          ) : (
+            <p className={classes.muted}>{copy.notesEmpty}</p>
+          )}
         </section>
       );
     },

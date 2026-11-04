@@ -30,6 +30,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
+import { NoteBody } from "../plans/WriteUpBody";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -216,7 +217,7 @@ export function TripDetailScreen({
       <>
         <SectionHeader title={copy.notes} />
         {current.notes ? (
-          <Text style={styles.notes}>{current.notes}</Text>
+          <NoteBody notes={current.notes} />
         ) : (
           <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
@@ -296,8 +297,4 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   muted: { ...muted(theme, textRole.detail) },
-  notes: {
-    ...textRole.paragraph,
-    color: theme.text,
-  },
 }));
