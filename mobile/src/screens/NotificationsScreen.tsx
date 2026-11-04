@@ -1026,15 +1026,15 @@ export function NotificationsScreen({
 
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
-  // The chips and the truncation note scroll in the list's header, in the
-  // contract's order; every other section is drawn in place.
-  const headKeys: readonly string[] = ["buckets", "truncated"];
+  // The truncation note scrolls in the list's header; every other section is
+  // drawn in place, so the chips and search stay pinned under the hero.
+  const headKeys: readonly string[] = ["truncated"];
   const head = contractSectionKeys(INBOX, "gps").filter((key) =>
     headKeys.includes(key),
   );
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
     // The hero is pinned and folds to its title row once the list scrolls;
-    // the chips and search ride in the list's header. A multi-select's bar
+    // the chips and search stay pinned under it. A multi-select's bar
     // takes the compact row's slot (DESIGN.md).
     //
     // The answer to "what happened while I was away?" is a NUMBER of things
@@ -1091,7 +1091,7 @@ export function NotificationsScreen({
     ),
     buckets: () =>
       notifications.length > 0 ? (
-        <View style={styles.rail}>
+        <View style={styles.pinnedRail}>
           <ChipRail
             options={buckets}
             value={bucket}
@@ -1624,8 +1624,13 @@ function EmptyPanel({
 const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
-  // The chips run off the right edge, so the rail bleeds past the list's gutter.
-  rail: { marginHorizontal: -spacing(2), paddingLeft: spacing(2) },
+  // Pinned outside the list, so it carries the list's gutter itself; the chips
+  // run off the right edge.
+  pinnedRail: {
+    paddingLeft: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),

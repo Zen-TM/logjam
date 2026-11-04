@@ -172,6 +172,26 @@ describe("list screens collapse their hero", () => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<HeroAdd");
   });
+  // Mutation: move Saved's ChipRail back inside its ScrollView, or add
+  // "buckets" back to Inbox's list-header keys, and the filter rail scrolls
+  // away with the rows.
+  it("pins the filter rail on Saved and Inbox", () => {
+    const saved = readFileSync(
+      new URL("../saved/SavedScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(saved.indexOf("<ChipRail")).toBeGreaterThan(-1);
+    expect(saved.indexOf("<ChipRail")).toBeLessThan(
+      saved.indexOf("<ScrollView\n        ref={scrollRef}"),
+    );
+    const inbox = readFileSync(
+      new URL("../screens/NotificationsScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(inbox).toMatch(
+      /const headKeys: readonly string\[\] = \["truncated"\];/,
+    );
+  });
   it("Leaderboard's compact row says the standing", () => {
     const source = readFileSync(
       new URL("../screens/LeaderboardScreen.tsx", import.meta.url),
