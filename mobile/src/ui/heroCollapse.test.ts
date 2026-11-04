@@ -217,6 +217,9 @@ describe("list screens collapse their hero", () => {
     expect(saved.indexOf("<ChipRail")).toBeLessThan(
       saved.indexOf("<HeroScrollView"),
     );
+    expect(saved.indexOf("<SearchField")).toBeLessThan(
+      saved.indexOf("<HeroScrollView"),
+    );
     const inbox = readFileSync(
       new URL("../screens/NotificationsScreen.tsx", import.meta.url),
       "utf8",
