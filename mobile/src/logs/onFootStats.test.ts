@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { STAT_PAIRS } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
@@ -19,9 +20,26 @@ describe("onFootStats", () => {
     const [first, second] = STAT_PAIRS[0];
     expect(labels.slice(0, 2)).toEqual([first, second]);
   });
-  // Mutation: add a fifth stat and the last row hangs a lone cell.
-  it("fills two whole rows", () => {
+  // Mutation: add a fifth stat, or let Ascent or Longest span the row, and
+  // the second row is a lone full-width cell instead of a pair.
+  it("fills a second row with Ascent beside Longest", () => {
     expect(stats).toHaveLength(4);
+    expect(labels.slice(2)).toEqual(["Ascent", "Longest"]);
+    expect(stats.every((stat) => !("span" in stat))).toBe(true);
     expect(stats.find((s) => s.label === "Ascent")?.value).toBe("410 m");
+  });
+});
+
+// Rendering StatsScreen needs the whole React Native tree, which this suite
+// does not load, so the tie is read from source. Mutation: inline the four
+// stats in OnFoot again, in any order.
+describe("StatsScreen", () => {
+  it("draws the On foot grid from onFootStats", () => {
+    const source = readFileSync(
+      new URL("./StatsScreen.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).toMatch(/<StatGrid\s+stats=\{onFootStats\(/);
+    expect(source).not.toContain('label: "Time"');
   });
 });
