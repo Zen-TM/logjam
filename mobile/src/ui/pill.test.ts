@@ -42,6 +42,19 @@ describe("the chip's count badge", () => {
   });
 });
 
+// A status pill sits in the middle of a row's trailing slot, not at its top.
+// Mutation: put `alignSelf: "flex-start"` back on the StatusPill base style, and
+// "From bob" floats above the ⋯ beside it on a shared place's row.
+describe("a status pill is centred in its row", () => {
+  it("does not set alignSelf", () => {
+    const source = readFileSync(
+      new URL("./StatusPill.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).not.toMatch(/alignSelf:/);
+  });
+});
+
 // A pill-shaped control is never narrower than it is tall (`minWidth` = its
 // height), so a one-glyph or one-digit pill is a circle. To see it red: delete
 // the `minWidth` line from the style named below.

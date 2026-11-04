@@ -1954,21 +1954,11 @@ export function SavedScreen({
                         {formatBytes(item.sizeBytes)}
                       </Text>
                     ) : null}
-                    {/* The pill is wrapped because its own base style carries
-                    `alignSelf: "flex-start"` — right in the COLUMN contexts it
-                    is used in elsewhere (the hero notes, a detail header),
-                    where it stops the pill stretching the full width, but in
-                    this row-direction container flex-start is the TOP edge and
-                    the pill floated above the size text beside it. The wrapper
-                    takes the container's `alignItems: center` and the pill
-                    aligns inside it. */}
                     {item.pill ? (
-                      <View>
-                        <StatusPill
-                          label={item.pill.label}
-                          tone={item.pill.tone}
-                        />
-                      </View>
+                      <StatusPill
+                        label={item.pill.label}
+                        tone={item.pill.tone}
+                      />
                     ) : null}
                     {/* Shared out, by the same argument as the cloud below: the
                     row's own fan-out is a fact the user is not asking about
