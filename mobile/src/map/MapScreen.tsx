@@ -222,8 +222,8 @@ import {
 } from "./heading";
 import {
   CompassStrip,
-  COMPASS_STRIP_HEIGHT,
-  COMPASS_STRIP_WIDTH,
+  stripHeight as compassStripHeight,
+  stripWidth as compassStripWidth,
 } from "./CompassStrip";
 import { isCompassEnabled } from "./compassPreference";
 import {
@@ -4842,7 +4842,7 @@ export function MapScreen({
   const ornamentMarginY =
     instrumentsBottom +
     (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
-    (compassEnabled ? COMPASS_STRIP_HEIGHT + INSTRUMENT_GAP : 0) +
+    (compassEnabled ? compassStripHeight(fontScale) + INSTRUMENT_GAP : 0) +
     (speedElevationEnabled ? readoutChipHeight(fontScale) + INSTRUMENT_GAP : 0);
   /**
    * When the location marker has to be re-inserted to stay on top.
@@ -4881,8 +4881,9 @@ export function MapScreen({
   // Fixed rather than run to the button column: the tape is a glance-at
   // reference, not a ruler, and a strip that changes width with the phone
   // changes how many degrees a thumb-width represents. Only narrow screens
-  // shrink it.
-  const compassWidth = Math.min(scaleBarMaxWidth, COMPASS_STRIP_WIDTH);
+  // shrink it, and none that matter: a 320 dp window leaves 212 px here, the
+  // widest the strip gets is 206 (compassStripWidth at the combined ceiling).
+  const compassWidth = Math.min(scaleBarMaxWidth, compassStripWidth(fontScale));
   /**
    * The one sentence the map says about its own basemap, or null for silence.
    *
