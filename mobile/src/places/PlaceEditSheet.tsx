@@ -37,8 +37,8 @@ import {
 } from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
-import { attachMediaLocal } from "../sync/mediaUpload";
-import { pickMedia } from "../media/pickMedia";
+import { attachMediaLocal, discardPickedFile } from "../sync/mediaUpload";
+import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "../media/pickMedia";
 import { AddWaySheet } from "./AddWaySheet";
 import {
   hasStagedMedia,
@@ -201,6 +201,9 @@ export function PlaceEditSheet({
   const [staged, setStaged] = useState<StagedMedia>(NO_STAGED_MEDIA);
   const [pickSheet, setPickSheet] = useState<"photos" | "way" | null>(null);
   const [away, setAway] = useState(false);
+  // The sheet to show once the form has finished sliding out: the two never
+  // coexist (DESIGN.md §4).
+  const [nextSheet, setNextSheet] = useState<"photos" | "way" | null>(null);
   const [pickJob, setPickJob] = useState<null | (() => Promise<void>)>(null);
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
     useFieldDefs("place");
@@ -275,15 +278,30 @@ export function PlaceEditSheet({
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
+    // Picks from an abandoned form are cache files nothing else will reach.
+    for (const file of staged.files) void discardPickedFile(file.uri);
     setStaged(NO_STAGED_MEDIA);
     setPickSheet(null);
+    setNextSheet(null);
     setAway(false);
     setPickJob(null);
   }
 
   function stepOutTo(sheet: "photos" | "way") {
     setAway(true);
-    setPickSheet(sheet);
+    setNextSheet(sheet);
+  }
+
+  function formClosed() {
+    if (nextSheet) setPickSheet(nextSheet);
+    setNextSheet(null);
+  }
+
+  /** Cancel: nothing was queued, so the held picks' files go too. */
+  function cancel() {
+    for (const file of staged.files) void discardPickedFile(file.uri);
+    setStaged(NO_STAGED_MEDIA);
+    onClose();
   }
 
   /** Close the photo sheet, then run the picker with nothing on screen. */
@@ -514,6 +532,7 @@ export function PlaceEditSheet({
         const { failed } = await queueStagedMedia(newId, staged, (file) =>
           attachMediaLocal("place", newId, file),
         );
+        setStaged(NO_STAGED_MEDIA);
         onSaved(failed ? PLACE_FORM.copy.addedNotAll : PLACE_FORM.copy.added);
       }
       onClose();
@@ -583,9 +602,9 @@ export function PlaceEditSheet({
       hasStagedMedia(staged));
 
   const sections: Record<SectionKeysOn<typeof PLACE_FORM, "gps">, ReactNode> = {
-    // The two below are for a NEW place only: an existing one has both on its
-    // page, one tap from here, with the real strip.
-    photos: editing ? null : (
+    // The two below are for a NEW place only (`onlyWhenAdding` in the
+    // contract): an existing one has both on its page, with the real strip.
+    photos: (
       <>
         <SectionHeader title={PLACE_FORM.copy.photos} />
         {staged.files.map((file, index) => {
@@ -602,26 +621,27 @@ export function PlaceEditSheet({
                 <IconButton
                   icon="close"
                   accessibilityLabel={`Remove ${title}`}
-                  onPress={() =>
+                  onPress={() => {
+                    void discardPickedFile(file.uri);
                     setStaged((current) => ({
                       ...current,
                       files: current.files.filter((_, at) => at !== index),
-                    }))
-                  }
+                    }));
+                  }}
                 />
               }
             />
           );
         })}
         <Button
-          label="Add a photo or video"
+          label={ADD_PHOTO_LABEL}
           icon="add"
           variant="outlineAccent"
           onPress={() => stepOutTo("photos")}
         />
       </>
     ),
-    route: editing ? null : (
+    route: (
       <>
         <SectionHeader title={PLACE_FORM.copy.route} />
         {staged.way ? (
@@ -642,7 +662,9 @@ export function PlaceEditSheet({
           />
         ) : null}
         <Button
-          label={staged.way ? ADD_WAY.copy.replaceTitle : ADD_WAY.copy.title}
+          label={
+            staged.way ? PLACE_FORM.copy.chooseAnotherWay : ADD_WAY.copy.title
+          }
           icon={staged.way ? "replace" : "add"}
           variant="outlineAccent"
           onPress={() => stepOutTo("way")}
@@ -844,9 +866,10 @@ export function PlaceEditSheet({
         discard={dirty ? abandonConfirm("place", !editing) : null}
         // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
         // not "throw away everything I just typed".
+        onClosed={formClosed}
         onClose={
           mode === "form"
-            ? onClose
+            ? cancel
             : () => setMode(mode === "fieldForm" ? "fields" : "form")
         }
         title={title}
@@ -938,7 +961,11 @@ export function PlaceEditSheet({
 
         {mode !== "form" ? null : (
           <FormStack>
-            {contractSectionKeys(PLACE_FORM, "gps").map((key) => (
+            {contractSectionKeys(
+              PLACE_FORM,
+              "gps",
+              editing ? "edit" : "add",
+            ).map((key) => (
               <Fragment key={key}>{sections[key]}</Fragment>
             ))}
           </FormStack>
@@ -953,23 +980,16 @@ export function PlaceEditSheet({
             visible={pickSheet === "photos"}
             onClose={() => setPickSheet(null)}
             onClosed={photoSheetClosed}
-            title="Add a photo or video"
+            title={ADD_PHOTO_LABEL}
           >
-            <Row
-              icon="camera"
-              title="Take photo"
-              onPress={() => pickFrom("camera", "photo")}
-            />
-            <Row
-              icon="video"
-              title="Record video"
-              onPress={() => pickFrom("camera", "video")}
-            />
-            <Row
-              icon="photo"
-              title="Choose from library"
-              onPress={() => pickFrom("library", "photo")}
-            />
+            {PHOTO_SOURCES.map((entry) => (
+              <Row
+                key={entry.title}
+                icon={entry.icon}
+                title={entry.title}
+                onPress={() => pickFrom(entry.source, entry.kind)}
+              />
+            ))}
           </BottomSheet>
           <AddWaySheet
             placeId={null}

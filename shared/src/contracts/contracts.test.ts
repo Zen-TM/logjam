@@ -151,6 +151,28 @@ describe("every screen contract", () => {
     },
   );
 
+  // Mutation: delete `onlyWhenAdding` from a PLACE_FORM section and Logjam GPS's
+  // edit sheet is handed (and must draw) a picker it cannot run; add one with no
+  // gap sentence and the divergence is off the record.
+  it("leaves a section a client draws only while adding out of its edit form, and says why", () => {
+    for (const section of PLACE_FORM.sections)
+      if ("onlyWhenAdding" in section)
+        expect(section.onlyWhenAdding.gap.length).toBeGreaterThan(0);
+    expect(contractSectionKeys(PLACE_FORM, "gps", "edit")).not.toContain(
+      "photos",
+    );
+    expect(contractSectionKeys(PLACE_FORM, "gps", "edit")).not.toContain(
+      "route",
+    );
+    expect(contractSectionKeys(PLACE_FORM, "gps", "add")).toEqual(
+      expect.arrayContaining(["photos", "route"]),
+    );
+    // Logjam Web draws both in either mode.
+    expect(contractSectionKeys(PLACE_FORM, "web", "edit")).toEqual(
+      expect.arrayContaining(["photos", "route"]),
+    );
+  });
+
   it("hands a client its own sections, in order, and never the other's", () => {
     expect(contractSectionKeys(PLACES_FILTER_SHEET, "web")).toEqual([
       "sort",

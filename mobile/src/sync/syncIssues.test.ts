@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 const runAsync = vi.hoisted(() => vi.fn());
 const db = vi.hoisted(() => ({
   runAsync,
+  getAllAsync: vi.fn(async () => [] as unknown[]),
   getFirstAsync: vi.fn(async () => ({
     seq: 5,
     entity: "place",
@@ -20,7 +21,8 @@ vi.mock("./syncDb", () => ({
   notifyMirrorChanged: vi.fn(),
   wipeMirror: vi.fn(),
 }));
-vi.mock("expo-file-system/legacy", () => ({ deleteAsync: vi.fn() }));
+const deleteAsync = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock("expo-file-system/legacy", () => ({ deleteAsync }));
 vi.mock("./mirrorStore", () => ({}));
 vi.mock("./outbox", () => ({}));
 vi.mock("./deltaPull", () => ({}));
@@ -57,5 +59,67 @@ describe("discardParkedOp", () => {
     await discardParkedOp(9);
     const sql = runAsync.mock.calls.map(([statement]) => String(statement));
     expect(sql).toEqual(["DELETE FROM outbox WHERE seq = ?"]);
+  });
+
+  // A parked place create takes the photos and the way queued behind it: they
+  // name the place in their payload, not in `entity_id`. Mutation: drop the
+  // media loop in discardParkedOp and the photo's op, row and files stay.
+  it("discards a place create with its photos, its way's link and their files", async () => {
+    runAsync.mockClear();
+    db.getAllAsync.mockResolvedValueOnce([
+      {
+        seq: 6,
+        entity_id: "m1",
+        op: "create",
+        fields_json: JSON.stringify({ linkedType: "place", linkedId: "p1" }),
+      },
+      {
+        seq: 7,
+        entity_id: "f1",
+        op: "link",
+        fields_json: JSON.stringify({ placeId: "p1" }),
+      },
+      {
+        seq: 8,
+        entity_id: "m2",
+        op: "create",
+        fields_json: JSON.stringify({ linkedType: "place", linkedId: "other" }),
+      },
+    ]);
+    db.getFirstAsync
+      .mockResolvedValueOnce({
+        seq: 5,
+        entity: "place",
+        op: "create",
+        entity_id: "p1",
+      } as never)
+      .mockResolvedValueOnce({
+        local_display_path: "/cache/m1.display",
+        local_thumb_path: "/cache/m1.thumb",
+      } as never);
+
+    await discardParkedOp(5);
+
+    const sql: [string, unknown[]][] = runAsync.mock.calls.map(
+      ([statement, ...args]) => [String(statement), args],
+    );
+    expect(sql).toContainEqual(["DELETE FROM media WHERE id = ?", ["m1"]]);
+    expect(sql).toContainEqual(["DELETE FROM outbox WHERE seq = ?", [6]]);
+    expect(sql).toContainEqual(["DELETE FROM outbox WHERE seq = ?", [7]]);
+    expect(
+      sql.some(
+        ([statement, args]) =>
+          statement.startsWith("UPDATE media SET linked_type = 'none'") &&
+          args[0] === "f1",
+      ),
+    ).toBe(true);
+    // Another place's photo is left alone.
+    expect(sql).not.toContainEqual(["DELETE FROM outbox WHERE seq = ?", [8]]);
+    expect(deleteAsync).toHaveBeenCalledWith("/cache/m1.display", {
+      idempotent: true,
+    });
+    expect(deleteAsync).toHaveBeenCalledWith("/cache/m1.thumb", {
+      idempotent: true,
+    });
   });
 });

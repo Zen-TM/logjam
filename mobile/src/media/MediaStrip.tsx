@@ -33,7 +33,7 @@ import {
 } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { pickMedia } from "./pickMedia";
+import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "./pickMedia";
 import { attachBatch } from "./attachBatch";
 import { stripOffers } from "./stripOffers";
 import { routeFileMimeType } from "./routeFileMime";
@@ -275,7 +275,7 @@ export function MediaStrip({
               accessibilityRole="button"
               accessibilityLabel={
                 kind !== "track"
-                  ? "Add a photo or video"
+                  ? ADD_PHOTO_LABEL
                   : onAddWay
                     ? atLimit
                       ? "Replace this place's route"
@@ -365,34 +365,23 @@ export function MediaStrip({
             ? "Recorded tracks"
             : kind === "track"
               ? "Add a route"
-              : "Add a photo or video"
+              : ADD_PHOTO_LABEL
         }
       >
         {sourceMode === "sources" ? (
           <View style={styles.sheetBody}>
             {kind === "media" ? (
               <>
-                <Row
-                  icon="camera"
-                  title="Take photo"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("camera", "photo"))
-                  }
-                />
-                <Row
-                  icon="video"
-                  title="Record video"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("camera", "video"))
-                  }
-                />
-                <Row
-                  icon="photo"
-                  title="Choose from library"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("library", "photo"))
-                  }
-                />
+                {PHOTO_SOURCES.map((entry) => (
+                  <Row
+                    key={entry.title}
+                    icon={entry.icon}
+                    title={entry.title}
+                    onPress={() =>
+                      runAfterSheet(() => captureFrom(entry.source, entry.kind))
+                    }
+                  />
+                ))}
               </>
             ) : (
               <>

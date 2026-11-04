@@ -464,6 +464,51 @@ export async function discardParkedOp(seq: number): Promise<void> {
         row.entity_id,
         seq,
       );
+      // The photos and the way queued behind a place or trip that will never
+      // exist name it in their payload, not in `entity_id`, so the delete above
+      // misses them: each would presign, 404 and park as its own issue. Their
+      // pending rows and cached bytes go with it; a file linked onto the row
+      // is unlinked and stays standalone.
+      const queued = await db.getAllAsync<{
+        seq: number;
+        entity_id: string;
+        op: string;
+        fields_json: string | null;
+      }>(
+        "SELECT seq, entity_id, op, fields_json FROM outbox WHERE entity = 'media' AND op IN ('create', 'link')",
+      );
+      for (const media of queued) {
+        const fields = JSON.parse(media.fields_json ?? "{}") as {
+          linkedId?: string;
+          placeId?: string | null;
+        };
+        if (
+          (media.op === "create" ? fields.linkedId : fields.placeId) !==
+          row.entity_id
+        )
+          continue;
+        if (media.op === "create") {
+          const cached = await db.getFirstAsync<{
+            local_display_path: string | null;
+            local_thumb_path: string | null;
+          }>(
+            "SELECT local_display_path, local_thumb_path FROM media WHERE id = ?",
+            media.entity_id,
+          );
+          if (cached?.local_display_path)
+            orphanedFiles.push(cached.local_display_path);
+          if (cached?.local_thumb_path)
+            orphanedFiles.push(cached.local_thumb_path);
+          await db.runAsync("DELETE FROM media WHERE id = ?", media.entity_id);
+        } else {
+          await db.runAsync(
+            "UPDATE media SET linked_type = 'none', linked_id = NULL WHERE id = ? AND linked_id = ?",
+            media.entity_id,
+            row.entity_id,
+          );
+        }
+        await db.runAsync("DELETE FROM outbox WHERE seq = ?", media.seq);
+      }
     }
     await db.runAsync("DELETE FROM outbox WHERE seq = ?", seq);
   });

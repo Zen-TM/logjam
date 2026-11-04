@@ -26,6 +26,10 @@ export type ContractSection<K extends string = string> = {
   /** Drawn only on something the viewer owns: a page of a shared item has no
    *  such section, on either client. Not a platform difference, so no reason. */
   ownerOnly?: true;
+  /** A form's section that one client draws only while ADDING: an existing
+   *  item has it elsewhere on that client. The sentence says where, so the
+   *  edit-mode gap is on the record rather than a `null` in a renderer. */
+  onlyWhenAdding?: { on: ContractPlatform; gap: string };
 };
 
 export type ScreenContract<
@@ -69,13 +73,22 @@ export function contractSectionsFor<
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
 
-/** A client's sections, in the contract's order. */
+/** A client's sections, in the contract's order. `mode: "edit"` leaves out
+ *  the ones that client draws only while adding (`onlyWhenAdding`). */
 export function contractSectionKeys<
   C extends { sections: readonly ContractSection[] },
   P extends ContractPlatform,
->(contract: C, platform: P): SectionKeysOn<C, P>[] {
+>(
+  contract: C,
+  platform: P,
+  mode: "add" | "edit" = "add",
+): SectionKeysOn<C, P>[] {
   return contract.sections
-    .filter((section) => section.on == null || section.on === platform)
+    .filter(
+      (section) =>
+        (section.on == null || section.on === platform) &&
+        !(mode === "edit" && section.onlyWhenAdding?.on === platform),
+    )
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
 

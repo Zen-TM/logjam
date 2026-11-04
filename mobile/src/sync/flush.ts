@@ -510,12 +510,15 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
  * place (or trip) it points at to fully flush: an outbox row still targeting
  * that id means the row may not exist server-side yet. A link also waits for
  * the file's own upload, since the API cannot move a file it has not seen.
- * PARKED ops don't count — a parked create is never going to flush on its own,
- * and counting it would leave the photos of a blocked place create sitting
- * queued forever: never uploaded, never parked, and so never shown in Sync
- * Issues either. `retrying` DOES count: it is sent again unasked, and until it
- * lands the row does not exist (the same reason `selectFlushBatch` holds back
- * its dependents). */
+ *
+ * Held while the target's CREATE is parked too, not only while it is queued: a
+ * photo sent behind a create that never lands presigns, 404s and parks as an
+ * issue of its own, and a link's 404 is read as "already gone" and deleted, so
+ * the way vanishes without a word. The parked create is the one Sync Issue; its
+ * discard takes the held ops with it (`discardParkedOp`), and its Retry lets
+ * them go. A parked UPDATE does not hold anything: the row exists. `retrying`
+ * counts for the reason `selectFlushBatch` gives its dependents. A link holds
+ * for a `blocked` upload the same way: Retry on the upload releases it. */
 async function isLinkPending(
   db: Awaited<ReturnType<typeof getSyncDb>>,
   row: MediaOpRow & { op: string },
@@ -529,7 +532,7 @@ async function isLinkPending(
     const upload = await db.getFirstAsync<{ n: number }>(
       `SELECT COUNT(*) AS n FROM outbox
         WHERE entity = 'media' AND op = 'create' AND entity_id = ?
-          AND state IN ('queued', 'inflight')`,
+          AND state IN ('queued', 'inflight', 'blocked')`,
       row.entity_id,
     );
     if ((upload?.n ?? 0) > 0) return true;
@@ -538,7 +541,8 @@ async function isLinkPending(
   const pending = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM outbox
       WHERE entity_id = ? AND entity != 'media'
-        AND state IN ('queued', 'inflight', 'retrying')`,
+        AND (state IN ('queued', 'inflight', 'retrying')
+             OR (op = 'create' AND state IN ('blocked', 'deadRemote')))`,
     targetId,
   );
   return (pending?.n ?? 0) > 0;
