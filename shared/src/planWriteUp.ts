@@ -49,12 +49,32 @@ export function boldHeadings(blocks: MessageBlock[]): MessageBlock[] {
   );
 }
 
+// A line of only dashes or equals under text is a setext heading, which
+// `dropped` doesn't report; on its own it is a rule, which it does.
+const UNDERLINE = /^ {0,3}(-+|=+)[ \t]*$/m;
+
 /**
  * The blocks to draw for a place's or a trip's free-text notes: the same
- * Markdown subset, with every line break kept as it was typed. Nothing in the
- * tree is markup, and a link is https, http or mailto only. Guard:
- * planWriteUp.test.ts ("noteBlocks").
+ * Markdown subset, every line break kept. A note is shown as typed, so one
+ * that uses anything the subset cannot draw (a rule, a quote, a table, a task
+ * list, a heading underline...) is drawn whole as plain text instead of with
+ * characters missing. Nothing in the tree is markup, and a link is https, http
+ * or mailto only. Guard: planWriteUp.test.ts ("noteBlocks").
  */
 export function noteBlocks(notes: string): MessageBlock[] {
-  return boldHeadings(parseMessageMarkdown(notes, { breaks: true }).blocks);
+  const { blocks, dropped } = parseMessageMarkdown(notes, { breaks: true });
+  if (dropped.length === 0 && !UNDERLINE.test(notes))
+    return boldHeadings(blocks);
+  return [
+    {
+      type: "paragraph",
+      children: notes
+        .replace(/\n+$/, "")
+        .split("\n")
+        .flatMap((line, i): MessageInline[] => [
+          ...(i > 0 ? [{ type: "break" } as const] : []),
+          { type: "text", text: line },
+        ]),
+    },
+  ];
 }

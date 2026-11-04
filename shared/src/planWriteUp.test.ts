@@ -72,6 +72,45 @@ describe("noteBlocks", () => {
     );
   });
 
+  it.each([
+    [
+      "a rule",
+      "Part one\n\n---\n\nPart two",
+      ["Part one", "", "---", "", "Part two"],
+    ],
+    [
+      "a setext heading",
+      "Part one\n---\nPart two",
+      ["Part one", "---", "Part two"],
+    ],
+    ["an equals underline", "Title\n=====", ["Title", "====="]],
+    ["a quote", "> quoted", ["> quoted"]],
+    ["a task list", "- [x] wet\n- [ ] rope", ["- [x] wet", "- [ ] rope"]],
+    ["strikethrough", "~5km to~10km", ["~5km to~10km"]],
+    ["a nested list", "- a\n  - b", ["- a", "  - b"]],
+  ])("shows a note with %s exactly as typed", (_name, note, lines) => {
+    // Red if a dropped construct is rendered with its characters missing:
+    // the author never sees what was lost.
+    const blocks = noteBlocks(note);
+    expect(blocks).toHaveLength(1);
+    const [block] = blocks;
+    if (block.type !== "paragraph") throw new Error("not a paragraph");
+    const typed = block.children
+      .map((c) =>
+        c.type === "break" ? "\n" : c.type === "text" ? c.text : "?",
+      )
+      .join("");
+    expect(typed).toBe(lines.join("\n"));
+  });
+
+  it("still draws Markdown it can fully draw", () => {
+    // Red if the fallback fires on a note the subset covers.
+    expect(noteBlocks("**a**\n\n- b\n- c").map((b) => b.type)).toEqual([
+      "paragraph",
+      "list",
+    ]);
+  });
+
   it("draws raw HTML and an image as text, never as a tree node", () => {
     // Red if an html or image token maps to anything but plain text: a remote
     // image would load for whoever opens the note.

@@ -71,6 +71,18 @@ describe("a plan's place on Logjam Web", () => {
     expect(screen.queryByText("V grade")).toBeNull();
   });
 
+  // Mutation: draw the notes as a raw paragraph again, and Markdown a member
+  // typed shows as typed.
+  it("draws its notes as Markdown", () => {
+    const { container } = render(
+      <PlanPlacePage
+        place={{ ...place, notes: "**a**" } as TripPlanPlace}
+        onBack={() => {}}
+      />,
+    );
+    expect(container.querySelector("strong")?.textContent).toBe("a");
+  });
+
   // Mutation: leave foreignFields out of PlanPlacePage or the edit dialog, and
   // the adder's set-aside attributes sit in the payload with nothing showing
   // them; or the type name, and a custom type reads as a Marker.

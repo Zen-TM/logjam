@@ -39,16 +39,23 @@ describe("a place's or trip's notes", () => {
     const { container } = render(
       <NoteBody
         notes={
-          'Hi <img src=x onerror="alert(1)"> ![p](https://x.test/a.png) [go](javascript:alert(1)) <script>x</script>\n\n[ok](https://example.com)'
+          'Hi <img src=x onerror="alert(1)"> ![p](https://x.test/a.png) [go](javascript:alert(1)) <script>x</script>'
         }
       />,
     );
-    expect(container.querySelector("img, script")).toBeNull();
-    expect(screen.getAllByRole("link")).toHaveLength(1);
-    expect(screen.getByRole("link").getAttribute("href")).toBe(
-      "https://example.com",
-    );
+    expect(container.querySelector("img, script, a")).toBeNull();
     expect(container.textContent).toContain("<script>x</script>");
+  });
+
+  // Mutation: drop the target or rel from `messageInlines`' link.
+  it("links https in a new tab, and never a script link", () => {
+    render(<NoteBody notes="[ok](https://example.com)" />);
+    const link = screen.getByRole("link");
+    expect(link.getAttribute("href")).toBe("https://example.com");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    cleanup();
+    render(<NoteBody notes="[go](javascript:x)" />);
+    expect(screen.queryByRole("link")).toBeNull();
   });
 
   it("draws bold, italic and a list", () => {

@@ -77,10 +77,11 @@ describe("a note's spans", () => {
   // Mutation: let a script link through `parseMessageMarkdown`; tapping it
   // would hand the string to Linking.openURL.
   it("carries a link only when it is https, http or mailto", () => {
-    expect(
-      spans("[a](javascript:alert(1)) [b](https://example.com)").map(
-        (s) => s.href,
-      ),
-    ).toEqual([null, null, "https://example.com"]);
+    expect(spans("[a](javascript:alert(1))").map((s) => s.href)).toEqual([
+      null,
+    ]);
+    expect(spans("[b](https://example.com)").map((s) => s.href)).toEqual([
+      "https://example.com",
+    ]);
   });
 });
