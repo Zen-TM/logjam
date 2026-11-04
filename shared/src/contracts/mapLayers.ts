@@ -12,13 +12,6 @@ export const MAP_LAYERS = {
   id: "map.layers",
   title: "Map layers",
   sections: [
-    {
-      // The row above the tabs, so the sunlight scheme is one press, not three
-      // levels down in Settings. Logjam Web is read at a desk.
-      key: "brightLight",
-      on: "gps",
-      reason: "The sun is on a phone's screen; Logjam Web is read at a desk.",
-    },
     { key: "basemap" },
     { key: "terrain" },
     { key: "overlays" },
@@ -34,7 +27,6 @@ export const MAP_LAYERS = {
     tabTerrain: MAP_TERRAIN.title,
     tabOverlays: "Overlays",
     tabOffline: "Offline",
-    brightLight: "Bright light",
     places: "Places",
     ways: "Ways",
     // The overlays list ends with the way to add one, named the same on both

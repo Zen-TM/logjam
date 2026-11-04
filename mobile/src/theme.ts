@@ -41,11 +41,6 @@ import { readPref, writePref } from "./prefsDb";
 
 const THEME_SCHEME_PREF_KEY = "themeSchemeId";
 const TEXT_SCALE_PREF_KEY = "textScale";
-// The dark scheme Bright light came from, empty when it is off.
-const BRIGHT_FROM_PREF_KEY = "brightLightFrom";
-
-/** The sunlight scheme: the one light scheme, read in full sun. */
-export const BRIGHT_LIGHT_SCHEME_ID: ThemeSchemeId = "ghostGum";
 
 function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
@@ -76,19 +71,6 @@ const subscribeToScheme = (listener: () => void) => {
   return () => void schemeListeners.delete(listener);
 };
 
-// What "off" returns to, held while Bright light is on and empty otherwise. It
-// is the account's scheme when one is known (`applyAccountScheme`), so a scheme
-// changed on Logjam Web meanwhile is the one that comes back.
-let brightFrom = readPref(BRIGHT_FROM_PREF_KEY) ?? "";
-
-function setBrightFrom(value: string): boolean {
-  const changed = value !== brightFrom;
-  brightFrom = value;
-  const stored = writePref(BRIGHT_FROM_PREF_KEY, value);
-  if (changed) for (const listener of schemeListeners) listener();
-  return stored;
-}
-
 /**
  * Repaint the running Logjam GPS in `id`, and record it for the next launch. Returns
  * false when the device refused to store it (the repaint still happened), so
@@ -99,58 +81,11 @@ function setBrightFrom(value: string): boolean {
  * one is what makes Logjam GPS open in the right colours with no network.
  */
 export function setThemeSchemeId(id: ThemeSchemeId): boolean {
-  // Any pick made by name is a choice, not the sun: Bright light lets go.
-  if (isBrightLight()) setBrightFrom("");
   if (id !== currentThemeSchemeId) {
     currentThemeSchemeId = id;
     for (const listener of schemeListeners) listener();
   }
   return writePref(THEME_SCHEME_PREF_KEY, id);
-}
-
-/** The scheme painted right now, outside a component. */
-export const getThemeSchemeId = (): ThemeSchemeId => currentThemeSchemeId;
-
-/** Whether Bright light is on: the Layers sheet's switch, which outlasts a
- *  launch. A scheme picked in Settings is never this, even Ghost Gum. */
-export const isBrightLight = (): boolean => brightFrom !== "";
-
-export const useBrightLight = (): boolean =>
-  useSyncExternalStore(subscribeToScheme, isBrightLight);
-
-/**
- * The account's scheme arrived (or changed). Painted, unless Bright light is
- * on: then it waits as what "off" returns to. Anything that is not a scheme
- * id is ignored.
- */
-export function applyAccountScheme(account: unknown): void {
-  const id = normalizeThemeSchemeId(account);
-  if (!id) return;
-  if (isBrightLight()) setBrightFrom(id);
-  else setThemeSchemeId(id);
-}
-
-/**
- * Bright light on: the sunlight scheme, remembering the dark one it came from.
- * Off: back to that one. This phone only: the account's scheme, and Logjam
- * Web's, stay as the user picked them in Settings. Returns false when the
- * device would not store it.
- */
-export function setBrightLight(on: boolean): boolean {
-  if (!on) {
-    // Nothing to undo: a scheme picked by name is the user's, even Ghost Gum.
-    if (!isBrightLight()) return true;
-    return setThemeSchemeId(
-      normalizeThemeSchemeId(brightFrom) ?? schemeForOs(osPrefersDark()),
-    );
-  }
-  if (isBrightLight()) return true;
-  // Flagged first: painting a scheme by name would let go of it.
-  const flagged = setBrightFrom(currentThemeSchemeId);
-  const stored = writePref(THEME_SCHEME_PREF_KEY, BRIGHT_LIGHT_SCHEME_ID);
-  currentThemeSchemeId = BRIGHT_LIGHT_SCHEME_ID;
-  for (const listener of schemeListeners) listener();
-  return flagged && stored;
 }
 
 const ThemeSchemeContext = createContext<ThemeSchemeId>(currentThemeSchemeId);
