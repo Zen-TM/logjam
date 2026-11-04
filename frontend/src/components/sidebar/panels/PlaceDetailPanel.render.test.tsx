@@ -483,35 +483,9 @@ describe("the place panel's notes", () => {
   // Mutation: draw `current.notes` as a raw paragraph again, and Markdown in a
   // note (shared with a sharee too) shows as typed.
   it("draw as Markdown through NoteBody", async () => {
-    const noop = vi.fn();
-    const { container } = render(
-      <PlaceDetailPanel
-        place={{ ...place, notes: "**a**" } as TPlace}
-        places={[place]}
-        isOwnedPlace
-        friends={[]}
-        onRefetch={noop}
-        onRefetchShared={noop}
-        setSelectedPlaceID={noop}
-        onPickCoords={noop}
-        pickingCoords={false}
-        onCancelPickCoords={noop}
-        onBack={noop}
-        onOpenTrip={noop}
-        onMakeMap={noop}
-        onSharePlace={noop}
-        verbRequest={null}
-        onVerbRequestConsumed={noop}
-        customFieldDefs={[]}
-        placeTypes={[]}
-        onCustomFieldDefsChange={noop}
-        placeCustomFieldDefs={[]}
-        onPlaceCustomFieldDefsChange={noop}
-        onQuotaChanged={noop}
-        onRefetchTripLogs={noop}
-        onAfterDelete={noop}
-      />,
-    );
+    const { container } = renderPanel({
+      place: { ...place, notes: "**a**" } as TPlace,
+    });
     await waitFor(() =>
       expect(container.querySelector("strong")?.textContent).toBe("a"),
     );
