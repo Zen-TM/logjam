@@ -40,6 +40,7 @@ import {
   withRowUnit,
   distinctTripTypes,
   formatCanyonGrade,
+  withoutCanyonGradeRows,
   formatDistanceM,
   formatTripDate,
   mediaCategory,
@@ -281,9 +282,9 @@ export function PlaceDetailScreen({
       ?.name ?? "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
-  const customFields = attributeRows(labellingDefs, storedFields).map(
-    withRowUnit,
-  );
+  const customFields = withoutCanyonGradeRows(
+    attributeRows(labellingDefs, storedFields),
+  ).map(withRowUnit);
 
   // Position is what every place has. Type-specific attributes render in the
   // type's own attribute table below rather than in bespoke stat tiles.
@@ -357,7 +358,7 @@ export function PlaceDetailScreen({
         <View style={styles.pillRow}>
           {/* The grade rides as a pill rather than as the eyebrow: the eyebrow
               style is uppercase, and a place grade is written with a lowercase
-              v/a ("v4a4 III") — upcasing it renders a grade nobody writes. */}
+              v/a ("v4a4III") — upcasing it renders a grade nobody writes. */}
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
             label={placeStatusLabel(

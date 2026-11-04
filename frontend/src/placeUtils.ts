@@ -2147,6 +2147,6 @@ export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
 }
 
-// Renders `v3a4 III`, omitting unset segments. Re-exported from
+// Renders `v3a4III`, omitting unset segments. Re-exported from
 // shared/src/canyonGrade.ts so Logjam Web and Logjam GPS format identically.
 export { formatCanyonGrade } from "@logjam/shared";

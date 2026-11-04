@@ -2,6 +2,7 @@
 // clients draw from this one builder so a file leaves Logjam Web and Logjam GPS
 // byte for byte alike; only where it goes (a download, a chosen folder) is theirs.
 import type { TPlace } from "./apiTypes.js";
+import { formatCanyonGrade, isCanyonGradeKey } from "./canyonGrade.js";
 import { escapeXml } from "./escapeXml.js";
 import { userFieldValues } from "./fieldValues.js";
 import { SOURCES_FIELD_KEY } from "./placeTypes.js";
@@ -99,12 +100,15 @@ function descriptionText(c: TPlace, defs: ExportFieldLabel[]): string {
   const parts: string[] = [];
   if (c.altNames.length > 0)
     parts.push(`Also known as: ${c.altNames.join(", ")}`);
+  const grade = formatCanyonGrade(placeFieldValues(c));
+  if (grade) parts.push(`Canyon grade: ${grade}`);
   // Whatever the place's type carries, in the order the values are stored. The
   // labels a UI would show live on the definitions, which this module does not
   // have; the KEY is what a third-party reader gets, which is the same thing
   // the GeoJSON/CSV forms give them.
   for (const [key, value] of Object.entries(placeFieldValues(c))) {
     if (value === null || value === undefined || value === "") continue;
+    if (isCanyonGradeKey(key)) continue;
     parts.push(`${fieldLabel(key, defs)}: ${String(value)}`);
   }
   if (c.notes) parts.push(`Notes: ${c.notes}`);

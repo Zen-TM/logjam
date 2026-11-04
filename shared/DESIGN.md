@@ -162,6 +162,9 @@ renumber.
 - **A control a hover reveals is always visible on a coarse pointer.**
 - **A press with a non-obvious effect says so on the thing**: a copyable
   value carries a copy glyph; a file's row says "Click to download".
+- **The coordinates are the copy control, never a separate button** (Logjam
+  Web: `Stat onCopy`; Logjam GPS: a pressable `Row`). Guard:
+  `shared/src/coordinatesCopyRule.test.ts`.
 
 ## 5. Absent, disabled, or there
 
