@@ -212,7 +212,7 @@ async function assertOwnsReplaced(
 /** The old file went between the check and the swap; the write is rolled back. */
 class ReplacedFileGone extends AppError {
   constructor() {
-    super(400, say`replaces must name your own uploaded track on this place`);
+    super(400, say`The file you were replacing is no longer on this place.`);
   }
 }
 
