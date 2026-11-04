@@ -45,15 +45,22 @@ test("an owner adds a route from a way already in the app", async ({
     .getByRole("button", { name: /^Du Faur Head approach/ })
     .click();
 
-  await expect(page.getByText("Route linked to this place.")).toBeVisible();
-  await expect(aside.getByText("Du Faur Head approach")).toBeVisible();
-  await expect(
-    aside.getByRole("button", { name: "Replace this place's route" }),
-  ).toBeVisible();
-
-  // Put it back.
-  await aside.getByRole("button", { name: "Unlink from this place" }).click();
-  await expect(page.getByText("Route unlinked.")).toBeVisible();
+  try {
+    await expect(page.getByText("Route linked to this place.")).toBeVisible();
+    await expect(aside.getByText("Du Faur Head approach")).toBeVisible();
+    await expect(
+      aside.getByRole("button", { name: "Replace this place's route" }),
+    ).toBeVisible();
+  } finally {
+    // Put it back, even when an assertion failed: the cases share one place.
+    const unlink = aside.getByRole("button", {
+      name: "Unlink from this place",
+    });
+    if ((await unlink.count()) > 0) {
+      await unlink.click();
+      await expect(page.getByText("Route unlinked.")).toBeVisible();
+    }
+  }
 });
 
 // Mutation: send the picked file to the edit dialog's uploader only, or skip
@@ -70,18 +77,23 @@ test("an owner adds a route from a GPX file", async ({ page }) => {
     ),
   });
 
-  await expect(
-    page.getByText("Route file linked to this place."),
-  ).toBeVisible();
-  await expect(aside.getByText("e2e-line.gpx")).toBeVisible();
-
-  // Put it back.
-  await aside
-    .getByRole("button", { name: "Delete the track e2e-line.gpx" })
-    .click();
-  await page
-    .getByRole("alertdialog")
-    .getByRole("button", { name: "Delete", exact: true })
-    .click();
-  await expect(aside.getByText("No route yet.")).toBeVisible();
+  try {
+    await expect(
+      page.getByText("Route file linked to this place."),
+    ).toBeVisible();
+    await expect(aside.getByText("e2e-line.gpx")).toBeVisible();
+  } finally {
+    // Put it back, even when an assertion failed.
+    const remove = aside.getByRole("button", {
+      name: "Delete the track e2e-line.gpx",
+    });
+    if ((await remove.count()) > 0) {
+      await remove.click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "Delete", exact: true })
+        .click();
+      await expect(aside.getByText("No route yet.")).toBeVisible();
+    }
+  }
 });

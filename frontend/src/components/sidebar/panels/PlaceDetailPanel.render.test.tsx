@@ -315,4 +315,141 @@ describe("adding a route from the place page", () => {
     );
     expect(toast.success).toHaveBeenCalledWith(ADD_WAY.copy.fileDone);
   });
+
+  const gpxFile = (name = "line.gpx", size = 6) =>
+    new File([new Uint8Array(size)], name);
+
+  // Mutation: route the confirm through the "kept" wording for every file, and
+  // an uploaded GPX is deleted on a promise that it is kept.
+  it("says an uploaded file in the slot will be deleted, and deletes it before the upload", async () => {
+    api.getPlaceDetail.mockResolvedValue({
+      tripLogs: [],
+      media: [{ ...trackFile, origin: null }],
+    });
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.replaceTitle }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, {
+      target: { files: [gpxFile()] },
+    });
+    expect(await screen.findByText(/will be deleted/)).toBeTruthy();
+    expect(api.deleteMedia).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    await waitFor(() => expect(api.uploadMedia).toHaveBeenCalledTimes(1));
+    expect(api.deleteMedia).toHaveBeenCalledWith("m1");
+    expect(api.deleteMedia.mock.invocationCallOrder[0]).toBeLessThan(
+      api.uploadMedia.mock.invocationCallOrder[0],
+    );
+  });
+
+  // Mutation: move the size check after the removal, and an oversize pick
+  // costs the user the upload it was meant to replace.
+  it("refuses an oversize file before the upload in the slot is deleted", async () => {
+    api.getPlaceDetail.mockResolvedValue({
+      tripLogs: [],
+      media: [{ ...trackFile, origin: null }],
+    });
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.replaceTitle }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    const big = gpxFile("big.gpx");
+    Object.defineProperty(big, "size", { value: 21 * 1024 * 1024 });
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, {
+      target: { files: [big] },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+    expect(await within(dialog).findByText(ADD_WAY.copy.tooLarge)).toBeTruthy();
+    expect(api.deleteMedia).not.toHaveBeenCalled();
+    expect(api.uploadMedia).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop `onFilled()` from the catch, and a write that failed after
+  // the old way was taken out leaves the page showing the old way.
+  it("keeps the dialog open with the banner, and refreshes the page, when the write fails", async () => {
+    api.uploadMedia.mockRejectedValueOnce(new Error("boom"));
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    const before = api.getPlaceDetail.mock.calls.length;
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, {
+      target: { files: [gpxFile()] },
+    });
+    expect(await within(dialog).findByText(ADD_WAY.copy.failed)).toBeTruthy();
+    expect(api.getPlaceDetail.mock.calls.length).toBeGreaterThan(before);
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  // Mutation: show `failed` for a removal that follows a successful write.
+  it("says the new route is in place when only the old one could not be removed", async () => {
+    const onRoutesChanged = vi.fn();
+    api.updateRoute
+      .mockResolvedValueOnce({ displacedRoute: null })
+      .mockRejectedValueOnce(new Error("503"));
+    renderPanel({
+      routes: [
+        route({ id: "old", name: "Old line", placeId: "p1" }),
+        route({ id: "new", name: "New line" }),
+      ],
+      onRoutesChanged,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.replaceTitle }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: new RegExp(ADD_WAY.copy.routeTitle),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /New line/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(ADD_WAY.copy.removalFailed),
+    );
+    expect(onRoutesChanged).toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalledWith(ADD_WAY.copy.failed);
+  });
+
+  // Mutation: show Delete for a linked import, and the only way off the place
+  // destroys the user's file.
+  it("unlinks a linked import from the page and only deletes an upload", async () => {
+    api.getPlaceDetail.mockResolvedValue({
+      tripLogs: [],
+      media: [trackFile],
+    });
+    const { unmount } = renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Unlink from this place" }),
+    );
+    await waitFor(() =>
+      expect(api.linkMediaToPlace).toHaveBeenCalledWith("m1", null),
+    );
+    expect(
+      screen.queryByRole("button", { name: /^Delete the track/ }),
+    ).toBeNull();
+    unmount();
+
+    api.getPlaceDetail.mockResolvedValue({
+      tripLogs: [],
+      media: [{ ...trackFile, origin: null }],
+    });
+    renderPanel();
+    expect(
+      await screen.findByRole("button", { name: "Delete the track old.gpx" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Unlink from this place" }),
+    ).toBeNull();
+  });
 });

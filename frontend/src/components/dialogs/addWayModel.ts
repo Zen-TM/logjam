@@ -3,6 +3,7 @@
 // written in. Logjam GPS's `places/routeSlot.ts` is the same decision over its
 // own mirror; the words are `ADD_WAY`'s.
 import {
+  attachableRoutes,
   mediaCategory,
   mediaDisplayName,
   placeRoute,
@@ -10,6 +11,7 @@ import {
   type RouteSlotIncumbent,
   type StandaloneFile,
   type WaySource,
+  WayRemovalError,
 } from "@logjam/shared";
 import {
   deleteMedia,
@@ -43,17 +45,17 @@ export function slotIncumbent(
   };
 }
 
-/** The routes the user may attach: their own, narrowed by what they typed. */
-export function attachableRoutes(
+/** The user's own routes the panel offers (`attachableRoutes` decides which). */
+export function ownAttachableRoutes(
   routes: readonly TRoute[],
   currentUserId: string | null,
+  placeId: string,
   query: string,
 ): TRoute[] {
-  const needle = query.trim().toLowerCase();
-  return routes.filter(
-    (route) =>
-      route.ownerId === currentUserId &&
-      (!needle || route.name.toLowerCase().includes(needle)),
+  return attachableRoutes(
+    routes.filter((route) => route.ownerId === currentUserId),
+    placeId,
+    query,
   );
 }
 
@@ -79,20 +81,30 @@ export function attachableFiles(
  * Write a way into the slot and take the incumbent out, in the safe order.
  *
  * Normally the new way goes in first, so a failed removal leaves the place
- * briefly showing both rather than neither. A file over a file is the
- * exception: the API refuses a second track on a place (409), so the first
- * has to go before the second is written. Unlinking destroys nothing, which is
- * what makes going first safe.
+ * showing both rather than neither; that failure is a `WayRemovalError`, since
+ * the new way did land. A file over a file is the exception: the API refuses a
+ * second track on a place (409), so the first has to go before the second is
+ * written. Unlinking an import or recording destroys nothing, so going first is
+ * safe. DELETING an uploaded file is destructive, and a failed write after it
+ * leaves the place with no route and the upload gone: `preflight` runs before
+ * anything is removed, and is where every check that can be made without
+ * writing belongs (extension, size, reading the file). A rejection from the
+ * write itself after that (network, the storage quota, which only the API
+ * knows) is still unrecoverable; an API swap (a `replaces` id on the media
+ * confirm) is the fix for that.
  */
 export async function fillWaySlot({
   incumbent,
   source,
   write,
+  preflight,
 }: {
   incumbent: SlotIncumbent | null;
   source: WaySource;
   write: () => Promise<unknown>;
+  preflight?: () => Promise<void>;
 }): Promise<void> {
+  await preflight?.();
   const remove = incumbent ? () => removeIncumbent(incumbent) : null;
   const fileOverFile =
     (source === "import" || source === "track" || source === "file") &&
@@ -100,7 +112,11 @@ export async function fillWaySlot({
     incumbent.kind !== "route";
   if (remove && fileOverFile) await remove();
   await write();
-  if (remove && !fileOverFile) await remove();
+  if (remove && !fileOverFile) {
+    await remove().catch((err: unknown) => {
+      throw new WayRemovalError(err);
+    });
+  }
 }
 
 function removeIncumbent(incumbent: SlotIncumbent): Promise<unknown> {

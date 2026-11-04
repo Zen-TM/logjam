@@ -26,6 +26,7 @@ import {
   isReservedFieldKey,
   formatDistanceM,
   mediaCategory,
+  mediaDisplayName,
   placeRoute,
   routeLengthM,
   primaryTripType,
@@ -103,7 +104,11 @@ import {
   StatGrid,
   StatusPill,
 } from "../../../ui";
-import { formatCanyonGrade, updateRoute } from "../../../placeUtils";
+import {
+  formatCanyonGrade,
+  linkMediaToPlace,
+  updateRoute,
+} from "../../../placeUtils";
 
 /**
  * Runs a verb pressed on the place's ROW that needs this page's forms and
@@ -954,18 +959,43 @@ function PlaceDetailPanel({
         ) : track ? (
           <Row
             leading={<IconTile icon="track" hue="var(--hue-track)" />}
-            title={track.filename}
+            title={mediaDisplayName(track)}
             subtitle="Click to download"
             href={track.displayUrl}
             download={track.filename}
             trailing={
               isOwnedPlace ? (
-                <IconButton
-                  icon="delete"
-                  label={`Delete the track ${track.filename}`}
-                  tone="danger"
-                  onClick={() => setFileToDelete(track)}
-                />
+                // An import or a recording is the user's own file, so it comes
+                // off the place and stays; only a file uploaded here has no life
+                // apart from the place and can only be deleted.
+                track.origin !== null ? (
+                  <IconButton
+                    icon="unlink"
+                    label="Unlink from this place"
+                    onClick={() => {
+                      linkMediaToPlace(track.id, null)
+                        .then(() => {
+                          reloadPlaceMedia();
+                          toast.success("Route unlinked.");
+                        })
+                        .catch((err: unknown) =>
+                          toast.error(
+                            messageFromError(
+                              err,
+                              "Couldn't unlink that route.",
+                            ),
+                          ),
+                        );
+                    }}
+                  />
+                ) : (
+                  <IconButton
+                    icon="delete"
+                    label={`Delete the track ${mediaDisplayName(track)}`}
+                    tone="danger"
+                    onClick={() => setFileToDelete(track)}
+                  />
+                )
               ) : undefined
             }
           />

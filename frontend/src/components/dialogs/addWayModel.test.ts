@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MediaItem, StandaloneFile } from "@logjam/shared";
+import {
+  WayRemovalError,
+  type MediaItem,
+  type StandaloneFile,
+} from "@logjam/shared";
 import type { TRoute } from "../../placeUtils";
 
 const api = vi.hoisted(() => ({
@@ -11,7 +15,7 @@ vi.mock("../../placeUtils", () => api);
 
 import {
   attachableFiles,
-  attachableRoutes,
+  ownAttachableRoutes,
   fillWaySlot,
   slotIncumbent,
 } from "./addWayModel";
@@ -71,7 +75,7 @@ describe("slotIncumbent", () => {
   });
 });
 
-describe("attachableRoutes", () => {
+describe("ownAttachableRoutes", () => {
   // Mutation: drop the owner test, and a route shared with the user is
   // offered although the API refuses to re-link it.
   it("offers only the user's own routes, narrowed by name", () => {
@@ -80,14 +84,25 @@ describe("attachableRoutes", () => {
       route({ id: "b", name: "Other", ownerId: "them" }),
       route({ id: "c", name: "Tiger" }),
     ];
-    expect(attachableRoutes(list, "me", "").map((r) => r.id)).toEqual([
-      "a",
-      "c",
+    const ids = (q: string, user: string | null = "me") =>
+      ownAttachableRoutes(list, user, "p", q).map((r) => r.id);
+    expect(ids("")).toEqual(["a", "c"]);
+    expect(ids(" clau")).toEqual(["a"]);
+    expect(ids("", null)).toEqual([]);
+  });
+
+  // Mutation: drop the placeId test, and a route on another place is moved
+  // off it, revoking that place's sharees' sight of it, without being asked.
+  it("leaves out routes on another place, and keeps this place's own", () => {
+    const list = [
+      route({ id: "free" }),
+      route({ id: "here", placeId: "p" }),
+      route({ id: "away", placeId: "q" }),
+    ];
+    expect(ownAttachableRoutes(list, "me", "p", "").map((r) => r.id)).toEqual([
+      "free",
+      "here",
     ]);
-    expect(attachableRoutes(list, "me", " clau").map((r) => r.id)).toEqual([
-      "a",
-    ]);
-    expect(attachableRoutes(list, null, "")).toEqual([]);
   });
 });
 
@@ -176,5 +191,47 @@ describe("fillWaySlot", () => {
     });
     expect(order).toEqual(["write", "unlink route"]);
     expect(api.updateRoute).toHaveBeenCalledWith("r", { placeId: null });
+  });
+});
+
+describe("fillWaySlot failures", () => {
+  const upload = { kind: "upload", id: "m", name: "x" } as const;
+  const link = { kind: "file", id: "m", name: "x" } as const;
+
+  // Mutation: run the preflight after the removal, and a file that fails its
+  // checks has already cost the user the upload it was to replace.
+  it("refuses before deleting anything when the preflight fails", async () => {
+    await expect(
+      fillWaySlot({
+        incumbent: upload,
+        source: "file",
+        write: vi.fn(),
+        preflight: async () => {
+          throw new Error("too big");
+        },
+      }),
+    ).rejects.toThrow("too big");
+    expect(api.deleteMedia).not.toHaveBeenCalled();
+    expect(api.updateRoute).not.toHaveBeenCalled();
+    expect(api.linkMediaToPlace).not.toHaveBeenCalled();
+  });
+
+  it("rejects, and removes nothing more, when the write fails after the removal", async () => {
+    const write = vi.fn().mockRejectedValue(new Error("network"));
+    await expect(
+      fillWaySlot({ incumbent: link, source: "import", write }),
+    ).rejects.toThrow("network");
+    expect(api.linkMediaToPlace).toHaveBeenCalledTimes(1);
+  });
+
+  // Mutation: let the removal's own error through, and the user reads "couldn't
+  // set that" about a route that is already on the place.
+  it("reports a failed removal after the write as WayRemovalError", async () => {
+    const write = vi.fn(async () => {});
+    api.linkMediaToPlace.mockRejectedValueOnce(new Error("503"));
+    await expect(
+      fillWaySlot({ incumbent: link, source: "route", write }),
+    ).rejects.toBeInstanceOf(WayRemovalError);
+    expect(write).toHaveBeenCalledTimes(1);
   });
 });

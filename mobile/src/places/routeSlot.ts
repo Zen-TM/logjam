@@ -105,12 +105,24 @@ export function routeSlotDisplaceConfirm(
 ): ConfirmCopy | null {
   if (!occupant) return null;
   return sharedDisplaceConfirm("gps", placeName, {
-    kind: occupant.kind,
+    kind: occupantKind(occupant),
     name:
       occupant.kind === "route"
         ? occupant.name
         : mediaDisplayName(occupant.media),
   });
+}
+
+/**
+ * A file with no `origin` was uploaded onto the place (from Logjam Web) and has
+ * no life apart from it: the API refuses to unlink one (400), so replacing it
+ * deletes it. An import or recording is unlinked and kept.
+ */
+export function occupantKind(
+  occupant: NonNullable<RouteSlotOccupant>,
+): "route" | "file" | "upload" {
+  if (occupant.kind === "route") return "route";
+  return occupant.media.origin === null ? "upload" : "file";
 }
 
 /**

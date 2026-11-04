@@ -4,16 +4,21 @@
 // Split from `routeSlot.ts` (which is pure and tested) only because this half
 // reaches the confirm, the mirror and the outbox. The DECISIONS still live there;
 // nothing here re-derives an occupant or re-words a sentence.
+import { WayRemovalError } from "@logjam/shared";
 import { confirm } from "../ui";
 
 import {
+  occupantKind,
   removeOccupantFirst,
   routeSlotDisplaceConfirm,
   waySourceWrites,
   type RouteSlotOccupant,
   type WaySource,
 } from "./routeSlot";
-import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
+import {
+  deleteMediaLocal,
+  linkStandaloneMediaLocal,
+} from "../sync/mediaUpload";
 import { updateRouteLocal } from "../sync/outbox";
 
 /**
@@ -49,14 +54,22 @@ export async function fillRouteSlot({
             // until the next delta pull it would otherwise show two routes on
             // the one place — the state the confirm just said would not exist.
             updateRouteLocal(occupant.id, { placeId: null })
-          : // UNLINK, never delete: the file is the user's own import or
-            // recording and lives on in Saved.
-            linkStandaloneMediaLocal(occupant.media.id, null)
+          : occupantKind(occupant) === "upload"
+            ? // Uploaded onto the place (no origin): there is nothing to unlink
+              // to, and the confirm said it would be deleted.
+              deleteMediaLocal(occupant.media)
+            : // UNLINK, never delete: an import or recording lives on in Saved.
+              linkStandaloneMediaLocal(occupant.media.id, null)
     : null;
 
   const writes = waySourceWrites(source);
   if (remove && removeOccupantFirst(writes, occupant)) await remove();
   await write();
-  if (remove && !removeOccupantFirst(writes, occupant)) await remove();
+  if (remove && !removeOccupantFirst(writes, occupant)) {
+    // The new way is in: say that, not that nothing happened.
+    await remove().catch((err: unknown) => {
+      throw new WayRemovalError(err);
+    });
+  }
   return true;
 }
