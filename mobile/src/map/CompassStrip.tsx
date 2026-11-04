@@ -29,7 +29,12 @@ import { compassPointFor } from "@logjam/shared";
 
 import { radius, spacing, textScale, withAlpha, makeStyles } from "../theme";
 import type { NorthReference } from "./mapPreferences";
-import { compassTicks, displayHeading } from "./compassTape";
+import {
+  compassLabelFits,
+  compassStripWidth,
+  compassTicks,
+  displayHeading,
+} from "./compassTape";
 
 /**
  * Fixed height, and exported: the native MapLibre compass ornament shares this
@@ -47,7 +52,7 @@ export const COMPASS_STRIP_HEIGHT = Math.round(38 * textScale);
  * at, and every pixel of it is terrain you can't see (DESIGN.md — the map has
  * no chrome it can do without).
  */
-export const COMPASS_STRIP_WIDTH = 176;
+export const COMPASS_STRIP_WIDTH = compassStripWidth(textScale);
 
 /**
  * Room for a three-digit label centred on its tick, scaled with the type for
@@ -92,7 +97,7 @@ export function CompassStrip({
         {ticks.map((tick) => (
           <View key={tick.bearing} style={[styles.tick, { left: tick.x }]}>
             <View style={tick.major ? styles.markMajor : styles.markMinor} />
-            {tick.label ? (
+            {tick.label && compassLabelFits(tick.x, width, LABEL_WIDTH) ? (
               <Text style={styles.label} numberOfLines={1}>
                 {tick.label}
               </Text>
