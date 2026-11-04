@@ -337,6 +337,7 @@ export function TrackOptionsSheet({
           <ColourField
             icon="colour"
             hue={assetHue.track}
+            disabled={busy}
             label="Colour"
             palette={TRACK_COLORS}
             value={track.color}
