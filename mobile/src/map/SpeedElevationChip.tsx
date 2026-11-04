@@ -23,7 +23,7 @@
 // logged.
 import { memo, useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { formatSpeedMps, splitUnit } from "@logjam/shared";
+import { formatSpeedMps } from "@logjam/shared";
 
 import {
   fontSize,
@@ -38,7 +38,7 @@ import { keepWithValue, readoutFigures, useLiveReadout } from "./liveReadout";
 // The height of one line of each text, as the font draws it (the same estimate
 // the scale bar makes): the chip is a fixed box around them.
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
-const VALUE_LINE = Math.round(fontSize.xxl * 1.2);
+const VALUE_LINE = Math.round(fontSize.sm * 1.35);
 
 /** Its drawn height at the default text size (a larger system font grows the
  *  chip past it), exported for the same reason `SCALE_BAR_HEIGHT` is: the
@@ -48,8 +48,9 @@ export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
 /** Wide enough for the longest pair either column produces ("12.5 km/h",
  *  "1234 m") and the longest label ("12 min ago") without the
- *  columns touching, and never wider. */
-const CHIP_WIDTH = 248;
+ *  columns touching, and never wider. A glance figure, not a hero: it sits
+ *  beside the scale bar and must not outweigh the map. */
+const CHIP_WIDTH = 168;
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -77,14 +78,14 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   }, [active]);
 
   const figures = readoutFigures(readout, now);
-  const speed = splitUnit(
-    figures.speedMps == null ? UNKNOWN : formatSpeedMps(figures.speedMps),
-  );
-  const elevation = splitUnit(
+  const speed =
+    figures.speedMps == null
+      ? UNKNOWN
+      : keepWithValue(formatSpeedMps(figures.speedMps));
+  const elevation =
     figures.elevationM == null
       ? UNKNOWN
-      : `${Math.round(figures.elevationM)} m`,
-  );
+      : keepWithValue(`${Math.round(figures.elevationM)} m`);
   // Every figure from the position says how far to trust it: its age once the
   // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
   // the label's place (over the figure, so "about" reads into it) because the
@@ -100,10 +101,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
         </Text>
         <Text
           style={[styles.value, grey && styles.grey]}
-          accessibilityLabel={`Speed ${speed.join(" ")}`}
+          accessibilityLabel={`Speed ${speed}`}
         >
-          {speed[0]}
-          <Text style={styles.unit}>{keepWithValue(speed[1])}</Text>
+          {speed}
         </Text>
       </View>
       <View style={styles.divider} />
@@ -118,10 +118,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
         </Text>
         <Text
           style={[styles.value, grey && styles.grey]}
-          accessibilityLabel={`Elevation ${elevation.join(" ")}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
+          accessibilityLabel={`Elevation ${elevation}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
-          {elevation[0]}
-          <Text style={styles.unit}>{keepWithValue(elevation[1])}</Text>
+          {elevation}
         </Text>
       </View>
     </View>
@@ -142,8 +141,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   column: { flex: 1, alignItems: "center" },
   label: { ...muted(theme, textRole.meta) },
-  value: { ...textRole.instrument, color: theme.text },
-  unit: { ...textRole.control },
+  value: {
+    ...textRole.control,
+    color: theme.text,
+    fontVariant: ["tabular-nums"],
+  },
   grey: { color: theme.textMuted },
   // A hairline rather than a gap: two centred columns with nothing between them
   // read as one wrapped sentence at a glance.

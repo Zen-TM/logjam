@@ -131,7 +131,8 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { LayersGlyph, markMapDrawing, markMapDrawn } from "./mapLoading";
+import { LayersGlyph } from "./mapLoading";
+import { markMapDrawing, markMapDrawn } from "./mapDrawing";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,

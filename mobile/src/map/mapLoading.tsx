@@ -1,43 +1,22 @@
-// Whether the map's last frame was only partly drawn. Frames arrive at display
-// rate, so the flag lives here and only the layers glyph subscribes: putting it
-// in MapScreen's state would re-render every MLRN layer on each tile batch
-// (docs/decisions/0010-map-sensors-only-while-focused.md).
+// The layers button's glyph; the flag it reads is mapDrawing.ts.
 import { useEffect, useSyncExternalStore } from "react";
 
 import { Icon } from "../ui";
 import { useTheme } from "../theme";
 
 import { FAB_ICON } from "./mapChrome";
-
-let drawing = false;
-const listeners = new Set<() => void>();
-
-function set(next: boolean) {
-  if (drawing === next) return;
-  drawing = next;
-  listeners.forEach((listener) => listener());
-}
-
-export const markMapDrawing = () => set(true);
-export const markMapDrawn = () => set(false);
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+import { isMapDrawing, markMapDrawn, subscribeMapDrawing } from "./mapDrawing";
 
 /**
- * The layers button's glyph. A loader while the map online is still drawing:
- * the one cue that a blank map is loading and not broken. Offline, the notice
- * explains it instead.
+ * The layers button's glyph. A loader once the map online has stayed unfinished
+ * for a real wait: the one cue that a blank map is loading and not broken.
+ * Offline, the notice explains it instead.
  */
 export function LayersGlyph({ online }: { online: boolean }) {
   const theme = useTheme();
-  const isDrawing = useSyncExternalStore(subscribe, () => drawing);
+  const isDrawing = useSyncExternalStore(subscribeMapDrawing, isMapDrawing);
   // A screen that goes away mid-frame never sees the "drawn" event.
-  useEffect(() => () => set(false), []);
+  useEffect(() => markMapDrawn, []);
   return (
     <Icon
       idea={isDrawing && online ? "loading" : "layers"}
