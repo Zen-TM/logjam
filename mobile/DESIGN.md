@@ -115,10 +115,13 @@ handler or a camera write, read
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
 - **There is one toast host.** `<Toast>` draws nothing; `ToastHost` (mounted
-  once in `AppShell`) shows it centred above the tab bar, `bottom` lifting it
-  clear of a screen's own instruments and `inset` keeping a column free on both
-  sides. A background job's toast is at the shell (`BackgroundToast.tsx`),
-  never on the screen that started it.
+  once in `AppShell`) shows one toast at a time, centred above the tab bar,
+  and the rest wait in order (`toastStore.test.ts`): an error or an action is
+  never replaced, and a message already showing or waiting is not added
+  twice. `bottom` lifts it clear of a screen's own instruments and `inset`
+  keeps a column free on both sides (the map passes both). A background job's
+  toast is at the shell (`BackgroundToast.tsx`), never on the screen that
+  started it.
 - **Long work is a progress card, not a screen**, unless leaving would break
   it.
 
