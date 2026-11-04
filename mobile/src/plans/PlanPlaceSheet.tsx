@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Clipboard, Text, View } from "react-native";
 import {
   attributeRows,
+  canyonGradeRows,
   formatElevationM,
   mapPointPosition,
   messageFromError,
@@ -93,7 +94,10 @@ export function PlanPlaceSheet({
   // A plan place is always of a system type, so the system definitions
   // label its attributes.
   const attributes = place
-    ? attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues))
+    ? canyonGradeRows(
+        attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)),
+        place.fieldValues,
+      )
     : [];
   return (
     <BottomSheet

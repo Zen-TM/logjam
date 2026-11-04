@@ -51,7 +51,7 @@ describe("placeSummary", () => {
         longestAbseil: 30,
         numAbseils: 8,
       }),
-    ).toBe("v4a3 III · 6 h · 30 m max");
+    ).toBe("v4a3III · 6 h · 30 m max");
   });
 
   it("caps at three facts, but promotes a lower-priority one when a gap frees a slot", () => {

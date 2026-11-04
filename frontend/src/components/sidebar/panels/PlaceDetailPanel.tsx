@@ -31,6 +31,7 @@ import {
   placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
+  isCanyonGradeKey,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
@@ -279,6 +280,7 @@ function PlaceDetailPanel({
   const attributes = useMemo(() => {
     if (!place) return [];
     return defsForType(placeCustomFieldDefs, place.placeTypeId)
+      .filter((def) => !isCanyonGradeKey(def.key))
       .map((def) => ({
         def,
         text: displayValue(def, fieldValue(place.fieldValues, def.key)),

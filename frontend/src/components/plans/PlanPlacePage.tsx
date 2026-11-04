@@ -5,6 +5,7 @@
 import { useState } from "react";
 import {
   attributeRows,
+  canyonGradeRows,
   formatElevationM,
   formatFieldValue,
   mapPointPosition,
@@ -40,9 +41,9 @@ export default function PlanPlacePage({
   const type = tripPlanPlaceType(place);
   const setAside = tripPlanSetAsideRows(place);
   const position = mapPointPosition(place);
-  const attributes = attributeRows(
-    SYSTEM_FIELD_DEFS,
-    userFieldValues(place.fieldValues),
+  const attributes = canyonGradeRows(
+    attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)),
+    place.fieldValues,
   );
   const photos = place.media.filter(
     (item) => mediaCategory(item.mediaType) !== "track",

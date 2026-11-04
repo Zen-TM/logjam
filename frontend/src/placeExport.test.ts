@@ -70,7 +70,8 @@ describe("buildPlaceExport — GPX", () => {
     expect(xml).toContain("<name>Empress Canyon</name>");
     // No defs supplied, so the description falls back to the field KEY — the
     // same fallback a value whose definition has been deleted gets.
-    expect(xml).toContain("v_grade: 3");
+    expect(xml).toContain("Grade: v3");
+    expect(xml).not.toContain("v_grade: 3");
     expect(xml).toContain("num_abseils: 8");
     expect(blob.type).toBe("application/gpx+xml");
   });

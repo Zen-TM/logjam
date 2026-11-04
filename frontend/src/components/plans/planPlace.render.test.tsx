@@ -66,7 +66,9 @@ describe("a plan's place on Logjam Web", () => {
     render(<PlanPlacePage place={place} onBack={() => {}} />);
     expect(screen.getByText("Exit left at the pool.")).toBeTruthy();
     expect(screen.getByText(/The Claustral/)).toBeTruthy();
-    expect(screen.getByText("V grade")).toBeTruthy();
+    expect(screen.getByText("Grade")).toBeTruthy();
+    expect(screen.getByText("v3")).toBeTruthy();
+    expect(screen.queryByText("V grade")).toBeNull();
   });
 
   // Mutation: leave foreignFields out of PlanPlacePage or the edit dialog, and
