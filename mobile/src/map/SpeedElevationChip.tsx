@@ -38,7 +38,7 @@ import {
 import { keepWithValue, readoutFigures, useLiveReadout } from "./liveReadout";
 import {
   readoutChipHeight as chipHeight,
-  readoutChipMinWidth,
+  readoutChipLayout,
 } from "./readoutChipSize";
 
 // The height of one line of each text, as the font draws it (the same estimate
@@ -52,9 +52,18 @@ const VALUE_LINE = Math.round(fontSize.sm * 1.35);
  *  stack (see MapScreen's `ornamentMarginY`). */
 export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
-/** The chip's height at the system text size `fontScale`. */
-export const readoutChipHeight = (fontScale: number): number =>
-  chipHeight(LABEL_LINE + VALUE_LINE, spacing(1), fontScale);
+/** The chip's height at the system text size `fontScale`, in the `maxWidth`
+ *  the map leaves it. */
+export const readoutChipHeight = (
+  fontScale: number,
+  maxWidth: number,
+): number =>
+  chipHeight(
+    LABEL_LINE + VALUE_LINE,
+    spacing(1),
+    fontScale,
+    readoutChipLayout(fontScale, textScale, maxWidth).stacked,
+  );
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -65,10 +74,14 @@ const UNKNOWN = "—";
 
 export const SpeedElevationChip = memo(function SpeedElevationChip({
   active,
+  maxWidth,
 }: {
   /** The map's own `mapFocused && appActive`. A ticker behind a dark screen is
    *  a wakeup nobody sees. */
   active: boolean;
+  /** What the map leaves it beside the action column (the scale bar's). A
+   *  larger text size stacks the two readings rather than widening past it. */
+  maxWidth: number;
 }) {
   const styles = useStyles();
   const { fontScale } = useWindowDimensions();
@@ -97,13 +110,11 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   // name plus the age does not fit a column at a large system font.
   const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
   const grey = figures.quality === "stale";
+  const { width, stacked } = readoutChipLayout(fontScale, textScale, maxWidth);
 
   return (
     <View
-      style={[
-        styles.chip,
-        { minWidth: readoutChipMinWidth(fontScale, textScale) },
-      ]}
+      style={[styles.chip, { minWidth: width }, stacked && styles.chipStacked]}
       pointerEvents="none"
     >
       <View style={styles.column}>
@@ -118,7 +129,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
           {speed}
         </Text>
       </View>
-      <View style={styles.divider} />
+      <View style={[styles.divider, stacked && styles.dividerStacked]} />
       <View style={styles.column}>
         {/* No provenance glyph on screen: a DEM reading and a GPS one are not
             the same measurement, but displaying that permanently in a
@@ -151,12 +162,20 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
+  chipStacked: { flexDirection: "column", alignItems: "stretch" },
   column: { flex: 1, alignItems: "center" },
   label: { ...muted(theme, textRole.meta) },
   value: {
     ...textRole.control,
     color: theme.text,
     fontVariant: ["tabular-nums"],
+  },
+  dividerStacked: {
+    width: undefined,
+    height: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    marginVertical: 0,
+    marginHorizontal: spacing(1),
   },
   grey: { color: theme.textMuted },
   // A hairline rather than a gap: two centred columns with nothing between them
