@@ -196,14 +196,11 @@ const BOUNDS_PADDING = { top: 72, bottom: 64, left: 32, right: 32 };
  * button) have a fixed shape, the connection confirmation is a dialog at the
  * Save tap, and warnings overlay the map, so the panel does not scroll.
  *
- * That includes the one line under the chips saying the detailed map comes
- * with every area.
- *
  * ponytail: fixed pixels, so a very large OS font setting will clip the last
  * row rather than scroll it. Measure and raise this number if that turns
  * up in the field; making the panel scrollable again just hides the Save button.
  */
-const PANEL_HEIGHT = 250;
+const PANEL_HEIGHT = 220;
 
 export function RegionDownloadScreen({
   onBack,
@@ -772,10 +769,6 @@ export function RegionDownloadScreen({
           })}
         </ScrollView>
 
-        <Text style={styles.sourceNote}>
-          The detailed map is saved with every area.
-        </Text>
-
         <View style={styles.panelBody}>
           <Field
             label="Detail"
@@ -902,11 +895,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   // `flexGrow: 0` and a centred cross-axis: a horizontal ScrollView otherwise
   // grows to fill the panel and stretches its chips into tall ovals.
   chipScroll: { flexGrow: 0 },
-  sourceNote: {
-    ...muted(theme, textRole.detail),
-    paddingHorizontal: spacing(2),
-    paddingTop: spacing(0.5),
-  },
   chipRow: {
     flexDirection: "row",
     alignItems: "center",

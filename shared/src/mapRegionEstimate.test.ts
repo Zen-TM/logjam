@@ -6,6 +6,7 @@ import {
   MAX_REGION_AREA_KM2,
   MAX_REGION_EDGE_KM,
   MAX_REGION_TILES,
+  NSW_5M_SOLID,
   REGION_MIN_ZOOM,
   SOFT_WARN_TILES,
   checkRegionCaps,
@@ -226,6 +227,14 @@ describe("planRegionForBasemaps", () => {
   const maxZoomFor = (id: OfflineBasemapId) =>
     ({ "six-topo": 16, "six-base": 18, "six-imagery": 18 })[id];
 
+  // Outside every NSW_5M_SOLID box: the worldwide tiles are still saved here.
+  const COAST_10KM: RegionBbox = {
+    west: 151.4,
+    south: -33.745,
+    east: 151.508,
+    north: -33.655,
+  };
+
   /** The basemap pyramids only — every plan also carries the DEM (see below). */
   const basemapSources = (job: ReturnType<typeof planRegionForBasemaps>) =>
     job.perSource.filter((s) => s.basemapId !== DEM_SOURCE_ID);
@@ -233,7 +242,7 @@ describe("planRegionForBasemaps", () => {
   // Mutation: save only the finest DEM that covers the area and a line that
   // leaves it offline has no height, and no source to measure the seam in.
   it("saves a clip of every DEM archive the area touches, on top of the worldwide tiles", () => {
-    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    const job = planRegionForBasemaps(COAST_10KM, [], 15, maxZoomFor);
     expect(job.demArchives.map((a) => a.sourceId)).toEqual(["nsw-5m"]);
     expect(job.perSource.map((s) => s.basemapId)).toEqual([DEM_SOURCE_ID]);
     // The clips count toward the bytes the free-space check reads, not the
@@ -263,7 +272,7 @@ describe("planRegionForBasemaps", () => {
   // Mutation: leave the contour clip out of the totals and the free-space
   // check passes an area whose download then does not fit.
   it("counts the contour clip in the bytes", () => {
-    const job = planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor);
+    const job = planRegionForBasemaps(COAST_10KM, [], 15, maxZoomFor);
     // A real clip of 10 km of the Grose gorge is 1.7 MB.
     expect(job.contours.meanBytes).toBeGreaterThan(1_200_000);
     expect(job.contours.p90Bytes).toBeLessThan(2_500_000);
@@ -334,9 +343,9 @@ describe("planRegionForBasemaps", () => {
   });
 
   it("totals tiles and bytes across sources — three maps is three downloads", () => {
-    const one = planRegionForBasemaps(TEN_KM, ["six-topo"], 16, maxZoomFor);
+    const one = planRegionForBasemaps(COAST_10KM, ["six-topo"], 16, maxZoomFor);
     const two = planRegionForBasemaps(
-      TEN_KM,
+      COAST_10KM,
       ["six-topo", "six-imagery"],
       16,
       maxZoomFor,
@@ -359,7 +368,7 @@ describe("planRegionForBasemaps", () => {
       ["six-topo"],
       ["six-topo", "six-imagery"],
     ] as const) {
-      const job = planRegionForBasemaps(TEN_KM, [...ids], 16, maxZoomFor);
+      const job = planRegionForBasemaps(COAST_10KM, [...ids], 16, maxZoomFor);
       const dem = job.perSource.filter((s) => s.basemapId === DEM_SOURCE_ID);
       expect(dem).toHaveLength(1);
       expect(dem[0].plan.perZoom.map((level) => level.z)).toEqual([
@@ -371,7 +380,7 @@ describe("planRegionForBasemaps", () => {
   it("does not deepen the DEM when the detail rail moves", () => {
     const demAt = (zMax: number) =>
       planRegionForBasemaps(
-        TEN_KM,
+        COAST_10KM,
         ["six-base"],
         zMax,
         maxZoomFor,
@@ -381,7 +390,7 @@ describe("planRegionForBasemaps", () => {
   });
 
   it("counts the DEM in the totals the caps and the space check read", () => {
-    const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 16, maxZoomFor);
+    const job = planRegionForBasemaps(COAST_10KM, ["six-topo"], 16, maxZoomFor);
     const dem = job.perSource.find((s) => s.basemapId === DEM_SOURCE_ID)!;
     expect(job.totalTiles).toBe(
       job.perSource.reduce((sum, s) => sum + s.plan.totalTiles, 0),
@@ -392,5 +401,43 @@ describe("planRegionForBasemaps", () => {
   it("starts every pyramid at REGION_MIN_ZOOM so a zoomed-out offline map is not blank", () => {
     const job = planRegionForBasemaps(TEN_KM, ["six-topo"], 14, maxZoomFor);
     expect(job.perSource[0].plan.perZoom[0].z).toBe(REGION_MIN_ZOOM);
+  });
+
+  // Mutation: save the worldwide tiles only where the rectangle of
+  // NSW_5M.coverage says the 5 m DEM is, and Lamington (Queensland), eastern
+  // Victoria and the sea lose the only heights they have.
+  it("saves the worldwide tiles unless the 5 m DEM holds the whole area", () => {
+    const hasWorldwide = (b: RegionBbox) =>
+      planRegionForBasemaps(b, [], 15, maxZoomFor).perSource.some(
+        (s) => s.basemapId === DEM_SOURCE_ID,
+      );
+    const around = (lon: number, lat: number): RegionBbox => ({
+      west: lon - 0.05,
+      east: lon + 0.05,
+      south: lat - 0.05,
+      north: lat + 0.05,
+    });
+    expect(hasWorldwide(TEN_KM)).toBe(false); // Blue Mountains
+    expect(hasWorldwide(around(149.1, -35.3))).toBe(false); // Canberra
+    expect(hasWorldwide(around(151.6, -30.5))).toBe(false); // Armidale
+    expect(hasWorldwide(around(153.0, -28.25))).toBe(true); // Lamington, Qld
+    expect(hasWorldwide(around(148.5, -37.2))).toBe(true); // Victoria
+    expect(hasWorldwide(around(151.5, -33.7))).toBe(true); // off Sydney
+    expect(hasWorldwide(around(150.9, -33.7))).toBe(false); // Sydney's west
+    // An area straddling two covered boxes' edge is not covered by either.
+    expect(hasWorldwide({ ...TEN_KM, west: 141.5, east: 150.4 })).toBe(true);
+    // The clip of the 5 m DEM is still saved when the worldwide tiles are not.
+    expect(
+      planRegionForBasemaps(TEN_KM, [], 15, maxZoomFor).demArchives.map(
+        (a) => a.sourceId,
+      ),
+    ).toEqual(["nsw-5m"]);
+  });
+
+  it("keeps every solid box inside the 5 m DEM's declared coverage", () => {
+    const [west, south, east, north] = NSW_5M.coverage;
+    for (const [w, s, e, n] of NSW_5M_SOLID) {
+      expect(w >= west && s >= south && e <= east && n <= north).toBe(true);
+    }
   });
 });

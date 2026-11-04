@@ -31,6 +31,21 @@ export function isRegionArtifact(artifact: Pick<MapArtifact, "kind">): boolean {
   return REGION_ARTIFACT_KINDS.includes(artifact.kind);
 }
 
+/**
+ * Whether a file of a saved area came without the user picking it: the vector
+ * map, the elevation, contours, slope and land clips and a sharpened area's
+ * clips. The user picked only the raster maps, so only those can go on their
+ * own; deleting any other leaves an area that quietly loses a tool offline.
+ * Guard: `artifactGroups.test.ts` ("isBundledRegionMember").
+ */
+export function isBundledRegionMember(
+  artifact: Pick<MapArtifact, "kind" | "logicalKey">,
+): boolean {
+  return (
+    artifact.kind !== "basemap-region" || artifact.logicalKey === "protomaps"
+  );
+}
+
 export type Bbox = [west: number, south: number, east: number, north: number];
 
 export type ArtifactGroup = {

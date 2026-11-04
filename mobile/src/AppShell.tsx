@@ -254,6 +254,8 @@ type SavedStackParams = {
   SavedPickPoint:
     | { latitude: number; longitude: number; placeId?: string }
     | undefined;
+  // Saved's "Save an offline map", pushed here so Back is Saved.
+  SavedRegionDownload: RegionDownloadParams;
 };
 
 type MoreStackParams = {
@@ -344,9 +346,9 @@ const useStackScreenOptions = makeThemed(
     }) as const,
 );
 
-// One download screen for two stacks: the Map tab's, and the More tab's for a
-// plan's "Download the map for this area", so Back returns to that plan, named
-// by `backLabelOf`, instead of the Map tab.
+// One download screen for three stacks: the Map tab's, the Saved tab's and the
+// More tab's for a plan's "Download the map for this area", so Back returns to
+// where it was opened from, named by `backLabelOf`, instead of the Map tab.
 function RegionDownloadRoute({
   navigation,
   route,
@@ -579,12 +581,8 @@ function SavedStackNav() {
                   : undefined,
               })
             }
-            // Open the region download framing screen directly.
-            onDownloadRegion={() =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapRegionDownload",
-              })
-            }
+            // Pushed in this stack, not the Map tab's, so Back is Saved.
+            onDownloadRegion={() => navigation.navigate("SavedRegionDownload")}
             onEditRoute={(routeId) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -656,6 +654,14 @@ function SavedStackNav() {
               navigation.goBack();
             }}
           />
+        )}
+      </SavedStack.Screen>
+      <SavedStack.Screen
+        name="SavedRegionDownload"
+        options={{ headerShown: false }}
+      >
+        {({ navigation, route }) => (
+          <RegionDownloadRoute navigation={navigation} route={route} />
         )}
       </SavedStack.Screen>
     </SavedStack.Navigator>
