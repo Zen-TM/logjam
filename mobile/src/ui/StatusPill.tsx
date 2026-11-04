@@ -90,9 +90,10 @@ const useStyles = makeStyles((theme, textRole) => ({
     // A pill is never narrower than it is tall (UX §4). Guard: pill.test.ts.
     minHeight: PILL_HEIGHT,
     minWidth: PILL_HEIGHT,
-    // Not `alignSelf`: that pinned the pill to the top of a row's trailing slot
-    // (guard: pill.test.ts). Unfilled, a stretched pill looks the same, so the
-    // parent decides, and the words start at the left of a column.
+    justifyContent: "center",
+    // No self-alignment: pinning one to the start put the pill at the top of a
+    // row's trailing slot (guard: pill.test.ts). Unfilled, a stretched pill
+    // looks the same, so the parent decides.
   },
   dot: { width: 8, height: 8, borderRadius: radius.pill },
   label: { ...textRole.caption },
