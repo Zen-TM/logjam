@@ -28,10 +28,15 @@ import {
   muted,
   wash,
 } from "../theme";
-import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import {
+  attachMediaLocal,
+  deleteMediaLocal,
+  type PickedFile,
+} from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { savesCapturesToGallery } from "./galleryPreference";
+import { attachBatch, attachSummary } from "./attachBatch";
 import { stripOffers } from "./stripOffers";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
@@ -116,6 +121,7 @@ export function MediaStrip({
   emptyHint,
   limit,
   onFailed,
+  onAdded,
   onShowRoute,
   onAddWay,
   readOnly,
@@ -150,6 +156,8 @@ export function MediaStrip({
   limit?: number;
   /** Routed to the screen's toast channel. */
   onFailed: (message: string) => void;
+  /** Routed to the same channel, for the one line a successful pick leaves. */
+  onAdded: (message: string) => void;
   /**
    * Show a route attachment on the map. Given for `kind="track"`, a tap opens
    * the map rather than the viewer — a line on a basemap is the only useful way
@@ -193,22 +201,20 @@ export function MediaStrip({
   }, []);
 
   const attach = useCallback(
-    async (file: {
-      uri: string;
-      mimeType?: string | null;
-      fileName?: string | null;
-    }) => {
+    async (files: PickedFile[]) => {
       setBusy(true);
       try {
-        await attachMediaLocal(linkedType, linkedId, file);
-      } catch (err) {
-        console.error(err);
-        onFailed("That file couldn't be attached.");
+        const { added, failed } = await attachBatch(files, (file) =>
+          attachMediaLocal(linkedType, linkedId, file),
+        );
+        const summary = attachSummary(added, failed);
+        if (summary?.tone === "error") onFailed(summary.text);
+        else if (summary) onAdded(summary.text);
       } finally {
         setBusy(false);
       }
     },
-    [onFailed, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   const captureFrom = useCallback(
@@ -250,6 +256,9 @@ export function MediaStrip({
             : await ImagePicker.launchImageLibraryAsync({
                 mediaTypes,
                 quality: 1,
+                // Unlimited (selectionLimit 0): a photo is only queued, and the
+                // outbox uploads when there is signal.
+                allowsMultipleSelection: true,
               });
       } catch (err) {
         // launchCameraAsync REJECTS when CAMERA is denied (its own native
@@ -272,17 +281,19 @@ export function MediaStrip({
         throw err;
       }
       if (result.canceled || result.assets.length === 0) return;
-      const asset = result.assets[0];
       // The gallery copy happens BEFORE the attach, and its failure is never
       // allowed to cost the attachment: the photo the user actually asked for
       // is the one going onto the place, and a refused media permission must
       // not take that with it (Settings → Privacy and security).
-      if (source === "camera") await saveToGalleryIfWanted(asset.uri);
-      await attach({
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
+      if (source === "camera")
+        await saveToGalleryIfWanted(result.assets[0].uri);
+      await attach(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+          fileName: asset.fileName,
+        })),
+      );
     },
     [attach],
   );
@@ -301,7 +312,7 @@ export function MediaStrip({
       onFailed("Pick a .gpx or .kml file.");
       return;
     }
-    await attach({ uri: asset.uri, mimeType, fileName: asset.name });
+    await attach([{ uri: asset.uri, mimeType, fileName: asset.name }]);
   }, [attach, onFailed]);
 
   const attachTrack = useCallback(

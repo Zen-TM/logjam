@@ -564,6 +564,7 @@ export function PlaceDetailScreen({
           emptyHint={copy.photosEmpty}
           readOnly={!isOwner}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "info")}
         />
       </>
     ),
@@ -621,6 +622,7 @@ export function PlaceDetailScreen({
             emptyHint={copy.routeEmpty}
             readOnly={!isOwner}
             onFailed={(text) => notify(text, "error")}
+            onAdded={(text) => notify(text, "info")}
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({
                 mediaId: item.id,
