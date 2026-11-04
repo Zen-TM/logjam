@@ -3,12 +3,17 @@ import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-// Coordinates copy where they are pressed (the Position stat, a pressable
-// Row), never from a button beside them: one rule for every coordinates card
-// in both clients, as Logjam GPS's place page already did.
+// shared/DESIGN.md §4: the coordinates are the copy control, never a separate
+// button. This holds the lazy half: a button-like element in either client's
+// source whose own text (label, children or handler) says "copy ... coordinates",
+// including `tripPlanCopyCoordinatesLabel(...)`. It cannot see a label held in
+// a variable, a differently worded one ("Copy position") or an icon-only copy
+// button; the render tests that press the coordinates on each page cover the
+// wiring.
 //
 // Mutation that turns it red: put an `<IconButton label="Copy the coordinates
-// of …" />` back in `PlaceDetailPanel.tsx` or `PlanPlacePage.tsx`, or a
+// of …" />` or `label={tripPlanCopyCoordinatesLabel(name)}` back in
+// `PlaceDetailPanel.tsx` or `PlanPlacePage.tsx`, or a
 // `<Button>Copy coordinates</Button>` anywhere in `frontend/src` or
 // `mobile/src`.
 const CONTROLS = new Set([
@@ -69,8 +74,11 @@ describe("coordinates copy where they are pressed", () => {
     ).toEqual([]);
   });
 
-  it("sees a copy-coordinates button when there is one", () => {
-    const src = `const a = <IconButton icon="copy" label="Copy the coordinates of X" />;`;
-    expect(scan("probe.tsx", src)).toEqual(["probe.tsx:1"]);
+  it.each([
+    `<IconButton icon="copy" label="Copy the coordinates of X" />`,
+    `<IconButton icon="copy" label={tripPlanCopyCoordinatesLabel(x)} />`,
+    `<Button onPress={copyCoordinates}>Copy</Button>`,
+  ])("sees a copy-coordinates button in %s", (jsx) => {
+    expect(scan("probe.tsx", `const a = ${jsx};`)).toEqual(["probe.tsx:1"]);
   });
 });
