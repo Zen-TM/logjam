@@ -13,6 +13,7 @@ import { ACCOUNT } from "./account.js";
 import { SETTINGS } from "./settings.js";
 import { INBOX } from "./inbox.js";
 import { PLACE_PAGE } from "./placePage.js";
+import { ADD_WAY } from "./addWay.js";
 import { TRIP_PAGE } from "./tripPage.js";
 import { PLACE_FORM } from "./placeForm.js";
 import { TRIP_FORM } from "./tripForm.js";
@@ -35,6 +36,7 @@ export * from "./placesList.js";
 export * from "./placesFilterSheet.js";
 export * from "./placeVerbs.js";
 export * from "./placePage.js";
+export * from "./addWay.js";
 export * from "./tripVerbs.js";
 export * from "./tripPage.js";
 export * from "./placeForm.js";
@@ -70,6 +72,7 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   PLACES_ADD,
   PLACES_FILTER_SHEET,
   PLACE_PAGE,
+  ADD_WAY,
   TRIP_PAGE,
   PLACE_FORM,
   TRIP_FORM,

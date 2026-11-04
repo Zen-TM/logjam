@@ -35,6 +35,7 @@ import {
   removeShareConfirm,
   contractSectionsFor,
   isCanyonGradeKey,
+  ADD_WAY,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
@@ -60,6 +61,7 @@ import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import AddWayDialog from "../../dialogs/AddWayDialog";
 import type {
   TPlace,
   TFriend,
@@ -199,6 +201,7 @@ function PlaceDetailPanel({
   onRefetchTripLogs,
   onAfterDelete,
   routes,
+  currentUserId,
   onFocusBounds,
   onOpenRoute,
   onRoutesChanged,
@@ -242,6 +245,8 @@ function PlaceDetailPanel({
   onAfterDelete: () => void;
   /** Every drawn route the user can see; one may fill this place's route slot. */
   routes: TRoute[];
+  /** Whose routes are the user's own: only those can be attached here. */
+  currentUserId: string | null;
   /** Fit the map to a box, as the route row's tap does. */
   onFocusBounds: (bounds: [number, number, number, number]) => void;
   /** Open the route's own page (the Way). */
@@ -258,6 +263,7 @@ function PlaceDetailPanel({
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [addingWay, setAddingWay] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
   const [deletingFile, setDeletingFile] = useState(false);
 
@@ -1004,6 +1010,19 @@ function PlaceDetailPanel({
         ) : (
           <p className={classes.muted}>{copy.routeEmpty}</p>
         )}
+        {isOwnedPlace && (
+          <div>
+            <Button
+              compact
+              icon={drawnRoute || track ? "replace" : "add"}
+              onClick={() => setAddingWay(true)}
+            >
+              {drawnRoute || track
+                ? ADD_WAY.copy.replaceTitle
+                : ADD_WAY.copy.title}
+            </Button>
+          </div>
+        )}
       </section>
     ),
 
@@ -1175,6 +1194,23 @@ function PlaceDetailPanel({
           ))}
         </div>
       </div>
+
+      {isOwnedPlace && (
+        <AddWayDialog
+          open={addingWay}
+          placeId={current.id}
+          placeName={current.name}
+          routes={routes}
+          currentUserId={currentUserId}
+          media={placeMedia}
+          onClose={() => setAddingWay(false)}
+          onFilled={() => {
+            reloadPlaceMedia();
+            onRoutesChanged();
+            onQuotaChanged();
+          }}
+        />
+      )}
 
       <PlaceDialog
         place={current}

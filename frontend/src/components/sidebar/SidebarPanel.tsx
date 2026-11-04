@@ -526,6 +526,7 @@ function SidebarPanel({
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}
             routes={allRoutes}
+            currentUserId={currentUserId}
             onFocusBounds={onFocusBounds}
             onOpenRoute={onOpenRoute}
             onRoutesChanged={onRoutesChanged}

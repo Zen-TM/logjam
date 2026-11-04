@@ -1471,6 +1471,25 @@ export function deleteMedia(id: string): Promise<void> {
   return apiFetch<void>(`/media/${id}`, { method: "DELETE" });
 }
 
+/**
+ * Move a standalone file (an import or a recording) onto a place as its route,
+ * or off it with null. The same row changes parent, so the file survives being
+ * replaced; a photo or an upload has no life apart from its parent and the API
+ * refuses to move one.
+ */
+export function linkMediaToPlace(
+  id: string,
+  placeId: string | null,
+): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}/link`, {
+    method: "PATCH",
+    body:
+      placeId === null
+        ? { linkedType: "none" }
+        : { linkedType: "place", linkedId: placeId },
+  });
+}
+
 // ── Standalone files ──────────────────────────────────────────
 // A file that belongs to nobody but the user: a GPX/KML/GeoJSON they imported,
 // or a track Logjam GPS recorded. The list is metadata only — blob content
