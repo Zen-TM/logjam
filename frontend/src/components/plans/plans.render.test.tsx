@@ -49,6 +49,7 @@ import PlanJoinDialog from "./PlanJoinDialog";
 import PlanInvitePage from "./PlanInvitePage";
 import { approveMember } from "../../plansApi";
 import PlanPeople from "./PlanPeople";
+import PlanPlacePage from "./PlanPlacePage";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanAnswerDialog from "./PlanAnswerDialog";
@@ -1139,5 +1140,38 @@ describe("a form's answers table on a narrow panel", () => {
     expect(
       screen.getByRole("dialog", { name: `bob · ${longLabel}` }),
     ).toBeTruthy();
+  });
+});
+
+describe("a plan place's coordinates", () => {
+  // Mutation: copy from a separate button again, or stop wiring `onCopy`, and
+  // pressing the coordinates writes nothing.
+  it("copy where they are pressed, with the place page's sentence", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const place = {
+      kind: "place",
+      name: "Claustral",
+      altNames: [],
+      latitude: -33.71234,
+      longitude: 150.31188,
+      elevation: 412,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      typeName: null,
+      typeIconKey: null,
+      notes: null,
+      fieldValues: {},
+      foreignFields: null,
+      media: [],
+    } as unknown as TripPlanPlace;
+    render(<PlanPlacePage place={place} onBack={() => {}} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Coordinates: .*\. Copy$/ }),
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
+    );
+    expect(toast.success).toHaveBeenCalledWith("Coordinates copied.");
+    vi.unstubAllGlobals();
   });
 });
