@@ -27,9 +27,12 @@ import {
   routeSlotDisplaceConfirm,
   type MediaItem,
   type StandaloneFile,
+  MEDIA_SIZE_CAPS,
+  wayFailureMessage,
+  WayRefusedError,
+  WayRemovalError,
   type WaySource,
 } from "@logjam/shared";
-import { messageFromError } from "../../errors/messageFromError";
 import {
   linkMediaToPlace,
   updateRoute,
@@ -50,7 +53,7 @@ import { useConfirm } from "../sidebar/panels/useConfirm";
 import { resolveMediaType } from "../media/mediaFiles";
 import {
   attachableFiles,
-  attachableRoutes,
+  ownAttachableRoutes,
   fillWaySlot,
   slotIncumbent,
 } from "./addWayModel";
@@ -109,12 +112,13 @@ export default function AddWayDialog({
     source: WaySource,
     write: () => Promise<unknown>,
     done: string,
+    preflight?: () => Promise<void>,
   ) => {
     const go = async () => {
       setBusy(true);
       setError(null);
       try {
-        await fillWaySlot({ incumbent, source, write });
+        await fillWaySlot({ incumbent, source, write, preflight });
         toast.done(done);
         onFilled();
         close();
@@ -122,7 +126,14 @@ export default function AddWayDialog({
         console.error(err);
         // The slot may have changed before the failure.
         onFilled();
-        setError(messageFromError(err, ADD_WAY.copy.failed));
+        if (err instanceof WayRemovalError) {
+          // The new way is in; only the old one stayed. Nothing left to retry
+          // here, so leave the dialog and say so.
+          toast.error(err.message);
+          close();
+        } else {
+          setError(wayFailureMessage(err));
+        }
       } finally {
         setBusy(false);
       }
@@ -150,11 +161,18 @@ export default function AddWayDialog({
           thumbnail: null,
         }),
       ADD_WAY.copy.fileDone,
+      // Before an uploaded file in the slot is deleted for this one: fail here
+      // on what can be known without writing.
+      async () => {
+        if (file.size > MEDIA_SIZE_CAPS.track)
+          throw new WayRefusedError(ADD_WAY.copy.tooLarge);
+        await file.arrayBuffer();
+      },
     );
   };
 
   const fileRow = addWayFileRow("web");
-  const drawn = attachableRoutes(routes, currentUserId, query);
+  const drawn = ownAttachableRoutes(routes, currentUserId, placeId, query);
   const recordings = attachableFiles(files, "track", placeId);
   const imports = attachableFiles(files, "import", placeId);
 

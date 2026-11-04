@@ -5,6 +5,7 @@
 //
 // A place holds one route, so every source can displace an incumbent. The
 // words for that, and for each source, are written here once.
+import { messageFromError } from "../apiErrors.js";
 import type { ConfirmCopy } from "./confirm.js";
 import { SHARE_SENTENCES } from "./share.js";
 import type { ContractPlatform, ScreenContract } from "./types.js";
@@ -54,6 +55,10 @@ export const ADD_WAY = {
     fileDone: "Route file linked to this place.",
     failed: "Couldn't set that as this place's route.",
     notRouteFile: "Pick a .gpx or .kml file.",
+    tooLarge: "That file is too big to use as a route.",
+    // The write landed and taking the old way out did not.
+    removalFailed:
+      "The new route is in place; the old one couldn't be removed.",
   },
 } as const satisfies ScreenContract;
 
@@ -138,4 +143,47 @@ export function routeSlotDisplaceConfirm(
     // Unlinked, not deleted: nothing is lost.
     tone: "filled",
   };
+}
+
+/**
+ * The new way was written and the incumbent could not be removed afterwards:
+ * the place holds both, and "couldn't set that" would be untrue.
+ */
+export class WayRemovalError extends Error {
+  constructor(readonly removalCause: unknown) {
+    super(ADD_WAY.copy.removalFailed);
+    this.name = "WayRemovalError";
+  }
+}
+
+/** A way refused before anything was written; its message is the user's. */
+export class WayRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WayRefusedError";
+  }
+}
+
+/** What to tell the user when filling the slot threw. */
+export function wayFailureMessage(err: unknown): string {
+  return err instanceof WayRemovalError || err instanceof WayRefusedError
+    ? err.message
+    : messageFromError(err, ADD_WAY.copy.failed);
+}
+
+/**
+ * Which of the user's own routes the panel offers for a place: those on no
+ * place, and this one's own (shown done), narrowed by what they typed. Moving a
+ * route off another place would revoke that place's sharees' sight of it, so
+ * those are left out, as imports and recordings are.
+ */
+export function attachableRoutes<
+  R extends { name: string; placeId: string | null },
+>(routes: readonly R[], placeId: string, query: string): R[] {
+  const needle = query.trim().toLowerCase();
+  return routes.filter(
+    (route) =>
+      (route.placeId === null || route.placeId === placeId) &&
+      (!needle || route.name.toLowerCase().includes(needle)),
+  );
 }

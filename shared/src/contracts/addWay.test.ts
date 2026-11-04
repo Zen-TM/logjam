@@ -11,7 +11,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ADD_WAY,
+  WayRefusedError,
+  WayRemovalError,
   addWayFileRow,
+  attachableRoutes,
+  wayFailureMessage,
   addWayImportSubtitle,
   routeSlotDisplaceConfirm,
 } from "./addWay.js";
@@ -95,6 +99,11 @@ describe("both clients draw the panel's words from the contract", () => {
       ADD_WAY.copy.routeDone,
       ADD_WAY.copy.linkedDone,
       ADD_WAY.copy.failed,
+      ADD_WAY.copy.fileDone,
+      ADD_WAY.copy.notRouteFile,
+      ADD_WAY.copy.noRoutes,
+      ADD_WAY.copy.noRouteMatch,
+      ADD_WAY.copy.removalFailed,
     ])
       expect(source, words).not.toContain(words);
     expect(source).toContain("ADD_WAY.copy.routeTitle");
@@ -103,5 +112,54 @@ describe("both clients draw the panel's words from the contract", () => {
   it("builds the displacement confirm in one place", () => {
     expect(slot).toContain("routeSlotDisplaceConfirm");
     expect(slot).not.toContain("will be unlinked");
+  });
+});
+
+describe("which routes the panel offers", () => {
+  // Mutation: drop the placeId test, and a route on another place is moved off
+  // it, revoking that place's sharees' sight, on either client.
+  it("leaves out a route on another place and keeps this place's own", () => {
+    const list = [
+      { name: "Free", placeId: null },
+      { name: "Here", placeId: "p" },
+      { name: "Away", placeId: "q" },
+    ];
+    expect(attachableRoutes(list, "p", "").map((r) => r.name)).toEqual([
+      "Free",
+      "Here",
+    ]);
+    expect(attachableRoutes(list, "p", " fr").map((r) => r.name)).toEqual([
+      "Free",
+    ]);
+  });
+
+  it("is what both clients ask, not a filter of their own", () => {
+    expect(read("frontend/src/components/dialogs/addWayModel.ts")).toContain(
+      "attachableRoutes(",
+    );
+    expect(read("mobile/src/places/AddWaySheet.tsx")).toContain(
+      "attachableRoutes(",
+    );
+  });
+});
+
+describe("telling a failure", () => {
+  // Mutation: say `failed` for a removal after the write, and the user is told
+  // nothing was set when the new route is already on the place.
+  it("says the new way landed when only the removal failed", () => {
+    expect(wayFailureMessage(new WayRemovalError(new Error("x")))).toBe(
+      "The new route is in place; the old one couldn't be removed.",
+    );
+    expect(wayFailureMessage(new WayRefusedError("Too big."))).toBe("Too big.");
+    expect(wayFailureMessage(new Error("x"))).toBe(ADD_WAY.copy.failed);
+  });
+
+  it("is told the same way by both clients", () => {
+    expect(read("mobile/src/places/fillRouteSlot.ts")).toContain(
+      "WayRemovalError",
+    );
+    expect(read("frontend/src/components/dialogs/addWayModel.ts")).toContain(
+      "WayRemovalError",
+    );
   });
 });

@@ -35,9 +35,10 @@ import {
   addWayImportSubtitle,
   addWayNoImports,
   addWayNoTracks,
+  attachableRoutes,
   formatDistanceM,
-  messageFromError,
   routeLengthM,
+  wayFailureMessage,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -183,7 +184,7 @@ export function AddWaySheet({
           // UNDER an open sheet, so a failure reported with this one still up
           // is a failure the user never sees.
           close();
-          onError(messageFromError(err, ADD_WAY.copy.failed));
+          onError(wayFailureMessage(err));
         })
         .finally(() => setBusy(false));
     },
@@ -227,14 +228,13 @@ export function AddWaySheet({
     });
   }, [placeId, fill, onError]);
 
-  const drawnRoutes = (routes.data ?? [])
+  const drawnRoutes = attachableRoutes(
     // A route shared with you belongs to someone else; the API refuses the
     // write, so it must not be offered.
-    .filter((route) => route.syncRole !== "shared")
-    .filter((route) => {
-      const needle = query.trim().toLowerCase();
-      return !needle || route.name.toLowerCase().includes(needle);
-    });
+    (routes.data ?? []).filter((route) => route.syncRole !== "shared"),
+    placeId,
+    query,
+  );
 
   // A verb that can only refuse is absent (DESIGN.md): an import with no
   // .gpx/.kml original, and a recording too short to make a route from, both

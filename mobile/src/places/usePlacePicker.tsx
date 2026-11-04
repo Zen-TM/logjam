@@ -19,6 +19,7 @@ import {
   messageFromError,
   SHARE_SENTENCES,
   truncationHint,
+  WayRemovalError,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -106,7 +107,11 @@ export function usePlacePicker({
         // renders UNDER an open sheet (a Modal), so a failure reported with the
         // picker still up is a failure the user never sees.
         onDone();
-        onError(messageFromError(err, failure));
+        onError(
+          err instanceof WayRemovalError
+            ? err.message
+            : messageFromError(err, failure),
+        );
       })
       .finally(() => setBusy(false));
   };
