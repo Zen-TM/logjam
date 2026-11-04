@@ -79,17 +79,29 @@ export function Toast({
   );
 }
 
-/** Mounted once, at the shell root, above the navigator: the only anchor. */
-export function ToastHost() {
-  useEffect(() => queue.mountHost(), []);
+/**
+ * Mounted once at the shell root, above the navigator, and once more inside
+ * each open modal sheet (`sheet`): a native Modal draws over everything under
+ * it, the shell's host included, so the newest host is the only one that draws
+ * (`toastStore.topHost`). Over a sheet the tab bar is covered, so the dock
+ * clears nothing of its own.
+ */
+export function ToastHost({ sheet = false }: { sheet?: boolean }) {
+  const [id] = useState(() => Symbol("host"));
+  useEffect(() => queue.mountHost(id), [id]);
   const current = useSyncExternalStore(queue.subscribe, queue.current);
+  const top = useSyncExternalStore(queue.subscribe, queue.topHost);
   const tabBar = useTabBarHeight();
   return (
     <ToastDock
-      message={current?.message ?? null}
+      message={top === id ? (current?.message ?? null) : null}
       onDismissed={queue.dismiss}
-      bottom={dockBottom(spacing(2), tabBar, current?.bottom)}
-      inset={current?.inset}
+      bottom={
+        sheet
+          ? dockBottom(spacing(2), 0)
+          : dockBottom(spacing(2), tabBar, current?.bottom)
+      }
+      inset={sheet ? undefined : current?.inset}
     />
   );
 }
