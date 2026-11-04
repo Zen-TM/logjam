@@ -158,7 +158,7 @@ export function AddWaySheet({
    * documented order, then say what happened — once, for every source.
    */
   const fill = useCallback(
-    (source: WaySource, write: () => Promise<string>) => {
+    (source: WaySource, write: (replaces?: string) => Promise<string>) => {
       setBusy(true);
       // The write's own sentence, said only once the swap has finished — a
       // toast fired before the incumbent is gone would describe a slot that
@@ -168,8 +168,8 @@ export function AddWaySheet({
         placeName,
         source,
         occupant: routeSlotOccupant(placeId, routes.data ?? [], media),
-        write: () =>
-          write().then((said) => {
+        write: (replaces) =>
+          write(replaces).then((said) => {
             message = said;
           }),
       })
@@ -221,9 +221,9 @@ export function AddWaySheet({
     // uploaded straight onto the place. One kind of file, one row, one place
     // it lives — it appears in Saved like every other import, survives being
     // replaced here, and can be put on another place later.
-    fill("file", async () => {
+    fill("file", async (replaces) => {
       const record = await importVectorSource(asset.uri, asset.name);
-      await linkStandaloneMediaLocal(record.id, placeId);
+      await linkStandaloneMediaLocal(record.id, placeId, replaces);
       return ADD_WAY.copy.fileDone;
     });
   }, [placeId, fill, onError]);
@@ -396,8 +396,11 @@ export function AddWaySheet({
                 title={row.name}
                 disabled={busy}
                 onPress={() =>
-                  fill("import", async () => {
-                    await vectorImportActions(row).attachToPlace!(placeId);
+                  fill("import", async (replaces) => {
+                    await vectorImportActions(row).attachToPlace!(
+                      placeId,
+                      replaces,
+                    );
                     return ADD_WAY.copy.linkedDone;
                   })
                 }

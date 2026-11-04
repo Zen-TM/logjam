@@ -1338,6 +1338,8 @@ type MediaUploadMeta = {
   linkedId: string;
   filename: string;
   mediaType: string;
+  /** A track this one takes over from, deleted with it at confirm. */
+  replaces?: string;
 };
 
 type PresignMediaResponse = {
@@ -1402,12 +1404,16 @@ export async function uploadMedia(params: {
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
+  /** The uploaded track on this place that this one replaces. The API swaps
+   *  them when the upload is confirmed, so a failed upload keeps the old one. */
+  replaces?: string;
 }): Promise<MediaItem> {
   const meta: MediaUploadMeta = {
     linkedType: params.linkedType,
     linkedId: params.linkedId,
     filename: params.file.name,
     mediaType: params.mediaType,
+    replaces: params.replaces,
   };
   // Declared sizes are signed into the presigned PUT's Content-Length, so the
   // uploaded bytes must match what's declared here (server caps per category).
@@ -1450,13 +1456,16 @@ export function deleteMedia(id: string): Promise<void> {
 export function linkMediaToPlace(
   id: string,
   placeId: string | null,
+  /** The uploaded track on that place this one takes over from; the API
+   *  deletes it in the same step as the move. */
+  replaces?: string,
 ): Promise<MediaItem> {
   return apiFetch<MediaItem>(`/media/${id}/link`, {
     method: "PATCH",
     body:
       placeId === null
         ? { linkedType: "none" }
-        : { linkedType: "place", linkedId: placeId },
+        : { linkedType: "place", linkedId: placeId, replaces },
   });
 }
 

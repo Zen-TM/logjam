@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   removeOccupantFirst,
+  replacedUploadId,
   routeSlotDisplaceConfirm,
   routeSlotOccupant,
   waySourceWrites,
@@ -162,6 +163,30 @@ describe("waySourceWrites", () => {
     expect(waySourceWrites("route")).toBe("route");
     expect(waySourceWrites("track")).toBe("route");
     expect(waySourceWrites("draw")).toBe("route");
+  });
+});
+
+describe("replacedUploadId", () => {
+  const upload = {
+    kind: "file",
+    media: media("m1", "c1", GPX, "up.gpx", null),
+  } as const;
+  const imported = {
+    kind: "file",
+    media: media("m2", "c1", GPX, "imp.gpx", "import"),
+  } as const;
+
+  // Mutation: name an import, and the API refuses it (it is unlinked, never
+  // deleted); skip the writes check, and a route write names a file it never
+  // replaces.
+  it("names an uploaded file only for a media write", () => {
+    expect(replacedUploadId("media", upload)).toBe("m1");
+    expect(replacedUploadId("media", imported)).toBeUndefined();
+    expect(replacedUploadId("route", upload)).toBeUndefined();
+    expect(
+      replacedUploadId("media", { kind: "route", id: "r", name: "x" }),
+    ).toBeUndefined();
+    expect(replacedUploadId("media", null)).toBeUndefined();
   });
 });
 

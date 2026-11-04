@@ -200,7 +200,7 @@ export type AssetActions = {
    * and linking connects the existing standalone media row without duplicating
    * the underlying file.
    */
-  attachToPlace?: (placeId: string) => Promise<unknown>;
+  attachToPlace?: (placeId: string, replaces?: string) => Promise<unknown>;
   /**
    * Present on a track that can be attached to a trip: "Log a trip" opens the
    * trip form on the track's day, and the track goes with the trip. The track
@@ -375,8 +375,8 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     // The import stays in Saved, keeps its identity, and survives both being
     // replaced and the place being deleted (see IMPORT_TO_PLACE_PROMISE in
     // routeSlot.ts).
-    attachToPlace: (placeId: string) =>
-      linkStandaloneMediaLocal(imported.id, placeId),
+    attachToPlace: (placeId: string, replaces?: string) =>
+      linkStandaloneMediaLocal(imported.id, placeId, replaces),
     delete: {
       confirmTitle: "Delete this import?",
       // Imports sync across devices, so deletion removes the file from the

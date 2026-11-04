@@ -110,7 +110,7 @@ export default function AddWayDialog({
   /** Confirm what the displacement costs, write, say what happened. */
   const fill = (
     source: WaySource,
-    write: () => Promise<unknown>,
+    write: (replaces?: string) => Promise<unknown>,
     done: string,
     preflight?: () => Promise<void>,
   ) => {
@@ -152,17 +152,17 @@ export default function AddWayDialog({
     }
     fill(
       "file",
-      () =>
+      (replaces) =>
         uploadMedia({
           linkedType: "place",
           linkedId: placeId,
           file,
           mediaType: resolved.mediaType,
           thumbnail: null,
+          replaces,
         }),
       ADD_WAY.copy.fileDone,
-      // Before an uploaded file in the slot is deleted for this one: fail here
-      // on what can be known without writing.
+      // Fail here on what can be known without uploading.
       async () => {
         if (file.size > MEDIA_SIZE_CAPS.track)
           throw new WayRefusedError(ADD_WAY.copy.tooLarge);
@@ -233,7 +233,8 @@ export default function AddWayDialog({
                 : () =>
                     fill(
                       source,
-                      () => linkMediaToPlace(file.id, placeId),
+                      (replaces) =>
+                        linkMediaToPlace(file.id, placeId, replaces),
                       ADD_WAY.copy.linkedDone,
                     )
             }

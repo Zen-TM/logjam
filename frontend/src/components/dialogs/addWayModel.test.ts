@@ -173,14 +173,47 @@ describe("fillWaySlot", () => {
     expect(order).toEqual(["unlink file", "write"]);
   });
 
-  it("removes an uploaded file by deleting it, never by unlinking", async () => {
+  // Mutation: delete the uploaded file before the write again (the old
+  // delete-first branch), and a rejected upload leaves the place with nothing.
+  it.each(["file", "import", "track"] as const)(
+    "hands an uploaded file to a %s write as `replaces` and deletes nothing itself",
+    async (source) => {
+      const seen = vi.fn<(replaces?: string) => Promise<void>>(async () => {});
+      await fillWaySlot({
+        incumbent: { kind: "upload", id: "old", name: "x" },
+        source,
+        write: seen,
+      });
+      expect(seen).toHaveBeenCalledWith("old");
+      expect(api.deleteMedia).not.toHaveBeenCalled();
+      expect(api.linkMediaToPlace).not.toHaveBeenCalled();
+    },
+  );
+
+  // Mutation: pass `replaces` for a route too, and the API answers 400 to a
+  // route link that has no such field.
+  it("deletes an uploaded file after a drawn route lands, never by unlinking", async () => {
+    const seen = vi.fn<(replaces?: string) => Promise<void>>(async () => {
+      order.push("write");
+    });
     await fillWaySlot({
       incumbent: { kind: "upload", id: "m", name: "x" },
-      source: "file",
-      write,
+      source: "route",
+      write: seen,
     });
-    expect(order).toEqual(["delete upload", "write"]);
+    expect(seen).toHaveBeenCalledWith(undefined);
+    expect(order).toEqual(["write", "delete upload"]);
     expect(api.linkMediaToPlace).not.toHaveBeenCalled();
+  });
+
+  it("gives an unlinked import's write no `replaces`", async () => {
+    const seen = vi.fn<(replaces?: string) => Promise<void>>(async () => {});
+    await fillWaySlot({
+      incumbent: { kind: "file", id: "m", name: "x" },
+      source: "import",
+      write: seen,
+    });
+    expect(seen).toHaveBeenCalledWith(undefined);
   });
 
   it("unlinks a displaced drawn route after a file lands", async () => {
@@ -198,9 +231,9 @@ describe("fillWaySlot failures", () => {
   const upload = { kind: "upload", id: "m", name: "x" } as const;
   const link = { kind: "file", id: "m", name: "x" } as const;
 
-  // Mutation: run the preflight after the removal, and a file that fails its
-  // checks has already cost the user the upload it was to replace.
-  it("refuses before deleting anything when the preflight fails", async () => {
+  // Mutation: run the preflight after the write, and a file that fails its
+  // checks has already been uploaded.
+  it("refuses before writing anything when the preflight fails", async () => {
     await expect(
       fillWaySlot({
         incumbent: upload,

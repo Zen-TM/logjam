@@ -463,6 +463,10 @@ export async function reclimbStandaloneMediaLocal(
 export async function linkStandaloneMediaLocal(
   mediaId: string,
   placeId: string | null,
+  /** The file uploaded onto that place that this one takes over from. The API
+   *  deletes it in the same step as the move, so a link that is refused leaves
+   *  it on the place. */
+  replaces?: string,
 ): Promise<void> {
   const db = await getSyncDb();
   await withSyncTransaction(db, async () => {
@@ -472,6 +476,14 @@ export async function linkStandaloneMediaLocal(
       placeId,
       mediaId,
     );
+    if (replaces) {
+      // Hidden, not deleted: the API removes it with the link, and the next
+      // delta either drops it or, if the link was refused, brings it back.
+      await db.runAsync(
+        "UPDATE media SET sync_state = 'pendingDelete' WHERE id = ?",
+        replaces,
+      );
+    }
     await db.runAsync(
       `DELETE FROM outbox
        WHERE entity = 'media' AND op = 'link' AND entity_id = ?
@@ -484,7 +496,7 @@ export async function linkStandaloneMediaLocal(
        VALUES (?, 'media', 'link', ?, ?, 'queued', 0, ?)`,
       mintUuid(),
       mediaId,
-      JSON.stringify({ placeId } satisfies LinkFields),
+      JSON.stringify({ placeId, replaces } satisfies LinkFields),
       new Date().toISOString(),
     );
   });
@@ -537,7 +549,7 @@ type ClimbFields = TrackClimb;
 type RenameFields = { displayName: string | null };
 
 /** Fields of a link/unlink op (`op = 'link'`). */
-type LinkFields = { placeId: string | null };
+type LinkFields = { placeId: string | null; replaces?: string };
 
 /** The first of the op's local blobs that has gone missing, or null. */
 async function firstMissingFile(fields: MediaFields): Promise<string | null> {
@@ -830,15 +842,37 @@ export async function runMediaReclimbOp(
  */
 export async function runMediaLinkOp(row: MediaOpRow): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
-  const fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
-  try {
-    await apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
+  let fields = JSON.parse(row.fields_json ?? "{}") as LinkFields;
+  const send = () =>
+    apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/link`, {
       method: "PATCH",
       body:
         fields.placeId === null
           ? { linkedType: "none" }
-          : { linkedType: "place", linkedId: fields.placeId },
+          : {
+              linkedType: "place",
+              linkedId: fields.placeId,
+              replaces: fields.replaces,
+            },
     });
+  try {
+    try {
+      await send();
+    } catch (err) {
+      // The file this one was to replace has gone (deleted on another device)
+      // and the API refuses the name. Link without it, once: the slot is free
+      // now, and parking over a convenience would leave the way unset. Guard:
+      // "links without a replaced file…" in mediaUpload.test.ts.
+      if ((err as { status?: number }).status !== 400 || !fields.replaces)
+        throw err;
+      fields = { placeId: fields.placeId };
+      await db.runAsync(
+        "UPDATE outbox SET fields_json = ? WHERE seq = ?",
+        JSON.stringify(fields),
+        row.seq,
+      );
+      await send();
+    }
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status === 404) {

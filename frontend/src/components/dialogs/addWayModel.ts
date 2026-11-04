@@ -85,13 +85,12 @@ export function attachableFiles(
  * the new way did land. A file over a file is the exception: the API refuses a
  * second track on a place (409), so the first has to go before the second is
  * written. Unlinking an import or recording destroys nothing, so going first is
- * safe. DELETING an uploaded file is destructive, and a failed write after it
- * leaves the place with no route and the upload gone: `preflight` runs before
- * anything is removed, and is where every check that can be made without
- * writing belongs (extension, size, reading the file). A rejection from the
- * write itself after that (network, the storage quota, which only the API
- * knows) is still unrecoverable; an API swap (a `replaces` id on the media
- * confirm) is the fix for that.
+ * safe.
+ *
+ * An UPLOADED file in the slot is never removed here: its id goes to `write`
+ * as `replaces`, and the API deletes it in the same step that lands the new
+ * file, so a write that fails (network, quota, validation) leaves it where it
+ * was. `preflight` still runs first for the checks that cost nothing.
  */
 export async function fillWaySlot({
   incumbent,
@@ -101,17 +100,20 @@ export async function fillWaySlot({
 }: {
   incumbent: SlotIncumbent | null;
   source: WaySource;
-  write: () => Promise<unknown>;
+  write: (replaces?: string) => Promise<unknown>;
   preflight?: () => Promise<void>;
 }): Promise<void> {
   await preflight?.();
-  const remove = incumbent ? () => removeIncumbent(incumbent) : null;
+  const fileWay =
+    source === "import" || source === "track" || source === "file";
+  const replaces =
+    fileWay && incumbent?.kind === "upload" ? incumbent.id : undefined;
+  const remove =
+    incumbent && !replaces ? () => removeIncumbent(incumbent) : null;
   const fileOverFile =
-    (source === "import" || source === "track" || source === "file") &&
-    incumbent !== null &&
-    incumbent.kind !== "route";
+    fileWay && incumbent !== null && incumbent.kind !== "route";
   if (remove && fileOverFile) await remove();
-  await write();
+  await write(replaces);
   if (remove && !fileOverFile) {
     await remove().catch((err: unknown) => {
       throw new WayRemovalError(err);

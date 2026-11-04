@@ -56,6 +56,38 @@ describe("fillRouteSlot", () => {
     expect(calls.deleteMediaLocal).not.toHaveBeenCalled();
   });
 
+  // Mutation: delete the upload before the write again (the old delete-first
+  // branch), and a refused link leaves the place with no route.
+  it("names an uploaded file as replaced by a file source instead of deleting it", async () => {
+    for (const source of ["file", "import"] as const) {
+      vi.clearAllMocks();
+      const write = vi.fn(async (_replaces?: string) => {});
+      await fillRouteSlot({
+        placeName: "P",
+        source,
+        occupant: file(null),
+        write,
+      });
+      expect(write).toHaveBeenCalledWith("m1");
+      expect(calls.deleteMediaLocal).not.toHaveBeenCalled();
+      expect(calls.linkStandaloneMediaLocal).not.toHaveBeenCalled();
+    }
+  });
+
+  // Mutation: pass the id for an import occupant too, and the API answers 400
+  // to a `replaces` that is not an upload.
+  it("names nothing when the occupant is an import, and unlinks it first", async () => {
+    const write = vi.fn(async (_replaces?: string) => {});
+    await fillRouteSlot({
+      placeName: "P",
+      source: "import",
+      occupant: file("import"),
+      write,
+    });
+    expect(write).toHaveBeenCalledWith(undefined);
+    expect(calls.linkStandaloneMediaLocal).toHaveBeenCalledWith("m1", null);
+  });
+
   // Mutation: let the removal's rejection through as it is, and the user is
   // told nothing was set when the new route is already on the place.
   it("says the new way landed when the removal after it fails", async () => {

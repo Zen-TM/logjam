@@ -126,10 +126,10 @@ export function ImportOptionsSheet({
   const placePicker = usePlacePicker({
     source: "import",
     active: attaching,
-    attach: async (placeId) => {
+    attach: async (placeId, _placeName, replaces) => {
       if (!actions?.attachToPlace)
         throw new Error("This import has no original file.");
-      await actions.attachToPlace(placeId);
+      await actions.attachToPlace(placeId, replaces);
       onInfo(ADD_WAY.copy.linkedDone);
     },
     onDone: () => {
