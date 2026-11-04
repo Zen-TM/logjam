@@ -279,7 +279,7 @@ describe("adding a route from the place page", () => {
     await waitFor(() => expect(api.linkMediaToPlace).toHaveBeenCalledTimes(2));
     expect(api.linkMediaToPlace.mock.calls).toEqual([
       ["m1", null],
-      ["m2", "p1"],
+      ["m2", "p1", undefined],
     ]);
   });
 
@@ -321,7 +321,7 @@ describe("adding a route from the place page", () => {
 
   // Mutation: route the confirm through the "kept" wording for every file, and
   // an uploaded GPX is deleted on a promise that it is kept.
-  it("says an uploaded file in the slot will be deleted, and deletes it before the upload", async () => {
+  it("says an uploaded file in the slot will be deleted, and has the upload replace it", async () => {
     api.getPlaceDetail.mockResolvedValue({
       tripLogs: [],
       media: [{ ...trackFile, origin: null }],
@@ -337,17 +337,41 @@ describe("adding a route from the place page", () => {
       target: { files: [gpxFile()] },
     });
     expect(await screen.findByText(/will be deleted/)).toBeTruthy();
-    expect(api.deleteMedia).not.toHaveBeenCalled();
+    expect(api.uploadMedia).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Replace" }));
     await waitFor(() => expect(api.uploadMedia).toHaveBeenCalledTimes(1));
-    expect(api.deleteMedia).toHaveBeenCalledWith("m1");
-    expect(api.deleteMedia.mock.invocationCallOrder[0]).toBeLessThan(
-      api.uploadMedia.mock.invocationCallOrder[0],
+    // Mutation: delete it here before the upload again, and a rejected upload
+    // leaves the place with no route and the old file gone.
+    expect(api.uploadMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ replaces: "m1" }),
     );
+    expect(api.deleteMedia).not.toHaveBeenCalled();
   });
 
-  // Mutation: move the size check after the removal, and an oversize pick
-  // costs the user the upload it was meant to replace.
+  it("keeps the uploaded file in the slot when the replacing upload fails", async () => {
+    api.getPlaceDetail.mockResolvedValue({
+      tripLogs: [],
+      media: [{ ...trackFile, origin: null }],
+    });
+    api.uploadMedia.mockRejectedValueOnce(new Error("quota"));
+    renderPanel();
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.replaceTitle }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    fireEvent.change(dialog.querySelector('input[type="file"]')!, {
+      target: { files: [gpxFile()] },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
+    expect(await within(dialog).findByText(ADD_WAY.copy.failed)).toBeTruthy();
+    expect(api.deleteMedia).not.toHaveBeenCalled();
+    expect(api.linkMediaToPlace).not.toHaveBeenCalled();
+  });
+
+  // Mutation: move the size check after the upload, and an oversize pick is
+  // sent to the API only to be refused there.
   it("refuses an oversize file before the upload in the slot is deleted", async () => {
     api.getPlaceDetail.mockResolvedValue({
       tripLogs: [],

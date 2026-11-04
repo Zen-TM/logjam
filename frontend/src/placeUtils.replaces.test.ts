@@ -22,6 +22,8 @@ const calls: { url: string; body: Record<string, unknown> }[] = [];
 
 function stubApi() {
   calls.length = 0;
+  // Fake auth, as `make dev` has it: CI has no session to load.
+  vi.stubEnv("VITE_AUTH_MODE", "fake");
   vi.stubGlobal("XMLHttpRequest", OkXhr);
   vi.stubGlobal(
     "fetch",
@@ -38,7 +40,10 @@ function stubApi() {
   );
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 const upload = (replaces?: string) =>
   uploadMedia({
