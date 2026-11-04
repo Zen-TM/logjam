@@ -88,9 +88,17 @@ describe("noteBlocks", () => {
     ["a task list", "- [x] wet\n- [ ] rope", ["- [x] wet", "- [ ] rope"]],
     ["strikethrough", "~5km to~10km", ["~5km to~10km"]],
     ["a nested list", "- a\n  - b", ["- a", "  - b"]],
+    [
+      "hand indentation",
+      "a\n  two-space indent\n      six-space indent\nb",
+      ["a", "  two-space indent", "      six-space indent", "b"],
+    ],
+    ["a tab indent", "a\n\tb", ["a", "\tb"]],
+    ["an indent after a plain list", "- a\n\nb\n  c", ["- a", "", "b", "  c"]],
   ])("shows a note with %s exactly as typed", (_name, note, lines) => {
     // Red if a dropped construct is rendered with its characters missing:
-    // the author never sees what was lost.
+    // the author never sees what was lost. Also red if losesIndent is removed:
+    // the indented lines come out flush left.
     const blocks = noteBlocks(note);
     expect(blocks).toHaveLength(1);
     const [block] = blocks;
@@ -107,6 +115,14 @@ describe("noteBlocks", () => {
     // Red if the fallback fires on a note the subset covers.
     expect(noteBlocks("**a**\n\n- b\n- c").map((b) => b.type)).toEqual([
       "paragraph",
+      "list",
+    ]);
+  });
+
+  it("keeps a list item's indented continuation as a list", () => {
+    // Red if losesIndent flags every indented line: a wrapped list item would
+    // lose its list drawing.
+    expect(noteBlocks("- a\n  more of a\n- b").map((b) => b.type)).toEqual([
       "list",
     ]);
   });
