@@ -95,6 +95,7 @@ vi.mock("expo-file-system/legacy", () => ({
 
 const {
   attachMediaLocal,
+  discardPickedFile,
   linkStandaloneMediaLocal,
   reclimbStandaloneMediaLocal,
   recolourStandaloneMediaLocal,
@@ -104,6 +105,19 @@ const {
   runMediaRecolourOp,
 } = await import("./mediaUpload");
 const { isNoResponse } = await import("../api/noResponse");
+
+describe("discardPickedFile", () => {
+  // Mutation: drop the owned-store check and a file the app keeps elsewhere
+  // (an import's original) is deleted when a form is cancelled.
+  it("deletes a picker file but never one under our own stores", async () => {
+    unlinked.length = 0;
+    await discardPickedFile("file:///data/user/0/app/cache/ImagePicker/a.jpg");
+    await discardPickedFile("file:///docs/imports/original.gpx");
+    expect(unlinked).toEqual([
+      "file:///data/user/0/app/cache/ImagePicker/a.jpg",
+    ]);
+  });
+});
 
 describe("attachMediaLocal", () => {
   beforeEach(() => {

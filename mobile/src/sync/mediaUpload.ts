@@ -94,6 +94,13 @@ function isOwnedStorePath(uri: string): boolean {
   return WIPED_DIRS.some((dir) => uri.startsWith(dir));
 }
 
+/** Drop a picked or captured file that was never attached (a cancelled form,
+ *  a removed pick). A path under one of our stores is not a picker's to drop. */
+export async function discardPickedFile(uri: string): Promise<void> {
+  if (isOwnedStorePath(uri)) return;
+  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+}
+
 function mintUuid(): string {
   const id = Crypto.randomUUID();
   if (!isUuidV4(id)) throw new Error("UUID mint produced a non-v4 id");

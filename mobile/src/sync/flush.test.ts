@@ -150,18 +150,26 @@ const db = {
   },
   getFirstAsync: (sql: string, ...args: unknown[]) => {
     if (sql.includes("entity_id = ?")) {
-      // isLinkPending's two counts: a file's own queued upload, and any
-      // non-media op still targeting the place.
-      const states = [...sql.matchAll(/'(queued|inflight|retrying)'/g)].map(
-        (match) => match[1],
-      );
-      const ownUpload = sql.includes("op = 'create'");
+      // isLinkPending's two counts, as flush.ts words them.
+      if (sql.includes("entity = 'media' AND op = 'create'")) {
+        return Promise.resolve({
+          n: rows.filter(
+            (row) =>
+              row.entity === "media" &&
+              row.op === "create" &&
+              row.entity_id === args[0] &&
+              ["queued", "inflight", "blocked"].includes(row.state),
+          ).length,
+        });
+      }
       return Promise.resolve({
         n: rows.filter(
           (row) =>
+            row.entity !== "media" &&
             row.entity_id === args[0] &&
-            (ownUpload ? row.entity === "media" : row.entity !== "media") &&
-            states.includes(row.state),
+            (["queued", "inflight", "retrying"].includes(row.state) ||
+              (row.op === "create" &&
+                ["blocked", "deadRemote"].includes(row.state))),
         ).length,
       });
     }
@@ -637,13 +645,53 @@ describe("media pass", () => {
     expect(rows).toEqual([]);
   });
 
-  it("does not wait for a place create that is parked", async () => {
+  // The photo of a place whose create is parked would presign, 404 and park as
+  // an issue of its own, N of them from one bad place. Mutation: drop the
+  // `blocked`/`deadRemote` arm from isLinkPending and the photo runs.
+  it("holds a photo while its place's create is parked", async () => {
     rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
     rejections.set("op-1", { code: 400, message: "no" });
 
     await flushOutbox();
 
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => [row.seq, row.state])).toEqual([
+      [1, "blocked"],
+      [2, "queued"],
+    ]);
+  });
+
+  it("holds a route file's link while its place's create is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+  });
+
+  it("does not hold a photo for a parked EDIT of a place that exists", async () => {
+    rows = [{ ...placeCreateRow(1, "c-2"), op: "update" }, mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
     expect(mediaRuns).toEqual([2]);
+  });
+
+  // A released link PATCHes a file the API never saw; the 404 is read as gone
+  // and the op deleted, so the way would never attach even after a Retry.
+  // Mutation: drop 'blocked' from the own-upload states.
+  it("holds a link while the upload of its file is parked", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1", state: "blocked" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
   });
 
   it("holds a route file's link until its place exists", async () => {

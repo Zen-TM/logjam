@@ -29,6 +29,10 @@ export type ContractSection<K extends string = string> = {
   /** A friend the item is shared with sees this section. The owner's page says
    *  so in the section's title, so the owner knows what they hand over. */
   shareeSees?: true;
+  /** A form's section that one client draws only while ADDING: an existing
+   *  item has it elsewhere on that client. The sentence says where, so the
+   *  edit-mode gap is on the record rather than a `null` in a renderer. */
+  onlyWhenAdding?: { on: ContractPlatform; gap: string };
 };
 
 /**
@@ -84,13 +88,22 @@ export function contractSectionsFor<
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
 
-/** A client's sections, in the contract's order. */
+/** A client's sections, in the contract's order. `mode: "edit"` leaves out
+ *  the ones that client draws only while adding (`onlyWhenAdding`). */
 export function contractSectionKeys<
   C extends { sections: readonly ContractSection[] },
   P extends ContractPlatform,
->(contract: C, platform: P): SectionKeysOn<C, P>[] {
+>(
+  contract: C,
+  platform: P,
+  mode: "add" | "edit" = "add",
+): SectionKeysOn<C, P>[] {
   return contract.sections
-    .filter((section) => section.on == null || section.on === platform)
+    .filter(
+      (section) =>
+        (section.on == null || section.on === platform) &&
+        !(mode === "edit" && section.onlyWhenAdding?.on === platform),
+    )
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
 

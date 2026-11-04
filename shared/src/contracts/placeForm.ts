@@ -28,8 +28,20 @@ export const PLACE_FORM = {
     // Both clients take photos and a route while a place is being made. Logjam
     // GPS holds the picks until the place is saved; Logjam Web uploads them
     // against a draft place.
-    { key: "photos" },
-    { key: "route" },
+    {
+      key: "photos",
+      onlyWhenAdding: {
+        on: "gps",
+        gap: "Logjam GPS edits an existing place's photos on its page, where the picker can run.",
+      },
+    },
+    {
+      key: "route",
+      onlyWhenAdding: {
+        on: "gps",
+        gap: "Logjam GPS edits an existing place's route on its page, where the picker can run.",
+      },
+    },
   ],
   copy: {
     addTitle: "Add a place",
@@ -40,9 +52,11 @@ export const PLACE_FORM = {
     saved: "Place saved.",
     // Under a photo or a way picked on a new place, until Save queues it.
     stagedHint: "Added to the place when you save.",
+    // The way button once one is picked on a place not yet saved.
+    chooseAnotherWay: "Choose another way",
     pickFailed: "Couldn't add that photo or video. Try again.",
     addedNotAll:
-      "Place added. Some photos or the route couldn't be added: add them from the place.",
+      "Place added. Some photos, videos or the route couldn't be added: add them from the place.",
     saveFailed: "Couldn't save this place.",
     fixFields: "Fix the highlighted fields.",
 

@@ -5,6 +5,7 @@ import { alertPermissionDenied } from "../permissionAlert";
 import { libraryPickerOptions } from "./attachBatch";
 import { savesCapturesToGallery } from "./galleryPreference";
 import type { PickedFile } from "../sync/mediaUpload";
+import type { Glyph } from "../ui";
 
 /**
  * Copy a just-captured file into the phone's gallery, if the user asked for
@@ -42,6 +43,26 @@ async function saveToGalleryIfWanted(uri: string): Promise<void> {
     );
   }
 }
+
+/** The sources a photo or video comes from, in the order every sheet lists
+ *  them, and the words for the sheet and the entry that opens it. One list, so
+ *  the place page's strip and the Add-a-place form cannot drift. */
+export const ADD_PHOTO_LABEL = "Add a photo or video";
+export const PHOTO_SOURCES: readonly {
+  icon: Glyph;
+  title: string;
+  source: "camera" | "library";
+  kind: "photo" | "video";
+}[] = [
+  { icon: "camera", title: "Take photo", source: "camera", kind: "photo" },
+  { icon: "video", title: "Record video", source: "camera", kind: "video" },
+  {
+    icon: "photo",
+    title: "Choose from library",
+    source: "library",
+    kind: "photo",
+  },
+];
 
 /**
  * Take or choose photos and videos, as files to attach. Empty when the user
