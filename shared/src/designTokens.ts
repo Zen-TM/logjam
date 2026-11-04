@@ -299,8 +299,8 @@ export const TEXT_ROLES = {
   caption: { size: "xs", weight: "medium" },
   /** A section heading or a stat caption: the only capitals. */
   section: { size: "xs", weight: "medium", uppercase: true },
-  /** A figure read at arm's length while moving: distance, bearing, speed,
-   *  elevation, recording time. */
+  /** A figure read at arm's length while moving: distance, bearing and
+   *  recording time. */
   instrument: { size: "xxl", weight: "bold", tabular: true },
 } as const satisfies Record<string, TextRoleSpec>;
 
