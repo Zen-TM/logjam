@@ -103,7 +103,9 @@ export function runGeoPdfRender(
           finish({
             ok: true,
             pdf: new Blob([m.pdf], { type: "application/pdf" }),
-            fileName: geoPdfFileName(input.config.elements.title),
+            fileName: geoPdfFileName(
+              input.fileName ?? input.config.elements.title,
+            ),
             timings: m.timings,
             pixels: m.pixels,
           });

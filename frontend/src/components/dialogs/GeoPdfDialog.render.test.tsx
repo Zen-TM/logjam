@@ -298,20 +298,84 @@ describe("GeoPdfDialog, drawing the area", () => {
   });
 });
 
-const typeEdges = () =>
-  fireEvent.click(screen.getByRole("radio", { name: "Type the edges" }));
-const isTypingEdges = () =>
-  screen
-    .getByRole("radio", { name: "Type the edges" })
-    .getAttribute("aria-checked") === "true";
+// The file name and the Title follow each other until both are typed in.
+// Mutations: let a field show the other's text once it has been typed in, or
+// drop the file name from the render input.
+describe("GeoPdfDialog, file name and title", () => {
+  const title = () => screen.getByRole("textbox", { name: "Map title" });
+  const file = () => screen.getByRole("textbox", { name: "File name" });
+  const type = (field: HTMLElement, value: string) =>
+    fireEvent.change(field, { target: { value } });
+  const makeIt = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await vi.waitFor(() => expect(rendered()).toHaveLength(1));
+    return rendered()[0]!;
+  };
+  const open = () => {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Title" }));
+  };
 
-// Coordinates and the edges wait behind Type the edges, which starts on the
-// map; Make it switches to it when a field inside needs fixing, or the banner
+  it("names the file after a title typed, and the title after a file name typed", async () => {
+    open();
+    type(title(), "Claustral");
+    expect((file() as HTMLInputElement).value).toBe("Claustral");
+    cleanup();
+
+    open();
+    type(file(), "Trip notes");
+    expect((title() as HTMLInputElement).value).toBe("Trip notes");
+    const input = await makeIt();
+    expect(input.fileName).toBe("Trip notes");
+    expect(input.config.elements.title).toBe("Trip notes");
+  });
+
+  it("lets the two differ once both are typed in", async () => {
+    open();
+    type(title(), "Claustral Canyon");
+    type(file(), "claustral-a4");
+    expect((title() as HTMLInputElement).value).toBe("Claustral Canyon");
+    const input = await makeIt();
+    expect(input.fileName).toBe("claustral-a4");
+    expect(input.config.elements.title).toBe("Claustral Canyon");
+  });
+
+  it("is optional: left alone, the file takes its default name", async () => {
+    render(dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }));
+    expect((file() as HTMLInputElement).value).toBe("");
+    expect((await makeIt()).fileName).toBe("");
+  });
+});
+
+// The Area row leads with its two ways to set the area. Mutation: colour
+// Pick on the map before anything is picked.
+describe("GeoPdfDialog, the Area row", () => {
+  it("lights Pick on the map once the area is picked, and has no tabs", () => {
+    const { rerender } = render(dialog({ open: true }));
+    expect(screen.queryByRole("radio", { name: "Type the edges" })).toBeNull();
+    const pick = () => screen.getByRole("button", { name: "Pick on the map" });
+    const filled = () => pick().className.includes("filled");
+    expect(filled()).toBe(false);
+    rerender(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }),
+    );
+    expect(filled()).toBe(true);
+  });
+});
+
+const coordsButton = () =>
+  screen.getByRole("button", { name: "Type the coordinates" });
+const typeEdges = () => fireEvent.click(coordsButton());
+const isTypingEdges = () =>
+  coordsButton().getAttribute("aria-expanded") === "true";
+
+// Coordinates and the edges wait behind Type the coordinates, which starts
+// folded; Make it opens it when a field inside needs fixing, or the banner
 // would point at a field nobody can see. With no map centre the seeded extent
 // is all zeros, so North is not above South. Mutation: drop
 // `setAreaView("edges")` from handleGenerate.
-describe("GeoPdfDialog, Type the edges", () => {
-  it("starts on the map and switches on Make it when an edge needs fixing", () => {
+describe("GeoPdfDialog, Type the coordinates", () => {
+  it("starts folded and opens on Make it when an edge needs fixing", () => {
     render(dialog({ open: true }));
     expect(isTypingEdges()).toBe(false);
     expect(screen.queryByRole("textbox", { name: "North" })).toBeNull();
@@ -660,7 +724,7 @@ describe("Export an area, for GIS", () => {
 
   // An edge left wrong is not committed, so the box underneath is the last
   // good one. Mutation: drop the edge-error check from handleExportArea.
-  it("sends nothing while an edge shows an error, and switches to Type the edges", () => {
+  it("sends nothing while an edge shows an error, and opens the coordinates", () => {
     vi.mocked(apiFetch).mockClear();
     render(dialog({ open: true, areaSeed: seed }));
     chooseGis("GeoTIFF");
@@ -668,7 +732,8 @@ describe("Export an area, for GIS", () => {
     const north = screen.getByRole("textbox", { name: "North" });
     fireEvent.change(north, { target: { value: "-34" } });
     fireEvent.blur(north);
-    fireEvent.click(screen.getByRole("radio", { name: "On the map" }));
+    typeEdges();
+    expect(isTypingEdges()).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     expect(screen.getByText("A field below needs fixing first.")).toBeTruthy();
@@ -854,7 +919,14 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     // The live region holds only the phase; the percent is the bar's value.
     expect(screen.getByRole("status").textContent).toBe("Drawing the map.");
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // Its own dialog, not a strip on the form.
+    const progressDialog = screen.getByRole("dialog", {
+      name: "Making your GeoPDF",
+    });
+    expect(within(progressDialog).getByRole("progressbar")).toBe(bar);
+    fireEvent.click(
+      within(progressDialog).getByRole("button", { name: "Cancel" }),
+    );
     await vi.waitFor(() => expect(signal?.aborted).toBe(true));
     await vi.waitFor(() =>
       expect(screen.queryByRole("progressbar")).toBeNull(),

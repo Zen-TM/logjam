@@ -986,14 +986,14 @@ test.describe("desktop", () => {
     await expect(
       dialog.getByRole("heading", { name: "Export an area" }),
     ).toBeVisible();
-    // Closed, the Area section is paper, scale and the button to the map.
+    // Closed, the Area section is paper, scale and the two ways to set the area.
     await expect(
       dialog.getByRole("button", { name: "Pick on the map" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Type the edges swaps the map button for the four edges.
-    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    // Type the coordinates opens the four edges under the Area row.
+    await dialog.getByRole("button", { name: "Type the coordinates" }).click();
     await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
@@ -1015,7 +1015,7 @@ test.describe("desktop", () => {
     // format's layers.
     await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
     await expect(dialog.getByRole("button", { name: "Heights" })).toBeVisible();
-    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    await dialog.getByRole("button", { name: "Type the coordinates" }).click();
     await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 

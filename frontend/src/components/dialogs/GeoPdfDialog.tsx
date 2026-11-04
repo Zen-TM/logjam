@@ -159,14 +159,6 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "enNorthing", label: "E/N" },
 ];
 
-/** How the area is set: framed on the map, or typed as four edges. */
-type AreaView = "map" | "edges";
-
-const AREA_VIEW_OPTIONS: ChipOption<AreaView>[] = [
-  { value: "map", label: "On the map" },
-  { value: "edges", label: "Type the edges" },
-];
-
 // The Overlays group's chips that are not layers of the map.
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
@@ -280,6 +272,12 @@ function GeoPdfDialog({
   // Map elements
   const [titleEnabled, setTitleEnabled] = useState(false);
   const [titleText, setTitleText] = useState("");
+  // The file name and the title follow each other until both are typed in:
+  // `touched` is whether the user has typed in one, so a field they have not
+  // touched shows the other's text.
+  const [fileText, setFileText] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [fileTouched, setFileTouched] = useState(false);
   const [compassEnabled, setCompassEnabled] = useState(true);
   const [scaleTextEnabled, setScaleTextEnabled] = useState(true);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
@@ -316,7 +314,7 @@ function GeoPdfDialog({
   // error, and whether they are the view showing.
   const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
-  const [gisAreaView, setGisAreaView] = useState<AreaView>("map");
+  const [gisCoordsOpen, setGisCoordsOpen] = useState(false);
   // Make it was pressed with something missing: a requirement shows from then
   // on, where a limit shows live (shared/DESIGN.md §11).
   const [gisTried, setGisTried] = useState(false);
@@ -357,10 +355,11 @@ function GeoPdfDialog({
   const [rawScale, setRawScale] = useState("");
   // Other was pressed: its field stays open even at a preset's number.
   const [scaleOtherPicked, setScaleOtherPicked] = useState(false);
-  // The area view starts on the map on every open; Make it switches to Type
-  // the edges when a field there needs fixing, so the field the banner points
-  // at can be seen.
-  const [areaView, setAreaView] = useState<AreaView>("map");
+  // The coordinates start folded away on every open; Make it opens them when a
+  // field there needs fixing, so the field the banner points at can be seen.
+  const [coordsOpen, setCoordsOpen] = useState(false);
+  // The area was framed on the map, not only seeded from where it was looking.
+  const [areaPicked, setAreaPicked] = useState(false);
 
   // The last settings, applied over the form once per genuine open. A field
   // the stored value lacks keeps the seed already set.
@@ -438,6 +437,9 @@ function GeoPdfDialog({
       setExtentState(DEFAULT_EXTENT_STATE);
       setTitleEnabled(false);
       setTitleText("");
+      setFileText("");
+      setTitleTouched(false);
+      setFileTouched(false);
       setCompassEnabled(true);
       setScaleTextEnabled(true);
       setScaleBarEnabled(true);
@@ -452,11 +454,12 @@ function GeoPdfDialog({
       setRawW("");
       setRawScale("");
       setScaleOtherPicked(false);
-      setAreaView("map");
+      setCoordsOpen(false);
+      setAreaPicked(false);
       setGisBox(null);
       setGisLayers(new Set(AREA_EXPORT_LAYERS));
       setGisRaw(NO_EDGES_TYPED);
-      setGisAreaView("map");
+      setGisCoordsOpen(false);
       setGisTried(false);
       setDirty(false);
     }
@@ -485,6 +488,7 @@ function GeoPdfDialog({
         west: pendingExtent.west,
         scale: pendingScale,
       }));
+      setAreaPicked(true);
       setDirty(true);
     }
   }
@@ -657,7 +661,7 @@ function GeoPdfDialog({
       gisChosenLayers.length === 0
     ) {
       setGisTried(true);
-      if (edgeError) setGisAreaView("edges");
+      if (edgeError) setGisCoordsOpen(true);
       setError("A field below needs fixing first.");
       return;
     }
@@ -756,6 +760,13 @@ function GeoPdfDialog({
     completedTopoJobs,
   ]);
 
+  const titleShown = titleTouched ? titleText : fileTouched ? fileText : "";
+  const fileShown = fileTouched
+    ? fileText
+    : titleEnabled && titleTouched
+      ? titleText
+      : "";
+
   const handleGenerate = useCallback(async () => {
     if (
       !extentValid ||
@@ -764,7 +775,7 @@ function GeoPdfDialog({
       tooLarge
     ) {
       if (!extentValid || hasExtentFieldError(extentInputErrors))
-        setAreaView("edges");
+        setCoordsOpen(true);
       setError("A field below needs fixing first.");
       return;
     }
@@ -789,7 +800,7 @@ function GeoPdfDialog({
       baseLayer: selectedBaseLayer,
       overlays: printedOverlays,
       elements: {
-        ...(titleEnabled ? { title: titleText } : {}),
+        ...(titleEnabled ? { title: titleShown } : {}),
         compass: compassEnabled,
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
@@ -820,6 +831,7 @@ function GeoPdfDialog({
           areas: completedTopoJobs.flatMap((job) => job.sharpened ?? []),
           vegetationUrls: vegetationUrlsFor(completedTopoJobs, config.extent),
           origin: location.origin,
+          fileName: fileShown,
         },
         { onProgress: setProgress, signal: controller.signal },
       );
@@ -851,7 +863,8 @@ function GeoPdfDialog({
     selectedBaseLayer,
     printedOverlays,
     titleEnabled,
-    titleText,
+    titleShown,
+    fileShown,
     compassEnabled,
     scaleTextEnabled,
     scaleBarEnabled,
@@ -917,18 +930,14 @@ function GeoPdfDialog({
         open={open}
         title="Export an area"
         size="large"
-        dismissible={!generating || progress !== null}
+        dismissible={!generating}
         onClose={guard.requestClose}
         footer={
           <>
             <Button
-              onClick={
-                progress
-                  ? () => renderAbort.current?.abort()
-                  : guard.requestClose
-              }
-              disabled={generating && !progress}
-              disabledReason="Starting the export…"
+              onClick={guard.requestClose}
+              disabled={generating}
+              disabledReason="Making it…"
             >
               Cancel
             </Button>
@@ -946,18 +955,6 @@ function GeoPdfDialog({
           <p className={classes.wideHint}>This is easier on a bigger screen.</p>
 
           {error && <ErrorBanner message={error} />}
-          {progress && (
-            <div className={classes.progress}>
-              <ProgressBar
-                label="Making your GeoPDF"
-                value={progress.fraction * 100}
-              />
-              <p className={classes.note}>
-                <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
-                {Math.round(progress.fraction * 100)}%
-              </p>
-            </div>
-          )}
 
           <section className={classes.group}>
             <SectionHeader title="Format" />
@@ -990,8 +987,8 @@ function GeoPdfDialog({
               }}
               edgeErrors={gisEdgeErrors}
               focusedFieldRef={gisFocused}
-              areaView={gisAreaView}
-              onAreaViewChange={setGisAreaView}
+              coordsOpen={gisCoordsOpen}
+              onToggleCoords={() => setGisCoordsOpen(!gisCoordsOpen)}
               onCoordModeChange={(coordMode) => {
                 // The text moves with the mode (see the GeoPDF chip).
                 if (gisArea)
@@ -1162,33 +1159,17 @@ function GeoPdfDialog({
                 )}
                 <FieldError message={scaleInputError} />
 
-                <ChipRail
-                  label="Set the area"
-                  className={classes.railCell}
-                  options={AREA_VIEW_OPTIONS}
-                  value={areaView}
-                  onChange={setAreaView}
+                <AreaRow
+                  size={sheetSizeLabel(
+                    (extentState.scale * mapMm.w) / 1000,
+                    (extentState.scale * mapMm.h) / 1000,
+                  )}
+                  picked={areaPicked}
+                  onPick={handleSelectOnMap}
+                  coordsOpen={coordsOpen}
+                  onToggleCoords={() => setCoordsOpen(!coordsOpen)}
                 />
-                {areaView === "map" ? (
-                  <SettingsRow label="Area">
-                    <div className={classes.areaCell}>
-                      <span className={classes.areaSize}>
-                        {sheetSizeLabel(
-                          (extentState.scale * mapMm.w) / 1000,
-                          (extentState.scale * mapMm.h) / 1000,
-                        )}
-                      </span>
-                      <Button
-                        icon="pickArea"
-                        compact
-                        variant="outline"
-                        onClick={handleSelectOnMap}
-                      >
-                        Pick on the map
-                      </Button>
-                    </div>
-                  </SettingsRow>
-                ) : (
+                {coordsOpen && (
                   <div className={classes.group}>
                     <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
                       <ChipRail
@@ -1388,9 +1369,10 @@ function GeoPdfDialog({
                         hideLabel
                         className={classes.elementField}
                         placeholder="Map title"
-                        value={titleText}
+                        value={titleShown}
                         onChange={(event) => {
                           setTitleText(event.target.value);
+                          setTitleTouched(true);
                           markDirty();
                         }}
                       />
@@ -1454,10 +1436,47 @@ function GeoPdfDialog({
                     )}
                   </div>
                 </div>
+                <TextField
+                  label="File name"
+                  hint={
+                    titleEnabled
+                      ? "Optional. Follows the title until you type one here."
+                      : "Optional."
+                  }
+                  placeholder="logjam-geopdf"
+                  value={fileShown}
+                  onChange={(event) => {
+                    setFileText(event.target.value);
+                    setFileTouched(true);
+                    markDirty();
+                  }}
+                />
               </section>
             </>
           )}
         </div>
+      </Dialog>
+
+      <Dialog
+        open={progress !== null}
+        title="Making your GeoPDF"
+        onClose={() => renderAbort.current?.abort()}
+        footer={
+          <Button onClick={() => renderAbort.current?.abort()}>Cancel</Button>
+        }
+      >
+        {progress && (
+          <div className={classes.progress}>
+            <ProgressBar
+              label="Making your GeoPDF"
+              value={progress.fraction * 100}
+            />
+            <p className={classes.note}>
+              <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
+              {Math.round(progress.fraction * 100)}%
+            </p>
+          </div>
+        )}
       </Dialog>
 
       <ConfirmDialog
@@ -1470,6 +1489,53 @@ function GeoPdfDialog({
         onClose={guard.cancelDiscard}
       />
     </>
+  );
+}
+
+/**
+ * The Area row: its size, then the two ways to set it. Pick on the map leaves
+ * for the map and takes the accent once the area holds a value; Type the
+ * coordinates opens the edges beneath the row.
+ */
+function AreaRow({
+  size,
+  picked,
+  onPick,
+  coordsOpen,
+  onToggleCoords,
+  canType = true,
+}: {
+  size: string;
+  picked: boolean;
+  onPick: () => void;
+  coordsOpen: boolean;
+  onToggleCoords: () => void;
+  canType?: boolean;
+}) {
+  return (
+    <SettingsRow label="Area">
+      <div className={classes.areaCell}>
+        <span className={classes.areaSize}>{size}</span>
+        <Button
+          icon="pickArea"
+          compact
+          variant={picked ? "filled" : "outline"}
+          onClick={onPick}
+        >
+          Pick on the map
+        </Button>
+        <Button
+          compact
+          variant="outline"
+          aria-expanded={coordsOpen}
+          disabled={!canType}
+          disabledReason="Pick an area first."
+          onClick={onToggleCoords}
+        >
+          Type the coordinates
+        </Button>
+      </div>
+    </SettingsRow>
   );
 }
 
@@ -1577,8 +1643,8 @@ function AreaExportFields({
   onDraft,
   edgeErrors,
   focusedFieldRef,
-  areaView,
-  onAreaViewChange,
+  coordsOpen,
+  onToggleCoords,
   onCoordModeChange,
   onAreaChange,
   onPick,
@@ -1595,8 +1661,8 @@ function AreaExportFields({
   onDraft: (which: ExtentFieldKey, value: string) => void;
   edgeErrors: ExtentFieldErrors;
   focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
-  areaView: AreaView;
-  onAreaViewChange: (view: AreaView) => void;
+  coordsOpen: boolean;
+  onToggleCoords: () => void;
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
@@ -1612,36 +1678,20 @@ function AreaExportFields({
     <>
       <section className={classes.group}>
         <SectionHeader title="Area" />
-        {area && (
-          <ChipRail
-            label="Set the area"
-            className={classes.railCell}
-            options={AREA_VIEW_OPTIONS}
-            value={areaView}
-            onChange={onAreaViewChange}
-          />
-        )}
-        {(!area || areaView === "map") && (
-          <SettingsRow label="Area">
-            <div className={classes.areaCell}>
-              <span className={classes.areaSize}>
-                {size
-                  ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
-                  : "None yet"}
-              </span>
-              <Button
-                icon="pickArea"
-                compact
-                variant="outline"
-                onClick={onPick}
-              >
-                Pick on the map
-              </Button>
-            </div>
-          </SettingsRow>
-        )}
+        <AreaRow
+          size={
+            size
+              ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
+              : "None yet"
+          }
+          picked={area !== null}
+          onPick={onPick}
+          coordsOpen={coordsOpen}
+          onToggleCoords={onToggleCoords}
+          canType={area !== null}
+        />
         <FieldError message={areaError} />
-        {area && areaView === "edges" && (
+        {area && coordsOpen && (
           <div className={classes.group}>
             <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
               <ChipRail
