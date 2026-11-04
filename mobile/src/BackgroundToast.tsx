@@ -4,7 +4,7 @@
 // started it — the Saved tab's own toast would only fire if the user happened
 // to still be standing there when the job landed (DESIGN.md, the corollary).
 //
-// Six sources, one component: a GeoPDF import, a region download run,
+// Seven sources, one component: a GeoPDF import, a region download run,
 // Settings → Map's place names download, a plan's Download for the trip, a
 // finished recording and a refused permission. A second mounted toast would let two
 // of them overlap in the same dock, and the user does not care which
@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
 import { onPlaceRegistryToast } from "./offline/placeRegistry";
+import { FINISH_ROUTE_FIRST, onRouteLeaveBlocked } from "./map/routeEditLock";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 import { onPermissionToast } from "./permissionAlert";
 import { onPlanDownloadToast } from "./plans/planDownloads";
@@ -44,6 +45,9 @@ export function BackgroundToast() {
       onPlanDownloadToast(show),
       onRecordingToast(show),
       onPermissionToast(show),
+      onRouteLeaveBlocked(() =>
+        show({ text: FINISH_ROUTE_FIRST, tone: "error" }),
+      ),
       onLogTripRequest(setLogging),
     ];
     return () => {

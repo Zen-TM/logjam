@@ -25,7 +25,7 @@ import {
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
-import { isRouteEditing } from "./map/routeEditLock";
+import { announceRouteLeaveBlocked, isRouteEditing } from "./map/routeEditLock";
 import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -111,9 +111,7 @@ import {
   tabBadgeLabel,
   tabBadgeStyle,
   TAB_BAR_TOP_PAD,
-  Toast,
   ToastHost,
-  type ToastMessage,
   useTabBarHeight,
 } from "./ui";
 
@@ -922,10 +920,6 @@ function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
 // is what keeps one tap from being followed twice. The ref is untyped across
 // nested navigators; runtime routes are the tab/screen names registered below.
 const navigationRef = createNavigationContainerRef<never>();
-// Said by the mounted shell (its toast lives there); a tap cannot arrive
-// before one is mounted, because the intake only releases it once the
-// navigator, which the shell renders, is ready.
-let onTapBlocked: () => void = () => {};
 type TapNav = { navigate: (name: string, params?: object) => void };
 
 /** The one way a destination is opened, from an Inbox row and from a tap on
@@ -947,7 +941,7 @@ function openNotificationTap(nav: TapNav, data: unknown) {
   });
   if (target.kind === "blocked") {
     // With the toast, so the tap is answered rather than silently ignored.
-    onTapBlocked();
+    announceRouteLeaveBlocked();
     return;
   }
   // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
@@ -1011,17 +1005,6 @@ export function AppShell({
   );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
-  // Said in one place because it is said from two: the tab bar and the
-  // notification-response listener are both ways off the map, and two copies of
-  // this sentence would be two chances for them to drift apart.
-  const [routeToast, setRouteToast] = useState<ToastMessage | null>(null);
-  const saveRouteFirst = useCallback(() => {
-    setRouteToast((prev) => ({
-      text: "Finish your route first. Save it, or delete the draft, before leaving the map.",
-      tone: "error",
-      nonce: (prev?.nonce ?? 0) + 1,
-    }));
-  }, []);
   const { fontScale } = useWindowDimensions();
   const tabBarHeight = useTabBarHeight();
 
@@ -1077,7 +1060,6 @@ export function AppShell({
     // This registers the token only when notification permission is ALREADY
     // granted; it never prompts (Settings → Notifications asks).
     if (!isGuest) void registerForPushNotifications();
-    onTapBlocked = saveRouteFirst;
     const subscription =
       Notifications.addNotificationResponseReceivedListener(offerTap);
     // A tap that STARTED the app is not delivered to a listener added after it:
@@ -1111,7 +1093,7 @@ export function AppShell({
       subscription.remove();
       received.remove();
     };
-  }, [isGuest, accountState, saveRouteFirst]);
+  }, [isGuest, accountState]);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
@@ -1194,7 +1176,7 @@ export function AppShell({
                 const target = event.target ?? "";
                 if (target.startsWith("Map")) return;
                 event.preventDefault();
-                saveRouteFirst();
+                announceRouteLeaveBlocked();
               },
             }}
             screenOptions={{
@@ -1728,7 +1710,6 @@ export function AppShell({
         </NavigationContainer>
         <BackgroundToast />
         <ConfirmHost />
-        <Toast message={routeToast} onDismissed={() => setRouteToast(null)} />
         <ToastHost />
       </View>
     </AccountStateProvider>
