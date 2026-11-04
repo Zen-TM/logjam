@@ -85,6 +85,14 @@ HTMLDialogElement.prototype.showModal = function () {
 HTMLDialogElement.prototype.close = function () {
   this.open = false;
 };
+// jsdom has no Popover API either; a disabled button's reason is a tooltip.
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement) {
+    this.removeAttribute("popover");
+  },
+  hidePopover() {},
+  togglePopover() {},
+});
 
 afterEach(() => {
   cleanup();

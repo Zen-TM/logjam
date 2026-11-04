@@ -449,7 +449,7 @@ function PlaceDetailPanel({
   async function handleCopyCoordinates() {
     try {
       await navigator.clipboard.writeText(coordinates);
-      toast.success(PLACE_PAGE.copy.copyPosition);
+      toast.done(PLACE_PAGE.copy.copyPosition);
     } catch (err) {
       // A browser that refuses the clipboard (no permission, no secure
       // context) must say so rather than looking like it worked.

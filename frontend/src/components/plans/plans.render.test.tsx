@@ -1215,7 +1215,7 @@ describe("a plan place's coordinates", () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
-    expect(toast.success).toHaveBeenCalledWith("Coordinates copied.");
+    expect(toast.done).toHaveBeenCalledWith("Coordinates copied.");
     vi.unstubAllGlobals();
   });
 });

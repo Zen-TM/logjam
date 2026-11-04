@@ -50,13 +50,7 @@ import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerShellTriggers } from "./shellTriggers";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import {
-  makeThemed,
-  setThemeSchemeId,
-  spacing,
-  useTheme,
-  useThemeMode,
-} from "./theme";
+import { makeThemed, setThemeSchemeId, useTheme, useThemeMode } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";

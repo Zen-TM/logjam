@@ -11,7 +11,7 @@ import type { TPlace } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
 const toast = vi.hoisted(() => ({
-  success: vi.fn(),
+  done: vi.fn(),
   error: vi.fn(),
   info: vi.fn(),
 }));
@@ -89,7 +89,12 @@ describe("the place panel's coordinates", () => {
         onBack={noop}
         onOpenTrip={noop}
         onMakeMap={noop}
-        onSharePlace={noop}
+        onExportPlace={noop}
+        onWaysChanged={noop}
+        routes={[]}
+        onFocusBounds={noop}
+        onOpenRoute={noop}
+        onRoutesChanged={noop}
         verbRequest={null}
         onVerbRequestConsumed={noop}
         customFieldDefs={[]}
@@ -108,6 +113,6 @@ describe("the place panel's coordinates", () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
     );
-    expect(toast.success).toHaveBeenCalledWith(PLACE_PAGE.copy.copyPosition);
+    expect(toast.done).toHaveBeenCalledWith(PLACE_PAGE.copy.copyPosition);
   });
 });

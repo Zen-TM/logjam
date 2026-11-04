@@ -61,7 +61,7 @@ export default function PlanPlacePage({
   async function copyPosition() {
     try {
       await navigator.clipboard.writeText(position);
-      toast.success(copy.copyPosition);
+      toast.done(copy.copyPosition);
     } catch (err) {
       console.error(err);
       toast.error(planCopy.placeCopyFailed);
