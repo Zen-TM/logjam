@@ -629,7 +629,21 @@ export async function runMediaCreateOp(
   row: MediaOpRow,
 ): Promise<MediaOpOutcome> {
   const db = await getSyncDb();
-  const fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+  let fields = JSON.parse(row.fields_json ?? "{}") as MediaFields;
+  // A trip's copy names its recording only as a convenience: if the API
+  // refuses that name (the recording is gone), the attachment goes up
+  // unlinked, once, rather than parking over a link. Guard: "uploads a trip's
+  // copy unlinked…" in mediaUpload.test.ts.
+  const unlinkOn400 = async <T>(send: () => Promise<T>): Promise<T> => {
+    try {
+      return await send();
+    } catch (err) {
+      if ((err as { status?: number }).status !== 400 || !fields.sourceMediaId)
+        throw err;
+      fields = await dropSourceLink(db, row.seq, row.entity_id, fields);
+      return send();
+    }
+  };
 
   // Phase 0: the bytes still have to be here. If the OS reclaimed the cache
   // dir — or a sibling op's discard unlinked them — `uploadAsync` throws a
@@ -652,9 +666,8 @@ export async function runMediaCreateOp(
   // Phase 1: presign. Quota (507) / track-slot (409) → park blocked.
   let presign: PresignResponse | ConfirmedMedia;
   try {
-    presign = await apiFetch<PresignResponse | ConfirmedMedia>(
-      "/media/presign",
-      {
+    presign = await unlinkOn400(() =>
+      apiFetch<PresignResponse | ConfirmedMedia>("/media/presign", {
         method: "POST",
         body: {
           mediaId: row.entity_id,
@@ -664,7 +677,7 @@ export async function runMediaCreateOp(
           sizeBytes: fields.sizeBytes,
           thumbnailSizeBytes: fields.thumbnailSizeBytes,
         },
-      },
+      }),
     );
   } catch (err) {
     const status = (err as { status?: number }).status;
@@ -724,16 +737,15 @@ export async function runMediaCreateOp(
   );
 
   // Phase 3: confirm (idempotent) → canonical row.
-  const confirmed = await apiFetch<ConfirmedMedia>(
-    `/media/${row.entity_id}/confirm`,
-    {
+  const confirmed = await unlinkOn400(() =>
+    apiFetch<ConfirmedMedia>(`/media/${row.entity_id}/confirm`, {
       method: "POST",
       body: {
         ...linkBody(fields),
         filename: fields.filename,
         mediaType: fields.mediaType,
       },
-    },
+    }),
   );
   await finalizeConfirmed(db, row.seq, row.entity_id, confirmed);
   return "done";
@@ -908,10 +920,49 @@ function messageForBlock(status: number): string {
   return "The server rejected this upload.";
 }
 
+/**
+ * Forget the recording a queued trip copy names, on its outbox op and its
+ * mirror row, and return the op's fields without it.
+ */
+async function dropSourceLink(
+  db: Awaited<ReturnType<typeof getSyncDb>>,
+  seq: number,
+  mediaId: string,
+  fields: MediaFields,
+): Promise<MediaFields> {
+  const unlinked = { ...fields };
+  delete unlinked.sourceMediaId;
+  await db.runAsync(
+    "UPDATE outbox SET fields_json = ? WHERE seq = ?",
+    JSON.stringify(unlinked),
+    seq,
+  );
+  // A queued copy's extra_json holds nothing but the link.
+  await db.runAsync("UPDATE media SET extra_json = NULL WHERE id = ?", mediaId);
+  return unlinked;
+}
+
 /** Enqueue a media delete (used by the detail UI). */
 export async function deleteMediaLocal(media: MirrorMedia): Promise<void> {
   const db = await getSyncDb();
   const cancelled = await withSyncTransaction(db, async () => {
+    // A trip copy still waiting to upload must not name this recording: the
+    // API would refuse the name once the delete lands. Guard: "forgets a
+    // deleted recording…" in mediaUpload.test.ts.
+    const queued = await db.getAllAsync<{
+      seq: number;
+      entity_id: string;
+      fields_json: string | null;
+    }>(
+      `SELECT seq, entity_id, fields_json FROM outbox
+       WHERE entity = 'media' AND op = 'create'`,
+    );
+    for (const op of queued) {
+      const fields = JSON.parse(op.fields_json ?? "{}") as MediaFields;
+      if (fields.sourceMediaId === media.id) {
+        await dropSourceLink(db, op.seq, op.entity_id, fields);
+      }
+    }
     // Media ops bypass `planOutboxEnqueue`, so its delete-cancellation does
     // not run automatically here: without explicit cancellation, deleting a
     // photo whose upload is still queued would upload the whole file

@@ -12,6 +12,8 @@ const calls: Call[] = [];
 const unlinked: string[] = [];
 /** The queued, never-attempted create op, or null when the upload already ran. */
 let pendingCreate: { seq: number } | null = null;
+/** Every media create op still in the outbox. */
+let createOps: { seq: number; entity_id: string; fields_json: string }[] = [];
 
 const db = {
   runAsync: (sql: string, ...args: unknown[]) => {
@@ -23,7 +25,7 @@ const db = {
     if (sql.includes("FROM outbox")) return Promise.resolve(pendingCreate);
     return Promise.resolve(null);
   },
-  getAllAsync: () => Promise.resolve([]),
+  getAllAsync: () => Promise.resolve(createOps),
 };
 
 vi.mock("./syncDb", () => ({
@@ -88,6 +90,48 @@ describe("deleteMediaLocal", () => {
   beforeEach(() => {
     calls.length = 0;
     unlinked.length = 0;
+    createOps = [];
+  });
+
+  // A trip's copy that is still queued names its recording; the API refuses a
+  // name it no longer has. Mutation: drop the sourceMediaId loop from
+  // deleteMediaLocal and the copy still names the deleted recording.
+  it("forgets a deleted recording on the trip copies still queued for it", async () => {
+    pendingCreate = null;
+    createOps = [
+      {
+        seq: 3,
+        entity_id: "copy-1",
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "trip-1",
+          sourceMediaId: "media-1",
+        }),
+      },
+      {
+        seq: 4,
+        entity_id: "copy-2",
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "trip-1",
+          sourceMediaId: "another-recording",
+        }),
+      },
+    ];
+    await deleteMediaLocal(media);
+    const rewritten = calls.filter((call) =>
+      call.sql.includes("UPDATE outbox SET fields_json"),
+    );
+    expect(rewritten).toHaveLength(1);
+    expect(rewritten[0].args[1]).toBe(3);
+    expect(JSON.parse(rewritten[0].args[0] as string)).toEqual({
+      linkedType: "tripLog",
+      linkedId: "trip-1",
+    });
+    const cleared = calls.filter((call) =>
+      call.sql.includes("UPDATE media SET extra_json = NULL"),
+    );
+    expect(cleared.map((call) => call.args)).toEqual([["copy-1"]]);
   });
 
   it("cancels a never-sent create instead of uploading then deleting", async () => {
