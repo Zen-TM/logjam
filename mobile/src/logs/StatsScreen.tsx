@@ -36,8 +36,6 @@ import {
   computeLogbookStats,
   contractSectionKeys,
   fieldStatDisplay,
-  formatDistanceM,
-  formatDurationMs,
   logbookActivityLabel,
   logbookRanges,
   pluralCount,
@@ -78,6 +76,7 @@ import {
   SectionHeader,
   StatGrid,
 } from "../ui";
+import { onFootStats } from "./onFootStats";
 import { tripTypeMeta } from "./tripTypeMeta";
 
 const copy = STATS.copy;
@@ -438,12 +437,12 @@ function OnFoot({
     <View style={styles.section}>
       <SectionHeader title={copy.onFoot} />
       <StatGrid
-        stats={[
-          { label: "Distance", value: formatDistanceM(distanceM) },
-          { label: "Ascent", value: `${Math.round(ascentM)} m` },
-          { label: "Time", value: formatDurationMs(durationMs) },
-          { label: "Longest", value: formatDistanceM(longest.distanceM) },
-        ]}
+        stats={onFootStats({
+          distanceM,
+          durationMs,
+          ascentM,
+          longestM: longest.distanceM,
+        })}
       />
       <Text style={styles.caption}>
         {`from ${pluralCount(inRange.length, "recording")} on this phone — recordings aren't linked to trips, so these are the same days seen another way`}
