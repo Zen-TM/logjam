@@ -87,6 +87,10 @@ export const KIT_COMPONENTS = {
     "the offline and waiting-to-sync pair in every list hero; a phone is the one that goes offline",
   ),
 
+  ToastHost: gps(
+    "the one place a toast shows; Logjam Web's ToastProvider is its host",
+  ),
+
   // — form controls —
   TextField: both,
   Field: gps(
