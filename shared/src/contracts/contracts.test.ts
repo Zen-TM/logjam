@@ -626,14 +626,13 @@ describe("the account", () => {
 });
 
 describe("the map's layers", () => {
-  it("draws Bright light and Offline on Logjam GPS only, and says why", () => {
+  it("draws Offline on Logjam GPS only, and says why", () => {
     expect(contractSectionKeys(MAP_LAYERS, "web")).toEqual([
       "basemap",
       "terrain",
       "overlays",
     ]);
     expect(contractSectionKeys(MAP_LAYERS, "gps")).toEqual([
-      "brightLight",
       "basemap",
       "terrain",
       "overlays",

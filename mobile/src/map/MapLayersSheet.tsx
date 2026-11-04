@@ -52,8 +52,6 @@ import {
 } from "@logjam/shared";
 
 import {
-  setBrightLight,
-  useBrightLight,
   spacing,
   makeStyles,
   useTheme,
@@ -79,14 +77,9 @@ import { useSlopeBands } from "./slopeBandsPreference";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
-// Bright light is a row above the tabs, not one of them.
-type Tab = Exclude<SectionKeysOn<typeof MAP_LAYERS, "gps">, "brightLight">;
+type Tab = SectionKeysOn<typeof MAP_LAYERS, "gps">;
 
 const copy = MAP_LAYERS.copy;
-
-const tabKeys = contractSectionKeys(MAP_LAYERS, "gps").filter(
-  (key): key is Tab => key !== "brightLight",
-);
 
 const TAB_LABEL: Record<Tab, string> = {
   basemap: copy.tabBasemap,
@@ -156,7 +149,6 @@ export function MapLayersSheet({
   onSaveArea,
   onOpenSaved,
   onImportFile,
-  onError,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -178,7 +170,6 @@ export function MapLayersSheet({
   onOpenSaved: (category: "region") => void;
   /** The overlays list ends with the way to add one: the existing importer. */
   onImportFile: () => void;
-  onError: (message: string) => void;
 }) {
   const styles = useStyles();
 
@@ -263,10 +254,9 @@ export function MapLayersSheet({
         ) : null
       }
     >
-      {legend ? null : <BrightLightRow onError={onError} />}
       <View style={styles.rail}>
         <ChipRail
-          options={tabKeys.map((key) => ({
+          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
             value: key,
             label: TAB_LABEL[key],
           }))}
@@ -277,23 +267,6 @@ export function MapLayersSheet({
 
       {panes[tab]()}
     </BottomSheet>
-  );
-}
-
-/** The sunlight scheme, one switch away; off returns to the dark scheme it
- *  came from. */
-function BrightLightRow({ onError }: { onError: (message: string) => void }) {
-  return (
-    <SwitchRow
-      title={copy.brightLight}
-      checked={useBrightLight()}
-      onChange={(on) => {
-        if (!setBrightLight(on))
-          onError(
-            "This phone wouldn't store that theme, so it lasts until Logjam GPS closes.",
-          );
-      }}
-    />
   );
 }
 
