@@ -117,7 +117,16 @@ describe("the shell feeds the intake", () => {
     const shell = read("src", "AppShell.tsx");
     expect(shell).toContain('Linking.addEventListener("url"');
     expect(shell).toMatch(
-      /Linking\.getInitialURL\(\)[\s\S]{0,120}offerOngoingUrl\(url, "ongoing-launch"\)/,
+      /Linking\.getInitialURL\(\)[\s\S]{0,120}offerOngoingUrl\(url, id\)/,
     );
+  });
+
+  // Mutation: go back to a process-wide flag or a constant launch id, and a tap
+  // on "Recording track" after a swipe from Recents (new activity, JS runtime
+  // still alive) is dropped as already read, and the app opens wherever.
+  it("reads the launching URL once per shell mount, not once per process", () => {
+    const shell = read("src", "AppShell.tsx");
+    expect(shell).toContain("`ongoing-launch-${launchMounts++}`");
+    expect(shell).not.toMatch(/launchUrlRead|"ongoing-launch"/);
   });
 });

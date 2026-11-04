@@ -10,8 +10,9 @@
 // the dev build (app.config.ts), and the intent names the activity directly, so
 // it needs no intent filter.
 //
-// Nothing here may carry a name or a coordinate: the URI is visible to every
-// app that can read a task's intents.
+// The URIs are fixed words, never an id, a name or a coordinate: they are
+// visible to every app that can read a task's intents. Guard: the "fixed words"
+// test in `ongoingTap.test.ts`.
 
 export const ONGOING_TAP_SCHEME = "logjam-ongoing://";
 
