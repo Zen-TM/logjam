@@ -44,17 +44,35 @@ describe("MediaUpload", () => {
   });
 
   // Mutation: replace the failure list with the toast alone, and the file's
-  // name goes missing.
-  it("keeps listing a failed file by name", async () => {
+  // name goes missing; toast the partial-failure sentence too and the failure
+  // is said twice.
+  it("toasts only what went in, and keeps listing a failed file by name", async () => {
     mocks.uploadMedia
       .mockResolvedValueOnce({ id: "m" })
       .mockRejectedValueOnce(new Error("too big"));
     const view = pick([jpg("a.jpg"), jpg("b.jpg")]);
     await waitFor(() =>
-      expect(mocks.toast.error).toHaveBeenCalledWith(
-        "1 of 2 added. 1 couldn't be added.",
-      ),
+      expect(mocks.toast.success).toHaveBeenCalledWith("1 photo added."),
     );
+    expect(mocks.toast.error).not.toHaveBeenCalled();
     expect(view.container.textContent).toContain("b.jpg");
+  });
+
+  // Mutation: toast a failure sentence when every file fails.
+  it("shows no toast when every file fails; the list says it", async () => {
+    mocks.uploadMedia.mockRejectedValue(new Error("too big"));
+    const view = pick([jpg("a.jpg"), jpg("b.jpg")]);
+    await waitFor(() => expect(view.container.textContent).toContain("b.jpg"));
+    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+  });
+
+  // Mutation: size the noun from the file's name instead of the resolved kind.
+  it("names a track through its real category", async () => {
+    mocks.uploadMedia.mockResolvedValue({ id: "m" });
+    pick([new File(["<gpx/>"], "descent.gpx", { type: "" })]);
+    await waitFor(() =>
+      expect(mocks.toast.success).toHaveBeenCalledWith("1 route added."),
+    );
   });
 });

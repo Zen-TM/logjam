@@ -23,13 +23,22 @@ function whatWasAdded(added: readonly (MediaCategory | null)[]): string {
  * and how many didn't. `added` is the kind of each file that went in. A single
  * file that fails keeps the single-file wording; nothing to say when nothing
  * was picked.
+ *
+ * `failuresListed`: the surface already lists each failure where the user is
+ * looking (Logjam Web's list under the dropzone), and a failure has one place.
+ * The line then says only what went in, and nothing when nothing did.
  */
 export function attachSummary(
   added: readonly (MediaCategory | null)[],
   failed: number,
+  { failuresListed = false }: { failuresListed?: boolean } = {},
 ): { message: string; tone: "done" | "error" } | null {
   const total = added.length + failed;
   if (total === 0) return null;
+  if (failuresListed)
+    return added.length === 0
+      ? null
+      : { message: `${whatWasAdded(added)} added.`, tone: "done" };
   if (failed === 0)
     return { message: `${whatWasAdded(added)} added.`, tone: "done" };
   if (total === 1)
