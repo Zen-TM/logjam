@@ -4709,7 +4709,9 @@ export function MapScreen({
     instrumentsBottom +
     (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
     (compassEnabled ? compassStripHeight(fontScale) + INSTRUMENT_GAP : 0) +
-    (speedElevationEnabled ? readoutChipHeight(fontScale) + INSTRUMENT_GAP : 0);
+    (speedElevationEnabled
+      ? readoutChipHeight(fontScale, scaleBarMaxWidth) + INSTRUMENT_GAP
+      : 0);
   /**
    * When the location marker has to be re-inserted to stay on top.
    *
@@ -5669,7 +5671,10 @@ export function MapScreen({
             on. It subscribes to its own value — a fix must not re-render this
             screen (mobile/CLAUDE.md, Battery). */}
         {speedElevationEnabled ? (
-          <SpeedElevationChip active={sensorsActive} />
+          <SpeedElevationChip
+            active={sensorsActive}
+            maxWidth={scaleBarMaxWidth}
+          />
         ) : null}
         <LiveCompassStrip
           enabled={compassEnabled}

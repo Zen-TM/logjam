@@ -1,7 +1,12 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { readoutChipHeight, readoutChipMinWidth } from "./readoutChipSize";
+import { CHROME_GAP, FAB_SIZE } from "./mapChrome";
+import {
+  readoutChipHeight,
+  readoutChipLayout,
+  readoutChipMinWidth,
+} from "./readoutChipSize";
 
 // The chip is a glance beside the scale bar, not a hero (mobile/DESIGN.md §3).
 // Mutation: restore `...textRole.instrument` on `value` (red: the 28 px figures
@@ -18,9 +23,7 @@ describe("SpeedElevationChip", () => {
     expect(source).toContain("...textRole.control");
   });
   it("keeps each value on one line and sizes itself from the text size", () => {
-    expect(source).toContain(
-      "minWidth: readoutChipMinWidth(fontScale, textScale)",
-    );
+    expect(source).toContain("{ minWidth: width }");
     expect(source).not.toMatch(/\bwidth: CHIP/);
     expect(
       source.match(/numberOfLines=\{1\}\s+style=\{\[styles\.value/g),
@@ -40,5 +43,32 @@ describe("the chip's size follows the text size", () => {
   it("grows its height with the system text size, not its padding", () => {
     expect(readoutChipHeight(40, 8, 1)).toBe(48);
     expect(readoutChipHeight(40, 8, 1.5)).toBe(68);
+  });
+});
+
+// Mutation: return `wanted` from `readoutChipLayout` unclamped (the chip then
+// grows to 336 at 2.0 and covers the Locate button), or report `stacked` false
+// when it was clamped (the columns are squeezed to a half-width each and the
+// figures are cut).
+describe("the chip never reaches the action column", () => {
+  // The map leaves the chip what the scale bar gets (MapScreen's
+  // `scaleBarMaxWidth`), on the narrowest and a wide phone.
+  const maxOf = (windowWidth: number) =>
+    windowWidth - FAB_SIZE - CHROME_GAP * 3 - 8;
+  it("fits its room at every system text size to the OS maximum", () => {
+    for (const windowWidth of [320, 360, 412])
+      for (const textScale of [0.85, 1, 1.15, 1.3])
+        for (const fontScale of [0.85, 1, 1.3, 1.5, 1.8, 2, 2.6])
+          expect(
+            readoutChipLayout(fontScale, textScale, maxOf(windowWidth)).width,
+          ).toBeLessThanOrEqual(maxOf(windowWidth));
+  });
+  it("stacks the readings exactly when the wanted width does not fit", () => {
+    expect(readoutChipLayout(1, 1, 260)).toEqual({
+      width: 168,
+      stacked: false,
+    });
+    expect(readoutChipLayout(2, 1, 260)).toEqual({ width: 260, stacked: true });
+    expect(readoutChipHeight(40, 8, 2, true)).toBe(168);
   });
 });
