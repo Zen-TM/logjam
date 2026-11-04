@@ -26,6 +26,8 @@ const HALF_REVEAL_FRACTION = 0.45;
 // A release this fast (px/ms) carries on as far as it would in this long, so a
 // flick down closes the sheet without crossing the screen.
 const FLING_PROJECTION_MS = 150;
+// A finger still for this long before it lifts has no fling left.
+const FLING_STALE_MS = 100;
 // A finger moves a little before it means a drag; under this a pull is a tap
 // or a scroll.
 const PULL_SLOP_PX = 6;
@@ -79,6 +81,22 @@ function scrolledWithin(target: EventTarget | null, root: HTMLElement) {
   return false;
 }
 
+/** Elements that keep their own touches: a field, a scrub chart, anything marked
+ *  `data-no-sheet-drag`. A vertical drag on them is theirs, not the sheet's. */
+function ownsTouch(target: EventTarget | null, root: HTMLElement) {
+  for (let el = target as HTMLElement | null; el; el = el.parentElement) {
+    if (
+      el.matches(
+        "input, textarea, select, [contenteditable], [data-no-sheet-drag]",
+      ) ||
+      getComputedStyle(el).touchAction === "none"
+    )
+      return true;
+    if (el === root) break;
+  }
+  return false;
+}
+
 type Drag = {
   startY: number;
   base: number;
@@ -94,8 +112,9 @@ type Drag = {
  *
  *  A user has two heights, half and full, and a way out: swiping down from half
  *  closes the sheet as its ✕ does (`onClose`). "Peek" is not one of them; it is
- *  where a map flow or a drawing tool holds the sheet (and a sheet with no
- *  `onClose` cannot be closed by a swipe), so the map is there to press.
+ *  where a map flow or a drawing tool holds the sheet (`peek`), so the map is
+ *  there to press. A sheet with no `onClose` cannot be closed by a swipe, and
+ *  its floor is the peek.
  *
  *  It is dragged by its grab bar, or by a finger pulling down anywhere on a
  *  page that is scrolled to its top, as Logjam GPS's sheets are.
@@ -108,15 +127,20 @@ function BottomSheet({
   snap,
   onSnapChange,
   onClose,
+  peek = false,
   title,
   peekReveal = PEEK_REVEAL_PX,
   children,
 }: {
   snap: SheetSnap;
   onSnapChange: (snap: SheetSnap) => void;
-  /** What a swipe down from half does. Absent for a page that must ask before
-   *  it closes (a drawing tool): its sheet bottoms out at the peek instead. */
+  /** What a swipe down past the lowest height does, and what Escape does.
+   *  Absent where closing must not happen under the user: a tool whose ✕ asks
+   *  first, or a map flow that has brought the sheet down. */
   onClose?: () => void;
+  /** The peek is a height of this sheet: a drawing tool, or a map flow, keeps it
+   *  low so the map is there to press. */
+  peek?: boolean;
   /** The page's own title: the landmark's accessible name. */
   title: string;
   /** How much of the sheet shows at "peek", in px. The default is a title; a
@@ -125,16 +149,19 @@ function BottomSheet({
   children: ReactNode;
 }) {
   const viewport = useViewport();
-  const canClose = onClose != null && snap !== "peek";
-  const stops: readonly Stop[] = canClose
-    ? ["full", "half", "closed"]
-    : ["full", "half", "peek"];
+  const hasPeek = peek || snap === "peek";
+  const stops: readonly Stop[] = [
+    "full",
+    "half",
+    ...(hasPeek ? (["peek"] as const) : []),
+    ...(onClose ? (["closed"] as const) : []),
+  ];
   // Shortest first, so the index doubles as the slider's value: taller is more.
-  const heights: readonly SheetSnap[] = canClose
-    ? ["half", "full"]
-    : ["peek", "half", "full"];
+  const heights: readonly SheetSnap[] = hasPeek
+    ? ["peek", "half", "full"]
+    : ["half", "full"];
   const floor = stopTranslate(
-    canClose ? "closed" : "peek",
+    onClose ? "closed" : hasPeek ? "peek" : "half",
     viewport,
     peekReveal,
   );
@@ -177,12 +204,22 @@ function BottomSheet({
     setDragTranslate(d.translate);
   }
 
+  /** An interruption (a call, a second finger, the notification shade) is not a
+   *  release: the sheet goes back to where it was. */
+  function cancel() {
+    drag.current = null;
+    setDragTranslate(null);
+  }
+
   function end() {
     const d = drag.current;
     drag.current = null;
     setDragTranslate(null);
     if (!d) return;
-    const projected = d.translate + d.velocity * FLING_PROJECTION_MS;
+    // A finger that stopped before it lifted is not a fling.
+    const velocity =
+      performance.now() - d.lastT > FLING_STALE_MS ? 0 : d.velocity;
+    const projected = d.translate + velocity * FLING_PROJECTION_MS;
     const stop = nearestStop(projected, stops, viewport, peekReveal);
     if (stop === "closed") onClose?.();
     else onSnapChange(stop);
@@ -192,9 +229,9 @@ function BottomSheet({
   // and not passive: a React `onTouchMove` cannot cancel the browser's own
   // scroll, which would then fight the drag.
   const contentRef = useRef<HTMLDivElement>(null);
-  const latest = useRef({ begin, move, end });
+  const latest = useRef({ begin, move, end, cancel });
   useLayoutEffect(() => {
-    latest.current = { begin, move, end };
+    latest.current = { begin, move, end, cancel };
   });
   useEffect(() => {
     const root = contentRef.current;
@@ -202,28 +239,41 @@ function BottomSheet({
     let pull: { x: number; y: number; blocked: boolean } | null = null;
     let pulling = false;
     const onStart = (event: TouchEvent) => {
+      // A second finger is a pinch or a palm, not a pull: a drag in progress
+      // goes back to where it was.
+      if (pulling) latest.current.cancel();
+      pulling = false;
       const touch = event.touches[0];
       pull =
         event.touches.length === 1
           ? {
               x: touch.clientX,
               y: touch.clientY,
-              blocked: scrolledWithin(event.target, root),
+              blocked:
+                scrolledWithin(event.target, root) ||
+                ownsTouch(event.target, root),
             }
           : null;
-      pulling = false;
     };
     const onMove = (event: TouchEvent) => {
       if (!pull) return;
       const touch = event.touches[0];
       if (!pulling) {
+        if (pull.blocked) return;
         const dy = touch.clientY - pull.y;
+        const dx = Math.abs(touch.clientX - pull.x);
+        // Once a gesture has gone up, sideways, or scrolled the page, it is the
+        // page's for good: coming back down past where it began must not start a
+        // drag the browser is already scrolling under.
         if (
-          pull.blocked ||
-          dy < PULL_SLOP_PX ||
-          dy < Math.abs(touch.clientX - pull.x)
-        )
+          dy < -PULL_SLOP_PX ||
+          (dx > PULL_SLOP_PX && dx > dy) ||
+          scrolledWithin(event.target, root)
+        ) {
+          pull.blocked = true;
           return;
+        }
+        if (dy < PULL_SLOP_PX) return;
         pulling = true;
         latest.current.begin(pull.y);
       }
@@ -235,17 +285,39 @@ function BottomSheet({
       pull = null;
       pulling = false;
     };
+    const onCancel = () => {
+      if (pulling) latest.current.cancel();
+      pull = null;
+      pulling = false;
+    };
     root.addEventListener("touchstart", onStart, { passive: true });
     root.addEventListener("touchmove", onMove, { passive: false });
     root.addEventListener("touchend", onEnd);
-    root.addEventListener("touchcancel", onEnd);
+    root.addEventListener("touchcancel", onCancel);
     return () => {
       root.removeEventListener("touchstart", onStart);
       root.removeEventListener("touchmove", onMove);
       root.removeEventListener("touchend", onEnd);
-      root.removeEventListener("touchcancel", onEnd);
+      root.removeEventListener("touchcancel", onCancel);
     };
   }, []);
+
+  // Escape closes a sheet that can close, unless something inside took it: a
+  // search clearing or a row selection (they preventDefault), a menu, a dialog.
+  // React's handler, not a native one: it runs after the handlers below it, and
+  // hears a portalled dialog's keys, which `closest` then recognises. The
+  // keyboard's other way out is the ✕ in the page.
+  function handleEscape(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Escape" || event.defaultPrevented || !onClose) return;
+    if (
+      (event.target as Element).closest(
+        'input, textarea, select, [role="menu"], [role="dialog"], [role="listbox"]',
+      )
+    )
+      return;
+    event.preventDefault();
+    onClose();
+  }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -288,8 +360,11 @@ function BottomSheet({
           onClick={() => onSnapChange("half")}
         />
       )}
+      {/* The landmark only hears the keys of the controls inside it. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <aside
         className={classes.sheet}
+        onKeyDown={handleEscape}
         aria-label={title}
         {...{ [BOTTOM_SHEET_ATTR]: "" }}
         style={{
@@ -311,7 +386,7 @@ function BottomSheet({
           onPointerDown={handlePointerDown}
           onPointerMove={(event) => move(event.clientY)}
           onPointerUp={end}
-          onPointerCancel={end}
+          onPointerCancel={cancel}
         >
           <div className={classes.grip} />
         </div>

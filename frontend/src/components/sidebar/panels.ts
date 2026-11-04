@@ -33,6 +33,11 @@ const DRAFT_PANELS: readonly PanelId[] = ["way-draw", "measure"];
 export const isDraftPanel = (panel: PanelId | null) =>
   panel !== null && DRAFT_PANELS.includes(panel);
 
+/** The drawing tools whose ✕ asks before it discards work (the route's
+ *  `cancelRouteGuard`). Narrow, a swipe must not close them around that
+ *  question; Measure keeps nothing, so its ✕, and a swipe, close at once. */
+export const closeAsksFirst = (panel: PanelId | null) => panel === "way-draw";
+
 /** How much of a drawing tool's sheet shows at its peek, in px: the grab bar,
  *  the hero (57, or 73 for a finger) and one row, which is `DraftPeek`. Taller
  *  than a title's peek, which would show the hero and none of the readout. */

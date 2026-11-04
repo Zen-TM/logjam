@@ -2099,8 +2099,7 @@ test.describe("narrow web", () => {
     await expect(tabs.getByRole("button", { name: "Map" })).toHaveCount(0);
   });
 
-  // Mutation that turns it red: stop the grab bar's release from closing, or
-  // leave a panel with no way to close.
+  // Mutation that turns it red: stop the grab bar's release from closing.
   test("swiping a panel down closes it and leaves the map to use", async ({
     page,
   }) => {
@@ -2161,10 +2160,10 @@ test.describe("narrow web", () => {
     await expect(sheet).toHaveCount(0);
   });
 
-  // A finger-sized hit area on the grab bar, whatever the pointer. Mutation that
-  // turns it red: shrink `::after` back to `--control-lg`, which is 36px for a
-  // mouse.
-  test("the grab bar can be hit 22px either side of its centre", async ({
+  // A finger-sized hit area on the grab bar, whatever the pointer, grown upward
+  // so it never covers the page. Mutation that turns it red: shrink `::after`
+  // back to `--control-lg` (36px for a mouse), or grow it down into the hero.
+  test("the grab bar is 44px to hit, and never covers the page's first button", async ({
     page,
   }) => {
     await openApp(page);
@@ -2172,17 +2171,106 @@ test.describe("narrow web", () => {
     const grip = (await page
       .getByRole("slider", { name: "Panel height" })
       .boundingBox())!;
+    const bottom = grip.y + grip.height;
     const hits = await page.evaluate(
-      ({ x, y }) =>
-        [-21, 21].map(
-          (dy) =>
-            document.elementFromPoint(x, y + dy)?.getAttribute("role") ===
+      ({ x, bottom }) =>
+        [1, 43].map(
+          (up) =>
+            document.elementFromPoint(x, bottom - up)?.getAttribute("role") ===
             "slider",
         ),
-      { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 },
+      { x: grip.x + grip.width / 2, bottom },
     );
     expect(hits).toEqual([true, true]);
+
+    // The top edge of the hero's ✕ is the page's, not the bar's.
+    const close = page
+      .locator("aside")
+      .getByRole("button", { name: "Close", exact: true });
+    await close.click({ position: { x: 10, y: 1 } });
+    await expect(page.locator("aside")).toHaveCount(0);
   });
+
+  // Every narrow page has a ✕ that closes it. Mutation that turns it red: draw a
+  // `Hero` with `onClose={null}` on any of them.
+  test("every panel closes by its Close button", async ({ page }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+    const pages: [string, boolean][] = [
+      ["Places", false],
+      ["Trips", false],
+      ["Ways", false],
+      ["Plans", false],
+      ["Inbox", true],
+      ["Friends", true],
+      ["Settings", true],
+      ["Account", true],
+    ];
+    for (const [name, inMore] of pages) {
+      if (inMore) {
+        await page.getByRole("button", { name: /^More/ }).click();
+        await page
+          .getByRole("menuitem", { name: new RegExp(`^${name}`) })
+          .click();
+      } else {
+        await page
+          .getByRole("button", { name: new RegExp(`^${name}`) })
+          .click();
+      }
+      const close = aside.getByRole("button", { name: "Close", exact: true });
+      await expect(close, name).toBeVisible({ timeout: 15_000 });
+      await close.click();
+      await expect(aside, name).toHaveCount(0);
+    }
+
+    // A page opened from a row.
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    const close = aside.getByRole("button", { name: "Close", exact: true });
+    await expect(close).toBeVisible();
+    await close.click();
+    await expect(aside).toHaveCount(0);
+  });
+
+  // The route tool's ✕ asks before it discards a line, so a swipe bottoms out at
+  // its peek; Measure keeps nothing, so a swipe closes it. Mutation that turns
+  // it red: pass `onClose` to the route tool's sheet, or withhold it from
+  // Measure's.
+  for (const tool of [
+    { name: "Measure distance", title: "Measure distance", closes: true },
+    { name: "Draw a route", title: "Draw a route", closes: false },
+  ]) {
+    test(`${tool.name}: a swipe down ${tool.closes ? "closes" : "stops at the peek"}`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+      await page.getByRole("button", { name: "Tools", exact: true }).click();
+      await page.getByRole("button", { name: tool.name }).click();
+      const sheet = page.getByRole("complementary", { name: tool.title });
+      await expect(sheet).toBeVisible();
+      const grip = (await page
+        .getByRole("slider", { name: "Panel height" })
+        .boundingBox())!;
+      const x = grip.x + grip.width / 2;
+      const y = grip.y + grip.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, 700, { steps: 6 });
+      await page.mouse.move(x, 843, { steps: 6 });
+      await page.mouse.up();
+      if (tool.closes) {
+        await expect(sheet).toHaveCount(0);
+      } else {
+        await expect(sheet).toBeVisible();
+        await expect(
+          page.getByRole("slider", { name: "Panel height" }),
+        ).toHaveAttribute("aria-valuetext", "Peek");
+      }
+    });
+  }
 
   test("the sign-in card", async ({ page }) => {
     // The other width for a screen that is ONLY ever seen before any app shell

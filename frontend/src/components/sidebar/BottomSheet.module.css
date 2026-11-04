@@ -38,7 +38,8 @@
    full-width row, and a keyboard reaching a 4px-tall pill would be a worse
    promise than reaching none. The bar is drawn 16px tall; `::after` grows what
    a finger or a pointer hits to at least 44px (`--control-lg` is 36 for a
-   pointer) without moving the content under it. */
+   pointer), upward over the map and never down over the page's own first
+   control, whose top edge must stay pressable. */
 .handle {
   position: relative;
   flex-shrink: 0;
@@ -53,7 +54,8 @@
 .handle::after {
   content: "";
   position: absolute;
-  inset: calc((100% - max(var(--control-lg), 44px)) / 2) 0; /* intrinsic: the 44px minimum target */
+  inset: auto 0 0;
+  height: max(var(--control-lg), 44px); /* intrinsic: the 44px minimum target */
 }
 
 /* The ring hugs the grip rather than the full-width bar it sits in, so focus
@@ -88,4 +90,11 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A page's own scroller keeps the scroll it overshoots: the browser's pull to
+   refresh and iOS's rubber band must not take a pull down from the top. (Only
+   scroll containers read this.) */
+.content * {
+  overscroll-behavior-y: contain;
 }
