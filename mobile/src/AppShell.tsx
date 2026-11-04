@@ -938,10 +938,17 @@ function offerTap(response: Notifications.NotificationResponse) {
 
 // The ongoing notifications' taps (`ongoingTap.ts`) join the push taps in
 // `tapIntake`, so they wait for the navigator and meet the same guards. A warm
-// tap is a `url` event, always new; the launching URL is read once per process,
-// because `getInitialURL` keeps returning it and the shell can mount again.
+// tap is a `url` event, always new. The launching URL is read once per shell
+// MOUNT, under an id of its own: `getInitialURL` keeps returning it, so one
+// mount must not follow it twice, but the foreground services outlive the
+// activity, so a tap after a swipe from Recents starts a new activity under a
+// JS runtime that is still alive, and that mount must read it afresh. The cost:
+// a shell that mounts again (sign-in change) follows the launching tap again.
+// A task relaunched from Recents after the process died replays its original
+// intent into a fresh runtime and is followed too; that is not told apart.
+// Guard: `tapIntake.test.ts`.
 let ongoingTapCount = 0;
-let launchUrlRead = false;
+let launchMounts = 0;
 function offerOngoingUrl(url: string | null | undefined, id: string) {
   const ongoing = ongoingTapKind(url);
   if (ongoing) tapIntake.offer(id, { ongoing });
@@ -1053,12 +1060,6 @@ export function AppShell({
     const ongoingSubscription = Linking.addEventListener("url", (event) =>
       offerOngoingUrl(event.url, `ongoing-${ongoingTapCount++}`),
     );
-    if (!launchUrlRead) {
-      launchUrlRead = true;
-      void Linking.getInitialURL()
-        .then((url) => offerOngoingUrl(url, "ongoing-launch"))
-        .catch(console.error);
-    }
     // A plan push while Logjam GPS is open: the list and that plan are
     // fetched again, so neither reads stale, if the connection rule allows.
     const received = Notifications.addNotificationReceivedListener(
@@ -1083,6 +1084,13 @@ export function AppShell({
       received.remove();
     };
   }, [isGuest, accountState]);
+
+  useEffect(() => {
+    const id = `ongoing-launch-${launchMounts++}`;
+    void Linking.getInitialURL()
+      .then((url) => offerOngoingUrl(url, id))
+      .catch(console.error);
+  }, []);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
