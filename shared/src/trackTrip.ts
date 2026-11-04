@@ -1,4 +1,4 @@
-import { formatTripDate, todayDateKey } from "./logbook.js";
+import { todayDateKey } from "./logbook.js";
 import { haversineMeters } from "./placeGeo.js";
 
 /**
@@ -69,49 +69,6 @@ export function gpxEnds(gpx: string): LatLng[] {
   return first && last ? [first, last] : [];
 }
 
-/** Whole days a track still counts as "to log" for. */
-export const RECORDINGS_TO_LOG_DAYS = 30;
-
-/**
- * Recordings from the last 30 days whose local day has no trip: the ones still
- * to log, newest first. Matched by DAY, not by a link from trip to track (the
- * API has none), so a trip logged on the same day for another walk hides it.
- *
- * Both sides are local days: a track's via `tripPrefillFromTrack`, a trip's
- * from its stored UTC-midnight date, which is its user's local day by
- * construction (`todayDateKey`). Comparing the track's UTC day instead drops a
- * 7:30 AEDT start into the day before (test: shared/src/trackTrip.test.ts).
- */
-export function recordingsToLog<T extends { startedAt: string | null }>(
-  tracks: readonly T[],
-  trips: readonly { date: string }[],
-  today: Date = new Date(),
-  timeZone?: string,
-): T[] {
-  const loggedDays = new Set(trips.map((trip) => trip.date.slice(0, 10)));
-  const dayOf = (instant: Date) =>
-    tripPrefillFromTrack({ startedAt: instant.toISOString() }, timeZone).date;
-  const newest = dayOf(today);
-  // 30 calendar days back from today's date, not 30 x 24 h, so a daylight
-  // saving change does not move the edge.
-  const [year, month, day] = newest.split("-").map(Number);
-  const oldest = todayDateKey(
-    new Date(year, month - 1, day - RECORDINGS_TO_LOG_DAYS),
-  );
-  return tracks
-    .filter((track) => {
-      if (!track.startedAt || Number.isNaN(Date.parse(track.startedAt)))
-        return false;
-      const trackDay = tripPrefillFromTrack(track, timeZone).date;
-      return (
-        trackDay >= oldest && trackDay <= newest && !loggedDays.has(trackDay)
-      );
-    })
-    .sort(
-      (a, b) => Date.parse(b.startedAt ?? "") - Date.parse(a.startedAt ?? ""),
-    );
-}
-
 export function tripPrefillFromTrack(
   track: {
     startedAt: string | null;
@@ -143,18 +100,4 @@ export function tripPrefillFromTrack(
         )
       : [],
   };
-}
-
-/**
- * A recording's local day as a logbook line ("Sun 15 Mar 2026"). Not
- * `formatTripDate(startedAt)`, which reads a stored UTC-midnight trip date and
- * would show a morning walk under the day before.
- */
-export function trackDayLabel(
-  startedAt: string | null,
-  timeZone?: string,
-): string {
-  return formatTripDate(
-    `${tripPrefillFromTrack({ startedAt }, timeZone).date}T00:00:00.000Z`,
-  );
 }

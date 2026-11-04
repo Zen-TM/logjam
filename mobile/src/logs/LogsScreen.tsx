@@ -41,12 +41,10 @@ import {
   hasActiveTripFilter,
   listSelectionLabel,
   monthlyTripCounts,
-  recordingsToLogLabel,
   NO_TYPE_FILTER_VALUE,
   reconcileCustomFieldFilters,
   sortTrips,
   tripDeleteConfirm,
-  trackDayLabel,
   tripDeleteDone,
   tripsEmptyKind,
   tripsEmptyState,
@@ -56,7 +54,6 @@ import {
   TRIPS_ADD_ICON,
   TRIPS_FILTER_SHEET,
   TRIPS_LIST,
-  TRIPS_TO_LOG,
   tripFilterFieldDefs,
   type CustomFieldFilter,
   type SectionKeysOn,
@@ -85,7 +82,6 @@ import {
 } from "../sync/useSyncQueries";
 import {
   ActivitySpark,
-  BottomSheet,
   Button,
   ErrorState,
   Hero,
@@ -108,8 +104,6 @@ import {
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
-import type { TripTrackSource } from "../tracks/tripTrackSource";
-import { useRecordingsToLog } from "./useRecordingsToLog";
 import { LogsFilterSheet } from "./LogsFilterSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 
@@ -151,12 +145,9 @@ export function LogsScreen({
   const [sort, setSort] = useState<TripSortKey>("newest");
   const { defs: tripDefs } = useFieldDefs("tripLog");
   const [menuTripId, setMenuTripId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<{
-    trip: MirrorTrip | null;
-    fromTrack?: TripTrackSource;
-  } | null>(null);
-  const [toLogOpen, setToLogOpen] = useState(false);
-  const toLog = useRecordingsToLog(trips);
+  const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
+    null,
+  );
   // One toast channel for every async outcome on the screen (DESIGN.md).
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
@@ -175,7 +166,6 @@ export function LogsScreen({
     setMenuTripId(null);
     setEditing(null);
     setSheetOpen(false);
-    setToLogOpen(false);
   }, []);
   useFocusEffect(closeSheets);
 
@@ -407,30 +397,6 @@ export function LogsScreen({
     guest,
   });
 
-  const toLogSections: Record<
-    SectionKeysOn<typeof TRIPS_TO_LOG, "gps">,
-    ReactNode
-  > = {
-    note: (
-      <Text style={styles.toLogHint}>
-        {toLog.length === 0 ? TRIPS_TO_LOG.copy.empty : TRIPS_TO_LOG.copy.note}
-      </Text>
-    ),
-    list: toLog.map((source) => (
-      <Row
-        key={source.key}
-        icon={TRIPS_ADD_ICON.add}
-        title={source.name}
-        subtitle={`${trackDayLabel(source.startedAt)} · ${TRIPS_TO_LOG.copy.verb}`}
-        accessibilityLabel={`${TRIPS_TO_LOG.copy.verb} from ${source.name}`}
-        onPress={() => {
-          setToLogOpen(false);
-          setEditing({ trip: null, fromTrack: source });
-        }}
-      />
-    )),
-  };
-
   // The page, section by section, in the order its contract gives. Exhaustive
   // by type: a section the contract names cannot be left out, and one it does
   // not name cannot be drawn.
@@ -476,16 +442,6 @@ export function LogsScreen({
           </View>
         }
       >
-        {toLog.length > 0 ? (
-          <Button
-            label={recordingsToLogLabel(toLog.length)}
-            icon="track"
-            variant="outlineAccent"
-            compact
-            onPress={() => setToLogOpen(true)}
-          />
-        ) : null}
-
         <ActivitySpark
           buckets={spark}
           caption={`${recentCount} in the last 12 months · ${placeCount} ${
@@ -663,24 +619,11 @@ export function LogsScreen({
         online={online}
         visible={editing !== null}
         trip={editing?.trip ?? null}
-        fromTrack={editing?.fromTrack ?? null}
         places={placesQuery.data ?? []}
         existingTypes={distinctTypes}
         onClose={() => setEditing(null)}
         onSaved={info}
       />
-
-      <BottomSheet
-        visible={toLogOpen}
-        onClose={() => setToLogOpen(false)}
-        title={TRIPS_TO_LOG.title}
-      >
-        <View style={styles.toLogBody}>
-          {contractSectionKeys(TRIPS_TO_LOG, "gps").map((key) => (
-            <Fragment key={key}>{toLogSections[key]}</Fragment>
-          ))}
-        </View>
-      </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -808,8 +751,6 @@ function EmptyPanel({
 
 const useStyles = makeStyles((theme, textRole) => ({
   screen: { flex: 1, backgroundColor: theme.page },
-  toLogBody: { gap: spacing(1) },
-  toLogHint: { ...textRole.caption, color: theme.textMuted },
   heroActions: {
     flexDirection: "row",
     alignItems: "center",
