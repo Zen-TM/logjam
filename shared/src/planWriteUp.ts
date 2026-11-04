@@ -53,17 +53,30 @@ export function boldHeadings(blocks: MessageBlock[]): MessageBlock[] {
 // `dropped` doesn't report; on its own it is a rule, which it does.
 const UNDERLINE = /^ {0,3}(-+|=+)[ \t]*$/m;
 
+// Markdown drops a line's leading spaces, so a hand-indented line would come
+// out flush left. Only a list item's continuation may be indented: its
+// indent is the list's own.
+function losesIndent(notes: string): boolean {
+  let inItem = false;
+  return notes.split("\n").some((line) => {
+    if (!line.trim()) return false;
+    if (/^[ \t]/.test(line)) return !inItem;
+    inItem = /^(?:[-*+]|\d+[.)])[ \t]/.test(line);
+    return false;
+  });
+}
+
 /**
  * The blocks to draw for a place's or a trip's free-text notes: the same
  * Markdown subset, every line break kept. A note is shown as typed, so one
  * that uses anything the subset cannot draw (a rule, a quote, a table, a task
- * list, a heading underline...) is drawn whole as plain text instead of with
+ * list, a heading underline, a hand-indented line...) is drawn whole as plain text instead of with
  * characters missing. Nothing in the tree is markup, and a link is https, http
  * or mailto only. Guard: planWriteUp.test.ts ("noteBlocks").
  */
 export function noteBlocks(notes: string): MessageBlock[] {
   const { blocks, dropped } = parseMessageMarkdown(notes, { breaks: true });
-  if (dropped.length === 0 && !UNDERLINE.test(notes))
+  if (dropped.length === 0 && !UNDERLINE.test(notes) && !losesIndent(notes))
     return boldHeadings(blocks);
   return [
     {
