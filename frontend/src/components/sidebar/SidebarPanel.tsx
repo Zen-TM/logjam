@@ -518,6 +518,8 @@ function SidebarPanel({
       <BottomSheet
         snap={sheetSnap}
         onSnapChange={setSheetSnap}
+        // A drawing tool closes through its own ✕, which asks first.
+        onClose={isDraftPanel(activePanel) ? undefined : onClose}
         title={title}
         peekReveal={
           isDraftPanel(activePanel) ? DRAFT_PEEK_REVEAL_PX : undefined

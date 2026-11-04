@@ -44,15 +44,16 @@ describe("partitionNavItems", () => {
     expect(railItems[spacerAfterIndex! + 1].id).toBe(PERSONAL_ITEMS[0].id);
   });
 
-  it("gives narrow web Logjam GPS's tabs: Places, Trips, Ways between Map and More", () => {
+  // Mutation: put a Map entry back in `NAV`'s tabs, or drop Plans from them.
+  it("gives narrow web Places, Trips, Ways and Plans before More, and no Map", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(true);
-    expect(ids(railItems)).toEqual(["places", "logs", "ways"]);
+    expect(ids(railItems)).toEqual(["places", "logs", "ways", "plans"]);
     expect(spacerAfterIndex).toBeNull();
   });
 
   it("fits five 72px tabs in a 390px viewport", () => {
     const { railItems } = partitionNavItems(true);
-    expect((railItems.length + 2) * 72).toBeLessThanOrEqual(390); // + Map and More
+    expect((railItems.length + 1) * 72).toBeLessThanOrEqual(390); // + More
   });
 
   it("partitions narrow items exhaustively and without overlap", () => {

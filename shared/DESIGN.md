@@ -125,7 +125,9 @@ renumber.
   out to its parent, and the title names the step. Escape, the back gesture
   and × each undo exactly one layer.
 - **A page fills a phone**; it is left by its back arrow or the tab bar. A
-  sheet over the map is for choosing and acting, never for a page.
+  sheet over the map is for choosing and acting, never for a page. (Logjam Web
+  on a phone draws its pages as sheets over the map, so it has no Map tab: a
+  page closes by its ×, or by swiping it down.)
 - **Opening a place, a way or a topo fits the map to it**, in the one
   function that opens it, never per caller. So where the map sits beside the
   page (Logjam Web) there is no "Show on map" verb; where the page covers the

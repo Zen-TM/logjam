@@ -1427,8 +1427,7 @@ test.describe("narrow web", () => {
 
   test("Plans at phone width: the list and a plan's page", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("button", { name: /^More/ }).click();
-    await page.getByRole("menuitem", { name: /^Plans/ }).click();
+    await page.getByRole("button", { name: /^Plans/ }).click();
     await expect(page.getByRole("radio", { name: /^Upcoming/ })).toBeVisible({
       timeout: 15_000,
     });
@@ -1649,9 +1648,113 @@ test.describe("narrow web", () => {
     await page.keyboard.press("ArrowUp");
     await expect(height).toHaveAttribute("aria-valuetext", "Full height");
 
+    // And it has no peek: half is the lowest the keys go.
     await page.keyboard.press("Home");
-    await expect(height).toHaveAttribute("aria-valuetext", "Peek");
-    await expect.poll(topAt).toBeGreaterThan(half);
+    await expect(height).toHaveAttribute("aria-valuetext", "Half height");
+    await expect.poll(topAt).toBe(half);
+  });
+
+  // Narrow web has no Map tab: a panel is a sheet over the map, and closing it
+  // is how a user gets back. Mutation that turns it red: put the Map button back
+  // in NavRail, or drop Plans from the narrow tabs in NAV.
+  test("the tab bar is Places, Trips, Ways, Plans and More, with no Map", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const tabs = page.getByRole("navigation", { name: "Pages" });
+    await expect(tabs.getByRole("button")).toHaveText([
+      "Places",
+      "Trips",
+      "Ways",
+      "Plans",
+      "More",
+    ]);
+    await expect(tabs.getByRole("button", { name: "Map" })).toHaveCount(0);
+  });
+
+  // Mutation that turns it red: stop the grab bar's release from closing, or
+  // leave a panel with no way to close.
+  test("swiping a panel down closes it and leaves the map to use", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await expect(sheet).toBeVisible();
+
+    const grip = (await page
+      .getByRole("slider", { name: "Panel height" })
+      .boundingBox())!;
+    const x = grip.x + grip.width / 2;
+    const y = grip.y + grip.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 150, { steps: 6 });
+    await page.mouse.move(x, 844, { steps: 6 });
+    await page.mouse.up();
+
+    await expect(sheet).toHaveCount(0);
+    // The map answers: its zoom control works and nothing covers the canvas.
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    const canvas = (await page
+      .locator("canvas.maplibregl-canvas")
+      .boundingBox())!;
+    const covered = await page.evaluate(
+      ({ cx, cy }) =>
+        !document.elementFromPoint(cx, cy)?.closest(".maplibregl-map"),
+      { cx: canvas.x + canvas.width / 2, cy: canvas.y + canvas.height / 2 },
+    );
+    expect(covered).toBe(false);
+  });
+
+  // The pull is a touch on the list, not the grab bar. Mutation that turns it
+  // red: remove the content's touch listeners from BottomSheet.tsx.
+  test("pulling down on a list scrolled to its top closes the panel", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    const row = sheet.locator("[data-place-id]").first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+
+    const at = (await row.boundingBox())!;
+    const x = at.x + at.width / 2;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: string, y?: number) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: y === undefined ? [] : [{ x, y }],
+      });
+    await touch("touchStart", at.y);
+    for (let y = at.y; y < 840; y += 40) await touch("touchMove", y);
+    await touch("touchEnd");
+
+    await expect(sheet).toHaveCount(0);
+  });
+
+  // A finger-sized hit area on the grab bar, whatever the pointer. Mutation that
+  // turns it red: shrink `::after` back to `--control-lg`, which is 36px for a
+  // mouse.
+  test("the grab bar can be hit 22px either side of its centre", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const grip = (await page
+      .getByRole("slider", { name: "Panel height" })
+      .boundingBox())!;
+    const hits = await page.evaluate(
+      ({ x, y }) =>
+        [-21, 21].map(
+          (dy) =>
+            document.elementFromPoint(x, y + dy)?.getAttribute("role") ===
+            "slider",
+        ),
+      { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 },
+    );
+    expect(hits).toEqual([true, true]);
   });
 
   test("the sign-in card", async ({ page }) => {
