@@ -84,9 +84,11 @@ export function snapTarget(input: { y: number; distance: number }): number {
  * The extra room a list needs at its end so it can always scroll the whole
  * `distance`: the list's rows sit under a floating header, so a list that
  * overflows its view by less than `distance` would otherwise end with the
- * header half-folded and nowhere to go. `contentHeight` includes the `extra`
- * already added. A list that does not overflow at all gets none (it does not
- * scroll, and its hero stays full).
+ * header half-folded and nowhere to go. `contentHeight` is the list's own,
+ * without the room this returns: reading a height that includes it makes the
+ * answer depend on the answer, and a list near the threshold flips between
+ * room and none for as long as it lays out. A list that does not overflow at
+ * all gets none (it does not scroll, and its hero stays full).
  *
  * Guard: heroCollapse.test.ts.
  */
@@ -94,10 +96,9 @@ export function roomBelow(input: {
   contentHeight: number;
   viewHeight: number;
   distance: number;
-  extra: number;
 }): number {
-  const { contentHeight, viewHeight, distance, extra } = input;
-  const overflow = contentHeight - extra - viewHeight;
+  const { contentHeight, viewHeight, distance } = input;
+  const overflow = contentHeight - viewHeight;
   if (!(distance > 0) || !(overflow > 0.5)) return 0;
   return Math.max(0, distance - overflow);
 }

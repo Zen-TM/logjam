@@ -135,7 +135,6 @@ describe("roomBelow", () => {
       contentHeight: view + overflow,
       viewHeight: view,
       distance: DISTANCE,
-      extra: 0,
     });
     expect(extra).toBe(DISTANCE - overflow);
     // With the room added, the range is exactly the distance, so a list at its
@@ -143,17 +142,23 @@ describe("roomBelow", () => {
     const range = view + overflow + extra - view;
     expect(snapTarget({ y: range, distance: DISTANCE })).toBe(range);
   });
-  // Mutation: read `contentHeight` without taking `extra` off, and the room it
-  // gave is counted as the list's own and the answer drifts to 0.
-  it("is stable once the room is in the content", () => {
-    expect(
-      roomBelow({
-        contentHeight: view + DISTANCE,
-        viewHeight: view,
-        distance: DISTANCE,
-        extra: DISTANCE - 60,
-      }),
-    ).toBe(DISTANCE - 60);
+  // Mutation: make the answer depend on the room already added (the old
+  // `contentHeight - extra` read, with `extra` the latest answer and the height
+  // a layout behind): a list that overflows by 60 then asks for room, reads its
+  // own padded height as overflow, drops the room, and asks again for as long
+  // as it lays out.
+  it("settles: the answer for a list's own height is the same on every read", () => {
+    const own = view + 60;
+    const first = roomBelow({
+      contentHeight: own,
+      viewHeight: view,
+      distance: DISTANCE,
+    });
+    for (let read = 0; read < 5; read++)
+      expect(
+        roomBelow({ contentHeight: own, viewHeight: view, distance: DISTANCE }),
+      ).toBe(first);
+    expect(first).toBe(DISTANCE - 60);
   });
   // Mutation: drop the `overflow > 0.5` guard, and a list that fits scrolls.
   it("gives a list that fits, or a long one, nothing", () => {
@@ -163,7 +168,6 @@ describe("roomBelow", () => {
           contentHeight,
           viewHeight: view,
           distance: DISTANCE,
-          extra: 0,
         }),
       ).toBe(0);
     expect(
@@ -171,7 +175,6 @@ describe("roomBelow", () => {
         contentHeight: 900,
         viewHeight: view,
         distance: 0,
-        extra: 0,
       }),
     ).toBe(0);
   });
