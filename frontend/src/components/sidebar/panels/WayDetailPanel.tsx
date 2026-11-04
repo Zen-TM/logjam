@@ -289,7 +289,7 @@ export default function WayDetailPanel({
         // are one fact about the line, and side by side is what makes them
         // comparable.
         {
-          label: "Distance",
+          label: PAIRED_STAT_LABELS.distance,
           value: formatDistanceM(routeLengthM(route.points)),
           span: true,
         },
@@ -306,7 +306,7 @@ export default function WayDetailPanel({
         ...(way.distanceM != null
           ? [
               {
-                label: "Distance",
+                label: PAIRED_STAT_LABELS.distance,
                 value: formatDistanceM(way.distanceM),
                 span: true,
               },

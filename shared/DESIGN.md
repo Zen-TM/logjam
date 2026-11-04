@@ -92,9 +92,9 @@ renumber.
   own.
 - **A title does not repeat a count the screen already shows.**
 - **A pair is drawn on one line** (ascent and descent, highest and lowest,
-  level and flow, time and distance); among more figures, the ones that match up still share a
-  line, and a figure with no partner takes the whole line. Pairs:
-  `statPairs.ts`.
+  level and flow, time and distance); among more figures, the ones that match
+  up still share a line, and a figure with no partner takes the whole line.
+  Pairs: `statPairs.ts`.
 
 ## 3. Getting around and getting out
 

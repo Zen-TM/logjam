@@ -120,7 +120,7 @@ export function RouteDrawPanel({
 
   const stats: Stat[] = [
     {
-      label: "Distance",
+      label: PAIRED_STAT_LABELS.distance,
       value: hasLine ? formatDistanceM(routeLengthM(points)) : "—",
       // The headline figure while drawing, with the pair beneath it.
       span: true,
