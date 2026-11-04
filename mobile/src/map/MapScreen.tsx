@@ -287,7 +287,7 @@ import {
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
 import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
-import { MapHoldSheet } from "./MapHoldSheet";
+import { MapHoldSheet, type MapHoldRun } from "./MapHoldSheet";
 import { MapPointSheet, type MapPoint, type OwnFix } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
@@ -4217,6 +4217,45 @@ export function MapScreen({
     [addToolPoint, handleCancelRouteDraw, measureDraft, routeDraft],
   );
 
+  const parkPlacePoint = useCallback((point: MapPoint) => {
+    pendingPlacePoint.current = point;
+  }, []);
+  const openParkedPlaceForm = useCallback(() => {
+    const point = pendingPlacePoint.current;
+    if (!point) return;
+    pendingPlacePoint.current = null;
+    setAddPlaceAt(point);
+  }, []);
+  /**
+   * What each place verb does at a point, for the press-and-hold sheet and the
+   * tap sheet's Options alike: one list of flows, so a verb cannot do one thing
+   * from one and another from the other. `dismiss` closes the sheet it was
+   * chosen from. A `Record` over the hold's ids: `tsc` refuses a verb with no
+   * flow.
+   */
+  const verbRun = (dismiss: () => void): MapHoldRun => ({
+    navigate: (point) => {
+      dismiss();
+      navigateToPoint(point);
+    },
+    dropMarker: (point) => {
+      dismiss();
+      dropMarkerAt(point);
+    },
+    drawRoute: (point) => {
+      dismiss();
+      startRouteDrawAt(point);
+    },
+    measure: (point) => {
+      dismiss();
+      startMeasureAt(point);
+    },
+    addPlace: (point) => {
+      parkPlacePoint(point);
+      dismiss();
+    },
+  });
+
   /**
    * Press-and-hold. `ask` opens the sheet that has always been here; the rest
    * are the same four outcomes without it, for people who only ever pick one
@@ -5773,8 +5812,8 @@ export function MapScreen({
         land={tappedLand}
         userCoord={userCoord}
         onClose={() => setTappedPoint(null)}
-        onNavigate={navigateToPoint}
-        onDropMarker={dropMarkerAt}
+        onClosed={openParkedPlaceForm}
+        run={verbRun(() => setTappedPoint(null))}
         savedHereOnly={savedHereOnly}
         onInfo={(text) => notify(text, "info")}
       />
@@ -5788,34 +5827,8 @@ export function MapScreen({
         point={longPressPoint}
         savedHereOnly={savedHereOnly}
         onClose={() => setLongPressPoint(null)}
-        onClosed={() => {
-          const point = pendingPlacePoint.current;
-          if (!point) return;
-          pendingPlacePoint.current = null;
-          setAddPlaceAt(point);
-        }}
-        run={{
-          navigate: (point) => {
-            setLongPressPoint(null);
-            navigateToPoint(point);
-          },
-          dropMarker: (point) => {
-            setLongPressPoint(null);
-            dropMarkerAt(point);
-          },
-          drawRoute: (point) => {
-            setLongPressPoint(null);
-            startRouteDrawAt(point);
-          },
-          measure: (point) => {
-            setLongPressPoint(null);
-            startMeasureAt(point);
-          },
-          addPlace: (point) => {
-            pendingPlacePoint.current = point;
-            setLongPressPoint(null);
-          },
-        }}
+        onClosed={openParkedPlaceForm}
+        run={verbRun(() => setLongPressPoint(null))}
       />
 
       {/* ONE form for both modes (DESIGN.md): a long-press drops a new

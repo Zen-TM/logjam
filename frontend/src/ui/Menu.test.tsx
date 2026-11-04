@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Menu } from "./Menu";
+import { Menu, Popover } from "./Menu";
 
 // jsdom has no Popover API, and a closed `popover` counts as unrendered
 // there, so showing one drops the attribute.
@@ -85,5 +85,65 @@ describe("a press outside a floating element", () => {
     dialog.remove();
     fireEvent.pointerDown(document.body);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("a Popover that swallows the press that dismisses it", () => {
+  function open(swallow: boolean) {
+    const onClose = vi.fn();
+    const heard = vi.fn();
+    document.body.addEventListener("click", heard);
+    const anchor = document.createElement("div");
+    document.body.appendChild(anchor);
+    render(
+      <Popover
+        open
+        onClose={onClose}
+        anchorRef={{ current: anchor }}
+        label="Panel"
+        dismissOnOutsidePress
+        swallowOutsidePress={swallow}
+      >
+        <p>Inside</p>
+      </Popover>,
+    );
+    return {
+      onClose,
+      heard,
+      done: () => document.body.removeEventListener("click", heard),
+    };
+  }
+
+  // Mutation: stop passing `swallow` to useOutsidePress, and the click that
+  // closes the panel also reaches the map under it and asks about a new point.
+  it("closes on the press and lets the click that follows nowhere else", () => {
+    const { onClose, heard, done } = open(true);
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(heard).not.toHaveBeenCalled();
+    // Only that one click: a later, separate press is the page's again.
+    fireEvent.click(document.body);
+    expect(heard).toHaveBeenCalledTimes(1);
+    done();
+  });
+
+  it("does not eat a click after a press that never clicked (a drag)", () => {
+    const { heard, done } = open(true);
+    fireEvent.pointerDown(document.body);
+    // The next press lands inside the panel (the mock keeps it open).
+    fireEvent.pointerDown(screen.getByText("Inside"));
+    fireEvent.click(document.body);
+    expect(heard).toHaveBeenCalledTimes(1);
+    done();
+  });
+
+  it("leaves the click alone unless asked", () => {
+    const { onClose, heard, done } = open(false);
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(heard).toHaveBeenCalledTimes(1);
+    done();
   });
 });

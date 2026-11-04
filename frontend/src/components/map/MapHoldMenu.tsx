@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
 import {
   MAP_POINT,
@@ -8,7 +7,8 @@ import {
   type MapPointCoord,
 } from "@logjam/shared";
 import { useIsMobile } from "../../useIsMobile";
-import { IconTile, MapPointDot, Popover, Row } from "../../ui";
+import { IconTile, Popover, Row } from "../../ui";
+import { PointAnchor } from "./PointAnchor";
 import classes from "./MapPointPopover.module.css";
 
 /**
@@ -33,18 +33,6 @@ export default function MapHoldMenu({
   const [anchorEl] = useState(() => document.createElement("div"));
   const anchorRef = useRef<HTMLElement | null>(anchorEl);
 
-  useEffect(() => {
-    const marker = new maplibregl.Marker({ element: anchorEl })
-      .setLngLat([point.longitude, point.latitude])
-      .addTo(map);
-    // Moving the map is looking away: the point would be left beside nothing.
-    map.on("movestart", onClose);
-    return () => {
-      map.off("movestart", onClose);
-      marker.remove();
-    };
-  }, [map, point, anchorEl, onClose]);
-
   const close = () => {
     onClose();
     map.getCanvas().focus();
@@ -52,7 +40,12 @@ export default function MapHoldMenu({
 
   return (
     <>
-      {createPortal(<MapPointDot />, anchorEl)}
+      <PointAnchor
+        map={map}
+        point={point}
+        element={anchorEl}
+        onClose={onClose}
+      />
       <Popover
         open
         onClose={close}
@@ -61,6 +54,8 @@ export default function MapHoldMenu({
         placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
+        swallowOutsidePress
+        closeButton={false}
       >
         <div className={classes.body}>
           <div className={classes.verbs}>

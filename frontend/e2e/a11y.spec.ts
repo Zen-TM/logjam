@@ -1224,15 +1224,22 @@ test.describe("desktop", () => {
     await expect(canvas).toBeFocused();
 
     // Reachable without a pointer: Enter on the focused map asks about the
-    // middle of what is visible, and Tab walks the panel's own controls.
+    // middle of what is visible, and Tab walks the panel's own controls: the
+    // coordinates copy where they are pressed, and Options holds the verbs.
     const panel = page.getByRole("dialog", { name: "This point" });
     await page.keyboard.press("Enter");
     await expect(panel).toBeVisible();
-    await expect(
-      panel.getByRole("button", { name: "Copy coordinates" }),
-    ).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Close" })).toHaveCount(0);
     await page.keyboard.press("Tab");
-    await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
+    await expect(
+      panel.getByRole("button", { name: /^Position: .*\. Copy$/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("button", { name: "Options" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      panel.getByRole("button", { name: "Add a place here" }),
+    ).toBeVisible();
   });
 
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({

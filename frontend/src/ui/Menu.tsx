@@ -59,13 +59,32 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
   }, [open, ref]);
 }
 
+/** Stops the click this press ends in, in the capture phase, before the map or
+ *  a control under it hears it. A press that never clicks (a drag) leaves the
+ *  catcher for the next press to clear, so it cannot eat a later, separate click. */
+function swallowNextClick() {
+  const stop = (event: Event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    clear();
+  };
+  const clear = () => {
+    window.removeEventListener("click", stop, true);
+    window.removeEventListener("pointerdown", clear, true);
+  };
+  window.addEventListener("click", stop, true);
+  window.addEventListener("pointerdown", clear, true);
+}
+
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. */
+ *  and reopening in one click. With `swallow`, the click that press ends in
+ *  goes nowhere else: it closes the panel and does nothing more. */
 export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
+  swallow = false,
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -83,6 +102,7 @@ export function useOutsidePress(
       )
         return;
       handleOutside();
+      if (swallow) swallowNextClick();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>
@@ -249,7 +269,8 @@ export function Menu({
  * A press OUTSIDE it (the map included) dismisses it only when the caller
  * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
  * look away, and one that hangs around reads as stuck. The press is not
- * swallowed, so focus goes where the user pressed.
+ * swallowed unless the caller asks with `swallowOutsidePress`, so focus goes
+ * where the user pressed.
  */
 export function Popover({
   open,
@@ -260,6 +281,7 @@ export function Popover({
   className,
   fit = false,
   dismissOnOutsidePress = false,
+  swallowOutsidePress = false,
   closeButton = true,
   children,
 }: {
@@ -276,6 +298,10 @@ export function Popover({
   fit?: boolean;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
+  /** With `dismissOnOutsidePress`: that press closes the panel and does
+   *  nothing else, so looking away from a point on the map never asks about
+   *  another. */
+  swallowOutsidePress?: boolean;
   /** The × at the top right (UX §3: every surface carries its way out). Off
    *  only for a popover whose own header already ends in one. */
   closeButton?: boolean;
@@ -286,7 +312,12 @@ export function Popover({
   useAnchoredPosition(open, anchorRef, ref, placement);
   // The anchor is excluded inside the hook, so pressing the trigger toggles
   // rather than closing and reopening in one gesture.
-  useOutsidePress(open && dismissOnOutsidePress, [ref, anchorRef], onClose);
+  useOutsidePress(
+    open && dismissOnOutsidePress,
+    [ref, anchorRef],
+    onClose,
+    swallowOutsidePress,
+  );
   useEscape(open ? ref : null, () => {
     onClose();
     anchorRef.current?.focus();
