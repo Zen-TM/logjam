@@ -180,7 +180,7 @@ async function assertOwnsReplaced(
   linkedType: string,
   linkedId: string | null,
   category: MediaCategory,
-): Promise<string | null> {
+): Promise<{ id: string; sizeBytes: bigint } | null> {
   if (replaces === undefined || replaces === null) return null;
   const refusal = "replaces must name your own uploaded track on this place";
   if (typeof replaces !== "string" || !replaces) throw malformed(refusal);
@@ -193,6 +193,7 @@ async function assertOwnsReplaced(
       linkedId: true,
       origin: true,
       mediaType: true,
+      fileSizeBytes: true,
     },
   });
   if (
@@ -205,7 +206,14 @@ async function assertOwnsReplaced(
   ) {
     throw malformed(refusal);
   }
-  return replaces;
+  return { id: replaces, sizeBytes: old.fileSizeBytes };
+}
+
+/** The old file went between the check and the swap; the write is rolled back. */
+class ReplacedFileGone extends AppError {
+  constructor() {
+    super(400, say`replaces must name your own uploaded track on this place`);
+  }
 }
 
 /**
@@ -213,7 +221,8 @@ async function assertOwnsReplaced(
  * its quota and the tombstones (owner and the place's sharees), as for a
  * DELETE. A sharee's next delta therefore unlinks the old file and carries the
  * new one. Returns the blob keys to remove once the transaction has committed,
- * or throws 400 if the old row went in the meantime, which rolls the write back.
+ * or throws `ReplacedFileGone` if another request took the old row first, which
+ * rolls the write back.
  */
 async function dropReplaced(
   tx: Prisma.TransactionClient,
@@ -223,7 +232,13 @@ async function dropReplaced(
   const old = await tx.media.findFirst({
     where: { id: replacesId, ownerId: userId },
   });
-  if (!old) throw malformed("replaces must name your own uploaded track");
+  if (!old) throw new ReplacedFileGone();
+  // deleteMany, not delete: of two requests naming the same old file the loser
+  // matches nothing, instead of throwing P2025 as a 500.
+  const { count } = await tx.media.deleteMany({
+    where: { id: replacesId, ownerId: userId },
+  });
+  if (count === 0) throw new ReplacedFileGone();
   const placeId = placeIdOfMedia(old);
   const sharees =
     placeId !== null
@@ -232,7 +247,6 @@ async function dropReplaced(
           select: { sharedWithId: true },
         })
       : [];
-  await tx.media.delete({ where: { id: replacesId } });
   await decrementStorageUsed(userId, old.fileSizeBytes, tx);
   await writeTombstones(
     tx,
@@ -380,13 +394,17 @@ router.post(
       linkedType,
       linkedId,
       category,
-      replaces ? [replaces] : [],
+      replaces ? [replaces.id] : [],
     );
     // Headroom pre-check including the declared upload; the authoritative
-    // quota charge still happens on confirm against the real S3 size.
+    // quota charge still happens on confirm against the real S3 size. The file
+    // being replaced is credited, as confirm credits it before charging: a user
+    // at their quota can swap a file for one no larger.
     await assertHasStorageQuota(
       user.id,
       BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+      prisma,
+      replaces?.sizeBytes ?? 0n,
     );
 
     const mediaId = clientMediaId ?? randomUUID();
@@ -466,8 +484,11 @@ router.post(
       linkedType,
       linkedId,
       category,
-      replaces ? [replaces] : [],
+      replaces ? [replaces.id] : [],
     );
+    // Before the transaction, so a bad name is a 400 with the blobs left for
+    // the client's retry, as it was before `replaces` existed.
+    const displayName = parseMediaDisplayName(body.displayName);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -524,7 +545,7 @@ router.post(
         // are charged: replacing a file near the quota must not need room for
         // both.
         replacedKeys = replaces
-          ? await dropReplaced(tx, user.id, replaces)
+          ? await dropReplaced(tx, user.id, replaces.id)
           : [];
         await incrementStorageUsed(user.id, totalBytes, tx);
         const { used, quota } = await getStorageUsage(user.id, tx);
@@ -563,7 +584,7 @@ router.post(
             linkedType,
             linkedId,
             origin,
-            displayName: parseMediaDisplayName(body.displayName),
+            displayName,
             metadata,
             s3KeyDisplay: displayKey,
             s3KeyThumbnail: expectThumb ? thumbnailKey : null,
@@ -579,7 +600,7 @@ router.post(
     } catch (err) {
       if (
         err instanceof AppError &&
-        (err.statusCode === 507 || err.statusCode === 400)
+        (err.statusCode === 507 || err instanceof ReplacedFileGone)
       ) {
         // Transaction rolled back (charge undone, the old file kept); remove the uploaded
         // objects best-effort so the 507 is not masked by a cleanup failure.
@@ -858,8 +879,13 @@ router.patch(
     const category = mediaCategory(media.mediaType);
     if (!category) throw malformed("Unsupported media type");
     await assertOwnsTarget(user.id, linkedType, nextLinkedId);
+    // Already on this place: a retry of a link whose reply was lost, after the
+    // swap deleted the old file. Answer the plain re-link, as presign and
+    // confirm answer a replay before looking at `replaces`.
+    const alreadyThere =
+      media.linkedType === "place" && media.linkedId === nextLinkedId;
     const replaces =
-      linkedType === "place"
+      linkedType === "place" && !alreadyThere
         ? await assertOwnsReplaced(
             user.id,
             body.replaces,
@@ -868,13 +894,12 @@ router.patch(
             category,
           )
         : null;
-    if (replaces === id) throw malformed("A file cannot replace itself");
     if (linkedType === "none" && body.replaces != null) {
       throw malformed("Unlinking must not carry replaces");
     }
     await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, [
       id,
-      ...(replaces ? [replaces] : []),
+      ...(replaces ? [replaces.id] : []),
     ]);
 
     // Whoever could see this file only through its OLD place must be told to
@@ -889,7 +914,9 @@ router.patch(
 
     let replacedKeys: string[] = [];
     const updated = await prisma.$transaction(async (tx) => {
-      replacedKeys = replaces ? await dropReplaced(tx, user.id, replaces) : [];
+      replacedKeys = replaces
+        ? await dropReplaced(tx, user.id, replaces.id)
+        : [];
       const row = await tx.media.update({
         where: { id },
         data: { linkedType, linkedId: nextLinkedId },

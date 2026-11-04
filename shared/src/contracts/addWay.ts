@@ -117,6 +117,22 @@ export type RouteSlotIncumbent = {
 };
 
 /**
+ * The uploaded file a write names as `replaces`, so the API deletes it in the
+ * same step that lands the new file, or undefined. Only a write that puts a
+ * FILE in the slot can name one, and only an upload can be named: an import or
+ * recording is unlinked, never deleted. Deleting the upload first instead would
+ * leave the place with no route if the write then failed.
+ */
+export function replacedUploadId(
+  writes: "route" | "media",
+  incumbent: { kind: RouteSlotIncumbent["kind"]; id: string } | null,
+): string | undefined {
+  return writes === "media" && incumbent?.kind === "upload"
+    ? incumbent.id
+    : undefined;
+}
+
+/**
  * What the user agrees to when a new way displaces the incumbent. Null when the
  * slot is free. The incoming way is deliberately not named: some sources have
  * not chosen yet when this is asked, and a sentence that only sometimes names

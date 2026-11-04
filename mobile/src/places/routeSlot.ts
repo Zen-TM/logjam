@@ -116,28 +116,13 @@ export function routeSlotDisplaceConfirm(
 /**
  * A file with no `origin` was uploaded onto the place (from Logjam Web) and has
  * no life apart from it: the API refuses to unlink one (400), so replacing it
- * deletes it (`replacedUploadId`). An import or recording is unlinked and kept.
+ * deletes it, in the same step as the write that replaces it (shared `replacedUploadId`). An import or recording is unlinked and kept.
  */
 export function occupantKind(
   occupant: NonNullable<RouteSlotOccupant>,
 ): "route" | "file" | "upload" {
   if (occupant.kind === "route") return "route";
   return occupant.media.origin === null ? "upload" : "file";
-}
-
-/**
- * The uploaded file a media write should name as `replaces`, so the API deletes
- * it in the same step that lands the new file; undefined for every other case.
- *
- * Deleting it first (as an unlink is done first) would be destructive: a link
- * that then fails would leave the place with no route and the upload gone.
- */
-export function replacedUploadId(
-  writes: "route" | "media",
-  occupant: RouteSlotOccupant,
-): string | undefined {
-  if (writes !== "media" || occupant?.kind !== "file") return undefined;
-  return occupantKind(occupant) === "upload" ? occupant.media.id : undefined;
 }
 
 /**

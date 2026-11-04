@@ -268,28 +268,35 @@ describe("linking a file over an uploaded one", () => {
     media_phase: null,
     attempts: 0,
   });
+  const queued = { placeId: "place-1", replaces: "old" };
+  const hidesAnything = () =>
+    calls.some((c) => c.sql.includes("pendingDelete"));
 
   // Mutation: leave `replaces` out of the queued fields, and the flush links
   // without it and the API answers 409 over the upload it was to replace.
-  it("queues the replaced id with the link and hides that row meanwhile", async () => {
+  it("queues the replaced id with the link", async () => {
     await linkStandaloneMediaLocal("imp", "place-1", "old");
     const insert = calls.find(
       (c) => c.sql.includes("'link'") && c.sql.includes("INSERT"),
     );
-    expect(insert?.args[2]).toBe(
-      JSON.stringify({ placeId: "place-1", replaces: "old" }),
-    );
-    const hide = calls.find((c) => c.sql.includes("'pendingDelete'"));
-    expect(hide?.args).toEqual(["old"]);
+    expect(insert?.args[2]).toBe(JSON.stringify(queued));
   });
 
-  it("hides nothing for a plain link", async () => {
-    await linkStandaloneMediaLocal("imp", "place-1");
-    expect(calls.some((c) => c.sql.includes("'pendingDelete'"))).toBe(false);
+  // Mutation: hide the replaced row as the link is queued again, and a link
+  // that parks, 404s or is discarded leaves the upload gone from this phone
+  // while the server still holds it: only the delta after a landed swap may
+  // drop it.
+  it("leaves the replaced upload visible when queued, parked, refused or 404", async () => {
+    await linkStandaloneMediaLocal("imp", "place-1", "old");
+    apiFetch.mockRejectedValue({ status: 409 });
+    expect(await runMediaLinkOp(op(queued))).toBe("blocked");
+    apiFetch.mockRejectedValue({ status: 404 });
+    expect(await runMediaLinkOp(op(queued))).toBe("done");
+    expect(hidesAnything()).toBe(false);
   });
 
   it("sends the replaced id on the PATCH", async () => {
-    await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" }));
+    await runMediaLinkOp(op(queued));
     expect(apiFetch).toHaveBeenCalledWith("/media/imp/link", {
       method: "PATCH",
       body: { linkedType: "place", linkedId: "place-1", replaces: "old" },
@@ -300,30 +307,29 @@ describe("linking a file over an uploaded one", () => {
   // another device parks as a sync issue and the place never gets its way.
   it("links without a replaced file the API no longer knows, once", async () => {
     apiFetch.mockRejectedValueOnce({ status: 400 });
-    expect(
-      await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" })),
-    ).toBe("done");
+    expect(await runMediaLinkOp(op(queued))).toBe("done");
     expect(apiFetch).toHaveBeenCalledTimes(2);
     expect(apiFetch.mock.calls[1][1]).toEqual({
       method: "PATCH",
       body: { linkedType: "place", linkedId: "place-1", replaces: undefined },
     });
-    const rewrite = calls.find((c) =>
-      c.sql.startsWith("UPDATE outbox SET fields_json"),
-    );
-    expect(rewrite?.args[0]).toBe(JSON.stringify({ placeId: "place-1" }));
   });
 
-  it("parks a 400 that has no replaced file to blame, and a second one", async () => {
+  // Mutation: rewrite the op's fields before the retry (as the first version
+  // did), and a retry that also fails leaves an op that can no longer swap.
+  it("keeps `replaces` on the op when the retry fails too", async () => {
+    apiFetch.mockRejectedValue({ status: 400 });
+    expect(await runMediaLinkOp(op(queued))).toBe("blocked");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(
+      calls.some((c) => c.sql.startsWith("UPDATE outbox SET fields_json")),
+    ).toBe(false);
+  });
+
+  it("parks a 400 that has no replaced file to blame without a retry", async () => {
     apiFetch.mockRejectedValue({ status: 400 });
     expect(await runMediaLinkOp(op({ placeId: "place-1" }))).toBe("blocked");
     expect(apiFetch).toHaveBeenCalledTimes(1);
-
-    apiFetch.mockClear();
-    expect(
-      await runMediaLinkOp(op({ placeId: "place-1", replaces: "old" })),
-    ).toBe("blocked");
-    expect(apiFetch).toHaveBeenCalledTimes(2);
   });
 });
 

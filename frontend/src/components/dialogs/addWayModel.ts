@@ -12,6 +12,7 @@ import {
   type StandaloneFile,
   type WaySource,
   WayRemovalError,
+  replacedUploadId,
 } from "@logjam/shared";
 import {
   deleteMedia,
@@ -106,8 +107,7 @@ export async function fillWaySlot({
   await preflight?.();
   const fileWay =
     source === "import" || source === "track" || source === "file";
-  const replaces =
-    fileWay && incumbent?.kind === "upload" ? incumbent.id : undefined;
+  const replaces = replacedUploadId(fileWay ? "media" : "route", incumbent);
   const remove =
     incumbent && !replaces ? () => removeIncumbent(incumbent) : null;
   const fileOverFile =
