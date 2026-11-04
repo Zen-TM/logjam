@@ -15,7 +15,6 @@ export const TRIPS_LIST = {
   question: "What have I done?",
   title: navLabel("logs"),
   sections: [
-    // Also holds the way into `TRIPS_TO_LOG`: a button, shown above zero.
     { key: "hero" },
     // One rail: what kind of trip. The selection bar takes its place.
     { key: "typeRail" },
@@ -118,34 +117,10 @@ export const TRIPS_FILTER_SHEET = {
 } as const satisfies ScreenContract;
 
 /**
- * The recordings that have no trip on their day (`recordingsToLog`): a
- * sub-view on Logjam Web, a sheet on Logjam GPS. Each client's hero opens it
- * with a button reading `recordingsToLogLabel`, shown only above zero.
+ * The trip form's chip row of saved places near the ends of the track it was
+ * opened from.
  */
-export const TRIPS_TO_LOG = {
-  id: "logs.toLog",
-  question: "Which recordings have no trip yet?",
-  title: "Recordings to log",
-  sections: [
-    // One line saying what the list holds, or that it is empty.
-    { key: "note" },
-    // A row per recording, each opening the trip form on it.
-    { key: "list" },
-  ],
-  copy: {
-    note: "Recordings from the last 30 days on a day with no trip.",
-    empty: "Every recent recording has a trip.",
-    // The same verb as the logbook's add button, so a rename is made once.
-    verb: TRIPS_ADD.copy.add,
-    // The trip form's chip row of saved places near the recording's ends.
-    nearTrack: "Near this track",
-  },
-} as const satisfies ScreenContract;
-
-/** "1 recording to log", "3 recordings to log". */
-export function recordingsToLogLabel(count: number): string {
-  return `${count} ${count === 1 ? "recording" : "recordings"} to log`;
-}
+export const TRIP_NEAR_TRACK_LABEL = "Near this track";
 
 /** "1 trip", "37 trips". */
 export function tripsCountLabel(count: number): string {

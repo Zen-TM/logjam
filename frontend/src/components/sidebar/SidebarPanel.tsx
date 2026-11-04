@@ -472,7 +472,6 @@ function SidebarPanel({
             onQuotaChanged={onQuotaChanged}
             onRefetchPlaces={onRefetch}
             onOpenUnifiedImport={onOpenUnifiedImport}
-            recordings={standaloneFiles}
           />
         )}
         {!accountFailed && activePanel === "account" && (

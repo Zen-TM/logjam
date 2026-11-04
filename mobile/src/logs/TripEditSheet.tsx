@@ -21,7 +21,7 @@ import {
   MAX_PLACES_PER_TRIP,
   TRIP_PLACES_CAP_SENTENCE,
   TRIP_TYPE_SUGGESTIONS,
-  TRIPS_TO_LOG,
+  TRIP_NEAR_TRACK_LABEL,
   tripFieldDefs,
   tripPrefillFromTrack,
   type TripPlanTripLogPrefill,
@@ -583,7 +583,7 @@ export function TripEditSheet({
 
         {!editing && nearIds.length > 0 ? (
           <ChipPicker
-            label={TRIPS_TO_LOG.copy.nearTrack}
+            label={TRIP_NEAR_TRACK_LABEL}
             options={nearIds.flatMap((id) => {
               const place = places.find((p) => p.id === id);
               return place ? [{ value: id, label: place.name }] : [];

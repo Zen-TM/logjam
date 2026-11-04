@@ -16,12 +16,7 @@ import { PLACE_PAGE } from "./placePage.js";
 import { TRIP_PAGE } from "./tripPage.js";
 import { PLACE_FORM } from "./placeForm.js";
 import { TRIP_FORM } from "./tripForm.js";
-import {
-  TRIPS_ADD,
-  TRIPS_FILTER_SHEET,
-  TRIPS_LIST,
-  TRIPS_TO_LOG,
-} from "./tripLogs.js";
+import { TRIPS_ADD, TRIPS_FILTER_SHEET, TRIPS_LIST } from "./tripLogs.js";
 import { PLACES_FILTER_SHEET } from "./placesFilterSheet.js";
 import { PLACES_ADD, PLACES_LIST } from "./placesList.js";
 import {
@@ -81,7 +76,6 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   TRIPS_LIST,
   TRIPS_ADD,
   TRIPS_FILTER_SHEET,
-  TRIPS_TO_LOG,
   INBOX,
   FRIENDS,
   FRIEND_SHARES,

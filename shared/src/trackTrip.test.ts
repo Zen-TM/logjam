@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   gpxEnds,
   placesNearTrackEnds,
-  recordingsToLog,
-  trackDayLabel,
   tripPrefillFromTrack,
 } from "./trackTrip.js";
 
@@ -42,57 +40,6 @@ describe("tripPrefillFromTrack", () => {
         /^\d{4}-\d{2}-\d{2}$/,
       );
     }
-  });
-});
-
-describe("recordingsToLog", () => {
-  // Wall-clock noon on 15 Mar, in whatever zone the runner has.
-  const today = new Date(2026, 2, 15, 12);
-  const at = (day: number, hour = 9) =>
-    new Date(2026, 2, day, hour).toISOString();
-  const track = (id: string, startedAt: string | null) => ({ id, startedAt });
-  const trip = (day: number) => ({
-    date: `2026-03-${String(day).padStart(2, "0")}T00:00:00.000Z`,
-  });
-
-  it("offers a recent recording whose day has no trip, newest first", () => {
-    const tracks = [
-      track("old", at(3)),
-      track("new", at(14)),
-      track("mid", at(9)),
-    ];
-    expect(recordingsToLog(tracks, [trip(9)], today).map((t) => t.id)).toEqual([
-      "new",
-      "old",
-    ]);
-  });
-
-  it("matches the trip to the track's LOCAL day, not its UTC day", () => {
-    // Mutation: compare the track's UTC date (startedAt.slice(0, 10)) and this
-    // 07:30 AEDT walk, which began on the 14th in UTC, is logged by a trip on
-    // the 14th instead of the 15th.
-    const startedAt = "2026-03-14T20:30:00.000Z";
-    const sydneyToday = new Date("2026-03-15T02:00:00.000Z");
-    const tracks = [track("walk", startedAt)];
-    expect(
-      recordingsToLog(tracks, [trip(15)], sydneyToday, "Australia/Sydney"),
-    ).toEqual([]);
-    expect(
-      recordingsToLog(tracks, [trip(14)], sydneyToday, "Australia/Sydney"),
-    ).toHaveLength(1);
-  });
-
-  it("drops recordings older than 30 days, in the future, or undated", () => {
-    const tracks = [
-      track("stale", new Date(2026, 1, 10, 9).toISOString()),
-      track("edge", new Date(2026, 1, 13, 9).toISOString()),
-      track("future", at(20)),
-      track("none", null),
-      track("junk", "not a date"),
-    ];
-    expect(recordingsToLog(tracks, [], today).map((t) => t.id)).toEqual([
-      "edge",
-    ]);
   });
 });
 
@@ -144,15 +91,5 @@ describe("gpxEnds", () => {
       { latitude: -33.3, longitude: 150.4 },
     ]);
     expect(gpxEnds("<gpx/>")).toEqual([]);
-  });
-});
-
-describe("trackDayLabel", () => {
-  it("names the local day of the track, not its UTC day", () => {
-    // 07:30 on the 15th in Sydney is the 14th in UTC.
-    expect(
-      trackDayLabel("2026-03-14T20:30:00.000Z", "Australia/Sydney"),
-    ).toContain("15");
-    expect(trackDayLabel("2026-03-14T20:30:00.000Z", "UTC")).toContain("14");
   });
 });
