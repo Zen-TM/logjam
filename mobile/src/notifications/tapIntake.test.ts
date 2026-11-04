@@ -109,4 +109,15 @@ describe("the shell feeds the intake", () => {
       /dropPendingNotificationTap\(\) \{\s*tapIntake\.clear\(\);\s*Notifications\.clearLastNotificationResponse\(\);/,
     );
   });
+
+  // Mutation: drop either read, and the "Recording track" / map-download
+  // notification goes back to resuming the app where it was left (the launch
+  // read) or does nothing while Logjam GPS is open (the event).
+  it("feeds the ongoing notifications' URLs in, at launch and while open", () => {
+    const shell = read("src", "AppShell.tsx");
+    expect(shell).toContain('Linking.addEventListener("url"');
+    expect(shell).toMatch(
+      /Linking\.getInitialURL\(\)[\s\S]{0,120}offerOngoingUrl\(url, "ongoing-launch"\)/,
+    );
+  });
 });

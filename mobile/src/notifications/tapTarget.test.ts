@@ -197,6 +197,40 @@ describe("notificationTapTarget", () => {
 
 // The navigator's ref is typed `never`, so these names are checked nowhere
 // else. The screen names are the ones AppShell registers.
+describe("an ongoing notification's tap (ongoingTap.ts)", () => {
+  // Mutation: let the draft block it, and a tap on "Recording track" while a
+  // route is being drawn is answered with an Alert on the very map it names.
+  it("opens the map for the recording, even with a route being drawn", () => {
+    expect(
+      notificationTapTarget({
+        data: { ongoing: "recording" },
+        routeEditing: true,
+      }),
+    ).toEqual({ kind: "recording" });
+    expect(tapTargetCall({ kind: "recording" }, 1)).toEqual({
+      name: "Map",
+      params: { screen: "MapView" },
+    });
+  });
+
+  // Mutation: send it to the inbox, and the download notification opens a
+  // screen with nothing about downloads on it.
+  it("opens the offline maps in Saved for the downloads, and honours the draft", () => {
+    expect(
+      notificationTapTarget({
+        data: { ongoing: "downloads" },
+        routeEditing: false,
+      }),
+    ).toEqual({ kind: "saved", filter: "region", highlightKey: null });
+    expect(
+      notificationTapTarget({
+        data: { ongoing: "downloads" },
+        routeEditing: true,
+      }),
+    ).toEqual({ kind: "blocked" });
+  });
+});
+
 describe("tapTargetCall", () => {
   // Mutation: misspell any screen name or move a param (say "Friend" for
   // "Friends", or drop `invited`), and the matching case goes red.
