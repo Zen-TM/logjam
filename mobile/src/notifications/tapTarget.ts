@@ -6,12 +6,17 @@
 
 import { notificationPlanTarget, type TNotification } from "@logjam/shared";
 
+import type { SavedCategory } from "../saved/savedKeys";
+import { notificationDestination } from "./notificationDestination";
+
 /** Where a tapped notification sends the user — or that it sends them nowhere. */
 export type NotificationTapTarget =
   | { kind: "blocked" }
   | { kind: "place"; placeId: string }
   | { kind: "plan"; planId: string; view?: "people"; invited?: boolean }
   | { kind: "announcement"; announcementId: string }
+  | { kind: "friends" }
+  | { kind: "saved"; filter: SavedCategory; highlightKey: string | null }
   | { kind: "inbox" };
 
 /**
@@ -23,14 +28,13 @@ export type NotificationTapTarget =
  * user in PlaceDetail with the pen still armed and nothing on screen saying so.
  *
  * Below the draft it is just the payload: a placeId goes to that place, an
- * announcementId to the inbox with that message open, and everything else —
- * no id, an id that is not a string, a payload that is not an object — falls
- * back to the inbox, where every notification is listed anyway.
- *
- * That fallback carries the two ACTIONABLE kinds, and is the right destination:
- * a friend request and a file send are answered inline on their inbox row, so
- * the tap lands the user exactly where the accept/decline is. Neither has a
- * screen of its own to deep-link to.
+ * announcementId to the inbox with that message open, a plan push to its plan,
+ * and a friend, shared-item or finished-topo push to the same screen its Inbox
+ * row opens (`notificationDestination`, so the two cannot drift). Everything
+ * else — no id, an id that is not a string, a payload that is not an object, a
+ * failure, a quota, a file send still waiting to be answered — falls back to
+ * the inbox, where every notification is listed anyway and a file send is
+ * answered inline.
  */
 export function notificationTapTarget(args: {
   data: unknown;
@@ -61,6 +65,27 @@ export function notificationTapTarget(args: {
       view: plan.view,
       invited: plan.invited,
     };
+  // The push carries `type` plus the same opaque ids the row's payload holds,
+  // so the row's own mapping reads it as it is. A push has no
+  // `fileSendStatus`, so a file send stays on the inbox, where it is answered.
+  const destination =
+    typeof type === "string"
+      ? notificationDestination({
+          id: "",
+          type,
+          payload: (args.data ?? {}) as Record<string, unknown>,
+          read: false,
+          createdAt: "",
+        })
+      : null;
+  if (destination?.tab === "friends") return { kind: "friends" };
+  if (destination?.tab === "saved") {
+    return {
+      kind: "saved",
+      filter: destination.filter,
+      highlightKey: destination.highlightKey,
+    };
+  }
   const announcementId = data?.announcementId;
   if (typeof announcementId === "string" && announcementId.length > 0) {
     return { kind: "announcement", announcementId };
