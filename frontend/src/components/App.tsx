@@ -1449,10 +1449,9 @@ function App() {
           id: "topo",
           label: LIDAR_JOB_COPY.make,
           icon: "lidar",
-          onSelect: () => {
-            setActivePanel(null);
-            setBoxPick((pick) => armBox(pick, "topo"));
-          },
+          // The dialog draws the area itself ("Draw the area"), as the Layers
+          // popover's Sharpen button opens it.
+          onSelect: () => setShowTopo(true),
         },
         {
           id: "export",

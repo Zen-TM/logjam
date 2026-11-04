@@ -33,6 +33,10 @@ export const MAP_TERRAIN = {
     hillshade: "Hillshade",
     vegetation: "Vegetation",
     sharpenedAreas: "Sharpened areas",
+    // Behind the Sharpened areas row's help button, titled with its label.
+    sharpenedAreasAbout: "About sharpened areas",
+    sharpenedAreasLegend:
+      "A sharpened area redraws contours, slope and hillshade from LiDAR you supply, at the survey's own detail instead of the statewide layers'. It is yours alone until you share it with a friend.",
     vegetationHint: "Scrub density for bushbashing",
     // Behind the Vegetation row's help button, titled with its label.
     vegetationAbout: "About vegetation",

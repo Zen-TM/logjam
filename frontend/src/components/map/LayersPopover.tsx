@@ -125,7 +125,7 @@ export default function LayersPopover({
   sharpenedLoaded: boolean;
   activeTopoJobs: TopoJob[];
   friends: TFriend[];
-  /** Arms the pick for a new sharpened area, as the Make a map menu does. */
+  /** Opens the dialog for a new sharpened area, as the Make a map menu does. */
   onSharpen: () => void;
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyToArea: (footprint: GeoJsonPolygonal) => void;
@@ -369,6 +369,7 @@ export function TerrainPane({
   onOpenSharpened: () => void;
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const [sharpenedAboutOpen, setSharpenedAboutOpen] = useState(false);
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
@@ -384,6 +385,9 @@ export function TerrainPane({
         key={key}
         title={title}
         subtitle={reason}
+        onPress={
+          printed || shadowed ? undefined : () => onChange(key, !layers[key])
+        }
         trailing={
           <>
             {extra}
@@ -421,6 +425,7 @@ export function TerrainPane({
           key="vegetation"
           title={terrainCopy.vegetation}
           subtitle={terrainCopy.vegetationHint}
+          onPress={() => onChange("vegetation", !layers.vegetation)}
           trailing={
             <>
               <IconButton
@@ -446,6 +451,13 @@ export function TerrainPane({
             : `${terrainCopy.sharpenedAreas} · ${sharpenedCount}`
         }
         onOpen={onOpenSharpened}
+        trailing={
+          <IconButton
+            icon="help"
+            label={terrainCopy.sharpenedAreasAbout}
+            onClick={() => setSharpenedAboutOpen(true)}
+          />
+        }
       />
     ),
     // Opened from the Slope row's chevron, as a view of its own.
@@ -460,6 +472,13 @@ export function TerrainPane({
         onClose={() => setLegendOpen(false)}
       >
         <p>{terrainCopy.vegetationLegend}</p>
+      </Dialog>
+      <Dialog
+        open={sharpenedAboutOpen}
+        title={terrainCopy.sharpenedAreas}
+        onClose={() => setSharpenedAboutOpen(false)}
+      >
+        <p>{terrainCopy.sharpenedAreasLegend}</p>
       </Dialog>
     </div>
   );
@@ -565,6 +584,7 @@ function OverlayRow({
       leading={<IconTile icon={icon} hue={hue} />}
       title={title}
       subtitle={subtitle}
+      onPress={() => onToggle(!checked)}
       trailing={
         <>
           {help && (
