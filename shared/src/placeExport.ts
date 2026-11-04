@@ -101,7 +101,7 @@ function descriptionText(c: TPlace, defs: ExportFieldLabel[]): string {
   if (c.altNames.length > 0)
     parts.push(`Also known as: ${c.altNames.join(", ")}`);
   const grade = formatCanyonGrade(placeFieldValues(c));
-  if (grade) parts.push(`Grade: ${grade}`);
+  if (grade) parts.push(`Canyon grade: ${grade}`);
   // Whatever the place's type carries, in the order the values are stored. The
   // labels a UI would show live on the definitions, which this module does not
   // have; the KEY is what a third-party reader gets, which is the same thing

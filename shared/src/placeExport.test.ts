@@ -47,3 +47,20 @@ describe("buildPlaceExport", () => {
     );
   });
 });
+
+// Mutation: write the grade as `Grade:` (a user field labelled "Grade" would
+// then collide), stop skipping the three keys, or drop the partial case.
+describe.each([["gpx"], ["kml"]] as const)("%s description", (format) => {
+  it.each([
+    [{ v_grade: 3, a_grade: 4, commitment: 3 }, "Canyon grade: v3a4III"],
+    [{ a_grade: 2 }, "Canyon grade: a2"],
+  ])("writes %j as one line, not three", async (fieldValues, line) => {
+    const { content } = buildPlaceExport(
+      [{ ...place, fieldValues } as unknown as TPlace],
+      format,
+    );
+    expect(content).toContain(line);
+    for (const key of ["v_grade", "a_grade", "commitment"])
+      expect(content).not.toContain(`${key}:`);
+  });
+});
