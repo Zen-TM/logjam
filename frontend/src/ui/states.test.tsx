@@ -33,6 +33,35 @@ afterEach(cleanup);
 // Mutations that turn these red: make `Row` always render its `.open` button;
 // drop `aria-disabled` from a Button that carries a reason; stop SwitchRow's
 // row click from toggling.
+describe("a Row with onPress answers a press on its card", () => {
+  // Mutation: drop `!disabled` from Row's click, and a dimmed card still toggles.
+  // Mutation: spread the caller's onClick after the card's, and it is replaced.
+  it("runs on the card, not on a control inside it, and not when disabled", () => {
+    const onPress = vi.fn();
+    const onClick = vi.fn();
+    const onHelp = vi.fn();
+    const row = (disabled: boolean) => (
+      <Row
+        title="Contours"
+        onPress={onPress}
+        onClick={onClick}
+        disabled={disabled}
+        trailing={<button onClick={onHelp}>help</button>}
+      />
+    );
+    const { rerender } = render(row(false));
+    fireEvent.click(screen.getByText("Contours"));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "help" }));
+    expect(onHelp).toHaveBeenCalledTimes(1);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    rerender(row(true));
+    fireEvent.click(screen.getByText("Contours"));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Row is pressable only when it does something", () => {
   it("has nothing to press when it has no onOpen and no href", () => {
     render(<Row title="Grade" subtitle="3B" trailing={<span>x</span>} />);

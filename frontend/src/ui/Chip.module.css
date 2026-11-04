@@ -130,6 +130,18 @@
   color: var(--color-text-muted);
 }
 
+/* ── Rails ──────────────────────────────────────────────────────────────
+   The band under a hero that holds a ChipRail; screens compose it, so every
+   panel's rail sits at one height. */
+
+.rails {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--gutter);
+}
+
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 .rail {

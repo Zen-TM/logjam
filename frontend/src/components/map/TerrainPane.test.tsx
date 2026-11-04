@@ -102,6 +102,43 @@ describe("the Terrain group on Logjam Web", () => {
     expect(props.onOpenSharpened).toHaveBeenCalled();
   });
 
+  // Mutation: drop `onPress` from `row`, and only the small switch toggles.
+  // Mutation: let the help button's press reach the card, and reading about a
+  // layer also switches it.
+  it("switches a layer from anywhere on its card but a button inside it", () => {
+    const props = draw("protomaps", undefined, true);
+    fireEvent.click(screen.getByText(copy.hillshade));
+    expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
+    fireEvent.click(screen.getByText(copy.vegetationHint));
+    expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
+    props.onChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: copy.vegetationAbout }));
+    fireEvent.click(screen.getByRole("button", { name: copy.slopeBands }));
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.onOpenSlopeBands).toHaveBeenCalled();
+  });
+
+  // Mutation: drop `|| shadowed` from the card's press, and a press on imagery's
+  // Hillshade card switches a layer that cannot draw.
+  it("leaves a disabled layer's card alone", () => {
+    const props = draw("six-imagery");
+    fireEvent.click(screen.getByText(copy.hillshade));
+    expect(props.onChange).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the help button or the Dialog, and a sharpened area is a
+  // row nobody can read about.
+  it("opens the sharpened areas' about dialog without opening the areas", () => {
+    const props = draw();
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.sharpenedAreasAbout }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: copy.sharpenedAreas }).textContent,
+    ).toContain(copy.sharpenedAreasLegend);
+    expect(props.onOpenSharpened).not.toHaveBeenCalled();
+  });
+
   it("opens the slope bands from the Slope row", () => {
     const props = draw();
     fireEvent.click(screen.getByRole("button", { name: copy.slopeBands }));
@@ -173,6 +210,10 @@ describe("the Land tenure row on Logjam Web", () => {
     expect(land.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(land);
     expect(onToggle).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText(copy.land));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: copy.landAbout }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   // Mutation: drop the caveat, and Sydney's gaps and Land Council freehold

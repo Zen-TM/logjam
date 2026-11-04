@@ -10,6 +10,7 @@ import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
 import { Icon, type Glyph } from "./Icon";
 import { Tooltip } from "./Tooltip";
+import { pressOutsideControls } from "./cardPress";
 
 /**
  * A row's tile that is also its checkbox (DESIGN.md): the tile at rest, a
@@ -174,6 +175,8 @@ export function Row({
   badge,
   footer,
   onOpen,
+  onPress,
+  onClick,
   href,
   download,
   external = false,
@@ -200,6 +203,13 @@ export function Row({
    *  for the next row down. */
   footer?: ReactNode;
   onOpen?: () => void;
+  /**
+   * A press on the card, anywhere but a control inside it (a ?, a >, the
+   * switch itself), runs this: the whole card is the target of the switch in
+   * `trailing`, which stays the one control in the accessibility tree and the
+   * keyboard path, as `SwitchRow` does.
+   */
+  onPress?: () => void;
   /**
    * The row IS a link: a file to download, a page to open. Same anatomy and
    * the same stretched hit area as `onOpen`, but an anchor — so middle-click,
@@ -230,8 +240,15 @@ export function Row({
       .filter(Boolean)
       .join(" ") || undefined;
   return (
+    // The click is a convenience over the switch's own button (see `onPress`).
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
+      data-pressable={(onPress != null && !disabled) || undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        if (onPress && !disabled) pressOutsideControls(event, onPress);
+      }}
       data-selected={selected}
       data-accent-edge={String(accentEdge)}
       data-disabled={disabled}

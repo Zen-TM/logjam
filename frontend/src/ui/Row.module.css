@@ -47,6 +47,16 @@
   border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
 }
 
+/* A row whose whole card is its switch answers the pointer like one that
+   opens, though only the switch inside is a control. */
+.row[data-pressable="true"] {
+  cursor: pointer;
+}
+
+.row[data-pressable="true"]:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 70%, var(--color-line));
+}
+
 .row:has(.open:active) {
   background: var(--color-card-pressed);
 }
