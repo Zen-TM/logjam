@@ -18,3 +18,35 @@ describe("the press-and-hold sheet", () => {
       expect(screen, verb.label).not.toContain(`"${verb.label}"`);
   });
 });
+
+describe("the tap sheet", () => {
+  // Mutation: draw a verb list of its own in the tap sheet, or put a verb
+  // back on the facts view: they belong behind one Options row.
+  it("draws its verbs from the contract, behind one Options row", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet).toContain('mapPointVerbs("gps"');
+    expect(sheet).toContain("MAP_POINT.copy.options");
+    expect(sheet.match(/mapPointVerbs\(/g)).toHaveLength(1);
+  });
+
+  // Mutation: build a stat from `mapPointFacts` without wiring `copyable` to
+  // `onCopy`, and a coordinates figure stops copying where it is pressed.
+  it("copies every coordinates figure where it is pressed", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet.match(/mapPointFacts\(/g)).toHaveLength(2);
+    expect(sheet.match(/fact\.copyable/g)).toHaveLength(2);
+  });
+
+  // Mutation: give the sheet a plain `onClose={onClose}` again, and the back
+  // gesture, the scrim and the swipe close the whole sheet from the forecast
+  // or Options instead of undoing one layer. The steps themselves are
+  // `mapPointStepBack`'s, held by its shared test.
+  it("steps back one layer on the back gesture, the scrim and the arrow alike", () => {
+    const sheet = read("MapPointSheet.tsx");
+    expect(sheet).toContain("const back = mapPointStepBack(view);");
+    expect(sheet).toMatch(/onClose=\{back \? \(\) => show\(back\) : onClose\}/);
+    expect(sheet).toMatch(
+      /onBack=\{back \? \(\) => show\(back\) : undefined\}/,
+    );
+  });
+});

@@ -2,13 +2,13 @@
 // Logjam GPS's map, a popover anchored at the point on Logjam Web's. The map
 // answers where things are; this answers what a spot you are only pointing at
 // is: where it is, how high, and (with a fix) how far and which way from you,
-// then the few things worth doing about it.
+// then one Options button that opens the things worth doing about it.
 //
 // The facts are one declaration both clients draw (`mapPointFacts`); the verbs
 // are declared once with the client that has each. A tap asks and a
-// press-and-hold commits (shared/DESIGN.md §3): this is the asking, so its
-// verbs are the first steps of something, never a write that cannot be undone
-// without a trip to another screen.
+// press-and-hold commits (shared/DESIGN.md §3): the tap panel shows the facts
+// and puts every verb behind Options, so the question is never crowded by the
+// answers. The coordinates copy where they are pressed; there is no verb for it.
 //
 // PRIVACY (shared/DESIGN.md §13): a coordinate and a distance-from-me belong on
 // a DETAIL surface, which is what this is: the user asked about this exact
@@ -69,6 +69,9 @@ export const MAP_POINT = {
     fixTitle: "Your position",
     // The press-and-hold sheet's title: what can go at the point.
     holdTitle: "What goes here?",
+    // The one button on the tap panel that opens the verbs, and their title.
+    options: "Options",
+    backToPoint: "Back to this point",
     notReported: "Not reported",
     // The receiver's own height, when no terrain figure arrives for a fix.
     gpsAltitude: "GPS altitude",
@@ -101,13 +104,12 @@ type PointVerbDeclaration = {
   label: string;
   subtitle?: string;
   /**
-   * Offered from the press-and-hold sheet (Logjam GPS) and the right-click or
-   * long-press menu (Logjam Web) on these clients. `on` and its reason or gap
-   * describe the tap panel; a verb with no `tap: false` is on it.
+   * Also offered straight from the press-and-hold sheet (Logjam GPS) and the
+   * right-click or long-press menu (Logjam Web) on these clients. `on` and its
+   * reason or gap describe the client that has the verb at all, Options
+   * included.
    */
   hold?: VerbWhere;
-  /** False: only the hold offers it. */
-  tap?: false;
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
@@ -143,7 +145,6 @@ export const MAP_POINT_VERBS = [
     icon: "draw",
     label: "Draw a route from here",
     hold: "gps",
-    tap: false,
     on: "gps",
     gap: "Logjam Web starts a route from its Routes tool, not from a point on the map.",
   },
@@ -152,26 +153,12 @@ export const MAP_POINT_VERBS = [
     icon: "addPlace",
     label: "Add a place here",
     hold: "both",
-    on: "web",
-    reason:
-      "Logjam Web keeps it on the tap panel too, for a browser without a right-click. Logjam GPS puts it on the hold sheet only and drops a marker from the tap.",
   },
   {
     id: "measure",
     icon: MAP_MEASURE_ICON,
     label: MAP_MEASURE.copy.fromHere,
     hold: "both",
-    on: "web",
-    reason:
-      "Logjam Web keeps it on the tap panel too, for a browser without a right-click. Logjam GPS has it on the hold sheet only.",
-  },
-  {
-    id: "copy",
-    icon: "copy",
-    label: "Copy coordinates",
-    on: "web",
-    reason:
-      "Logjam GPS copies by pressing the Position figure, which wears the copy glyph.",
   },
   // Opens the forecast in the panel's place, and backs out to it.
   { id: "weather", icon: "weather", label: WEATHER.copy.show },
@@ -214,7 +201,7 @@ const asVerb =
   });
 
 /**
- * The verbs one client's tap panel has, in the order it draws them.
+ * The verbs one client's Options view has, in the order it draws them.
  * `savedHereOnly`: what a marker promises is true only once it has synced, so
  * the verb says "Saved on this phone" while that is all that is known.
  */
@@ -223,9 +210,7 @@ export function mapPointVerbs(
   savedHereOnly = false,
 ): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
-    .filter(
-      (verb) => verb.tap !== false && (verb.on == null || verb.on === platform),
-    )
+    .filter((verb) => verb.on == null || verb.on === platform)
     .map(asVerb(savedHereOnly));
 }
 
@@ -244,6 +229,19 @@ export function mapHoldVerbs(
         verb.hold != null && (verb.hold === "both" || verb.hold === platform),
     )
     .map(asVerb(savedHereOnly));
+}
+
+/** The point panel's layers: the facts, Options over them, the forecast over those. */
+export type MapPointView = "point" | "options" | "weather";
+
+/**
+ * Where a way out goes from `view`, one layer at a time (shared/DESIGN.md §3):
+ * the forecast backs out to Options, Options to the facts, and from the facts
+ * there is no layer left, so null: close. Escape and the back arrow on Logjam
+ * Web, the back gesture, the scrim, the swipe and the arrow on Logjam GPS.
+ */
+export function mapPointStepBack(view: MapPointView): MapPointView | null {
+  return view === "weather" ? "options" : view === "options" ? "point" : null;
 }
 
 /** A bare lat/lng, as a map hands one back from a press. */
@@ -272,7 +270,7 @@ export type MapPointFact = {
   span?: true;
   /** Why there is no figure: the value is then "—" and this is its caption. */
   note?: string;
-  /** Pressing the figure copies it (Logjam GPS); Logjam Web has a verb. */
+  /** Pressing the figure copies it, on both clients. */
   copyable?: true;
 };
 

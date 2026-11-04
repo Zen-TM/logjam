@@ -46,6 +46,7 @@ import {
   MAP_SNAP_OPTIONS,
   mapPointFacts,
   mapHoldVerbs,
+  mapPointStepBack,
   mapPointVerbs,
   fixAgeLabel,
   MAP_SEARCH_PLACEHOLDER,
@@ -998,8 +999,10 @@ describe("the map point panel", () => {
       ["position", "-33.65000, 150.35000"],
       ["elevation", "412 m"],
     ]);
-    // The position takes the line and can be copied; the rest do not.
+    // The position takes the line and copies where it is pressed; the rest do
+    // not. Mutation: drop `copyable` and both clients lose the press.
     expect(facts[0]).toMatchObject({ span: true, copyable: true });
+    expect(facts.slice(1).some((fact) => fact.copyable)).toBe(false);
   });
 
   it("adds distance and bearing only from a fix the device already has", () => {
@@ -1077,37 +1080,50 @@ describe("the map point panel", () => {
     expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
       "addPlace",
       "measure",
-      "copy",
       "weather",
     ]);
     expect(mapPointVerbs("gps").map((verb) => verb.id)).toEqual([
       "navigate",
       "dropMarker",
+      "drawRoute",
+      "addPlace",
+      "measure",
       "weather",
     ]);
     for (const verb of MAP_POINT_VERBS)
       if ("on" in verb)
         expect((verb.reason ?? verb.gap).length).toBeGreaterThan(0);
-    expect(mapPointVerbs("gps")).toEqual([
-      {
-        id: "navigate",
-        icon: "navigateTo",
-        label: "Navigate to this point",
-        subtitle: "Live distance and bearing — nothing saved",
-      },
-      {
-        id: "dropMarker",
-        icon: "flag",
-        label: "Drop a marker here",
-        subtitle: "Saved, and synced",
-      },
-      {
-        id: "weather",
-        icon: "weather",
-        label: "Show the weather here",
-        subtitle: null,
-      },
-    ]);
+    expect(mapPointVerbs("gps")[0]).toEqual({
+      id: "navigate",
+      icon: "navigateTo",
+      label: "Navigate to this point",
+      subtitle: "Live distance and bearing — nothing saved",
+    });
+  });
+
+  // Mutation: add a verb to Options that the hold lacks and that is not the
+  // weather: `run[...]` on each client is a `Record` over the hold's ids, so
+  // that verb would reach it as `undefined` and do nothing.
+  it("gives every Options verb but the weather a flow from the hold's list", () => {
+    for (const platform of ["gps", "web"] as const) {
+      const hold = mapHoldVerbs(platform).map((verb) => verb.id);
+      for (const verb of mapPointVerbs(platform))
+        if (verb.id !== "weather") expect(hold, verb.id).toContain(verb.id);
+    }
+  });
+
+  // Mutation: let weather back out to the facts, or Options close the panel:
+  // Escape and the back gesture would undo two layers, or none.
+  it("backs the point panel out one layer at a time", () => {
+    expect(mapPointStepBack("weather")).toBe("options");
+    expect(mapPointStepBack("options")).toBe("point");
+    expect(mapPointStepBack("point")).toBeNull();
+  });
+
+  // Mutation: declare a copy verb again, and a client draws a Copy coordinates
+  // button beside the figure that already copies when pressed.
+  it("has no verb that copies the coordinates", () => {
+    expect(MAP_POINT_VERBS.map((verb) => verb.id)).not.toContain("copy");
   });
 
   // Mutation: give a verb `hold: "gps"` that Logjam GPS's sheet does not draw
@@ -1125,16 +1141,17 @@ describe("the map point panel", () => {
       "addPlace",
       "measure",
     ]);
-    // A verb the hold shares with the tap panel is one label in both.
+    // A verb the hold shares with Options is one label in both.
     const labels = new Map<string, string>();
     for (const verb of [...mapPointVerbs("gps"), ...mapHoldVerbs("gps")]) {
       expect(labels.get(verb.id) ?? verb.label).toBe(verb.label);
       labels.set(verb.id, verb.label);
     }
-    // The hold-only verb stays off the tap panel; the shared ones keep their place.
-    expect(mapPointVerbs("gps").map((verb) => verb.id)).not.toContain(
-      "drawRoute",
-    );
+    // Everything the hold offers is also behind Options.
+    for (const platform of ["gps", "web"] as const)
+      expect(mapPointVerbs(platform).map((verb) => verb.id)).toEqual(
+        expect.arrayContaining(mapHoldVerbs(platform).map((verb) => verb.id)),
+      );
     // A hold verb only one client draws says why or what is missing.
     for (const verb of MAP_POINT_VERBS)
       if ("hold" in verb && verb.hold !== "both")

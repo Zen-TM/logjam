@@ -2,9 +2,10 @@
 //
 // The map answers where things are. Long-press already means "something
 // goes HERE" (a marker, a canyon), which is a commitment; a tap is the
-// question that comes before it, and it answers the four facts a canyoner
+// question that comes before it, and it answers the facts a canyoner
 // actually wants off a map — where it is, how high it is, and how far and which
-// way it is from them — plus the two things they might do about it.
+// way it is from them — with one Options row for the things they might do
+// about it. The coordinates copy where they are pressed.
 //
 // PRIVACY (shared/DESIGN.md §13): a coordinate and a distance-from-me belong on a
 // DETAIL surface, which is what this is — the user asked about this exact spot.
@@ -18,10 +19,11 @@ import {
   WEATHER,
   mapPointFacts,
   mapPointPosition,
+  mapPointStepBack,
   mapPointVerbs,
   type MapPointCoord,
   type MapPointElevation,
-  type MapPointVerbId,
+  type MapPointView,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, muted } from "../theme";
@@ -31,6 +33,7 @@ import { useElevationProfile } from "./useElevationProfile";
 import { useWeather } from "../weather/useWeather";
 import { showWeatherRow } from "../weather/weatherState";
 import { WeatherView } from "../weather/WeatherView";
+import type { MapHoldRun } from "./MapHoldSheet";
 
 /** A bare lat/lng, as the map hands one back from a tap. */
 export type MapPoint = MapPointCoord;
@@ -48,8 +51,8 @@ export function MapPointSheet({
   userCoord,
   land,
   onClose,
-  onNavigate,
-  onDropMarker,
+  onClosed,
+  run,
   onInfo,
   allowNetwork,
   savedHereOnly,
@@ -64,8 +67,10 @@ export function MapPointSheet({
   /** Latest fix as [lon, lat], or null when the dot isn't running. */
   userCoord: [number, number] | null;
   onClose: () => void;
-  onNavigate: (point: MapPoint) => void;
-  onDropMarker: (point: MapPoint) => void;
+  /** After the sheet has gone: the place form cannot open over it. */
+  onClosed: () => void;
+  /** What each verb in Options does. Each one dismisses the sheet itself. */
+  run: MapHoldRun;
   /** Transient feedback channel — the map's own toast. */
   onInfo: (message: string) => void;
   /**
@@ -76,23 +81,34 @@ export function MapPointSheet({
   savedHereOnly?: boolean;
   allowNetwork?: boolean;
 }) {
-  // The weather replaces the facts in place and backs out to them
+  // Options and the weather replace the facts in place and back out one step
   // (shared/DESIGN.md §10); a new point starts on the facts.
-  const [weatherPoint, setWeatherPoint] = useState<MapPoint | null>(null);
-  const weatherOpen = point !== null && weatherPoint === point;
-  const closeWeather = () => setWeatherPoint(null);
+  const [step, setStep] = useState<{
+    point: MapPoint;
+    view: "options" | "weather";
+  } | null>(null);
+  const view: MapPointView =
+    point !== null && step?.point === point ? step.view : "point";
+  const show = (next: MapPointView) =>
+    setStep(point && next !== "point" ? { point, view: next } : null);
+  // The back gesture, the scrim and the swipe undo one layer, as the arrow
+  // does (shared/DESIGN.md §3); from the facts they close.
+  const back = mapPointStepBack(view);
   return (
     <BottomSheet
       visible={point !== null}
-      onClose={weatherOpen ? closeWeather : onClose}
+      onClose={back ? () => show(back) : onClose}
+      onClosed={onClosed}
       title={
-        weatherOpen
+        view === "weather"
           ? WEATHER.title
-          : fix
-            ? MAP_POINT.copy.fixTitle
-            : MAP_POINT.title
+          : view === "options"
+            ? MAP_POINT.copy.options
+            : fix
+              ? MAP_POINT.copy.fixTitle
+              : MAP_POINT.title
       }
-      onBack={weatherOpen ? closeWeather : undefined}
+      onBack={back ? () => show(back) : undefined}
     >
       {/* Mounted only with a point, so the elevation request inside is tied to
           the sheet being open rather than firing for a stale coordinate every
@@ -112,14 +128,12 @@ export function MapPointSheet({
           point={point}
           land={land}
           userCoord={userCoord}
-          onClose={onClose}
-          onNavigate={onNavigate}
-          onDropMarker={onDropMarker}
+          run={run}
           onInfo={onInfo}
           allowNetwork={allowNetwork}
           savedHereOnly={savedHereOnly}
-          weatherOpen={weatherOpen}
-          onShowWeather={() => setWeatherPoint(point)}
+          view={view}
+          onView={show}
         />
       ) : null}
     </BottomSheet>
@@ -196,26 +210,22 @@ function PointDetail({
   point,
   land,
   userCoord,
-  onClose,
-  onNavigate,
-  onDropMarker,
+  run,
   onInfo,
   allowNetwork = true,
   savedHereOnly = false,
-  weatherOpen,
-  onShowWeather,
+  view,
+  onView,
 }: {
   point: MapPoint;
   land: string | null;
   userCoord: [number, number] | null;
-  onClose: () => void;
-  onNavigate: (point: MapPoint) => void;
-  onDropMarker: (point: MapPoint) => void;
+  run: MapHoldRun;
   onInfo: (message: string) => void;
   allowNetwork?: boolean;
   savedHereOnly?: boolean;
-  weatherOpen: boolean;
-  onShowWeather: () => void;
+  view: MapPointView;
+  onView: (view: MapPointView) => void;
 }) {
   const styles = useStyles();
 
@@ -258,7 +268,7 @@ function PointDetail({
   const [pressedElevation, setPressedElevation] = useState<number | null>(null);
   const weather = useWeather(
     point,
-    weatherOpen ? pressedElevation : elevationM,
+    view === "weather" ? pressedElevation : elevationM,
     allowNetwork,
   );
   const showRow = showWeatherRow(weather);
@@ -290,13 +300,37 @@ function PointDetail({
     ...(fact.copyable ? { onCopy: copyPosition } : {}),
   }));
 
-  // What each verb does here. Declared once with its words in the contract.
-  const run: Partial<Record<MapPointVerbId, () => void>> = {
-    navigate: () => onNavigate(point),
-    dropMarker: () => onDropMarker(point),
-  };
+  if (view === "weather") return <WeatherView weather={weather} />;
 
-  if (weatherOpen) return <WeatherView weather={weather} />;
+  if (view === "options")
+    return (
+      <View style={styles.body}>
+        {mapPointVerbs("gps", savedHereOnly).map((verb) => (
+          <Row
+            key={verb.id}
+            icon={verb.icon}
+            title={verb.label}
+            subtitle={
+              verb.id === "weather"
+                ? showRow.reason
+                : (verb.subtitle ?? undefined)
+            }
+            disabled={verb.id === "weather" && showRow.disabled}
+            onPress={() => {
+              // The one verb that keeps the sheet: the forecast replaces the
+              // options, and the press is what asks for it.
+              if (verb.id === "weather") {
+                setPressedElevation(elevationM);
+                onView("weather");
+                weather.refresh();
+                return;
+              }
+              run[verb.id as keyof MapHoldRun](point);
+            }}
+          />
+        ))}
+      </View>
+    );
 
   return (
     <View style={styles.body}>
@@ -304,31 +338,11 @@ function PointDetail({
       {userCoord == null ? (
         <Text style={styles.note}>{MAP_POINT_NO_FIX_NOTE.gps}</Text>
       ) : null}
-      {mapPointVerbs("gps", savedHereOnly).map((verb) => (
-        <Row
-          key={verb.id}
-          icon={verb.icon}
-          title={verb.label}
-          subtitle={
-            verb.id === "weather"
-              ? showRow.reason
-              : (verb.subtitle ?? undefined)
-          }
-          disabled={verb.id === "weather" && showRow.disabled}
-          onPress={() => {
-            // The one verb that keeps the panel: the forecast replaces the
-            // facts, and the press is what asks for it.
-            if (verb.id === "weather") {
-              setPressedElevation(elevationM);
-              onShowWeather();
-              weather.refresh();
-              return;
-            }
-            run[verb.id]?.();
-            onClose();
-          }}
-        />
-      ))}
+      <Row
+        icon="overflow"
+        title={MAP_POINT.copy.options}
+        onPress={() => onView("options")}
+      />
     </View>
   );
 }

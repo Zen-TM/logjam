@@ -288,7 +288,8 @@ export function Menu({
  * A press OUTSIDE it (the map included) dismisses it only when the caller
  * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
  * look away, and one that hangs around reads as stuck. The press is not
- * swallowed, so focus goes where the user pressed.
+ * swallowed unless the caller asks with `swallowWithin`, so focus goes
+ * where the user pressed.
  */
 export function Popover({
   open,
@@ -299,6 +300,8 @@ export function Popover({
   className,
   fit = false,
   dismissOnOutsidePress = false,
+  swallowWithin = null,
+  onEscape,
   closeButton = true,
   children,
 }: {
@@ -315,8 +318,17 @@ export function Popover({
   fit?: boolean;
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
+  /** With `dismissOnOutsidePress`: a press inside this element (the map)
+   *  closes the panel and does nothing else, so looking away from a point on
+   *  the map never asks about another. A press elsewhere (a control, a link)
+   *  closes it and still acts. */
+  swallowWithin?: Element | null;
+  /** Escape undoes one layer of the panel's own, and this is told first;
+   *  without it Escape closes the panel and returns focus to the anchor. */
+  onEscape?: () => void;
   /** The × at the top right (UX §3: every surface carries its way out). Off
-   *  only for a popover whose own header already ends in one. */
+   *  only for a popover whose own header already ends in one, and for a map
+   *  point panel, which is left by a press outside it and by Escape. */
   closeButton?: boolean;
   children: ReactNode;
 }) {
@@ -325,8 +337,14 @@ export function Popover({
   useAnchoredPosition(open, anchorRef, ref, placement);
   // The anchor is excluded inside the hook, so pressing the trigger toggles
   // rather than closing and reopening in one gesture.
-  useOutsidePress(open && dismissOnOutsidePress, [ref, anchorRef], onClose);
+  useOutsidePress(
+    open && dismissOnOutsidePress,
+    [ref, anchorRef],
+    onClose,
+    swallowWithin,
+  );
   useEscape(open ? ref : null, () => {
+    if (onEscape) return onEscape();
     onClose();
     anchorRef.current?.focus();
   });
