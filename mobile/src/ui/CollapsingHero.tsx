@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { Animated, StyleSheet, View } from "react-native";
 
 import { useTheme } from "../theme";
-import { collapseRanges, type Ramp } from "./heroCollapseRule";
+import { collapseRanges, heroReach, type Ramp } from "./heroCollapseRule";
 import type { useHeroCollapse } from "./useHeroCollapse";
 import { useReducedMotion } from "./useReducedMotion";
 
@@ -22,14 +22,14 @@ function through(scrollY: Animated.Value, { inputRange, outputRange }: Ramp) {
   });
 }
 
-/** The folded layer is out of reach, of touch and of a screen reader. */
-function reach(away: boolean) {
+/** What a layer can be touched and heard as (`heroReach` decides). */
+function reach(reachable: boolean) {
   return {
-    pointerEvents: away ? ("none" as const) : ("auto" as const),
-    accessibilityElementsHidden: away,
-    importantForAccessibility: away
-      ? ("no-hide-descendants" as const)
-      : ("auto" as const),
+    pointerEvents: reachable ? ("auto" as const) : ("none" as const),
+    accessibilityElementsHidden: !reachable,
+    importantForAccessibility: reachable
+      ? ("auto" as const)
+      : ("no-hide-descendants" as const),
   };
 }
 
@@ -72,8 +72,8 @@ export function CollapsingHeader({
 /**
  * The hero inside a `CollapsingHeader`: `children(compact)` draws it in both
  * forms. The full one fades out as it slides away, the compact one fades in
- * over the top; once the list has come to rest, only the form showing can be
- * touched or heard.
+ * over the top; only the form showing can be touched or heard, and only once the list
+ * has come to rest (`heroReach`).
  */
 export function CollapsingHero({
   collapse,
@@ -85,7 +85,8 @@ export function CollapsingHero({
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
   const { scrollY } = collapse;
-  const { distance, collapsed } = useMetrics(collapse);
+  const { distance, collapsed, moving } = useMetrics(collapse);
+  const can = heroReach({ collapsed, moving });
   const { full, compact, counterSlide } = useMemo(() => {
     const ranges = collapseRanges(distance, reduceMotion);
     return {
@@ -99,7 +100,7 @@ export function CollapsingHero({
       <Animated.View
         onLayout={collapse.measure.full}
         style={{ opacity: full }}
-        {...reach(collapsed)}
+        {...reach(can.full)}
       >
         {children(false)}
       </Animated.View>
@@ -113,7 +114,7 @@ export function CollapsingHero({
             transform: [{ translateY: counterSlide }],
           },
         ]}
-        {...reach(!collapsed)}
+        {...reach(can.compact)}
       >
         {children(true)}
       </Animated.View>

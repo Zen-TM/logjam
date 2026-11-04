@@ -565,8 +565,9 @@ export function SavedScreen({
   const scrollToPulse = useCallback(
     (y: number) => {
       if (scrolledForNonce.current === highlightNonce) return;
-      scrolledForNonce.current = highlightNonce;
-      scrollToRow(y, spacing(2));
+      // Not until the list is padded for the header: the row lays out again
+      // after that, and this is called again with the offset that counts.
+      if (scrollToRow(y, spacing(2))) scrolledForNonce.current = highlightNonce;
     },
     [highlightNonce, scrollToRow],
   );
@@ -1768,7 +1769,7 @@ export function SavedScreen({
 
       <HeroScrollView
         {...heroCollapse.scrollProps}
-        contentContainerStyle={[styles.body, heroCollapse.inset(spacing(1.5))]}
+        contentContainerStyle={[styles.body, heroCollapse.inset()]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -2646,12 +2647,17 @@ const useStyles = makeStyles((theme, textRole) => ({
   // `disabled` state — a control that still looks pressable but silently
   // no-ops is worse than one that visibly can't be touched.
   railInert: { opacity: opacity.disabled },
-  // The chips run off the right edge, so the rail bleeds past the body's gutter.
+  // The chips run off the right edge, so the rail bleeds past `pinnedRail`'s gutter.
   rail: {
     marginHorizontal: -spacing(2),
     paddingLeft: spacing(2),
   },
-  pinnedRail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
+  // The bottom pad is the gap the list scrolls against, as on Places and Logs.
+  pinnedRail: {
+    paddingHorizontal: spacing(2),
+    paddingTop: spacing(1.5),
+    paddingBottom: spacing(1.5),
+  },
   body: {
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(4),

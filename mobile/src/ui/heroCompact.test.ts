@@ -23,8 +23,7 @@ describe("Hero compact", () => {
   });
 });
 
-// The chips scroll away, so the pinned row is the only thing left to say a
-// list is filtered. Mutation: set Saved's compact title back to "Saved".
+// The compact row still names the filter. Mutation: set Saved's compact title back to "Saved".
 describe("Saved's compact title", () => {
   it("names the active filter", () => {
     const saved = readFileSync(

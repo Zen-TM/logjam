@@ -65,24 +65,79 @@ export function collapseRanges(distance: number, reduceMotion: boolean) {
 
 /**
  * Where a list should come to rest when the finger lets go at offset `y`,
- * given the `distance` the hero collapses over and the list's `range` (how far
- * it can scroll at all). A hero left half-folded is wrong either way: rows
- * hidden under it, or a compact row half-faded over them.
- *
- * - at either end, or past it (overscroll), it stays where it is;
- * - halfway or more goes to the collapsed end, less to the top;
- * - a list that cannot scroll the whole distance goes to the top: it could
- *   never finish the collapse.
+ * given the `distance` the hero collapses over. A hero left half-folded is
+ * wrong either way: rows hidden under it, or a compact row half-faded over
+ * them. At either end, or past it (overscroll), it stays where it is; halfway
+ * or more goes to the collapsed end, less to the top. The list always has the
+ * room to get there (`roomBelow`), so this never sends a user away from the
+ * true bottom.
  *
  * Guard: heroCollapse.test.ts.
  */
-export function snapTarget(input: {
-  y: number;
-  distance: number;
-  range: number;
-}): number {
-  const { y, distance, range } = input;
+export function snapTarget(input: { y: number; distance: number }): number {
+  const { y, distance } = input;
   if (!(distance > 0) || y <= 0 || y >= distance) return y;
-  if (range < distance) return 0;
   return y < distance / 2 ? 0 : distance;
+}
+
+/**
+ * The extra room a list needs at its end so it can always scroll the whole
+ * `distance`: the list's rows sit under a floating header, so a list that
+ * overflows its view by less than `distance` would otherwise end with the
+ * header half-folded and nowhere to go. `contentHeight` includes the `extra`
+ * already added. A list that does not overflow at all gets none (it does not
+ * scroll, and its hero stays full).
+ *
+ * Guard: heroCollapse.test.ts.
+ */
+export function roomBelow(input: {
+  contentHeight: number;
+  viewHeight: number;
+  distance: number;
+  extra: number;
+}): number {
+  const { contentHeight, viewHeight, distance, extra } = input;
+  const overflow = contentHeight - extra - viewHeight;
+  if (!(distance > 0) || !(overflow > 0.5)) return 0;
+  return Math.max(0, distance - overflow);
+}
+
+/**
+ * Which form of the hero can be touched or heard. While the list is moving
+ * (from the finger going down until it has settled, programmatic scrolls
+ * included) neither can: one is part-faded and the other not yet there, and a
+ * tap that lands on a header cannot stop a fling. At rest only the form
+ * showing can.
+ *
+ * Guard: heroCollapse.test.ts.
+ */
+export function heroReach(input: { collapsed: boolean; moving: boolean }): {
+  full: boolean;
+  compact: boolean;
+} {
+  const { collapsed, moving } = input;
+  return { full: !moving && !collapsed, compact: !moving && collapsed };
+}
+
+/**
+ * The offset that brings the row at `contentY` (in the list's content, header
+ * room included) to just under the folded header, `gap` below it, or null
+ * until the header has been measured and the list padded for it. A row that
+ * would land with the header half-folded goes to the nearer end instead.
+ *
+ * Guard: heroCollapse.test.ts.
+ */
+export function rowTarget(input: {
+  contentY: number;
+  header: number;
+  distance: number;
+  paddedFor: number;
+  gap: number;
+  range: number;
+}): number | null {
+  const { contentY, header, distance, paddedFor, gap, range } = input;
+  if (!(header > 0) || paddedFor !== header) return null;
+  const folded = header - Math.max(0, distance);
+  const target = Math.min(Math.max(0, contentY - folded - gap), range);
+  return snapTarget({ y: target, distance });
 }

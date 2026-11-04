@@ -6,6 +6,9 @@ import {
   STEP_PX,
   collapseRanges,
   compactHeroTitle,
+  heroReach,
+  roomBelow,
+  rowTarget,
   snapTarget,
 } from "./heroCollapseRule";
 
@@ -100,7 +103,7 @@ describe("collapseRanges", () => {
 });
 
 describe("snapTarget", () => {
-  const list = { distance: DISTANCE, range: 3000 };
+  const list = { distance: DISTANCE };
   // Mutation: compare with `<=`, or snap to the nearer end the wrong way round.
   it("settles to the nearer end", () => {
     expect(snapTarget({ ...list, y: 20 })).toBe(0);
@@ -114,20 +117,139 @@ describe("snapTarget", () => {
     for (const y of [-30, 0, DISTANCE, DISTANCE + 1, 2500])
       expect(snapTarget({ ...list, y })).toBe(y);
   });
-  // Mutation: drop the `range < distance` term, and a short list that can
-  // only scroll a little is sent to an offset it cannot reach.
-  it("sends a list that cannot finish the collapse to the top", () => {
-    const short = { distance: DISTANCE, range: DISTANCE - 1 };
-    expect(snapTarget({ ...short, y: DISTANCE - 5 })).toBe(0);
-    expect(snapTarget({ ...short, y: 10 })).toBe(0);
-    expect(snapTarget({ distance: DISTANCE, range: DISTANCE, y: 190 })).toBe(
-      DISTANCE,
-    );
-  });
   // Mutation: remove the `distance > 0` guard, and an unmeasured hero snaps
   // every scroll to 0.
   it("does nothing before the hero is measured", () => {
-    expect(snapTarget({ distance: 0, range: 500, y: 40 })).toBe(40);
+    expect(snapTarget({ distance: 0, y: 40 })).toBe(40);
+  });
+});
+
+describe("roomBelow", () => {
+  const view = 800;
+  // Mutation: return 0 when the overflow is under `distance` (the old rule sent
+  // a user at the true bottom of a short list back to the top): the rows below
+  // the fold are then out of reach once the header settles.
+  it("gives a list that overflows by less than the collapse the room to scroll all of it", () => {
+    const overflow = 60;
+    const extra = roomBelow({
+      contentHeight: view + overflow,
+      viewHeight: view,
+      distance: DISTANCE,
+      extra: 0,
+    });
+    expect(extra).toBe(DISTANCE - overflow);
+    // With the room added, the range is exactly the distance, so a list at its
+    // true bottom is at or past the collapsed end and never snapped.
+    const range = view + overflow + extra - view;
+    expect(snapTarget({ y: range, distance: DISTANCE })).toBe(range);
+  });
+  // Mutation: read `contentHeight` without taking `extra` off, and the room it
+  // gave is counted as the list's own and the answer drifts to 0.
+  it("is stable once the room is in the content", () => {
+    expect(
+      roomBelow({
+        contentHeight: view + DISTANCE,
+        viewHeight: view,
+        distance: DISTANCE,
+        extra: DISTANCE - 60,
+      }),
+    ).toBe(DISTANCE - 60);
+  });
+  // Mutation: drop the `overflow > 0.5` guard, and a list that fits scrolls.
+  it("gives a list that fits, or a long one, nothing", () => {
+    for (const contentHeight of [300, view, view + DISTANCE, 5000])
+      expect(
+        roomBelow({
+          contentHeight,
+          viewHeight: view,
+          distance: DISTANCE,
+          extra: 0,
+        }),
+      ).toBe(0);
+    expect(
+      roomBelow({
+        contentHeight: 900,
+        viewHeight: view,
+        distance: 0,
+        extra: 0,
+      }),
+    ).toBe(0);
+  });
+});
+
+describe("heroReach", () => {
+  // Mutation: gate on `collapsed` alone (drop `moving`), and the invisible full
+  // hero takes the tap that was meant to stop a fling.
+  it("lets neither form take touch while the list is moving", () => {
+    for (const collapsed of [false, true])
+      expect(heroReach({ collapsed, moving: true })).toEqual({
+        full: false,
+        compact: false,
+      });
+  });
+  // Mutation: swap the two, and the folded form is the one that answers.
+  it("at rest, only the form showing does", () => {
+    expect(heroReach({ collapsed: false, moving: false })).toEqual({
+      full: true,
+      compact: false,
+    });
+    expect(heroReach({ collapsed: true, moving: false })).toEqual({
+      full: false,
+      compact: true,
+    });
+  });
+});
+
+describe("rowTarget", () => {
+  const base = {
+    header: 300,
+    distance: DISTANCE,
+    paddedFor: 300,
+    gap: 16,
+    range: 3000,
+  };
+  const folded = base.header - DISTANCE;
+  // Mutation: drop the `folded` term, and the row lands a hero's height too low.
+  it("puts the row a gap under the folded header", () => {
+    expect(rowTarget({ ...base, contentY: 1000 })).toBe(1000 - folded - 16);
+  });
+  // Mutation: drop the null returns, and a row laid out before the header was
+  // measured, or before the list was padded for it, scrolls to a short offset.
+  it("waits for the header, and for the list to be padded for it", () => {
+    expect(
+      rowTarget({ ...base, contentY: 1000, header: 0, paddedFor: 0 }),
+    ).toBeNull();
+    expect(rowTarget({ ...base, contentY: 1000, paddedFor: 0 })).toBeNull();
+  });
+  // Mutation: drop the clamp to the range, or the snap, and the target is
+  // past the end of the list or leaves the header half-folded.
+  it("never leaves the header half-folded or the list past its end", () => {
+    expect(rowTarget({ ...base, contentY: 1000, range: 600 })).toBe(600);
+    expect(rowTarget({ ...base, contentY: 150 })).toBe(0);
+    expect(rowTarget({ ...base, contentY: folded + 16 + 150 })).toBe(DISTANCE);
+  });
+});
+
+describe("the hook", () => {
+  const hook = readFileSync(
+    new URL("./useHeroCollapse.ts", import.meta.url),
+    "utf8",
+  );
+  // Mutation: set `useNativeDriver: false`, and the collapse silently runs
+  // through the JS bridge again.
+  it("feeds the scroll to the native driver", () => {
+    expect(hook).toMatch(/Animated\.event\([\s\S]*useNativeDriver: true/);
+    expect(hook).not.toContain("useNativeDriver: false");
+  });
+  // Mutation: bring `LayoutAnimation` back, and the swap lays the list out again.
+  it("never animates layout", () => {
+    expect(hook).not.toContain("LayoutAnimation");
+    const header = readFileSync(
+      new URL("./CollapsingHero.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(header).not.toContain("LayoutAnimation");
+    expect(header).toContain("translateY");
   });
 });
 
@@ -215,6 +337,9 @@ describe("list screens collapse their hero", () => {
     );
     expect(saved.indexOf("<ChipRail")).toBeGreaterThan(-1);
     expect(saved.indexOf("<ChipRail")).toBeLessThan(
+      saved.indexOf("<HeroScrollView"),
+    );
+    expect(saved.indexOf("<SearchField")).toBeLessThan(
       saved.indexOf("<HeroScrollView"),
     );
     const inbox = readFileSync(
