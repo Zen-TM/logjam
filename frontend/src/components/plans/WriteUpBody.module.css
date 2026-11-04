@@ -4,9 +4,10 @@
   overflow-wrap: anywhere;
 }
 
-/* A note reads at the paragraph role's line height, as plain notes did. */
+/* A note reads at the paragraph role's line height and keeps its spaces, as plain notes did (and Logjam GPS's Text does). */
 .note {
   composes: paragraph from "../../textRoles.generated.module.css";
+  white-space: pre-wrap;
 }
 
 /* The first block sits under the section title as plain text did. */
