@@ -72,6 +72,7 @@ export {
 export { ForecastList, type ForecastRow } from "./ForecastList";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
-export { Toast, type ToastMessage } from "./Toast";
+export { Toast, ToastHost, type ToastMessage } from "./Toast";
+export { TAB_BAR_TOP_PAD, useTabBarHeight } from "./tabBar";
 export { backLabelOf } from "./backLabel";
 export { useNow } from "./useNow";

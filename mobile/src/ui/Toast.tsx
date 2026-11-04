@@ -5,13 +5,21 @@ import {
   type ToastAction,
   type ToastTone,
 } from "@logjam/shared";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
 import { useReducedMotionRef } from "./useReducedMotion";
+import { useTabBarHeight } from "./tabBar";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
+import { createToastQueue, dockBottom, type Clearance } from "./toastStore";
 
 export type ToastMessage = {
   text: string;
@@ -24,32 +32,77 @@ export type ToastMessage = {
   nonce: number;
 };
 
+// One host, one anchor (DESIGN.md): every `<Toast>` publishes to this queue and
+// `ToastHost`, mounted once at the shell, draws the one showing, centred above
+// the tab bar. A toast is therefore the same place whichever screen raised it.
+const queue = createToastQueue();
+
 /**
- * Transient status, floating above the screen's content — the outcome of an
- * action the user just took (imported, saved, couldn't reach the server).
+ * Transient status, centred above the tab bar: the outcome of an action the
+ * user just took (imported, saved, couldn't reach the server).
  *
  * Toasts, not inline cards: an inline banner reflows the list under the user's
  * thumb and then lingers with no owner. Errors stay up longer than
  * confirmations, and both are announced to screen readers.
  *
- * Render it as the LAST child of the screen root so it stacks above the list.
- * Only the pill takes touches (the dock around it is `box-none`), so it never
- * eats a tap beside itself. It can be cleared early: swipe it sideways (a
- * bottom-docked pill, and vertical belongs to the sheets and the map), or
- * press its × — the visible way out a screen reader and a thumb both reach.
+ * A screen keeps its message in state and renders `<Toast>`, which draws
+ * nothing itself: `ToastHost` does, one at a time, in the order they came
+ * (`toastStore.ts`). Only the pill takes touches (the dock around it is
+ * `box-none`), so it never eats a tap beside itself. It can be cleared early:
+ * swipe it sideways (a bottom-docked pill, and vertical belongs to the sheets
+ * and the map), or press its × — the visible way out a screen reader and a
+ * thumb both reach.
  */
 export function Toast({
   message,
   onDismissed,
-  clear,
+  bottom,
+  inset,
+}: { message: ToastMessage | null; onDismissed: () => void } & Clearance) {
+  const [owner] = useState(() => Symbol("toast"));
+  const hosted = useSyncExternalStore(queue.subscribe, queue.hosted);
+  useEffect(() => {
+    if (hosted && message)
+      queue.publish({ owner, message, onDismissed, bottom, inset });
+    // Raised when the message changes, once; the callback is a fresh closure
+    // each render and the clearance is read as it is raised.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosted, message, owner]);
+  // No host mounted (a test, a screen outside the shell): draw it in place.
+  return hosted ? null : (
+    <ToastDock
+      message={message}
+      onDismissed={onDismissed}
+      bottom={dockBottom(spacing(2), 0, bottom)}
+      inset={inset}
+    />
+  );
+}
+
+/** Mounted once, at the shell root, above the navigator: the only anchor. */
+export function ToastHost() {
+  useEffect(() => queue.mountHost(), []);
+  const current = useSyncExternalStore(queue.subscribe, queue.current);
+  const tabBar = useTabBarHeight();
+  return (
+    <ToastDock
+      message={current?.message ?? null}
+      onDismissed={queue.dismiss}
+      bottom={dockBottom(spacing(2), tabBar, current?.bottom)}
+      inset={current?.inset}
+    />
+  );
+}
+
+function ToastDock({
+  message,
+  onDismissed,
+  bottom,
+  inset,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
-  /** Extra room from the host's edges, for a host that keeps its own controls
-   *  there (the map's action column and instruments): the toast docks clear of
-   *  them rather than over them. Added to the default margin. */
-  clear?: { bottom?: number; left?: number; right?: number };
-}) {
+} & Clearance) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -136,11 +189,8 @@ export function Toast({
     <View
       style={[
         styles.dock,
-        clear && {
-          bottom: spacing(2) + (clear.bottom ?? 0),
-          left: spacing(2) + (clear.left ?? 0),
-          right: spacing(2) + (clear.right ?? 0),
-        },
+        bottom != null && { bottom },
+        inset != null && { left: inset, right: inset },
       ]}
       pointerEvents="box-none"
     >

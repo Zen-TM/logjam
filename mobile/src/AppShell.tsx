@@ -30,7 +30,6 @@ import { isRouteEditing } from "./map/routeEditLock";
 import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   currentConsentVersionOf,
   navLabel,
@@ -111,8 +110,11 @@ import {
   LoadingState,
   tabBadgeLabel,
   tabBadgeStyle,
+  TAB_BAR_TOP_PAD,
   Toast,
+  ToastHost,
   type ToastMessage,
+  useTabBarHeight,
 } from "./ui";
 
 function useNavigationTheme() {
@@ -319,9 +321,6 @@ const TripsStack = createNativeStackNavigator<TripsStackParams>();
 const SavedStack = createNativeStackNavigator<SavedStackParams>();
 const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
-/** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
-const TAB_BAR_BASE_HEIGHT = 49;
-const TAB_BAR_TOP_PAD = spacing(0.5);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
@@ -957,7 +956,7 @@ export function AppShell({
   }, []);
   const { fontScale } = useWindowDimensions();
   const navigationRef = useRef<NavigationContainerRef<never>>(null);
-  const insets = useSafeAreaInsets();
+  const tabBarHeight = useTabBarHeight();
 
   // Register this device for pushes once authenticated (best-effort), and
   // route notification taps: a place reference deep-links to its detail,
@@ -1188,7 +1187,7 @@ export function AppShell({
                 // same amount — and a set height replaces the library's, so it has
                 // to carry the bottom inset itself (the library still pads by it).
                 paddingTop: TAB_BAR_TOP_PAD,
-                height: TAB_BAR_BASE_HEIGHT + TAB_BAR_TOP_PAD + insets.bottom,
+                height: tabBarHeight,
               },
               tabBarActiveTintColor: theme.accent,
               tabBarInactiveTintColor: theme.textMuted,
@@ -1705,19 +1704,8 @@ export function AppShell({
         </NavigationContainer>
         <BackgroundToast />
         <ConfirmHost />
-        {/* Docked like BackgroundToast: clear of the tab bar. */}
-        <View
-          style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 64,
-          }}
-          pointerEvents="box-none"
-        >
-          <Toast message={routeToast} onDismissed={() => setRouteToast(null)} />
-        </View>
+        <Toast message={routeToast} onDismissed={() => setRouteToast(null)} />
+        <ToastHost />
       </View>
     </AccountStateProvider>
   );

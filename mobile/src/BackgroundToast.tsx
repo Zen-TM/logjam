@@ -10,10 +10,9 @@
 // of them overlap in the same dock, and the user does not care which
 // subsystem is talking.
 //
-// It docks clear of the tab bar so an outcome doesn't land on top of the
-// navigation the user is about to use.
+// It draws nothing itself: `ToastHost` (ui/Toast.tsx) is the one place a toast
+// shows, centred above the tab bar, whichever screen or job raised it.
 import { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
 
 import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
@@ -27,9 +26,6 @@ import {
 } from "./tracks/finishRecordingPrompt";
 import { LogTripFromTrackSheet } from "./tracks/LogTripFromTrackSheet";
 import type { TripTrackSource } from "./tracks/tripTrackSource";
-
-/** Bottom tab bar height plus a little air — the toast sits above both. */
-const TAB_BAR_CLEARANCE = 64;
 
 export function BackgroundToast() {
   const [message, setMessage] = useState<ToastMessage | null>(null);
@@ -56,7 +52,7 @@ export function BackgroundToast() {
   }, []);
 
   return (
-    <View style={styles.dock} pointerEvents="box-none">
+    <>
       <Toast message={message} onDismissed={() => setMessage(null)} />
       {/* Mounted only while open: it carries the whole trip form and its
           mirror queries, which nothing else at the root needs. */}
@@ -70,16 +66,6 @@ export function BackgroundToast() {
           }}
         />
       ) : null}
-    </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  dock: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: TAB_BAR_CLEARANCE,
-  },
-});

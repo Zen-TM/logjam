@@ -6045,15 +6045,16 @@ export function MapScreen({
         onError={(text) => notify(text, "error")}
       />
 
-      {/* Clear of the action column (the record button is in it) and of the
-          instruments stack with the speed and elevation chip. */}
+      {/* Centred over the tab bar like every toast, lifted above whichever
+          instruments are on (their stack ends `ornamentMarginY` up, the dock
+          already leaves `spacing(2)`), and kept off the action column on
+          BOTH sides so it stays centred: the column's edge gap, its width and
+          a gap of air. */}
       <Toast
         message={toast}
         onDismissed={() => setToast(null)}
-        clear={{
-          bottom: ornamentMarginY,
-          [controlsOnLeft ? "left" : "right"]: FAB_SIZE + CHROME_GAP,
-        }}
+        bottom={Math.max(0, ornamentMarginY - spacing(2))}
+        inset={CHROME_GAP + FAB_SIZE + CHROME_GAP}
       />
 
       <MapLayersSheet
