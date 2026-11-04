@@ -7,6 +7,7 @@ import {
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
 import { Icon, type Glyph } from "./Icon";
+import { pressOutsideControls } from "./cardPress";
 
 /**
  * A row's tile that is also its checkbox (DESIGN.md): the tile at rest, a
@@ -132,6 +133,7 @@ export function Row({
   footer,
   onOpen,
   onPress,
+  onClick,
   href,
   download,
   external = false,
@@ -190,15 +192,11 @@ export function Row({
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
-      data-pressable={onPress != null || undefined}
-      onClick={
-        onPress &&
-        ((event) => {
-          if ((event.target as HTMLElement).closest("button, a, [role=switch]"))
-            return;
-          onPress();
-        })
-      }
+      data-pressable={(onPress != null && !disabled) || undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        if (onPress && !disabled) pressOutsideControls(event, onPress);
+      }}
       data-selected={selected}
       data-accent-edge={String(accentEdge)}
       data-disabled={disabled}

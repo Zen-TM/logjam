@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type { Disablable } from "./Button";
+import { pressOutsideControls } from "./cardPress";
 import classes from "./Toggle.module.css";
 
 /** An on/off switch. A real `role="switch"` button, so Space and Enter work
@@ -77,9 +78,7 @@ export function SwitchRow({
       className={classes.row}
       data-disabled={disabled || undefined}
       onClick={(event) => {
-        if (disabled) return;
-        if ((event.target as HTMLElement).closest('[role="switch"]')) return;
-        onChange(!checked);
+        if (!disabled) pressOutsideControls(event, () => onChange(!checked));
       }}
     >
       <div className={classes.text}>
