@@ -235,6 +235,8 @@ export function ImportOptionsSheet({
         <View style={styles.body}>
           {actions.setColor ? (
             <ColourField
+              icon="colour"
+              hue={assetHue.import}
               label="Colour"
               palette={TRACK_COLORS}
               value={imported.color}

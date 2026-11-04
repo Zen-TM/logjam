@@ -46,6 +46,7 @@ export function ColourField({
   hideLabel = false,
   disabled = false,
   icon,
+  hue,
 }: {
   label: string;
   /** The closed list to choose from. Logjam Web's `ColourField` takes the same
@@ -59,6 +60,8 @@ export function ColourField({
   hideLabel?: boolean;
   disabled?: boolean;
   icon?: Glyph;
+  /** The tile's hue under `icon`, as the sibling rows in an options sheet take. */
+  hue?: string;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -70,6 +73,7 @@ export function ColourField({
       {icon ? (
         <Row
           icon={icon}
+          hue={hue}
           title={label}
           accessibilityLabel={`${label}: ${chosen}`}
           disabled={disabled}

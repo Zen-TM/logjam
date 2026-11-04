@@ -31,15 +31,18 @@ describe("a palette", () => {
   });
 });
 
-// Settings > Map is a stack of card rows, so its colour is one too. Mutation:
-// drop `icon="colour"` from the marker colour in MapSettingsScreen, and it is a
-// bare row between cards again.
-describe("the marker colour in Map settings", () => {
-  it("is drawn as a settings row", () => {
-    const screen = readFileSync(
-      join(SRC, "screens/settings/MapSettingsScreen.tsx"),
-      "utf8",
+// An options sheet and Settings > Map are stacks of card rows, so their colour
+// is one too; only the route toolbar's bare disc (`hideLabel`) is not. Mutation:
+// drop `icon="colour"` from the colour in TrackOptionsSheet, ImportOptionsSheet
+// or MapSettingsScreen, and it is a bare row between cards again.
+describe("a colour in a stack of card rows", () => {
+  it.each([
+    "screens/settings/MapSettingsScreen.tsx",
+    "tracks/TrackOptionsSheet.tsx",
+    "imports/ImportOptionsSheet.tsx",
+  ])("is drawn as a settings row in %s", (file) => {
+    expect(readFileSync(join(SRC, file), "utf8")).toMatch(
+      /<ColourField\s+icon="colour"/,
     );
-    expect(screen).toMatch(/<ColourField\s+icon="colour"/);
   });
 });
