@@ -13,6 +13,8 @@ export type TapIntake<T> = {
   offer: (id: string, tap: T) => void;
   /** The navigator became ready: release the tap that was waiting. */
   flush: () => void;
+  /** Drop a held tap: the account it was for has signed out. */
+  clear: () => void;
 };
 
 export function createTapIntake<T>(
@@ -37,5 +39,8 @@ export function createTapIntake<T>(
       flush();
     },
     flush,
+    clear() {
+      waiting = null;
+    },
   };
 }
