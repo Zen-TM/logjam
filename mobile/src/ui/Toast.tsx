@@ -5,11 +5,18 @@ import {
   type ToastAction,
   type ToastTone,
 } from "@logjam/shared";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Animated, PanResponder, Pressable, Text, View } from "react-native";
 
 import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Icon } from "./Icon";
+import { useTabBarHeight } from "./tabBar";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
 
 export type ToastMessage = {
@@ -23,31 +30,115 @@ export type ToastMessage = {
   nonce: number;
 };
 
+type Clearance = {
+  /** How far above the tab bar the toast docks, for a screen that keeps its own
+   *  instruments there (the map's scale bar). */
+  bottom?: number;
+  /** Kept free on BOTH sides, so the toast stays centred while it clears a
+   *  column on one of them (the map's actions). */
+  inset?: number;
+};
+
+type Shown = {
+  owner: symbol;
+  message: ToastMessage;
+  onDismissed: () => void;
+} & Clearance;
+
+// One host, one anchor (DESIGN.md): every `<Toast>` publishes here and
+// `ToastHost`, mounted once at the shell, draws it centred above the tab bar.
+// A screen's toast is therefore the same place whichever screen raised it.
+let shown: Shown | null = null;
+let hosts = 0;
+const listeners = new Set<() => void>();
+const emit = () => {
+  for (const listener of listeners) listener();
+};
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+};
+
 /**
- * Transient status, floating above the screen's content — the outcome of an
+ * Transient status, centred above the tab bar — the outcome of an
+ * action the user just took (imported, saved, couldn't reach the server). — the outcome of an
  * action the user just took (imported, saved, couldn't reach the server).
  *
  * Toasts, not inline cards: an inline banner reflows the list under the user's
  * thumb and then lingers with no owner. Errors stay up longer than
  * confirmations, and both are announced to screen readers.
  *
- * Render it as the LAST child of the screen root so it stacks above the list.
- * Only the pill takes touches (the dock around it is `box-none`), so it never
- * eats a tap beside itself. It can be cleared early: swipe it sideways (a
- * bottom-docked pill, and vertical belongs to the sheets and the map), or
- * press its × — the visible way out a screen reader and a thumb both reach.
+ * A screen keeps its message in state and renders `<Toast>`, which draws
+ * nothing itself: `ToastHost` does. Only the pill takes touches (the dock
+ * around it is `box-none`), so it never eats a tap beside itself. It can be
+ * cleared early: swipe it sideways (a bottom-docked pill, and vertical
+ * belongs to the sheets and the map), or press its × — the visible way out a
+ * screen reader and a thumb both reach.
  */
 export function Toast({
   message,
   onDismissed,
   bottom,
+  inset,
+}: { message: ToastMessage | null; onDismissed: () => void } & Clearance) {
+  const [owner] = useState(() => Symbol("toast"));
+  const hosted = useSyncExternalStore(subscribe, () => hosts > 0);
+  useEffect(() => {
+    if (!hosted) return;
+    if (message) shown = { owner, message, onDismissed, bottom, inset };
+    else if (shown?.owner === owner) shown = null;
+    else return;
+    emit();
+    // `onDismissed` is a fresh closure every render; the message is the change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hosted, message, owner, bottom, inset]);
+  // No host mounted (a test, a screen outside the shell): draw it in place.
+  return hosted ? null : (
+    <ToastDock
+      message={message}
+      onDismissed={onDismissed}
+      bottom={bottom}
+      inset={inset}
+    />
+  );
+}
+
+/** Mounted once, at the shell root, above the navigator: the only anchor. */
+export function ToastHost() {
+  useEffect(() => {
+    hosts += 1;
+    emit();
+    return () => {
+      hosts -= 1;
+      emit();
+    };
+  }, []);
+  const current = useSyncExternalStore(subscribe, () => shown);
+  const tabBar = useTabBarHeight();
+  return (
+    <ToastDock
+      message={current?.message ?? null}
+      onDismissed={() => {
+        const dismissOwner = current?.onDismissed;
+        shown = null;
+        emit();
+        dismissOwner?.();
+      }}
+      bottom={(current?.bottom ?? 0) + tabBar}
+      inset={current?.inset}
+    />
+  );
+}
+
+function ToastDock({
+  message,
+  onDismissed,
+  bottom,
+  inset,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
-  /** How far up from the host's bottom edge the toast docks, for a host that
-   *  keeps its own instruments there (the map's scale bar). */
-  bottom?: number;
-}) {
+} & Clearance) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -129,7 +220,11 @@ export function Toast({
 
   return (
     <View
-      style={[styles.dock, bottom != null && { bottom }]}
+      style={[
+        styles.dock,
+        bottom != null && { bottom: spacing(2) + bottom },
+        inset != null && { left: inset, right: inset },
+      ]}
       pointerEvents="box-none"
     >
       <Animated.View

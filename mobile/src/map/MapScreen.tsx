@@ -504,8 +504,9 @@ async function currentHeading(): Promise<number | null> {
 /** Gap between the stacked instruments, and the same value their container uses. */
 const INSTRUMENT_GAP = spacing(1);
 
-/** A toast over the map docks above the compass strip and scale bar, bottom-left. */
-const MAP_TOAST_CLEARANCE = spacing(6) + spacing(2);
+/** A toast over the map docks this far above the tab bar's own margin: clear of
+ *  the compass strip and scale bar. */
+const MAP_TOAST_CLEARANCE = spacing(6);
 
 /**
  * How long to wait for a `rotation` reading before deciding the device has no

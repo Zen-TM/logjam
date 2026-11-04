@@ -114,7 +114,10 @@ handler or a camera write, read
   sheet; an error is a toast.
 - **Give every sheet a title**: it draws the × and names the screen-reader
   dismiss.
-- **A background job's toast is at the shell** (`BackgroundToast.tsx`),
+- **There is one toast host.** `<Toast>` draws nothing; `ToastHost` (mounted
+  once in `AppShell`) shows it centred above the tab bar, `bottom` lifting it
+  clear of a screen's own instruments and `inset` keeping a column free on both
+  sides. A background job's toast is at the shell (`BackgroundToast.tsx`),
   never on the screen that started it.
 - **Long work is a progress card, not a screen**, unless leaving would break
   it.
