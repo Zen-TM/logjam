@@ -404,7 +404,11 @@ async function flushMediaOps(): Promise<boolean> {
   let firstError: unknown = null;
 
   for (const row of rows) {
-    if (row.op === "create" && (await isLinkPending(db, row))) continue;
+    if (
+      (row.op === "create" || row.op === "link") &&
+      (await isLinkPending(db, row))
+    )
+      continue;
 
     await db.runAsync(
       "UPDATE outbox SET state = 'inflight', attempts = attempts + 1 WHERE seq = ?",
@@ -502,23 +506,40 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
   }
 }
 
-/** A media create must wait for its linked entity's create to fully flush:
- * an outbox row still targeting linkedId means the row may not exist
- * server-side yet. PARKED ops don't count — a parked link is never going to
- * flush on its own, and counting it would leave the photos of a blocked place
- * create sitting queued forever: never uploaded, never parked, and so never
- * shown in Sync Issues either. */
+/** A media create, or a link that moves a file onto a place, must wait for the
+ * place (or trip) it points at to fully flush: an outbox row still targeting
+ * that id means the row may not exist server-side yet. A link also waits for
+ * the file's own upload, since the API cannot move a file it has not seen.
+ * PARKED ops don't count — a parked create is never going to flush on its own,
+ * and counting it would leave the photos of a blocked place create sitting
+ * queued forever: never uploaded, never parked, and so never shown in Sync
+ * Issues either. `retrying` DOES count: it is sent again unasked, and until it
+ * lands the row does not exist (the same reason `selectFlushBatch` holds back
+ * its dependents). */
 async function isLinkPending(
   db: Awaited<ReturnType<typeof getSyncDb>>,
-  row: MediaOpRow,
+  row: MediaOpRow & { op: string },
 ): Promise<boolean> {
-  const fields = JSON.parse(row.fields_json ?? "{}") as { linkedId?: string };
-  if (!fields.linkedId) return false;
+  const fields = JSON.parse(row.fields_json ?? "{}") as {
+    linkedId?: string;
+    placeId?: string | null;
+  };
+  const targetId = row.op === "link" ? fields.placeId : fields.linkedId;
+  if (row.op === "link") {
+    const upload = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM outbox
+        WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+          AND state IN ('queued', 'inflight')`,
+      row.entity_id,
+    );
+    if ((upload?.n ?? 0) > 0) return true;
+  }
+  if (!targetId) return false;
   const pending = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM outbox
       WHERE entity_id = ? AND entity != 'media'
-        AND state IN ('queued', 'inflight')`,
-    fields.linkedId,
+        AND state IN ('queued', 'inflight', 'retrying')`,
+    targetId,
   );
   return (pending?.n ?? 0) > 0;
 }
