@@ -68,6 +68,18 @@ function mediaRow(seq: number, extra: Partial<Row> = {}): Row {
   };
 }
 
+function placeCreateRow(seq: number, id: string): Row {
+  return { ...pushRow(seq), entity: "place", op: "create", entity_id: id };
+}
+
+function linkRow(seq: number, mediaId: string, placeId: string): Row {
+  return mediaRow(seq, {
+    op: "link",
+    entity_id: mediaId,
+    fields_json: JSON.stringify({ placeId }),
+  });
+}
+
 function pushRow(seq: number): Row {
   return {
     seq,
@@ -136,20 +148,29 @@ const db = {
     else run(sql, args);
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
-  getFirstAsync: (sql: string, ...args: unknown[]) =>
-    Promise.resolve({
+  getFirstAsync: (sql: string, ...args: unknown[]) => {
+    if (sql.includes("entity_id = ?")) {
+      // isLinkPending's two counts: a file's own queued upload, and any
+      // non-media op still targeting the place.
+      const states = [...sql.matchAll(/'(queued|inflight|retrying)'/g)].map(
+        (match) => match[1],
+      );
+      const ownUpload = sql.includes("op = 'create'");
+      return Promise.resolve({
+        n: rows.filter(
+          (row) =>
+            row.entity_id === args[0] &&
+            (ownUpload ? row.entity === "media" : row.entity !== "media") &&
+            states.includes(row.state),
+        ).length,
+      });
+    }
+    return Promise.resolve({
       n: sql.includes("'retrying'")
         ? rows.filter((row) => row.state === "retrying").length
-        : sql.includes("op = 'create' AND entity_id = ?")
-          ? rows.filter(
-              (row) =>
-                row.entity === "media" &&
-                row.op === "create" &&
-                row.entity_id === args[0] &&
-                (row.state === "queued" || row.state === "inflight"),
-            ).length
-          : 0,
-    }),
+        : 0,
+    });
+  },
   getAllAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve(
       sql.includes("entity = 'media'")
@@ -186,6 +207,11 @@ vi.mock("./mediaUpload", () => ({
     if (mediaErrors.has(row.seq))
       return Promise.reject(mediaErrors.get(row.seq));
     if (deadMedia.has(row.seq)) return Promise.reject(new Error("file gone"));
+    rows = rows.filter((candidate) => candidate.seq !== row.seq);
+    return Promise.resolve("done");
+  },
+  runMediaLinkOp: (row: { seq: number }) => {
+    mediaRuns.push(row.seq);
     rows = rows.filter((candidate) => candidate.seq !== row.seq);
     return Promise.resolve("done");
   },
@@ -577,6 +603,70 @@ describe("media pass", () => {
 
     // The copy was queued first but waited for the pass after its recording.
     expect(mediaRuns).toEqual([2, 1]);
+  });
+
+  // A photo or a route file picked while a place is being made is queued
+  // against an id the server has not seen. Mutation: drop 'retrying' from
+  // isLinkPending's states and the upload runs against a place still being
+  // retried; drop the `link` branch and the file's link runs (and a 404 deletes
+  // it) before the place exists.
+  it("holds a photo until the create of its place has landed", async () => {
+    rows = [
+      placeCreateRow(1, "c-2"),
+      mediaRow(2),
+      mediaRow(3, {
+        fields_json: JSON.stringify({ linkedType: "place", linkedId: "c-9" }),
+      }),
+    ];
+    // The server cannot take the place yet: it is retried, not parked.
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    // Only the photo of a different, settled place went up.
+    expect(mediaRuns).toEqual([3]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("sends the photo once the place's create has been applied", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+    expect(rows).toEqual([]);
+  });
+
+  it("does not wait for a place create that is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+  });
+
+  it("holds a route file's link until its place exists", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("holds a link until the file it moves has uploaded", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+    mediaErrors.set(1, httpError(503));
+
+    await expect(flushOutbox()).rejects.toBeDefined();
+
+    expect(mediaRuns).toEqual([1]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
   });
 
   it("keeps going past a dead op instead of aborting the pass", async () => {

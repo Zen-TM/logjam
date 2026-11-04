@@ -10,11 +10,13 @@ import {
 import { Text, View, type TextInputInstance } from "react-native";
 import {
   abandonConfirm,
+  ADD_WAY,
   ATTRIBUTE_NOUN,
   contractSectionKeys,
   defsForType,
   isValidLatitude,
   isValidLongitude,
+  mediaCategory,
   placeAttributesTitle,
   PLACE_FORM,
   type SectionKeysOn,
@@ -27,7 +29,7 @@ import {
   coordinateEntry,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, muted } from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   coordinateBlur,
   coordinateProblem,
@@ -38,6 +40,15 @@ import {
 } from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
+import { attachMediaLocal } from "../sync/mediaUpload";
+import { pickMedia } from "../media/pickMedia";
+import { AddWaySheet } from "./AddWaySheet";
+import {
+  hasStagedMedia,
+  NO_STAGED_MEDIA,
+  queueStagedMedia,
+  type StagedMedia,
+} from "./stagedPlaceMedia";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -59,6 +70,7 @@ import {
   ErrorBanner,
   Field,
   FormStack,
+  IconButton,
   Row,
   SectionHeader,
   ChipRail,
@@ -84,6 +96,13 @@ import {
  * through a MODE of this sheet, exactly as on `TripEditSheet` (DESIGN.md —
  * never a second modal). A date-typed field needs the picker, which is the
  * other mode.
+ *
+ * A NEW place also takes photos, videos and a way (the place page's own
+ * entries). They are only held here until Save, then queued behind the place's
+ * create, so cancelling leaves nothing queued (`stagedPlaceMedia.test.ts`). A
+ * system picker cannot run under an open sheet (DESIGN.md §4), so while one of
+ * their sheets is up this form steps out of the way, state intact, like the
+ * map picker's `resuming` round trip.
  *
  * PRIVACY: a place's name and position are the most sensitive pair in the app.
  * They live in component state and leave only through the outbox's authed push;
@@ -155,6 +174,7 @@ export function PlaceEditSheet({
   onSaved: (message: string) => void;
 }) {
   const theme = useTheme();
+  const { assetHue } = useHues();
   const styles = useStyles();
 
   const editing = place != null;
@@ -189,6 +209,13 @@ export function PlaceEditSheet({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
+  // New place only: the photos and way picked so far, the sheet that picks them,
+  // and whether this form is out of its way. `away` outlasts the picking sheet
+  // (it clears on that sheet's `onClosed`, after any system picker it parked).
+  const [staged, setStaged] = useState<StagedMedia>(NO_STAGED_MEDIA);
+  const [pickSheet, setPickSheet] = useState<"photos" | "way" | null>(null);
+  const [away, setAway] = useState(false);
+  const [pickJob, setPickJob] = useState<null | (() => Promise<void>)>(null);
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
     useFieldDefs("place");
   const placeTypes = useMirrorPlaceTypes();
@@ -262,6 +289,43 @@ export function PlaceEditSheet({
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
+    setStaged(NO_STAGED_MEDIA);
+    setPickSheet(null);
+    setAway(false);
+    setPickJob(null);
+  }
+
+  function stepOutTo(sheet: "photos" | "way") {
+    setAway(true);
+    setPickSheet(sheet);
+  }
+
+  /** Close the photo sheet, then run the picker with nothing on screen. */
+  function pickFrom(source: "camera" | "library", kind: "photo" | "video") {
+    setPickJob(() => async () => {
+      const files = await pickMedia(source, kind);
+      if (files.length > 0)
+        setStaged((current) => ({
+          ...current,
+          files: [...current.files, ...files],
+        }));
+    });
+    setPickSheet(null);
+  }
+
+  function photoSheetClosed() {
+    const job = pickJob;
+    setPickJob(null);
+    if (!job) {
+      setAway(false);
+      return;
+    }
+    void job()
+      .catch((err: unknown) => {
+        console.error(err);
+        setFormError(PLACE_FORM.copy.pickFailed);
+      })
+      .finally(() => setAway(false));
   }
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -450,7 +514,7 @@ export function PlaceEditSheet({
         await updatePlaceLocal(place.id, changes);
         onSaved(PLACE_FORM.copy.saved);
       } else {
-        await createPlaceLocal({
+        const newId = await createPlaceLocal({
           name: draft.name,
           // Non-null by the validation above.
           latitude: draft.latitude as number,
@@ -460,7 +524,11 @@ export function PlaceEditSheet({
           placeTypeId,
           fieldValues: withFieldValues({}, effectiveCustomFields),
         });
-        onSaved(PLACE_FORM.copy.added);
+        // After the place's own create, so each waits behind it in the outbox.
+        const { failed } = await queueStagedMedia(newId, staged, (file) =>
+          attachMediaLocal("place", newId, file),
+        );
+        onSaved(failed ? PLACE_FORM.copy.addedNotAll : PLACE_FORM.copy.added);
       }
       onClose();
     } catch (err) {
@@ -481,6 +549,7 @@ export function PlaceEditSheet({
     latitudeShown,
     longitudeShown,
     placeTypeId,
+    staged,
     typeFieldDefs,
   ]);
 
@@ -516,7 +585,7 @@ export function PlaceEditSheet({
 
   const dirty =
     mode === "form" &&
-    formFingerprint({
+    (formFingerprint({
       name,
       altNames,
       latitude,
@@ -524,9 +593,76 @@ export function PlaceEditSheet({
       notes,
       placeTypeId,
       fieldValues,
-    }) !== pristine;
+    }) !== pristine ||
+      hasStagedMedia(staged));
 
   const sections: Record<SectionKeysOn<typeof PLACE_FORM, "gps">, ReactNode> = {
+    // The two below are for a NEW place only: an existing one has both on its
+    // page, one tap from here, with the real strip.
+    photos: editing ? null : (
+      <>
+        <SectionHeader title={PLACE_FORM.copy.photos} />
+        {staged.files.map((file, index) => {
+          const video =
+            mediaCategory(file.mimeType ?? "image/jpeg") === "video";
+          const title = file.fileName ?? (video ? "Video" : "Photo");
+          return (
+            <Row
+              key={`${file.uri}-${index}`}
+              icon={video ? "video" : "photo"}
+              title={title}
+              subtitle={PLACE_FORM.copy.stagedHint}
+              right={
+                <IconButton
+                  icon="close"
+                  accessibilityLabel={`Remove ${title}`}
+                  onPress={() =>
+                    setStaged((current) => ({
+                      ...current,
+                      files: current.files.filter((_, at) => at !== index),
+                    }))
+                  }
+                />
+              }
+            />
+          );
+        })}
+        <Button
+          label="Add a photo or video"
+          icon="add"
+          variant="outlineAccent"
+          onPress={() => stepOutTo("photos")}
+        />
+      </>
+    ),
+    route: editing ? null : (
+      <>
+        <SectionHeader title={PLACE_FORM.copy.route} />
+        {staged.way ? (
+          <Row
+            icon="route"
+            hue={assetHue.route}
+            title={staged.way.label}
+            subtitle={PLACE_FORM.copy.stagedHint}
+            right={
+              <IconButton
+                icon="close"
+                accessibilityLabel={`Remove ${staged.way.label}`}
+                onPress={() =>
+                  setStaged((current) => ({ ...current, way: null }))
+                }
+              />
+            }
+          />
+        ) : null}
+        <Button
+          label={staged.way ? ADD_WAY.copy.replaceTitle : ADD_WAY.copy.title}
+          icon={staged.way ? "replace" : "add"}
+          variant="outlineAccent"
+          onPress={() => stepOutTo("way")}
+        />
+      </>
+    ),
     type: (
       <>
         {/* TYPE FIRST, because everything below it depends on the answer: the
@@ -743,106 +879,153 @@ export function PlaceEditSheet({
   };
 
   return (
-    <BottomSheet
-      visible={visible}
-      discard={dirty ? abandonConfirm("place", !editing) : null}
-      // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
-      // not "throw away everything I just typed".
-      onClose={
-        mode === "form"
-          ? onClose
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      title={title}
-      // A sub-mode gets an arrow back to the mode it came from.
-      onBack={
-        mode === "form"
-          ? undefined
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      footer={
-        mode === "form" ? (
-          <FormStack>
-            {/* Not attributable to one control (a field-value range, a save
+    <>
+      <BottomSheet
+        visible={visible && !away}
+        discard={dirty ? abandonConfirm("place", !editing) : null}
+        // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
+        // not "throw away everything I just typed".
+        onClose={
+          mode === "form"
+            ? onClose
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        title={title}
+        // A sub-mode gets an arrow back to the mode it came from.
+        onBack={
+          mode === "form"
+            ? undefined
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        footer={
+          mode === "form" ? (
+            <FormStack>
+              {/* Not attributable to one control (a field-value range, a save
                 the outbox rejected) — directly above Save, never at the top
                 of the form where it can sit out of sight of the button
                 (shared/DESIGN.md §11). */}
-            {formError ? <ErrorBanner message={formError} /> : null}
+              {formError ? <ErrorBanner message={formError} /> : null}
+              <Button
+                label={
+                  editing
+                    ? PLACE_FORM.copy.saveSubmit
+                    : PLACE_FORM.copy.addSubmit
+                }
+                icon="done"
+                loading={saving}
+                onPress={() => void save()}
+              />
+            </FormStack>
+          ) : mode === "fieldForm" ? (
+            fieldForm.footer
+          ) : mode === "fields" ? (
+            // PINNED, keeping the action this mode exists for visible above the
+            // list rows.
             <Button
-              label={
-                editing ? PLACE_FORM.copy.saveSubmit : PLACE_FORM.copy.addSubmit
-              }
-              icon="done"
-              loading={saving}
-              onPress={() => void save()}
+              label={ATTRIBUTE_NOUN.add}
+              icon="add"
+              onPress={() => {
+                setEditingField(null);
+                setMode("fieldForm");
+              }}
             />
+          ) : (
+            <Button label="Done" icon="done" onPress={() => setMode("form")} />
+          )
+        }
+      >
+        {mode === "date" && dateFieldKey ? (
+          <FormStack>
+            <DatePicker
+              value={fieldValues[dateFieldKey] || null}
+              onChange={(key) =>
+                setFieldValues((current) => ({
+                  ...current,
+                  [dateFieldKey]: key,
+                }))
+              }
+            />
+            {/* An attribute date may be unknown; a picker with no way back to
+              blank turns that into a wrong answer. */}
+            {fieldValues[dateFieldKey] ? (
+              <Button
+                label="Clear date"
+                icon="close"
+                variant="ghost"
+                onPress={() => {
+                  setFieldValues((current) => ({
+                    ...current,
+                    [dateFieldKey]: "",
+                  }));
+                  setMode("form");
+                }}
+              />
+            ) : null}
           </FormStack>
-        ) : mode === "fieldForm" ? (
-          fieldForm.footer
-        ) : mode === "fields" ? (
-          // PINNED, keeping the action this mode exists for visible above the
-          // list rows.
-          <Button
-            label={ATTRIBUTE_NOUN.add}
-            icon="add"
-            onPress={() => {
-              setEditingField(null);
+        ) : null}
+
+        {mode === "fields" ? (
+          <CustomFieldList
+            entity="place"
+            defs={typeFieldDefs}
+            onEdit={(def) => {
+              setEditingField(def);
               setMode("fieldForm");
             }}
           />
-        ) : (
-          <Button label="Done" icon="done" onPress={() => setMode("form")} />
-        )
-      }
-    >
-      {mode === "date" && dateFieldKey ? (
-        <FormStack>
-          <DatePicker
-            value={fieldValues[dateFieldKey] || null}
-            onChange={(key) =>
-              setFieldValues((current) => ({ ...current, [dateFieldKey]: key }))
-            }
-          />
-          {/* An attribute date may be unknown; a picker with no way back to
-              blank turns that into a wrong answer. */}
-          {fieldValues[dateFieldKey] ? (
-            <Button
-              label="Clear date"
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                setFieldValues((current) => ({
-                  ...current,
-                  [dateFieldKey]: "",
-                }));
-                setMode("form");
-              }}
+        ) : null}
+
+        {mode === "fieldForm" ? fieldForm.body : null}
+
+        {mode !== "form" ? null : (
+          <FormStack>
+            {contractSectionKeys(PLACE_FORM, "gps").map((key) => (
+              <Fragment key={key}>{sections[key]}</Fragment>
+            ))}
+          </FormStack>
+        )}
+      </BottomSheet>
+
+      {/* The pickers of a new place's photos and way, each shown alone while the
+        form above is out of the way (DESIGN.md §4: never a second sheet). */}
+      {editing ? null : (
+        <>
+          <BottomSheet
+            visible={pickSheet === "photos"}
+            onClose={() => setPickSheet(null)}
+            onClosed={photoSheetClosed}
+            title="Add a photo or video"
+          >
+            <Row
+              icon="camera"
+              title="Take photo"
+              onPress={() => pickFrom("camera", "photo")}
             />
-          ) : null}
-        </FormStack>
-      ) : null}
-
-      {mode === "fields" ? (
-        <CustomFieldList
-          entity="place"
-          defs={typeFieldDefs}
-          onEdit={(def) => {
-            setEditingField(def);
-            setMode("fieldForm");
-          }}
-        />
-      ) : null}
-
-      {mode === "fieldForm" ? fieldForm.body : null}
-
-      {mode !== "form" ? null : (
-        <FormStack>
-          {contractSectionKeys(PLACE_FORM, "gps").map((key) => (
-            <Fragment key={key}>{sections[key]}</Fragment>
-          ))}
-        </FormStack>
+            <Row
+              icon="video"
+              title="Record video"
+              onPress={() => pickFrom("camera", "video")}
+            />
+            <Row
+              icon="photo"
+              title="Choose from library"
+              onPress={() => pickFrom("library", "photo")}
+            />
+          </BottomSheet>
+          <AddWaySheet
+            placeId={null}
+            placeName={draft.name}
+            media={[]}
+            visible={pickSheet === "way"}
+            onClose={() => setPickSheet(null)}
+            onClosed={() => setAway(false)}
+            onStage={(way) => setStaged((current) => ({ ...current, way }))}
+            onInfo={() => {}}
+            onError={setFormError}
+          />
+        </>
       )}
-    </BottomSheet>
+    </>
   );
 }
 

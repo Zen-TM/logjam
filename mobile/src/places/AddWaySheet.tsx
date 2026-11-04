@@ -62,24 +62,42 @@ import {
 
 type Mode = "sources" | "routes" | "imports" | "tracks";
 
+/**
+ * A way chosen for a place that does not exist yet: the Add-a-place form holds
+ * it and runs `write` with the new place's id once the place is queued, so
+ * cancelling the form leaves nothing behind.
+ */
+export type StagedWay = {
+  /** What the form shows for it: a route, recording or file name. */
+  label: string;
+  write: (placeId: string) => Promise<string>;
+};
+
 export function AddWaySheet({
   placeId,
   placeName,
   media,
   visible,
   onClose,
+  onClosed,
   onDrawRoute,
+  onStage,
   onInfo,
   onError,
 }: {
-  placeId: string;
+  /** Null while the place is still being made: a pick is handed to `onStage`
+   *  instead of written, and nothing in the slot can be displaced. */
+  placeId: string | null;
   placeName: string;
   /** This place's attachments — half of what can be occupying the slot. */
   media: MirrorMedia[];
   visible: boolean;
   onClose: () => void;
+  /** The sheet has finished closing and any picker it parked has settled. */
+  onClosed?: () => void;
   /** Arm the map's pen for this place. Absent when the host has no map. */
   onDrawRoute?: () => void;
+  onStage?: (way: StagedWay) => void;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -158,7 +176,16 @@ export function AddWaySheet({
    * documented order, then say what happened — once, for every source.
    */
   const fill = useCallback(
-    (source: WaySource, write: (replaces?: string) => Promise<string>) => {
+    (
+      source: WaySource,
+      label: string,
+      write: (placeId: string, replaces?: string) => Promise<string>,
+    ) => {
+      if (placeId === null) {
+        onStage?.({ label, write: (id) => write(id) });
+        close();
+        return;
+      }
       setBusy(true);
       // The write's own sentence, said only once the swap has finished — a
       // toast fired before the incumbent is gone would describe a slot that
@@ -169,7 +196,7 @@ export function AddWaySheet({
         source,
         occupant: routeSlotOccupant(placeId, routes.data ?? [], media),
         write: (replaces) =>
-          write(replaces).then((said) => {
+          write(placeId, replaces).then((said) => {
             message = said;
           }),
       })
@@ -188,7 +215,7 @@ export function AddWaySheet({
         })
         .finally(() => setBusy(false));
     },
-    [placeId, placeName, close, media, onError, onInfo, routes.data],
+    [placeId, placeName, close, media, onError, onInfo, onStage, routes.data],
   );
 
   /** Close first, then run — every system picker needs a window of its own. */
@@ -221,18 +248,18 @@ export function AddWaySheet({
     // uploaded straight onto the place. One kind of file, one row, one place
     // it lives — it appears in Saved like every other import, survives being
     // replaced here, and can be put on another place later.
-    fill("file", async (replaces) => {
+    fill("file", asset.name, async (id, replaces) => {
       const record = await importVectorSource(asset.uri, asset.name);
-      await linkStandaloneMediaLocal(record.id, placeId, replaces);
+      await linkStandaloneMediaLocal(record.id, id, replaces);
       return ADD_WAY.copy.fileDone;
     });
-  }, [placeId, fill, onError]);
+  }, [fill, onError]);
 
   const drawnRoutes = attachableRoutes(
     // A route shared with you belongs to someone else; the API refuses the
     // write, so it must not be offered.
     (routes.data ?? []).filter((route) => route.syncRole !== "shared"),
-    placeId,
+    placeId ?? "",
     query,
   );
 
@@ -254,14 +281,19 @@ export function AddWaySheet({
       onBack={mode === "sources" ? undefined : () => setMode("sources")}
       onClosed={() => {
         const job = pending;
-        if (!job) return;
+        if (!job) {
+          onClosed?.();
+          return;
+        }
         setPending(null);
         // A picker flow can reject (a cancelled folder grant, a failed read);
         // unhandled here it was an unhandled rejection and the row looked dead.
-        void job().catch((err: unknown) => {
-          console.error(err);
-          onError("Couldn't finish that. Try again.");
-        });
+        void job()
+          .catch((err: unknown) => {
+            console.error(err);
+            onError("Couldn't finish that. Try again.");
+          })
+          .finally(() => onClosed?.());
       }}
       title={
         mode === "routes"
@@ -354,7 +386,7 @@ export function AddWaySheet({
             </Text>
           ) : (
             drawnRoutes.map((route) => {
-              const here = route.placeId === placeId;
+              const here = placeId !== null && route.placeId === placeId;
               return (
                 <Row
                   key={route.id}
@@ -368,8 +400,8 @@ export function AddWaySheet({
                   hue={here ? theme.accent : assetHue.route}
                   disabled={busy || here}
                   onPress={() =>
-                    fill("route", async () => {
-                      await updateRouteLocal(route.id, { placeId });
+                    fill("route", route.name, async (id) => {
+                      await updateRouteLocal(route.id, { placeId: id });
                       return ADD_WAY.copy.routeDone;
                     })
                   }
@@ -396,11 +428,8 @@ export function AddWaySheet({
                 title={row.name}
                 disabled={busy}
                 onPress={() =>
-                  fill("import", async (replaces) => {
-                    await vectorImportActions(row).attachToPlace!(
-                      placeId,
-                      replaces,
-                    );
+                  fill("import", row.name, async (id, replaces) => {
+                    await vectorImportActions(row).attachToPlace!(id, replaces);
                     return ADD_WAY.copy.linkedDone;
                   })
                 }
@@ -429,9 +458,9 @@ export function AddWaySheet({
                   subtitle={trackSummary(track)}
                   disabled={busy}
                   onPress={() =>
-                    fill("track", async () => {
+                    fill("track", track.name, async (id) => {
                       const { name, pointCount } =
-                        await trackActions(track).createRouteFrom!(placeId);
+                        await trackActions(track).createRouteFrom!(id);
                       // RDP always throws points away; saying how many survived
                       // is what stops the user concluding Logjam GPS lost
                       // their recording.
