@@ -37,14 +37,7 @@
 // through navigation params to MapScreen's camera; in memory only, never
 // logged, never persisted.
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type ScrollViewInstance,
-} from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import * as FileSystem from "expo-file-system/legacy";
@@ -101,7 +94,9 @@ import {
   BottomSheet,
   Button,
   Meter,
+  CollapsingHeader,
   CollapsingHero,
+  HeroScrollView,
   compactHeroTitle,
   Hero,
   IconButton,
@@ -563,20 +558,17 @@ export function SavedScreen({
   const highlightNonce = initialHighlight?.nonce ?? 0;
   const [pulsingKey, setPulsingKey] = useState<string | null>(null);
   const [pulse] = useState(() => new Animated.Value(1));
-  const scrollRef = useRef<ScrollViewInstance>(null);
   const heroCollapse = useHeroCollapse();
+  const { scrollToRow } = heroCollapse;
   /** One scroll per arrival — `onLayout` fires again on every relayout. */
   const scrolledForNonce = useRef<number | null>(null);
   const scrollToPulse = useCallback(
     (y: number) => {
       if (scrolledForNonce.current === highlightNonce) return;
       scrolledForNonce.current = highlightNonce;
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, y - spacing(2)),
-        animated: true,
-      });
+      scrollToRow(y, spacing(2));
     },
-    [highlightNonce],
+    [highlightNonce, scrollToRow],
   );
 
   const [addSheetOpen, setAddSheetOpen] = useState(false);
@@ -1665,114 +1657,118 @@ export function SavedScreen({
       {/* The storage summary is the hero; once the list scrolls it folds to
           the title row (and the bulk bar, which takes its slot while picking),
           and the chips and search stay pinned under it. */}
-      <CollapsingHero collapse={heroCollapse}>
-        {(compact) => (
-          <Hero
-            compact={compact}
-            value={formatBytes(usedBytes)}
-            valueSuffix={
-              freeBytes != null
-                ? `used · ${formatBytes(freeBytes)} free`
-                : "used"
-            }
-            // The pinned row names the filter even when it is compact (an Inbox
-            // tap lands on Routes).
-            title={(() => {
-              const name =
-                filter === "all"
-                  ? "Saved"
-                  : `Saved · ${CATEGORY_META[filter].plural}`;
-              return compact
-                ? compactHeroTitle(name, activeCategoryCount)
-                : name;
-            })()}
-            titleNumberOfLines={2}
-            actions={
-              <Button
-                label="Add"
-                icon="addSaved"
-                compact
-                onPress={() => setAddSheetOpen(true)}
-              />
-            }
-          >
-            {selecting ? (
-              <SelectionBar
-                countLabel={`${countOf(selectedItems.length, "item")} selected${
-                  selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
-                }`}
-                // "Everything" means everything a selection can act on — a shared
-                // route or waypoint is skipped rather than picked and then refused.
-                showSelectAll={selectedItems.length < selectableItems.length}
-                extra={
-                  <BulkShareButton
-                    online={online}
-                    onPress={() => setBulkShareOpen(true)}
-                  />
-                }
-                onClear={clearSelection}
-                onSelectAll={() =>
-                  setSelectedKeys(selectableItems.map((item) => item.key))
-                }
-                onDelete={deleteSelected}
-              />
-            ) : compact ? undefined : (
-              <>
-                {/* One kind on the phone: its legend would say the line above again. */}
-                <Meter
-                  segments={segments}
-                  legend={segments.filter((s) => s.value > 0).length > 1}
+      <CollapsingHeader collapse={heroCollapse}>
+        <CollapsingHero collapse={heroCollapse}>
+          {(compact) => (
+            <Hero
+              compact={compact}
+              value={formatBytes(usedBytes)}
+              valueSuffix={
+                freeBytes != null
+                  ? `used · ${formatBytes(freeBytes)} free`
+                  : "used"
+              }
+              // The pinned row names the filter even when it is compact (an Inbox
+              // tap lands on Routes).
+              title={(() => {
+                const name =
+                  filter === "all"
+                    ? "Saved"
+                    : `Saved · ${CATEGORY_META[filter].plural}`;
+                return compact
+                  ? compactHeroTitle(name, activeCategoryCount)
+                  : name;
+              })()}
+              titleNumberOfLines={2}
+              actions={
+                <Button
+                  label="Add"
+                  icon="addSaved"
+                  compact
+                  onPress={() => setAddSheetOpen(true)}
                 />
-                {/* Offline is a normal state here — everything already on the device
+              }
+            >
+              {selecting ? (
+                <SelectionBar
+                  countLabel={`${countOf(selectedItems.length, "item")} selected${
+                    selectedBytes > 0 ? ` · ${formatBytes(selectedBytes)}` : ""
+                  }`}
+                  // "Everything" means everything a selection can act on — a shared
+                  // route or waypoint is skipped rather than picked and then refused.
+                  showSelectAll={selectedItems.length < selectableItems.length}
+                  extra={
+                    <BulkShareButton
+                      online={online}
+                      onPress={() => setBulkShareOpen(true)}
+                    />
+                  }
+                  onClear={clearSelection}
+                  onSelectAll={() =>
+                    setSelectedKeys(selectableItems.map((item) => item.key))
+                  }
+                  onDelete={deleteSelected}
+                />
+              ) : compact ? undefined : (
+                <>
+                  {/* One kind on the phone: its legend would say the line above again. */}
+                  <Meter
+                    segments={segments}
+                    legend={segments.filter((s) => s.value > 0).length > 1}
+                  />
+                  {/* Offline is a normal state here — everything already on the device
                 still works — so it sits beside what is still waiting to leave
                 rather than reading as an error. */}
-                <SyncStatusPills online={online} pendingCount={pendingCount} />
-              </>
-            )}
-          </Hero>
-        )}
-      </CollapsingHero>
+                  <SyncStatusPills
+                    online={online}
+                    pendingCount={pendingCount}
+                  />
+                </>
+              )}
+            </Hero>
+          )}
+        </CollapsingHero>
 
-      {/* Pinned with the hero (shared/DESIGN.md: only the list scrolls). */}
-      <View style={styles.pinnedRail}>
-        <View style={styles.rail}>
-          <ChipRail
-            options={filterOptions}
-            value={filter}
-            onChange={selectFilter}
-            scroll
-          />
-          {/* A name search on every tab — every category carries a
+        {/* Pinned with the hero (shared/DESIGN.md: only the list scrolls). */}
+        <View style={styles.pinnedRail}>
+          <View style={styles.rail}>
+            <ChipRail
+              options={filterOptions}
+              value={filter}
+              onChange={selectFilter}
+              scroll
+            />
+            {/* A name search on every tab — every category carries a
               `search.haystack`. Nothing to search: the field is hidden with
               nothing on the phone, and the empty panel gets the whole screen
               body. */}
-          {activeCategoryCount > 0 ? (
-            // The field carries its own right pad because the rail has none —
-            // the category chips are meant to scroll off the edge, an input
-            // running into it just looks clipped.
-            <View style={styles.searchField}>
-              <SearchField
-                label={`Search ${searchNoun(filter)}`}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                // Narrowing the list mid-selection could scroll a selected row
-                // out of view or drop it out of the visible set entirely — the
-                // same reason changing category clears the selection outright
-                // (selectFilter). The field stays visible but inert, rather
-                // than losing what was typed. It also GREYS OUT — a
-                // live-looking field that silently eats taps read as broken,
-                // not as "not now".
-                editable={!selecting}
-              />
-            </View>
-          ) : null}
+            {activeCategoryCount > 0 ? (
+              // The field carries its own right pad because the rail has none —
+              // the category chips are meant to scroll off the edge, an input
+              // running into it just looks clipped.
+              <View style={styles.searchField}>
+                <SearchField
+                  label={`Search ${searchNoun(filter)}`}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  // Narrowing the list mid-selection could scroll a selected row
+                  // out of view or drop it out of the visible set entirely — the
+                  // same reason changing category clears the selection outright
+                  // (selectFilter). The field stays visible but inert, rather
+                  // than losing what was typed. It also GREYS OUT — a
+                  // live-looking field that silently eats taps read as broken,
+                  // not as "not now".
+                  editable={!selecting}
+                />
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View>
+      </CollapsingHeader>
 
-      <ScrollView
-        ref={scrollRef}
+      <HeroScrollView
         {...heroCollapse.scrollProps}
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, heroCollapse.inset(spacing(1.5))]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -2103,7 +2099,7 @@ export function SavedScreen({
             ))}
           </>
         ) : null}
-      </ScrollView>
+      </HeroScrollView>
 
       {/* Share the whole selection — the same sheet the Places screen opens,
           so the two cannot word a bulk share differently. */}
@@ -2658,7 +2654,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   pinnedRail: { paddingHorizontal: spacing(2), paddingTop: spacing(1.5) },
   body: {
     paddingHorizontal: spacing(2),
-    paddingTop: spacing(1.5),
     paddingBottom: spacing(4),
     gap: spacing(1),
   },

@@ -20,13 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Keyboard,
-  RefreshControl,
-  SectionList,
-  Text,
-  View,
-} from "react-native";
+import { Keyboard, RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeTripFilterCount,
@@ -87,7 +81,9 @@ import {
   Button,
   ErrorState,
   Hero,
+  CollapsingHeader,
   CollapsingHero,
+  HeroSectionList,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -543,10 +539,10 @@ export function LogsScreen({
       ) : null,
 
     list: (
-      <SectionList
+      <HeroSectionList
         style={styles.list}
         {...heroCollapse.scrollProps}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={yearSections}
         keyExtractor={keyExtractor}
         keyboardShouldPersistTaps="handled"
@@ -561,6 +557,7 @@ export function LogsScreen({
         removeClippedSubviews
         refreshControl={
           <RefreshControl
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
@@ -605,9 +602,14 @@ export function LogsScreen({
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(TRIPS_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(TRIPS_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
 
       <TripOptionsSheet
         trip={menuTrip}

@@ -1,119 +1,227 @@
-import { useCallback, useRef } from "react";
 import {
-  LayoutAnimation,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import {
+  Animated,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 
-import { COMPACT_ROW, nextCompact } from "./heroCollapseRule";
+import { snapTarget } from "./heroCollapseRule";
 import { useReducedMotionRef } from "./useReducedMotion";
 
-/** How long the swap between the full and the compact hero eases. */
-const SWAP_MS = 100;
+/** A scroll that has been quiet this long, with no finger down, has stopped. */
+const IDLE_MS = 100;
 
-/** After a swap the list's offset is in flux (the layout moved under it) and
- *  scroll events already in flight carry the old one: they are read for their
- *  numbers but not acted on until this has passed, and the next scroll or the
- *  end of the gesture decides. */
-const SETTLE_MS = 200;
+/** What `CollapsingHeader` and `CollapsingHero` measure and the snap decides. */
+export type HeroMetrics = {
+  /** The full hero's height, and the compact row's. */
+  full: number;
+  compact: number;
+  /** The whole header block's: hero and the pinned rows under it. */
+  header: number;
+  /** The list has come to rest with the hero folded (not a per-frame value). */
+  collapsed: boolean;
+};
+
+/** Whatever a list instance exposes of its scroll view. */
+type ListHandle = {
+  getScrollResponder?: () => unknown;
+};
+type Scrollable = {
+  scrollTo?: (options: { y: number; animated: boolean }) => void;
+};
 
 /**
- * Whether a list's pinned hero is full or compact, from the list's own scroll,
- * size and layout (`nextCompact` holds the rule; guard: `heroCollapse.test.ts`).
+ * The pinned hero of a list that collapses as the list scrolls. The scroll
+ * offset drives the hero on the UI thread (`Animated.event`, native driver), so
+ * the collapse follows the finger frame by frame and costs the JS thread
+ * nothing. Nothing in it changes layout: the header floats over the list, the
+ * list leaves it `headerHeight` of room at its top, and the hero slides and
+ * fades (`collapseRanges` has the numbers, `snapTarget` the rest).
  *
- * The flag is NOT React state on the screen: it sits in a ref and only the
- * `CollapsingHero` that reads it re-renders, so crossing the threshold costs
- * one hero's render, not the list's (it was a whole-screen render under a 300 ms
- * ease, which in a dev build read as lag). The swap eases for `SWAP_MS` unless
- * the user asked for reduced motion.
+ * The JS side only watches for the list to stop, to settle a half-folded hero
+ * to the nearer end; a ref and a timer, no state, until the hero comes to rest.
  *
- * Spread `scrollProps` on the list and give `CollapsingHero` the rest.
+ * On the screen: `CollapsingHeader` around the hero (`CollapsingHero`) and
+ * the rows pinned under it; the list is a `HeroFlatList` / `HeroSectionList` /
+ * `HeroScrollView` with `{...scrollProps}`, `heroCollapse.inset()` in its
+ * `contentContainerStyle`, and `progressViewOffset={headerHeight}` on its
+ * `RefreshControl`.
  */
 export function useHeroCollapse() {
-  const state = useRef(false);
-  const listeners = useRef(new Set<() => void>());
+  const scrollY = useMemo(() => new Animated.Value(0), []);
   const reduceMotion = useReducedMotionRef();
-  const metrics = useRef({
-    y: 0,
-    contentHeight: 0,
-    viewHeight: 0,
-    fullHeight: 0,
-    compactHeight: COMPACT_ROW,
+
+  const metrics = useRef<HeroMetrics>({
+    full: 0,
+    compact: 0,
+    header: 0,
+    collapsed: false,
   });
-
-  const settledAt = useRef(0);
-  const evaluate = useCallback(() => {
-    const next = nextCompact({ compact: state.current, ...metrics.current });
-    if (next === state.current) return;
-    state.current = next;
-    settledAt.current = Date.now() + SETTLE_MS;
-    if (!reduceMotion.current)
-      LayoutAnimation.configureNext(
-        LayoutAnimation.create(SWAP_MS, "easeOut", "opacity"),
-      );
+  const listeners = useRef(new Set<() => void>());
+  const patch = useCallback((change: Partial<HeroMetrics>) => {
+    const next = { ...metrics.current, ...change };
+    if (
+      next.full === metrics.current.full &&
+      next.compact === metrics.current.compact &&
+      next.header === metrics.current.header &&
+      next.collapsed === metrics.current.collapsed
+    )
+      return;
+    metrics.current = next;
     listeners.current.forEach((listener) => listener());
-  }, [reduceMotion]);
-
+  }, []);
   const subscribe = useCallback((listener: () => void) => {
     listeners.current.add(listener);
     return () => {
       listeners.current.delete(listener);
     };
   }, []);
-  const getCompact = useCallback(() => state.current, []);
+  const getMetrics = useCallback(() => metrics.current, []);
 
-  const onScroll = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-      Object.assign(metrics.current, {
-        y: contentOffset.y,
-        contentHeight: contentSize.height,
-        viewHeight: layoutMeasurement.height,
-      });
-      if (Date.now() >= settledAt.current) evaluate();
-    },
-    [evaluate],
-  );
+  const list = useRef<ListHandle | null>(null);
+  const scroll = useRef({
+    y: 0,
+    contentHeight: 0,
+    viewHeight: 0,
+    dragging: false,
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  });
 
-  // The gesture ending is the moment to take a decision a settling list held.
-  const onScrollEnd = useCallback(() => evaluate(), [evaluate]);
-
-  // A search or a filter can shorten the list without a scroll event.
-  const onContentSizeChange = useCallback(
-    (_width: number, height: number) => {
-      metrics.current.contentHeight = height;
-      evaluate();
-    },
-    [evaluate],
-  );
-
-  const onListLayout = useCallback(
-    (e: LayoutChangeEvent) => {
-      metrics.current.viewHeight = e.nativeEvent.layout.height;
-      evaluate();
-    },
-    [evaluate],
-  );
-
-  const onHeroLayout = useCallback((e: LayoutChangeEvent) => {
-    const { height } = e.nativeEvent.layout;
-    if (state.current) metrics.current.compactHeight = height;
-    else metrics.current.fullHeight = height;
+  const scrollTo = useCallback((y: number, animated: boolean) => {
+    const handle = list.current;
+    const target = (handle?.getScrollResponder?.() ?? handle) as
+      | Scrollable
+      | null
+      | undefined;
+    target?.scrollTo?.({ y, animated });
   }, []);
 
-  return {
+  /** Brings the row at `contentY` (in the list's content, header room
+   *  included) to just under the folded header. */
+  const scrollToRow = useCallback(
+    (contentY: number, gap: number) => {
+      const { full, compact, header } = metrics.current;
+      const folded = header - Math.max(0, full - compact);
+      scrollTo(Math.max(0, contentY - folded - gap), true);
+    },
+    [scrollTo],
+  );
+
+  const settle = useCallback(() => {
+    const s = scroll.current;
+    const distance = Math.max(
+      0,
+      metrics.current.full - metrics.current.compact,
+    );
+    const target = snapTarget({
+      y: s.y,
+      distance,
+      range: Math.max(0, s.contentHeight - s.viewHeight),
+    });
+    if (target !== s.y) scrollTo(target, !reduceMotion.current);
+    patch({ collapsed: distance > 0 && target >= distance });
+  }, [patch, reduceMotion, scrollTo]);
+
+  const arm = useCallback(() => {
+    const s = scroll.current;
+    clearTimeout(s.timer);
+    if (!s.dragging) s.timer = setTimeout(settle, IDLE_MS);
+  }, [settle]);
+  useEffect(() => () => clearTimeout(scroll.current.timer), []);
+
+  const onScrollEvent = useMemo(
+    () =>
+      // eslint-disable-next-line react-hooks/refs -- the listener reads refs on a scroll event, never during render
+      Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+        useNativeDriver: true,
+        listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          const { contentOffset, contentSize, layoutMeasurement } =
+            e.nativeEvent;
+          Object.assign(scroll.current, {
+            y: contentOffset.y,
+            contentHeight: contentSize.height,
+            viewHeight: layoutMeasurement.height,
+          });
+          arm();
+        },
+      }),
+    [arm, scrollY],
+  );
+
+  const onScrollBeginDrag = useCallback(() => {
+    scroll.current.dragging = true;
+    clearTimeout(scroll.current.timer);
+  }, []);
+  const onScrollEndDrag = useCallback(() => {
+    scroll.current.dragging = false;
+    arm();
+  }, [arm]);
+
+  // A search or a filter can shorten the list, or a layout change resize it,
+  // without a finger on it.
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      scroll.current.contentHeight = height;
+      arm();
+    },
+    [arm],
+  );
+  const onListLayout = useCallback(
+    (e: LayoutChangeEvent) => {
+      scroll.current.viewHeight = e.nativeEvent.layout.height;
+      arm();
+    },
+    [arm],
+  );
+
+  const setList = useCallback((instance: ListHandle | null) => {
+    list.current = instance;
+  }, []);
+
+  // The one value a screen reads, so the screen re-renders when the header's
+  // height changes (a selection bar, a note) and never for the collapse.
+  const headerHeight = useSyncExternalStore(
     subscribe,
-    getCompact,
+    () => metrics.current.header,
+  );
+
+  const measure = useMemo(
+    () => ({
+      full: (e: LayoutChangeEvent) =>
+        patch({ full: e.nativeEvent.layout.height }),
+      compact: (e: LayoutChangeEvent) =>
+        patch({ compact: e.nativeEvent.layout.height }),
+      header: (e: LayoutChangeEvent) =>
+        patch({ header: e.nativeEvent.layout.height }),
+    }),
+    [patch],
+  );
+
+  return {
+    scrollY,
+    subscribe,
+    getMetrics,
+    measure,
+    headerHeight,
+    /** The list's top padding: room for the header, plus the gap the screen wants. */
+    inset: (gap = 0) => ({ paddingTop: headerHeight + gap }),
+    scrollToRow,
     scrollProps: {
-      onScroll,
-      // One event a frame: the swap lands on the frame that crossed it.
+      ref: setList,
+      onScroll: onScrollEvent,
+      // One event a frame, for the idle timer and the snap.
       scrollEventThrottle: 16,
-      onScrollEndDrag: onScrollEnd,
-      onMomentumScrollEnd: onScrollEnd,
+      onScrollBeginDrag,
+      onScrollEndDrag,
       onContentSizeChange,
       onLayout: onListLayout,
     },
-    heroProps: { onLayout: onHeroLayout },
   };
 }

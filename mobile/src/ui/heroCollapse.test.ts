@@ -3,109 +3,132 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  COLLAPSE_AT,
-  EXPAND_AT,
+  STEP_PX,
+  collapseRanges,
   compactHeroTitle,
-  nextCompact,
+  snapTarget,
 } from "./heroCollapseRule";
 
-const list = {
-  contentHeight: 3000,
-  viewHeight: 800,
-  fullHeight: 260,
-  compactHeight: 56,
-};
+/** What an `Animated` interpolation with `extrapolate: "clamp"` returns. */
+function at(ramp: { inputRange: number[]; outputRange: number[] }, y: number) {
+  const { inputRange: x, outputRange: v } = ramp;
+  if (y <= x[0]) return v[0];
+  for (let i = 1; i < x.length; i++) {
+    if (y <= x[i])
+      return (
+        v[i - 1] + ((y - x[i - 1]) / (x[i] - x[i - 1])) * (v[i] - v[i - 1])
+      );
+  }
+  return v[v.length - 1];
+}
 
-const GIVES = list.fullHeight - list.compactHeight;
+const DISTANCE = 204;
 
-describe("nextCompact", () => {
-  // Mutation: remove the `gives` term and the short list below collapses.
-  it("never collapses a list that would stop scrolling once the hero shrinks", () => {
-    const short = { ...list, contentHeight: 800 + GIVES + 20 };
-    expect(nextCompact({ ...short, compact: false, y: 400 })).toBe(false);
-    expect(nextCompact({ ...list, compact: false, y: 400 })).toBe(true);
+describe("collapseRanges", () => {
+  const r = collapseRanges(DISTANCE, false);
+  // Mutation: change the slide's output to anything but -distance, and the
+  // header and the rows under it stop moving together.
+  it("slides the header exactly as far as the list scrolls, then holds", () => {
+    expect(at(r.slide, 0)).toBe(0);
+    expect(at(r.slide, 50)).toBe(-50);
+    expect(at(r.slide, DISTANCE)).toBe(-DISTANCE);
+    expect(at(r.slide, DISTANCE + 500)).toBe(-DISTANCE);
+    expect(at(r.slide, -80)).toBe(0);
   });
-  // Mutation: swap the two thresholds, compare with `<` instead of `>`, or
-  // drop `gives` from the collapse line (the old logic: collapse at 32).
-  it("collapses past what the hero gives plus COLLAPSE_AT, holds between, and expands at EXPAND_AT", () => {
-    const line = GIVES + COLLAPSE_AT;
-    expect(nextCompact({ ...list, compact: false, y: line })).toBe(false);
-    expect(nextCompact({ ...list, compact: false, y: line + 1 })).toBe(true);
-    expect(nextCompact({ ...list, compact: true, y: EXPAND_AT + 1 })).toBe(
-      true,
-    );
-    expect(nextCompact({ ...list, compact: true, y: EXPAND_AT })).toBe(false);
+  // Mutation: use +distance's sign for the slide, or drop the counter slide,
+  // and the compact row travels up with the header and leaves the screen.
+  it("keeps the compact row still: its slide cancels the header's", () => {
+    for (const y of [0, 17, 100, DISTANCE, 900])
+      expect(at(r.slide, y) + at(r.counterSlide, y)).toBeCloseTo(0);
   });
-  // Mutation: drop the `overflow <= 0` term, and a search that shortens a
-  // scrolled list leaves the compact row with nothing to scroll back with.
-  it("expands when a compact list no longer overflows its view", () => {
-    expect(
-      nextCompact({ ...list, compact: true, y: 100, contentHeight: 700 }),
-    ).toBe(false);
+  // Mutation: let either opacity leave 0..1, or end the full hero's fade
+  // after the compact row has already shown.
+  it("fades the full hero out and the compact row in, never past 0..1", () => {
+    expect(at(r.full, 0)).toBe(1);
+    expect(at(r.compact, 0)).toBe(0);
+    expect(at(r.full, DISTANCE)).toBe(0);
+    expect(at(r.compact, DISTANCE)).toBe(1);
+    for (let y = -50; y <= DISTANCE + 50; y += 7)
+      for (const ramp of [r.full, r.compact]) {
+        expect(at(ramp, y)).toBeGreaterThanOrEqual(0);
+        expect(at(ramp, y)).toBeLessThanOrEqual(1);
+      }
+  });
+  // Mutation: start the compact fade before the full one ends, or swap them:
+  // there is a stretch with both rows faint and the header looks empty.
+  it("crosses the two over the middle of the scroll", () => {
+    const mid = DISTANCE / 2;
+    expect(at(r.full, mid)).toBeLessThan(0.5);
+    expect(at(r.compact, mid)).toBeLessThan(0.5);
+    expect(at(r.full, mid) + at(r.compact, mid)).toBeGreaterThan(0.2);
+  });
+  // Mutation: let an input range repeat or descend, and the native driver
+  // rejects the interpolation.
+  it("hands the driver strictly rising input ranges", () => {
+    for (const reduced of [false, true])
+      for (const ramp of Object.values(collapseRanges(DISTANCE, reduced))) {
+        expect(ramp.inputRange.length).toBe(ramp.outputRange.length);
+        ramp.inputRange.forEach((x, i) => {
+          if (i > 0) expect(x).toBeGreaterThan(ramp.inputRange[i - 1]);
+        });
+      }
+  });
+  // Mutation: return the animated ranges for a distance of 0 (hero not
+  // measured yet) and the first frame divides by nothing.
+  it("rests, full hero showing, until the hero has been measured", () => {
+    const none = collapseRanges(0, false);
+    for (const y of [0, 40, 400]) {
+      expect(at(none.slide, y)).toBe(0);
+      expect(at(none.full, y)).toBe(1);
+      expect(at(none.compact, y)).toBe(0);
+    }
+  });
+  // Mutation: use the normal ranges when motion is reduced, and the hero
+  // slides and fades through every in-between frame.
+  it("swaps in the last pixel when motion is reduced", () => {
+    const still = collapseRanges(DISTANCE, true);
+    const before = DISTANCE - STEP_PX - 0.01;
+    for (const y of [0, 60, before]) {
+      expect(at(still.slide, y)).toBe(0);
+      expect(at(still.full, y)).toBe(1);
+      expect(at(still.compact, y)).toBe(0);
+    }
+    expect(at(still.slide, DISTANCE)).toBe(-DISTANCE);
+    expect(at(still.full, DISTANCE)).toBe(0);
+    expect(at(still.compact, DISTANCE)).toBe(1);
   });
 });
 
-// The swap changes the list's height, and the platform moves the offset to
-// match: it clamps it by what the hero gave up, and may add it back when the
-// hero returns. A scroll that goes one way must swap once, whatever the offset
-// does at the swap. Mutation: collapse at COLLAPSE_AT alone, or expand above
-// EXPAND_AT, and the "follow" model flaps (full, compact, full, compact).
-describe("a swipe swaps the hero exactly once", () => {
-  // What the swap itself does to the offset, per platform behaviour.
-  const MODELS = {
-    // The rows stay where they were on screen: the offset moves by `gives`.
-    follow: (y: number, gives: number, nowCompact: boolean) =>
-      nowCompact ? Math.max(0, y - gives) : y + gives,
-    // The offset is left alone.
-    keep: (y: number) => y,
-    // Only a collapse moves it (a clamp to the new, shorter maximum).
-    clamp: (y: number, gives: number, nowCompact: boolean) =>
-      nowCompact ? Math.max(0, y - gives) : y,
-  };
-
-  function swipe(
-    model: keyof typeof MODELS,
-    fullHeight: number,
-    from: { y: number; compact: boolean },
-    step: number,
-  ) {
-    const gives = fullHeight - list.compactHeight;
-    let { y, compact } = from;
-    const swaps: boolean[] = [];
-    for (let frame = 0; frame < 400; frame++) {
-      y = Math.max(0, y + step);
-      // The swap's own scroll event arrives before the finger moves again.
-      for (let settle = 0; settle < 4; settle++) {
-        const next = nextCompact({
-          compact,
-          y,
-          contentHeight: list.contentHeight,
-          viewHeight: list.viewHeight + (compact ? gives : 0),
-          fullHeight,
-          compactHeight: list.compactHeight,
-        });
-        if (next === compact) break;
-        compact = next;
-        swaps.push(next);
-        y = MODELS[model](y, gives, next);
-      }
-    }
-    return swaps;
-  }
-
-  const heroes = [120, 260, 380];
-  for (const model of Object.keys(MODELS) as (keyof typeof MODELS)[]) {
-    for (const fullHeight of heroes) {
-      it(`up, then down: collapse once, expand once (${model}, hero ${fullHeight})`, () => {
-        expect(swipe(model, fullHeight, { y: 0, compact: false }, 6)).toEqual([
-          true,
-        ]);
-        expect(
-          swipe(model, fullHeight, { y: 2400, compact: true }, -6),
-        ).toEqual([false]);
-      });
-    }
-  }
+describe("snapTarget", () => {
+  const list = { distance: DISTANCE, range: 3000 };
+  // Mutation: compare with `<=`, or snap to the nearer end the wrong way round.
+  it("settles to the nearer end", () => {
+    expect(snapTarget({ ...list, y: 20 })).toBe(0);
+    expect(snapTarget({ ...list, y: DISTANCE / 2 - 1 })).toBe(0);
+    expect(snapTarget({ ...list, y: DISTANCE / 2 })).toBe(DISTANCE);
+    expect(snapTarget({ ...list, y: DISTANCE - 20 })).toBe(DISTANCE);
+  });
+  // Mutation: drop the `y <= 0 || y >= distance` guard, and a list at rest, or
+  // scrolled far down, is yanked back to the collapsed offset.
+  it("leaves a list at either end, or past it, where it is", () => {
+    for (const y of [-30, 0, DISTANCE, DISTANCE + 1, 2500])
+      expect(snapTarget({ ...list, y })).toBe(y);
+  });
+  // Mutation: drop the `range < distance` term, and a short list that can
+  // only scroll a little is sent to an offset it cannot reach.
+  it("sends a list that cannot finish the collapse to the top", () => {
+    const short = { distance: DISTANCE, range: DISTANCE - 1 };
+    expect(snapTarget({ ...short, y: DISTANCE - 5 })).toBe(0);
+    expect(snapTarget({ ...short, y: 10 })).toBe(0);
+    expect(snapTarget({ distance: DISTANCE, range: DISTANCE, y: 190 })).toBe(
+      DISTANCE,
+    );
+  });
+  // Mutation: remove the `distance > 0` guard, and an unmeasured hero snaps
+  // every scroll to 0.
+  it("does nothing before the hero is measured", () => {
+    expect(snapTarget({ distance: 0, range: 500, y: 40 })).toBe(40);
+  });
 });
 
 describe("compactHeroTitle", () => {
@@ -117,7 +140,9 @@ describe("compactHeroTitle", () => {
 // Every top-level list page pins a hero that gives way to the compact row once
 // the list scrolls (shared/DESIGN.md §2). Mutation: drop the `CollapsingHero` or the
 // `scrollProps` spread from one screen, re-literal a compact title or add
-// button, or add a screen with a `<Hero` to neither list below.
+// button, or add a screen with a `<Hero` to neither list below. Mutation: put
+// a plain `FlatList`, `SectionList` or `ScrollView` back under the header, and
+// the native driver never sees its scroll: the hero stops following it.
 const COLLAPSING = [
   "../places/PlacesScreen.tsx",
   "../logs/LogsScreen.tsx",
@@ -146,7 +171,15 @@ describe("list screens collapse their hero", () => {
   it.each(COLLAPSING)("%s", (file) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<CollapsingHero collapse={heroCollapse}>");
+    expect(source).toContain("<CollapsingHeader collapse={heroCollapse}>");
     expect(source).toContain("{...heroCollapse.scrollProps}");
+    expect(source).toContain("heroCollapse.inset(");
+    // Saved has no pull to refresh.
+    if (!file.includes("SavedScreen"))
+      expect(source).toContain(
+        "progressViewOffset={heroCollapse.headerHeight}",
+      );
+    expect(source).toMatch(/<Hero(FlatList|SectionList|ScrollView)\b/);
     expect(source).toContain("compact={compact}");
     expect(source).not.toMatch(/`[^`]*\$\{[^}]*\.length[^}]*\}`\s*:/);
   });
@@ -182,7 +215,7 @@ describe("list screens collapse their hero", () => {
     );
     expect(saved.indexOf("<ChipRail")).toBeGreaterThan(-1);
     expect(saved.indexOf("<ChipRail")).toBeLessThan(
-      saved.indexOf("<ScrollView\n        ref={scrollRef}"),
+      saved.indexOf("<HeroScrollView"),
     );
     const inbox = readFileSync(
       new URL("../screens/NotificationsScreen.tsx", import.meta.url),

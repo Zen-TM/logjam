@@ -132,8 +132,20 @@ export const KIT_COMPONENTS = {
   HeroAdd: gps(
     "a list hero's one add: labelled, then the glyph alone in the compact row",
   ),
+  CollapsingHeader: gps(
+    "the floating header of a phone list that collapses: the hero and the rows pinned under it, over a list that scrolls beneath",
+  ),
   CollapsingHero: gps(
     "a phone list's pinned hero, folding to its title row on scroll; the desktop screen has room for the full one",
+  ),
+  HeroFlatList: gps(
+    "a FlatList under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
+  ),
+  HeroSectionList: gps(
+    "a SectionList under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
+  ),
+  HeroScrollView: gps(
+    "a ScrollView under a CollapsingHeader, whose scroll drives the collapse on the UI thread",
   ),
   DataTable: web(
     "a table with a pinned first column and 2-line cells that open whole; Logjam GPS draws it as AnswersTable",

@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { FlatList, RefreshControl, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -61,7 +61,9 @@ import {
   ChipRail,
   EmptyState,
   Hero,
+  CollapsingHeader,
   CollapsingHero,
+  HeroFlatList,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -597,6 +599,11 @@ export function PlansScreen({
       : unavailableReasonText("needs-connection"),
   };
   const empty = tripPlansEmpty(plans?.length ?? 0, bucket);
+  // The states that replace the list are not under it, so they take its room.
+  const listReady =
+    shown.kind !== "loading" &&
+    shown.kind !== "failed" &&
+    shown.kind !== "neverFetched";
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLANS_LIST, "gps">,
     ReactNode
@@ -693,59 +700,67 @@ export function PlansScreen({
       </View>
     ),
     list: (
-      <ListBody
-        state={
-          shown.kind === "loading"
-            ? "loading"
-            : shown.kind === "failed"
-              ? "failed"
-              : "ready"
-        }
-        loadingLabel={copy.loading}
-        error={shown.kind === "failed" ? shown.message : null}
-        onRetry={() => void poll()}
-        empty={
-          shown.kind === "neverFetched" ? (
-            <EmptyState
-              icon="offline"
-              title={TRIP_PLAN_OFFLINE.noPlansOffline}
-            />
-          ) : undefined
-        }
-      >
-        <FlatList
-          style={styles.list}
-          {...heroCollapse.scrollProps}
-          contentContainerStyle={styles.listContent}
-          data={rows}
-          keyExtractor={planKey}
-          renderItem={renderItem}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void poll()}
-              tintColor={theme.accent}
-            />
+      <View style={[styles.list, listReady ? undefined : heroCollapse.inset()]}>
+        <ListBody
+          state={
+            shown.kind === "loading"
+              ? "loading"
+              : shown.kind === "failed"
+                ? "failed"
+                : "ready"
           }
-          ListEmptyComponent={
-            <EmptyState
-              icon={empty.icon}
-              title={empty.title}
-              hint={empty.body}
-              // The way in, where a new plan would land.
-              action={bucket === "upcoming" ? newPlan : undefined}
-            />
+          loadingLabel={copy.loading}
+          error={shown.kind === "failed" ? shown.message : null}
+          onRetry={() => void poll()}
+          empty={
+            shown.kind === "neverFetched" ? (
+              <EmptyState
+                icon="offline"
+                title={TRIP_PLAN_OFFLINE.noPlansOffline}
+              />
+            ) : undefined
           }
-        />
-      </ListBody>
+        >
+          <HeroFlatList
+            style={styles.list}
+            {...heroCollapse.scrollProps}
+            contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
+            data={rows}
+            keyExtractor={planKey}
+            renderItem={renderItem}
+            refreshControl={
+              <RefreshControl
+                progressViewOffset={heroCollapse.headerHeight}
+                refreshing={refreshing}
+                onRefresh={() => void poll()}
+                tintColor={theme.accent}
+              />
+            }
+            ListEmptyComponent={
+              <EmptyState
+                icon={empty.icon}
+                title={empty.title}
+                hint={empty.body}
+                // The way in, where a new plan would land.
+                action={bucket === "upcoming" ? newPlan : undefined}
+              />
+            }
+          />
+        </ListBody>
+      </View>
     ),
   };
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(TRIP_PLANS_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(TRIP_PLANS_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
       <PlanDetailsSheet
         visible={newOpen}
         onClose={() => setNewOpen(false)}

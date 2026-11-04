@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, SectionList, Text, View } from "react-native";
+import { RefreshControl, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -123,7 +123,9 @@ import {
   Button,
   CardActions,
   confirm,
+  CollapsingHeader,
   CollapsingHero,
+  HeroSectionList,
   compactHeroTitle,
   EmptyState,
   Hero,
@@ -1118,9 +1120,9 @@ export function NotificationsScreen({
         </Text>
       ) : null,
     list: () => (
-      <SectionList
+      <HeroSectionList
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={sections}
         keyExtractor={keyExtractor}
         initialNumToRender={12}
@@ -1138,6 +1140,7 @@ export function NotificationsScreen({
         }
         refreshControl={
           <RefreshControl
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}
@@ -1161,11 +1164,14 @@ export function NotificationsScreen({
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(INBOX, "gps")
-        .filter((key) => !head.includes(key))
-        .map((key) => (
-          <Fragment key={key}>{page[key]()}</Fragment>
-        ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(INBOX, "gps")
+          .filter((key) => !head.includes(key) && key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{page[key]()}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {page.list()}
 
       {/* Per-row verbs. Looked up from the live list, so a refetch that drops
           or restyles the row cannot leave the sheet acting on a stale copy. */}
