@@ -20,6 +20,7 @@ export type NotificationTapTarget =
   | { kind: "plan"; planId: string; view?: "people"; invited?: boolean }
   | { kind: "announcement"; announcementId: string }
   | { kind: "friends" }
+  | { kind: "recording" }
   | { kind: "saved"; filter: SavedCategory; highlightKey: string | null }
   | { kind: "inbox" };
 
@@ -44,11 +45,19 @@ export function notificationTapTarget(args: {
   data: unknown;
   routeEditing: boolean;
 }): NotificationTapTarget {
-  if (args.routeEditing) return { kind: "blocked" };
   const data = args.data as
-    | { placeId?: unknown; announcementId?: unknown }
+    | { placeId?: unknown; announcementId?: unknown; ongoing?: unknown }
     | null
     | undefined;
+  // The "Recording track" notification (`ongoingTap.ts`): the map is where the
+  // recorder is, and where a route is drawn, so this is not a way out of the
+  // draft and is not refused by it.
+  if (data?.ongoing === "recording") return { kind: "recording" };
+  if (args.routeEditing) return { kind: "blocked" };
+  // The map-download notification: those downloads are listed under Saved.
+  if (data?.ongoing === "downloads") {
+    return { kind: "saved", filter: "region", highlightKey: null };
+  }
   const placeId = data?.placeId;
   if (typeof placeId === "string") return { kind: "place", placeId };
   // A plan push opens where Logjam Web opens its inbox row
@@ -184,6 +193,8 @@ export function tapTargetCall(
         },
         nonce,
       );
+    case "recording":
+      return { name: "Map", params: { screen: "MapView" } };
     case "inbox":
       return { name: "More", params: { screen: "Inbox" } };
   }

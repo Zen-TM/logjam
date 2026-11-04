@@ -18,3 +18,19 @@ index 8088ec6..3d3e6c3 100644
          throw ForegroundServiceStartNotAllowedException()
        }
  
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+index 8f13054..c9a0f49 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+@@ -95,6 +95,11 @@ class LocationTaskService : Service() {
+ 
+     packageManager.getLaunchIntentForPackage(packageName)?.let {
+       it.flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
++      // LOGJAM PATCH (patches/expo-location+*.patch): a tap opens the recording, not
++      // wherever the app was left. React Native reports only a VIEW intent's data to JS;
++      // mobile/src/notifications/ongoingTap.ts reads this URI.
++      it.action = Intent.ACTION_VIEW
++      it.data = android.net.Uri.parse("logjam-ongoing://recording")
+       // We're defaulting to the behaviour prior API 31 (mutable) even though Android recommends immutability
+       val mutableFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+         PendingIntent.FLAG_MUTABLE

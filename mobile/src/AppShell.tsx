@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useWindowDimensions, View } from "react-native";
+import { Linking, useWindowDimensions, View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
@@ -61,6 +61,7 @@ import { BackgroundToast } from "./BackgroundToast";
 import { ConfirmHost } from "./ConfirmHost";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
+import { ongoingTapKind } from "./notifications/ongoingTap";
 import { createTapIntake } from "./notifications/tapIntake";
 import {
   destinationCall,
@@ -967,6 +968,17 @@ function offerTap(response: Notifications.NotificationResponse) {
   );
 }
 
+// The ongoing notifications' taps (`ongoingTap.ts`) join the push taps in
+// `tapIntake`, so they wait for the navigator and meet the same guards. A warm
+// tap is a `url` event, always new; the launching URL is read once per process,
+// because `getInitialURL` keeps returning it and the shell can mount again.
+let ongoingTapCount = 0;
+let launchUrlRead = false;
+function offerOngoingUrl(url: string | null | undefined, id: string) {
+  const ongoing = ongoingTapKind(url);
+  if (ongoing) tapIntake.offer(id, { ongoing });
+}
+
 /** Sign-out: a tap held for, or still waiting in the phone's last-response
  *  slot for, the account that is leaving must not open for the next one. */
 export function dropPendingNotificationTap() {
@@ -1071,6 +1083,15 @@ export function AppShell({
       // not.
       Notifications.clearLastNotificationResponse();
     }
+    const ongoingSubscription = Linking.addEventListener("url", (event) =>
+      offerOngoingUrl(event.url, `ongoing-${ongoingTapCount++}`),
+    );
+    if (!launchUrlRead) {
+      launchUrlRead = true;
+      void Linking.getInitialURL()
+        .then((url) => offerOngoingUrl(url, "ongoing-launch"))
+        .catch(console.error);
+    }
     // A plan push while Logjam GPS is open: the list and that plan are
     // fetched again, so neither reads stale, if the connection rule allows.
     const received = Notifications.addNotificationReceivedListener(
@@ -1091,6 +1112,7 @@ export function AppShell({
     );
     return () => {
       subscription.remove();
+      ongoingSubscription.remove();
       received.remove();
     };
   }, [isGuest, accountState]);
