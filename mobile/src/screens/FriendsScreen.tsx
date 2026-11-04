@@ -86,6 +86,7 @@ import {
   ErrorBanner,
   ErrorState,
   Hero,
+  CollapsingHero,
   useHeroCollapse,
   HeroAdd,
   compactHeroTitle,
@@ -348,36 +349,38 @@ export function FriendsScreen({
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
-      <View {...heroCollapse.heroProps}>
-        <Hero
-          compact={heroCollapse.compact}
-          title={
-            heroCollapse.compact
-              ? compactHeroTitle(FRIENDS.title, friends.length)
-              : FRIENDS.title
-          }
-          value={friendsHeroSubtitle(requests.length, friends.length)}
-          onBack={onBack}
-          backLabel={backLabel}
-          actions={
-            <View style={styles.heroActions}>
-              {/* Nothing at all until the user joins: Settings is the only way in. */}
-              {leaderboardOptIn && board?.joined !== false ? (
-                <LeaderboardButton
-                  standing={board?.joined ? selfStanding(board) : null}
-                  onPress={onOpenLeaderboard}
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
+              compact
+                ? compactHeroTitle(FRIENDS.title, friends.length)
+                : FRIENDS.title
+            }
+            value={friendsHeroSubtitle(requests.length, friends.length)}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              <View style={styles.heroActions}>
+                {/* Nothing at all until the user joins: Settings is the only way in. */}
+                {leaderboardOptIn && board?.joined !== false ? (
+                  <LeaderboardButton
+                    standing={board?.joined ? selfStanding(board) : null}
+                    onPress={onOpenLeaderboard}
+                  />
+                ) : null}
+                <HeroAdd
+                  label={copy.add}
+                  icon="addFriend"
+                  compact={compact}
+                  onPress={() => setAddOpen(true)}
                 />
-              ) : null}
-              <HeroAdd
-                label={copy.add}
-                icon="addFriend"
-                compact={heroCollapse.compact}
-                onPress={() => setAddOpen(true)}
-              />
-            </View>
-          }
-        />
-      </View>
+              </View>
+            }
+          />
+        )}
+      </CollapsingHero>
     ),
     buckets: () => (
       <View style={styles.rail}>

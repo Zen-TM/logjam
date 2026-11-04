@@ -112,6 +112,7 @@ import {
   BottomSheet,
   Button,
   CardActions,
+  CollapsingHero,
   EmptyState,
   ErrorState,
   Hero,
@@ -125,6 +126,7 @@ import {
   SearchField,
   Toast,
   useBulkSelection,
+  useHeroCollapse,
   type ChipOption,
   type ToastMessage,
 } from "../ui";
@@ -286,6 +288,7 @@ export function NotificationsScreen({
     },
     [],
   );
+  const heroCollapse = useHeroCollapse();
   const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   /** Which row's ⋯ sheet is open, by id — the row itself is looked up from the
@@ -1012,21 +1015,6 @@ export function NotificationsScreen({
 
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`INBOX`, shared/src/contracts).
-  // The answer to "what happened while I was away?" is a NUMBER of things that
-  // did (shared/DESIGN.md §2), rather than a line that says the same words for
-  // one notification and for forty. The tally beside it stays the whole inbox,
-  // so the two never restate each other.
-  const summary = (
-    <View style={styles.summary}>
-      <Text style={styles.summaryTitle}>
-        {inboxHeroTitle(unreadCount, notifications.length)}
-      </Text>
-      <Text style={styles.summaryTally}>
-        {tally.total} {tally.total === 1 ? "notification" : "notifications"}
-      </Text>
-    </View>
-  );
-
   // The chips and the truncation note scroll in the list's header, in the
   // contract's order; every other section is drawn in place.
   const headKeys: readonly string[] = ["buckets", "truncated"];
@@ -1034,45 +1022,56 @@ export function NotificationsScreen({
     headKeys.includes(key),
   );
   const page: Record<SectionKeysOn<typeof INBOX, "gps">, () => ReactNode> = {
-    // Only this row is pinned: the unread line, chips and search ride in the
-    // list's header and scroll away with it. A multi-select's bar takes the
-    // row's slot, so the list does not jump when picking starts (DESIGN.md).
+    // The hero is pinned and folds to its title row once the list scrolls;
+    // the chips and search ride in the list's header. A multi-select's bar
+    // takes the compact row's slot (DESIGN.md).
+    //
+    // The answer to "what happened while I was away?" is a NUMBER of things
+    // that did (shared/DESIGN.md §2), rather than a line that says the same
+    // words for one notification and for forty. The tally beside it stays the
+    // whole inbox, so the two never restate each other.
     hero: () => (
-      <Hero
-        compact
-        title={INBOX.title}
-        onBack={onBack}
-        backLabel={backLabel}
-        actions={
-          <IconButton
-            icon="overflow"
-            accessibilityLabel="Inbox actions"
-            onPress={() => setActionsOpen(true)}
-          />
-        }
-      >
-        {selecting && readAction ? (
-          <SelectionBar
-            countLabel={selectionCountLabel(selectedNotifications)}
-            showSelectAll={selectedItems.length < selectableItems.length}
-            // ONE read/unread button, not a pair: which way it goes follows the
-            // selection (all read → unread, anything unread → read), and the
-            // bar's count line states the unread tally so the direction can be
-            // read off the screen rather than remembered.
-            extra={
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={INBOX.title}
+            value={inboxHeroTitle(unreadCount, notifications.length)}
+            valueSuffix={`${tally.total} ${tally.total === 1 ? "notification" : "notifications"}`}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
               <IconButton
-                icon={readAction.icon}
-                accessibilityLabel={readAction.label}
-                color={theme.accent}
-                onPress={applyReadAction}
+                icon="overflow"
+                accessibilityLabel="Inbox actions"
+                onPress={() => setActionsOpen(true)}
               />
             }
-            onClear={clearSelection}
-            onSelectAll={selectAll}
-            onDelete={deleteSelected}
-          />
-        ) : undefined}
-      </Hero>
+          >
+            {selecting && readAction ? (
+              <SelectionBar
+                countLabel={selectionCountLabel(selectedNotifications)}
+                showSelectAll={selectedItems.length < selectableItems.length}
+                // ONE read/unread button, not a pair: which way it goes follows the
+                // selection (all read → unread, anything unread → read), and the
+                // bar's count line states the unread tally so the direction can be
+                // read off the screen rather than remembered.
+                extra={
+                  <IconButton
+                    icon={readAction.icon}
+                    accessibilityLabel={readAction.label}
+                    color={theme.accent}
+                    onPress={applyReadAction}
+                  />
+                }
+                onClear={clearSelection}
+                onSelectAll={selectAll}
+                onDelete={deleteSelected}
+              />
+            ) : undefined}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
     buckets: () =>
       notifications.length > 0 ? (
@@ -1113,9 +1112,9 @@ export function NotificationsScreen({
         windowSize={5}
         removeClippedSubviews
         keyboardShouldPersistTaps="handled"
+        {...heroCollapse.scrollProps}
         ListHeaderComponent={
           <View>
-            {summary}
             {head.map((key) => (
               <Fragment key={key}>{page[key]()}</Fragment>
             ))}
@@ -1574,15 +1573,6 @@ function EmptyPanel({
 const useStyles = makeStyles((theme, textRole) => ({
   actionsBody: { gap: spacing(1) },
   root: { flex: 1, backgroundColor: theme.page },
-  summary: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: spacing(1),
-    paddingTop: spacing(1.5),
-    paddingBottom: spacing(1),
-  },
-  summaryTitle: { ...textRole.heading, color: theme.text },
-  summaryTally: { ...muted(theme, textRole.detail) },
   // The chips run off the right edge, so the rail bleeds past the list's gutter.
   rail: { marginHorizontal: -spacing(2), paddingLeft: spacing(2) },
   list: { flex: 1 },

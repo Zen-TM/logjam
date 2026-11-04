@@ -25,7 +25,15 @@ function chrome(selectingArea = false, map: maplibregl.Map | null = null) {
         is3D={false}
         onToggle3D={() => {}}
         search={null}
-        tools={[{ id: "m", label: "Measure", icon: "add", onSelect() {} }]}
+        tools={[
+          {
+            id: "m",
+            label: "Measure",
+            description: "How far.",
+            icon: "add",
+            onSelect() {},
+          },
+        ]}
         selectingArea={selectingArea}
       />
       <div data-testid="map" />
@@ -38,7 +46,7 @@ describe("the Tools tray's light dismiss", () => {
   it("closes on a press outside, and stays open on one in the tray", () => {
     chrome();
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Measure" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Measure/ }));
     expect(screen.queryByRole("group", { name: "Tools" })).toBeTruthy();
     fireEvent.pointerDown(screen.getByTestId("map"));
     expect(screen.queryByRole("group", { name: "Tools" })).toBeNull();

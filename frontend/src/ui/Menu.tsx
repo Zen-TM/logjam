@@ -61,11 +61,14 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
 
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. */
+ *  and reopening in one click. With `swallow`, the click that press ends in is
+ *  eaten as well, so the press only closes (the map tools tray). Guard:
+ *  Menu.test.tsx. */
 export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
+  { swallow = false }: { swallow?: boolean } = {},
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -83,6 +86,15 @@ export function useOutsidePress(
       )
         return;
       handleOutside();
+      if (swallow) {
+        const eat = (click: Event) => {
+          click.stopPropagation();
+          click.preventDefault();
+        };
+        document.addEventListener("click", eat, { capture: true, once: true });
+        // A press that became a drag ends in no click: don't eat the next one.
+        setTimeout(() => document.removeEventListener("click", eat, true), 600);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>

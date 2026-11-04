@@ -21,9 +21,16 @@ import {
 import { useToast } from "../feedback/ToastProvider";
 import classes from "./MapChrome.module.css";
 
+type MapToolBase = {
+  id: string;
+  label: string;
+  /** The one line under the label. */
+  description: string;
+  icon: Glyph;
+};
 export type MapTool =
-  | { id: string; label: string; icon: Glyph; onSelect: () => void }
-  | { id: string; label: string; icon: Glyph; menu: readonly MenuEntry[] };
+  | (MapToolBase & { onSelect: () => void })
+  | (MapToolBase & { menu: readonly MenuEntry[] });
 
 type LocateState = "off" | "waiting" | "on" | "error";
 
@@ -133,7 +140,9 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
-  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false));
+  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false), {
+    swallow: true,
+  });
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);
@@ -159,8 +168,27 @@ export default function MapChrome({
               aria-label="Tools"
               className={classes.tray}
             >
-              {tools.map((tool) =>
-                "menu" in tool ? (
+              {tools.map((tool, index) => {
+                const item = {
+                  className: `${classes.trayItem} ${index === 0 ? classes.trayFirst : ""}`,
+                  style: { "--i": index } as CSSProperties,
+                };
+                const face = (
+                  <>
+                    <Icon
+                      idea={tool.icon}
+                      size={18}
+                      className={classes.trayGlyph}
+                    />
+                    <span className={classes.trayText}>
+                      <span className={classes.trayLabel}>{tool.label}</span>{" "}
+                      <span className={classes.trayDescription}>
+                        {tool.description}
+                      </span>
+                    </span>
+                  </>
+                );
+                return "menu" in tool ? (
                   <Menu
                     key={tool.id}
                     label={tool.label}
@@ -171,17 +199,8 @@ export default function MapChrome({
                         : { ...entry, onSelect: () => runTool(entry.onSelect) },
                     )}
                     trigger={(props) => (
-                      <button
-                        {...props}
-                        type="button"
-                        className={classes.trayItem}
-                      >
-                        <Icon
-                          idea={tool.icon}
-                          size={18}
-                          className={classes.trayGlyph}
-                        />
-                        {tool.label}
+                      <button {...props} type="button" {...item}>
+                        {face}
                       </button>
                     )}
                   />
@@ -189,18 +208,13 @@ export default function MapChrome({
                   <button
                     key={tool.id}
                     type="button"
-                    className={classes.trayItem}
+                    {...item}
                     onClick={() => runTool(tool.onSelect)}
                   >
-                    <Icon
-                      idea={tool.icon}
-                      size={18}
-                      className={classes.trayGlyph}
-                    />
-                    {tool.label}
+                    {face}
                   </button>
-                ),
-              )}
+                );
+              })}
             </div>
           )}
           <MapButton

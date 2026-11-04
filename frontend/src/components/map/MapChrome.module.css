@@ -52,16 +52,24 @@
 }
 
 .toolsLine {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
+/* Beside the column, from the + row down, so opening it moves nothing: the
+   first pill slides out from under the + and each next one falls out from
+   under the one above (--i is its place), 200 ms in all. Logjam GPS's tray
+   moves the same way (MapToolGroup.tsx). */
 .tray {
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--space-1));
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  width: max-content;
   max-width: calc(100vw - var(--map-inset-left, 0px) - 100px);
 }
 
@@ -69,22 +77,62 @@
   composes: control from "../../textRoles.generated.module.css";
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 0 16px 0 14px;
+  gap: var(--space-1-5);
+  min-height: var(--control-lg);
+  padding: var(--space-0-5) var(--space-2) var(--space-0-5) var(--space-1-5);
   border: none;
   border-radius: var(--radius-pill);
   background: var(--color-page);
   color: var(--color-text);
   font-family: inherit;
   line-height: inherit;
-  white-space: nowrap;
+  text-align: left;
   box-shadow: var(--shadow-float);
   cursor: pointer;
+  z-index: calc(10 - var(--i, 0));
+  animation: trayFold 110ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+.trayFirst {
+  animation-name: traySlide;
+}
+
+@keyframes traySlide {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--space-6) + var(--space-1)));
+  }
+}
+
+@keyframes trayFold {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * (var(--space-6) + var(--space-1))));
+  }
 }
 
 .trayItem:hover {
   background: color-mix(in srgb, var(--color-text) 14%, var(--color-page));
+}
+
+.trayText {
+  display: flex;
+  flex-direction: column;
+}
+
+.trayLabel {
+  white-space: nowrap;
+}
+
+.trayDescription {
+  composes: meta from "../../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+/* The hover fill is a step darker than the muted words can stand. */
+.trayItem:hover .trayDescription {
+  color: var(--color-text);
 }
 
 .trayGlyph {
@@ -112,6 +160,10 @@
   .topLeft,
   .instruments {
     transition: none;
+  }
+
+  .trayItem {
+    animation: none;
   }
 }
 

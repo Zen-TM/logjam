@@ -76,10 +76,16 @@ renumber.
   the counts (`ScreenContract.title`).
 - **Pin the hero and the filter rail; only the list scrolls.** No scroller
   inside a scroller.
-  On Logjam GPS's long lists (Places, Trips, Friends, Plans) the full hero
-  pins at the top and hands over to `Hero compact` once the list scrolls: one
-  row, "Name · count", its add reduced to the glyph. It returns at the top, and
-  when the list is too short to scroll. The rail and the search stay pinned.
+  On every top-level list of Logjam GPS (Places, Trips, Saved, Inbox, Plans,
+  Friends, Leaderboard) the full hero pins at the top and hands over to
+  `Hero compact` once the list scrolls: one row, "Name · count", its add
+  reduced to the glyph. It returns at the top, and when the list is too short
+  to scroll. The rail and the search stay pinned. A detail page (a place, a
+  trip, a plan) does not collapse: its header is the item itself, and there is
+  no list to give the screen back to. The swap is `CollapsingHero`, which
+  re-renders the hero alone and eases for 100 ms: a collapse that waits on the
+  whole screen reads as lag. Guard: `heroCollapse.test.ts`, which fails for a
+  screen that draws a `Hero` and is on neither of its lists.
 - **Between the hero and the list, only what narrows the list** (the rail, a
   search bar, a selection bar). A way elsewhere is a hero action; a number it carries is its
   badge.
@@ -390,7 +396,11 @@ renumber.
 - **Two edges, two jobs.** The action edge: layers, tools, locate. The
   instrument edge: compass and scale, nothing that changes the app.
 - **Tools share one button whose tray opens sideways**; arming one closes
-  it. A tool a client lacks is absent, not disabled. A tool's own settings
+  it. Each tool is a pill with its label and a one-line description from
+  `MAP_TOOLS`. The first slides out from under the +, the rest fall out from
+  under the one above, staggered, 200 ms in all, and not at all under
+  reduced motion. A press anywhere else closes the tray and does nothing
+  more. A tool a client lacks is absent, not disabled. A tool's own settings
   live with the tool, not in Layers.
 - **Notices sit in one stack** and say only what is true right now. A notice
   about data being lost right now is `tone="critical"` (the warning fill,

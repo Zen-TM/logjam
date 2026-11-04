@@ -13,8 +13,13 @@ describe("webMapTools", () => {
       place: noop,
       makeMap: { menu: [] },
     });
-    expect(tools.map(({ id, label, icon }) => ({ id, label, icon }))).toEqual(
-      mapTools("web"),
-    );
+    expect(
+      tools.map(({ id, label, icon, description }) => ({
+        id,
+        label,
+        icon,
+        description,
+      })),
+    ).toEqual(mapTools("web"));
   });
 });

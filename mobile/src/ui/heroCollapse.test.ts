@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   COLLAPSE_AT,
@@ -49,23 +51,64 @@ describe("compactHeroTitle", () => {
   });
 });
 
-// The four long lists pin a hero that gives way to the compact row once the
-// list scrolls. Mutation: drop `compact={heroCollapse.compact}` or a spread
-// from one screen; re-literal a compact title or add button.
+// Every top-level list page pins a hero that gives way to the compact row once
+// the list scrolls (mobile/DESIGN.md). Mutation: drop the `CollapsingHero` or the
+// `scrollProps` spread from one screen, re-literal a compact title or add
+// button, or add a screen with a `<Hero` to neither list below.
+const COLLAPSING = [
+  "../places/PlacesScreen.tsx",
+  "../logs/LogsScreen.tsx",
+  "../saved/SavedScreen.tsx",
+  "../screens/NotificationsScreen.tsx",
+  "../plans/PlansScreen.tsx",
+  "../screens/FriendsScreen.tsx",
+  "../screens/LeaderboardScreen.tsx",
+];
+// A detail page's header is the item itself, and a flow or a short menu has
+// nothing long to scroll under its hero.
+const KEEPS_FULL_HERO = [
+  "../map/RegionDownloadScreen.tsx",
+  "../plans/PlanScreen.tsx",
+  "../plans/PlanPreview.tsx",
+  "../places/PlaceDetailScreen.tsx",
+  "../logs/TripDetailScreen.tsx",
+  "../logs/StatsScreen.tsx",
+  "../sharing/FriendSharesScreen.tsx",
+  "../screens/MoreScreen.tsx",
+  "../screens/AccountScreen.tsx",
+  "../screens/SyncIssuesScreen.tsx",
+];
+
 describe("list screens collapse their hero", () => {
+  it.each(COLLAPSING)("%s", (file) => {
+    const source = readFileSync(new URL(file, import.meta.url), "utf8");
+    expect(source).toContain("<CollapsingHero collapse={heroCollapse}>");
+    expect(source).toContain("{...heroCollapse.scrollProps}");
+    expect(source).toContain("compact={compact}");
+    expect(source).not.toMatch(/`[^`]*\$\{[^}]*\.length[^}]*\}`\s*:/);
+  });
   it.each([
     "../places/PlacesScreen.tsx",
     "../logs/LogsScreen.tsx",
-    "../screens/FriendsScreen.tsx",
     "../plans/PlansScreen.tsx",
-  ])("%s", (file) => {
+    "../screens/FriendsScreen.tsx",
+  ])("%s names its compact title and add", (file) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
-    expect(source).toContain("compact={heroCollapse.compact}");
-    expect(source).toContain("{...heroCollapse.scrollProps}");
-    expect(source).toContain("{...heroCollapse.heroProps}");
     expect(source).toContain("compactHeroTitle(");
     expect(source).toContain("<HeroAdd");
-    expect(source).not.toMatch(/`[^`]*\$\{[^}]*\.length[^}]*\}`\s*:/);
+  });
+  it("sorts every screen that draws a Hero", () => {
+    const dir = fileURLToPath(new URL("..", import.meta.url));
+    const known = new Set(
+      [...COLLAPSING, ...KEEPS_FULL_HERO].map((file) =>
+        fileURLToPath(new URL(file, import.meta.url)),
+      ),
+    );
+    const drawn = readdirSync(dir, { recursive: true, encoding: "utf8" })
+      .filter((file) => /Screen\.tsx$|PlanPreview\.tsx$/.test(file))
+      .map((file) => join(dir, file))
+      .filter((file) => /<Hero[\s>]/.test(readFileSync(file, "utf8")));
+    expect(drawn.filter((file) => !known.has(file))).toEqual([]);
   });
   it("seeds the tray's Add a place from the map's camera", () => {
     const source = readFileSync(

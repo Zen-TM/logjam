@@ -31,6 +31,7 @@ import {
   Linking,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
   useWindowDimensions,
@@ -5619,6 +5620,17 @@ export function MapScreen({
           <Notice icon="saveOffline">{downloadProgress}</Notice>
         ) : null}
       </ScrollView>
+
+      {/* An open tools tray ends with the next press anywhere else, and that
+          press does nothing more: this sits over the map and every notice, and
+          under the column and the tray. Guard: mapTools.test.ts. */}
+      {toolsOpen ? (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessible={false}
+          onPress={() => setToolsOpen(false)}
+        />
+      ) : null}
 
       {/* One column of actions on one edge; the OTHER edge belongs to the map's
           own instruments (native compass + compass tape + scale bar). Which is

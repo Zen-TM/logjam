@@ -20,6 +20,7 @@ export {
 export { confirm } from "./confirm";
 export { Hero } from "./Hero";
 export { HeroAdd } from "./HeroAdd";
+export { CollapsingHero } from "./CollapsingHero";
 export { useHeroCollapse } from "./useHeroCollapse";
 export { compactHeroTitle } from "./heroCollapseRule";
 export { useReduceMotion } from "./useReduceMotion";

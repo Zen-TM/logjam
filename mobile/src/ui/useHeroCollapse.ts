@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import {
   LayoutAnimation,
   type LayoutChangeEvent,
@@ -9,16 +9,24 @@ import {
 import { COMPACT_ROW, nextCompact } from "./heroCollapseRule";
 import { useReduceMotionRef } from "./useReduceMotion";
 
+/** How long the swap between the full and the compact hero eases. */
+const SWAP_MS = 100;
+
 /**
  * Whether a list's pinned hero is full or compact, from the list's own scroll,
  * size and layout (`nextCompact` holds the rule; guard: `heroCollapse.test.ts`).
- * The swap eases unless the user asked for reduced motion.
  *
- * Spread `scrollProps` on the list and `heroProps` on a `View` around the hero.
+ * The flag is NOT React state on the screen: it sits in a ref and only the
+ * `CollapsingHero` that reads it re-renders, so crossing the threshold costs
+ * one hero's render, not the list's (it was a whole-screen render under a 300 ms
+ * ease, which in a dev build read as lag). The swap eases for `SWAP_MS` unless
+ * the user asked for reduced motion.
+ *
+ * Spread `scrollProps` on the list and give `CollapsingHero` the rest.
  */
 export function useHeroCollapse() {
-  const [compact, setCompact] = useState(false);
   const state = useRef(false);
+  const listeners = useRef(new Set<() => void>());
   const reduceMotion = useReduceMotionRef();
   const metrics = useRef({
     y: 0,
@@ -33,9 +41,19 @@ export function useHeroCollapse() {
     if (next === state.current) return;
     state.current = next;
     if (!reduceMotion.current)
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setCompact(next);
+      LayoutAnimation.configureNext(
+        LayoutAnimation.create(SWAP_MS, "easeOut", "opacity"),
+      );
+    listeners.current.forEach((listener) => listener());
   }, [reduceMotion]);
+
+  const subscribe = useCallback((listener: () => void) => {
+    listeners.current.add(listener);
+    return () => {
+      listeners.current.delete(listener);
+    };
+  }, []);
+  const getCompact = useCallback(() => state.current, []);
 
   const onScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -74,10 +92,12 @@ export function useHeroCollapse() {
   }, []);
 
   return {
-    compact,
+    subscribe,
+    getCompact,
     scrollProps: {
       onScroll,
-      scrollEventThrottle: 32,
+      // One event a frame: the swap lands on the frame that crossed it.
+      scrollEventThrottle: 16,
       onContentSizeChange,
       onLayout: onListLayout,
     },

@@ -51,7 +51,7 @@ const BUDGET: Record<string, number> = {
   "components/map/BasemapGallery.module.css": 3,
   "components/map/LayersPopover.module.css": 25,
   "components/map/Map.module.css": 17,
-  "components/map/MapChrome.module.css": 32,
+  "components/map/MapChrome.module.css": 26,
   "components/map/MapSearchBox.module.css": 15,
   "components/media/Lightbox.module.css": 1,
   "components/media/MediaGallery.module.css": 6,

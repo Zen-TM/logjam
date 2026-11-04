@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Menu } from "./Menu";
+import { Menu, useOutsidePress } from "./Menu";
 
 // jsdom has no Popover API, and a closed `popover` counts as unrendered
 // there, so showing one drops the attribute.
@@ -85,5 +86,32 @@ describe("a press outside a floating element", () => {
     dialog.remove();
     fireEvent.pointerDown(document.body);
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("useOutsidePress with swallow", () => {
+  function Host({ onOutside }: { onOutside: () => void }) {
+    const ref = useRef<HTMLDivElement>(null);
+    useOutsidePress(true, [ref], onOutside, { swallow: true });
+    return <div ref={ref}>inside</div>;
+  }
+
+  // Mutation: drop the one-shot click listener, and the press that closed the
+  // tools tray also reaches the map under it.
+  it("closes on the press and eats the click that follows", () => {
+    const onOutside = vi.fn();
+    const onClick = vi.fn();
+    render(<Host onOutside={onOutside} />);
+    const elsewhere = document.body.appendChild(
+      document.createElement("button"),
+    );
+    elsewhere.addEventListener("click", onClick);
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.click(elsewhere);
+    expect(onOutside).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+    fireEvent.click(elsewhere);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    elsewhere.remove();
   });
 });
