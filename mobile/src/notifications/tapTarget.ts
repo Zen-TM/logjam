@@ -4,7 +4,11 @@
 // AppShell pulls in the RN runtime and vitest cannot parse React Native's Flow
 // sources. Same split, and the same reason, as `sharing/shareRowSubtitle.ts`.
 
-import { notificationPlanTarget, type TNotification } from "@logjam/shared";
+import {
+  notificationPlanTarget,
+  TRIP_PLANS_LIST,
+  type TNotification,
+} from "@logjam/shared";
 
 import type { SavedCategory } from "../saved/savedKeys";
 import { notificationDestination } from "./notificationDestination";
@@ -91,4 +95,96 @@ export function notificationTapTarget(args: {
     return { kind: "announcement", announcementId };
   }
   return { kind: "inbox" };
+}
+
+/** One `navigate(name, params)` on the TAB navigator. */
+export type RouteCall = { name: string; params?: object };
+
+/** What an Inbox row's "View in" and a tapped push both open. */
+export type DestinationTarget =
+  | { tab: "friends" }
+  | { tab: "saved"; filter: SavedCategory; highlightKey: string | null };
+
+/**
+ * The one route a destination is opened with, from the Inbox row and from a
+ * push alike. Always through the More tab's own stack for Friends: from the
+ * Inbox that pushes Friends on top of it, so Back returns to the inbox; from a
+ * cold start it is the stack's only screen. Guard: `tapTarget.test.ts`. The
+ * navigator's ref is typed `never`, so a misspelt screen name does not fail
+ * the type-check; that test does.
+ */
+export function destinationCall(
+  d: DestinationTarget,
+  nonce: number,
+): RouteCall {
+  if (d.tab === "friends") {
+    return { name: "More", params: { screen: "Friends" } };
+  }
+  return {
+    name: "Saved",
+    params: {
+      screen: "SavedHome",
+      params: {
+        filter: d.filter,
+        nonce,
+        ...(d.highlightKey ? { highlightKey: d.highlightKey } : {}),
+      },
+    },
+  };
+}
+
+/** The route a tap opens; `blocked` has none (the shell answers it). */
+export function tapTargetCall(
+  target: Exclude<NotificationTapTarget, { kind: "blocked" }>,
+  nonce: number,
+): RouteCall {
+  switch (target.kind) {
+    case "place":
+      return {
+        name: "Places",
+        params: {
+          screen: "PlaceDetail",
+          params: { placeId: target.placeId, name: "Place" },
+        },
+      };
+    case "plan":
+      return {
+        name: "More",
+        params: {
+          screen: "Plan",
+          params: {
+            planId: target.planId,
+            name: TRIP_PLANS_LIST.title,
+            view: target.view,
+            invited: target.invited,
+          },
+        },
+      };
+    case "announcement":
+      return {
+        name: "More",
+        params: {
+          screen: "Inbox",
+          params: {
+            openAnnouncement: {
+              announcementId: target.announcementId,
+              nonce,
+            },
+          },
+        },
+      };
+    case "friends":
+      return destinationCall({ tab: "friends" }, nonce);
+    case "saved":
+      return destinationCall(
+        {
+          tab: "saved",
+          filter: target.filter,
+          highlightKey: target.highlightKey,
+        },
+        nonce,
+      );
+    case "inbox":
+      return { name: "More", params: { screen: "Inbox" } };
+  }
 }

@@ -54,7 +54,12 @@ import { BackgroundToast } from "./BackgroundToast";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
 import { createTapIntake } from "./notifications/tapIntake";
-import { notificationTapTarget } from "./notifications/tapTarget";
+import {
+  destinationCall,
+  notificationTapTarget,
+  tapTargetCall,
+  type DestinationTarget,
+} from "./notifications/tapTarget";
 import { PLACE_FOCUS_DEGREES } from "./saved/bboxOfPoints";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
@@ -885,6 +890,13 @@ function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
 const navigationRef = createNavigationContainerRef<never>();
 type TapNav = { navigate: (name: string, params?: object) => void };
 
+/** The one way a destination is opened, from an Inbox row and from a tap on
+ *  its push alike (the route itself is `destinationCall`). */
+function openDestination(nav: TapNav, destination: DestinationTarget) {
+  const call = destinationCall(destination, Date.now());
+  nav.navigate(call.name, call.params);
+}
+
 /** Where a tapped notification goes. Cold start, warm start and the app in the
  *  foreground all end here, via `tapIntake`. */
 function openNotificationTap(nav: TapNav, data: unknown) {
@@ -907,48 +919,8 @@ function openNotificationTap(nav: TapNav, data: unknown) {
   // tap-through takes rows out of the one list they are looked for in.
   // Opening the row is what reads it. An announcement push opens its
   // message on the inbox, and the message is read when the user closes it.
-  if (target.kind === "place") {
-    nav.navigate("Places", {
-      screen: "PlaceDetail",
-      params: { placeId: target.placeId, name: "Place" },
-    });
-  } else if (target.kind === "plan") {
-    nav.navigate("More", {
-      screen: "Plan",
-      params: {
-        planId: target.planId,
-        name: TRIP_PLANS_LIST.title,
-        view: target.view,
-        invited: target.invited,
-      },
-    });
-  } else if (target.kind === "announcement") {
-    nav.navigate("More", {
-      screen: "Inbox",
-      params: {
-        openAnnouncement: {
-          announcementId: target.announcementId,
-          nonce: Date.now(),
-        },
-      },
-    });
-  } else if (target.kind === "friends") {
-    nav.navigate("More", { screen: "Friends" });
-  } else if (target.kind === "saved") {
-    // The tab, on its filter, with the row pulsed: where the Inbox row's
-    // "View in Saved" goes.
-    nav.navigate("Saved", {
-      screen: "SavedHome",
-      params: {
-        filter: target.filter,
-        nonce: Date.now(),
-        ...(target.highlightKey ? { highlightKey: target.highlightKey } : {}),
-      },
-    });
-  } else {
-    // Inbox lives inside the More stack.
-    nav.navigate("More", { screen: "Inbox" });
-  }
+  const call = tapTargetCall(target, Date.now());
+  nav.navigate(call.name, call.params);
 }
 
 const tapIntake = createTapIntake<unknown>(
@@ -961,6 +933,13 @@ function offerTap(response: Notifications.NotificationResponse) {
     response.notification.request.identifier,
     response.notification.request.content.data,
   );
+}
+
+/** Sign-out: a tap held for, or still waiting in the phone's last-response
+ *  slot for, the account that is leaving must not open for the next one. */
+export function dropPendingNotificationTap() {
+  tapIntake.clear();
+  Notifications.clearLastNotificationResponse();
 }
 
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
@@ -1053,7 +1032,12 @@ export function AppShell({
     // A tap that STARTED the app is not delivered to a listener added after it:
     // it waits in the last-response slot until the shell mounts.
     const launching = Notifications.getLastNotificationResponse();
-    if (launching) offerTap(launching);
+    if (launching) {
+      offerTap(launching);
+      // Read once: the native slot outlives a JS reload, and `tapIntake` does
+      // not.
+      Notifications.clearLastNotificationResponse();
+    }
     // A plan push while Logjam GPS is open: the list and that plan are
     // fetched again, so neither reads stale, if the connection rule allows.
     const received = Notifications.addNotificationReceivedListener(
@@ -1289,18 +1273,19 @@ export function AppShell({
                         // The filter alone when the notification names the thing
                         // but not the row (see notificationDestination.ts).
                         onOpenSaved={(filter, highlightKey) =>
-                          navigation.getParent()?.navigate("Saved", {
-                            screen: "SavedHome",
-                            params: {
-                              filter,
-                              nonce: Date.now(),
-                              ...(highlightKey ? { highlightKey } : {}),
-                            },
-                          })
+                          openDestination(
+                            navigation.getParent() as unknown as TapNav,
+                            { tab: "saved", filter, highlightKey },
+                          )
                         }
-                        // Pushed INSIDE the More stack, like the place above, so
-                        // Back returns to the inbox rather than to another tab.
-                        onOpenFriends={() => navigation.navigate("Friends")}
+                        // Pushed on the More stack above the inbox, like the
+                        // place above, so Back returns to the inbox.
+                        onOpenFriends={() =>
+                          openDestination(
+                            navigation.getParent() as unknown as TapNav,
+                            { tab: "friends" },
+                          )
+                        }
                       />
                     )}
                   </MoreStack.Screen>

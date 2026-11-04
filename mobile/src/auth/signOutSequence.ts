@@ -17,6 +17,8 @@ export type SignOutSteps = {
   reportEverywhereFailed: (err: unknown) => void;
   /** Needs the session, so it runs before the tokens go. */
   unregisterPush: () => Promise<void>;
+  /** A notification tap held for this account must not open for the next. */
+  dropNotificationTap: () => void;
   wipe: () => Promise<{ failed: string[] }>;
   reportWipeIncomplete: (failed: string[]) => void;
   /** Clears the tokens and identity and lands on the chooser. */
@@ -42,6 +44,7 @@ export async function runSignOut(steps: SignOutSteps): Promise<void> {
     }
   }
   await steps.unregisterPush();
+  steps.dropNotificationTap();
   const wiped = await steps.wipe();
   if (wiped.failed.length > 0) steps.reportWipeIncomplete(wiped.failed);
   await steps.finish();

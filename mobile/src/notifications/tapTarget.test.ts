@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { NOTIFICATION_DESTINATIONS, NOTIFICATION_TYPES } from "@logjam/shared";
+import {
+  NOTIFICATION_DESTINATIONS,
+  NOTIFICATION_TYPES,
+  TRIP_PLANS_LIST,
+} from "@logjam/shared";
 
-import { notificationTapTarget } from "./tapTarget";
+import {
+  destinationCall,
+  notificationTapTarget,
+  tapTargetCall,
+} from "./tapTarget";
 
 describe("notificationTapTarget", () => {
   it("opens the place a push names", () => {
@@ -184,5 +192,77 @@ describe("notificationTapTarget", () => {
     expect((topo as { highlightKey: string | null }).highlightKey).toContain(
       "j1",
     );
+  });
+});
+
+// The navigator's ref is typed `never`, so these names are checked nowhere
+// else. The screen names are the ones AppShell registers.
+describe("tapTargetCall", () => {
+  // Mutation: misspell any screen name or move a param (say "Friend" for
+  // "Friends", or drop `invited`), and the matching case goes red.
+  it.each([
+    [
+      { kind: "place", placeId: "c-1" },
+      {
+        name: "Places",
+        params: {
+          screen: "PlaceDetail",
+          params: { placeId: "c-1", name: "Place" },
+        },
+      },
+    ],
+    [
+      { kind: "plan", planId: "p-1", view: "people", invited: false },
+      {
+        name: "More",
+        params: {
+          screen: "Plan",
+          params: {
+            planId: "p-1",
+            name: TRIP_PLANS_LIST.title,
+            view: "people",
+            invited: false,
+          },
+        },
+      },
+    ],
+    [
+      { kind: "announcement", announcementId: "a-1" },
+      {
+        name: "More",
+        params: {
+          screen: "Inbox",
+          params: { openAnnouncement: { announcementId: "a-1", nonce: 7 } },
+        },
+      },
+    ],
+    [{ kind: "friends" }, { name: "More", params: { screen: "Friends" } }],
+    [
+      { kind: "saved", filter: "route", highlightKey: "r1" },
+      {
+        name: "Saved",
+        params: {
+          screen: "SavedHome",
+          params: { filter: "route", nonce: 7, highlightKey: "r1" },
+        },
+      },
+    ],
+    [{ kind: "inbox" }, { name: "More", params: { screen: "Inbox" } }],
+  ] as const)("opens %j", (target, call) => {
+    expect(tapTargetCall(target, 7)).toEqual(call);
+  });
+
+  // Mutation: always spread `highlightKey`, and a filter-only open sends
+  // `highlightKey: undefined`/null, which the Saved screen reads as a row.
+  it("leaves out a highlight there is none of", () => {
+    expect(
+      destinationCall(
+        { tab: "saved", filter: "import", highlightKey: null },
+        7,
+      ),
+    ).toEqual({
+      name: "Saved",
+      params: { screen: "SavedHome", params: { filter: "import", nonce: 7 } },
+    });
   });
 });

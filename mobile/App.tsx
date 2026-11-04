@@ -34,7 +34,7 @@ import { wipeAllLocalData } from "./src/offline/wipeLocalData";
 import { unregisterPushNotifications } from "./src/notifications/pushRegistration";
 import { LandingScreen } from "./src/screens/LandingScreen";
 import { CrashReportConsent } from "./src/screens/CrashReportConsent";
-import { AppShell } from "./src/AppShell";
+import { AppShell, dropPendingNotificationTap } from "./src/AppShell";
 import { AppLockGate } from "./src/offline/AppLockGate";
 import { applyScreenCapturePolicy } from "./src/offline/appLockPreference";
 import { excludeLocalDataFromBackup } from "./src/offline/localStores";
@@ -239,6 +239,7 @@ export default function App() {
                   // Unregister the push token BEFORE tokens are cleared (the
                   // DELETE needs an authenticated request); best-effort inside.
                   unregisterPush: unregisterPushNotifications,
+                  dropNotificationTap: dropPendingNotificationTap,
                   wipe: wipeAllLocalData,
                   // The privacy line held only partly. Say so — the next person
                   // to use this phone would otherwise inherit the remains

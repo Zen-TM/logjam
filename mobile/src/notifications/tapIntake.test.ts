@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createTapIntake } from "./tapIntake";
@@ -58,5 +60,53 @@ describe("createTapIntake", () => {
     state.ready = true;
     intake.flush();
     expect(went).toEqual(["b"]);
+  });
+});
+
+describe("createTapIntake.clear", () => {
+  // Mutation: make clear() a no-op, and a tap held behind the consent gate
+  // fires in the next account's navigator after a sign-out.
+  it("drops a held tap, so a sign-out does not hand it to the next account", () => {
+    const { state, went, intake } = setup(false);
+    intake.offer("n1", "a");
+    intake.clear();
+    state.ready = true;
+    intake.flush();
+    expect(went).toEqual([]);
+  });
+});
+
+// AppShell and App cannot be loaded here (React Native's sources), so the wiring
+// the cold start depends on is held as text, as `ui/toastHost.test.ts` does.
+describe("the shell feeds the intake", () => {
+  const read = (...path: string[]) =>
+    readFileSync(join(__dirname, "..", "..", ...path), "utf8");
+
+  // Mutation: drop `onReady={tapIntake.flush}`, and every cold-start tap is held
+  // forever, because the navigator is not ready when the shell's effect runs.
+  it("releases a held tap when the navigator is ready", () => {
+    expect(read("src", "AppShell.tsx")).toContain("onReady={tapIntake.flush}");
+  });
+
+  // Mutation: drop the last-response read, and the tap that STARTED the app is
+  // never seen (a listener added afterwards is not given it); drop the clear
+  // beside it and a JS reload re-follows it.
+  it("reads, then clears, the tap that launched the app", () => {
+    const shell = read("src", "AppShell.tsx");
+    expect(shell).toContain("Notifications.getLastNotificationResponse()");
+    expect(shell).toMatch(
+      /offerTap\(launching\);[\s\S]{0,200}Notifications\.clearLastNotificationResponse\(\)/,
+    );
+  });
+
+  // Mutation: drop the sign-out wiring, and a tap held for one account opens
+  // for the next one who signs in on this phone.
+  it("drops a held tap on sign-out", () => {
+    expect(read("App.tsx")).toContain(
+      "dropNotificationTap: dropPendingNotificationTap",
+    );
+    expect(read("src", "AppShell.tsx")).toMatch(
+      /dropPendingNotificationTap\(\) \{\s*tapIntake\.clear\(\);\s*Notifications\.clearLastNotificationResponse\(\);/,
+    );
   });
 });
