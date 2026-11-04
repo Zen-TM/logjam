@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { radius, scrim, spacing, makeStyles, useTheme } from "../theme";
 import { IconButton } from "./IconButton";
+import { ToastHost } from "./Toast";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
@@ -705,6 +706,9 @@ export function BottomSheet({
           </Animated.View>
         </Held>
       </Animated.ScrollView>
+      {/* The Modal covers the shell's toast host, so a toast raised while the
+          sheet is up (a copy, a save) is drawn here instead. */}
+      {visible ? <ToastHost sheet /> : null}
     </Modal>
   );
 }

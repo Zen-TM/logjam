@@ -33,7 +33,8 @@ export const dockBottom = (gap: number, tabBar: number, bottom = 0) =>
 export function createToastQueue() {
   let current: Entry | null = null;
   const waiting: Entry[] = [];
-  let hosts = 0;
+  // Mounted hosts, oldest first: the shell's, then any modal sheet open over it.
+  const hosts: symbol[] = [];
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const listener of listeners) listener();
@@ -47,12 +48,18 @@ export function createToastQueue() {
     current: () => current,
     queued: () => waiting.length,
     /** A host is mounted: `<Toast>` hands over to it instead of drawing in place. */
-    hosted: () => hosts > 0,
-    mountHost() {
-      hosts += 1;
+    hosted: () => hosts.length > 0,
+    /**
+     * The one host that draws the showing toast: the newest mounted. A native
+     * Modal (a bottom sheet) covers the shell's host, so the sheet mounts one
+     * of its own, and the toast shows there for as long as the sheet is open.
+     */
+    topHost: () => hosts[hosts.length - 1] ?? null,
+    mountHost(id: symbol = Symbol("host")) {
+      hosts.push(id);
       emit();
       return () => {
-        hosts -= 1;
+        hosts.splice(hosts.indexOf(id), 1);
         emit();
       };
     },
