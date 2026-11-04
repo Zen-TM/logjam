@@ -4,6 +4,7 @@ import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
 import {
   DRAFT_PEEK_REVEAL_PX,
+  closeAsksFirst,
   isDraftPanel,
   PANEL_TITLES,
   type LogsView,
@@ -518,8 +519,12 @@ function SidebarPanel({
       <BottomSheet
         snap={sheetSnap}
         onSnapChange={setSheetSnap}
-        // A drawing tool closes through its own ✕, which asks first.
-        onClose={isDraftPanel(activePanel) ? undefined : onClose}
+        // A swipe closes what the ✕ closes, except mid-flow (the map is being
+        // pressed) and for a tool whose ✕ asks first.
+        onClose={
+          collapseToPeek || closeAsksFirst(activePanel) ? undefined : onClose
+        }
+        peek={isDraftPanel(activePanel) || collapseToPeek}
         title={title}
         peekReveal={
           isDraftPanel(activePanel) ? DRAFT_PEEK_REVEAL_PX : undefined

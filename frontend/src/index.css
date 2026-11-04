@@ -50,6 +50,13 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+/* The page itself never scrolls or refreshes on a pull: a narrow sheet's drag
+   (BottomSheet.tsx) and the map's own pan are the only things that move. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
 *,
 *::before,
 *::after {
