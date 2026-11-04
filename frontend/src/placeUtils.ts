@@ -1368,6 +1368,8 @@ type MediaUploadMeta = {
   linkedId: string;
   filename: string;
   mediaType: string;
+  /** A trip's copy of a recorded track: the recording it came from. */
+  sourceMediaId?: string;
 };
 
 type PresignMediaResponse = {
@@ -1432,12 +1434,14 @@ export async function uploadMedia(params: {
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
+  sourceMediaId?: string;
 }): Promise<MediaItem> {
   const meta: MediaUploadMeta = {
     linkedType: params.linkedType,
     linkedId: params.linkedId,
     filename: params.file.name,
     mediaType: params.mediaType,
+    ...(params.sourceMediaId && { sourceMediaId: params.sourceMediaId }),
   };
   // Declared sizes are signed into the presigned PUT's Content-Length, so the
   // uploaded bytes must match what's declared here (server caps per category).

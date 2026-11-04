@@ -69,6 +69,9 @@ export type WayItem = {
    * row already carries, so centring one costs no download.
    */
   bounds: [number, number, number, number] | null;
+  /** A trip has already been logged from this recording, so "Log a trip" is
+   *  not offered again. False for everything else. */
+  hasTrip: boolean;
 };
 
 /** The box around a line. Null for a line with no points to bound. */
@@ -127,6 +130,7 @@ export function wayFromRoute(
     placeId: route.placeId,
     createdAt: route.createdAt,
     bounds: boundsOfPoints(route.points),
+    hasTrip: false,
   };
 }
 
@@ -177,6 +181,7 @@ export function buildWays({
         placeId: file.linkedPlaceId,
         createdAt: file.createdAt,
         bounds: file.metadata.bbox ?? null,
+        hasTrip: file.hasTrip,
       }),
     ),
     ...placeTracks
@@ -205,6 +210,7 @@ export function buildWays({
           // `/places/tracks` carries no date; these sort last (see WayItem).
           createdAt: null,
           bounds: track.metadata.bbox ?? null,
+          hasTrip: false,
         }),
       ),
   ]);

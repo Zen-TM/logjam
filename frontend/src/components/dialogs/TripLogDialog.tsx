@@ -778,6 +778,9 @@ function TripLogDialog({
           file,
           mediaType: resolved.mediaType,
           thumbnail: await generateThumbnail(file, resolved.category),
+          // The copy names its recording, so the recording stops offering
+          // "Log a trip".
+          sourceMediaId: fromTrack.mediaId,
         });
         setMedia((prev) => [...prev, item]);
       } catch (err) {

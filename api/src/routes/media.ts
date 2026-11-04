@@ -38,8 +38,10 @@ import {
   categoryHasThumbnail,
   isMediaOrigin,
   parseMediaMetadata,
+  parseSourceMediaId,
   parseTrackClimb,
   MediaMetadataError,
+  SourceMediaIdError,
   type MediaLinkedType,
   type MediaOrigin,
   pickNextTrackColor,
@@ -75,8 +77,19 @@ function parseLinkTarget(body: Record<string, unknown>): {
   linkedType: MediaLinkedType;
   linkedId: string | null;
   origin: MediaOrigin | null;
+  sourceMediaId: string | null;
 } {
   const { linkedType, linkedId, origin } = body;
+  let sourceMediaId: string | null;
+  try {
+    sourceMediaId = parseSourceMediaId(body.sourceMediaId);
+  } catch (err) {
+    if (err instanceof SourceMediaIdError) throw malformed(err.message);
+    throw err;
+  }
+  if (sourceMediaId !== null && linkedType !== "tripLog") {
+    throw malformed("Only a trip's file can name a source recording");
+  }
   if (
     linkedType !== "place" &&
     linkedType !== "tripLog" &&
@@ -95,12 +108,12 @@ function parseLinkTarget(body: Record<string, unknown>): {
     if (parsedOrigin === null) {
       throw malformed("A standalone file requires an origin");
     }
-    return { linkedType, linkedId: null, origin: parsedOrigin };
+    return { linkedType, linkedId: null, origin: parsedOrigin, sourceMediaId };
   }
   if (typeof linkedId !== "string" || !linkedId) {
     throw malformed("linkedId is required");
   }
-  return { linkedType, linkedId, origin: parsedOrigin };
+  return { linkedType, linkedId, origin: parsedOrigin, sourceMediaId };
 }
 
 // Only the owner of the target place (or the place owning the trip log) may
@@ -141,6 +154,23 @@ async function assertOwnsTarget(
 }
 
 // A place may have at most one track (GPX/KML). Trip logs are unconstrained.
+// A trip's copy may only name one of the caller's own recordings. A foreign
+// id, a missing one and a non-recording all answer the same 400, so the status
+// is no oracle for other people's media ids.
+async function assertOwnsSourceTrack(
+  userId: string,
+  sourceMediaId: string | null,
+) {
+  if (sourceMediaId === null) return;
+  const source = await prisma.media.findUnique({
+    where: { id: sourceMediaId },
+    select: { ownerId: true, origin: true },
+  });
+  if (!source || source.ownerId !== userId || source.origin !== "track") {
+    throw malformed("sourceMediaId must name one of your recorded tracks");
+  }
+}
+
 // Checked in both presign (fail fast) and confirm (authoritative — the presign
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
 async function assertPlaceTrackSlotFree(
@@ -247,7 +277,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { sizeBytes, thumbnailSizeBytes } = body;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const { category, mediaType } = validateMediaType(
       body.mediaType,
       body.filename,
@@ -259,6 +290,7 @@ router.post(
     // Content-Length below, so S3 rejects uploads that exceed the declaration.
     const sizes = validateUploadSizes(category, sizeBytes, thumbnailSizeBytes);
     await assertOwnsTarget(user.id, linkedType, linkedId);
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
     // Optional client-minted mediaId. A client id whose row
     // already exists means the whole three-phase flow already completed —
     // return the existing item (200), never fresh upload URLs. Foreign id →
@@ -335,13 +367,15 @@ router.post(
     const user = await getUser(req.user!.sub);
     const mediaId = getParam(req.params.mediaId);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const metadata = parseMediaMetadataOr400(origin, body.metadata);
     const { category, mediaType, filename } = validateMediaType(
       body.mediaType,
       body.filename,
     );
     await assertOwnsTarget(user.id, linkedType, linkedId);
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
 
     // Idempotent confirm: if the row already exists, this confirm
     // already succeeded — return it (handled below) before the track-slot guard
@@ -447,6 +481,7 @@ router.post(
             linkedType,
             linkedId,
             origin,
+            sourceMediaId,
             displayName: parseMediaDisplayName(body.displayName),
             metadata,
             s3KeyDisplay: displayKey,
@@ -598,6 +633,19 @@ router.get(
       where: { ownerId: user.id, origin: { not: null } },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
+    // The recordings a trip has been logged from: one query for the page, so
+    // "Log a trip" is offered only on the rest.
+    const withTrip = new Set(
+      (
+        await prisma.media.findMany({
+          where: {
+            ownerId: user.id,
+            sourceMediaId: { in: rows.map((row) => row.id) },
+          },
+          select: { sourceMediaId: true },
+        })
+      ).map((copy) => copy.sourceMediaId),
+    );
     const files: StandaloneFile[] = rows.flatMap((row) => {
       if (!isMediaOrigin(row.origin)) return [];
       return [
@@ -611,6 +659,7 @@ router.get(
           origin: row.origin,
           metadata: readMediaMetadata(row.origin, row.metadata),
           linkedPlaceId: placeIdOfMedia(row),
+          hasTrip: withTrip.has(row.id),
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
         },

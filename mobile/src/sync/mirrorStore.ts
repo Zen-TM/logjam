@@ -23,6 +23,7 @@ import {
   readMediaMetadata,
   SYSTEM_PLACE_TYPES,
   isSystemPlaceTypeId,
+  tripLoggedTrackIds,
 } from "@logjam/shared";
 
 import type { TPlace, TTripLog } from "../api/types";
@@ -1162,6 +1163,27 @@ export async function listStandaloneMedia(
     origin,
   );
   return rows.map(rowToMirrorMedia);
+}
+
+/**
+ * The recordings a trip has been logged from. A trip's copy of a recording
+ * keeps the source's media id as `sourceMediaId`; the mirror has no column for
+ * it, so it rides in `extra_json` (written by `attachMediaLocal` for a copy
+ * still queued, and by the delta for a synced one). Copies made before the
+ * link existed name nothing, so their recording is offered again.
+ */
+export async function listLoggedTrackIds(): Promise<Set<string>> {
+  const db = await getSyncDb();
+  const rows = await db.getAllAsync<{ extra_json: string }>(
+    `SELECT extra_json FROM media
+     WHERE linked_type = 'tripLog' AND extra_json IS NOT NULL
+       AND sync_state != 'pendingDelete'`,
+  );
+  return tripLoggedTrackIds(
+    rows.map((row) =>
+      parseJson<{ sourceMediaId?: string | null }>(row.extra_json, {}),
+    ),
+  );
 }
 
 /** One media row by id, or null. */

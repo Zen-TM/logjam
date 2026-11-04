@@ -28,6 +28,7 @@ import {
 import { getEnv } from "../lib/env";
 import { logger } from "../lib/logger";
 import { resolveUser } from "../lib/resolveUser";
+import { visibleSourceMediaId } from "../lib/mediaPresign";
 import {
   say,
   readMediaMetadata,
@@ -694,6 +695,7 @@ router.get(
           // Row-level stats, so the other device can LIST an import or a
           // recording without downloading its blob.
           metadata: readMediaMetadata(row.origin, row.metadata),
+          sourceMediaId: visibleSourceMediaId(row),
           createdAt: row.createdAt,
           updatedAt: row.updatedAt,
         })),

@@ -26,6 +26,9 @@ vi.mock("./trackRecorder", () => ({
   discardTrackRecording: (id: string) => discardTrackRecording(id),
   isActiveRecording: async (id: string) => activeId === id,
 }));
+vi.mock("../sync/mirrorStore", () => ({
+  listLoggedTrackIds: async () => new Set<string>(),
+}));
 vi.mock("./tracksDb", () => ({ getTrack: vi.fn(async () => null) }));
 vi.mock("./tripTrackSource", () => ({ recordedTrackSource: vi.fn() }));
 

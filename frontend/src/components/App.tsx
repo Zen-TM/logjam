@@ -887,7 +887,10 @@ function App() {
   const refetchAfterTripWrite = useCallback(() => {
     refetchTripLogs();
     refetch();
-  }, [refetchTripLogs, refetch]);
+    // A trip logged from a recording (or deleted) changes whether the
+    // recording still offers "Log a trip".
+    refetchStandaloneFiles();
+  }, [refetchTripLogs, refetch, refetchStandaloneFiles]);
 
   // Trip-log definitions, read from the same row-grain endpoint as the place
   // ones. A trip field carries scoping too (`tripTypes`, the trip's own tags),

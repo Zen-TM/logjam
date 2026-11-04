@@ -5,7 +5,7 @@ import type { WayItem } from "./waysModel";
 
 type Subject = Pick<
   WayItem,
-  "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin"
+  "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin" | "hasTrip"
 >;
 
 const route = (over: Partial<Subject> = {}): Subject => ({
@@ -14,6 +14,7 @@ const route = (over: Partial<Subject> = {}): Subject => ({
   viaPlace: false,
   hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const importFile = (over: Partial<Subject> = {}): Subject => ({
@@ -22,6 +23,7 @@ const importFile = (over: Partial<Subject> = {}): Subject => ({
   viaPlace: false,
   hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const ids = (subject: Subject, surface: WaySurface = "row") =>
@@ -223,6 +225,14 @@ describe("wayVerbs", () => {
       "logTrip",
     ]);
     expect(ids(track, "detail").slice(0, 2)).toEqual(["openPlace", "logTrip"]);
+  });
+
+  // Mutation: drop `!way.hasTrip` from the logTrip verb, and a recording with
+  // a trip is offered one again.
+  it("stops offering Log a trip on a recording that has a trip", () => {
+    const track = importFile({ kind: "track", hasTrip: true });
+    expect(ids(track, "row")).not.toContain("logTrip");
+    expect(ids(track, "detail")).not.toContain("logTrip");
   });
 
   // A route is a plan and an import is somebody's walk with no day of its own;

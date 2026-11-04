@@ -4,6 +4,7 @@ import {
   encodeSyncCursor,
   isUuidV4,
   parseSyncDeltaCustomFieldDefRow,
+  parseSyncDeltaMediaRow,
   parseSyncDeltaPlaceRow,
   parseSyncDeltaPlaceTypeRow,
   parseSyncDeltaTombstone,
@@ -284,5 +285,37 @@ describe("delta row parsers", () => {
       expect(message).not.toContain("-33.5");
       expect(message).not.toContain("Claustral");
     }
+  });
+});
+
+describe("parseSyncDeltaMediaRow", () => {
+  const row = {
+    id: "m1",
+    linkedType: "tripLog",
+    linkedId: "t1",
+    mediaType: "application/gpx+xml",
+    filename: "a.gpx",
+    fileSizeBytes: "10",
+    color: null,
+    origin: null,
+    displayName: null,
+    metadata: {},
+    createdAt: "2026-11-01T00:00:00.000Z",
+    updatedAt: "2026-11-01T00:00:00.000Z",
+  };
+
+  // Mutation: make `sourceMediaId` required in MEDIA_ROW_SPEC and the row from
+  // a server that predates it (every row today) fails its whole delta page.
+  it("takes a source recording, null or none, and refuses a non-string", () => {
+    expect(
+      parseSyncDeltaMediaRow({ ...row, sourceMediaId: "rec-1" }).sourceMediaId,
+    ).toBe("rec-1");
+    expect(
+      parseSyncDeltaMediaRow({ ...row, sourceMediaId: null }).sourceMediaId,
+    ).toBeNull();
+    expect(parseSyncDeltaMediaRow(row).sourceMediaId).toBeUndefined();
+    expect(() =>
+      parseSyncDeltaMediaRow({ ...row, sourceMediaId: 7 }),
+    ).toThrow();
   });
 });

@@ -34,6 +34,7 @@ import {
   ColourField,
 } from "../ui";
 import { trackActions } from "../saved/assetActions";
+import { useMirrorLoggedTrackIds } from "../sync/useSyncQueries";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
@@ -157,7 +158,8 @@ export function TrackOptionsSheet({
       : null;
 
   const shareRowProps = useShareRowProps(online);
-  const actions = track ? trackActions(track) : null;
+  const loggedTrackIds = useMirrorLoggedTrackIds().data ?? undefined;
+  const actions = track ? trackActions(track, loggedTrackIds) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
   // other surface renders, with the wording the one non-revocable verb needs.
   const share = useSharePanel({

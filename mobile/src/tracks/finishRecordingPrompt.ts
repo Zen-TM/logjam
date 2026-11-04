@@ -25,6 +25,7 @@ import {
   finishTrackRecording,
   isActiveRecording,
 } from "./trackRecorder";
+import { listLoggedTrackIds } from "../sync/mirrorStore";
 import { getTrack } from "./tracksDb";
 import { recordedTrackSource, type TripTrackSource } from "./tripTrackSource";
 
@@ -83,8 +84,15 @@ async function announceFinished(trackId: string, queued: boolean) {
   const notice = queued && !isGuest() && needsTrackBackupNotice();
   if (notice) markTrackBackupNoticeShown();
   const track = await getTrack(trackId).catch(() => null);
+  // Not offered where a trip was already logged from it (a recording that was
+  // continued and finished again is a new file, with none).
+  const logged = await listLoggedTrackIds().catch(() => new Set<string>());
   const source =
-    track && track.pointCount >= 2 ? recordedTrackSource(track) : null;
+    track &&
+    track.pointCount >= 2 &&
+    !(track.mediaId && logged.has(track.mediaId))
+      ? recordedTrackSource(track)
+      : null;
   toast(
     notice ? SAVED_NOTICE : "Recording saved.",
     "done",

@@ -66,11 +66,16 @@ export function syncedTrackSource(
       // Cached already, or fetched once and cached: null offline.
       const uri = await ensureDisplayCached(file.id);
       if (!uri) return false;
-      await attachMediaLocal("tripLog", tripId, {
-        uri,
-        mimeType: file.mediaType,
-        fileName: file.filename ?? `${file.title}.gpx`,
-      });
+      await attachMediaLocal(
+        "tripLog",
+        tripId,
+        {
+          uri,
+          mimeType: file.mediaType,
+          fileName: file.filename ?? `${file.title}.gpx`,
+        },
+        file.id,
+      );
       return true;
     },
   };

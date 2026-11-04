@@ -134,6 +134,97 @@ describe("attachMediaLocal", () => {
   });
 });
 
+// A trip's copy of a recording names it. Mutation: drop `sourceMediaId` from the
+// INSERT's extra_json and the recording keeps offering "Log a trip" until the
+// next sync; drop it from the outbox fields (or linkBody) and the API never
+// learns it.
+describe("attachMediaLocal with a source recording", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({
+      mediaId: "media-1",
+      displayUploadUrl: "https://s3.example/display",
+      thumbnailUploadUrl: null,
+    });
+    canRunNow.mockReset().mockResolvedValue(true);
+  });
+
+  const attach = (source?: string) =>
+    attachMediaLocal(
+      "tripLog",
+      "trip-1",
+      {
+        uri: "file:///docs/imports/x.gpx",
+        mimeType: "application/gpx+xml",
+        fileName: "track.gpx",
+      },
+      source,
+    );
+
+  it("keeps it on the queued row and in the outbox op", async () => {
+    await attach("rec-1");
+    const insertMedia = calls.find((c) => c.sql.includes("INSERT INTO media"));
+    expect(insertMedia?.args).toContain(
+      JSON.stringify({ sourceMediaId: "rec-1" }),
+    );
+    const op = calls.find((c) => c.sql.includes("INSERT INTO outbox"));
+    expect(JSON.parse(op?.args[2] as string).sourceMediaId).toBe("rec-1");
+  });
+
+  it("writes nothing extra when there is no source", async () => {
+    await attach();
+    const insertMedia = calls.find((c) => c.sql.includes("INSERT INTO media"));
+    expect(insertMedia?.args).not.toContain(
+      JSON.stringify({ sourceMediaId: undefined }),
+    );
+    const op = calls.find((c) => c.sql.includes("INSERT INTO outbox"));
+    expect(JSON.parse(op?.args[2] as string)).not.toHaveProperty(
+      "sourceMediaId",
+    );
+  });
+
+  it("sends it at presign and at confirm", async () => {
+    apiFetch
+      .mockResolvedValueOnce({
+        mediaId: "media-1",
+        displayUploadUrl: "https://s3.example/display",
+        thumbnailUploadUrl: null,
+      })
+      .mockResolvedValueOnce({
+        id: "media-1",
+        linkedType: "tripLog",
+        linkedId: "trip-1",
+        mediaType: "application/gpx+xml",
+        filename: "a.gpx",
+        fileSizeBytes: 1,
+        color: null,
+        createdAt: "2026-08-01T00:00:00.000Z",
+      });
+    await runMediaCreateOp({
+      seq: 8,
+      entity_id: "media-1",
+      op: "create",
+      fields_json: JSON.stringify({
+        linkedType: "tripLog",
+        linkedId: "trip-1",
+        sourceMediaId: "rec-1",
+        filename: "a.gpx",
+        mediaType: "application/gpx+xml",
+        sizeBytes: 1,
+        localDisplayPath: "file:///cache/media-cache/media-1.display",
+        localThumbPath: null,
+      }),
+      media_phase: null,
+      attempts: 1,
+    });
+    const bodies = apiFetch.mock.calls.map(
+      (call) => (call[1] as { body: Record<string, unknown> }).body,
+    );
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) expect(body.sourceMediaId).toBe("rec-1");
+  });
+});
+
 describe("runMediaCreateOp", () => {
   beforeEach(() => {
     calls.length = 0;

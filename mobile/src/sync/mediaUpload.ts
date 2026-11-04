@@ -116,6 +116,9 @@ export async function attachMediaLocal(
   linkedType: "place" | "tripLog",
   linkedId: string,
   file: PickedFile,
+  /** A trip's copy of a recording: the recording's media id. The API refuses
+   *  it on anything else and on an id that is not the caller's recording. */
+  sourceMediaId?: string,
 ): Promise<string> {
   await ensureCacheDir();
   const mediaId = mintUuid();
@@ -181,7 +184,7 @@ export async function attachMediaLocal(
            (id, linked_type, linked_id, media_type, filename, file_size_bytes,
             color, created_at, extra_json, sync_state, local_display_path,
             local_thumb_path)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, 'pendingUpload', ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'pendingUpload', ?, ?)`,
         mediaId,
         linkedType,
         linkedId,
@@ -189,6 +192,10 @@ export async function attachMediaLocal(
         filename,
         String(sizeBytes),
         new Date().toISOString(),
+        // Where the mirror keeps it until the delta brings the synced row
+        // (listLoggedTrackIds), so the recording stops offering "Log a trip"
+        // at once, offline.
+        sourceMediaId ? JSON.stringify({ sourceMediaId }) : null,
         displayPath,
         thumbPath,
       );
@@ -203,6 +210,7 @@ export async function attachMediaLocal(
         JSON.stringify({
           linkedType,
           linkedId,
+          ...(sourceMediaId && { sourceMediaId }),
           filename,
           mediaType,
           sizeBytes,
@@ -513,6 +521,8 @@ type MediaFields = {
   linkedType: "place" | "tripLog" | "none";
   /** Null on a standalone file — it belongs to no place or trip. */
   linkedId: string | null;
+  /** A trip's copy of a recording: where it was copied from. */
+  sourceMediaId?: string;
   filename: string;
   mediaType: string;
   sizeBytes: number;
@@ -740,7 +750,11 @@ export async function runMediaCreateOp(
  */
 function linkBody(fields: MediaFields): Record<string, unknown> {
   if (fields.linkedType !== "none") {
-    return { linkedType: fields.linkedType, linkedId: fields.linkedId };
+    return {
+      linkedType: fields.linkedType,
+      linkedId: fields.linkedId,
+      sourceMediaId: fields.sourceMediaId,
+    };
   }
   return {
     linkedType: "none",
