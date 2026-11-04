@@ -12,10 +12,11 @@
 // is the only thing that can notice a fix has gone stale, and 2 s is as coarse
 // as it can be while a 20 s staleness cliff still lands promptly.
 //
-// TWO LABELLED COLUMNS, FIXED WIDTH. Both halves are numbers with units, and
+// TWO LABELLED COLUMNS, A STEADY WIDTH. Both halves are numbers with units, and
 // units alone don't say which is which — "3.4 km/h · 253 m" needs reading, a
-// labelled column is glanced at. The width is fixed and the values centred so
-// the chip does not breathe with every fix: it sits in a stack above the scale
+// labelled column is glanced at. The width has a floor and the values are
+// centred so the chip does not breathe with every fix (it grows only with the
+// system text size, each value on one line): it sits in a stack above the scale
 // bar and the compass tape, and a box that changes width while you walk drags
 // the eye to the one instrument that has nothing new to say.
 //
@@ -50,7 +51,7 @@ export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
  *  "1234 m") and the longest label ("12 min ago") without the
  *  columns touching, and never wider. A glance figure, not a hero: it sits
  *  beside the scale bar and must not outweigh the map. */
-const CHIP_WIDTH = 168;
+const CHIP_MIN_WIDTH = 168;
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -100,6 +101,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
           {note && figures.speedMps != null ? note : "Speed"}
         </Text>
         <Text
+          numberOfLines={1}
           style={[styles.value, grey && styles.grey]}
           accessibilityLabel={`Speed ${speed}`}
         >
@@ -117,6 +119,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
           {note && figures.elevationM != null ? note : "Elevation"}
         </Text>
         <Text
+          numberOfLines={1}
           style={[styles.value, grey && styles.grey]}
           accessibilityLabel={`Elevation ${elevation}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
@@ -133,7 +136,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    width: CHIP_WIDTH,
+    minWidth: CHIP_MIN_WIDTH,
     minHeight: READOUT_CHIP_HEIGHT,
     backgroundColor: withAlpha(theme.page, 0.8),
     borderRadius: radius.sm,
