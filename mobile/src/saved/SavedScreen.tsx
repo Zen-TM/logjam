@@ -173,6 +173,7 @@ import { TrackOptionsSheet } from "../tracks/TrackOptionsSheet";
 import { LogTripFromTrackSheet } from "../tracks/LogTripFromTrackSheet";
 import { ImportOptionsSheet } from "../imports/ImportOptionsSheet";
 import {
+  deleteLabel,
   geoPdfActions,
   remoteTrackActions,
   trackActions,
@@ -187,7 +188,7 @@ import { BulkShareButton, BulkShareSheet } from "../sharing/BulkShareSheet";
 import { useTracks } from "../tracks/useTracks";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
 import { bboxOfFootprint, type Bbox } from "./bboxOfPoints";
-import { bulkDeleteConfirmBody } from "./bulkDeleteConfirm";
+import { bulkDeleteConfirmBody, bulkDeleteCounts } from "./bulkDeleteConfirm";
 import { RouteOptionsSheet } from "../routes/RouteOptionsSheet";
 
 function getCompletedOverlays(): Promise<CompletedOverlaysResponse> {
@@ -377,6 +378,7 @@ type SavedItem = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    synced: boolean;
     run: () => Promise<unknown>;
   };
   /** Present on an editable route — the map's draw tool reopens this id. */
@@ -771,7 +773,7 @@ export function SavedScreen({
   const downloadableJobs = mergedOverlays.jobs
     .map((job) => ({
       jobId: job.jobId,
-      label: job.name ?? `Topo ${job.jobId.slice(0, 8)}`,
+      label: job.name ?? `LiDAR map ${job.jobId.slice(0, 8)}`,
       bbox: bboxOfFootprint(job.footprint),
       // A synthetic job (built from what is on disk when the account list is
       // unreachable) carries no URL, so there is nothing to offer.
@@ -949,6 +951,7 @@ export function SavedScreen({
     // (no groupId) group under their own id and stand alone, unchanged.
     for (const group of groupArtifacts(regionArtifacts, regionGroupKey)) {
       const first = group.members[0];
+      const title = group.label ?? "Offline map";
       // The DEM saved with the run is a member (its bytes and its deletion
       // belong to this card) but it is not a MAP: it is never drawn, never
       // switched to, and counting it would tell the user they saved three maps
@@ -960,7 +963,7 @@ export function SavedScreen({
       rows.push({
         key: savedRegionKey(group.key),
         category: "region",
-        title: group.label ?? "Offline map region",
+        title,
         subtitle: `${countOf(basemapMembers.length, "map")} · saved ${formatDay(first.downloadedAt)}`,
         sizeBytes: group.sizeBytes,
         locatable: group.bbox != null,
@@ -980,8 +983,9 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this region?",
-          confirmBody: `The offline tiles for this area (${countOf(basemapMembers.length, "map")}) are removed from the device.`,
+          confirmTitle: `Delete ${title}?`,
+          synced: false,
+          confirmBody: `The map data for this area (${countOf(group.members.length, "layer")}) is removed from the device.`,
           run: async () => {
             for (const artifact of group.members) {
               await deleteDownloadedArtifact(artifact.id);
@@ -996,10 +1000,12 @@ export function SavedScreen({
       const job = mergedOverlays.jobs.find(
         (candidate) => candidate.jobId === group.key,
       );
+      const title =
+        group.label ?? job?.name ?? `LiDAR map ${group.key.slice(0, 8)}`;
       rows.push({
         key: savedOverlayKey(group.key),
         category: "overlay",
-        title: group.label ?? job?.name ?? `Topo ${group.key.slice(0, 8)}`,
+        title,
         subtitle: countOf(group.members.length, "layer"),
         sizeBytes: group.sizeBytes,
         pill: { label: "Offline", tone: "accent" },
@@ -1020,13 +1026,13 @@ export function SavedScreen({
               // and cannot say why.
               removeShare: {
                 confirmTitle: removeShareConfirm({
-                  kindLabel: "topo",
-                  itemName: group.label ?? job?.name ?? "This topo",
+                  kindLabel: "LiDAR map",
+                  itemName: group.label ?? job?.name ?? "This LiDAR map",
                 }).title,
                 confirmBody: `${
                   removeShareConfirm({
-                    kindLabel: "topo",
-                    itemName: group.label ?? job?.name ?? "This topo",
+                    kindLabel: "LiDAR map",
+                    itemName: group.label ?? job?.name ?? "This LiDAR map",
                   }).body
                 } The ${countOf(group.members.length, "layer")} downloaded here are deleted too.`,
                 run: async () => {
@@ -1061,7 +1067,8 @@ export function SavedScreen({
           delete: () => deleteDownloadedArtifact(artifact.id),
         })),
         delete: {
-          confirmTitle: "Delete this topo?",
+          confirmTitle: `Delete ${title}?`,
+          synced: false,
           confirmBody: `Its ${countOf(group.members.length, "layer")} are removed from the device. You can download them again later.`,
           run: async () => {
             for (const artifact of group.members) {
@@ -1397,12 +1404,8 @@ export function SavedScreen({
    *  `bulkDeleteConfirmBody`, which owns every count/kind combination. */
   const deleteSelected = async () => {
     const targets = selectedItems;
-    const syncedCount = targets.filter(
-      (item) => item.category === "route",
-    ).length;
     const body = bulkDeleteConfirmBody({
-      onDeviceCount: targets.length - syncedCount,
-      syncedCount,
+      ...bulkDeleteCounts(targets),
       onDeviceBytes: selectedBytes,
     });
     const ok = await confirm({
@@ -1439,7 +1442,7 @@ export function SavedScreen({
       const removal = item.delete;
       if (!removal) return;
       const ok = await confirm({
-        confirmTitle: `Delete ${item.title}?`,
+        confirmTitle: removal.confirmTitle,
         confirmBody: removal.confirmBody,
         confirmLabel: "Delete",
         tone: "destructive",
@@ -1488,7 +1491,7 @@ export function SavedScreen({
       const ok = await confirm({
         confirmTitle: `Delete ${member.title}?`,
         confirmBody:
-          "This map is removed from the device. The rest of this region stays.",
+          "This offline map is removed from the device. The rest of this area stays.",
         confirmLabel: "Delete",
         tone: "destructive",
       });
@@ -1748,7 +1751,7 @@ export function SavedScreen({
               // What the run is going to cost, as soon as planning knows —
               // a GeoPDF import is minutes of rendering.
               importRun.estimate
-                ? `${importRun.estimate.tiles.toLocaleString()} tiles · ${formatMinutes(importRun.estimate.seconds)}`
+                ? `about ${formatMinutes(importRun.estimate.seconds)}`
                 : null,
             ]
               .filter(Boolean)
@@ -2267,17 +2270,11 @@ export function SavedScreen({
                   onPress={() => setMenuMode("rename")}
                 />
               ) : null}
-              {/* Every asset that still reaches THIS sheet is a file on this
-                  handset. Routes, tracks, imports and waypoints left for their
-                  own sheets, which is what keeps this label from growing a
-                  branch per kind. */}
+              {/* A recording made on another device also reaches this sheet and
+                  is synced, so the label comes from the descriptor. */}
               {menuItem.delete ? (
                 <Row
-                  title={
-                    menuItem.members && menuItem.members.length > 1
-                      ? "Delete all from device"
-                      : "Delete from device"
-                  }
+                  title={deleteLabel(menuItem.delete, menuItem.members?.length)}
                   icon="delete"
                   hue={theme.warning}
                   onPress={() => {

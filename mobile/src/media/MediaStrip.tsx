@@ -12,6 +12,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library/legacy";
 import {
+  attachSummary,
   categoryHasThumbnail,
   mediaCategory,
   type MediaCategory,
@@ -27,10 +28,16 @@ import {
   useTheme,
   muted,
 } from "../theme";
-import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import {
+  attachMediaLocal,
+  deleteMediaLocal,
+  type PickedFile,
+} from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { savesCapturesToGallery } from "./galleryPreference";
+import { attachBatch, libraryPickerOptions } from "./attachBatch";
+import { stripOffers } from "./stripOffers";
 import { alertPermissionDenied } from "../permissionAlert";
 import { routeFileMimeType } from "./routeFileMime";
 import { listTracks, type Track } from "../tracks/tracksDb";
@@ -114,8 +121,10 @@ export function MediaStrip({
   emptyHint,
   limit,
   onFailed,
+  onAdded,
   onShowRoute,
   onAddWay,
+  readOnly,
 }: {
   /**
    * Which family of attachment this strip owns. Photos/videos and route files
@@ -147,6 +156,8 @@ export function MediaStrip({
   limit?: number;
   /** Routed to the screen's toast channel. */
   onFailed: (message: string) => void;
+  /** Routed to the same channel, for the one line a successful pick leaves. */
+  onAdded: (message: string) => void;
   /**
    * Show a route attachment on the map. Given for `kind="track"`, a tap opens
    * the map rather than the viewer — a line on a basemap is the only useful way
@@ -162,6 +173,8 @@ export function MediaStrip({
    * nothing, and keeps the two file sources below.
    */
   onAddWay?: () => void;
+  /** Someone else owns the row: no Add, no press-and-hold delete. */
+  readOnly?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -188,22 +201,23 @@ export function MediaStrip({
   }, []);
 
   const attach = useCallback(
-    async (file: {
-      uri: string;
-      mimeType?: string | null;
-      fileName?: string | null;
-    }) => {
+    async (files: PickedFile[]) => {
       setBusy(true);
       try {
-        await attachMediaLocal(linkedType, linkedId, file);
-      } catch (err) {
-        console.error(err);
-        onFailed("That file couldn't be attached.");
+        const { added, failed } = await attachBatch(files, (file) =>
+          attachMediaLocal(linkedType, linkedId, file),
+        );
+        const summary = attachSummary(
+          added.map((file) => mediaCategory(file.mimeType ?? "image/jpeg")),
+          failed,
+        );
+        if (summary?.tone === "error") onFailed(summary.message);
+        else if (summary) onAdded(summary.message);
       } finally {
         setBusy(false);
       }
     },
-    [onFailed, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   const captureFrom = useCallback(
@@ -242,10 +256,9 @@ export function MediaStrip({
         result =
           source === "camera"
             ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
-            : await ImagePicker.launchImageLibraryAsync({
-                mediaTypes,
-                quality: 1,
-              });
+            : await ImagePicker.launchImageLibraryAsync(
+                libraryPickerOptions(mediaTypes),
+              );
       } catch (err) {
         // launchCameraAsync REJECTS when CAMERA is denied (its own native
         // ensureCameraPermissionsAreGranted), so reading the status here
@@ -267,17 +280,19 @@ export function MediaStrip({
         throw err;
       }
       if (result.canceled || result.assets.length === 0) return;
-      const asset = result.assets[0];
       // The gallery copy happens BEFORE the attach, and its failure is never
       // allowed to cost the attachment: the photo the user actually asked for
       // is the one going onto the place, and a refused media permission must
       // not take that with it (Settings → Privacy and security).
-      if (source === "camera") await saveToGalleryIfWanted(asset.uri);
-      await attach({
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
+      if (source === "camera")
+        await saveToGalleryIfWanted(result.assets[0].uri);
+      await attach(
+        result.assets.map((asset) => ({
+          uri: asset.uri,
+          mimeType: asset.mimeType,
+          fileName: asset.fileName,
+        })),
+      );
     },
     [attach],
   );
@@ -296,16 +311,16 @@ export function MediaStrip({
       onFailed("Pick a .gpx or .kml file.");
       return;
     }
-    await attach({ uri: asset.uri, mimeType, fileName: asset.name });
+    await attach([{ uri: asset.uri, mimeType, fileName: asset.name }]);
   }, [attach, onFailed]);
 
   const attachTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
       try {
-        if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
-          onFailed("That track has too few points to attach.");
-        }
+        if (await attachRecordedTrack(linkedType, linkedId, track))
+          onAdded("1 route added.");
+        else onFailed("That track has too few points to attach.");
       } catch (err) {
         console.error(err);
         onFailed("That track couldn't be attached.");
@@ -313,7 +328,7 @@ export function MediaStrip({
         setBusy(false);
       }
     },
-    [onFailed, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   // Loaded when the picker opens, not on mount — most visits never attach.
@@ -355,6 +370,7 @@ export function MediaStrip({
   }, []);
 
   const atLimit = limit != null && shown.length >= limit;
+  const offers = stripOffers({ readOnly, atLimit, hasAddWay: !!onAddWay });
 
   return (
     <View>
@@ -363,7 +379,7 @@ export function MediaStrip({
           {/* The slot's panel can REPLACE what is in it, so its tile outlives
               the limit; a strip with no such panel still stops offering "Add"
               at the limit rather than failing on upload. */}
-          {atLimit && !onAddWay ? null : (
+          {offers.add ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
@@ -375,23 +391,33 @@ export function MediaStrip({
                       : "Add a way"
                     : "Add a route"
               }
-              onPress={() => (onAddWay ? onAddWay() : setSourceMode("sources"))}
+              accessibilityState={{ busy }}
+              // A second batch would run beside the first.
+              onPress={() => {
+                if (busy) return;
+                if (onAddWay) onAddWay();
+                else setSourceMode("sources");
+              }}
               style={({ pressed }) => [
                 styles.tile,
                 styles.addTile,
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Icon
-                idea={atLimit ? "replace" : "add"}
-                size={20}
-                color={theme.accent}
-              />
+              {busy ? (
+                <ActivityIndicator color={theme.accent} />
+              ) : (
+                <Icon
+                  idea={atLimit ? "replace" : "add"}
+                  size={20}
+                  color={theme.accent}
+                />
+              )}
               <Text style={styles.addTileLabel}>
-                {atLimit ? "Replace" : "Add"}
+                {busy ? "Adding…" : atLimit ? "Replace" : "Add"}
               </Text>
             </Pressable>
-          )}
+          ) : null}
 
           {shown.map((item, itemIndex) => (
             <AttachmentTile
@@ -402,7 +428,9 @@ export function MediaStrip({
                   ? onShowRoute(item)
                   : setViewerIndex(itemIndex)
               }
-              onLongPress={() => void confirmDelete(item)}
+              onLongPress={
+                offers.remove ? () => void confirmDelete(item) : undefined
+              }
               online={online}
             />
           ))}
@@ -410,7 +438,7 @@ export function MediaStrip({
           {shown.length === 0 && emptyHint ? (
             <Text style={styles.emptyHint}>{emptyHint}</Text>
           ) : null}
-          {atLimit ? (
+          {atLimit && !readOnly ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
                 ? `This holds up to ${limit} attachments.`
@@ -549,7 +577,7 @@ function AttachmentTile({
   item: MirrorMedia;
   online: boolean;
   onPress: () => void;
-  onLongPress: () => void;
+  onLongPress?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();

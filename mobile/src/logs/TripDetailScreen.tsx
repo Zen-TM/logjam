@@ -176,6 +176,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.photosEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "info")}
         />
       </>
     ),
@@ -191,6 +192,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.routesEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "info")}
           onShowRoute={(item) => {
             resolveRouteAttachmentBbox({
               mediaId: item.id,
