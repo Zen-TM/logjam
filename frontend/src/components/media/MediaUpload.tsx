@@ -138,7 +138,7 @@ export default function MediaUpload({
     // line for the pick, the same sentence Logjam GPS shows.
     const summary =
       added.length > 0 ? attachSummary(added, failures.length) : null;
-    if (summary?.tone === "done") toast.success(summary.message);
+    if (summary?.tone === "done") toast.done(summary.message);
     else if (summary) toast.error(summary.message);
   }
 

@@ -4,7 +4,7 @@ import MediaUpload from "./MediaUpload";
 
 const mocks = vi.hoisted(() => ({
   uploadMedia: vi.fn(),
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toast: { done: vi.fn(), error: vi.fn() },
 }));
 vi.mock("../../placeUtils", () => ({ uploadMedia: mocks.uploadMedia }));
 vi.mock("./mediaFiles", async (importOriginal) => ({
@@ -37,7 +37,7 @@ describe("MediaUpload", () => {
     mocks.uploadMedia.mockResolvedValue({ id: "m" });
     pick([jpg("a.jpg"), jpg("b.jpg"), mp4("c.mp4")]);
     await waitFor(() =>
-      expect(mocks.toast.success).toHaveBeenCalledWith(
+      expect(mocks.toast.done).toHaveBeenCalledWith(
         "2 photos and 1 video added.",
       ),
     );
