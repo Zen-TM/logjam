@@ -8,7 +8,7 @@ import { BASEMAP_CATALOG } from "@logjam/shared";
 import { unavailableReasonText } from "../auth/capabilities";
 import { useConnectivity } from "../map/connectivity";
 import { readBasemapPreference } from "../map/basemapPreference";
-import { Button, CardActions, Row } from "../ui";
+import { Row } from "../ui";
 import {
   coveredByOfflineMaps,
   routeCoveredByOfflineMaps,
@@ -49,33 +49,28 @@ export function MapCoverageRow({
         subtitle={basemapName}
       />
     );
+  // A card row like its neighbours (Coordinates, Open in maps): the whole card
+  // is the verb, and the sentence says what is missing.
   return (
     <Row
       icon="saveOffline"
-      title="No offline map for this area"
+      title="Save an offline map"
       subtitle={
-        online ? basemapName : unavailableReasonText("needs-connection")
+        online
+          ? `No offline map for this area${basemapName ? ` · ${basemapName}` : ""}`
+          : `No offline map for this area · ${unavailableReasonText("needs-connection")}`
       }
-      // Under the text, not beside it, so the sentence keeps the row's width.
-      footer={
-        <CardActions>
-          <Button
-            variant="outlineAccent"
-            label="Save map"
-            disabled={!online}
-            onPress={() => {
-              onSave?.();
-              // Every stack sits under the tabs, whose Map tab holds the framing
-              // screen (the plan page's "Download the map for this area" goes
-              // the same way).
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapRegionDownload",
-                params: { bounds: bbox },
-              });
-            }}
-          />
-        </CardActions>
-      }
+      disabled={!online}
+      onPress={() => {
+        onSave?.();
+        // Every stack sits under the tabs, whose Map tab holds the framing
+        // screen (the plan page's "Download the map for this area" goes
+        // the same way).
+        navigation.getParent()?.navigate("Map", {
+          screen: "MapRegionDownload",
+          params: { bounds: bbox },
+        });
+      }}
     />
   );
 }
