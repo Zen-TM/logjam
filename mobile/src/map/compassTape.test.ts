@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
   COMPASS_PX_PER_DEGREE,
   compassLabelFits,
+  compassLabelWidth,
   compassStripWidth,
   compassTicks,
   displayHeading,
@@ -80,13 +82,15 @@ describe("compassLabelFits", () => {
     expect(compassLabelFits(88, 176, label)).toBe(true);
     expect(compassLabelFits(22.5, 176, label)).toBe(true);
   });
-  // Mutation: return a flat 176 from compassStripWidth, and at 1.5 some
-  // headings leave a single label in full.
-  it.each([1, 1.15, 1.3, 1.5])(
-    "always leaves two labels in full at text size %s",
+  // The component draws with these two functions (the source check below), so
+  // this is its own geometry. `scale` is Logjam's size times the system font
+  // scale, up to the combined ceiling of 2. Mutation: return a flat 176 from
+  // compassStripWidth, or grow the label slot faster than the strip.
+  it.each([1, 1.15, 1.3, 1.5, 1.75, 2])(
+    "always leaves two labels in full at drawn text size %s",
     (scale) => {
       const width = compassStripWidth(scale);
-      const label = Math.round(30 * scale);
+      const label = compassLabelWidth(scale);
       for (let heading = 0; heading < 360; heading += 1) {
         const shown = compassTicks(heading, width).filter(
           (tick) => tick.label && compassLabelFits(tick.x, width, label),
@@ -95,4 +99,21 @@ describe("compassLabelFits", () => {
       }
     },
   );
+
+  // Mutation: delete the `compassLabelFits` condition from CompassStrip, or
+  // size its slot or strip from `textScale` alone.
+  it("is what CompassStrip draws with, at the system font scale too", () => {
+    const source = readFileSync(
+      new URL("./CompassStrip.tsx", import.meta.url),
+      "utf8",
+    );
+    for (const call of [
+      "compassLabelFits(tick.x, width, labelWidth)",
+      "compassLabelWidth(drawnScale(fontScale))",
+      "compassStripWidth(drawnScale(fontScale))",
+      "compassStripHeight(drawnScale(fontScale))",
+    ])
+      expect(source).toContain(call);
+    expect(source).toContain("textScale * fontScale");
+  });
 });
