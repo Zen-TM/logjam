@@ -134,12 +134,12 @@ export default function MediaUpload({
     setErrors(failures);
     setBusy(false);
     onBusyChange?.(false);
-    // The failures stay listed by name under the dropzone; this is the one
-    // line for the pick, the same sentence Logjam GPS shows.
-    const summary =
-      added.length > 0 ? attachSummary(added, failures.length) : null;
-    if (summary?.tone === "done") toast.done(summary.message);
-    else if (summary) toast.error(summary.message);
+    // A failure has one place: the list under the dropzone names each file, so
+    // the toast says only what went in, and nothing when nothing did.
+    const summary = attachSummary(added, failures.length, {
+      failuresListed: true,
+    });
+    if (summary) toast.done(summary.message);
   }
 
   return (
