@@ -298,33 +298,43 @@ describe("GeoPdfDialog, drawing the area", () => {
   });
 });
 
-// The file name and the Title follow each other until both are typed in.
-// Mutations: let a field show the other's text once it has been typed in, or
-// drop the file name from the render input.
+// The Title follows a file name typed first, until it is typed in itself; the
+// file name is only what is typed there, and empty it is the title's (else
+// logjam-geopdf). Mutations: make `touched` follow `value !== ""` (a cleared
+// field snaps back), let Title off or on change the File name text, or drop
+// the file name from the render input.
 describe("GeoPdfDialog, file name and title", () => {
   const title = () => screen.getByRole("textbox", { name: "Map title" });
   const file = () => screen.getByRole("textbox", { name: "File name" });
-  const type = (field: HTMLElement, value: string) =>
-    fireEvent.change(field, { target: { value } });
+  const value = (field: HTMLElement) => (field as HTMLInputElement).value;
+  const type = (field: HTMLElement, text: string) =>
+    fireEvent.change(field, { target: { value: text } });
+  const toggleTitle = () =>
+    fireEvent.click(screen.getByRole("checkbox", { name: "Title" }));
   const makeIt = async () => {
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await vi.waitFor(() => expect(rendered()).toHaveLength(1));
     return rendered()[0]!;
   };
-  const open = () => {
+  const open = (titleOn = true) => {
     render(dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Title" }));
+    if (titleOn) toggleTitle();
   };
 
-  it("names the file after a title typed, and the title after a file name typed", async () => {
+  it("takes the file name from the title when the field is empty", async () => {
     open();
     type(title(), "Claustral");
-    expect((file() as HTMLInputElement).value).toBe("Claustral");
-    cleanup();
+    expect(value(file())).toBe("");
+    expect(file().getAttribute("placeholder")).toBe("Claustral");
+    const input = await makeIt();
+    expect(input.fileName).toBeUndefined();
+    expect(input.config.elements.title).toBe("Claustral");
+  });
 
+  it("shows a file name typed first as the title, until the title is typed", async () => {
     open();
     type(file(), "Trip notes");
-    expect((title() as HTMLInputElement).value).toBe("Trip notes");
+    expect(value(title())).toBe("Trip notes");
     const input = await makeIt();
     expect(input.fileName).toBe("Trip notes");
     expect(input.config.elements.title).toBe("Trip notes");
@@ -334,32 +344,109 @@ describe("GeoPdfDialog, file name and title", () => {
     open();
     type(title(), "Claustral Canyon");
     type(file(), "claustral-a4");
-    expect((title() as HTMLInputElement).value).toBe("Claustral Canyon");
+    expect(value(title())).toBe("Claustral Canyon");
     const input = await makeIt();
     expect(input.fileName).toBe("claustral-a4");
     expect(input.config.elements.title).toBe("Claustral Canyon");
   });
 
-  it("is optional: left alone, the file takes its default name", async () => {
-    render(dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }));
-    expect((file() as HTMLInputElement).value).toBe("");
-    expect((await makeIt()).fileName).toBe("");
+  it("leaves a cleared field empty rather than snapping back", async () => {
+    open();
+    type(file(), "Trip notes");
+    type(title(), "Claustral");
+    type(title(), "");
+    expect(value(title())).toBe("");
+    expect(value(file())).toBe("Trip notes");
+    type(file(), "");
+    expect(value(file())).toBe("");
+    expect(value(title())).toBe("");
+    const input = await makeIt();
+    expect(input.config.elements.title).toBe("");
+  });
+
+  it("never changes the File name text when Title is toggled", () => {
+    open();
+    type(title(), "Claustral");
+    toggleTitle();
+    expect(value(file())).toBe("");
+    expect(file().getAttribute("placeholder")).toBe("logjam-geopdf");
+    toggleTitle();
+    type(file(), "Trip notes");
+    toggleTitle();
+    expect(value(file())).toBe("Trip notes");
+    toggleTitle();
+    expect(value(file())).toBe("Trip notes");
+    expect(value(title())).toBe("Claustral");
+  });
+
+  it("is optional: with no title and nothing typed, the file takes its default", async () => {
+    open(false);
+    expect(value(file())).toBe("");
+    const input = await makeIt();
+    expect(input.fileName).toBeUndefined();
+    expect(input.config.elements.title).toBeUndefined();
+  });
+
+  it("starts empty again after a genuine close, and keeps what was typed over a map round trip", () => {
+    const props = { onSelectOnMap: () => rerenderWith(false) };
+    const rerenderWith = (isOpen: boolean) =>
+      rerender(dialog({ open: isOpen, ...props }));
+    const { rerender } = render(dialog({ open: true, ...props }));
+    toggleTitle();
+    type(title(), "Claustral");
+    type(file(), "claustral-a4");
+
+    fireEvent.click(screen.getByRole("button", { name: "Pick on the map" }));
+    rerenderWith(true);
+    expect(value(title())).toBe("Claustral");
+    expect(value(file())).toBe("claustral-a4");
+
+    rerender(dialog({ open: false }));
+    rerender(dialog({ open: true }));
+    expect(value(file())).toBe("");
+    toggleTitle();
+    expect(value(title())).toBe("");
   });
 });
 
 // The Area row leads with its two ways to set the area. Mutation: colour
-// Pick on the map before anything is picked.
+// Pick on the map before anything is picked, or leave Type the coordinates
+// the same colour closed and open.
 describe("GeoPdfDialog, the Area row", () => {
-  it("lights Pick on the map once the area is picked, and has no tabs", () => {
+  const lit = (name: string) =>
+    screen.getByRole("button", { name }).className.includes("filled");
+
+  it("lights Pick on the map only once the area is picked, and has no tabs", () => {
     const { rerender } = render(dialog({ open: true }));
     expect(screen.queryByRole("radio", { name: "Type the edges" })).toBeNull();
-    const pick = () => screen.getByRole("button", { name: "Pick on the map" });
-    const filled = () => pick().className.includes("filled");
-    expect(filled()).toBe(false);
+    expect(lit("Pick on the map")).toBe(false);
     rerender(
       dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }),
     );
-    expect(filled()).toBe(true);
+    expect(lit("Pick on the map")).toBe(true);
+  });
+
+  it("lights Type the coordinates while the edges are open", () => {
+    render(dialog({ open: true }));
+    expect(lit("Type the coordinates")).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type the coordinates" }),
+    );
+    expect(lit("Type the coordinates")).toBe(true);
+    expect(lit("Pick on the map")).toBe(false);
+  });
+
+  it("lights Pick on the map for a GIS format only when the box was drawn, never for a seed", () => {
+    const { rerender } = render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    expect(lit("Pick on the map")).toBe(false);
+    expect(
+      screen
+        .getByRole("button", { name: "Type the coordinates" })
+        .getAttribute("aria-disabled"),
+    ).toBeNull();
+    rerender(dialog({ open: true, areaSeed: seed, pendingArea: seed }));
+    expect(lit("Pick on the map")).toBe(true);
   });
 });
 
@@ -893,13 +980,12 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     ).toEqual([]);
   });
 
-  it("shows progress, and Cancel aborts it and keeps the dialog open", async () => {
-    const onClose = vi.fn();
-    let signal: AbortSignal | undefined;
+  const slowRender = () => {
+    const seen: { signal?: AbortSignal } = {};
     renderGeoPdf.mockImplementation(
       (_input: unknown, opts: RenderOpts) =>
         new Promise((resolve) => {
-          signal = opts.signal;
+          seen.signal = opts.signal;
           opts.onProgress?.({
             phase: "drawing",
             done: 1,
@@ -911,29 +997,123 @@ describe("GeoPdfDialog, rendering in this tab", () => {
           );
         }),
     );
-    make({ open: true, onClose });
+    return seen;
+  };
+  const progressDialog = () =>
+    screen.getByRole("dialog", { name: "Making your GeoPDF" });
+  const typeTitle = () => {
+    fireEvent.click(screen.getByRole("checkbox", { name: "Title" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Map title" }), {
+      target: { value: "Claustral" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "File name" }), {
+      target: { value: "claustral-a4" },
+    });
+  };
+  const formKept = () => {
+    expect(
+      (screen.getByRole("textbox", { name: "Map title" }) as HTMLInputElement)
+        .value,
+    ).toBe("Claustral");
+    expect(
+      (screen.getByRole("textbox", { name: "File name" }) as HTMLInputElement)
+        .value,
+    ).toBe("claustral-a4");
+    expect(paper("A4").ariaChecked).toBe("true");
+  };
+
+  it("shows progress in its own dialog, and Cancel aborts it and keeps the form", async () => {
+    const onClose = vi.fn();
+    const seen = slowRender();
+    render(
+      dialog({
+        open: true,
+        onClose,
+        pendingExtent: extent,
+        pendingScale: 50000,
+      }),
+    );
+    typeTitle();
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     const bar = await screen.findByRole("progressbar");
     await vi.waitFor(() =>
       expect(bar.getAttribute("aria-valuenow")).toBe("25"),
     );
     // The live region holds only the phase; the percent is the bar's value.
     expect(screen.getByRole("status").textContent).toBe("Drawing the map.");
+    expect(within(progressDialog()).getByRole("progressbar")).toBe(bar);
 
-    // Its own dialog, not a strip on the form.
-    const progressDialog = screen.getByRole("dialog", {
-      name: "Making your GeoPDF",
-    });
-    expect(within(progressDialog).getByRole("progressbar")).toBe(bar);
     fireEvent.click(
-      within(progressDialog).getByRole("button", { name: "Cancel" }),
+      within(progressDialog()).getByRole("button", { name: "Cancel" }),
     );
-    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    await vi.waitFor(() => expect(seen.signal?.aborted).toBe(true));
     await vi.waitFor(() =>
       expect(screen.queryByRole("progressbar")).toBeNull(),
     );
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(downloadBlob).not.toHaveBeenCalled();
+    formKept();
+  });
+
+  // Mutation: give the progress dialog no onClose, or let the form's own
+  // Cancel or Escape act while it renders.
+  for (const [how, act] of [
+    ["Escape", () => fireEvent.keyDown(progressDialog(), { key: "Escape" })],
+    [
+      "the close button",
+      () =>
+        fireEvent.click(
+          within(progressDialog()).getByRole("button", { name: "Close" }),
+        ),
+    ],
+  ] as const) {
+    it(`${how} on the progress dialog aborts the render and keeps the form`, async () => {
+      const onClose = vi.fn();
+      const seen = slowRender();
+      render(
+        dialog({
+          open: true,
+          onClose,
+          pendingExtent: extent,
+          pendingScale: 50000,
+        }),
+      );
+      typeTitle();
+      fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+      await screen.findByRole("progressbar");
+      act();
+      await vi.waitFor(() => expect(seen.signal?.aborted).toBe(true));
+      await vi.waitFor(() =>
+        expect(screen.queryByRole("progressbar")).toBeNull(),
+      );
+      expect(onClose).not.toHaveBeenCalled();
+      formKept();
+    });
+  }
+
+  it("leaves the render alone when the form behind it is cancelled or escaped", async () => {
+    const onClose = vi.fn();
+    const seen = slowRender();
+    render(
+      dialog({
+        open: true,
+        onClose,
+        pendingExtent: extent,
+        pendingScale: 50000,
+      }),
+    );
+    typeTitle();
+    fireEvent.click(screen.getByRole("button", { name: "Make it" }));
+    await screen.findByRole("progressbar");
+
+    const form = screen.getByRole("dialog", { name: "Export an area" });
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(form, { key: "Escape" });
+    expect(seen.signal?.aborted).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    expect(screen.queryByText("Discard unsaved changes?")).toBeNull();
   });
 
   it("says so when the map is too large, and when the render fails", async () => {

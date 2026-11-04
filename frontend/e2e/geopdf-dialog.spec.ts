@@ -116,6 +116,8 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     await field.blur();
   }
 
+  await dialog.getByRole("textbox", { name: "File name" }).fill("Far west.pdf");
+
   const download = page.waitForEvent("download", { timeout: 90_000 });
   made = true;
   await dialog.getByRole("button", { name: "Make it" }).click();
@@ -128,7 +130,7 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
   await expect(cancel).toBeFocused({ timeout: 5_000 });
 
   const file = await download;
-  expect(file.suggestedFilename()).toMatch(/\.pdf$/);
+  expect(file.suggestedFilename()).toBe("Far west.pdf");
   const path = await file.path();
   const head = (await import("node:fs")).readFileSync(path).subarray(0, 5);
   expect(head.toString("latin1")).toBe("%PDF-");

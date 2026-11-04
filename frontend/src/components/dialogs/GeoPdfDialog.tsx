@@ -315,6 +315,8 @@ function GeoPdfDialog({
   const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
   const [gisCoordsOpen, setGisCoordsOpen] = useState(false);
+  // The box was drawn on the map, not seeded or typed.
+  const [gisPicked, setGisPicked] = useState(false);
   // Make it was pressed with something missing: a requirement shows from then
   // on, where a limit shows live (shared/DESIGN.md §11).
   const [gisTried, setGisTried] = useState(false);
@@ -460,6 +462,7 @@ function GeoPdfDialog({
       setGisLayers(new Set(AREA_EXPORT_LAYERS));
       setGisRaw(NO_EDGES_TYPED);
       setGisCoordsOpen(false);
+      setGisPicked(false);
       setGisTried(false);
       setDirty(false);
     }
@@ -501,6 +504,7 @@ function GeoPdfDialog({
     setPendingAreaAppliedFor(pendingArea);
     if (pendingArea) {
       setGisBox(pendingArea);
+      setGisPicked(true);
       setDirty(true);
     }
   }
@@ -761,11 +765,9 @@ function GeoPdfDialog({
   ]);
 
   const titleShown = titleTouched ? titleText : fileTouched ? fileText : "";
-  const fileShown = fileTouched
-    ? fileText
-    : titleEnabled && titleTouched
-      ? titleText
-      : "";
+  // The file name is only what was typed there; empty, the download takes
+  // the title's (the renderer's fallback) and the placeholder says so.
+  const fileDefault = (titleEnabled && titleShown.trim()) || "logjam-geopdf";
 
   const handleGenerate = useCallback(async () => {
     if (
@@ -831,7 +833,7 @@ function GeoPdfDialog({
           areas: completedTopoJobs.flatMap((job) => job.sharpened ?? []),
           vegetationUrls: vegetationUrlsFor(completedTopoJobs, config.extent),
           origin: location.origin,
-          fileName: fileShown,
+          fileName: fileText.trim() || undefined,
         },
         { onProgress: setProgress, signal: controller.signal },
       );
@@ -864,7 +866,7 @@ function GeoPdfDialog({
     printedOverlays,
     titleEnabled,
     titleShown,
-    fileShown,
+    fileText,
     compassEnabled,
     scaleTextEnabled,
     scaleBarEnabled,
@@ -1004,6 +1006,7 @@ function GeoPdfDialog({
                 setGisBox(area);
                 markDirty();
               }}
+              picked={gisPicked}
               onPick={() => {
                 setReturningFromMapSelect(true);
                 onPickArea?.();
@@ -1438,13 +1441,9 @@ function GeoPdfDialog({
                 </div>
                 <TextField
                   label="File name"
-                  hint={
-                    titleEnabled
-                      ? "Optional. Follows the title until you type one here."
-                      : "Optional."
-                  }
-                  placeholder="logjam-geopdf"
-                  value={fileShown}
+                  hint="Optional. Empty, it is the title when there is one. .pdf is added."
+                  placeholder={fileDefault}
+                  value={fileText}
                   onChange={(event) => {
                     setFileText(event.target.value);
                     setFileTouched(true);
@@ -1494,8 +1493,9 @@ function GeoPdfDialog({
 
 /**
  * The Area row: its size, then the two ways to set it. Pick on the map leaves
- * for the map and takes the accent once the area holds a value; Type the
- * coordinates opens the edges beneath the row.
+ * for the map and takes the accent once the area was picked there; Type the
+ * coordinates takes it while the edges are open beneath the row. Typed edges
+ * show through that open state, not through Pick.
  */
 function AreaRow({
   size,
@@ -1503,14 +1503,12 @@ function AreaRow({
   onPick,
   coordsOpen,
   onToggleCoords,
-  canType = true,
 }: {
   size: string;
   picked: boolean;
   onPick: () => void;
   coordsOpen: boolean;
   onToggleCoords: () => void;
-  canType?: boolean;
 }) {
   return (
     <SettingsRow label="Area">
@@ -1526,10 +1524,8 @@ function AreaRow({
         </Button>
         <Button
           compact
-          variant="outline"
+          variant={coordsOpen ? "filled" : "outline"}
           aria-expanded={coordsOpen}
-          disabled={!canType}
-          disabledReason="Pick an area first."
           onClick={onToggleCoords}
         >
           Type the coordinates
@@ -1648,6 +1644,7 @@ function AreaExportFields({
   onCoordModeChange,
   onAreaChange,
   onPick,
+  picked,
   layers,
   onToggleLayer,
   noLayers,
@@ -1666,6 +1663,7 @@ function AreaExportFields({
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
+  picked: boolean;
   layers: ReadonlySet<AreaExportLayer>;
   onToggleLayer: (layer: AreaExportLayer) => void;
   noLayers: boolean;
@@ -1684,14 +1682,13 @@ function AreaExportFields({
               ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
               : "None yet"
           }
-          picked={area !== null}
+          picked={picked}
           onPick={onPick}
           coordsOpen={coordsOpen}
           onToggleCoords={onToggleCoords}
-          canType={area !== null}
         />
         <FieldError message={areaError} />
-        {area && coordsOpen && (
+        {coordsOpen && (
           <div className={classes.group}>
             <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
               <ChipRail
@@ -1714,7 +1711,7 @@ function AreaExportFields({
                     onDraft={(next) => onDraft(field.which, next)}
                     onCommit={(degrees) =>
                       onAreaChange({
-                        ...area,
+                        ...(area ?? NO_AREA),
                         [EDGE_OF[field.which]]: degrees,
                       })
                     }

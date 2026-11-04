@@ -77,6 +77,30 @@ describe("runGeoPdfRender", () => {
     expect(made[0]!.terminate).toHaveBeenCalled();
   });
 
+  // Mutation: drop `input.fileName ??` from the client, and the download is
+  // named after the title.
+  it("names the PDF after the typed file name, else the title", async () => {
+    const done = async (extra: Partial<GeoPdfRenderInput>, title?: string) => {
+      stubWorker();
+      const result = runGeoPdfRender(
+        {
+          ...input,
+          config: { elements: { title } },
+          ...extra,
+        } as GeoPdfRenderInput,
+        {},
+      );
+      made[0]!.onmessage?.({
+        data: { type: "done", pdf: new ArrayBuffer(1), timings: {} },
+      } as MessageEvent);
+      return result;
+    };
+    await expect(done({ fileName: "Trip notes" }, "T")).resolves.toMatchObject({
+      fileName: "Trip notes.pdf",
+    });
+    await expect(done({}, "T")).resolves.toMatchObject({ fileName: "T.pdf" });
+  });
+
   // Mutation: do not re-arm the timer on a message, or never arm it.
   it("gives up on a worker that goes quiet, but not on one that keeps posting", async () => {
     vi.useFakeTimers();
