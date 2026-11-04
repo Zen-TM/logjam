@@ -247,7 +247,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       accent: "#DAB084",
       warning: "#E6AAA3",
       success: "#8FBE86",
-      neutral: "#A8C4A1",
+      neutral: "#D3DDD0",
       inverse: "#EAF2EC",
       onInverse: INK,
       onFill: INK,

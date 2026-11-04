@@ -32,6 +32,46 @@ const hueAngle = (hex: string) => {
   return (h * 60 + 360) % 360;
 };
 
+// CIE76 distance in CIELAB: a colour difference, not a contrast ratio.
+const lab = (hex: string): [number, number, number] => {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  const x = (0.4124 * r! + 0.3576 * g! + 0.1805 * b!) / 0.95047;
+  const y = 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  const z = (0.0193 * r! + 0.1192 * g! + 0.9505 * b!) / 1.08883;
+  const f = (t: number) =>
+    t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116;
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+};
+const deltaE = (a: string, b: string) => {
+  const [l1, a1, b1] = lab(a);
+  const [l2, a2, b2] = lab(b);
+  return Math.hypot(l1 - l2, a1 - a2, b1 - b2);
+};
+
+describe("a scheme's neutral", () => {
+  // Mutation: set Scribbly Gum's `neutral` to #C4DBBE (4.2 from Campsite's scrub
+  // green) or back to #A8C4A1 (14 from its `success`, near the pale greens),
+  // and "no kind" reads as a place type or as the good state.
+  it.each(THEME_SCHEME_ORDER)(
+    "%s: stands at least 7 CIELAB units from every identity hue and from success",
+    (id) => {
+      const { neutral, success } = THEME_SCHEMES[id].tokens;
+      for (const hue of IDENTITY_HUES)
+        expect(
+          deltaE(neutral, hue),
+          `${id} ${neutral} vs ${hue}`,
+        ).toBeGreaterThanOrEqual(7);
+      expect(
+        deltaE(neutral, success),
+        `${id} vs success`,
+      ).toBeGreaterThanOrEqual(7);
+    },
+  );
+});
+
 describe("chipFill", () => {
   // Mutation: return `hue` unchanged, and a selected chip in Ghost Gum is
   // 1.5:1 against the unselected one beside it (WCAG 1.4.11); or measure the
