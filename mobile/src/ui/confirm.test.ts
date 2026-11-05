@@ -41,7 +41,6 @@ const BASELINE: string[] = [
   "screens/AccountScreen.tsx",
   "screens/FriendsScreen.tsx",
   "screens/NotificationsScreen.tsx",
-  "screens/settings/MapSettingsScreen.tsx",
   "screens/SyncIssuesScreen.tsx",
   "sharing/FriendSharesScreen.tsx",
   "sharing/SharePanel.tsx",
