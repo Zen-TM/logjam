@@ -115,6 +115,8 @@ export function useHeroCollapse() {
   const scroll = useRef({
     y: 0,
     contentHeight: 0,
+    /** `contentHeight` less the end room it was reported with: the list's own. */
+    ownHeight: 0,
     viewHeight: 0,
     dragging: false,
     /** From the finger lifting with a fling behind it to the list at rest. */
@@ -124,6 +126,9 @@ export function useHeroCollapse() {
     arrival: undefined as ReturnType<typeof setTimeout> | undefined,
     /** The header height the screen last rendered its list padding for. */
     paddedFor: 0,
+    /** The end room the screen last rendered, which the content sizes the
+     *  list reports since include. */
+    paddedExtra: 0,
   });
   const settleRef = useRef<() => void>(() => undefined);
 
@@ -188,10 +193,9 @@ export function useHeroCollapse() {
     const s = scroll.current;
     patch({
       extra: roomBelow({
-        contentHeight: s.contentHeight,
+        contentHeight: s.ownHeight,
         viewHeight: s.viewHeight,
         distance: distanceOf(metrics.current),
-        extra: metrics.current.extra,
       }),
     });
   }, [patch]);
@@ -208,6 +212,7 @@ export function useHeroCollapse() {
           Object.assign(s, {
             y: contentOffset.y,
             contentHeight: contentSize.height,
+            ownHeight: contentSize.height - s.paddedExtra,
             viewHeight: layoutMeasurement.height,
           });
           if (
@@ -249,7 +254,9 @@ export function useHeroCollapse() {
   // without a finger on it.
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {
-      scroll.current.contentHeight = height;
+      const s = scroll.current;
+      s.contentHeight = height;
+      s.ownHeight = height - s.paddedExtra;
       makeRoom();
       settle();
     },
@@ -292,6 +299,9 @@ export function useHeroCollapse() {
   useEffect(() => {
     scroll.current.paddedFor = headerHeight;
   }, [headerHeight]);
+  useEffect(() => {
+    scroll.current.paddedExtra = extra > 0 ? extra : 0;
+  }, [extra]);
 
   const measure = useMemo(
     () => ({
