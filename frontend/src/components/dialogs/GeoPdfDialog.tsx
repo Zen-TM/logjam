@@ -97,6 +97,7 @@ import {
 } from "./geoPdfArea";
 import {
   Button,
+  IconButton,
   Checkbox,
   ChipPicker,
   ChipRail,
@@ -194,6 +195,20 @@ const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
 /** How long the area, scale and layers stand still before tiles are prefetched. */
 const PREFETCH_AFTER_MS = 1000;
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
+
+/** The sheet's area re-centred on a point, at its current paper and scale. */
+function centredOn(
+  prev: ExtentState,
+  center: { lat: number; lng: number },
+): ExtentState {
+  const paper = getPaperDimensions(prev);
+  const widthM = prev.scale * ((paper.w - 2 * GEOPDF_PADDING_MM) / 1000);
+  const heightM = prev.scale * ((paper.h - 2 * GEOPDF_PADDING_MM) / 1000);
+  return {
+    ...prev,
+    ...extentFromCentreAndSize(center.lat, center.lng, widthM, heightM),
+  };
+}
 
 function GeoPdfDialog({
   open,
@@ -417,22 +432,7 @@ function GeoPdfDialog({
         setTerrainFollowsMap(true);
         applyLastSettings();
         const center = mapCenter;
-        if (center) {
-          setExtentState((prev) => {
-            const paper = getPaperDimensions(prev);
-            const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
-            const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
-            const widthM = prev.scale * (mapW / 1000);
-            const heightM = prev.scale * (mapH / 1000);
-            const bounds = extentFromCentreAndSize(
-              center.lat,
-              center.lng,
-              widthM,
-              heightM,
-            );
-            return { ...prev, ...bounds };
-          });
-        }
+        if (center) setExtentState((prev) => centredOn(prev, center));
       }
     } else if (!returningFromMapSelect) {
       setSeededView(false);
@@ -492,6 +492,7 @@ function GeoPdfDialog({
         scale: pendingScale,
       }));
       setAreaPicked(true);
+      setCoordsOpen(false);
       setDirty(true);
     }
   }
@@ -505,6 +506,7 @@ function GeoPdfDialog({
     if (pendingArea) {
       setGisBox(pendingArea);
       setGisPicked(true);
+      setGisCoordsOpen(false);
       setDirty(true);
     }
   }
@@ -665,7 +667,10 @@ function GeoPdfDialog({
       gisChosenLayers.length === 0
     ) {
       setGisTried(true);
-      if (edgeError) setGisCoordsOpen(true);
+      if (edgeError) {
+        setGisCoordsOpen(true);
+        setGisPicked(false);
+      }
       setError("A field below needs fixing first.");
       return;
     }
@@ -776,8 +781,10 @@ function GeoPdfDialog({
       scaleInputError !== null ||
       tooLarge
     ) {
-      if (!extentValid || hasExtentFieldError(extentInputErrors))
+      if (!extentValid || hasExtentFieldError(extentInputErrors)) {
         setCoordsOpen(true);
+        setAreaPicked(false);
+      }
       setError("A field below needs fixing first.");
       return;
     }
@@ -990,7 +997,16 @@ function GeoPdfDialog({
               edgeErrors={gisEdgeErrors}
               focusedFieldRef={gisFocused}
               coordsOpen={gisCoordsOpen}
-              onToggleCoords={() => setGisCoordsOpen(!gisCoordsOpen)}
+              onToggleCoords={() => {
+                setGisCoordsOpen(!gisCoordsOpen);
+                setGisPicked(false);
+              }}
+              onClear={() => {
+                setGisBox(null);
+                setGisRaw(NO_EDGES_TYPED);
+                setGisPicked(false);
+                markDirty();
+              }}
               onCoordModeChange={(coordMode) => {
                 // The text moves with the mode (see the GeoPDF chip).
                 if (gisArea)
@@ -1170,7 +1186,19 @@ function GeoPdfDialog({
                   picked={areaPicked}
                   onPick={handleSelectOnMap}
                   coordsOpen={coordsOpen}
-                  onToggleCoords={() => setCoordsOpen(!coordsOpen)}
+                  onToggleCoords={() => {
+                    setCoordsOpen(!coordsOpen);
+                    setAreaPicked(false);
+                  }}
+                  onClear={() => {
+                    setAreaPicked(false);
+                    setExtentState((prev) =>
+                      mapCenter
+                        ? centredOn(prev, mapCenter)
+                        : { ...prev, ...NO_AREA },
+                    );
+                    markDirty();
+                  }}
                 />
                 {coordsOpen && (
                   <div className={classes.group}>
@@ -1494,8 +1522,8 @@ function GeoPdfDialog({
 /**
  * The Area row: its size, then the two ways to set it. Pick on the map leaves
  * for the map and takes the accent once the area was picked there; Type the
- * coordinates takes it while the edges are open beneath the row. Typed edges
- * show through that open state, not through Pick.
+ * coordinates takes it while the edges are open beneath the row. They are one
+ * choice: the parent un-picks when the edges open and closes them on a pick.
  */
 function AreaRow({
   size,
@@ -1503,12 +1531,14 @@ function AreaRow({
   onPick,
   coordsOpen,
   onToggleCoords,
+  onClear,
 }: {
   size: string;
   picked: boolean;
   onPick: () => void;
   coordsOpen: boolean;
   onToggleCoords: () => void;
+  onClear: () => void;
 }) {
   return (
     <SettingsRow label="Area">
@@ -1522,6 +1552,14 @@ function AreaRow({
         >
           Pick on the map
         </Button>
+        {picked && (
+          <IconButton
+            icon="close"
+            label="Clear the picked area"
+            size={14}
+            onClick={onClear}
+          />
+        )}
         <Button
           compact
           variant={coordsOpen ? "filled" : "outline"}
@@ -1641,6 +1679,7 @@ function AreaExportFields({
   focusedFieldRef,
   coordsOpen,
   onToggleCoords,
+  onClear,
   onCoordModeChange,
   onAreaChange,
   onPick,
@@ -1660,6 +1699,7 @@ function AreaExportFields({
   focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
   coordsOpen: boolean;
   onToggleCoords: () => void;
+  onClear: () => void;
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
@@ -1686,6 +1726,7 @@ function AreaExportFields({
           onPick={onPick}
           coordsOpen={coordsOpen}
           onToggleCoords={onToggleCoords}
+          onClear={onClear}
         />
         <FieldError message={areaError} />
         {coordsOpen && (
