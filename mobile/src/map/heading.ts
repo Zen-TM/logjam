@@ -919,7 +919,11 @@ export function foldCompassProbe(
 ): CompassCalibration {
   if (accuracy == null) return state;
   if (accuracy > COMPASS_ACCURACY_WARN_AT) return NO_COMPASS_CALIBRATION;
-  const badProbes = state.badProbes + 1;
+  // Capped, and the SAME object once capped: a phone that stays uncalibrated
+  // (an S9 does) would otherwise hand React a new state every probe and
+  // re-render the whole map for a verdict that has not changed.
+  const badProbes = Math.min(state.badProbes + 1, COMPASS_BAD_PROBES_TO_WARN);
+  if (badProbes === state.badProbes) return state;
   return { badProbes, warning: badProbes >= COMPASS_BAD_PROBES_TO_WARN };
 }
 
@@ -933,6 +937,24 @@ export function foldCompassProbe(
  */
 export function compassProbeIsUrgent(state: CompassCalibration): boolean {
   return state.warning || state.badProbes > 0;
+}
+
+export const COMPASS_PROBE_INTERVAL_MS = 120_000;
+export const COMPASS_PROBE_URGENT_MS = 6_000;
+/** Urgent probes per episode, about a minute: a warning that is still up after
+ *  that is a phone that is not being calibrated, and probing it every six
+ *  seconds for the rest of the session costs sensor time and renders for
+ *  nothing. Coming back to the tab starts a fresh episode. */
+export const COMPASS_URGENT_PROBES = 10;
+
+/** Wait before the probe after `probesSoFar` in this episode. */
+export function compassProbeDelayMs(
+  urgent: boolean,
+  probesSoFar: number,
+): number {
+  return urgent && probesSoFar < COMPASS_URGENT_PROBES
+    ? COMPASS_PROBE_URGENT_MS
+    : COMPASS_PROBE_INTERVAL_MS;
 }
 
 // ── the magnetic environment ─────────────────────────────────────────────────

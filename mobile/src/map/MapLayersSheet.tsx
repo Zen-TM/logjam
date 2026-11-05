@@ -33,7 +33,15 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
@@ -129,6 +137,57 @@ export type LayerToggleEntry = {
     onChange: (next: boolean) => void;
   }[];
 };
+
+/**
+ * Whether the sheet is open, held outside MapScreen. As MapScreen state, opening
+ * or closing the sheet re-rendered the whole map tree (every layer's props
+ * re-committed) in the same frames the sheet's window was being created.
+ */
+export type LayersOpen = {
+  get: () => boolean;
+  set: (open: boolean) => void;
+  subscribe: (listener: () => void) => () => void;
+};
+
+export function createLayersOpen(): LayersOpen {
+  let open = false;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => open,
+    set: (next) => {
+      if (next === open) return;
+      open = next;
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+/** The sheet, subscribed to `open` itself so MapScreen need not be. */
+export function MapLayersSheetHost({
+  open,
+  onOpened,
+  ...rest
+}: Omit<ComponentProps<typeof MapLayersSheet>, "visible" | "onClose"> & {
+  open: LayersOpen;
+  /** Runs each time the sheet opens (the basemap reachability probe). */
+  onOpened: () => void;
+}) {
+  const visible = useSyncExternalStore(open.subscribe, open.get);
+  useEffect(() => {
+    if (visible) onOpened();
+  }, [visible, onOpened]);
+  return (
+    <MapLayersSheet
+      {...rest}
+      visible={visible}
+      onClose={() => open.set(false)}
+    />
+  );
+}
 
 export function MapLayersSheet({
   visible,

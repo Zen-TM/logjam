@@ -23,6 +23,10 @@ import {
   fieldStrength,
   fieldStrengthUt,
   foldCompassProbe,
+  compassProbeDelayMs,
+  COMPASS_PROBE_INTERVAL_MS,
+  COMPASS_PROBE_URGENT_MS,
+  COMPASS_URGENT_PROBES,
   headingSettled,
   isDeclinationLearned,
   learnDeclination,
@@ -556,6 +560,29 @@ describe("the compass calibration verdict", () => {
     expect(compassProbeIsUrgent(fold([bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad, good]))).toBe(false);
+  });
+
+  // Red when `foldCompassProbe` builds a new state for an unchanged verdict:
+  // an uncalibrated phone (an S9, always) would re-render the map every probe.
+  // To see it: drop the `Math.min` / early return in `foldCompassProbe`.
+  it("hands back the same state once the verdict cannot change", () => {
+    const warned = fold([bad, bad, bad]);
+    expect(foldCompassProbe(warned, bad)).toBe(warned);
+    expect(foldCompassProbe(warned, null)).toBe(warned);
+    expect(foldCompassProbe(warned, good)).toBe(NO_COMPASS_CALIBRATION);
+  });
+
+  // Red when the urgent cadence is unbounded again. To see it: return the
+  // urgent delay unconditionally from `compassProbeDelayMs`.
+  it("probes urgently for a while, then settles to the slow cadence", () => {
+    expect(compassProbeDelayMs(false, 0)).toBe(COMPASS_PROBE_INTERVAL_MS);
+    expect(compassProbeDelayMs(true, 0)).toBe(COMPASS_PROBE_URGENT_MS);
+    expect(compassProbeDelayMs(true, COMPASS_URGENT_PROBES - 1)).toBe(
+      COMPASS_PROBE_URGENT_MS,
+    );
+    expect(compassProbeDelayMs(true, COMPASS_URGENT_PROBES)).toBe(
+      COMPASS_PROBE_INTERVAL_MS,
+    );
   });
 });
 

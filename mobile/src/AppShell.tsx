@@ -1132,6 +1132,14 @@ export function AppShell({
             }}
             screenOptions={{
               headerShown: false,
+              // A tab that is not showing does not render. All five stay mounted
+              // (a tab keeps its state), but a hidden one used to re-render, the
+              // map's hundred layers included, on every store update. Only React's
+              // rendering stops: effects, timers, the recorder's task and the
+              // download queue run on, and the blur render lands first, so the
+              // map's sensors still stop (react-native-screens' DelayedFreeze).
+              // Guard: freezeOnBlur.test.ts.
+              freezeOnBlur: true,
               tabBarStyle: {
                 backgroundColor: theme.card,
                 borderTopColor: theme.line,

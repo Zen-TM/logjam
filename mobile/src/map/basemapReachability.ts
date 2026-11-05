@@ -3,7 +3,7 @@
 // the Basemap tab asks each server for one tile when it opens. MapLibre RN
 // does not hand tile errors to JS, so the open of the tab is the only moment
 // an outage is found.
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BASEMAP_CATALOG,
   serverAnswers,
@@ -43,27 +43,31 @@ export function basemapFallbackFor(
     : DEFAULT_BASEMAP;
 }
 
-/** The basemaps whose server did not answer. Probes on mount, whenever the
- *  phone comes online and whenever `probeKey` changes (the Layers sheet
- *  opening); an offline phone marks nothing down. */
-export function useDownBasemaps(
-  online: boolean,
-  probeKey?: unknown,
-): ReadonlySet<BasemapId> {
+/** The basemaps whose server did not answer, and `probe`, which asks again (the
+ *  Layers sheet opening). Probes on mount and whenever the phone comes online;
+ *  an offline phone marks nothing down. */
+export function useDownBasemaps(online: boolean): {
+  down: ReadonlySet<BasemapId>;
+  probe: () => void;
+} {
   const [down, setDown] = useState<ReadonlySet<string>>(() => new Set());
-  useEffect(() => {
+  const alive = useRef(true);
+  const probe = useCallback(() => {
     if (!online) return;
-    let cancelled = false;
     for (const id of PROBED_BASEMAPS) {
       void serverAnswers(probeUrl(id)).then((ok) => {
-        if (!cancelled) setDown((prev) => withBasemapDown(prev, id, !ok));
+        if (alive.current) setDown((prev) => withBasemapDown(prev, id, !ok));
       });
     }
+  }, [online]);
+  useEffect(() => {
+    alive.current = true;
+    probe();
     return () => {
-      cancelled = true;
+      alive.current = false;
     };
-  }, [online, probeKey]);
-  return online ? (down as ReadonlySet<BasemapId>) : EMPTY;
+  }, [probe]);
+  return { down: online ? (down as ReadonlySet<BasemapId>) : EMPTY, probe };
 }
 
 const EMPTY: ReadonlySet<BasemapId> = new Set();
