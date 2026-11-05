@@ -34,4 +34,11 @@ describe("the notice stack", () => {
       source.indexOf("styles.noticeStack,"),
     );
   });
+
+  // The map says "Offline" and nothing about the queue: a Saved row's up arrow
+  // and the hero pills carry the count (mobile/DESIGN.md section 8).
+  // Mutation: subscribe MapScreen to `usePendingSyncCount` again.
+  it("does not count what is waiting to sync", () => {
+    expect(source).not.toContain("usePendingSyncCount");
+  });
 });
