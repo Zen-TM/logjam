@@ -567,6 +567,47 @@ describe("GeoPdfDialog, the Area row", () => {
       screen.queryByRole("button", { name: "Clear the picked area" }),
     ).toBeNull();
   });
+
+  // Same rules for a GIS format. Mutations: drop `setGisCoordsOpen(false)` from
+  // the confirmed pick, `setGisPicked(false)` from the Type toggle, or the
+  // `onClear` that forgets the pick.
+  it("makes Pick and Type the coordinates one choice for a GIS format, and clears", () => {
+    const other: TBbox = {
+      north: -33.5,
+      south: -33.6,
+      east: 150.4,
+      west: 150.3,
+    };
+    const clear = () =>
+      screen.queryByRole("button", { name: "Clear the picked area" });
+    const typed = () =>
+      screen
+        .getByRole("button", { name: "Type the coordinates" })
+        .getAttribute("aria-expanded") === "true";
+    const { rerender } = render(dialog({ open: true, areaSeed: seed }));
+    chooseGis("GeoTIFF");
+    expect(clear()).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type the coordinates" }),
+    );
+    expect(typed()).toBe(true);
+    rerender(dialog({ open: true, areaSeed: seed, pendingArea: seed }));
+    expect(lit("Pick on the map")).toBe(true);
+    expect(typed()).toBe(false);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type the coordinates" }),
+    );
+    expect(lit("Pick on the map")).toBe(false);
+    expect(clear()).toBeNull();
+
+    rerender(dialog({ open: true, areaSeed: seed, pendingArea: other }));
+    expect(lit("Pick on the map")).toBe(true);
+    fireEvent.click(clear() as HTMLElement);
+    expect(lit("Pick on the map")).toBe(false);
+    expect(clear()).toBeNull();
+  });
 });
 
 const coordsButton = () =>
