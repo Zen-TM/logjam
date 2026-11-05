@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-import { queueStagedMedia, type StagedMedia } from "./stagedPlaceMedia";
+import {
+  discardStagedMedia,
+  queueStagedMedia,
+  type StagedMedia,
+} from "./stagedPlaceMedia";
 
 vi.mock("expo-image-picker", () => ({}));
 
@@ -82,5 +86,37 @@ describe("PlaceEditSheet stages, never queues, on a pick", () => {
   it("writes nothing itself", () => {
     expect(source).not.toMatch(/updateRouteLocal|linkStandaloneMediaLocal/);
     expect(source.match(/attachMediaLocal\(/g) ?? []).toHaveLength(1);
+  });
+});
+
+describe("discardStagedMedia", () => {
+  // Mutation: drop the `way.discard` call and a file picked for a way stays in
+  // the picker's cache after Cancel; drop the files loop and photos do.
+  it("frees every photo's picked file and the way's", () => {
+    const discardFile = vi.fn(async (_uri: string) => {});
+    const discardWay = vi.fn(async () => {});
+
+    discardStagedMedia(
+      {
+        files: [photo("a.jpg"), photo("b.jpg")],
+        way: { label: "x", write: vi.fn(), discard: discardWay },
+      },
+      discardFile,
+    );
+
+    expect(discardFile.mock.calls.map(([uri]) => uri)).toEqual([
+      "file:///a.jpg",
+      "file:///b.jpg",
+    ]);
+    expect(discardWay).toHaveBeenCalledOnce();
+  });
+
+  it("copes with a way that holds nothing to free", () => {
+    expect(() =>
+      discardStagedMedia(
+        { files: [], way: { label: "x", write: vi.fn() } },
+        vi.fn(),
+      ),
+    ).not.toThrow();
   });
 });

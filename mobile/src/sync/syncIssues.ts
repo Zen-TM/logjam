@@ -465,7 +465,7 @@ export async function discardParkedOp(seq: number): Promise<void> {
         seq,
       );
       // The photos and the way queued behind a place or trip that will never
-      // exist name it in their payload, not in `entity_id`, so the delete above
+      // exist (or a trip's copies of a recording that will never upload) name it in their payload, not in `entity_id`, so the delete above
       // misses them: each would presign, 404 and park as its own issue. Their
       // pending rows and cached bytes go with it; a file linked onto the row
       // is unlinked and stays standalone.
@@ -481,10 +481,17 @@ export async function discardParkedOp(seq: number): Promise<void> {
         const fields = JSON.parse(media.fields_json ?? "{}") as {
           linkedId?: string;
           placeId?: string | null;
+          sourceMediaId?: string;
         };
+        // A trip's copy of a recording names it too: the copy's name can never
+        // resolve once the recording's upload is discarded, so it would park as
+        // a second issue.
+        const namesDiscarded =
+          media.op === "create" && fields.sourceMediaId === row.entity_id;
         if (
+          !namesDiscarded &&
           (media.op === "create" ? fields.linkedId : fields.placeId) !==
-          row.entity_id
+            row.entity_id
         )
           continue;
         if (media.op === "create") {

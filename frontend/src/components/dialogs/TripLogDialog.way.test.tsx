@@ -149,4 +149,29 @@ describe("Add a way on the trip form", () => {
       sourceMediaId: "rec-1",
     });
   });
+
+  // Mutation: drop `!wayBusy` from the dialog's `dismissible` and the X, Escape
+  // and the backdrop leave the way mode mid-upload, where Cancel then closes
+  // over a draft trip that is still being made.
+  it("cannot be closed while a way is uploading", async () => {
+    let finish: (value: { id: string }) => void = () => {};
+    vi.mocked(uploadMedia).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)) as never,
+    );
+    open();
+    fireEvent.click(screen.getByText("Use a recorded track"));
+    fireEvent.click(await screen.findByText("descent.gpx"));
+    await waitFor(() => expect(uploadMedia).toHaveBeenCalledTimes(1));
+
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(
+      (close as HTMLButtonElement).disabled ||
+        close.getAttribute("aria-disabled") === "true",
+    ).toBe(true);
+
+    finish({ id: "copy-1" });
+    await waitFor(() =>
+      expect(screen.queryByText("Use a recorded track")).toBeNull(),
+    );
+  });
 });

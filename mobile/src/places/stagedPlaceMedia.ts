@@ -35,3 +35,17 @@ export async function queueStagedMedia(
   }
   return { failed: failed > 0 || wayFailed };
 }
+
+/**
+ * Free what a form that is not going to save holds: each photo's picked file
+ * and the way's, if it holds one (a file picked for a way sits in the picker's
+ * cache until it is written). Both go through the caller's `discardFile`, so
+ * the hook owns the filesystem and this stays testable.
+ */
+export function discardStagedMedia(
+  staged: StagedMedia,
+  discardFile: (uri: string) => Promise<void>,
+): void {
+  for (const file of staged.files) void discardFile(file.uri);
+  void staged.way?.discard?.();
+}

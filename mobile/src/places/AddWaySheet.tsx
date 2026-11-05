@@ -31,6 +31,7 @@ import { ActivityIndicator, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import {
   ADD_WAY,
+  mediaDisplayName,
   addWayFileRow,
   addWayImportSubtitle,
   addWayNoImports,
@@ -45,16 +46,21 @@ import {
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
-import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
+import {
+  discardPickedFile,
+  linkStandaloneMediaLocal,
+} from "../sync/mediaUpload";
 import { importVectorSource } from "../imports/vectorImports";
 import { updateRouteLocal } from "../sync/outbox";
 import { useMirrorRoutes } from "../sync/useSyncQueries";
-import type { MirrorMedia } from "../sync/mirrorStore";
+import { listStandaloneMedia, type MirrorMedia } from "../sync/mirrorStore";
 import { routeFileMimeType } from "../media/routeFileMime";
 import { listVectorImports, type VectorImport } from "../imports/importsDb";
 import { listTracks, type Track } from "../tracks/tracksDb";
 import { trackActions, vectorImportActions } from "../saved/assetActions";
+import { syncedTrackSource } from "../tracks/tripTrackSource";
 import {
+  trackSourceWay,
   tripFileWay,
   tripImportWay,
   tripRecordingWay,
@@ -79,6 +85,9 @@ export type StagedWay = {
   /** What the form shows for it: a route, recording or file name. */
   label: string;
   write: (placeId: string) => Promise<string>;
+  /** Frees what the pick holds until it is written (a picker's cache file).
+   *  Called when the way is removed, swapped or the form is cancelled. */
+  discard?: () => Promise<void>;
 };
 
 export function AddWaySheet({
@@ -122,6 +131,9 @@ export function AddWaySheet({
   const [busy, setBusy] = useState(false);
   const [imports, setImports] = useState<VectorImport[] | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
+  // A trip only: the account's recordings made on another device. A trip takes
+  // a copy of the file, so these work like Logjam Web's list.
+  const [remoteTracks, setRemoteTracks] = useState<MirrorMedia[]>([]);
   /**
    * Work deferred until this sheet has fully closed. A system picker launched
    * from inside an open Modal can never attach its own window, and its promise
@@ -178,6 +190,19 @@ export function AddWaySheet({
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (mode !== "tracks" || !forTrip) return;
+    let cancelled = false;
+    listStandaloneMedia("track")
+      .then((all) => {
+        if (!cancelled) setRemoteTracks(all);
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, forTrip]);
+
   const close = useCallback(() => {
     setMode("sources");
     onClose();
@@ -192,9 +217,10 @@ export function AddWaySheet({
       source: WaySource,
       label: string,
       write: (placeId: string, replaces?: string) => Promise<string>,
+      discard?: () => Promise<void>,
     ) => {
       if (placeId === null) {
-        onStage?.({ label, write: (id) => write(id) });
+        onStage?.({ label, write: (id) => write(id), discard });
         close();
         return;
       }
@@ -266,6 +292,8 @@ export function AddWaySheet({
         "file",
         asset.name,
         tripFileWay({ uri: asset.uri, mimeType, fileName: asset.name }),
+        // The picker's cache copy, until Save hands it to the upload.
+        () => discardPickedFile(asset.uri),
       );
       return;
     }
@@ -296,6 +324,12 @@ export function AddWaySheet({
   );
   const convertibleTracks = (tracks ?? []).filter(
     (track) => trackActions(track).createRouteFrom != null,
+  );
+
+  // The ones made here are in the list above, under their own name.
+  const madeHere = new Set((tracks ?? []).map((track) => track.mediaId));
+  const otherDeviceTracks = remoteTracks.filter(
+    (file) => !madeHere.has(file.id),
   );
 
   return (
@@ -488,11 +522,14 @@ export function AddWaySheet({
           </Text>
           {tracks === null ? (
             <ActivityIndicator color={theme.accent} />
-          ) : convertibleTracks.length === 0 ? (
+          ) : convertibleTracks.length === 0 &&
+            otherDeviceTracks.length === 0 ? (
             <Text style={styles.hint}>{addWayNoTracks("gps")}</Text>
           ) : (
             <>
-              <SectionHeader title={`${convertibleTracks.length} finished`} />
+              {convertibleTracks.length > 0 ? (
+                <SectionHeader title={`${convertibleTracks.length} finished`} />
+              ) : null}
               {convertibleTracks.map((track) => (
                 <Row
                   key={track.id}
@@ -519,6 +556,34 @@ export function AddWaySheet({
                   }
                 />
               ))}
+              {forTrip && otherDeviceTracks.length > 0 ? (
+                <>
+                  <SectionHeader title="From your other devices" />
+                  {otherDeviceTracks.map((file) => (
+                    <Row
+                      key={file.id}
+                      icon="track"
+                      hue={file.color ?? assetHue.track}
+                      title={mediaDisplayName(file)}
+                      subtitle={
+                        file.localDisplayPath === null
+                          ? "Needs a connection to copy"
+                          : undefined
+                      }
+                      disabled={busy}
+                      onPress={() => {
+                        const way = trackSourceWay(
+                          syncedTrackSource({
+                            ...file,
+                            title: mediaDisplayName(file),
+                          }),
+                        );
+                        fill("track", way.label, way.write);
+                      }}
+                    />
+                  ))}
+                </>
+              ) : null}
             </>
           )}
         </View>

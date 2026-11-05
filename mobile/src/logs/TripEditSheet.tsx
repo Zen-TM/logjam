@@ -878,9 +878,7 @@ export function TripEditSheet({
             visible={media.pickSheet === "way"}
             onClose={() => media.setPickSheet(null)}
             onClosed={() => media.setAway(false)}
-            onStage={(way) =>
-              media.setStaged((current) => ({ ...current, way }))
-            }
+            onStage={media.stageWay}
             onInfo={() => {}}
             onError={setSaveError}
           />

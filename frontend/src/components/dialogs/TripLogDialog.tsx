@@ -1505,7 +1505,7 @@ function TripLogDialog({
         }
         size="large"
         // A file still landing would miss the delete Discard does.
-        dismissible={!saving && uploading === 0}
+        dismissible={!saving && uploading === 0 && !wayBusy}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
         onClose={

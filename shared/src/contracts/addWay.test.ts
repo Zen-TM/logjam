@@ -215,3 +215,13 @@ describe("which incumbent a write names as `replaces`", () => {
       expect(source).not.toContain("function replacedUploadId");
   });
 });
+
+describe("the file row", () => {
+  // Mutation: drop the trip target and Logjam GPS tells a user logging a trip
+  // that a picked file is imported, which it is not.
+  it("says a trip's file is chosen, not imported, and a place's is imported", () => {
+    expect(addWayFileRow("gps", "trip").title).toBe("Choose a file");
+    expect(addWayFileRow("gps").title).toBe("Import a new file");
+    expect(addWayFileRow("web", "trip").title).toBe("Upload a file");
+  });
+});

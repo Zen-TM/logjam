@@ -15,7 +15,12 @@ import { useHues } from "../theme";
 import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "../media/pickMedia";
 import { discardPickedFile } from "../sync/mediaUpload";
 import { BottomSheet, Button, IconButton, Row, SectionHeader } from "../ui";
-import { NO_STAGED_MEDIA, type StagedMedia } from "./stagedPlaceMedia";
+import type { StagedWay } from "./AddWaySheet";
+import {
+  discardStagedMedia,
+  NO_STAGED_MEDIA,
+  type StagedMedia,
+} from "./stagedPlaceMedia";
 
 export type PickSheet = "photos" | "way";
 
@@ -32,13 +37,23 @@ export function useStagedMedia(onPickFailed: () => void) {
 
   /** Picks from an abandoned form are cache files nothing else will reach. */
   function discardFiles() {
-    for (const file of staged.files) void discardPickedFile(file.uri);
+    discardStagedMedia(staged, discardPickedFile);
     setStaged(NO_STAGED_MEDIA);
   }
 
   return {
     staged,
     setStaged,
+    /** Stage a way, freeing the one it replaces. */
+    stageWay(way: StagedWay) {
+      void staged.way?.discard?.();
+      setStaged((current) => ({ ...current, way }));
+    },
+    /** Take the staged way out, freeing what it holds. */
+    removeWay() {
+      void staged.way?.discard?.();
+      setStaged((current) => ({ ...current, way: null }));
+    },
     pickSheet,
     setPickSheet,
     away,
@@ -170,9 +185,7 @@ export function StagedWaySection({
             <IconButton
               icon="close"
               accessibilityLabel={`Remove ${way.label}`}
-              onPress={() =>
-                media.setStaged((current) => ({ ...current, way: null }))
-              }
+              onPress={media.removeWay}
             />
           }
         />
