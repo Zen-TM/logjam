@@ -122,13 +122,13 @@ describe("MapPointPopover weather", () => {
     );
     await act(async () => {});
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
     // The facts are gone while the forecast is up, and Back returns to Options.
     expect(screen.queryByText(MAP_POINT.copy.position)).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Back to options", hidden: true }),
     );
-    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
         name: MAP_POINT.copy.backToPoint,
@@ -269,9 +269,9 @@ describe("the point popover's way out", () => {
       screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
     );
     await act(async () => {});
-    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeTruthy();
     escape();
-    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
     expect(
       screen.getByRole("button", { name: WEATHER.copy.show, hidden: true }),
     ).toBeTruthy();

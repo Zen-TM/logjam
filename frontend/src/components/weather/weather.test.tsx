@@ -4,12 +4,12 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WEATHER,
   contractSectionKeys,
-  formatRainMm,
   parseForecast,
   weatherCell,
 } from "@logjam/shared";
@@ -68,33 +68,69 @@ describe("WeatherView", () => {
   it("draws every section of the WEATHER contract", () => {
     render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
     const keys = contractSectionKeys(WEATHER, "web");
-    expect(keys).toEqual(["pastRain", "days", "credit"]);
-    expect(screen.getByText(WEATHER.copy.pastRain)).toBeTruthy();
-    expect(screen.getByText(formatRainMm(forecast.pastRainMm))).toBeTruthy();
-    expect(screen.getByRole("list", { name: WEATHER.title })).toBeTruthy();
+    expect(keys).toEqual(["hours", "days", "past", "credit"]);
+    for (const title of [
+      WEATHER.copy.hours,
+      WEATHER.copy.days,
+      WEATHER.copy.pastModel,
+    ])
+      expect(screen.getByRole("list", { name: title })).toBeTruthy();
+    expect(screen.getByText("25 mm")).toBeTruthy();
     const credit = screen.getByRole("link", { name: WEATHER.copy.credit });
     expect(credit.getAttribute("href")).toBe("https://open-meteo.com/");
     expect(credit.getAttribute("rel")).toContain("noopener");
   });
 
-  it("starts at today and says it", () => {
+  // Mutation that turns it red: draw a row's cards from another list than
+  // `weatherRows`, or drop `current` from the card.
+  it("starts the hours at Now and the days at today, and names every card", () => {
     render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
-    const rows = screen.getAllByRole("listitem");
-    expect(rows[0].textContent).toContain(WEATHER.copy.today);
-    expect(rows[0].getAttribute("data-current")).toBe("true");
-    expect(rows[1].getAttribute("data-current")).toBe("false");
-    expect(rows).toHaveLength(forecast.days.length);
-    // The condition glyph is named, not just drawn.
-    expect(
-      rows[0].querySelector("[role=img]")?.getAttribute("aria-label"),
-    ).toBeTruthy();
+    const hours = within(
+      screen.getByRole("list", { name: WEATHER.copy.hours }),
+    ).getAllByRole("listitem");
+    expect(hours).toHaveLength(24);
+    expect(hours[0].textContent).toContain(WEATHER.copy.now);
+    expect(hours[0].getAttribute("data-current")).toBe("true");
+    expect(hours[1].getAttribute("data-current")).toBe("false");
+    const days = within(
+      screen.getByRole("list", { name: WEATHER.copy.days }),
+    ).getAllByRole("listitem");
+    expect(days).toHaveLength(forecast.days.length);
+    expect(days[0].textContent).toContain(WEATHER.copy.today);
+    expect(days[0].getAttribute("data-current")).toBe("true");
+    for (const card of [...hours, ...days])
+      expect(card.getAttribute("aria-label")).toMatch(/rain .* mm/);
+    const past = within(
+      screen.getByRole("list", { name: WEATHER.copy.pastModel }),
+    ).getAllByRole("listitem");
+    expect(past).toHaveLength(7);
+  });
+
+  it("is a focusable, labelled scroller", () => {
+    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    const track = screen.getByRole("list", { name: WEATHER.copy.hours });
+    expect(track.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("pages a row by its buttons", () => {
+    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    const track = screen.getByRole("list", { name: WEATHER.copy.hours });
+    const scrollBy = vi.fn();
+    track.scrollBy = scrollBy;
+    window.matchMedia = vi.fn(() => ({ matches: false })) as never;
+    fireEvent.click(
+      screen.getAllByRole("button", { name: WEATHER.copy.later })[0],
+    );
+    expect(scrollBy).toHaveBeenCalledTimes(1);
   });
 
   it("says so when every day has run out", () => {
     const later = new Date(2027, 0, 1).getTime();
     render(<WeatherView state={ready} online onLoad={vi.fn()} now={later} />);
     expect(screen.getByText(WEATHER.copy.outOfDate)).toBeTruthy();
-    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+    // Only the rain that fell stays.
+    expect(screen.queryByRole("list", { name: WEATHER.copy.hours })).toBeNull();
+    expect(screen.queryByRole("list", { name: WEATHER.copy.days })).toBeNull();
   });
 
   it("refreshes online, and is disabled with its reason offline", () => {
@@ -155,7 +191,7 @@ describe("PlaceWeather", () => {
     expect(url.origin).toBe("https://api.open-meteo.com");
     expect(url.search).not.toContain("71234");
     expect(url.searchParams.get("elevation")).toBe("1010");
-    expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
   });
 
   // Mutation that turns it red: drop the focus effect in WeatherView.
@@ -165,12 +201,12 @@ describe("PlaceWeather", () => {
       <PlaceWeather point={spot} elevationM={null} />,
     );
     fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
-    await screen.findByText(WEATHER.copy.pastRain);
+    await screen.findByText(WEATHER.copy.pastModel);
     expect(container.contains(document.activeElement)).toBe(true);
     const refresh = screen.getByRole("button", { name: WEATHER.copy.refresh });
     refresh.focus();
     fireEvent.click(refresh);
-    await screen.findByText(WEATHER.copy.pastRain);
+    await screen.findByText(WEATHER.copy.pastModel);
     expect(container.contains(document.activeElement)).toBe(true);
     expect(document.activeElement).not.toBe(document.body);
   });
@@ -181,11 +217,11 @@ describe("PlaceWeather", () => {
     const fetch = stubFetch();
     render(<PlaceWeather point={spot} elevationM={null} />);
     fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
-    await screen.findByText(WEATHER.copy.pastRain);
+    await screen.findByText(WEATHER.copy.pastModel);
     fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.hide }));
-    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
-    expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 

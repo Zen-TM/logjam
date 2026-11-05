@@ -85,6 +85,7 @@ import {
   Icon,
   ErrorBanner,
   FieldError,
+  FieldBeside,
 } from "../../ui";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
@@ -1240,13 +1241,15 @@ function TripLogDialog({
                   }
                 />
                 {onPickCoords && (
-                  <Button
-                    variant="outline"
-                    icon="addPlace"
-                    onClick={handlePickCoords}
-                  >
-                    {PLACE_FORM.copy.selectOnMap}
-                  </Button>
+                  <FieldBeside>
+                    <Button
+                      variant="outline"
+                      icon="addPlace"
+                      onClick={handlePickCoords}
+                    >
+                      {PLACE_FORM.copy.selectOnMap}
+                    </Button>
+                  </FieldBeside>
                 )}
               </div>
             </div>

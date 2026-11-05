@@ -3,26 +3,19 @@ import {
   WEATHER,
   WEATHER_CREDIT_URL,
   contractSectionKeys,
-  formatRainMm,
-  localDate,
   weatherAge,
-  weatherDayFacts,
   weatherDaysFrom,
+  weatherRows,
   type WeatherForecast,
+  type WeatherRow,
 } from "@logjam/shared";
-import {
-  Button,
-  ErrorState,
-  ForecastList,
-  LoadingState,
-  StatGrid,
-} from "../../ui";
+import { Button, ErrorState, ForecastRail, LoadingState } from "../../ui";
 import type { WeatherState } from "./useWeather";
 import classes from "./WeatherView.module.css";
 
 /**
- * The weather at a spot, drawn from `WEATHER` (shared/contracts): the rain that
- * has fallen, the days ahead, and the credit CC BY 4.0 asks for. It only draws;
+ * The weather at a spot, drawn from `WEATHER` (shared/contracts): the hours and
+ * days ahead, the rain that has fallen, and the credit CC BY 4.0 asks for. It only draws;
  * `useWeather` is what fetches, and only on a press.
  */
 export function WeatherView(props: {
@@ -73,43 +66,30 @@ function WeatherBody({
     );
   const { forecast } = state;
   const now = fixedNow ?? state.now;
-  const days = weatherDaysFrom(forecast, now);
+  const rows = weatherRows(forecast, now);
+  const row = (key: WeatherRow["key"]) => {
+    const found = rows.find((r) => r.key === key);
+    if (found)
+      return (
+        <ForecastRail
+          title={found.title}
+          summary={found.summary}
+          labels={{ back: WEATHER.copy.earlier, on: WEATHER.copy.later }}
+          cards={found.cards}
+        />
+      );
+    // Every day the forecast held is past; its hours went with them.
+    return key === "days" && weatherDaysFrom(forecast, now).length === 0 ? (
+      <p className={classes.muted}>{WEATHER.copy.outOfDate}</p>
+    ) : null;
+  };
   const sections: Record<
     (typeof WEATHER.sections)[number]["key"],
     () => ReactNode
   > = {
-    pastRain: () => (
-      <StatGrid
-        stats={[
-          {
-            label: WEATHER.copy.pastRain,
-            value: formatRainMm(forecast.pastRainMm),
-            span: true,
-          },
-        ]}
-      />
-    ),
-    days: () =>
-      days.length === 0 ? (
-        <p className={classes.muted}>{WEATHER.copy.outOfDate}</p>
-      ) : (
-        <ForecastList
-          label={WEATHER.title}
-          rows={days.map((day) => {
-            const facts = weatherDayFacts(day, now);
-            return {
-              key: facts.date,
-              day: facts.day,
-              glyph: facts.condition.icon,
-              glyphLabel: facts.condition.label,
-              temperature: facts.temperature,
-              rain: facts.rain,
-              wind: facts.wind,
-              current: facts.date === localDate(now),
-            };
-          })}
-        />
-      ),
+    hours: () => row("hours"),
+    days: () => row("days"),
+    past: () => row("past"),
     credit: () => (
       <a
         className={classes.credit}

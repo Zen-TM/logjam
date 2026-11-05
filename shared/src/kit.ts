@@ -76,7 +76,7 @@ export const KIT_COMPONENTS = {
   StatGrid: both,
   Meter: both,
   ActivitySpark: both,
-  ForecastList: both,
+  ForecastRail: both,
   StatusPill: both,
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,
@@ -116,6 +116,9 @@ export const KIT_COMPONENTS = {
   TextArea: web("Logjam GPS's TextField takes multiline"),
   NumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
   LiveNumberField: web("Logjam GPS's TextField takes a numeric keyboard"),
+  FieldBeside: web(
+    "Logjam GPS stacks a button under the field instead of beside it",
+  ),
   SearchField: both,
   Select: web("a native select; touch uses ChipRail or a sheet"),
   Checkbox: web("a native checkbox; Logjam GPS uses Toggle or a chip"),

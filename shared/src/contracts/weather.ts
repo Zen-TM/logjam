@@ -1,7 +1,8 @@
 // THE WEATHER AT A SPOT: the forecast both clients show for a place on its
 // page and for a point pressed on the map, behind "Show the weather here". It
-// answers what a canyoner checks before going: what has fallen already (a
-// canyon drains for days), and what each of the next days brings.
+// answers what a canyoner checks before going: what each of the next hours and
+// days brings, and what has fallen already (a canyon drains for days). Each is
+// a row of cards that scrolls sideways (`weatherRows`).
 //
 // Online only to fetch. Logjam GPS keeps the last forecast for each spot and
 // shows it offline with its age; refreshing then says "Needs a connection"
@@ -12,9 +13,11 @@
 import type { IconIdea } from "../icons.js";
 import {
   OPEN_METEO_CREDIT_URL,
+  WEATHER_HOURS_SHOWN,
   WEATHER_PAST_DAYS,
   type WeatherDay,
   type WeatherForecast,
+  type WeatherHour,
 } from "../weather.js";
 import type { ScreenContract } from "./types.js";
 
@@ -22,10 +25,23 @@ export const WEATHER = {
   id: "weather",
   question: "What will the weather be here?",
   title: "Weather",
-  sections: [{ key: "pastRain" }, { key: "days" }, { key: "credit" }],
+  sections: [
+    { key: "hours" },
+    { key: "days" },
+    { key: "past" },
+    { key: "credit" },
+  ],
   copy: {
     show: "Show the weather here",
-    pastRain: `Rain, past ${WEATHER_PAST_DAYS} days`,
+    hours: `Next ${WEATHER_HOURS_SHOWN} hours`,
+    days: "Next 7 days",
+    // Named for where its figures come from, so a measured week (a gauge's)
+    // never reads as the model's guess.
+    pastModel: `Modelled rain, past ${WEATHER_PAST_DAYS} days`,
+    pastGauge: `Rain gauge, past ${WEATHER_PAST_DAYS} days`,
+    now: "Now",
+    earlier: "Scroll back",
+    later: "Scroll on",
     loading: "Getting the forecast…",
     failed: "Couldn't get the forecast.",
     needsConnection: "Needs a connection",
@@ -98,26 +114,209 @@ export type WeatherDayFacts = {
   condition: WeatherCondition;
   /** "4–17°C" */
   temperature: string;
-  /** "6 mm · 70% chance"; the chance is left out where there is none. */
+  /** "6 mm" */
   rain: string;
+  /** "70%"; null for a day already past, which has no chance. */
+  chance: string | null;
   /** "25 km/h" */
   wind: string;
 };
 
-export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
-  const [y, m, d] = day.date.split("-").map(Number);
+/** "Today", or "Mon 20". */
+function dayLabel(date: string, now: number): string {
+  const [y, m, d] = date.split("-").map(Number);
   const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return date === localDate(now) ? WEATHER.copy.today : `${weekday} ${d}`;
+}
+
+export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
   return {
     date: day.date,
-    day: day.date === localDate(now) ? WEATHER.copy.today : `${weekday} ${d}`,
+    day: dayLabel(day.date, now),
     condition: weatherCondition(day.code),
     temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°C`,
-    rain:
-      day.rainChance != null
-        ? `${formatRainMm(day.rainMm)} · ${day.rainChance}% chance`
-        : formatRainMm(day.rainMm),
+    rain: formatRainMm(day.rainMm),
+    chance: day.rainChance != null ? `${day.rainChance}%` : null,
     wind: `${Math.round(day.windMaxKmh)} km/h`,
   };
+}
+
+/** The next `WEATHER_HOURS_SHOWN` hours, from the one `now` falls in. */
+export function weatherHoursFrom(
+  forecast: WeatherForecast,
+  now: number,
+): WeatherHour[] {
+  return forecast.hours
+    .filter((hour) => hour.at + 3_600_000 > now)
+    .slice(0, WEATHER_HOURS_SHOWN);
+}
+
+/** One cell of a row: the same anatomy for an hour, a day and a past day. */
+export type WeatherCard = {
+  key: string;
+  /** "Now", "3 pm", "Today", "Mon 20". */
+  label: string;
+  /** The first card of the hourly and daily rows: the one the eye starts on. */
+  current: boolean;
+  /** Null where a figure is a rain total, which no single condition names. */
+  glyph: IconIdea | null;
+  glyphLabel: string;
+  /** "14°" for an hour, "4–17°C" for a day; null for a past day. */
+  temperature: string | null;
+  /** "0.4 mm" */
+  rain: string;
+  /** 0 to 1: how much of its row's wettest card this one is. Zero is empty. */
+  rainLevel: number;
+  /** "70%", where the model gave one. */
+  chance: string | null;
+  /** "25 km/h"; null for a past day. */
+  wind: string | null;
+  /** Every figure on the card, in words, for a screen reader. */
+  spoken: string;
+};
+
+export type WeatherRowKey = Exclude<
+  (typeof WEATHER.sections)[number]["key"],
+  "credit"
+>;
+
+export type WeatherRow = {
+  key: WeatherRowKey;
+  title: string;
+  /** "34 mm" over the row's days, for the rain row; null otherwise. */
+  summary: string | null;
+  cards: WeatherCard[];
+};
+
+// A row's bars are against its wettest card, but never against less than this:
+// a drizzle must not fill the bar a downpour would.
+const RAIN_FULL_MM: Record<WeatherRowKey, number> = {
+  hours: 4,
+  days: 20,
+  past: 20,
+};
+
+function rainLevels(key: WeatherRowKey, mm: number[]): number[] {
+  const full = Math.max(RAIN_FULL_MM[key], ...mm);
+  return mm.map((value) => (value > 0 ? value / full : 0));
+}
+
+function hourLabel(hour: WeatherHour): string {
+  const h = Number(hour.time.slice(11, 13));
+  return `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`;
+}
+
+/**
+ * The rows both clients draw, in the order of `WEATHER.sections`: the next
+ * hours, the next days, the rain that has fallen. A row with nothing left in it
+ * (a kept forecast that has outlived its hours) is absent.
+ */
+export function weatherRows(
+  forecast: WeatherForecast,
+  now: number,
+): WeatherRow[] {
+  const hours = weatherHoursFrom(forecast, now);
+  const days = weatherDaysFrom(forecast, now);
+  const past = forecast.past.days;
+  const hourLevels = rainLevels(
+    "hours",
+    hours.map((h) => h.rainMm),
+  );
+  const dayLevels = rainLevels(
+    "days",
+    days.map((d) => d.rainMm),
+  );
+  const pastLevels = rainLevels(
+    "past",
+    past.map((d) => d.rainMm),
+  );
+  const rows: WeatherRow[] = [
+    {
+      key: "hours",
+      title: WEATHER.copy.hours,
+      summary: null,
+      cards: withSpoken(
+        hours.map((hour, i) => {
+          const condition = weatherCondition(hour.code);
+          const current = i === 0 && hour.at <= now;
+          return {
+            key: hour.time,
+            label: current ? WEATHER.copy.now : hourLabel(hour),
+            current,
+            glyph: condition.icon,
+            glyphLabel: condition.label,
+            temperature: `${Math.round(hour.tempC)}°`,
+            rain: formatRainMm(hour.rainMm),
+            rainLevel: hourLevels[i],
+            chance: hour.rainChance != null ? `${hour.rainChance}%` : null,
+            wind: `${Math.round(hour.windKmh)} km/h`,
+          };
+        }),
+      ),
+    },
+    {
+      key: "days",
+      title: WEATHER.copy.days,
+      summary: null,
+      cards: withSpoken(
+        days.map((day, i) => {
+          const facts = weatherDayFacts(day, now);
+          return {
+            key: facts.date,
+            label: facts.day,
+            current: facts.date === localDate(now),
+            glyph: facts.condition.icon,
+            glyphLabel: facts.condition.label,
+            temperature: facts.temperature,
+            rain: facts.rain,
+            rainLevel: dayLevels[i],
+            chance: facts.chance,
+            wind: facts.wind,
+          };
+        }),
+      ),
+    },
+    {
+      key: "past",
+      title:
+        forecast.past.source === "gauge"
+          ? WEATHER.copy.pastGauge
+          : WEATHER.copy.pastModel,
+      summary: formatRainMm(past.reduce((sum, day) => sum + day.rainMm, 0)),
+      cards: withSpoken(
+        past.map((day, i) => ({
+          key: day.date,
+          label: dayLabel(day.date, now),
+          current: false,
+          glyph: null,
+          glyphLabel: "",
+          temperature: null,
+          rain: formatRainMm(day.rainMm),
+          rainLevel: pastLevels[i],
+          chance: null,
+          wind: null,
+        })),
+      ),
+    },
+  ];
+  return rows.filter((row) => row.cards.length > 0);
+}
+
+function withSpoken(cards: Omit<WeatherCard, "spoken">[]): WeatherCard[] {
+  return cards.map((card) => ({ ...card, spoken: spoken(card) }));
+}
+
+function spoken(card: Omit<WeatherCard, "spoken">): string {
+  return [
+    card.label,
+    card.glyphLabel,
+    card.temperature,
+    `rain ${card.rain}`,
+    card.chance && `${card.chance} chance`,
+    card.wind && `wind ${card.wind}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** "Updated 3 h ago": how old the figures on screen are. */

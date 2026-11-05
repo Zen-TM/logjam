@@ -4,6 +4,11 @@
   gap: var(--form-label);
 }
 
+/* Does not stretch or shrink beside the inputs that share its row. */
+.beside {
+  flex: none;
+}
+
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {

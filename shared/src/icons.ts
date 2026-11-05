@@ -87,6 +87,8 @@ export const ICONS = {
 
   // — structure: where the user is, and how it opens —
   disclosure: { web: "chevron-right", gps: "chevron-right" }, // opens a sub-view
+  scrollBack: { web: "chevrons-left", gps: "chevrons-left" }, // a row of cards, a page back
+  scrollOn: { web: "chevrons-right", gps: "chevrons-right" }, // ...a page on
   expand: { web: "chevron-down", gps: "chevron-down" },
   collapse: { web: "chevron-up", gps: "chevron-up" },
   overflow: { web: "ellipsis-vertical", gps: "more-vertical" }, // a thing's verbs

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { NumberField } from "./TextField";
+import { FieldBeside, NumberField } from "./TextField";
 
 afterEach(cleanup);
 
@@ -37,5 +37,21 @@ describe("NumberField", () => {
     expect(
       screen.getByText("Latitude must be between -90 and 90."),
     ).toBeTruthy();
+  });
+});
+
+describe("FieldBeside", () => {
+  // Mutation: render the spacer as a real label (or drop it): a screen reader
+  // reads an empty label, or the button rides up to the label's line.
+  it("keeps the button under an unseen, unread label-height spacer", () => {
+    render(
+      <FieldBeside>
+        <button type="button">Select on map</button>
+      </FieldBeside>,
+    );
+    const button = screen.getByRole("button", { name: "Select on map" });
+    const spacer = button.previousElementSibling;
+    expect(spacer?.getAttribute("aria-hidden")).toBe("true");
+    expect(spacer?.tagName).toBe("SPAN");
   });
 });
