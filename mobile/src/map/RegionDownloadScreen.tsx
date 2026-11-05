@@ -177,18 +177,16 @@ function regionLabelFor(basemapId: string): string {
   return `${name ?? "Map"} region`;
 }
 
-/** How far the map runs up behind the hero — one corner radius. */
-const HERO_OVERLAP = 16;
 /**
- * Lowest the top edge may go. The overlap plus half a handle: clamping to the
- * overlap alone leaves the handle's upper half behind the hero, which is still
- * a handle you have to aim under.
+ * Lowest the top edge may go: half a handle below the hero, or the handle's
+ * upper half sits against the hero, which is still a handle you have to aim
+ * under.
  */
-const MIN_TOP_INSET = HERO_OVERLAP + 22;
+const MIN_TOP_INSET = 22;
 // Room for the frame's handles around a plan's area, which the camera fits
 // and the frame then sits on (see applyBounds). The top clears the hero; the
 // bottom clears the "Move the map" hint.
-const BOUNDS_PADDING = { top: 72, bottom: 64, left: 32, right: 32 };
+const BOUNDS_PADDING = { top: 56, bottom: 64, left: 32, right: 32 };
 
 export function RegionDownloadScreen({
   onBack,
@@ -599,33 +597,28 @@ export function RegionDownloadScreen({
 
   return (
     <View style={styles.root}>
-      {/* Wrapped only to lift it above the map, which now slides up under its
-          rounded bottom corners. */}
-      <View style={styles.hero}>
-        <Hero
-          onBack={onBack}
-          backLabel={backLabel}
-          title="Save maps offline"
-          // TWO stats, equal weight, one line — the two things the decision is
-          // actually made on. Showing additional stats would overflow the
-          // line without changing what the user does next. The hero carries no
-          // warning slot (warnings overlay the map), keeping its height fixed
-          // so the map does not resize under a frame the user is actively
-          // dragging.
-          value={
-            job && job.totalTiles > 0
-              ? `≈ ${formatBytes(job.meanBytes + areaBytes)}`
-              : "—"
-          }
-          secondaryValue={
-            job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
-          }
-        />
-      </View>
+      <Hero
+        onBack={onBack}
+        backLabel={backLabel}
+        title="Save maps offline"
+        // TWO stats, equal weight, one line — the two things the decision is
+        // actually made on. Showing additional stats would overflow the
+        // line without changing what the user does next. The hero carries no
+        // warning slot (warnings overlay the map), keeping its height fixed
+        // so the map does not resize under a frame the user is actively
+        // dragging.
+        value={
+          job && job.totalTiles > 0
+            ? `≈ ${formatBytes(job.meanBytes + areaBytes)}`
+            : "—"
+        }
+        secondaryValue={
+          job && job.totalTiles > 0 ? formatMinutes(job.seconds) : "—"
+        }
+      />
 
-      {/* The map runs up behind the hero. The frame's top inset is clamped to
-          that overlap, or the top edge handle can be dragged in behind the
-          hero and become ungrabbable. */}
+      {/* The frame's top inset is clamped (MIN_TOP_INSET), or the top edge
+          handle can be dragged against the hero and become ungrabbable. */}
       <View style={styles.mapWrap} onLayout={handleLayout}>
         <Map
           ref={mapRef}
@@ -760,7 +753,7 @@ export function RegionDownloadScreen({
           <Field
             label="Detail"
             aside={
-              <Text style={styles.detailCaption}>
+              <Text style={styles.detailCaption} numberOfLines={1}>
                 {/* Metres-per-pixel describes a RASTER pyramid: fixed images at
                   fixed scales. A vector clip has no pixels — it redraws sharp
                   at any zoom, and the detail level only caps how much of the
@@ -835,10 +828,7 @@ export function RegionDownloadScreen({
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
-  // Opaque, so the map's overlap does not show through the hero's own bottom
-  // padding, which is the gap under the two estimates.
-  hero: { zIndex: 1, backgroundColor: theme.page },
-  mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
+  mapWrap: { flex: 1, overflow: "hidden" },
   mapHint: {
     position: "absolute",
     left: spacing(2),
@@ -851,14 +841,11 @@ const useStyles = makeStyles((theme, textRole) => ({
   // the hero so that it costs no layout: the hero and the panel are what the
   // map is measured against, and a band appearing or clearing there would resize
   // the map mid-gesture and move the frame the user is dragging.
-  // Clear of the hero, which overlaps the map's top strip: at two lines the
-  // pill would slide up behind it and lose its first line. `HERO_OVERLAP`
-  // is that strip; the rest is air.
   mapWarning: {
     position: "absolute",
     left: spacing(2),
     right: spacing(2),
-    top: HERO_OVERLAP + spacing(1),
+    top: spacing(1),
     alignItems: "center",
   },
   warningActions: { gap: spacing(1) },
@@ -891,5 +878,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
     paddingHorizontal: spacing(2),
   },
-  detailCaption: { ...muted(theme, textRole.meta) },
+  detailCaption: { ...muted(theme, textRole.meta), flexShrink: 1 },
 }));
