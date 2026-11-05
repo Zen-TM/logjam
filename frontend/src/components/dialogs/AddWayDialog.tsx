@@ -3,6 +3,7 @@
 // is the same panel; its words are `ADD_WAY`'s.
 //
 //   a route you drew      → the Route row is linked (Route.placeId)
+//   draw on the map       → the map's pen; the save writes the link
 //   a recorded track      → the stored recording is linked as the place's way
 //   an imported file      → the stored import is linked as the place's way
 //   a .gpx/.kml file      → uploaded onto the place
@@ -75,6 +76,7 @@ export default function AddWayDialog({
   media,
   onClose,
   onFilled,
+  onDrawRoute,
 }: {
   open: boolean;
   placeId: string;
@@ -87,6 +89,8 @@ export default function AddWayDialog({
   onClose: () => void;
   /** The slot changed: the page refetches its routes and media. */
   onFilled: () => void;
+  /** Hand over to the map's pen; the save links the route to this place. */
+  onDrawRoute: () => void;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -277,6 +281,16 @@ export default function AddWayDialog({
                 subtitle={ADD_WAY.copy.routeSubtitle}
                 disabled={busy}
                 onOpen={() => setMode("routes")}
+              />
+              <Row
+                leading={<IconTile icon="draw" hue="var(--hue-route)" />}
+                title={ADD_WAY.copy.drawTitle}
+                subtitle={ADD_WAY.copy.drawSubtitle}
+                disabled={busy}
+                onOpen={() => {
+                  close();
+                  onDrawRoute();
+                }}
               />
               <Row
                 leading={<IconTile icon="track" hue="var(--hue-track)" />}
