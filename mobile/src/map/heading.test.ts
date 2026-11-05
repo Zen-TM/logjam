@@ -23,7 +23,7 @@ import {
   fieldStrength,
   fieldStrengthUt,
   foldCompassProbe,
-  compassProbeDelayMs,
+  createCompassProbeSchedule,
   COMPASS_PROBE_INTERVAL_MS,
   COMPASS_PROBE_URGENT_MS,
   COMPASS_URGENT_PROBES,
@@ -572,16 +572,23 @@ describe("the compass calibration verdict", () => {
     expect(foldCompassProbe(warned, good)).toBe(NO_COMPASS_CALIBRATION);
   });
 
-  // Red when the urgent cadence is unbounded again. To see it: return the
-  // urgent delay unconditionally from `compassProbeDelayMs`.
+  // Red when the cap never fires: the schedule must count the probes it has
+  // run. To see it: drop the `++` in `createCompassProbeSchedule`.
   it("probes urgently for a while, then settles to the slow cadence", () => {
-    expect(compassProbeDelayMs(false, 0)).toBe(COMPASS_PROBE_INTERVAL_MS);
-    expect(compassProbeDelayMs(true, 0)).toBe(COMPASS_PROBE_URGENT_MS);
-    expect(compassProbeDelayMs(true, COMPASS_URGENT_PROBES - 1)).toBe(
-      COMPASS_PROBE_URGENT_MS,
+    const quiet = createCompassProbeSchedule(false);
+    expect(quiet.nextDelayMs()).toBe(COMPASS_PROBE_INTERVAL_MS);
+
+    const urgent = createCompassProbeSchedule(true);
+    const delays = Array.from({ length: COMPASS_URGENT_PROBES + 3 }, () =>
+      urgent.nextDelayMs(),
     );
-    expect(compassProbeDelayMs(true, COMPASS_URGENT_PROBES)).toBe(
-      COMPASS_PROBE_INTERVAL_MS,
+    // The first probe runs at once, so the schedule hands out one fewer urgent
+    // wait than there are urgent probes.
+    expect(delays.slice(0, COMPASS_URGENT_PROBES - 1)).toEqual(
+      Array(COMPASS_URGENT_PROBES - 1).fill(COMPASS_PROBE_URGENT_MS),
+    );
+    expect(delays.slice(COMPASS_URGENT_PROBES - 1)).toEqual(
+      Array(4).fill(COMPASS_PROBE_INTERVAL_MS),
     );
   });
 });

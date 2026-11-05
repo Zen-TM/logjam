@@ -189,7 +189,7 @@ import {
   EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
   addFieldSample,
-  compassProbeDelayMs,
+  createCompassProbeSchedule,
   compassProbeIsUrgent,
   createHeadingFilter,
   declinationNeedsRefresh,
@@ -288,11 +288,8 @@ import {
 } from "../ui";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
-import {
-  MapLayersSheetHost,
-  createLayersOpen,
-  type LayerToggleEntry,
-} from "./MapLayersSheet";
+import { MapLayersSheetHost, type LayerToggleEntry } from "./MapLayersSheet";
+import { createLayersOpen } from "./layersOpen";
 import { MapPointSheet, type MapPoint } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
 import { GaugesLayer } from "../gauges/GaugesLayer";
@@ -3264,13 +3261,8 @@ export function MapScreen({
     pendingPovHeading.current = heading;
     setPovRecentreNonce((nonce) => nonce + 1);
   }, []);
-  // Each request is answered once. A frozen tab (AppShell's freezeOnBlur) re-runs
-  // its layout effects when it is shown again, which would otherwise replay the
-  // last request and fly the camera back to the fix on every return to the map.
-  const answeredPovNonce = useRef(0);
   useLayoutEffect(() => {
-    if (povRecentreNonce === answeredPovNonce.current) return;
-    answeredPovNonce.current = povRecentreNonce;
+    if (povRecentreNonce === 0) return;
     recentre(pendingPovHeading.current);
   }, [povRecentreNonce, recentre]);
 
@@ -3984,15 +3976,11 @@ export function MapScreen({
       })();
     };
 
-    let probes = 0;
+    const schedule = createCompassProbeSchedule(compassProbeUrgent);
     let repeat: ReturnType<typeof setTimeout>;
     const next = () => {
       probe();
-      probes += 1;
-      repeat = setTimeout(
-        next,
-        compassProbeDelayMs(compassProbeUrgent, probes),
-      );
+      repeat = setTimeout(next, schedule.nextDelayMs());
     };
     next();
     return () => {

@@ -1132,14 +1132,6 @@ export function AppShell({
             }}
             screenOptions={{
               headerShown: false,
-              // A tab that is not showing does not render. All five stay mounted
-              // (a tab keeps its state), but a hidden one used to re-render, the
-              // map's hundred layers included, on every store update. Only React's
-              // rendering stops: effects, timers, the recorder's task and the
-              // download queue run on, and the blur render lands first, so the
-              // map's sensors still stop (react-native-screens' DelayedFreeze).
-              // Guard: freezeOnBlur.test.ts.
-              freezeOnBlur: true,
               tabBarStyle: {
                 backgroundColor: theme.card,
                 borderTopColor: theme.line,
@@ -1160,6 +1152,10 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
+                // Not frozen: a frozen map has null camera refs (a fit or a
+                // reset skipped while hidden), its sheets cannot close, and the
+                // catch-up render lands in the switch back.
+                freezeOnBlur: false,
                 tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
@@ -1168,6 +1164,10 @@ export function AppShell({
             <Tabs.Screen
               name="Places"
               options={{
+                // Frozen when hidden: React stops rendering the tab, while
+                // effects, timers and native callbacks run on. Which tabs freeze
+                // is pinned by freezeOnBlur.test.ts.
+                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="place" color={color} />
                 ),
@@ -1178,6 +1178,7 @@ export function AppShell({
             <Tabs.Screen
               name="Logs"
               options={{
+                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="trip" color={color} />
                 ),
@@ -1188,6 +1189,7 @@ export function AppShell({
             <Tabs.Screen
               name="Saved"
               options={{
+                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="saved" color={color} />
                 ),
@@ -1202,6 +1204,9 @@ export function AppShell({
                 // open inside it: the hub is where a visit starts. React
                 // Navigation pops the tab's stack when the tab loses focus.
                 popToTopOnBlur: true,
+                // Not frozen: the pop to root must reach the stack before the
+                // tab hides, or the old page flashes on return.
+                freezeOnBlur: false,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="moreTab" color={color} />
                 ),

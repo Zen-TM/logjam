@@ -51,20 +51,23 @@ export function useDownBasemaps(online: boolean): {
   probe: () => void;
 } {
   const [down, setDown] = useState<ReadonlySet<string>>(() => new Set());
-  const alive = useRef(true);
+  // The latest probe's number. An older probe that answers late would put its
+  // stale verdict over a newer one, so only the latest may write.
+  const latest = useRef(0);
   const probe = useCallback(() => {
     if (!online) return;
+    const mine = ++latest.current;
     for (const id of PROBED_BASEMAPS) {
       void serverAnswers(probeUrl(id)).then((ok) => {
-        if (alive.current) setDown((prev) => withBasemapDown(prev, id, !ok));
+        if (latest.current === mine)
+          setDown((prev) => withBasemapDown(prev, id, !ok));
       });
     }
   }, [online]);
   useEffect(() => {
-    alive.current = true;
     probe();
     return () => {
-      alive.current = false;
+      latest.current += 1;
     };
   }, [probe]);
   return { down: online ? (down as ReadonlySet<BasemapId>) : EMPTY, probe };

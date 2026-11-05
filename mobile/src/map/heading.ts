@@ -948,13 +948,18 @@ export const COMPASS_PROBE_URGENT_MS = 6_000;
 export const COMPASS_URGENT_PROBES = 10;
 
 /** Wait before the probe after `probesSoFar` in this episode. */
-export function compassProbeDelayMs(
-  urgent: boolean,
-  probesSoFar: number,
-): number {
+function compassProbeDelayMs(urgent: boolean, probesSoFar: number): number {
   return urgent && probesSoFar < COMPASS_URGENT_PROBES
     ? COMPASS_PROBE_URGENT_MS
     : COMPASS_PROBE_INTERVAL_MS;
+}
+
+/** One probing episode: call `nextDelayMs()` after each probe it runs. */
+export function createCompassProbeSchedule(urgent: boolean): {
+  nextDelayMs: () => number;
+} {
+  let probes = 0;
+  return { nextDelayMs: () => compassProbeDelayMs(urgent, ++probes) };
 }
 
 // ── the magnetic environment ─────────────────────────────────────────────────
