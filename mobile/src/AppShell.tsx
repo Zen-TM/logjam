@@ -956,8 +956,11 @@ export function AppShell({
 
   // The account's slope bands, kept on the phone so the map has them offline.
   useEffect(() => {
-    keepAccountSlopeBands(userQuery.data?.uiPreferences?.slopeBands);
-  }, [userQuery.data?.uiPreferences?.slopeBands]);
+    keepAccountSlopeBands(
+      userQuery.data?.uiPreferences?.slopeBands,
+      userQuery.data?.id,
+    );
+  }, [userQuery.data?.uiPreferences?.slopeBands, userQuery.data?.id]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap

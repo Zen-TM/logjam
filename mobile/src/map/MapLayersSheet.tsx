@@ -72,6 +72,7 @@ import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
+import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -174,7 +175,9 @@ export function MapLayersSheet({
   const [tab, setTab] = useState<Tab>("basemap");
   // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
-  const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
+  const [legend, setLegend] = useState<
+    "vegetation" | "land" | "slopeBands" | null
+  >(null);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -202,6 +205,7 @@ export function MapLayersSheet({
         artifacts={artifacts}
         hasVegetation={hasVegetation}
         onOpenLegend={() => setLegend("vegetation")}
+        onOpenSlopeBands={() => setLegend("slopeBands")}
       />
     ),
     overlays: () => (
@@ -240,6 +244,8 @@ export function MapLayersSheet({
       onBack={legend ? () => setLegend(null) : undefined}
       title={legend ? MAP_TERRAIN.copy[legend] : MAP_LAYERS.title}
       // Over the tab rather than in place of it, so the sheet keeps its height.
+      // The slope bands editor is taller than any tab, so it takes the tab's
+      // place instead.
       overlay={
         legend === "land" ? (
           <LandLegend />
@@ -248,18 +254,24 @@ export function MapLayersSheet({
         ) : null
       }
     >
-      <View style={styles.rail}>
-        <ChipRail
-          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
-            value: key,
-            label: TAB_LABEL[key],
-          }))}
-          value={tab}
-          onChange={(next) => setTab(next as Tab)}
-        />
-      </View>
+      {legend === "slopeBands" ? (
+        <SlopeBandsEditor />
+      ) : (
+        <>
+          <View style={styles.rail}>
+            <ChipRail
+              options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
+                value: key,
+                label: TAB_LABEL[key],
+              }))}
+              value={tab}
+              onChange={(next) => setTab(next as Tab)}
+            />
+          </View>
 
-      {panes[tab]()}
+          {panes[tab]()}
+        </>
+      )}
     </BottomSheet>
   );
 }
@@ -346,7 +358,7 @@ function BasemapTab({
 
 /**
  * The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. The
- * slope's bands are the account's, chosen on Logjam Web.
+ * slope's bands are the account's, edited from the row under the Slope switch.
  */
 function TerrainTab({
   layers,
@@ -356,6 +368,7 @@ function TerrainTab({
   artifacts,
   hasVegetation,
   onOpenLegend,
+  onOpenSlopeBands,
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
@@ -366,8 +379,10 @@ function TerrainTab({
   /** A sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
   onOpenLegend: () => void;
+  onOpenSlopeBands: () => void;
 }) {
   const styles = useStyles();
+  const theme = useTheme();
   const rows = {
     ...Object.fromEntries(
       TERRAIN_LAYER_KEYS.map((key) => {
@@ -391,6 +406,15 @@ function TerrainTab({
           />,
         ];
       }),
+    ),
+    // Under the Slope switch it colours (the contract's order).
+    slopeBands: (
+      <Row
+        key="slopeBands"
+        title={MAP_TERRAIN.copy.slopeBands}
+        onPress={onOpenSlopeBands}
+        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+      />
     ),
     vegetation: hasVegetation ? (
       <SwitchRow

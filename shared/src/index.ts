@@ -39,6 +39,7 @@ export * from "./monthlyQuota.js";
 export * from "./leaderboard.js";
 export * from "./computeCredits.js";
 export * from "./topoSettings.js";
+export * from "./slopeBandsEdit.js";
 export * from "./topoUpload.js";
 export * from "./topoExport.js";
 export * from "./ozUltimate.js";

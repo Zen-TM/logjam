@@ -633,11 +633,17 @@ describe("the map's layers", () => {
   // client lists the layers in one order and stacks them in another.
   it("lists the Terrain group in the order it is stacked", () => {
     const rows = TERRAIN_SWITCH_KEYS.filter((key) => key !== "land");
-    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(rows);
-    expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
-      ...rows,
-      "sharpenedAreas",
+    // The bands sit under the Slope switch they colour.
+    const slope = rows.indexOf("slope") + 1;
+    const withBands = [
+      ...rows.slice(0, slope),
       "slopeBands",
+      ...rows.slice(slope),
+    ];
+    expect(contractSectionKeys(MAP_TERRAIN, "gps")).toEqual(withBands);
+    expect(contractSectionKeys(MAP_TERRAIN, "web")).toEqual([
+      ...withBands,
+      "sharpenedAreas",
     ]);
   });
 });

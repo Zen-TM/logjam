@@ -2,9 +2,10 @@
 // group's statewide slope is coloured in, here and on Logjam GPS.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  nextSlopeBandsEdit,
   normalizeUserUiPreferences,
-  slopeBandsError,
   type SlopeBand,
+  type SlopeBandsEdit,
   type TUser,
 } from "@logjam/shared";
 
@@ -28,17 +29,9 @@ export function useSlopeBands(
   // session, so a save that comes back while the user edits on leaves it be.
   // The map keeps the last edit MapLibre can take while the editor holds one
   // it would refuse, and that edit is the one saved.
-  const [edit, setEdit] = useState<{
-    bands: SlopeBand[];
-    lastValid: SlopeBand[] | null;
-  } | null>(null);
+  const [edit, setEdit] = useState<SlopeBandsEdit | null>(null);
   const setBands = useCallback(
-    (bands: SlopeBand[]) =>
-      setEdit((prev) => ({
-        bands,
-        lastValid:
-          slopeBandsError(bands) == null ? bands : (prev?.lastValid ?? null),
-      })),
+    (bands: SlopeBand[]) => setEdit((prev) => nextSlopeBandsEdit(prev, bands)),
     [],
   );
   const lastValid = edit?.lastValid ?? null;

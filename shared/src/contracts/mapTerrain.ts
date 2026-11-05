@@ -10,6 +10,8 @@ export const MAP_TERRAIN = {
   sections: [
     { key: "contours" },
     { key: "slope" },
+    // Opened from the Slope row on Logjam Web, a row of its own on Logjam GPS.
+    { key: "slopeBands" },
     { key: "hillshade" },
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
@@ -18,12 +20,6 @@ export const MAP_TERRAIN = {
       on: "web",
       reason:
         "Making, sharing and deleting sharpened areas is planning, done at home: Logjam GPS draws the ones the account has and saves them from Saved.",
-    },
-    {
-      key: "slopeBands",
-      on: "web",
-      reason:
-        "Choosing the angles and colours of the slope bands is planning, done at home: Logjam GPS draws the bands the account has.",
     },
   ],
   copy: {
@@ -48,6 +44,8 @@ export const MAP_TERRAIN = {
     landCaveat:
       "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
     slopeBands: "Slope bands",
+    // At the top of the editor on both clients.
+    slopeBandsIntro: "Colour terrain based on how steep it is.",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
     // The Hillshade switch over imagery.
