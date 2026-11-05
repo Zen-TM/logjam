@@ -1305,6 +1305,12 @@ test.describe("desktop", () => {
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await expect(panel).toBeVisible();
     await expect(point).toHaveCount(0);
+
+    // And a press on empty map closes the gauge panel and asks nothing new.
+    await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.2);
+    await expect(panel).toHaveCount(0);
+    await page.waitForTimeout(600);
+    await expect(point).toHaveCount(0);
   });
 
   test("the Layers popover's Terrain tab, and its slope bands", async ({

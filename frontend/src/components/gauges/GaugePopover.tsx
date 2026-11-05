@@ -48,6 +48,7 @@ export default function GaugePopover({
       placement={narrow ? "top-start" : "bottom-start"}
       fit
       dismissOnOutsidePress
+      suppressAskWithin={map.getContainer()}
       closeButton={false}
     >
       <GaugeView

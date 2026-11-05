@@ -2062,8 +2062,9 @@ function Map({
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
   // or feature under it), and Enter on the focused map asks about the middle of
   // what is visible. The panel is drawn by `MapPointPopover`; this only decides
-  // when it is asked. A right-click or long-press asks the same panel and opens
-  // it on Options, wherever it lands.
+  // when it is asked. A right-click, or an Android long-press (the browser's
+  // `contextmenu`; iOS Safari sends none), asks the same panel and opens it on
+  // Options, wherever it lands.
   //
   // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
   // here writes anything: its verbs hand off to flows that confirm for
