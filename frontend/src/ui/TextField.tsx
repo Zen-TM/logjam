@@ -84,6 +84,31 @@ function Field({
   );
 }
 
+/** A control that sits beside text fields in a row (Select on map). Shaped like
+ *  a field, with an unseen label above it, so it lines up with the inputs
+ *  whatever the hint or error under them does. Rows using it align to the
+ *  top. */
+export function FieldBeside({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={[classes.field, classes.beside, className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <span className={classes.label} aria-hidden>
+        {"\u00a0"}
+      </span>
+      {children}
+    </div>
+  );
+}
+
 const describedBy = (inputId: string, hint?: string, error?: string | null) =>
   [hint && `${inputId}-hint`, error && `${inputId}-error`]
     .filter(Boolean)

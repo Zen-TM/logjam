@@ -19,6 +19,7 @@ import {
   TextField,
   Icon,
   ErrorBanner,
+  FieldBeside,
 } from "../../ui";
 import {
   abandonConfirm,
@@ -1641,15 +1642,16 @@ function UnifiedImportDialog({
               updateCreateForm(key, { longitude: event.target.value })
             }
           />
-          <Button
-            variant="outline"
-            compact
-            icon="place"
-            className={classes.pickButton}
-            onClick={() => handlePickCoordsFor(key)}
-          >
-            Pick on map
-          </Button>
+          <FieldBeside>
+            <Button
+              variant="outline"
+              compact
+              icon="place"
+              onClick={() => handlePickCoordsFor(key)}
+            >
+              Pick on map
+            </Button>
+          </FieldBeside>
         </div>
       </div>
     );

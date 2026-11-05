@@ -13,6 +13,7 @@ export { Hero, Meter, type MeterSegment } from "./Hero";
 export { SwitchRow, Toggle } from "./Toggle";
 export { Checkbox } from "./Choice";
 export {
+  FieldBeside,
   LiveNumberField,
   NumberField,
   SearchField,
