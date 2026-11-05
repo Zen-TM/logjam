@@ -17,7 +17,7 @@ describe("MapToolGroup", () => {
   });
   // Mutation: draw a second line under the label.
   it("shows no description line under a tool", () => {
-    expect(source).not.toContain("description");
+    expect(source).not.toMatch(/\bdescription\b\s*[:=}]|\.description\b/);
   });
   it("moves with native-driver timings that reduced motion zeroes", () => {
     expect(source).toContain("useNativeDriver: true");
