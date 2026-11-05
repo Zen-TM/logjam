@@ -16,15 +16,24 @@ export const TRIP_FORM = {
     { key: "attributes" },
     // Values kept from when the trip was another type; only keep or remove.
     { key: "leftover" },
+    // Both clients take photos and a way while a trip is being logged. Logjam
+    // GPS holds the picks until the trip is saved; Logjam Web uploads them
+    // against a draft trip.
     {
       key: "photos",
-      on: "web",
-      gap: "Logjam GPS doesn't take photos in this form yet.",
+      onlyWhenAdding: {
+        on: "gps",
+        gap: "Logjam GPS edits an existing trip's photos on its page, where the picker can run.",
+      },
     },
+    // A trip keeps a way as a copy of its file, so every ADD_WAY source but the
+    // pen ends up as a track on the trip.
     {
       key: "routes",
-      on: "web",
-      gap: "Logjam GPS doesn't take routes in this form yet.",
+      onlyWhenAdding: {
+        on: "gps",
+        gap: "Logjam GPS edits an existing trip's routes on its page, where the picker can run.",
+      },
     },
   ],
   copy: {
@@ -54,6 +63,17 @@ export const TRIP_FORM = {
     leftoverNote: `These ${ATTRIBUTE_NOUN.many} are left over from when this trip was saved as a different type.`,
     photos: "Photos & videos",
     routes: ROUTE_NOUN.many,
+    // Under a photo or a way picked on a trip not yet saved, until Save queues it.
+    stagedHint: "Added to the trip when you save.",
+    // The way button once one is picked on a trip not yet saved.
+    chooseAnotherWay: "Choose another way",
+    // What every source says before it is picked: a trip gets a copy, never the
+    // original, so the original is not touched.
+    wayCopiedHint:
+      "The trip gets a copy of the file. The original stays where it is.",
+    pickFailed: "Couldn't add that photo or video. Try again.",
+    loggedNotAll:
+      "Trip logged. Some photos, videos or the route couldn't be added: add them from the trip.",
   },
 } as const satisfies ScreenContract;
 

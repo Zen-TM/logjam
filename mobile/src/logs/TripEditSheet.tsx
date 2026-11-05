@@ -13,6 +13,7 @@ import {
   CANYONING_TRIP_TYPE,
   contractSectionKeys,
   tripTitleHint,
+  ADD_WAY,
   TRIP_FORM,
   type SectionKeysOn,
   enforceCanyoningTag,
@@ -37,6 +38,16 @@ import {
   muted,
 } from "../theme";
 import type { TripTrackSource } from "../tracks/tripTrackSource";
+import { AddWaySheet } from "../places/AddWaySheet";
+import { queueStagedMedia } from "../places/stagedPlaceMedia";
+import {
+  PhotoSourceSheet,
+  StagedPhotosSection,
+  StagedWaySection,
+  useStagedMedia,
+} from "../places/useStagedMedia";
+import { attachMediaLocal } from "../sync/mediaUpload";
+import { trackSourceWay } from "./tripWays";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
   createTripLocal,
@@ -167,6 +178,10 @@ export function TripEditSheet({
   // open (shared/DESIGN.md §11).
   const [placesError, setPlacesError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // New trip only: the photos and the way picked so far, and the sheets that
+  // pick them. A track logged from its options arrives as the way.
+  const media = useStagedMedia(() => setSaveError(TRIP_FORM.copy.pickFailed));
+  const { staged, setStaged } = media;
   // Custom-field VALUES are held as strings while editing (like the web form)
   // and coerced to their declared type on save.
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
@@ -276,6 +291,9 @@ export function TripEditSheet({
     );
     setPlacesError(null);
     setSaveError(null);
+    media.reset();
+    if (!trip && fromTrack)
+      media.setStaged({ files: [], way: trackSourceWay(fromTrack) });
   }
 
   // Linking a CANYON means "I did that canyon", so the API force-tags
@@ -311,6 +329,8 @@ export function TripEditSheet({
     fieldValues: Object.entries(fieldValues)
       .filter(([, value]) => value !== "")
       .sort(([a], [b]) => a.localeCompare(b)),
+    photos: staged.files.map((file) => file.uri),
+    way: staged.way?.label ?? null,
   });
   const [pristine, setPristine] = useState<{ for: string; of: string } | null>(
     null,
@@ -479,19 +499,15 @@ export function TripEditSheet({
           customFields: effectiveCustomFields,
           places: selected,
         });
-        // The trip is saved either way, so a track that will not attach is said
-        // in the outcome rather than failing the save and losing the form.
-        const attached =
-          !fromTrack ||
-          (await fromTrack.attach(tripId).catch((err: unknown) => {
-            console.error(err);
-            return false;
-          }));
-        onSaved(
-          attached
-            ? TRIP_FORM.copy.logged
-            : `${TRIP_FORM.copy.logged} The track couldn't be attached.`,
+        // After the trip's own create, so each waits behind it in the outbox.
+        // The trip is saved either way, so a photo or a way that will not queue
+        // is said in the outcome rather than failing the save and losing the
+        // form.
+        const { failed } = await queueStagedMedia(tripId, staged, (file) =>
+          attachMediaLocal("tripLog", tripId, file),
         );
+        setStaged({ files: [], way: null });
+        onSaved(failed ? TRIP_FORM.copy.loggedNotAll : TRIP_FORM.copy.logged);
       }
       onClose();
     } catch (err) {
@@ -517,7 +533,8 @@ export function TripEditSheet({
     selected,
     trip,
     types,
-    fromTrack,
+    staged,
+    setStaged,
   ]);
 
   const fieldForm = useCustomFieldForm({
@@ -593,17 +610,6 @@ export function TripEditSheet({
               const place = places.find((p) => p.id === id);
               if (place) togglePlace(place);
             }}
-          />
-        ) : null}
-
-        {/* Read-only: the recording goes with the trip when it is saved. A row
-              with nothing to press is not pressable (shared/DESIGN.md §4). */}
-        {!editing && fromTrack ? (
-          <Row
-            icon="track"
-            title={fromTrack.name}
-            subtitle="Track · attached when you log the trip"
-            titleNumberOfLines={2}
           />
         ) : null}
       </>
@@ -708,129 +714,179 @@ export function TripEditSheet({
         ) : null}
       </>
     ),
+    // The two below are for a NEW trip only (`onlyWhenAdding` in the contract):
+    // an existing one has both on its page, with the real strip.
+    photos: (
+      <StagedPhotosSection
+        media={media}
+        title={TRIP_FORM.copy.photos}
+        hint={TRIP_FORM.copy.stagedHint}
+      />
+    ),
+    routes: (
+      <StagedWaySection
+        media={media}
+        title={TRIP_FORM.copy.routes}
+        hint={TRIP_FORM.copy.stagedHint}
+        addLabel={ADD_WAY.copy.title}
+        chooseAnotherLabel={TRIP_FORM.copy.chooseAnotherWay}
+      />
+    ),
   };
 
   return (
-    <BottomSheet
-      visible={visible}
-      discard={dirty ? abandonConfirm("trip", !editing) : null}
-      // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
-      // not "throw away everything I just typed".
-      onClose={
-        mode === "form"
-          ? onClose
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      title={title}
-      // A sub-mode gets an arrow back to the mode it came from.
-      onBack={
-        mode === "form"
-          ? undefined
-          : () => setMode(mode === "fieldForm" ? "fields" : "form")
-      }
-      // Pinned, because the place list is longer than the sheet: a Done button
-      // that scrolls out of reach leaves the handle as the only exit.
-      footer={
-        mode === "form" ? (
-          <FormStack>
-            {/* Server refusal / failure while the sheet is still open — the
-                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
-            {saveError ? <ErrorBanner message={saveError} /> : null}
-            <Button
-              label={
-                editing ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit
+    <>
+      <BottomSheet
+        visible={visible && !media.away}
+        discard={dirty ? abandonConfirm("trip", !editing) : null}
+        onClosed={media.formClosed}
+        // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
+        // not "throw away everything I just typed".
+        onClose={
+          mode === "form"
+            ? () => {
+                media.cancel();
+                onClose();
               }
-              icon="done"
-              loading={saving}
-              onPress={() => void save()}
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        title={title}
+        // A sub-mode gets an arrow back to the mode it came from.
+        onBack={
+          mode === "form"
+            ? undefined
+            : () => setMode(mode === "fieldForm" ? "fields" : "form")
+        }
+        // Pinned, because the place list is longer than the sheet: a Done button
+        // that scrolls out of reach leaves the handle as the only exit.
+        footer={
+          mode === "form" ? (
+            <FormStack>
+              {/* Server refusal / failure while the sheet is still open — the
+                banner sits directly above Save, never a toast (shared/DESIGN.md §11). */}
+              {saveError ? <ErrorBanner message={saveError} /> : null}
+              <Button
+                label={
+                  editing ? TRIP_FORM.copy.saveSubmit : TRIP_FORM.copy.addSubmit
+                }
+                icon="done"
+                loading={saving}
+                onPress={() => void save()}
+              />
+            </FormStack>
+          ) : mode === "fieldForm" ? (
+            fieldForm.footer
+          ) : mode === "fields" ? (
+            // PINNED, for the same reason the Done button is: the one action this
+            // mode exists for must not sit below however many rows are already
+            // in the list.
+            <Button
+              label={ATTRIBUTE_NOUN.add}
+              icon="add"
+              onPress={() => {
+                setEditingField(null);
+                setMode("fieldForm");
+              }}
             />
+          ) : (
+            <Button label="Done" icon="done" onPress={() => setMode("form")} />
+          )
+        }
+      >
+        {mode === "date" ? (
+          <FormStack>
+            <DatePicker
+              value={
+                dateTarget.kind === "trip"
+                  ? dateKey
+                  : fieldValues[dateTarget.key] || null
+              }
+              onChange={(key) => {
+                if (dateTarget.kind === "trip") {
+                  setDateKey(key);
+                  return;
+                }
+                setFieldValue(dateTarget.key, key);
+              }}
+            />
+            {/* A trip always has a date; an attribute date may be unknown, and
+              a picker with no way back to blank turns that into a wrong
+              answer — the same reason a rail starts with "—". */}
+            {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
+              <Button
+                label="Clear date"
+                icon="close"
+                variant="ghost"
+                onPress={() => {
+                  setFieldValue(dateTarget.key, "");
+                  setMode("form");
+                }}
+              />
+            ) : null}
           </FormStack>
-        ) : mode === "fieldForm" ? (
-          fieldForm.footer
-        ) : mode === "fields" ? (
-          // PINNED, for the same reason the Done button is: the one action this
-          // mode exists for must not sit below however many rows are already
-          // in the list.
-          <Button
-            label={ATTRIBUTE_NOUN.add}
-            icon="add"
-            onPress={() => {
-              setEditingField(null);
+        ) : null}
+
+        {mode === "fields" ? (
+          <CustomFieldList
+            entity="tripLog"
+            defs={customFieldDefs}
+            onEdit={(def) => {
+              setEditingField(def);
               setMode("fieldForm");
             }}
           />
-        ) : (
-          <Button label="Done" icon="done" onPress={() => setMode("form")} />
-        )
-      }
-    >
-      {mode === "date" ? (
-        <FormStack>
-          <DatePicker
-            value={
-              dateTarget.kind === "trip"
-                ? dateKey
-                : fieldValues[dateTarget.key] || null
-            }
-            onChange={(key) => {
-              if (dateTarget.kind === "trip") {
-                setDateKey(key);
-                return;
-              }
-              setFieldValue(dateTarget.key, key);
-            }}
-          />
-          {/* A trip always has a date; an attribute date may be unknown, and
-              a picker with no way back to blank turns that into a wrong
-              answer — the same reason a rail starts with "—". */}
-          {dateTarget.kind === "field" && fieldValues[dateTarget.key] ? (
-            <Button
-              label="Clear date"
-              icon="close"
-              variant="ghost"
-              onPress={() => {
-                setFieldValue(dateTarget.key, "");
-                setMode("form");
-              }}
+        ) : null}
+
+        {mode === "fieldForm" ? fieldForm.body : null}
+
+        {mode === "places" ? (
+          <>
+            <PlacePicker
+              places={places}
+              selected={selected}
+              search={placeSearch}
+              onSearch={setPlaceSearch}
+              onToggle={togglePlace}
             />
-          ) : null}
-        </FormStack>
-      ) : null}
+            <FieldError message={placesError} />
+          </>
+        ) : null}
 
-      {mode === "fields" ? (
-        <CustomFieldList
-          entity="tripLog"
-          defs={customFieldDefs}
-          onEdit={(def) => {
-            setEditingField(def);
-            setMode("fieldForm");
-          }}
-        />
-      ) : null}
+        {mode === "form" ? (
+          <FormStack>
+            {contractSectionKeys(
+              TRIP_FORM,
+              "gps",
+              editing ? "edit" : "add",
+            ).map((key) => (
+              <Fragment key={key}>{sections[key]}</Fragment>
+            ))}
+          </FormStack>
+        ) : null}
+      </BottomSheet>
 
-      {mode === "fieldForm" ? fieldForm.body : null}
-
-      {mode === "places" ? (
+      {/* The pickers of a new trip's photos and way, each shown alone while the
+        form above is out of the way (DESIGN.md §4: never a second sheet). */}
+      {editing ? null : (
         <>
-          <PlacePicker
-            places={places}
-            selected={selected}
-            search={placeSearch}
-            onSearch={setPlaceSearch}
-            onToggle={togglePlace}
+          <PhotoSourceSheet media={media} />
+          <AddWaySheet
+            placeId={null}
+            placeName=""
+            media={[]}
+            forTrip
+            visible={media.pickSheet === "way"}
+            onClose={() => media.setPickSheet(null)}
+            onClosed={() => media.setAway(false)}
+            onStage={(way) =>
+              media.setStaged((current) => ({ ...current, way }))
+            }
+            onInfo={() => {}}
+            onError={setSaveError}
           />
-          <FieldError message={placesError} />
         </>
-      ) : null}
-
-      {mode === "form" ? (
-        <FormStack>
-          {contractSectionKeys(TRIP_FORM, "gps").map((key) => (
-            <Fragment key={key}>{sections[key]}</Fragment>
-          ))}
-        </FormStack>
-      ) : null}
-    </BottomSheet>
+      )}
+    </>
   );
 }
 

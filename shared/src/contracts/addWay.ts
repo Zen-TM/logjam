@@ -80,14 +80,18 @@ export function addWayImportSubtitle(platform: ContractPlatform): string {
 
 /** The file source differs in what it does, so its words differ: Logjam GPS
  *  makes the picked file an import and links it; Logjam Web uploads it onto the
- *  place and nothing else (it has no importer for GPX or KML). */
-export function addWayFileRow(platform: ContractPlatform): {
+ *  place and nothing else (it has no importer for GPX or KML). A trip takes a
+ *  copy on either client and imports nothing, so Logjam GPS does not say so. */
+export function addWayFileRow(
+  platform: ContractPlatform,
+  target: "place" | "trip" = "place",
+): {
   title: string;
   subtitle: string;
 } {
   return platform === "gps"
     ? {
-        title: "Import a new file",
+        title: target === "trip" ? "Choose a file" : "Import a new file",
         subtitle: "A .gpx or .kml from this phone",
       }
     : {
@@ -200,10 +204,22 @@ export function wayFailureMessage(err: unknown): string {
 export function attachableRoutes<
   R extends { name: string; placeId: string | null },
 >(routes: readonly R[], placeId: string, query: string): R[] {
+  return routesMatching(
+    routes.filter(
+      (route) => route.placeId === null || route.placeId === placeId,
+    ),
+    query,
+  );
+}
+
+/** The routes whose name contains what they typed. A trip takes a copy of a
+ *  route's line, so unlike a place's slot every route of theirs is on offer. */
+export function routesMatching<R extends { name: string }>(
+  routes: readonly R[],
+  query: string,
+): R[] {
   const needle = query.trim().toLowerCase();
   return routes.filter(
-    (route) =>
-      (route.placeId === null || route.placeId === placeId) &&
-      (!needle || route.name.toLowerCase().includes(needle)),
+    (route) => !needle || route.name.toLowerCase().includes(needle),
   );
 }

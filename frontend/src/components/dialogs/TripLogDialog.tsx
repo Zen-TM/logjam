@@ -11,6 +11,7 @@ import {
 import { useIsMobile } from "../../useIsMobile";
 import {
   abandonConfirm,
+  ADD_WAY,
   buildCustomFieldDef,
   contractSectionKeys,
   PLACE_FORM,
@@ -48,7 +49,6 @@ import {
   createTripLog,
   updateTripLog,
   deleteTripLog,
-  getMediaDownloadUrls,
   getTripLog,
   createPlace,
   createCustomField,
@@ -66,6 +66,8 @@ import {
 import MediaUpload from "../media/MediaUpload";
 import { generateThumbnail, resolveMediaType } from "../media/mediaFiles";
 import MediaGallery from "../media/MediaGallery";
+import TripWayPicker, { type TripWay } from "./TripWayPicker";
+import { fetchMediaFile } from "./tripWayModel";
 import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
 import {
   Button,
@@ -219,7 +221,7 @@ function TripLogDialog({
   // Set on a Save attempt so every invalid custom field shows its inline error
   // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
-  const [mode, setMode] = useState<"form" | "places">("form");
+  const [mode, setMode] = useState<"form" | "places" | "way">("form");
   const [placeSearch, setPlaceSearch] = useState("");
   // A choice a picker refuses (the place or type cap) is that picker's own
   // error, under it, not a toast.
@@ -729,6 +731,42 @@ function TripLogDialog({
     setMedia((prev) => prev.filter((m) => m.id !== id));
   }
 
+  // A track file onto the draft trip (made on the first one), so it can be
+  // taken out again and a Cancel deletes it with the draft. `sourceMediaId` is
+  // the recording it copies, where it copies one.
+  async function addTrackFile(file: File, sourceMediaId?: string) {
+    const resolved = resolveMediaType(file);
+    if (!resolved) throw new Error("Unsupported track file.");
+    const tripId = await ensureLinkedTripId();
+    const item = await uploadMedia({
+      linkedType: "tripLog",
+      linkedId: tripId,
+      file,
+      mediaType: resolved.mediaType,
+      thumbnail: await generateThumbnail(file, resolved.category),
+      sourceMediaId,
+    });
+    setMedia((prev) => [...prev, item]);
+  }
+
+  // Add a way: the picker's choice, fetched or written out as a file, then
+  // copied onto the trip like any track.
+  const [wayBusy, setWayBusy] = useState(false);
+  const [wayError, setWayError] = useState<string | null>(null);
+  async function addWay(way: TripWay) {
+    setWayBusy(true);
+    setWayError(null);
+    try {
+      await addTrackFile(await way.load(), way.sourceMediaId);
+      setMode("form");
+    } catch (err) {
+      console.error(err);
+      setWayError(messageFromError(err, ADD_WAY.copy.failed));
+    } finally {
+      setWayBusy(false);
+    }
+  }
+
   // "Log a trip" on a track: the track goes into the form as a copy of its file
   // on the draft trip, the same way a file the user drops here does, so it can
   // be taken out again and a Cancel deletes it with the draft. Once per open.
@@ -744,12 +782,10 @@ function TripLogDialog({
     setAttachingTrack(true);
     void (async () => {
       try {
-        const { items } = await getMediaDownloadUrls([fromTrack.mediaId]);
-        const url = items[0]?.displayUrl;
-        if (!url) throw new Error("The file could not be fetched.");
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("The file could not be fetched.");
-        const file = new File([await response.blob()], fromTrack.filename);
+        const file = await fetchMediaFile(
+          fromTrack.mediaId,
+          fromTrack.filename,
+        );
         setNearPlaceIds(
           tripPrefillFromTrack(
             { startedAt: null, ends: gpxEnds(await file.text()) },
@@ -757,20 +793,9 @@ function TripLogDialog({
             places,
           ).nearPlaceIds,
         );
-        const resolved = resolveMediaType(file);
-        if (!resolved) throw new Error("Unsupported track file.");
-        const tripId = await ensureLinkedTripId();
-        const item = await uploadMedia({
-          linkedType: "tripLog",
-          linkedId: tripId,
-          file,
-          mediaType: resolved.mediaType,
-          thumbnail: await generateThumbnail(file, resolved.category),
-          // The copy names its recording, so the recording stops offering
-          // "Log a trip".
-          sourceMediaId: fromTrack.mediaId,
-        });
-        setMedia((prev) => [...prev, item]);
+        // The copy names its recording, so the recording stops offering
+        // "Log a trip".
+        await addTrackFile(file, fromTrack.mediaId);
       } catch (err) {
         console.error(err);
         setError(
@@ -1400,14 +1425,18 @@ function TripLogDialog({
               emptyText="No tracks yet."
             />
           )}
-          <MediaUpload
-            category="track"
-            linkedType="tripLog"
-            linkedId={tripLog ? tripLog.id : ""}
-            resolveLinkedId={tripLog ? undefined : ensureLinkedTripId}
-            onUploaded={handleMediaUploaded}
+          <Button
+            icon="add"
+            variant="outline"
+            onClick={() => {
+              setWayError(null);
+              setMode("way");
+            }}
             disabled={saving}
-          />
+            disabledReason="Saving…"
+          >
+            {ADD_WAY.copy.title}
+          </Button>
         </section>
       </>
     ),
@@ -1420,22 +1449,39 @@ function TripLogDialog({
         title={
           mode === "places"
             ? "Places on this trip"
-            : tripLog
-              ? TRIP_FORM.copy.editTitle
-              : TRIP_FORM.copy.addTitle
+            : mode === "way"
+              ? ADD_WAY.copy.title
+              : tripLog
+                ? TRIP_FORM.copy.editTitle
+                : TRIP_FORM.copy.addTitle
         }
         size="large"
         dismissible={!saving}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
-        onClose={mode === "places" ? backToForm : closeAndForget}
+        onClose={
+          mode === "places"
+            ? backToForm
+            : mode === "way"
+              ? () => setMode("form")
+              : closeAndForget
+        }
         discard={
-          isDirty && mode !== "places" ? abandonConfirm("trip", !tripLog) : null
+          isDirty && mode === "form" ? abandonConfirm("trip", !tripLog) : null
         }
         footer={(requestClose) =>
           mode === "places" ? (
             <Button variant="filled" icon="done" onClick={backToForm}>
               Done
+            </Button>
+          ) : mode === "way" ? (
+            <Button
+              icon="back"
+              onClick={() => setMode("form")}
+              disabled={wayBusy}
+              disabledReason="Adding…"
+            >
+              Back to the trip
             </Button>
           ) : (
             <>
@@ -1460,6 +1506,10 @@ function TripLogDialog({
           )
         }
       >
+        {mode === "way" && (
+          <TripWayPicker busy={wayBusy} error={wayError} onPick={addWay} />
+        )}
+
         {mode === "places" && (
           <div className={classes.picker}>
             <SearchField

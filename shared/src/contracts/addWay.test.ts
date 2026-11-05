@@ -16,6 +16,7 @@ import {
   WayRemovalError,
   addWayFileRow,
   attachableRoutes,
+  routesMatching,
   wayFailureMessage,
   addWayImportSubtitle,
   replacedUploadId,
@@ -133,6 +134,20 @@ describe("which routes the panel offers", () => {
     expect(attachableRoutes(list, "p", " fr").map((r) => r.name)).toEqual([
       "Free",
     ]);
+  });
+
+  // Mutation: filter a trip's routes through attachableRoutes and a route that
+  // sits on a place cannot be copied onto a trip.
+  it("offers a trip every route of the user's, narrowed by the query", () => {
+    const list = [
+      { name: "Free", placeId: null },
+      { name: "Away", placeId: "q" },
+    ];
+    expect(routesMatching(list, "").map((r) => r.name)).toEqual([
+      "Free",
+      "Away",
+    ]);
+    expect(routesMatching(list, " AW").map((r) => r.name)).toEqual(["Away"]);
   });
 
   it("is what both clients ask, not a filter of their own", () => {

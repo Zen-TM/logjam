@@ -14,7 +14,6 @@ import {
   defsForType,
   isValidLatitude,
   isValidLongitude,
-  mediaCategory,
   placeAttributesTitle,
   PLACE_FORM,
   type SectionKeysOn,
@@ -26,7 +25,7 @@ import {
   type ScopedCustomFieldDef,
 } from "@logjam/shared";
 
-import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
+import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   coordinateBlur,
   coordinateProblem,
@@ -37,14 +36,18 @@ import {
 } from "./coordinateText";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { createPlaceLocal, updatePlaceLocal } from "../sync/outbox";
-import { attachMediaLocal, discardPickedFile } from "../sync/mediaUpload";
-import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "../media/pickMedia";
+import { attachMediaLocal } from "../sync/mediaUpload";
 import { AddWaySheet } from "./AddWaySheet";
+import {
+  PhotoSourceSheet,
+  StagedPhotosSection,
+  StagedWaySection,
+  useStagedMedia,
+} from "./useStagedMedia";
 import {
   hasStagedMedia,
   NO_STAGED_MEDIA,
   queueStagedMedia,
-  type StagedMedia,
 } from "./stagedPlaceMedia";
 import {
   CustomFieldList,
@@ -67,7 +70,6 @@ import {
   ErrorBanner,
   Field,
   FormStack,
-  IconButton,
   Row,
   SectionHeader,
   ChipRail,
@@ -168,7 +170,6 @@ export function PlaceEditSheet({
   onSaved: (message: string) => void;
 }) {
   const theme = useTheme();
-  const { assetHue } = useHues();
   const styles = useStyles();
 
   const editing = place != null;
@@ -195,16 +196,10 @@ export function PlaceEditSheet({
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<Mode>("form");
-  // New place only: the photos and way picked so far, the sheet that picks them,
-  // and whether this form is out of its way. `away` outlasts the picking sheet
-  // (it clears on that sheet's `onClosed`, after any system picker it parked).
-  const [staged, setStaged] = useState<StagedMedia>(NO_STAGED_MEDIA);
-  const [pickSheet, setPickSheet] = useState<"photos" | "way" | null>(null);
-  const [away, setAway] = useState(false);
-  // The sheet to show once the form has finished sliding out: the two never
-  // coexist (DESIGN.md §4).
-  const [nextSheet, setNextSheet] = useState<"photos" | "way" | null>(null);
-  const [pickJob, setPickJob] = useState<null | (() => Promise<void>)>(null);
+  // New place only: the photos and way picked so far and the sheets that pick
+  // them.
+  const media = useStagedMedia(() => setFormError(PLACE_FORM.copy.pickFailed));
+  const { staged, setStaged } = media;
   const { defs: customFieldDefs, setDefs: setCustomFieldDefs } =
     useFieldDefs("place");
   const placeTypes = useMirrorPlaceTypes();
@@ -278,58 +273,7 @@ export function PlaceEditSheet({
     setMode("form");
     setEditingField(null);
     setDateFieldKey(null);
-    // Picks from an abandoned form are cache files nothing else will reach.
-    for (const file of staged.files) void discardPickedFile(file.uri);
-    setStaged(NO_STAGED_MEDIA);
-    setPickSheet(null);
-    setNextSheet(null);
-    setAway(false);
-    setPickJob(null);
-  }
-
-  function stepOutTo(sheet: "photos" | "way") {
-    setAway(true);
-    setNextSheet(sheet);
-  }
-
-  function formClosed() {
-    if (nextSheet) setPickSheet(nextSheet);
-    setNextSheet(null);
-  }
-
-  /** Cancel: nothing was queued, so the held picks' files go too. */
-  function cancel() {
-    for (const file of staged.files) void discardPickedFile(file.uri);
-    setStaged(NO_STAGED_MEDIA);
-    onClose();
-  }
-
-  /** Close the photo sheet, then run the picker with nothing on screen. */
-  function pickFrom(source: "camera" | "library", kind: "photo" | "video") {
-    setPickJob(() => async () => {
-      const files = await pickMedia(source, kind);
-      if (files.length > 0)
-        setStaged((current) => ({
-          ...current,
-          files: [...current.files, ...files],
-        }));
-    });
-    setPickSheet(null);
-  }
-
-  function photoSheetClosed() {
-    const job = pickJob;
-    setPickJob(null);
-    if (!job) {
-      setAway(false);
-      return;
-    }
-    void job()
-      .catch((err: unknown) => {
-        console.error(err);
-        setFormError(PLACE_FORM.copy.pickFailed);
-      })
-      .finally(() => setAway(false));
+    media.reset();
   }
 
   // A point back from the picker touches the two coordinate fields and nothing
@@ -555,6 +499,7 @@ export function PlaceEditSheet({
     longitudeShown,
     placeTypeId,
     staged,
+    setStaged,
     typeFieldDefs,
   ]);
 
@@ -605,71 +550,20 @@ export function PlaceEditSheet({
     // The two below are for a NEW place only (`onlyWhenAdding` in the
     // contract): an existing one has both on its page, with the real strip.
     photos: (
-      <>
-        <SectionHeader title={PLACE_FORM.copy.photos} />
-        {staged.files.map((file, index) => {
-          const video =
-            mediaCategory(file.mimeType ?? "image/jpeg") === "video";
-          const title = file.fileName ?? (video ? "Video" : "Photo");
-          return (
-            <Row
-              key={`${file.uri}-${index}`}
-              icon={video ? "video" : "photo"}
-              title={title}
-              subtitle={PLACE_FORM.copy.stagedHint}
-              right={
-                <IconButton
-                  icon="close"
-                  accessibilityLabel={`Remove ${title}`}
-                  onPress={() => {
-                    void discardPickedFile(file.uri);
-                    setStaged((current) => ({
-                      ...current,
-                      files: current.files.filter((_, at) => at !== index),
-                    }));
-                  }}
-                />
-              }
-            />
-          );
-        })}
-        <Button
-          label={ADD_PHOTO_LABEL}
-          icon="add"
-          variant="outlineAccent"
-          onPress={() => stepOutTo("photos")}
-        />
-      </>
+      <StagedPhotosSection
+        media={media}
+        title={PLACE_FORM.copy.photos}
+        hint={PLACE_FORM.copy.stagedHint}
+      />
     ),
     route: (
-      <>
-        <SectionHeader title={PLACE_FORM.copy.route} />
-        {staged.way ? (
-          <Row
-            icon="route"
-            hue={assetHue.route}
-            title={staged.way.label}
-            subtitle={PLACE_FORM.copy.stagedHint}
-            right={
-              <IconButton
-                icon="close"
-                accessibilityLabel={`Remove ${staged.way.label}`}
-                onPress={() =>
-                  setStaged((current) => ({ ...current, way: null }))
-                }
-              />
-            }
-          />
-        ) : null}
-        <Button
-          label={
-            staged.way ? PLACE_FORM.copy.chooseAnotherWay : ADD_WAY.copy.title
-          }
-          icon={staged.way ? "replace" : "add"}
-          variant="outlineAccent"
-          onPress={() => stepOutTo("way")}
-        />
-      </>
+      <StagedWaySection
+        media={media}
+        title={PLACE_FORM.copy.route}
+        hint={PLACE_FORM.copy.stagedHint}
+        addLabel={ADD_WAY.copy.title}
+        chooseAnotherLabel={PLACE_FORM.copy.chooseAnotherWay}
+      />
     ),
     type: (
       <>
@@ -862,14 +756,17 @@ export function PlaceEditSheet({
   return (
     <>
       <BottomSheet
-        visible={visible && !away}
+        visible={visible && !media.away}
         discard={dirty ? abandonConfirm("place", !editing) : null}
         // Inside a sub-mode, a drag or a backdrop tap means "back to the form" —
         // not "throw away everything I just typed".
-        onClosed={formClosed}
+        onClosed={media.formClosed}
         onClose={
           mode === "form"
-            ? cancel
+            ? () => {
+                media.cancel();
+                onClose();
+              }
             : () => setMode(mode === "fieldForm" ? "fields" : "form")
         }
         title={title}
@@ -976,28 +873,14 @@ export function PlaceEditSheet({
         form above is out of the way (DESIGN.md §4: never a second sheet). */}
       {editing ? null : (
         <>
-          <BottomSheet
-            visible={pickSheet === "photos"}
-            onClose={() => setPickSheet(null)}
-            onClosed={photoSheetClosed}
-            title={ADD_PHOTO_LABEL}
-          >
-            {PHOTO_SOURCES.map((entry) => (
-              <Row
-                key={entry.title}
-                icon={entry.icon}
-                title={entry.title}
-                onPress={() => pickFrom(entry.source, entry.kind)}
-              />
-            ))}
-          </BottomSheet>
+          <PhotoSourceSheet media={media} />
           <AddWaySheet
             placeId={null}
             placeName={draft.name}
             media={[]}
-            visible={pickSheet === "way"}
-            onClose={() => setPickSheet(null)}
-            onClosed={() => setAway(false)}
+            visible={media.pickSheet === "way"}
+            onClose={() => media.setPickSheet(null)}
+            onClosed={() => media.setAway(false)}
             onStage={(way) => setStaged((current) => ({ ...current, way }))}
             onInfo={() => {}}
             onError={setFormError}
