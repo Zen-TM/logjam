@@ -4,10 +4,10 @@
 // started it — the Saved tab's own toast would only fire if the user happened
 // to still be standing there when the job landed (DESIGN.md, the corollary).
 //
-// Four sources, one component: a GeoPDF import, a region download run,
-// Settings → Map's place names download and a plan's Download for the trip. A second mounted toast would let two
-// of them overlap in the same dock, and the user does not care which
-// subsystem is talking.
+// Three sources, one component: a GeoPDF import, a region download run and a
+// plan's Download for the trip. A second mounted toast would let two of them
+// overlap in the same dock, and the user does not care which subsystem is
+// talking.
 //
 // It docks clear of the tab bar so an outcome doesn't land on top of the
 // navigation the user is about to use.
@@ -16,7 +16,6 @@ import { StyleSheet, View } from "react-native";
 
 import { Toast, type ToastMessage } from "./ui";
 import { onGeoPdfImportToast } from "./geopdf/importRunner";
-import { onPlaceRegistryToast } from "./offline/placeRegistry";
 import { onRegionDownloadToast } from "./offline/regionDownloadQueue";
 import { onPlanDownloadToast } from "./plans/planDownloads";
 
@@ -33,7 +32,6 @@ export function BackgroundToast() {
     const unsubscribes = [
       onGeoPdfImportToast(show),
       onRegionDownloadToast(show),
-      onPlaceRegistryToast(show),
       onPlanDownloadToast(show),
     ];
     return () => {
