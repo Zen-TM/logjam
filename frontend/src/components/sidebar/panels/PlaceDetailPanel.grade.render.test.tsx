@@ -5,7 +5,7 @@ import type { TPlace } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
 vi.mock("../../feedback/ToastProvider", () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
@@ -78,7 +78,8 @@ function renderPlace(place: TPlace, defs: ScopedCustomFieldDef[] = []) {
       onBack={noop}
       onOpenTrip={noop}
       onMakeMap={noop}
-      onSharePlace={noop}
+      onExportPlace={noop}
+      onWaysChanged={noop}
       verbRequest={null}
       onVerbRequestConsumed={noop}
       customFieldDefs={[]}
@@ -89,6 +90,12 @@ function renderPlace(place: TPlace, defs: ScopedCustomFieldDef[] = []) {
       onQuotaChanged={noop}
       onRefetchTripLogs={noop}
       onAfterDelete={noop}
+      routes={[]}
+      currentUserId="alice"
+      onFocusBounds={noop}
+      onOpenRoute={noop}
+      onRoutesChanged={noop}
+      onDrawRoute={noop}
     />,
   );
 }

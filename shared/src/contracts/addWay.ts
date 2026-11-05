@@ -44,6 +44,9 @@ export const ADD_WAY = {
     // A row already filling the slot is shown, not hidden, so it reads as done.
     alreadyHere: "Already this place's route",
 
+    // The place was deleted (or unshared) while its route was being drawn.
+    placeGone: "That place is gone, so the route was saved on its own.",
+
     // What each source says once it has landed.
     routeDone: "Route linked to this place.",
     linkedDone: "Linked as this place's route.",
