@@ -8,6 +8,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as maplibregl from "maplibre-gl";
 import { ToastProvider } from "../feedback/ToastProvider";
+import { takeDismissingPress } from "../../ui";
 import MapChrome from "./MapChrome";
 
 afterEach(cleanup);
@@ -63,18 +64,21 @@ describe("the Tools tray's light dismiss", () => {
   });
 
   // Mutation: drop the fourth argument (`map?.getContainer()`) of
-  // useOutsidePress in MapChrome, and a press on the map also reaches the map;
-  // swallow every outside press, and the second case goes red.
-  it("closes on a press on the map and the map hears nothing more", async () => {
+  // useOutsidePress in MapChrome, and the click that closes the tray also asks
+  // the map about a new point; stop the click, and a route or place under it
+  // no longer acts.
+  it("closes on a press on the map, marks its click for the map, and does not stop it", async () => {
     document.body.appendChild(mapContainer);
     const heard = vi.fn();
     mapContainer.addEventListener("click", heard);
     chrome(false, stubMap);
     fireEvent.click(screen.getByRole("button", { name: "Tools" }));
     fireEvent.pointerDown(mapContainer);
+    fireEvent.pointerUp(mapContainer);
     fireEvent.click(mapContainer);
     await waitFor(() => expect(tray()).toBeNull());
-    expect(heard).not.toHaveBeenCalled();
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(true);
     mapContainer.removeEventListener("click", heard);
     mapContainer.remove();
   });

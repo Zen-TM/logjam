@@ -63,19 +63,19 @@ function useTopLayer(open: boolean, ref: RefObject<HTMLElement | null>) {
  *  follows the release at once; this is only slack. */
 const CLICK_AFTER_RELEASE_MS = 400;
 
-/** Stops the click this press ends in, in the capture phase, before the map or
- *  a control under it hears it. The catcher is for THIS press only: it is
- *  cleared once the press is released and its click has had time to come
- *  (a drag, a touch pan, a right-click that never clicks), or by the next
- *  press. So a later click with no press before it (Enter or Space on a
- *  focused button, a screen reader's activation) is never eaten. */
-function swallowNextClick() {
+/** Whether the press being clicked just closed a panel over the map: see
+ *  `takeDismissingPress`. Cleared by `forget` once the press is released and
+ *  its click has had time to come (a drag, a touch pan, a right-click that
+ *  never clicks), or by the next press. So a later click with no press before
+ *  it (Enter or Space on a focused button, a screen reader's activation) is
+ *  never taken for it. */
+let pressDismissed = false;
+let forget: (() => void) | null = null;
+
+function markDismissingPress() {
+  forget?.();
+  pressDismissed = true;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const stop = (event: Event) => {
-    event.stopPropagation();
-    event.preventDefault();
-    clear();
-  };
   const released = () => {
     window.removeEventListener("pointerup", released, true);
     window.removeEventListener("pointercancel", released, true);
@@ -83,27 +83,39 @@ function swallowNextClick() {
   };
   const clear = () => {
     clearTimeout(timer);
-    window.removeEventListener("click", stop, true);
     window.removeEventListener("pointerdown", clear, true);
     window.removeEventListener("pointerup", released, true);
     window.removeEventListener("pointercancel", released, true);
+    pressDismissed = false;
+    forget = null;
   };
-  window.addEventListener("click", stop, true);
+  forget = clear;
   window.addEventListener("pointerdown", clear, true);
   window.addEventListener("pointerup", released, true);
   window.addEventListener("pointercancel", released, true);
 }
 
+/** True once, for the map click that ends a press which just closed a panel
+ *  (a map point panel, the Tools tray): that click must not ask about a new
+ *  point. It is the map's to read and nothing else's: a click on a route, a
+ *  place or a gauge under the same press still acts on it. */
+export function takeDismissingPress(): boolean {
+  const was = pressDismissed;
+  if (was) forget?.();
+  return was;
+}
+
 /** Close on a pointer press outside both the floating element and its anchor.
  *  The anchor is excluded so pressing the trigger toggles rather than closing
- *  and reopening in one click. With `swallowWithin`, a press that lands inside
- *  that element closes the panel and the click it ends in goes nowhere else;
- *  a press anywhere else closes it and still acts. */
+ *  and reopening in one click. With `suppressAskWithin`, a press that lands
+ *  inside that element (the map) closes the panel and is marked, so the map
+ *  does not read the click it ends in as a new question
+ *  (`takeDismissingPress`); the click still reaches whatever is under it. */
 export function useOutsidePress(
   open: boolean,
   refs: RefObject<HTMLElement | null>[],
   onOutside: () => void,
-  swallowWithin: Element | null = null,
+  suppressAskWithin: Element | null = null,
 ) {
   const handleOutside = useEffectEvent(onOutside);
   useEffect(() => {
@@ -121,7 +133,7 @@ export function useOutsidePress(
       )
         return;
       handleOutside();
-      if (swallowWithin?.contains(target)) swallowNextClick();
+      if (suppressAskWithin?.contains(target)) markDismissingPress();
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () =>
@@ -287,9 +299,10 @@ export function Menu({
  *
  * A press OUTSIDE it (the map included) dismisses it only when the caller
  * asks with `dismissOnOutsidePress`: every panel in Logjam Web closes when you
- * look away, and one that hangs around reads as stuck. The press is not
- * swallowed unless the caller asks with `swallowWithin`, so focus goes
- * where the user pressed.
+ * look away, and one that hangs around reads as stuck. The press is never
+ * swallowed, so focus goes where the user pressed and a click acts on what it
+ * landed on; `suppressAskWithin` only stops the map reading it as a new
+ * question.
  */
 export function Popover({
   open,
@@ -300,7 +313,7 @@ export function Popover({
   className,
   fit = false,
   dismissOnOutsidePress = false,
-  swallowWithin = null,
+  suppressAskWithin = null,
   onEscape,
   closeButton = true,
   children,
@@ -319,10 +332,10 @@ export function Popover({
   /** Close when something outside it (and outside its anchor) is pressed. */
   dismissOnOutsidePress?: boolean;
   /** With `dismissOnOutsidePress`: a press inside this element (the map)
-   *  closes the panel and does nothing else, so looking away from a point on
-   *  the map never asks about another. A press elsewhere (a control, a link)
-   *  closes it and still acts. */
-  swallowWithin?: Element | null;
+   *  closes the panel and the click it ends in asks about no new point, so
+   *  looking away from one never opens another. It still reaches a route,
+   *  place or gauge under it, and a press elsewhere closes and acts as ever. */
+  suppressAskWithin?: Element | null;
   /** Escape undoes one layer of the panel's own, and this is told first;
    *  without it Escape closes the panel and returns focus to the anchor. */
   onEscape?: () => void;
@@ -341,7 +354,7 @@ export function Popover({
     open && dismissOnOutsidePress,
     [ref, anchorRef],
     onClose,
-    swallowWithin,
+    suppressAskWithin,
   );
   useEscape(open ? ref : null, () => {
     if (onEscape) return onEscape();
@@ -360,7 +373,12 @@ export function Popover({
       role="dialog"
       aria-label={label}
       tabIndex={-1}
-      className={[classes.popover, fit && classes.fit, className]
+      className={[
+        classes.popover,
+        fit && classes.fit,
+        fit && !closeButton && classes.bare,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
     >

@@ -46,17 +46,22 @@ export default function MapPointPopover({
   map,
   point,
   from,
+  startAt,
   onClose,
   onAddPlace,
   onMeasure,
+  onDrawRoute,
 }: {
   map: maplibregl.Map;
   point: MapPointCoord;
   /** The viewer's fix if the browser already has one, else null. */
   from: MapPointCoord | null;
+  /** A right-click opens the panel on Options, with no facts to go back to. */
+  startAt?: "options";
   onClose: () => void;
   onAddPlace: (point: MapPointCoord) => void;
   onMeasure: (point: MapPointCoord) => void;
+  onDrawRoute: (point: MapPointCoord) => void;
 }) {
   const toast = useToast();
   // On narrow web the tab bar owns the bottom of the screen, and a panel below
@@ -80,7 +85,7 @@ export default function MapPointPopover({
 
   // Options and the weather swap the body in place and back out one step
   // (shared/DESIGN.md §10). The press is what fetches the weather.
-  const [view, setView] = useState<MapPointView>("point");
+  const [view, setView] = useState<MapPointView>(startAt ?? "point");
   const online = useOnline();
   const weather = useWeather(point, metres);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -137,9 +142,10 @@ export default function MapPointPopover({
   };
 
   const run: Record<
-    Extract<MapPointVerbId, "addPlace" | "measure" | "weather">,
+    Extract<MapPointVerbId, "drawRoute" | "addPlace" | "measure" | "weather">,
     () => void
   > = {
+    drawRoute: () => onDrawRoute(point),
     addPlace: () => onAddPlace(point),
     measure: () => onMeasure(point),
     weather: () => {
@@ -164,10 +170,11 @@ export default function MapPointPopover({
         placement={narrow ? "top-start" : "bottom-start"}
         fit
         dismissOnOutsidePress
-        swallowWithin={map.getContainer()}
+        suppressAskWithin={map.getContainer()}
         // Escape undoes one layer: the forecast, then Options, then the panel.
         onEscape={() => {
-          const back = mapPointStepBack(view);
+          const back =
+            view === "options" && startAt ? null : mapPointStepBack(view);
           if (back) setView(back);
           else close();
         }}
@@ -190,16 +197,18 @@ export default function MapPointPopover({
           ) : (
             <>
               <div className={classes.viewHeader}>
-                <IconButton
-                  ref={backRef}
-                  icon="back"
-                  label={
-                    view === "weather"
-                      ? "Back to options"
-                      : MAP_POINT.copy.backToPoint
-                  }
-                  onClick={() => setView(mapPointStepBack(view) ?? "point")}
-                />
+                {!(view === "options" && startAt) && (
+                  <IconButton
+                    ref={backRef}
+                    icon="back"
+                    label={
+                      view === "weather"
+                        ? "Back to options"
+                        : MAP_POINT.copy.backToPoint
+                    }
+                    onClick={() => setView(mapPointStepBack(view) ?? "point")}
+                  />
+                )}
                 <span className={classes.viewTitle}>
                   {view === "weather" ? WEATHER.title : MAP_POINT.copy.options}
                 </span>

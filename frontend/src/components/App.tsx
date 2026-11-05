@@ -1363,9 +1363,12 @@ function App() {
     openWay(wayFromRoute(copy, currentUser?.id ?? null, sharedPlaceIds));
   };
 
-  const startDrawingRoute = () => {
+  /** Arm the route tool, from `from` when a point asked for it (as a press on
+   *  the map there would have made it the first point). */
+  const startDrawingRoute = (from?: MapPointCoord) => {
     setEditingRouteId(null);
     routeDraft.reset();
+    if (from) routeDraft.addAnchor([from.longitude, from.latitude]);
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
     setDrawColor(nextColor);
     setDrawingRoute(true);
@@ -1537,7 +1540,7 @@ function App() {
   // Verbs that START on the map; `MAP_TOOLS` names them and orders them.
   const mapTools = webMapTools({
     measure: { onSelect: () => startMeasuring() },
-    route: { onSelect: startDrawingRoute },
+    route: { onSelect: () => startDrawingRoute() },
     place: { onSelect: () => setShowAdd(true) },
     makeMap: {
       menu: [
@@ -1672,7 +1675,7 @@ function App() {
             }}
             logsView={logsView}
             onLogsViewChange={setLogsView}
-            onStartDrawingRoute={startDrawingRoute}
+            onStartDrawingRoute={() => startDrawingRoute()}
             waysLoaded={waysLoaded}
             allRoutes={routes}
             placeTracks={placeTracks}
@@ -1974,6 +1977,7 @@ function App() {
             // The point is the measurement's first, as a press on the map there
             // would have made it.
             onMeasureFrom={startMeasuring}
+            onDrawRouteFrom={startDrawingRoute}
             selectTrack={(mediaId) => {
               if (planOnMap) return pressInPlan({ kind: "track", id: mediaId });
               const way = allWays.find(

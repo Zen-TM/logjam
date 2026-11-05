@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAP_POINT, WEATHER, type ElevationPoint } from "@logjam/shared";
+import { takeDismissingPress } from "../../ui";
 import forecastJson from "../../../../shared/src/__fixtures__/openMeteoForecast.json";
 import MapPointPopover from "./MapPointPopover";
 
@@ -54,7 +55,12 @@ const map = {
 };
 
 function mount(
-  handlers: { onAddPlace?: () => void; onClose?: () => void } = {},
+  handlers: {
+    onAddPlace?: () => void;
+    onClose?: () => void;
+    onDrawRoute?: () => void;
+    startAt?: "options";
+  } = {},
 ) {
   render(
     <MapPointPopover
@@ -62,9 +68,11 @@ function mount(
       map={map as any}
       point={point}
       from={null}
+      {...(handlers.startAt ? { startAt: handlers.startAt } : {})}
       onClose={handlers.onClose ?? vi.fn()}
       onAddPlace={handlers.onAddPlace ?? vi.fn()}
       onMeasure={vi.fn()}
+      onDrawRoute={handlers.onDrawRoute ?? vi.fn()}
     />,
   );
 }
@@ -235,10 +243,10 @@ describe("the point popover's first paint", () => {
 });
 
 describe("the point popover's way out", () => {
-  // Mutation: drop `swallowWithin` (or `dismissOnOutsidePress`) from the panel,
-  // and the press that closes it also reaches the map, which asks about a new
-  // point.
-  it("closes on a press on the map and swallows the click it ends in", () => {
+  // Mutation: drop `suppressAskWithin` (or `dismissOnOutsidePress`) from the
+  // panel, and the press that closes it also reaches the map, which asks about
+  // a new point; stop the click, and a route or place under it no longer acts.
+  it("closes on a press on the map and marks the click for the map, without stopping it", () => {
     const onClose = vi.fn();
     const heard = vi.fn();
     document.body.addEventListener("click", heard);
@@ -247,7 +255,8 @@ describe("the point popover's way out", () => {
     fireEvent.pointerUp(mapElement);
     fireEvent.click(mapElement);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(heard).not.toHaveBeenCalled();
+    expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(true);
     document.body.removeEventListener("click", heard);
   });
 
@@ -305,6 +314,7 @@ describe("the point popover's panel", () => {
       .map((button) => button.getAttribute("aria-label") ?? button.textContent);
     expect(names).toEqual([
       MAP_POINT.copy.backToPoint,
+      expect.stringContaining("Draw a route from here"),
       expect.stringContaining("Add a place here"),
       expect.stringContaining("Measure from here"),
       expect.stringContaining(WEATHER.copy.show),
@@ -320,6 +330,45 @@ describe("the point popover's panel", () => {
       screen.getByRole("button", { name: /Add a place here/, hidden: true }),
     );
     expect(onAddPlace).toHaveBeenCalledWith(point);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  // Mutation: draw the back arrow when the panel opened on Options (a
+  // right-click), or let Escape step back to facts it never showed.
+  it("opens on Options with no way back, and Escape closes it", () => {
+    const onClose = vi.fn();
+    mount({ startAt: "options", onClose });
+    expect(
+      screen.queryByRole("button", {
+        name: MAP_POINT.copy.backToPoint,
+        hidden: true,
+      }),
+    ).toBeNull();
+    expect(screen.queryByText(MAP_POINT.copy.position)).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /Draw a route from here/,
+        hidden: true,
+      }),
+    ).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("dialog", { hidden: true }), {
+      key: "Escape",
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands Draw a route from here its point and closes", () => {
+    const onDrawRoute = vi.fn();
+    const onClose = vi.fn();
+    mount({ onDrawRoute, onClose });
+    openOptions();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Draw a route from here/,
+        hidden: true,
+      }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith(point);
     expect(onClose).toHaveBeenCalled();
   });
 

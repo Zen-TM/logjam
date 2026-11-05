@@ -156,8 +156,8 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
-  // Closes on any press elsewhere; one on the map does nothing more, one on a
-  // control (a tab, another map button) still acts.
+  // Closes on any press elsewhere. One on the map only stops the map asking
+  // about that point (`takeDismissingPress`); one on a control still acts.
   useOutsidePress(
     toolsOpen,
     [toolsLineRef],

@@ -25,6 +25,7 @@ export { ColourField } from "./ColourField";
 export {
   Menu,
   Popover,
+  takeDismissingPress,
   useOutsidePress,
   type MenuEntry,
   type MenuItem,
