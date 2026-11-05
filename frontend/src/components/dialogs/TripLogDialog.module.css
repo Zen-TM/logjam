@@ -57,6 +57,10 @@
   gap: 8px;
 }
 
+.coordinates {
+  align-items: flex-start;
+}
+
 .attribute {
   flex-wrap: nowrap;
 }
