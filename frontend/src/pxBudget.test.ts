@@ -47,7 +47,7 @@ const BUDGET: Record<string, number> = {
   "components/dialogs/UnifiedImportDialog.module.css": 16,
   "components/dialogs/topoSettings/topoSettings.module.css": 10,
   "components/feedback/RootErrorBoundary.module.css": 10,
-  "components/feedback/ToastProvider.module.css": 4,
+  "components/feedback/ToastProvider.module.css": 2,
   "components/map/BasemapGallery.module.css": 3,
   "components/map/LayersPopover.module.css": 25,
   "components/map/Map.module.css": 17,
