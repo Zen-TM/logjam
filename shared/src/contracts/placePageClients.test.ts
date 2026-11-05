@@ -11,9 +11,10 @@
 // and return no grade).
 //
 //
-// Delete the `isCanyonGradeKey` filter or the Grade row from the Web place
-// page, or the `canyonGradeRows` call from either GPS screen, and the "one
-// Grade row, not three" tests below turn red. Neither GPS screen has a render harness, so they read the
+// Delete the `isCanyonGradeKey` filter or the `canyonGradeRow` call from the
+// Web place page, or the `canyonGradeRows` call from either GPS screen, and the
+// "one Grade row, not three" tests below turn red. Web's place page is also
+// rendered in PlaceDetailPanel.render.test.tsx. Neither GPS screen has a render harness, so they read the
 // source like the walk tests above; Web's plan place page is rendered in
 // planPlace.render.test.tsx.
 //
@@ -54,9 +55,7 @@ describe("Logjam Web's place page", () => {
 
   it("shows one Grade row in its attribute table, not the three inputs", () => {
     expect(WEB).toContain(".filter((def) => !isCanyonGradeKey(def.key))");
-    expect(WEB).toContain(
-      '{ key: "grade", label: "Grade", text: grade }, ...answered',
-    );
+    expect(WEB).toContain("canyonGradeRow(place.fieldValues)");
   });
 });
 

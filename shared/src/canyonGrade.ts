@@ -56,12 +56,28 @@ export function withoutCanyonGradeRows(rows: AttributeRow[]): AttributeRow[] {
   return rows.filter(([key]) => !isCanyonGradeKey(key));
 }
 
+/**
+ * The key and label of the one Grade row. The key is not a slug of any
+ * label (those use underscores), so a user attribute named "Grade", whose
+ * key is `grade`, never shares it.
+ */
+export const CANYON_GRADE_ROW_KEY = "canyon-grade";
+export const CANYON_GRADE_ROW_LABEL = "Grade";
+
+/** The one Grade row for these field values, or null when none is set. */
+export function canyonGradeRow(fieldValues: unknown): AttributeRow | null {
+  const grade = formatCanyonGrade(fieldValues);
+  return grade
+    ? [CANYON_GRADE_ROW_KEY, CANYON_GRADE_ROW_LABEL, grade, "string"]
+    : null;
+}
+
 /** The rows with the three grade inputs collapsed into one "Grade" row, first. */
 export function canyonGradeRows(
   rows: AttributeRow[],
   fieldValues: unknown,
 ): AttributeRow[] {
-  const grade = formatCanyonGrade(fieldValues);
+  const grade = canyonGradeRow(fieldValues);
   const rest = withoutCanyonGradeRows(rows);
-  return grade ? [["grade", "Grade", grade, "string"], ...rest] : rest;
+  return grade ? [grade, ...rest] : rest;
 }
