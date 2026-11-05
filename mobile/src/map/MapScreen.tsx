@@ -140,7 +140,6 @@ import {
   useMirrorTrips,
   useMirrorPlaceTracks,
   useMirrorRoutes,
-  usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
@@ -937,7 +936,6 @@ export function MapScreen({
   // signal — battery saver + predictability in the field.
   const [offlineOnly, setOfflineOnly] = useState(false);
   const connectivity = useConnectivity(offlineOnly);
-  const pendingSyncCount = usePendingSyncCount();
   /** Mirror for `noteReadoutFix`, memoised once — see `dotWantedRef`. */
   const offlineOnlyRef = useRef(offlineOnly);
   useLayoutEffect(() => {
@@ -5601,13 +5599,8 @@ export function MapScreen({
           <Notice icon="offline">Offline mode — using only saved maps</Notice>
         ) : null}
 
-        {/* A guest has no account for changes to wait on (SyncStatusPills). */}
         {connectivity === "offline" ? (
           <Notice icon="offline">Offline</Notice>
-        ) : null}
-
-        {pendingSyncCount > 0 && !isGuest ? (
-          <Notice icon="uploading">{`${pendingSyncCount} waiting to sync`}</Notice>
         ) : null}
 
         {noticeText ? <Notice icon="offline">{noticeText}</Notice> : null}
