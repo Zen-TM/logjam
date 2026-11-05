@@ -106,6 +106,7 @@ describe("both clients draw the panel's words from the contract", () => {
       ADD_WAY.copy.noRoutes,
       ADD_WAY.copy.noRouteMatch,
       ADD_WAY.copy.removalFailed,
+      ADD_WAY.copy.placeGone,
     ])
       expect(source, words).not.toContain(words);
     expect(source).toContain("ADD_WAY.copy.routeTitle");
