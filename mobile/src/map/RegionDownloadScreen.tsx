@@ -193,18 +193,6 @@ const MIN_TOP_INSET = HERO_OVERLAP + 22;
 // bottom clears the "Move the map" hint.
 const BOUNDS_PADDING = { top: 72, bottom: 64, left: 32, right: 32 };
 
-/**
- * The controls panel's height, fixed so the MAP never resizes under a frame the
- * user is mid-drag. Its contents (the map-layer chips, detail rail, and Save
- * button) have a fixed shape, the connection confirmation is a dialog at the
- * Save tap, and warnings overlay the map, so the panel does not scroll.
- *
- * ponytail: fixed pixels, so a very large OS font setting will clip the last
- * row rather than scroll it. Measure and raise this number if that turns
- * up in the field; making the panel scrollable again just hides the Save button.
- */
-const PANEL_HEIGHT = 250;
-
 export function RegionDownloadScreen({
   onBack,
   backLabel,
@@ -653,10 +641,9 @@ export function RegionDownloadScreen({
         />
       </View>
 
-      {/* The map slides UP under the hero's rounded bottom corners, so those
-          two notches show map instead of page colour. The frame's top inset is
-          clamped to the same overlap, or the top edge handle can be dragged in
-          behind the hero and become ungrabbable. */}
+      {/* The map runs up behind the hero. The frame's top inset is clamped to
+          that overlap, or the top edge handle can be dragged in behind the
+          hero and become ungrabbable. */}
       <View style={styles.mapWrap} onLayout={handleLayout}>
         <Map
           ref={mapRef}
@@ -876,7 +863,9 @@ export function RegionDownloadScreen({
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero paints over the map's top strip, so it has to win the z-order.
-  hero: { zIndex: 1 },
+  // Opaque, so the map's overlap does not show through the hero's own bottom
+  // padding, which is the gap under the two estimates.
+  hero: { zIndex: 1, backgroundColor: theme.page },
   mapWrap: { flex: 1, overflow: "hidden", marginTop: -HERO_OVERLAP },
   mapHint: {
     position: "absolute",
@@ -903,8 +892,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   warningActions: { gap: spacing(1) },
   namingBody: { gap: spacing(1.5) },
   namingNote: { ...muted(theme, textRole.detail) },
+  // Sized to its contents, which have a fixed shape (the connection
+  // confirmation is a dialog and warnings overlay the map), so the map takes
+  // every spare pixel and still never resizes under a frame mid-drag.
   panel: {
-    height: PANEL_HEIGHT,
     backgroundColor: theme.page,
     paddingTop: spacing(1),
     paddingBottom: spacing(1.5),
@@ -913,7 +904,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderTopColor: theme.line,
   },
   panelBody: {
-    flex: 1,
     paddingHorizontal: spacing(2),
     paddingBottom: spacing(1),
     gap: spacing(1),
