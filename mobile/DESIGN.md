@@ -118,9 +118,9 @@ handler or a camera write, read
   once in `AppShell`) shows one toast at a time, centred above the tab bar,
   and the rest wait in order (`toastStore.test.ts`): an error or an action is
   never replaced, and a message already showing or waiting is not added
-  twice. `bottom` lifts it clear of a screen's own instruments and `inset`
-  keeps a column free on both sides (the map passes both). A background job's
-  toast is at the shell (`BackgroundToast.tsx`), never on the screen that
+  twice. Its place is fixed: centred, one max width, its bottom edge just
+  above the tab bar, on every screen, sheet and the map; nothing moves it
+  (`toastHost.test.ts`). A background job's toast is at the shell (`BackgroundToast.tsx`), never on the screen that
   started it.
 - **Long work is a progress card, not a screen**, unless leaving would break
   it.
