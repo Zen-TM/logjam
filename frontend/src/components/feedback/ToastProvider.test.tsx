@@ -86,6 +86,9 @@ describe("toasts", () => {
     fireEvent.click(screen.getByText("same"));
     expect(screen.getAllByText("Couldn't load your account.")).toHaveLength(1);
     fireEvent.click(screen.getByText("other"));
-    expect(screen.getAllByRole("button", { name: /dismiss/i })).toHaveLength(2);
+    expect(
+      // The stack is a closed popover in jsdom, which has no Popover API.
+      screen.getAllByRole("button", { name: /dismiss/i, hidden: true }),
+    ).toHaveLength(2);
   });
 });
