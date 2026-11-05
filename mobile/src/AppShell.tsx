@@ -20,7 +20,10 @@ import {
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
 import { isRouteEditing } from "./map/routeEditLock";
-import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
+import {
+  keepAccountSlopeBands,
+  setSlopeBandsAccount,
+} from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -955,12 +958,13 @@ export function AppShell({
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   // The account's slope bands, kept on the phone so the map has them offline.
+  // The same account is where an edit made in the layers sheet is sent.
+  const slopeBandsFetched = userQuery.data?.uiPreferences?.slopeBands;
+  const accountId = userQuery.data?.id;
   useEffect(() => {
-    keepAccountSlopeBands(
-      userQuery.data?.uiPreferences?.slopeBands,
-      userQuery.data?.id,
-    );
-  }, [userQuery.data?.uiPreferences?.slopeBands, userQuery.data?.id]);
+    setSlopeBandsAccount({ signedIn: !isGuest, id: accountId ?? null });
+    keepAccountSlopeBands(slopeBandsFetched, accountId);
+  }, [slopeBandsFetched, accountId, isGuest]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
