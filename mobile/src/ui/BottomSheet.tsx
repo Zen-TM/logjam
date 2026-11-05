@@ -26,6 +26,8 @@ import { IconButton } from "./IconButton";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
+  sheetPinAfterQuiet,
+  sheetPinAfterTouch,
   sheetPins,
   sheetPulled,
   sheetRelease,
@@ -49,8 +51,9 @@ import {
 // drag synchronously, at its touch slop, before a PanResponder has been asked;
 // it does so even at its top with nowhere to scroll, and the JS touch is
 // cancelled. So the sheet itself is the content of an OUTER ScrollView, below
-// a spacer one screen tall, resting scrolled to the end: dragging the sheet
-// down IS scrolling the outer view up. The inner ScrollView hands whatever it
+// a spacer that fills what the sheet leaves of two screens, resting scrolled to
+// the end: dragging the sheet down IS scrolling the outer view up. The inner
+// ScrollView hands whatever it
 // cannot scroll to the outer one (Android nested scrolling,
 // `nestedScrollEnabled`), which is what makes one gesture cross from scrolling
 // to dragging without a jump. Guard: `sheetPull.test.ts`.
@@ -86,7 +89,7 @@ import {
 // stopping on the tab bar's colour.
 //
 // The modal covers the whole SCREEN, bars included, so that is the height the
-// spacer starts at. Window height is shorter by the bars where the system keeps
+// sheet slides in from. Window height is shorter by the bars where the system keeps
 // them out of the window, so using it would delay the correction to the middle
 // of the slide in.
 const SHEET_TRAVEL = Dimensions.get("screen").height;
@@ -271,8 +274,8 @@ export function BottomSheet({
   if (visible && !mounted) setMounted(true);
   const notifyClosed = useEffectEvent(() => onClosed?.());
   const [progress] = useState(() => new Animated.Value(0));
-  // The modal's own height: the spacer above the sheet is at least this
-  // tall, so the sheet can be dragged fully off the bottom edge.
+  // The modal's own height: the dock's content is two of these tall, so the
+  // sheet can be dragged fully off the bottom edge, and it caps the sheet.
   const [viewportHeight, setViewportHeight] = useState(SHEET_TRAVEL);
   const outerRef = useRef<ScrollViewInstance>(null);
   // The outer scroll as last reported; the sheet is pulled down by however far
@@ -406,7 +409,14 @@ export function BottomSheet({
     seat();
     // The pinned sheet's hand-off is undone once the finger is up (`settle`);
     // it is the sheet's again when that has landed.
-    if (pull.current.pinned && !pull.current.touching && rawPull() < 1)
+    if (
+      sheetPinAfterQuiet({
+        pinned: pull.current.pinned,
+        touching: pull.current.touching,
+        dragged: pull.current.dragged,
+        pull: rawPull(),
+      }) === "unpin"
+    )
       pin(false);
     const now = pulled();
     const sinking = now > pull.current.last;
@@ -488,18 +498,29 @@ export function BottomSheet({
         pull.current.seated = true;
         slideIn();
       }
+      // The hand-off a pinned drag took is undone where nobody sees it (the
+      // sheet is drawn at rest throughout); the sheet is unpinned once it is.
+      // `dragged` stays set until then, or the unpin would never be asked.
+      if (pull.current.pinned) {
+        const quiet = sheetPinAfterQuiet({
+          pinned: true,
+          touching: false,
+          dragged: pull.current.dragged,
+          pull: rawPull(),
+        });
+        if (quiet === "undo")
+          outerRef.current?.scrollToEnd({ animated: false });
+        else if (quiet === "unpin") {
+          pull.current.dragged = false;
+          pin(false);
+        }
+        return;
+      }
       const outcome = sheetRelease({
         pulled: pulled(),
         dragged: pull.current.dragged,
       });
       pull.current.dragged = false;
-      // The hand-off a pinned drag took is undone where nobody sees it (the
-      // sheet is drawn at rest throughout); the sheet is unpinned once it is.
-      if (pull.current.pinned) {
-        if (rawPull() >= 1) outerRef.current?.scrollToEnd({ animated: false });
-        else pin(false);
-        return;
-      }
       // Fold the lift into the real offsets: the sheet's scroll takes it, the
       // content's gives it up, and nothing moves on screen. Not on the way
       // out, where the sheet should leave from where it is.
@@ -616,17 +637,22 @@ export function BottomSheet({
         onScroll={scroll.onOuterScroll}
         // A drag that ends in a cancel never reports its end; the next touch
         // clears it, so the sheet cannot stay parked where it was left.
-        onTouchStart={() => {
+        onTouchStart={(event) => {
+          // A second finger decides nothing: it would pin or free the sheet
+          // under the first.
+          if (event.nativeEvent.touches.length > 1) return;
           pull.current.touching = false;
           pull.current.closing = false;
           // The content's own touch arrives here after it has had its say.
           // A finger away from the content (the handle, the title) always
-          // drags the sheet. Never unpinned while a pinned drag's hand-off is
-          // still being undone: the sheet would jump by it.
-          const next = pull.current.startedAway;
+          // drags the sheet.
+          const next = sheetPinAfterTouch({
+            startedAway: pull.current.startedAway,
+            pinned: pull.current.pinned,
+            pull: rawPull(),
+          });
           pull.current.startedAway = false;
-          if (next !== pull.current.pinned && (next || rawPull() < 1))
-            pin(next);
+          if (next !== pull.current.pinned) pin(next);
           settleSoon();
         }}
         {...dragHandlers}
@@ -739,7 +765,8 @@ export function BottomSheet({
                   nestedScrollEnabled
                   // A drag that starts on content scrolled away from its top
                   // never moves the sheet (`sheetPins`).
-                  onTouchStart={() => {
+                  onTouchStart={(event) => {
+                    if (event.nativeEvent.touches.length > 1) return;
                     pull.current.startedAway = sheetPins({
                       scrolled: viewport.current.y,
                     });
