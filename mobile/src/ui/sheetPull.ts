@@ -30,6 +30,45 @@ export function sheetPins({ scrolled }: { scrolled: number }): boolean {
 }
 
 /**
+ * Whether the sheet is pinned once a finger has gone down. A finger on scrolled
+ * content pins it; any other finger unpins it, except while the last pinned
+ * drag's hand-off (`pull`) is still being undone: unpinning then would draw
+ * the sheet that far down.
+ */
+export function sheetPinAfterTouch({
+  startedAway,
+  pinned,
+  pull,
+}: {
+  startedAway: boolean;
+  pinned: boolean;
+  pull: number;
+}): boolean {
+  return startedAway || (pinned && pull >= 1);
+}
+
+/**
+ * What a pinned sheet does once it has lain still. Only a drag seen for this
+ * touch ends the pin: a finger resting on scrolled content before its drag
+ * starts is quiet too, and unpinning then hands the coming drag to the sheet.
+ * `undo`: scroll the hand-off back; `unpin`: it is back, the sheet is free.
+ */
+export function sheetPinAfterQuiet({
+  pinned,
+  touching,
+  dragged,
+  pull,
+}: {
+  pinned: boolean;
+  touching: boolean;
+  dragged: boolean;
+  pull: number;
+}): "keep" | "undo" | "unpin" {
+  if (!pinned || touching || !dragged) return "keep";
+  return pull >= 1 ? "undo" : "unpin";
+}
+
+/**
  * How far down the sheet really is. `pull` is how far the drag has taken it;
  * `scrolled` is how far its content has scrolled. A drag that pulls the sheet
  * down and then turns back scrolls the CONTENT (Android gives a scroll view

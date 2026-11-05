@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
+  sheetPinAfterQuiet,
+  sheetPinAfterTouch,
   sheetPins,
   sheetPulled,
   sheetRelease,
@@ -206,4 +208,75 @@ it("the dock keeps one height whatever the sheet's", () => {
   expect(sheet).toMatch(/spacer: \{ flexGrow: 1 \}/);
   expect(sheet).toMatch(/contentContainerStyle=\{\{\s*minHeight: 2 \*/);
   expect(sheet).not.toMatch(/height: Math\.max\(SHEET_TRAVEL/);
+});
+
+// When the pin starts and ends over one touch.
+describe("sheetPinAfterQuiet", () => {
+  const pinned = { pinned: true, touching: false, dragged: true, pull: 0 };
+
+  // Red when the `dragged` condition is dropped: a finger resting on scrolled
+  // content for SETTLE_MS before its drag starts unpins the sheet, and the
+  // drag then hands off to it.
+  it("keeps the pin of a finger that has not started dragging", () => {
+    expect(sheetPinAfterQuiet({ ...pinned, dragged: false })).toBe("keep");
+  });
+
+  it("keeps the pin under a finger that is dragging", () => {
+    expect(sheetPinAfterQuiet({ ...pinned, touching: true, pull: 200 })).toBe(
+      "keep",
+    );
+  });
+
+  it("undoes the hand-off once the finger is up", () => {
+    expect(sheetPinAfterQuiet({ ...pinned, pull: 200 })).toBe("undo");
+  });
+
+  it("unpins once the hand-off is undone", () => {
+    expect(sheetPinAfterQuiet(pinned)).toBe("unpin");
+  });
+
+  it("has nothing to do for a sheet that is not pinned", () => {
+    expect(sheetPinAfterQuiet({ ...pinned, pinned: false, pull: 200 })).toBe(
+      "keep",
+    );
+  });
+});
+
+describe("sheetPinAfterTouch", () => {
+  it("pins a finger on scrolled content", () => {
+    expect(
+      sheetPinAfterTouch({ startedAway: true, pinned: false, pull: 0 }),
+    ).toBe(true);
+  });
+
+  it("frees the sheet for a finger at the top", () => {
+    expect(
+      sheetPinAfterTouch({ startedAway: false, pinned: true, pull: 0 }),
+    ).toBe(false);
+  });
+
+  // Red when the pull is ignored: the sheet is drawn `pull` lower at once.
+  it("stays pinned while the last hand-off is still being undone", () => {
+    expect(
+      sheetPinAfterTouch({ startedAway: false, pinned: true, pull: 200 }),
+    ).toBe(true);
+  });
+
+  it("stays free when nothing was pinned", () => {
+    expect(
+      sheetPinAfterTouch({ startedAway: false, pinned: false, pull: 200 }),
+    ).toBe(false);
+  });
+});
+
+// Red when BottomSheet stops asking the two decisions above, or acts on a
+// second finger.
+it("BottomSheet takes the pin lifecycle from sheetPull and ignores a second finger", () => {
+  const sheet = readFileSync(
+    new URL("./BottomSheet.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(sheet.match(/sheetPinAfterQuiet\(/g)?.length).toBe(2);
+  expect(sheet).toMatch(/sheetPinAfterTouch\(/);
+  expect(sheet.match(/touches\.length > 1/g)?.length).toBe(2);
 });
