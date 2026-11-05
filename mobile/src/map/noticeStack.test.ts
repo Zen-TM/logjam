@@ -36,9 +36,12 @@ describe("the notice stack", () => {
   });
 
   // The map says "Offline" and nothing about the queue: a Saved row's up arrow
-  // and the hero pills carry the count (mobile/DESIGN.md section 8).
-  // Mutation: subscribe MapScreen to `usePendingSyncCount` again.
-  it("does not count what is waiting to sync", () => {
-    expect(source).not.toContain("usePendingSyncCount");
+  // and the hero pills carry the count (mobile/DESIGN.md section 8). The hook
+  // itself is allowed here (a marker can say "saved here" until it syncs).
+  // Mutation: put the "N waiting to sync" Notice back, or any Notice whose
+  // icon is "uploading".
+  it("has no waiting-to-sync notice", () => {
+    expect(source).not.toContain("waiting to sync");
+    expect(source).not.toContain('<Notice icon="uploading"');
   });
 });
