@@ -10,6 +10,8 @@ export const MAP_TERRAIN = {
   sections: [
     { key: "contours" },
     { key: "slope" },
+    // Opened from the Slope row on Logjam Web, a row of its own on Logjam GPS.
+    { key: "slopeBands" },
     { key: "hillshade" },
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
@@ -18,12 +20,6 @@ export const MAP_TERRAIN = {
       on: "web",
       reason:
         "Making a sharpened area, and deleting it from the account, is planning, done at home: Logjam GPS draws the ones the account has and, from Saved, shares one, saves it and deletes its device copy.",
-    },
-    {
-      key: "slopeBands",
-      on: "web",
-      reason:
-        "Choosing the angles and colours of the slope bands is planning, done at home: Logjam GPS draws the bands the account has.",
     },
   ],
   copy: {
@@ -60,6 +56,8 @@ export const MAP_TERRAIN = {
     slopeAbout: "About slope",
     slopeLegend:
       "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.",
+    // At the top of the editor on both clients.
+    slopeBandsIntro: "Colour terrain based on how steep it is.",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
     // The Hillshade switch over imagery.

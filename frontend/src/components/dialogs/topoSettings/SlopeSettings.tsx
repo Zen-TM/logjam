@@ -1,11 +1,18 @@
 import { Fragment, type CSSProperties } from "react";
 import {
-  applySlopeGradient,
+  DEFAULT_SLOPE_SCALE,
+  MAP_TERRAIN,
+  insertSlopeBand,
+  removeSlopeBand,
   rgbaCssFromHex,
-  RASTER_TEMPLATE_DEFAULTS,
+  setSlopeScale,
+  setSlopeThreshold,
+  setSlopeUpper,
   slopeBandsError,
-  type SlopeSettings as SlopeSettingsValue,
+  slopeBoundaryRange,
+  slopeScale,
   type SlopeBand,
+  type SlopeSettings as SlopeSettingsValue,
 } from "@logjam/shared";
 import {
   Button,
@@ -24,98 +31,9 @@ interface Props {
   onChange: (next: SlopeSettingsValue) => void;
 }
 
-const MAX_BANDS = 8;
-const DEFAULT_INSERT_WIDTH = 10;
-const NEW_BAND_COLOUR = "#ff000080";
-
-// Shipped default scale endpoints — the lowest/highest band colours of the
-// canonical default slope ramp (yellow → dark red). Used by the Reset button.
-const DEFAULT_BANDS = RASTER_TEMPLATE_DEFAULTS.slope.bands;
-const DEFAULT_SCALE_START = DEFAULT_BANDS[0].colour;
-const DEFAULT_SCALE_END = DEFAULT_BANDS[DEFAULT_BANDS.length - 1].colour;
-
 const ANGLE_TOOLTIP =
   "Degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or " +
   "more. Each band starts where the one below it ends, so its neighbour follows what you set here.";
-
-/**
- * Insert a band at `position` (0..bands.length), keeping the band set a
- * contiguous, ascending cover of integer ranges. Returns null when there is no
- * room. Carving rules:
- *  - position 0: a new lowest band below the transparency threshold (lowers it).
- *  - position bands.length: a new top band toward 90°; if the top is already
- *    90° it carves room from the current last band instead.
- *  - interior: splits the shared boundary, taking the default width from the
- *    neighbour with more room while keeping every band ≥ 1°.
- */
-function computeInsert(
-  bands: SlopeBand[],
-  position: number,
-): SlopeBand[] | null {
-  if (bands.length >= MAX_BANDS) return null;
-  const next = bands.map((b) => ({ ...b }));
-
-  if (position <= 0) {
-    const top = next[0].fromDeg;
-    if (top <= 0) return null;
-    const from = Math.max(0, top - DEFAULT_INSERT_WIDTH);
-    if (from >= top) return null;
-    next.splice(0, 0, { fromDeg: from, toDeg: top, colour: NEW_BAND_COLOUR });
-    return next;
-  }
-
-  if (position >= bands.length) {
-    const last = next[next.length - 1];
-    if (last.toDeg < 90) {
-      const to = Math.min(90, last.toDeg + DEFAULT_INSERT_WIDTH);
-      next.push({ fromDeg: last.toDeg, toDeg: to, colour: NEW_BAND_COLOUR });
-      return next;
-    }
-    // Top is already 90° — carve room from the current last band.
-    const span = last.toDeg - last.fromDeg;
-    const width = Math.min(DEFAULT_INSERT_WIDTH, span - 1);
-    if (width < 1) return null;
-    const boundary = last.toDeg; // 90
-    last.toDeg = boundary - width;
-    next.push({
-      fromDeg: boundary - width,
-      toDeg: boundary,
-      colour: NEW_BAND_COLOUR,
-    });
-    return next;
-  }
-
-  const left = next[position - 1];
-  const right = next[position];
-  const boundary = left.toDeg; // === right.fromDeg
-  const leftSpan = left.toDeg - left.fromDeg;
-  const rightSpan = right.toDeg - right.fromDeg;
-  let width = Math.min(
-    DEFAULT_INSERT_WIDTH,
-    Math.max(1, Math.floor(Math.max(leftSpan, rightSpan) / 2)),
-  );
-
-  if (rightSpan >= leftSpan) {
-    width = Math.min(width, rightSpan - 1);
-    if (width < 1) return null;
-    right.fromDeg = boundary + width;
-    next.splice(position, 0, {
-      fromDeg: boundary,
-      toDeg: boundary + width,
-      colour: NEW_BAND_COLOUR,
-    });
-  } else {
-    width = Math.min(width, leftSpan - 1);
-    if (width < 1) return null;
-    left.toDeg = boundary - width;
-    next.splice(position, 0, {
-      fromDeg: boundary - width,
-      toDeg: boundary,
-      colour: NEW_BAND_COLOUR,
-    });
-  }
-  return next;
-}
 
 /**
  * Terrain coloured by steepness: a table of bands, its columns headed once
@@ -131,57 +49,25 @@ function computeInsert(
 export default function SlopeSettings({ value, onChange }: Props) {
   const bands = value.bands;
 
-  // `applySlopeGradient` always paints the first band exactly the start colour
-  // and the last band exactly the end colour, so the endpoints round-trip
-  // losslessly through `bands` — derive them here instead of holding parallel
-  // state that could drift from the persisted value.
-  const scaleStart = bands[0].colour;
-  const scaleEnd = bands[bands.length - 1].colour;
+  // The ends round-trip losslessly through `bands`, so they are derived here
+  // instead of held as parallel state that could drift from the persisted value.
+  const { start: scaleStart, end: scaleEnd } = slopeScale(bands);
 
-  // Recolour a restructured band set along the current scale so inserts,
-  // removals and boundary edits keep a clean fade (and new bands never keep the
-  // NEW_BAND_COLOUR placeholder).
-  const commitBands = (nextBands: SlopeBand[]) => {
-    onChange({
-      ...value,
-      bands: applySlopeGradient(nextBands, scaleStart, scaleEnd),
-    });
-  };
+  const commitBands = (nextBands: SlopeBand[]) =>
+    onChange({ ...value, bands: nextBands });
 
-  const setScale = (start: string, end: string) => {
-    onChange({ ...value, bands: applySlopeGradient(bands, start, end) });
-  };
-
-  const setThreshold = (deg: number) => {
-    commitBands(bands.map((b, i) => (i === 0 ? { ...b, fromDeg: deg } : b)));
-  };
-
-  const setUpper = (idx: number, deg: number) => {
-    const nextBands = bands.map((b) => ({ ...b }));
-    nextBands[idx].toDeg = deg;
-    if (idx < nextBands.length - 1) nextBands[idx + 1].fromDeg = deg;
-    commitBands(nextBands);
-  };
-
-  const removeBand = (idx: number) => {
-    const nextBands = bands.filter((_, i) => i !== idx).map((b) => ({ ...b }));
-    // Re-stitch contiguity: if an interior band was removed, close the gap by
-    // extending the previous band up to where the next band starts.
-    if (idx > 0 && idx < nextBands.length) {
-      nextBands[idx - 1].toDeg = nextBands[idx].fromDeg;
-    }
-    commitBands(nextBands);
-  };
+  const setScale = (start: string, end: string) =>
+    commitBands(setSlopeScale(bands, start, end));
 
   const insertAt = (position: number) => {
-    const nextBands = computeInsert(bands, position);
+    const nextBands = insertSlopeBand(bands, position);
     if (nextBands) commitBands(nextBands);
   };
 
   const error = slopeBandsError(bands);
 
   const insertControl = (position: number) => {
-    const room = computeInsert(bands, position) !== null;
+    const room = insertSlopeBand(bands, position) !== null;
     return (
       <button
         type="button"
@@ -205,19 +91,15 @@ export default function SlopeSettings({ value, onChange }: Props) {
   };
 
   const boundaryConstraints = (
-    min: number,
-    max: number,
+    boundary: "threshold" | number,
   ): NumericFieldConstraints => ({
-    min,
-    max,
+    ...slopeBoundaryRange(bands, boundary),
     integer: true,
   });
 
   return (
     <div className={styles.tabPanel}>
-      <p className={styles.helpText}>
-        Colour terrain based on how steep it is.
-      </p>
+      <p className={styles.helpText}>{MAP_TERRAIN.copy.slopeBandsIntro}</p>
 
       <div className={styles.scaleRow}>
         <span className={styles.scaleEnd}>
@@ -245,7 +127,9 @@ export default function SlopeSettings({ value, onChange }: Props) {
           compact
           variant="outline"
           className={styles.scaleReset}
-          onClick={() => setScale(DEFAULT_SCALE_START, DEFAULT_SCALE_END)}
+          onClick={() =>
+            setScale(DEFAULT_SLOPE_SCALE.start, DEFAULT_SLOPE_SCALE.end)
+          }
         >
           Reset colours
         </Button>
@@ -269,8 +153,8 @@ export default function SlopeSettings({ value, onChange }: Props) {
           hideLabel
           className={styles.numberCell}
           value={bands[0].fromDeg}
-          constraints={boundaryConstraints(0, bands[0].toDeg - 1)}
-          onCommit={setThreshold}
+          constraints={boundaryConstraints("threshold")}
+          onCommit={(deg) => commitBands(setSlopeThreshold(bands, deg))}
         />
         <span className={styles.fixedCell}>Transparent</span>
         <span />
@@ -284,11 +168,8 @@ export default function SlopeSettings({ value, onChange }: Props) {
               hideLabel
               className={styles.numberCell}
               value={band.toDeg}
-              constraints={boundaryConstraints(
-                band.fromDeg + 1,
-                idx < bands.length - 1 ? bands[idx + 1].toDeg - 1 : 90,
-              )}
-              onCommit={(deg) => setUpper(idx, deg)}
+              constraints={boundaryConstraints(idx)}
+              onCommit={(deg) => commitBands(setSlopeUpper(bands, idx, deg))}
             />
             <span
               className={styles.bandSwatch}
@@ -308,7 +189,7 @@ export default function SlopeSettings({ value, onChange }: Props) {
               <IconButton
                 icon="delete"
                 label={`Remove band ${idx + 1}`}
-                onClick={() => removeBand(idx)}
+                onClick={() => commitBands(removeSlopeBand(bands, idx))}
               />
             ) : (
               <span />

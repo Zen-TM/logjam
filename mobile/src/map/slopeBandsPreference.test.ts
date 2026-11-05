@@ -45,3 +45,35 @@ describe("the slope bands on Logjam GPS", () => {
     );
   });
 });
+
+describe("an edit made on the phone", () => {
+  const edited = [{ fromDeg: 20, toDeg: 90, colour: "#00ff00ff" }];
+
+  it("is drawn and kept at once", async () => {
+    const store = await load();
+    store.keepEditedSlopeBands(edited);
+    expect(store.readSlopeBands()).toEqual(edited);
+    expect(JSON.parse(prefs.get("mapSlopeBands")!)).toEqual(edited);
+  });
+
+  // Mutation: drop the hold, and the account's fetch (older than the edit,
+  // which has not reached it) puts the previous bands back on the map.
+  it("is not undone by its account's older bands until it has been sent", async () => {
+    const store = await load();
+    store.keepEditedSlopeBands(edited);
+    store.holdAccountSlopeBands("alice");
+    store.keepAccountSlopeBands(bands, "alice");
+    expect(store.readSlopeBands()).toEqual(edited);
+    store.holdAccountSlopeBands(null);
+    store.keepAccountSlopeBands(bands, "alice");
+    expect(store.readSlopeBands()).toEqual(bands);
+  });
+
+  it("does not hold back a different account's bands", async () => {
+    const store = await load();
+    store.keepEditedSlopeBands(edited);
+    store.holdAccountSlopeBands("alice");
+    store.keepAccountSlopeBands(bands, "bob");
+    expect(store.readSlopeBands()).toEqual(bands);
+  });
+});
