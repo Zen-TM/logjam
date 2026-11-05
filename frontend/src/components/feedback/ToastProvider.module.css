@@ -1,17 +1,12 @@
 /* Bottom-centre on every screen, one max width, never moved by what is under
    it: it may overlap the map's controls. A manual popover, so it is in the
-   top layer and shows above an open Dialog (ToastProvider.tsx). The popover's
-   own box styles are reset; only the position below is ours. */
+   top layer and shows above an open Dialog (ToastProvider.tsx). `all: unset`
+   drops the popover's own box (border, fill, padding, inset). */
 .stack {
+  all: unset;
   position: fixed;
-  inset: auto;
   left: 50%;
   bottom: var(--space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  overflow: visible;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
