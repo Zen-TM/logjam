@@ -15,8 +15,9 @@ describe("MapToolGroup", () => {
   it("shows each tool's label, not a glyph alone", () => {
     expect(source).toContain("{tool.label}");
   });
-  it("shows each tool's description under it", () => {
-    expect(source).toContain("{tool.description}");
+  // Mutation: draw a second line under the label.
+  it("shows no description line under a tool", () => {
+    expect(source).not.toContain("description");
   });
   it("moves with native-driver timings that reduced motion zeroes", () => {
     expect(source).toContain("useNativeDriver: true");

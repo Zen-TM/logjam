@@ -27,8 +27,6 @@ const TRAY_CLOSE_MS = 100;
 type MapToolBase = {
   id: string;
   label: string;
-  /** The one line under the label. */
-  description: string;
   icon: Glyph;
 };
 export type MapTool =
@@ -204,12 +202,7 @@ export default function MapChrome({
                       size={18}
                       className={classes.trayGlyph}
                     />
-                    <span className={classes.trayText}>
-                      <span className={classes.trayLabel}>{tool.label}</span>{" "}
-                      <span className={classes.trayDescription}>
-                        {tool.description}
-                      </span>
-                    </span>
+                    <span className={classes.trayLabel}>{tool.label}</span>
                   </>
                 );
                 return "menu" in tool ? (

@@ -398,8 +398,8 @@ renumber.
 - **Two edges, two jobs.** The action edge: layers, tools, locate. The
   instrument edge: compass and scale, nothing that changes the app.
 - **Tools share one button whose tray opens sideways**; arming one closes
-  it. Each tool is a pill with its label and a one-line description from
-  `MAP_TOOLS`. The first slides out from under the +, the rest fall out from
+  it. Each tool is a pill with its label from `MAP_TOOLS` and no
+  description line. The first slides out from under the +, the rest fall out from
   under the one above, staggered, 200 ms in all; it closes in a 100 ms
   fade, and neither moves under reduced motion. Anything else touched closes
   the tray (leaving the map does too). A tap or long-press on the map that
