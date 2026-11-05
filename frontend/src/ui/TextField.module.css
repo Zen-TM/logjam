@@ -9,6 +9,14 @@
   flex: none;
 }
 
+/* A row too narrow to hold the button beside its inputs wraps it under them
+   (the row is a size container); the spacer would only leave a gap above it. */
+@container (max-width: 400px) {
+  .beside > .label {
+    display: none;
+  }
+}
+
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {

@@ -768,12 +768,14 @@ function PlaceDialog({
                     server owns those definitions and refuses deletion, so
                     the action does not exist here rather than being disabled. */}
               {!isSystemFieldDef(def) && (
-                <IconButton
-                  icon="delete"
-                  label={`Delete the attribute ${def.label}`}
-                  tone="danger"
-                  onClick={() => setFieldToDelete(def)}
-                />
+                <FieldBeside>
+                  <IconButton
+                    icon="delete"
+                    label={`Delete the attribute ${def.label}`}
+                    tone="danger"
+                    onClick={() => setFieldToDelete(def)}
+                  />
+                </FieldBeside>
               )}
             </div>
           ))}

@@ -1660,7 +1660,6 @@ function UnifiedImportDialog({
           <FieldBeside>
             <Button
               variant="outline"
-              compact
               icon="place"
               onClick={() => handlePickCoordsFor(key)}
             >

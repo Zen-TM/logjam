@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CANYON_GRADE_ROW_KEY,
   canyonGradeRows,
   formatCanyonGrade,
   withoutCanyonGradeRows,
 } from "./canyonGrade.js";
 import type { AttributeRow } from "./logbook.js";
+import { makeCustomFieldKey } from "./tripLogFields.js";
 
 // Mutations that turn this red: join the segments with a space again; let
 // `withoutCanyonGradeRows` keep any of the three inputs; drop the "Grade" row
@@ -38,17 +40,28 @@ describe("the canyon grade as one value", () => {
 
   it("collapses them into one Grade row, first, when any is set", () => {
     expect(canyonGradeRows(rows, values)).toEqual([
-      ["grade", "Grade", "v3a4III", "string"],
+      ["canyon-grade", "Grade", "v3a4III", "string"],
       ["quality", "Quality", 4, "float"],
     ]);
     expect(canyonGradeRows(rows.slice(2), { commitment: 3 })[0]).toEqual([
-      "grade",
+      "canyon-grade",
       "Grade",
       "III",
       "string",
     ]);
     expect(canyonGradeRows(rows.slice(3), { quality: 4 })).toEqual(
       rows.slice(3),
+    );
+  });
+});
+
+// Mutation: key the row `grade` again: a user attribute labelled "Grade" is
+// stored under that key, and the page would draw two rows with one React key.
+describe("the Grade row's key", () => {
+  it("is not the key a user attribute labelled Grade gets", () => {
+    expect(CANYON_GRADE_ROW_KEY).not.toBe(makeCustomFieldKey("Grade"));
+    expect(makeCustomFieldKey(CANYON_GRADE_ROW_KEY)).not.toBe(
+      CANYON_GRADE_ROW_KEY,
     );
   });
 });

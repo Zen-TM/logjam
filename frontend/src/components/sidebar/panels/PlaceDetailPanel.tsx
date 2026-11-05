@@ -35,6 +35,7 @@ import {
   placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
+  canyonGradeRow,
   isCanyonGradeKey,
   ADD_WAY,
   PLACE_PAGE,
@@ -327,9 +328,12 @@ function PlaceDetailPanel({
         (row): row is { key: string; label: string; text: string } =>
           row.text != null,
       );
-    const grade = formatCanyonGrade(place.fieldValues);
+    const grade = canyonGradeRow(place.fieldValues);
     return grade
-      ? [{ key: "grade", label: "Grade", text: grade }, ...answered]
+      ? [
+          { key: grade[0], label: grade[1], text: String(grade[2]) },
+          ...answered,
+        ]
       : answered;
   }, [place, placeCustomFieldDefs]);
 
