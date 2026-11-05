@@ -131,8 +131,6 @@ import { useRouteDraft, type RouteDraftHandle } from "./useRouteDraft";
 import { readSnapMode, writeSnapMode } from "./snapPreference";
 import { useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { LayersGlyph } from "./mapLoading";
-import { markMapDrawing, markMapDrawn } from "./mapDrawing";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
@@ -4944,8 +4942,6 @@ export function MapScreen({
         preferredFramesPerSecond={MAP_MAX_FPS}
         onRegionIsChanging={handleRegionIsChanging}
         onRegionDidChange={handleRegionDidChange}
-        onDidFinishRenderingFrame={markMapDrawing}
-        onDidFinishRenderingFrameFully={markMapDrawn}
         onPress={handleMapPress}
         onLongPress={handleMapLongPress}
       >
@@ -5644,7 +5640,7 @@ export function MapScreen({
           style={styles.controlButton}
           onPress={() => setPickerOpen(true)}
         >
-          <LayersGlyph online={connectivity === "online"} />
+          <Icon idea="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
         <Pressable
           accessibilityRole="button"

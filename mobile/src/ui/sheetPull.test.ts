@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
+  sheetPins,
   sheetPulled,
   sheetRelease,
   sheetReseats,
@@ -147,4 +148,62 @@ describe("sheetSeated", () => {
     expect(sheetSeated({ ...open, y: Number.POSITIVE_INFINITY })).toBe(false);
     expect(sheetSeated({ content: 0, viewport: 0, y: 0 })).toBe(false);
   });
+});
+
+// A drag that starts on content scrolled away from its top scrolls the content
+// and stops at the top; it does not hand on to the sheet. A drag that starts at
+// the top may.
+describe("sheetPins", () => {
+  it("pins a finger that went down on scrolled content", () => {
+    expect(sheetPins({ scrolled: 40 })).toBe(true);
+  });
+
+  // Red when `sheetPins` returns true at the top: no sheet could be pulled
+  // down by its content any more.
+  it("does not pin a finger that went down at the top", () => {
+    expect(sheetPins({ scrolled: 0 })).toBe(false);
+  });
+
+  // The drag as the sheet sees it: the finger goes down 300pt into the content,
+  // drags down 500pt (the content takes 300, the hand-off takes the other 200),
+  // and lets go. Red when `sheetPulled` ignores `pinned`: the sheet is then 200pt
+  // down, and 80pt past the dismiss distance it closes.
+  it("a drag that started away from the top never moves the sheet", () => {
+    const pinned = sheetPins({ scrolled: 300 });
+    for (const taken of [0, 100, 200]) {
+      const pulled = sheetPulled({ pull: taken, scrolled: 0, pinned });
+      expect(pulled).toBe(0);
+      expect(sheetRelease({ pulled, dragged: true })).toBe("rest");
+    }
+  });
+
+  it("a drag that started at the top still pulls the sheet down", () => {
+    const pinned = sheetPins({ scrolled: 0 });
+    expect(sheetPulled({ pull: 200, scrolled: 0, pinned })).toBe(200);
+  });
+
+  // Red when BottomSheet stops pinning from the touch that lands on the
+  // content, or draws the pinned sheet lower by the hand-off.
+  it("BottomSheet reads the pin from the content's touch and cancels the pull", () => {
+    const sheet = readFileSync(
+      new URL("./BottomSheet.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(sheet).toMatch(/sheetPins\(\{\s*scrolled: viewport\.current\.y/);
+    expect(sheet).toMatch(/Animated\.multiply\(pinned, pullNode\)/);
+  });
+});
+
+// The sheet sits at the bottom of a dock whose height does not depend on it, so
+// a taller tab grows the sheet upward in the same layout pass. Red when the
+// spacer goes back to a fixed height: the dock then grows with the sheet, the
+// sheet grows downward and is pulled up by a scroll a frame or more later.
+it("the dock keeps one height whatever the sheet's", () => {
+  const sheet = readFileSync(
+    new URL("./BottomSheet.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(sheet).toMatch(/spacer: \{ flexGrow: 1 \}/);
+  expect(sheet).toMatch(/contentContainerStyle=\{\{\s*minHeight: 2 \*/);
+  expect(sheet).not.toMatch(/height: Math\.max\(SHEET_TRAVEL/);
 });
