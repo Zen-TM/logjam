@@ -76,6 +76,7 @@ const UNKNOWN = "—";
 export const SpeedElevationChip = memo(function SpeedElevationChip({
   active,
   maxWidth,
+  onHeight,
 }: {
   /** The map's own `mapFocused && appActive`. A ticker behind a dark screen is
    *  a wakeup nobody sees. */
@@ -83,6 +84,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
   /** What the map leaves it beside the action column (the scale bar's). A
    *  larger text size stacks the two readings rather than widening past it. */
   maxWidth: number;
+  /** Its drawn height, for the compass ornament's margin: the stack's own
+   *  measure, not an estimate of it. */
+  onHeight: (height: number) => void;
 }) {
   const styles = useStyles();
   const { fontScale } = useWindowDimensions();
@@ -117,8 +121,9 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
     <View
       style={[styles.chip, { minWidth: width }, stacked && styles.chipStacked]}
       pointerEvents="none"
+      onLayout={(e) => onHeight(Math.round(e.nativeEvent.layout.height))}
     >
-      <View style={styles.column}>
+      <View style={[styles.column, stacked && styles.columnStacked]}>
         <Text style={styles.label} numberOfLines={1}>
           {note && figures.speedMps != null ? note : "Speed"}
         </Text>
@@ -131,7 +136,7 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
         </Text>
       </View>
       <View style={[styles.divider, stacked && styles.dividerStacked]} />
-      <View style={styles.column}>
+      <View style={[styles.column, stacked && styles.columnStacked]}>
         {/* No provenance glyph on screen: a DEM reading and a GPS one are not
             the same measurement, but displaying that permanently in a
             two-word chip clutters the UI when the distinction only matters to
@@ -165,6 +170,10 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   chipStacked: { flexDirection: "column", alignItems: "stretch" },
   column: { flex: 1, alignItems: "center" },
+  // Stacked, each reading is as tall as its two lines. `flex: 1` there (a
+  // zero flex basis in a column of unset height) let each half balloon to
+  // several times its text.
+  columnStacked: { flexGrow: 0, flexShrink: 0, flexBasis: "auto" },
   label: { ...muted(theme, textRole.meta) },
   value: {
     ...textRole.control,

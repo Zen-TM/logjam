@@ -72,3 +72,33 @@ describe("the chip never reaches the action column", () => {
     expect(readoutChipHeight(40, 8, 2, true)).toBe(168);
   });
 });
+
+// Stacked, the chip is two label/figure pairs and nothing else: it sizes to its
+// content and reports what it drew. Mutation: give the stacked column back
+// `flex: 1` (each half then took several times its text on the S9 at 2.0 and
+// covered the compass strip and scale bar), or drop `onLayout`/`onHeight` (the
+// ornament margin reverts to an estimate).
+describe("the stacked chip is only as tall as its content", () => {
+  const source = readFileSync(
+    new URL("./SpeedElevationChip.tsx", import.meta.url),
+    "utf8",
+  ).replace(/\/\/.*|\/\*[\s\S]*?\*\//g, "");
+  it("does not let a stacked column grow", () => {
+    const stacked = source.match(/columnStacked: \{([^}]*)\}/)?.[1] ?? "";
+    expect(stacked).toContain("flexGrow: 0");
+    expect(stacked).toContain('flexBasis: "auto"');
+    expect(stacked).not.toMatch(/\bflex: 1/);
+    expect(source.match(/stacked && styles\.columnStacked/g)).toHaveLength(2);
+  });
+  it("reports its measured height", () => {
+    expect(source).toContain("onLayout={(e) => onHeight(");
+  });
+  // Mutation: count the lines twice again (`* 2` on top of the stacking).
+  it("estimates two pairs of lines, no more", () => {
+    // 2.0x: two pairs of (40 * 2) line height, plus the padding.
+    expect(readoutChipHeight(40, 8, 2, true)).toBe(2 * 40 * 2 + 8);
+    expect(readoutChipHeight(40, 8, 2, true)).toBeLessThan(
+      2 * readoutChipHeight(40, 8, 2, false),
+    );
+  });
+});
