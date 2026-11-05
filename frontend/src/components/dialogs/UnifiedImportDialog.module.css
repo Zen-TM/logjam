@@ -148,18 +148,12 @@
 .coordRow {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .coordField {
   flex: 1;
   min-width: 0;
-}
-
-/* Sits on the field's line, not on its label's. */
-.pickButton {
-  flex: none;
-  margin-bottom: 4px;
 }
 
 .chevron {
