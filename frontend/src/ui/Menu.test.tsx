@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Menu, Popover } from "./Menu";
+import { Menu, Popover, takeDismissingPress } from "./Menu";
 
 // jsdom has no Popover API, and a closed `popover` counts as unrendered
 // there, so showing one drops the attribute.
@@ -88,10 +88,10 @@ describe("a press outside a floating element", () => {
   });
 });
 
-describe("a Popover that swallows the press that dismisses it", () => {
-  // `map` stands for the element whose presses are swallowed; `other` for a
+describe("a Popover that marks the press that dismisses it", () => {
+  // `map` stands for the element whose presses are marked; `other` for a
   // control outside it.
-  function open(swallow: boolean) {
+  function open(mark: boolean) {
     const onClose = vi.fn();
     const heard = vi.fn();
     document.body.addEventListener("click", heard);
@@ -105,7 +105,7 @@ describe("a Popover that swallows the press that dismisses it", () => {
         anchorRef={{ current: anchor }}
         label="Panel"
         dismissOnOutsidePress
-        swallowWithin={swallow ? map : null}
+        suppressAskWithin={mark ? map : null}
       >
         <p>Inside</p>
       </Popover>,
@@ -118,6 +118,8 @@ describe("a Popover that swallows the press that dismisses it", () => {
       done: () => {
         document.body.removeEventListener("click", heard);
         for (const element of [anchor, map, other]) element.remove();
+        // Clear a mark a test left behind.
+        takeDismissingPress();
       },
     };
   }
@@ -128,57 +130,64 @@ describe("a Popover that swallows the press that dismisses it", () => {
   };
   afterEach(() => vi.useRealTimers());
 
-  // Mutation: stop passing `swallowWithin` to useOutsidePress, and the click
-  // that closes the panel also reaches the map under it.
-  it("closes on a press on the map and lets the click that follows nowhere else", () => {
-    const { onClose, heard, map, done } = open(true);
+  // Mutation: stop passing `suppressAskWithin` to useOutsidePress, and the
+  // click that closes the panel also asks the map about a new point.
+  it("closes on a press on the map and marks that click once, for the map to read", () => {
+    const { onClose, map, done } = open(true);
     click(map);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(heard).not.toHaveBeenCalled();
-    // Only that one click: the next one is the page's again.
-    fireEvent.click(map);
+    expect(takeDismissingPress()).toBe(true);
+    // Only that one click: the next one is the map's again.
+    expect(takeDismissingPress()).toBe(false);
+    done();
+  });
+
+  // Mutation: stop the click (stopPropagation) as well, and a route, place or
+  // gauge under the press no longer acts on it.
+  it("never stops the click, so what is under the press still acts", () => {
+    const { heard, map, done } = open(true);
+    click(map);
     expect(heard).toHaveBeenCalledTimes(1);
     done();
   });
 
-  // Mutation: swallow every outside press, and a control (a tab, Layers) does
-  // nothing on the press that closes the panel.
-  it("lets a press on a control outside the map close the panel and still act", () => {
+  // Mutation: mark every outside press, and a press on a control closes the
+  // panel but the next map click is dropped.
+  it("does not mark a press on a control outside the map", () => {
     const { onClose, heard, other, done } = open(true);
     click(other);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(false);
     done();
   });
 
   // Mutation: drop the timer, and a click with no press before it (Enter on a
-  // focused button) after a drag that never clicked is eaten.
-  it("expires after a press that never clicked, so a later click is not eaten", () => {
+  // focused button) after a drag that never clicked is taken for the press.
+  it("expires after a press that never clicked, so a later click is not taken", () => {
     vi.useFakeTimers();
-    const { heard, map, done } = open(true);
+    const { map, done } = open(true);
     fireEvent.pointerDown(map);
     fireEvent.pointerUp(map);
     vi.advanceTimersByTime(500);
-    fireEvent.click(document.body);
-    expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(false);
     done();
   });
 
-  it("does not eat a click after a press that never clicked and a press inside", () => {
-    const { heard, map, done } = open(true);
+  it("forgets the mark when the next press lands", () => {
+    const { map, done } = open(true);
     fireEvent.pointerDown(map);
     // The next press lands inside the panel (the mock keeps it open).
     fireEvent.pointerDown(screen.getByText("Inside"));
-    fireEvent.click(document.body);
-    expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(false);
     done();
   });
 
-  it("leaves the click alone unless asked", () => {
-    const { onClose, heard, map, done } = open(false);
+  it("marks nothing unless asked", () => {
+    const { onClose, map, done } = open(false);
     click(map);
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(heard).toHaveBeenCalledTimes(1);
+    expect(takeDismissingPress()).toBe(false);
     done();
   });
 

@@ -1168,6 +1168,19 @@ test.describe("desktop", () => {
       await expect(panel).toBeVisible({ timeout: 1_500 });
     }).toPass({ timeout: 15_000 });
     await expectNoViolations(page, "[role='dialog'][aria-label='River gauge']");
+
+    // A press that closes a point panel only stops that click asking about a
+    // new point: the gauge under it still opens.
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2, {
+      button: "right",
+    });
+    const point = page.getByRole("dialog", { name: "This point" });
+    await expect(point).toBeVisible();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(panel).toBeVisible();
+    await expect(point).toHaveCount(0);
   });
 
   test("the Layers popover's Terrain tab, and its slope bands", async ({
@@ -1190,7 +1203,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='dialog'][aria-label='Slope bands']");
   });
 
-  test("What goes here?: offered by a right-click; What is here? by Enter", async ({
+  test("A right-click opens the point panel on Options; What is here? by Enter", async ({
     page,
   }) => {
     await openApp(page);
@@ -1199,23 +1212,22 @@ test.describe("desktop", () => {
     await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
     const canvas = page.locator("canvas.maplibregl-canvas");
     const box = (await canvas.boundingBox())!;
-    // A right-click offers wherever it lands, so a seeded pin under the pointer
-    // cannot swallow the press.
+    // A right-click asks wherever it lands, so a seeded pin under the pointer
+    // cannot swallow the press. It is the same panel a click opens, on Options,
+    // so there is no facts view to go back to.
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
       button: "right",
     });
-    const hold = page.getByRole("dialog", { name: "What goes here?" });
+    const hold = page.getByRole("dialog", { name: "This point" });
     await expect(hold).toBeVisible();
-    await expect(
-      hold.getByRole("button", { name: "Add a place here" }),
-    ).toBeVisible();
-    await expect(
-      hold.getByRole("button", { name: "Measure from here" }),
-    ).toBeVisible();
-    await expectNoViolations(
-      page,
-      "[role='dialog'][aria-label='What goes here?']",
-    );
+    for (const name of [
+      "Draw a route from here",
+      "Add a place here",
+      "Measure from here",
+    ])
+      await expect(hold.getByRole("button", { name })).toBeVisible();
+    await expect(hold.getByRole("button", { name: /^Back/ })).toHaveCount(0);
+    await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
 
     // Escape closes it, takes the dot with it and gives focus back to the map.
     await page.keyboard.press("Escape");
@@ -1295,7 +1307,7 @@ test.describe("desktop", () => {
     await expect(panel).toBeVisible();
     await press();
     await expect(panel).toHaveCount(0);
-    // Past the single-press delay a swallowed click would have asked after.
+    // Past the single-press delay a click that asked would have opened one.
     await page.waitForTimeout(600);
     await expect(panel).toHaveCount(0);
     // The next press is the map's again.
@@ -1320,6 +1332,19 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
     await expect(tray).toHaveCount(0);
     await expect(tools).toBeFocused();
+
+    // A press on the map closes the tray and asks about no point.
+    await tools.click();
+    const mapBox = (await canvas.boundingBox())!;
+    await page.mouse.click(
+      mapBox.x + mapBox.width * 0.85,
+      mapBox.y + mapBox.height * 0.2,
+    );
+    await expect(tray).toHaveCount(0);
+    await page.waitForTimeout(600);
+    await expect(page.getByRole("dialog", { name: "This point" })).toHaveCount(
+      0,
+    );
 
     await tools.click();
     await tray.getByRole("button", { name: "Measure distance" }).click();
@@ -1357,13 +1382,26 @@ test.describe("desktop", () => {
       button: "right",
     });
     await page
-      .getByRole("dialog", { name: "What goes here?" })
+      .getByRole("dialog", { name: "This point" })
       .getByRole("button", { name: "Measure from here" })
       .click();
     await expect(
       aside.getByRole("heading", { level: 2, name: "Measure distance" }),
     ).toBeVisible();
     await expect(aside.getByRole("status")).toHaveText("1 point");
+
+    // "Draw a route from here" arms the route tool, which opens as a page.
+    await aside.getByRole("button", { name: "Close" }).click();
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    await page
+      .getByRole("dialog", { name: "This point" })
+      .getByRole("button", { name: "Draw a route from here" })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "New route" }),
+    ).toBeVisible();
   });
 });
 

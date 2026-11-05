@@ -133,7 +133,12 @@ export default function MapChrome({
     toolsButtonRef.current?.focus();
   });
 
-  useOutsidePress(toolsOpen, [toolsLineRef], () => setToolsOpen(false));
+  useOutsidePress(
+    toolsOpen,
+    [toolsLineRef],
+    () => setToolsOpen(false),
+    map?.getContainer() ?? null,
+  );
 
   const runTool = (action: () => void) => {
     setToolsOpen(false);

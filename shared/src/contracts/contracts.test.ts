@@ -896,6 +896,7 @@ describe("the map point panel", () => {
   // clients the same verb under one id with different words.
   it("gives each client its verbs, in order, a one-client verb with a reason", () => {
     expect(mapPointVerbs("web").map((verb) => verb.id)).toEqual([
+      "drawRoute",
       "addPlace",
       "measure",
       "weather",
@@ -920,14 +921,21 @@ describe("the map point panel", () => {
   });
 
   // Mutation: add a verb to Options that the hold lacks and that is not the
-  // weather: `run[...]` on each client is a `Record` over the hold's ids, so
-  // that verb would reach it as `undefined` and do nothing.
+  // weather: Logjam GPS's `run[...]` is a `Record` over the hold's ids, so that
+  // verb would reach it as `undefined` and do nothing.
   it("gives every Options verb but the weather a flow from the hold's list", () => {
-    for (const platform of ["gps", "web"] as const) {
-      const hold = mapHoldVerbs(platform).map((verb) => verb.id);
-      for (const verb of mapPointVerbs(platform))
-        if (verb.id !== "weather") expect(hold, verb.id).toContain(verb.id);
-    }
+    const hold = mapHoldVerbs("gps").map((verb) => verb.id);
+    for (const verb of mapPointVerbs("gps"))
+      if (verb.id !== "weather") expect(hold, verb.id).toContain(verb.id);
+  });
+
+  // Mutation: put `drawRoute` back behind `on: "gps"`: Logjam Web's Options
+  // loses it and its words stop matching Logjam GPS's.
+  it("offers Draw a route from here on both clients, in the same words", () => {
+    const label = (platform: "gps" | "web") =>
+      mapPointVerbs(platform).find((verb) => verb.id === "drawRoute")?.label;
+    expect(label("web")).toBe("Draw a route from here");
+    expect(label("web")).toBe(label("gps"));
   });
 
   // Mutation: let weather back out to the facts, or Options close the panel:
@@ -945,9 +953,9 @@ describe("the map point panel", () => {
   });
 
   // Mutation: give a verb `hold: "gps"` that Logjam GPS's sheet does not draw
-  // (or the reverse): `MapHoldSheet` and `MapHoldMenu` draw `mapHoldVerbs`, so
-  // this list is what each client's hold offers.
-  it("gives the hold the same verbs on both clients where it can, each with one label", () => {
+  // (or the reverse): `MapHoldSheet` draws `mapHoldVerbs`, so this list is what
+  // its hold offers. Logjam Web has no hold: a right-click opens Options.
+  it("gives Logjam GPS's hold its verbs, each with one label", () => {
     expect(mapHoldVerbs("gps").map((verb) => verb.id)).toEqual([
       "navigate",
       "dropMarker",
@@ -955,10 +963,7 @@ describe("the map point panel", () => {
       "addPlace",
       "measure",
     ]);
-    expect(mapHoldVerbs("web").map((verb) => verb.id)).toEqual([
-      "addPlace",
-      "measure",
-    ]);
+    expect(mapHoldVerbs("web")).toEqual([]);
     // A verb the hold shares with Options is one label in both.
     const labels = new Map<string, string>();
     for (const verb of [...mapPointVerbs("gps"), ...mapHoldVerbs("gps")]) {
@@ -970,10 +975,6 @@ describe("the map point panel", () => {
       expect(mapPointVerbs(platform).map((verb) => verb.id)).toEqual(
         expect.arrayContaining(mapHoldVerbs(platform).map((verb) => verb.id)),
       );
-    // A hold verb only one client draws says why or what is missing.
-    for (const verb of MAP_POINT_VERBS)
-      if ("hold" in verb && verb.hold !== "both")
-        expect("reason" in verb || "gap" in verb).toBe(true);
   });
 
   // Mutation: give the fix's figures to every point, and a tapped spot reads

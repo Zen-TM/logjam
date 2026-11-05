@@ -10,6 +10,7 @@ afterEach(cleanup);
 const stubMap = {
   on() {},
   off() {},
+  getContainer: () => document.createElement("div"),
   getBearing: () => 0,
   getZoom: () => 10,
   getMinZoom: () => 0,

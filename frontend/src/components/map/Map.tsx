@@ -1,4 +1,4 @@
-import { Button, Checkbox, Notice } from "../../ui";
+import { Button, Checkbox, Notice, takeDismissingPress } from "../../ui";
 import {
   useEffect,
   useEffectEvent,
@@ -53,7 +53,6 @@ import {
 import { WORLDWIDE_TERRAIN_SOURCE, applyTerrain } from "./terrainSource";
 import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
-import MapHoldMenu from "./MapHoldMenu";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
@@ -563,6 +562,7 @@ function Map({
   selectTrack,
   onAddPlaceAt,
   onMeasureFrom,
+  onDrawRouteFrom,
   routeHover,
   drawingRoute,
   measuring,
@@ -646,6 +646,7 @@ function Map({
   /** "What is here?" verbs: each hands the point to the flow that exists. */
   onAddPlaceAt: (point: MapPointCoord) => void;
   onMeasureFrom: (point: MapPointCoord) => void;
+  onDrawRouteFrom: (point: MapPointCoord) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -841,17 +842,16 @@ function Map({
   const [asked, setAsked] = useState<{
     point: MapPointCoord;
     from: MapPointCoord | null;
+    /** A right-click: the panel opens on Options. */
+    startAt?: "options";
   } | null>(null);
   // The latest fix, in memory only: it feeds the distance and bearing in that
   // panel and goes nowhere else (see the GeolocateControl note below).
   const userFixRef = useRef<MapPointCoord | null>(null);
   // The press that closes the panel (a click elsewhere on the map) is not also
-  // read as a new question: the panel's `swallowWithin` stops that click.
+  // read as a new question: the panel marks it (`takeDismissingPress`), and the
+  // click handler below skips it. A route, place or gauge under it still acts.
   const closeAsked = useCallback(() => setAsked(null), []);
-  // "What goes here?": a right-click or long-press, which commits where a
-  // press only asks.
-  const [held, setHeld] = useState<MapPointCoord | null>(null);
-  const closeHeld = useCallback(() => setHeld(null), []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
@@ -2011,8 +2011,8 @@ function Map({
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
   // or feature under it), and Enter on the focused map asks about the middle of
   // what is visible. The panel is drawn by `MapPointPopover`; this only decides
-  // when it is asked. A right-click or long-press is the hold: it offers what
-  // can go there (`MapHoldMenu`), wherever it lands.
+  // when it is asked. A right-click or long-press asks the same panel and opens
+  // it on Options, wherever it lands.
   //
   // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
   // here writes anything: its verbs hand off to flows that confirm for
@@ -2030,14 +2030,16 @@ function Map({
       pending = null;
     };
     const armed = () => pickModeRef.current || drawingRouteRef.current;
-    const ask = (latitude: number, longitude: number) =>
+    const ask = (latitude: number, longitude: number, startAt?: "options") =>
       setAsked({
         point: { latitude, longitude },
         from: userFixRef.current,
+        ...(startAt ? { startAt } : {}),
       });
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (armed()) return;
+      // Taken first: it is spent by the click it belongs to, armed or not.
+      if (takeDismissingPress() || armed()) return;
       const layers = PRESSABLE.filter((id) => map.getLayer(id));
       if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
       cancel();
@@ -2051,8 +2053,7 @@ function Map({
       if (armed()) return;
       e.originalEvent.preventDefault();
       cancel();
-      setAsked(null);
-      setHeld({ latitude: e.lngLat.lat, longitude: e.lngLat.lng });
+      ask(e.lngLat.lat, e.lngLat.lng, "options");
     };
     // Enter on the focused map is a press on the middle of it: it asks what is
     // there, or, with a drawing tool armed, places the next point there. With
@@ -3635,22 +3636,15 @@ function Map({
       />
       {asked && drawableMap && (
         <MapPointPopover
-          key={`${asked.point.latitude},${asked.point.longitude}`}
+          key={`${asked.point.latitude},${asked.point.longitude},${asked.startAt ?? ""}`}
           map={drawableMap}
           point={asked.point}
           from={asked.from}
+          {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
-        />
-      )}
-      {held && drawableMap && (
-        <MapHoldMenu
-          key={`${held.latitude},${held.longitude}`}
-          map={drawableMap}
-          point={held}
-          onClose={closeHeld}
-          run={{ addPlace: onAddPlaceAt, measure: onMeasureFrom }}
+          onDrawRoute={onDrawRouteFrom}
         />
       )}
       {openGauge && gaugeFile && drawableMap && showGauges && (

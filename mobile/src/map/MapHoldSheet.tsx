@@ -1,7 +1,7 @@
 // "What goes here?": the sheet a press-and-hold opens. Its rows are
-// `mapHoldVerbs("gps")` and nothing else, so its words cannot drift from the
-// ones Logjam Web's right-click menu draws; the `Record` below is the parity
-// check, and `contracts.test.ts` holds the list.
+// `mapHoldVerbs("gps")` and nothing else, so its words are the ones Logjam
+// Web's Options draws; the `Record` below is the parity check, and
+// `contracts.test.ts` holds the list.
 import { View } from "react-native";
 import {
   MAP_POINT,

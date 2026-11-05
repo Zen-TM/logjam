@@ -104,9 +104,9 @@ type PointVerbDeclaration = {
   label: string;
   subtitle?: string;
   /**
-   * Also offered straight from the press-and-hold sheet (Logjam GPS) and the
-   * right-click or long-press menu (Logjam Web) on these clients. `on` and its
-   * reason or gap describe the client that has the verb at all, Options
+   * Also offered straight from the press-and-hold sheet (Logjam GPS). Logjam
+   * Web has no hold: a right-click opens the point panel on Options. `on` and
+   * its reason or gap describe the client that has the verb at all, Options
    * included.
    */
   hold?: VerbWhere;
@@ -145,20 +145,18 @@ export const MAP_POINT_VERBS = [
     icon: "draw",
     label: "Draw a route from here",
     hold: "gps",
-    on: "gps",
-    gap: "Logjam Web starts a route from its Routes tool, not from a point on the map.",
   },
   {
     id: "addPlace",
     icon: "addPlace",
     label: "Add a place here",
-    hold: "both",
+    hold: "gps",
   },
   {
     id: "measure",
     icon: MAP_MEASURE_ICON,
     label: MAP_MEASURE.copy.fromHere,
-    hold: "both",
+    hold: "gps",
   },
   // Opens the forecast in the panel's place, and backs out to it.
   { id: "weather", icon: "weather", label: WEATHER.copy.show },
@@ -216,8 +214,8 @@ export function mapPointVerbs(
 
 /**
  * What can go at a spot, from the gesture that commits: Logjam GPS's
- * press-and-hold sheet and Logjam Web's right-click or long-press menu draw
- * exactly these, in this order.
+ * press-and-hold sheet draws exactly these, in this order. Logjam Web's
+ * right-click opens the point panel on Options instead, which has them all.
  */
 export function mapHoldVerbs(
   platform: ContractPlatform,
