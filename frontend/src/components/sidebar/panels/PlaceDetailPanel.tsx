@@ -276,19 +276,25 @@ function PlaceDetailPanel({
   const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
 
   /** What this KIND of place records, and what this one answered. Only the
-   *  answered ones: a form asks every question, a page reports the answers. */
+   *  answered ones: a form asks every question, a page reports the answers.
+   *  The three grade inputs read as the one Grade row, first, as on the hero. */
   const attributes = useMemo(() => {
     if (!place) return [];
-    return defsForType(placeCustomFieldDefs, place.placeTypeId)
+    const answered = defsForType(placeCustomFieldDefs, place.placeTypeId)
       .filter((def) => !isCanyonGradeKey(def.key))
       .map((def) => ({
-        def,
+        key: def.key,
+        label: def.label,
         text: displayValue(def, fieldValue(place.fieldValues, def.key)),
       }))
       .filter(
-        (row): row is { def: ScopedCustomFieldDef; text: string } =>
+        (row): row is { key: string; label: string; text: string } =>
           row.text != null,
       );
+    const grade = formatCanyonGrade(place.fieldValues);
+    return grade
+      ? [{ key: "grade", label: "Grade", text: grade }, ...answered]
+      : answered;
   }, [place, placeCustomFieldDefs]);
 
   /**
@@ -780,9 +786,9 @@ function PlaceDetailPanel({
             title={placeAttributesTitle(placeType?.name ?? null)}
           />
           <dl className={classes.table}>
-            {attributes.map(({ def, text }) => (
-              <div key={def.key} className={classes.tableRow}>
-                <dt>{def.label}</dt>
+            {attributes.map(({ key, label, text }) => (
+              <div key={key} className={classes.tableRow}>
+                <dt>{label}</dt>
                 <dd className={classes.figure}>{text}</dd>
               </div>
             ))}

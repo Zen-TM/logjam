@@ -39,7 +39,7 @@ import {
   withRowUnit,
   distinctTripTypes,
   formatCanyonGrade,
-  withoutCanyonGradeRows,
+  canyonGradeRows,
   formatDistanceM,
   formatTripDate,
   mediaCategory,
@@ -272,8 +272,9 @@ export function PlaceDetailScreen({
       ?.name ?? "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
-  const customFields = withoutCanyonGradeRows(
+  const customFields = canyonGradeRows(
     attributeRows(labellingDefs, storedFields),
+    place.fieldValues,
   ).map(withRowUnit);
 
   // Position is what every place has. Type-specific attributes render in the
