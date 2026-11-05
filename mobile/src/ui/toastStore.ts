@@ -4,15 +4,6 @@
 // with an action before it is read.
 import type { ToastMessage } from "./Toast";
 
-export type Clearance = {
-  /** How far above the tab bar's margin the toast docks, for a screen that
-   *  keeps its own instruments there (the map's scale bar). */
-  bottom?: number;
-  /** Kept free on BOTH sides, so the toast stays centred while it clears a
-   *  column on one of them (the map's actions). */
-  inset?: number;
-};
-
 export type Entry = {
   /** Who raised it: the same publisher repeating a showing message is ignored,
    *  another publisher's copy is dismissed at once. */
@@ -20,15 +11,11 @@ export type Entry = {
   message: ToastMessage;
   /** The raising screen clears its own state; runs once, whenever it ends. */
   onDismissed: () => void;
-} & Clearance;
+};
 
 /** Same words, tone and action: the same toast, whatever its nonce. */
 const sameToast = (a: ToastMessage, b: ToastMessage) =>
   a.text === b.text && a.tone === b.tone && a.action?.label === b.action?.label;
-
-/** Where the dock's bottom edge sits above the host's bottom edge. */
-export const dockBottom = (gap: number, tabBar: number, bottom = 0) =>
-  gap + tabBar + bottom;
 
 export function createToastQueue() {
   let current: Entry | null = null;
