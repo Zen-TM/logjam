@@ -1,6 +1,7 @@
-/* Bottom-centre, above dialogs: the map's controls own both bottom corners.
-   Raised past the scale bar (26px up, 22px tall) so a toast never covers it;
-   the credits sit lower still, in the corner. */
+/* Bottom-centre on every screen, one max width, and never moved by what is
+   under it: it may overlap the map's controls. Above dialogs. Raised past the
+   scale bar (26px up, 22px tall); the credits sit lower still, in the
+   corner. */
 .stack {
   position: fixed;
   left: 50%;
@@ -12,7 +13,7 @@
   align-items: center;
   gap: 8px;
   width: max-content;
-  max-width: calc(100vw - 32px);
+  max-width: min(30rem, calc(100vw - 32px));
   pointer-events: none;
 }
 
@@ -21,20 +22,8 @@
 }
 
 @media (max-width: 768px) {
-  /* On a phone the map's action column runs up the right edge, so the toast
-     sits against the left edge and stops short of the column instead of
-     covering the zoom buttons. */
+  /* The bottom nav is the tab bar: the toast sits just above it. */
   .stack {
-    left: var(--space-2);
-    transform: none;
-    align-items: flex-start;
-    max-width: calc(
-      100vw -
-      var(--space-2) -
-      var(--map-button-size) -
-      2 *
-      var(--space-2)
-    );
     bottom: calc(var(--bottom-nav-height) + 64px);
   }
 }

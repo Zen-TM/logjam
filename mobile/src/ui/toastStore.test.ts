@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createToastQueue, dockBottom, type Entry } from "./toastStore";
+import { createToastQueue, type Entry } from "./toastStore";
 
 const entry = (
   text: string,
@@ -149,13 +149,5 @@ describe("the toast queue", () => {
     const unmount = queue.mountHost();
     unmount();
     expect(heard).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("where the dock sits", () => {
-  // Mutation: drop the tab bar term, and a toast overlaps the bar.
-  it("is the gap, above the tab bar, above the screen's own clearance", () => {
-    expect(dockBottom(16, 53)).toBe(69);
-    expect(dockBottom(16, 53, 30)).toBe(99);
   });
 });

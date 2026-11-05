@@ -19,7 +19,7 @@ import { Icon } from "./Icon";
 import { useReducedMotionRef } from "./useReducedMotion";
 import { useTabBarHeight } from "./tabBar";
 import { claimsHorizontalDrag, swipeDismisses } from "./toastSwipe";
-import { createToastQueue, dockBottom, type Clearance } from "./toastStore";
+import { createToastQueue } from "./toastStore";
 
 export type ToastMessage = {
   text: string;
@@ -34,7 +34,9 @@ export type ToastMessage = {
 
 // One host, one anchor (DESIGN.md): every `<Toast>` publishes to this queue and
 // `ToastHost`, mounted once at the shell, draws the one showing, centred above
-// the tab bar. A toast is therefore the same place whichever screen raised it.
+// the tab bar. A toast is therefore the same place whichever screen raised it,
+// and no screen or sheet can move it (`toastHost.test.ts`).
+const TOAST_MAX_WIDTH = 480;
 const queue = createToastQueue();
 
 /**
@@ -56,52 +58,40 @@ const queue = createToastQueue();
 export function Toast({
   message,
   onDismissed,
-  bottom,
-  inset,
-}: { message: ToastMessage | null; onDismissed: () => void } & Clearance) {
+}: {
+  message: ToastMessage | null;
+  onDismissed: () => void;
+}) {
   const [owner] = useState(() => Symbol("toast"));
   const hosted = useSyncExternalStore(queue.subscribe, queue.hosted);
   useEffect(() => {
-    if (hosted && message)
-      queue.publish({ owner, message, onDismissed, bottom, inset });
+    if (hosted && message) queue.publish({ owner, message, onDismissed });
     // Raised when the message changes, once; the callback is a fresh closure
-    // each render and the clearance is read as it is raised.
+    // each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hosted, message, owner]);
   // No host mounted (a test, a screen outside the shell): draw it in place.
   return hosted ? null : (
-    <ToastDock
-      message={message}
-      onDismissed={onDismissed}
-      bottom={dockBottom(spacing(2), 0, bottom)}
-      inset={inset}
-    />
+    <ToastDock message={message} onDismissed={onDismissed} />
   );
 }
 
 /**
  * Mounted once at the shell root, above the navigator, and once more inside
- * each open modal sheet (`sheet`): a native Modal draws over everything under
- * it, the shell's host included, so the newest host is the only one that draws
- * (`toastStore.topHost`). Over a sheet the tab bar is covered, so the dock
- * clears nothing of its own.
+ * each open modal sheet: a native Modal draws over everything under it, the
+ * shell's host included, so the newest host is the only one that draws
+ * (`toastStore.topHost`). Both dock in the same place, so a toast does not jump
+ * when a sheet opens.
  */
-export function ToastHost({ sheet = false }: { sheet?: boolean }) {
+export function ToastHost() {
   const [id] = useState(() => Symbol("host"));
   useEffect(() => queue.mountHost(id), [id]);
   const current = useSyncExternalStore(queue.subscribe, queue.current);
   const top = useSyncExternalStore(queue.subscribe, queue.topHost);
-  const tabBar = useTabBarHeight();
   return (
     <ToastDock
       message={top === id ? (current?.message ?? null) : null}
       onDismissed={queue.dismiss}
-      bottom={
-        sheet
-          ? dockBottom(spacing(2), 0)
-          : dockBottom(spacing(2), tabBar, current?.bottom)
-      }
-      inset={sheet ? undefined : current?.inset}
     />
   );
 }
@@ -109,14 +99,13 @@ export function ToastHost({ sheet = false }: { sheet?: boolean }) {
 function ToastDock({
   message,
   onDismissed,
-  bottom,
-  inset,
 }: {
   message: ToastMessage | null;
   onDismissed: () => void;
-} & Clearance) {
+}) {
   const theme = useTheme();
   const styles = useStyles();
+  const bottom = spacing(2) + useTabBarHeight();
 
   const [opacity] = useState(() => new Animated.Value(0));
   const [lift] = useState(() => new Animated.Value(12));
@@ -198,14 +187,7 @@ function ToastDock({
   const error = message.tone === "error";
 
   return (
-    <View
-      style={[
-        styles.dock,
-        bottom != null && { bottom },
-        inset != null && { left: inset, right: inset },
-      ]}
-      pointerEvents="box-none"
-    >
+    <View style={[styles.dock, { bottom }]} pointerEvents="box-none">
       <Animated.View
         accessibilityRole="alert"
         accessibilityLiveRegion="polite"
@@ -252,7 +234,6 @@ const useStyles = makeStyles((theme, textRole) => ({
     position: "absolute",
     left: spacing(2),
     right: spacing(2),
-    bottom: spacing(2),
     alignItems: "center",
   },
   toast: {
@@ -263,7 +244,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderWidth: 1,
     paddingVertical: spacing(1.5),
     paddingHorizontal: spacing(2),
-    maxWidth: "100%",
+    maxWidth: TOAST_MAX_WIDTH,
   },
   // The inverted surface, as on Logjam Web: the glyph's SHAPE says error or
   // not, because an intent colour on the inverse fails 3:1 in a dark scheme.

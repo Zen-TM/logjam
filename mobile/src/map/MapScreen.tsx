@@ -6066,17 +6066,7 @@ export function MapScreen({
         onError={(text) => notify(text, "error")}
       />
 
-      {/* Centred over the tab bar like every toast, lifted above whichever
-          instruments are on (their stack ends `ornamentMarginY` up, the dock
-          already leaves `spacing(2)`), and kept off the action column on
-          BOTH sides so it stays centred: the column's edge gap, its width and
-          a gap of air. */}
-      <Toast
-        message={toast}
-        onDismissed={() => setToast(null)}
-        bottom={Math.max(0, ornamentMarginY - spacing(2))}
-        inset={CHROME_GAP + FAB_SIZE + CHROME_GAP}
-      />
+      <Toast message={toast} onDismissed={() => setToast(null)} />
 
       <MapLayersSheet
         visible={pickerOpen}

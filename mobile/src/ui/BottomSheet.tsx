@@ -747,7 +747,7 @@ export function BottomSheet({
       </Animated.ScrollView>
       {/* The Modal covers the shell's toast host, so a toast raised while the
           sheet is up (a copy, a save) is drawn here instead. */}
-      {visible ? <ToastHost sheet /> : null}
+      {visible ? <ToastHost /> : null}
     </Modal>
   );
 }
