@@ -49,16 +49,18 @@
   padding-top: 4px;
 }
 
+/* From the top, so a button beside a field stays on the input line whatever
+   the error or hint under the input does. */
 .coordinates,
 .attribute {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px;
 }
 
 .coordinates {
-  align-items: flex-start;
+  container-type: inline-size;
 }
 
 .attribute {
