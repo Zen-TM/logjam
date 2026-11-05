@@ -7,8 +7,8 @@
 //   an imported file      → a copy of its file
 //   a .gpx/.kml file      → that file
 //
-// There is no pen: Logjam Web draws with the Route tool on the map, which a
-// dialog would cover (ADD_WAY's `draw` section says so).
+// There is no pen: drawing writes a route linked to a place, and a trip keeps
+// files, not routes.
 //
 // PRIVACY: nothing here logs a filename, a route name or a coordinate.
 import { useContext, useRef, useState } from "react";
