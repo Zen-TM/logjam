@@ -28,9 +28,10 @@ const repo = join(import.meta.dirname, "..", "..", "..");
 const read = (file: string) => readFileSync(join(repo, file), "utf8");
 
 describe("the Add a way panel's sources", () => {
-  it("lists the same sources on both clients, but the pen on the phone only", () => {
+  it("lists the same sources, in the same order, on both clients", () => {
     expect(contractSectionKeys(ADD_WAY, "web")).toEqual([
       "route",
+      "draw",
       "track",
       "import",
       "file",
@@ -95,6 +96,7 @@ describe("both clients draw the panel's words from the contract", () => {
   ])("%s types none of the shared sentences itself", (_name, source) => {
     for (const words of [
       ADD_WAY.copy.routeTitle,
+      ADD_WAY.copy.drawTitle,
       ADD_WAY.copy.trackTitle,
       ADD_WAY.copy.importTitle,
       ADD_WAY.copy.findRoute,

@@ -116,6 +116,7 @@ function renderPanel(
       onFocusBounds={noop}
       onOpenRoute={noop}
       onRoutesChanged={noop}
+      onDrawRoute={noop}
       {...props}
     />,
   );
@@ -165,7 +166,7 @@ const trackFile = {
 describe("adding a route from the place page", () => {
   // Mutation: render the button without `isOwnedPlace &&`, or drop the
   // `AddWayDialog` from the Route section, and this goes red.
-  it("offers the four sources an owner has, with Logjam GPS's words", async () => {
+  it("offers the five sources an owner has, with Logjam GPS's words", async () => {
     renderPanel();
     fireEvent.click(
       await screen.findByRole("button", { name: ADD_WAY.copy.title }),
@@ -175,6 +176,7 @@ describe("adding a route from the place page", () => {
     });
     for (const title of [
       ADD_WAY.copy.routeTitle,
+      ADD_WAY.copy.drawTitle,
       ADD_WAY.copy.trackTitle,
       ADD_WAY.copy.importTitle,
       "Upload a file",
@@ -182,6 +184,25 @@ describe("adding a route from the place page", () => {
       expect(
         within(dialog).getByRole("button", { name: new RegExp(title) }),
       ).toBeTruthy();
+  });
+
+  // Mutation: drop `onDrawRoute(current.id)` from the dialog's draw row, or
+  // pass another id: the pen would arm for no place, or the wrong one.
+  it("hands the map's pen this place when asked to draw", async () => {
+    const onDrawRoute = vi.fn();
+    renderPanel({ onDrawRoute });
+    fireEvent.click(
+      await screen.findByRole("button", { name: ADD_WAY.copy.title }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: ADD_WAY.copy.title,
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: new RegExp(ADD_WAY.copy.drawTitle),
+      }),
+    );
+    expect(onDrawRoute).toHaveBeenCalledWith("p1");
   });
 
   // Mutation: drop the `isOwnedPlace` guard, and a sharee is offered a write

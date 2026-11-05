@@ -19,12 +19,7 @@ export const ADD_WAY = {
   sections: [
     // What you already have, most likely first; then a file; then the pen.
     { key: "route" },
-    {
-      key: "draw",
-      on: "gps",
-      reason:
-        "Logjam Web draws with the Route tool on the map, which a dialog over the place page would cover.",
-    },
+    { key: "draw" },
     { key: "track" },
     { key: "import" },
     { key: "file" },
