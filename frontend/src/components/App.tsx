@@ -53,7 +53,14 @@ import {
   getTopoExport,
   getPlaceDetail,
 } from "../placeUtils";
-import { fillWaySlot, slotIncumbent } from "./dialogs/addWayModel";
+import {
+  drawExitPanel,
+  drawTarget,
+  fillWaySlot,
+  placeIsGone,
+  planDrawnSave,
+  type SlotIncumbent,
+} from "./dialogs/addWayModel";
 import { useConfirm } from "./sidebar/panels/useConfirm";
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
@@ -103,7 +110,6 @@ import {
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
   ADD_WAY,
-  routeSlotDisplaceConfirm,
   wayFailureMessage,
   WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
@@ -1204,11 +1210,11 @@ function App() {
     // too and then opens the saved way, which wins.
     setDrawPlaceId(null);
     setActivePanel(
-      drawPlaceId
-        ? "place-detail"
-        : editingRouteId && selectedWay?.id === editingRouteId
-          ? "way-detail"
-          : "ways",
+      drawExitPanel({
+        drawPlaceId,
+        editingRouteId,
+        selectedWayId: selectedWay?.id ?? null,
+      }),
     );
     afterRouteCancel.current?.();
     afterRouteCancel.current = null;
@@ -1342,18 +1348,19 @@ function App() {
   };
 
   const saveDrawnRoute = async (name: string) => {
-    const placeId = editingRouteId ? null : drawPlaceId;
+    const placeId = drawTarget(editingRouteId, drawPlaceId);
     if (!placeId) return void writeDrawnRoute(name, null, null);
-    // Into a place's route slot, which may have filled since the pen was armed:
-    // ask at the moment of the write, as every other source does.
+    // Into a place's route slot, which may have filled since the pen was armed
+    // (or the place may be gone): ask at the moment of the write, as every
+    // other source does.
     setSavingRoute(true);
     try {
-      const detail = await getPlaceDetail(placeId);
-      const incumbent = slotIncumbent(placeId, routes, detail.media);
-      const copy = routeSlotDisplaceConfirm("web", detail.name, incumbent);
+      const plan = await planDrawnSave(placeId, routes, getPlaceDetail);
       setSavingRoute(false);
-      const go = async () => writeDrawnRoute(name, placeId, incumbent);
-      if (copy) displaceConfirm.ask({ copy, run: go });
+      if (plan.kind === "standalone")
+        return void writeDrawnRoute(name, null, null, true);
+      const go = async () => writeDrawnRoute(name, placeId, plan.incumbent);
+      if (plan.confirm) displaceConfirm.ask({ copy: plan.confirm, run: go });
       else await go();
     } catch (err) {
       console.error(err);
@@ -1365,7 +1372,8 @@ function App() {
   const writeDrawnRoute = async (
     name: string,
     placeId: string | null,
-    incumbent: ReturnType<typeof slotIncumbent>,
+    incumbent: SlotIncumbent | null,
+    placeGone = false,
   ) => {
     setSavingRoute(true);
     try {
@@ -1397,9 +1405,12 @@ function App() {
       cancelDrawingRoute();
       refetchRoutes();
       if (placeId) {
+        // A file the swap unlinked is drawn on the map from its own copy.
+        refetchStandaloneFiles();
+        refetchPlaceTracks();
         toast.success(ADD_WAY.copy.routeDone);
-        setActivePanel("place-detail");
       } else {
+        if (placeGone) toast.info(ADD_WAY.copy.placeGone);
         if (result)
           openWay(
             wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds),
@@ -1407,6 +1418,11 @@ function App() {
       }
     } catch (err) {
       console.error(err);
+      if (placeId && (await placeStillGone(placeId))) {
+        // Gone between the read and the write: keep the drawing on its own.
+        setSavingRoute(false);
+        return void writeDrawnRoute(name, null, null, true);
+      }
       toast.error(
         placeId
           ? wayFailureMessage(err)
@@ -1416,6 +1432,13 @@ function App() {
       setSavingRoute(false);
     }
   };
+
+  /** Whether the place a failed write named has been deleted since. */
+  const placeStillGone = async (placeId: string) =>
+    getPlaceDetail(placeId).then(
+      () => false,
+      (err: unknown) => placeIsGone(err),
+    );
 
   // Blocking re-consent gate: a signed-in user whose recorded consent version
   // is stale or absent must re-consent before using Logjam Web (the

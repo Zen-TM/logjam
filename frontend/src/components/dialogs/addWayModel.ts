@@ -3,7 +3,10 @@
 // written in. Logjam GPS's `places/routeSlot.ts` is the same decision over its
 // own mirror; the words are `ADD_WAY`'s.
 import {
+  ApiError,
   attachableRoutes,
+  routeSlotDisplaceConfirm,
+  type ConfirmCopy,
   mediaCategory,
   mediaDisplayName,
   placeRoute,
@@ -129,5 +132,69 @@ function removeIncumbent(incumbent: SlotIncumbent): Promise<unknown> {
       return linkMediaToPlace(incumbent.id, null);
     case "upload":
       return deleteMedia(incumbent.id);
+  }
+}
+
+/** The place a drawing fills the route slot of; an edit never links. */
+export function drawTarget(
+  editingRouteId: string | null,
+  drawPlaceId: string | null,
+): string | null {
+  return editingRouteId ? null : drawPlaceId;
+}
+
+/** Where leaving the Route tool goes: back to the place it was armed from,
+ *  to the way being edited, or to the list a new route came from. */
+export function drawExitPanel({
+  drawPlaceId,
+  editingRouteId,
+  selectedWayId,
+}: {
+  drawPlaceId: string | null;
+  editingRouteId: string | null;
+  selectedWayId: string | null;
+}): "place-detail" | "way-detail" | "ways" {
+  if (drawPlaceId) return "place-detail";
+  return editingRouteId && selectedWayId === editingRouteId
+    ? "way-detail"
+    : "ways";
+}
+
+/** A place that was deleted, or unshared from the user, while the pen was out. */
+export function placeIsGone(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 403);
+}
+
+export type DrawnSave =
+  | { kind: "standalone" }
+  | {
+      kind: "place";
+      incumbent: SlotIncumbent | null;
+      /** Null when the slot is free. */
+      confirm: ConfirmCopy | null;
+    };
+
+/**
+ * What saving a drawing armed for `placeId` should do, read at the moment of
+ * the save: the slot may have filled since the pen was armed, or the place may
+ * be gone, in which case the drawing is kept as a route of its own rather than
+ * lost. Any other failure is the caller's to show.
+ */
+export async function planDrawnSave(
+  placeId: string,
+  routes: readonly TRoute[],
+  getDetail: (id: string) => Promise<{ name: string; media: MediaItem[] }>,
+): Promise<DrawnSave> {
+  try {
+    const detail = await getDetail(placeId);
+    const incumbent = slotIncumbent(placeId, routes, detail.media);
+    return {
+      kind: "place",
+      incumbent,
+      confirm: routeSlotDisplaceConfirm("web", detail.name, incumbent),
+    };
+  } catch (err) {
+    if (placeIsGone(err)) return { kind: "standalone" };
+    throw err;
   }
 }

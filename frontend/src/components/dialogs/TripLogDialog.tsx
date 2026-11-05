@@ -1298,12 +1298,14 @@ function TripLogDialog({
                   showError={showFieldErrors}
                 />
               </div>
-              <IconButton
-                icon="delete"
-                label={`Delete the attribute ${def.label}`}
-                tone="danger"
-                onClick={() => setFieldToDelete(def)}
-              />
+              <FieldBeside>
+                <IconButton
+                  icon="delete"
+                  label={`Delete the attribute ${def.label}`}
+                  tone="danger"
+                  onClick={() => setFieldToDelete(def)}
+                />
+              </FieldBeside>
             </div>
           ))}
           {showAddField ? (
