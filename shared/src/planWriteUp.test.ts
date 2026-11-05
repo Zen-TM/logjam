@@ -72,43 +72,55 @@ describe("noteBlocks", () => {
     );
   });
 
+  // Each entry is the text of every block drawn, as typed.
   it.each([
-    [
-      "a rule",
-      "Part one\n\n---\n\nPart two",
-      ["Part one", "", "---", "", "Part two"],
-    ],
+    ["a rule", "Part one\n\n---\n\nPart two", ["Part one", "---", "Part two"]],
     [
       "a setext heading",
       "Part one\n---\nPart two",
-      ["Part one", "---", "Part two"],
+      ["Part one\n---", "Part two"],
     ],
-    ["an equals underline", "Title\n=====", ["Title", "====="]],
+    ["an equals underline", "Title\n=====", ["Title\n====="]],
     ["a quote", "> quoted", ["> quoted"]],
-    ["a task list", "- [x] wet\n- [ ] rope", ["- [x] wet", "- [ ] rope"]],
+    ["a task list", "- [x] wet\n- [ ] rope", ["- [x] wet\n- [ ] rope"]],
     ["strikethrough", "~5km to~10km", ["~5km to~10km"]],
-    ["a nested list", "- a\n  - b", ["- a", "  - b"]],
+    ["a nested list", "- a\n  - b", ["- a\n  - b"]],
     [
       "hand indentation",
       "a\n  two-space indent\n      six-space indent\nb",
-      ["a", "  two-space indent", "      six-space indent", "b"],
+      ["a\n  two-space indent\n      six-space indent\nb"],
     ],
-    ["a tab indent", "a\n\tb", ["a", "\tb"]],
-    ["an indent after a plain list", "- a\n\nb\n  c", ["- a", "", "b", "  c"]],
-  ])("shows a note with %s exactly as typed", (_name, note, lines) => {
+    ["a tab indent", "a\n\tb", ["a\n\tb"]],
+    ["an indent in a later paragraph", "a\n\nb\n  c", ["a", "b\n  c"]],
+  ])("shows a note with %s exactly as typed", (_name, note, typed) => {
     // Red if a dropped construct is rendered with its characters missing:
     // the author never sees what was lost. Also red if losesIndent is removed:
     // the indented lines come out flush left.
     const blocks = noteBlocks(note);
-    expect(blocks).toHaveLength(1);
-    const [block] = blocks;
-    if (block.type !== "paragraph") throw new Error("not a paragraph");
-    const typed = block.children
-      .map((c) =>
-        c.type === "break" ? "\n" : c.type === "text" ? c.text : "?",
-      )
-      .join("");
-    expect(typed).toBe(lines.join("\n"));
+    expect(
+      blocks.map((block) => {
+        if (block.type !== "paragraph") throw new Error("not a paragraph");
+        return block.children
+          .map((c) =>
+            c.type === "break" ? "\n" : c.type === "text" ? c.text : "?",
+          )
+          .join("");
+      }),
+    ).toEqual(typed);
+  });
+
+  it("falls back per block: one unrenderable block leaves the rest drawn", () => {
+    // Red if the fallback goes back to covering the whole note: the bold, the
+    // list and the heading would be shown as typed because of one quote.
+    const blocks = noteBlocks("# Gear\n\n**wet** suit\n\n> quoted\n\n- a\n- b");
+    expect(blocks.map((b) => b.type)).toEqual([
+      "paragraph",
+      "paragraph",
+      "paragraph",
+      "list",
+    ]);
+    expect(JSON.stringify(blocks[1])).toContain('"type":"strong"');
+    expect(JSON.stringify(blocks[2])).not.toContain('"type":"strong"');
   });
 
   it("still draws Markdown it can fully draw", () => {
