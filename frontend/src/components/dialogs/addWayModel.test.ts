@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ApiError,
   WayRemovalError,
   type MediaItem,
   type StandaloneFile,
@@ -15,8 +16,11 @@ vi.mock("../../placeUtils", () => api);
 
 import {
   attachableFiles,
+  drawExitPanel,
+  drawTarget,
   ownAttachableRoutes,
   fillWaySlot,
+  planDrawnSave,
   slotIncumbent,
 } from "./addWayModel";
 
@@ -266,5 +270,75 @@ describe("fillWaySlot failures", () => {
       fillWaySlot({ incumbent: link, source: "route", write }),
     ).rejects.toBeInstanceOf(WayRemovalError);
     expect(write).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The hand-over from a place's "Draw a route on the map" to the Route tool and
+// back (App holds the state; these are its decisions).
+describe("drawing a route for a place", () => {
+  // Mutation: drop the `editingRouteId ?` guard, and editing a route that was
+  // armed from a place links it to that place.
+  it("arms for the place, and an edit never links", () => {
+    expect(drawTarget(null, "p1")).toBe("p1");
+    expect(drawTarget("r1", "p1")).toBeNull();
+    expect(drawTarget(null, null)).toBeNull();
+  });
+
+  // Mutation: send a place-armed cancel to "ways", and backing out of the pen
+  // strands the user in the Ways list.
+  it("leaves the tool for the place it came from, else the way or the list", () => {
+    const base = {
+      drawPlaceId: null,
+      editingRouteId: null,
+      selectedWayId: null,
+    };
+    expect(drawExitPanel({ ...base, drawPlaceId: "p1" })).toBe("place-detail");
+    expect(
+      drawExitPanel({ ...base, editingRouteId: "r1", selectedWayId: "r1" }),
+    ).toBe("way-detail");
+    expect(
+      drawExitPanel({ ...base, editingRouteId: "r1", selectedWayId: "r2" }),
+    ).toBe("ways");
+    expect(drawExitPanel(base)).toBe("ways");
+  });
+
+  const detail = (media: MediaItem[]) => async () => ({
+    name: "Claustral",
+    media,
+  });
+
+  it("saves into a free slot with no question", async () => {
+    const plan = await planDrawnSave("p1", [], detail([]));
+    expect(plan).toEqual({ kind: "place", incumbent: null, confirm: null });
+  });
+
+  // Mutation: read the slot from the routes alone, and a file that landed on
+  // the place meanwhile is replaced without asking.
+  it("asks when the slot filled while the pen was out", async () => {
+    const plan = await planDrawnSave(
+      "p1",
+      [route({ id: "r9", placeId: "p1", name: "Old line" })],
+      detail([]),
+    );
+    expect(plan.kind).toBe("place");
+    if (plan.kind !== "place") return;
+    expect(plan.incumbent?.id).toBe("r9");
+    expect(plan.confirm?.confirmLabel).toBe("Replace");
+  });
+
+  // Mutation: let the not-found escape, and the drawing can never be saved:
+  // every retry fails and the only way out is to discard it.
+  it("keeps the drawing as a route of its own when the place is gone", async () => {
+    const gone = async () => {
+      throw new ApiError(404, "/places/p1", "GET");
+    };
+    expect(await planDrawnSave("p1", [], gone)).toEqual({ kind: "standalone" });
+  });
+
+  it("does not hide a failure that is not the place being gone", async () => {
+    const down = async () => {
+      throw new ApiError(500, "/places/p1", "GET");
+    };
+    await expect(planDrawnSave("p1", [], down)).rejects.toThrow();
   });
 });
