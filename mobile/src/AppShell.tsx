@@ -1117,6 +1117,14 @@ export function AppShell({
       <View style={{ flex: 1 }}>
         <NavigationContainer ref={navigationRef} theme={navigationTheme}>
           <Tabs.Navigator
+            // Hidden tabs stay attached to the window, `display: none`. By default
+            // react-native-screens detaches an inactive tab's native views and
+            // re-attaches the whole tree on every switch (a 220-330 ms mount
+            // batch on the S9). Costs: the native views stay in memory, a hidden
+            // tab keeps re-rendering (react-native-screens ignores freezeOnBlur
+            // when it is not detaching), and nothing is drawn or laid out for it.
+            // Guard: tabAttach.test.ts.
+            detachInactiveScreens={false}
             // A route being drawn or edited owns the map's taps and has no home
             // anywhere else, so the tab bar refuses to take you off it. The draft
             // does survive (routeDraftStore), but nothing on another tab says so —
@@ -1152,10 +1160,6 @@ export function AppShell({
             <Tabs.Screen
               name="Map"
               options={{
-                // Not frozen: a frozen map has null camera refs (a fit or a
-                // reset skipped while hidden), its sheets cannot close, and the
-                // catch-up render lands in the switch back.
-                freezeOnBlur: false,
                 tabBarIcon: ({ color }) => <TabIcon idea="map" color={color} />,
               }}
             >
@@ -1164,10 +1168,6 @@ export function AppShell({
             <Tabs.Screen
               name="Places"
               options={{
-                // Frozen when hidden: React stops rendering the tab, while
-                // effects, timers and native callbacks run on. Which tabs freeze
-                // is pinned by freezeOnBlur.test.ts.
-                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="place" color={color} />
                 ),
@@ -1178,7 +1178,6 @@ export function AppShell({
             <Tabs.Screen
               name="Logs"
               options={{
-                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="trip" color={color} />
                 ),
@@ -1189,7 +1188,6 @@ export function AppShell({
             <Tabs.Screen
               name="Saved"
               options={{
-                freezeOnBlur: true,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="saved" color={color} />
                 ),
@@ -1204,9 +1202,6 @@ export function AppShell({
                 // open inside it: the hub is where a visit starts. React
                 // Navigation pops the tab's stack when the tab loses focus.
                 popToTopOnBlur: true,
-                // Not frozen: the pop to root must reach the stack before the
-                // tab hides, or the old page flashes on return.
-                freezeOnBlur: false,
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="moreTab" color={color} />
                 ),
