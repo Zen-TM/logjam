@@ -530,6 +530,43 @@ describe("GeoPdfDialog, the Area row", () => {
     rerender(dialog({ open: true, areaSeed: seed, pendingArea: seed }));
     expect(lit("Pick on the map")).toBe(true);
   });
+
+  // Mutation: leave Pick lit when the edges open, or keep the edges open when a
+  // pick is confirmed.
+  it("makes Pick and Type the coordinates one choice", () => {
+    const { rerender } = render(dialog({ open: true }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type the coordinates" }),
+    );
+    rerender(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }),
+    );
+    expect(lit("Pick on the map")).toBe(true);
+    expect(lit("Type the coordinates")).toBe(false);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Type the coordinates" }),
+    );
+    expect(lit("Pick on the map")).toBe(false);
+    expect(lit("Type the coordinates")).toBe(true);
+  });
+
+  // Mutation: show the clear button before a pick, or leave Pick lit after it.
+  it("clears a picked area from the button beside Pick", () => {
+    const { rerender } = render(dialog({ open: true }));
+    expect(
+      screen.queryByRole("button", { name: "Clear the picked area" }),
+    ).toBeNull();
+    rerender(
+      dialog({ open: true, pendingExtent: extent, pendingScale: 50000 }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Clear the picked area" }),
+    );
+    expect(lit("Pick on the map")).toBe(false);
+    expect(
+      screen.queryByRole("button", { name: "Clear the picked area" }),
+    ).toBeNull();
+  });
 });
 
 const coordsButton = () =>
