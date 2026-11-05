@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -100,10 +101,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [push],
   );
 
+  // A modal Dialog is in the browser's top layer, which no z-index beats; a
+  // manual popover joins it, and showing it again after the Dialog opened
+  // puts it on top. Hidden when empty so it never sits over a later Dialog.
+  const stack = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = stack.current;
+    if (!el?.showPopover) return;
+    el.hidePopover(); // a no-op when hidden; showPopover() throws if shown
+    if (toasts.length > 0) el.showPopover();
+  }, [toasts]);
+
   return (
     <ToastContext.Provider value={value}>
       {children}
       <div
+        ref={stack}
+        popover="manual"
         className={classes.stack}
         onPointerEnter={() => setHovered(true)}
         onPointerLeave={() => setHovered(false)}

@@ -1,13 +1,18 @@
-/* Bottom-centre on every screen, one max width, and never moved by what is
-   under it: it may overlap the map's controls. Above dialogs. Raised past the
-   scale bar (26px up, 22px tall); the credits sit lower still, in the
-   corner. */
+/* Bottom-centre on every screen, one max width, never moved by what is under
+   it: it may overlap the map's controls. A manual popover, so it is in the
+   top layer and shows above an open Dialog (ToastProvider.tsx). The popover's
+   own box styles are reset; only the position below is ours. */
 .stack {
   position: fixed;
+  inset: auto;
   left: 50%;
-  bottom: 64px;
+  bottom: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
   transform: translateX(-50%);
-  z-index: 2000;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -17,6 +22,11 @@
   pointer-events: none;
 }
 
+/* A popover's display is none until shown; this keeps the flex layout shown. */
+.stack:not(:popover-open) {
+  display: none;
+}
+
 .stack > * {
   pointer-events: auto;
 }
@@ -24,6 +34,6 @@
 @media (max-width: 768px) {
   /* The bottom nav is the tab bar: the toast sits just above it. */
   .stack {
-    bottom: calc(var(--bottom-nav-height) + 64px);
+    bottom: calc(var(--bottom-nav-height) + var(--space-2));
   }
 }
