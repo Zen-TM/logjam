@@ -42,11 +42,9 @@ import {
 } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
-import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
 import { subscribeReconnect } from "../map/connectivity";
 import { readPref, writePref } from "../prefsDb";
-import type { ToastMessage } from "../ui";
 import { assertSpaceFor, hasSpaceFor, NotEnoughSpaceError } from "./freeSpace";
 import { PLACE_REGISTRY_DIR } from "./localStores";
 import { canRunNow } from "./networkPolicy";
@@ -57,7 +55,10 @@ const POINTER_URI = `${PLACE_REGISTRY_DIR}pointer.json`;
 const DOWNLOAD_URI = `${PLACE_REGISTRY_DIR}download.tmp`;
 
 /** "on" once the user started a region download. Unset (null) on a phone that
- *  has not. The file cannot be removed from the phone, so there is no "off". */
+ *  has not. The file cannot be removed from the phone, so nothing writes "off"
+ *  any more; a phone still holding "off" from when it could be removed is
+ *  treated as unset and gets the public file again, which holds nothing about
+ *  the user (ADR 0034). */
 const WANTED_PREF_KEY = "placeRegistryWanted";
 
 /** The path of a build whose index would not build. Not fetched again; keyed
@@ -82,24 +83,14 @@ const MIN_INTERVAL_MS = 10_000;
 export type PlaceRegistryStatus = {
   /** The build on this phone, or null when it has none. */
   stored: PlaceRegistryPointer | null;
-  /** What the stored build takes on disk: the pointer's `bytes` is the
-   *  download, gzipped. */
-  storedBytes: number;
-  /** The newest build this session has seen, stored or not, for the size of
-   *  a download not yet made. */
-  latest: PlaceRegistryPointer | null;
-  downloading: boolean;
   /** The last load of the stored build failed and kept the file: the search
-   *  box offers Try again. Cleared by the next load, install or Remove. */
+   *  box offers Try again. Cleared by the next load or install. */
   loadFailed: boolean;
 };
 
 const initial = readStoredPointer();
 let status: PlaceRegistryStatus = {
   stored: initial,
-  storedBytes: initial ? diskBytes(initial) : 0,
-  latest: initial,
-  downloading: false,
   loadFailed: false,
 };
 const listeners = new Set<() => void>();
@@ -144,14 +135,6 @@ function readStoredPointer(): PlaceRegistryPointer | null {
 
 function dataUri(pointer: PlaceRegistryPointer): string {
   return `${PLACE_REGISTRY_DIR}${pointer.path}`;
-}
-
-function diskBytes(pointer: PlaceRegistryPointer): number {
-  try {
-    return new File(dataUri(pointer)).size;
-  } catch {
-    return 0;
-  }
 }
 
 /** The index, if it is loaded. Synchronous, for a search on every keystroke. */
@@ -218,7 +201,7 @@ async function buildIndex(
       await FileSystem.deleteAsync(dataUri(stored), { idempotent: true }).catch(
         () => {},
       );
-      publish({ stored: null, storedBytes: 0 });
+      publish({ stored: null });
     } else {
       // Kept, so nothing else changes: say so, or the box loads forever.
       publish({ loadFailed: true });
@@ -292,7 +275,7 @@ export type FetchOutcome =
  * Bring this phone's file up to the CDN's current build.
  *
  * `allowMetered` is the user's answer for a fetch they started (a region
- * download's "use mobile data", or a press in Settings); a refresh leaves it
+ * download's "use mobile data"); a refresh leaves it
  * out and asks the `placeNames` connection policy instead. A fetch the user
  * started rejects with NotEnoughSpaceError when the file would not fit; a
  * refresh skips.
@@ -321,7 +304,6 @@ export async function fetchPlaceRegistry(options: {
   }
   const promise = runFetch(options.allowMetered).finally(() => {
     fetching = null;
-    publish({ downloading: false });
   });
   fetching = { promise, allowMetered: options.allowMetered === true };
   return promise;
@@ -333,7 +315,6 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
   try {
     const pointer = await fetchPointer();
     if (!pointer) return "failed";
-    publish({ latest: pointer });
     if (pointer.version === status.stored?.version) return "current";
     if (pointer.path === readPref(UNREADABLE_PREF_KEY)) return "unreadable";
     // ADR 0005: nothing large is written without asking whether it fits.
@@ -343,7 +324,6 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
     } else {
       await assertSpaceFor(onDisk);
     }
-    publish({ downloading: true });
     await installBuild(pointer);
     return "updated";
   } catch (err) {
@@ -404,7 +384,6 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   index = null;
   publish({
     stored: pointer,
-    storedBytes: diskBytes(pointer),
     loadFailed: false,
   });
   // Only the new build is kept: the old file, and anything a crash left.
@@ -421,55 +400,6 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
     }
   } catch (err) {
     console.error(err);
-  }
-}
-
-// --- Toasts -----------------------------------------------------------------
-// An explicit download finishes wherever the user has got to, so it announces
-// itself at the app shell (BackgroundToast.tsx), as a region download does.
-// Region-started and automatic fetches stay silent.
-const toastListeners = new Set<
-  (message: Omit<ToastMessage, "nonce">) => void
->();
-
-/** Subscribe to an explicit download's outcome: BackgroundToast only. */
-export function onPlaceRegistryToast(
-  listener: (message: Omit<ToastMessage, "nonce">) => void,
-): () => void {
-  toastListeners.add(listener);
-  return () => toastListeners.delete(listener);
-}
-
-function toast(text: string): void {
-  for (const listener of toastListeners) listener({ text, tone: "error" });
-}
-
-/** What Download says when it did not bring the file; nothing when it did. */
-export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
-  updated: null,
-  current: null,
-  skipped: unavailableReasonText("needs-connection"),
-  "offline-only": "Turn off Use only saved maps to download place names.",
-  unreadable:
-    "The latest place names can't be read, so Logjam GPS waits for the next build.",
-  failed: "Download didn't finish.",
-};
-
-/** An explicit download: wanted from now on, on any connection. */
-export async function requestPlaceRegistry(): Promise<FetchOutcome> {
-  writePref(WANTED_PREF_KEY, "on");
-  try {
-    const outcome = await fetchPlaceRegistry({ allowMetered: true });
-    const problem = DOWNLOAD_PROBLEM[outcome];
-    if (problem) toast(problem);
-    return outcome;
-  } catch (err) {
-    toast(
-      err instanceof NotEnoughSpaceError
-        ? err.message
-        : (DOWNLOAD_PROBLEM.failed ?? ""),
-    );
-    return "failed";
   }
 }
 
