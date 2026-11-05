@@ -43,6 +43,7 @@
    the bin belongs to it. */
 .attribute {
   flex-wrap: nowrap;
+  align-items: flex-start;
 }
 
 .grow {
@@ -57,6 +58,7 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 8px;
+  container-type: inline-size;
 }
 
 .addAttribute {
