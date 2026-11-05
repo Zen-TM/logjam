@@ -74,7 +74,10 @@ function WeatherBody({
         <ForecastRail
           title={found.title}
           summary={found.summary}
-          labels={{ back: WEATHER.copy.earlier, on: WEATHER.copy.later }}
+          labels={{
+            back: `${WEATHER.copy.earlier}: ${found.title}`,
+            on: `${WEATHER.copy.later}: ${found.title}`,
+          }}
           cards={found.cards}
         />
       );

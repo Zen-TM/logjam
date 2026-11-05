@@ -179,7 +179,7 @@ describe("weatherDayFacts", () => {
       day: "Today",
       condition: { label: "Clear", icon: "weatherClear" },
       temperature: "4–17°C",
-      rain: "0 mm",
+      rain: "–",
       chance: "5%",
       wind: "10 km/h",
     });
@@ -226,8 +226,56 @@ describe("weatherRows", () => {
     expect(hours[1].label).toBe("10 am");
     expect(hours[2]).toMatchObject({ label: "11 am", chance: "1%" });
     expect(hours[3]).toMatchObject({ label: "12 pm", chance: "5%" });
-    expect(hours.find((h) => h.label === "12 am")).toBeTruthy();
     expect(hours.filter((h) => h.current)).toHaveLength(1);
+  });
+
+  // The card that opens a new date says the day, so tonight is not mistaken
+  // for tomorrow morning. Mutation that turns it red: label it `hourLabel`
+  // whatever its date.
+  it("labels the first hour of a new date with its day", () => {
+    const hours = byKey.hours.cards;
+    expect(hours[14].label).toBe("11 pm");
+    expect(hours[15].label).toBe("Mon 19");
+    expect(hours[15].spoken).toMatch(/^Mon 19, 12 am, /);
+    expect(
+      hours.filter((h) => /^[A-Z][a-z]{2} \d+$/.test(h.label)),
+    ).toHaveLength(1);
+  });
+
+  it("draws none as a dash, so the wet cards stand out", () => {
+    const [now0] = byKey.hours.cards;
+    expect(now0).toMatchObject({ rain: "–", rainLevel: 0 });
+    const wet = byKey.days.cards.find((d) => d.rain !== "–");
+    expect(wet?.rain).toMatch(/mm$/);
+    expect(now0.spoken).toContain("no rain");
+    expect(byKey.past.cards[1]).toMatchObject({ rain: "–" });
+    // A trace too small to read as 0.1 is none, not "0.0 mm".
+    const trace = parseForecast(
+      {
+        ...forecastJson,
+        hourly: {
+          ...forecastJson.hourly,
+          precipitation: forecastJson.hourly.precipitation.map(() => 0.04),
+        },
+      },
+      cell,
+      spotNine,
+    );
+    expect(weatherRows(trace, spotNine)[0].cards[0].rain).toBe("–");
+  });
+
+  // A kept copy read late has fewer than 24 hours left: the title says how
+  // many, and the row goes when none remain. Mutation that turns it red: use
+  // `WEATHER.copy.hours` whatever the count.
+  it("titles the hours a stale copy has left, and drops the row at none", () => {
+    const late = weatherRows(forecast, spotNine + 30 * 3_600_000);
+    expect(late[0].title).toBe("Next 18 hours");
+    expect(late[0].cards).toHaveLength(18);
+    const last = weatherRows(forecast, spotNine + 47 * 3_600_000);
+    expect(last[0].title).toBe("Next 1 hour");
+    expect(
+      weatherRows(forecast, spotNine + 49 * 3_600_000).map((r) => r.key),
+    ).toEqual(["days", "past"]);
   });
 
   it("starts the hours at the next one when the read is between two", () => {
@@ -282,9 +330,47 @@ describe("weatherRows", () => {
 
   it("reads a card aloud with every figure on it", () => {
     expect(byKey.hours.cards[5].spoken).toBe(
-      "2 pm, Clear, 16°, rain 0 mm, 5% chance, wind 8 km/h",
+      "2 pm, Clear, 16°, no rain, 5% chance, wind 8 km/h",
     );
     expect(byKey.past.cards[0].spoken).toBe("Sun 11, rain 7 mm");
+  });
+});
+
+// The hourly array spans a fortnight, so one UTC offset for all of it is an
+// hour out on the far side of a daylight-saving change. Sydney went from +10
+// to +11 at 02:00 on 2026-10-04. Mutation that turns it red: build `at` from
+// `utc_offset_seconds` alone, as before.
+describe("hours across a daylight-saving change", () => {
+  const times = Array.from({ length: 72 }, (_, i) => {
+    const d = new Date(Date.UTC(2026, 9, 3, i));
+    return d.toISOString().slice(0, 13) + ":00";
+  }).filter((t) => t !== "2026-10-04T02:00"); // the hour that did not happen
+  const flat = (v: number) => times.map(() => v);
+  const json = {
+    ...forecastJson,
+    utc_offset_seconds: 39600,
+    hourly: {
+      time: times,
+      weather_code: flat(0),
+      temperature_2m: flat(10),
+      precipitation: flat(0),
+      precipitation_probability: flat(0),
+      wind_speed_10m: flat(5),
+    },
+  };
+  const parsed = parseForecast(json, cell, Date.UTC(2026, 9, 2, 12));
+  const at = (time: string) => parsed.hours.find((h) => h.time === time)?.at;
+
+  it("takes each hour's offset from the zone's rules", () => {
+    expect(at("2026-10-04T01:00")).toBe(Date.UTC(2026, 9, 3, 15)); // +10
+    expect(at("2026-10-04T03:00")).toBe(Date.UTC(2026, 9, 3, 16)); // +11
+    expect(at("2026-10-04T20:00")).toBe(Date.UTC(2026, 9, 4, 9)); // +11
+  });
+
+  it("falls back to the response's offset without a zone", () => {
+    const { timezone: _zone, ...noZone } = json;
+    const hour = parseForecast(noZone, cell, Date.UTC(2026, 9, 2, 12)).hours[0];
+    expect(hour.at).toBe(Date.UTC(2026, 9, 3, 0) - 39600_000);
   });
 });
 

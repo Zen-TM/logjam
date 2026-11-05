@@ -90,7 +90,9 @@ export function ForecastRail({
                 style={[styles.fill, { width: `${card.rainLevel * 100}%` }]}
               />
             </View>
-            <Text style={styles.rain}>{card.rain}</Text>
+            <Text style={[styles.rain, card.rainLevel === 0 && styles.dry]}>
+              {card.rain}
+            </Text>
             {card.chance ? (
               <Text style={styles.meta}>{card.chance}</Text>
             ) : null}
@@ -144,6 +146,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     textAlign: "center",
     fontVariant: ["tabular-nums"],
   },
+  // None is a dash in the muted ink, so a wet card is the one with a figure.
+  dry: { color: theme.textMuted },
   meta: {
     ...muted(theme, textRole.meta),
     textAlign: "center",

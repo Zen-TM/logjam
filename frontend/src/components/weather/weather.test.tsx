@@ -83,7 +83,7 @@ describe("WeatherView", () => {
     expect(days[0].textContent).toContain(WEATHER.copy.today);
     expect(days[0].getAttribute("data-current")).toBe("true");
     for (const card of [...hours, ...days])
-      expect(card.getAttribute("aria-label")).toMatch(/rain .* mm/);
+      expect(card.getAttribute("aria-label")).toMatch(/rain/);
     const past = within(
       screen.getByRole("list", { name: WEATHER.copy.pastModel }),
     ).getAllByRole("listitem");
@@ -96,6 +96,24 @@ describe("WeatherView", () => {
     expect(track.getAttribute("tabindex")).toBe("0");
   });
 
+  // Three rows, three pairs of buttons: a screen reader's list of buttons must
+  // say which row each pages. Mutation that turns it red: pass the same
+  // `labels` to every row in WeatherView.tsx.
+  it("names each row's buttons after the row", () => {
+    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    const names = screen
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label") ?? "")
+      .filter(
+        (n) =>
+          n.startsWith(WEATHER.copy.earlier) ||
+          n.startsWith(WEATHER.copy.later),
+      );
+    expect(names).toHaveLength(6);
+    expect(new Set(names).size).toBe(6);
+    expect(names).toContain(`${WEATHER.copy.earlier}: ${WEATHER.copy.days}`);
+  });
+
   it("pages a row by its buttons", () => {
     render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
     const track = screen.getByRole("list", { name: WEATHER.copy.hours });
@@ -103,7 +121,9 @@ describe("WeatherView", () => {
     track.scrollBy = scrollBy;
     window.matchMedia = vi.fn(() => ({ matches: false })) as never;
     fireEvent.click(
-      screen.getAllByRole("button", { name: WEATHER.copy.later })[0],
+      screen.getByRole("button", {
+        name: `${WEATHER.copy.later}: ${WEATHER.copy.hours}`,
+      }),
     );
     expect(scrollBy).toHaveBeenCalledTimes(1);
   });

@@ -8,7 +8,7 @@
 // shows it offline with its age; refreshing then says "Needs a connection"
 // (shared/DESIGN.md §5). Logjam Web, at a desk, keeps none.
 //
-// The figures are one function both clients draw (`weatherDayFacts`). The
+// The rows are one function both clients draw (`weatherRows`). The
 // credit is CC BY 4.0's condition for Open-Meteo's data: it is always drawn.
 import type { IconIdea } from "../icons.js";
 import {
@@ -103,6 +103,19 @@ export function weatherDaysFrom(
   return forecast.days.filter((day) => day.date >= today);
 }
 
+/** Drawn where a figure is none (0 mm, 0%, no wind): the wet ones stand out. */
+export const WEATHER_NONE = "–";
+
+/** The least rain a figure is drawn for: below it "0.0 mm" would be noise. */
+const RAIN_SHOWN_MM = 0.05;
+
+const rainText = (mm: number): string =>
+  mm >= RAIN_SHOWN_MM ? formatRainMm(mm) : WEATHER_NONE;
+const chanceText = (percent: number): string =>
+  percent > 0 ? `${percent}%` : WEATHER_NONE;
+const windText = (kmh: number): string =>
+  Math.round(kmh) > 0 ? `${Math.round(kmh)} km/h` : WEATHER_NONE;
+
 export function formatRainMm(mm: number): string {
   return `${mm > 0 && mm < 1 ? mm.toFixed(1) : Math.round(mm)} mm`;
 }
@@ -114,7 +127,7 @@ export type WeatherDayFacts = {
   condition: WeatherCondition;
   /** "4–17°C" */
   temperature: string;
-  /** "6 mm" */
+  /** "6 mm", or `WEATHER_NONE` for a dry day. */
   rain: string;
   /** "70%"; null for a day already past, which has no chance. */
   chance: string | null;
@@ -122,11 +135,15 @@ export type WeatherDayFacts = {
   wind: string;
 };
 
+/** "Mon 20". */
+function weekdayLabel(date: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d}`;
+}
+
 /** "Today", or "Mon 20". */
 function dayLabel(date: string, now: number): string {
-  const [y, m, d] = date.split("-").map(Number);
-  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
-  return date === localDate(now) ? WEATHER.copy.today : `${weekday} ${d}`;
+  return date === localDate(now) ? WEATHER.copy.today : weekdayLabel(date);
 }
 
 export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
@@ -135,9 +152,9 @@ export function weatherDayFacts(day: WeatherDay, now: number): WeatherDayFacts {
     day: dayLabel(day.date, now),
     condition: weatherCondition(day.code),
     temperature: `${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°C`,
-    rain: formatRainMm(day.rainMm),
-    chance: day.rainChance != null ? `${day.rainChance}%` : null,
-    wind: `${Math.round(day.windMaxKmh)} km/h`,
+    rain: rainText(day.rainMm),
+    chance: day.rainChance != null ? chanceText(day.rainChance) : null,
+    wind: windText(day.windMaxKmh),
   };
 }
 
@@ -163,13 +180,13 @@ export type WeatherCard = {
   glyphLabel: string;
   /** "14°" for an hour, "4–17°C" for a day; null for a past day. */
   temperature: string | null;
-  /** "0.4 mm" */
+  /** "0.4 mm"; `WEATHER_NONE` where none fell, so the wet cards stand out. */
   rain: string;
   /** 0 to 1: how much of its row's wettest card this one is. Zero is empty. */
   rainLevel: number;
-  /** "70%", where the model gave one. */
+  /** "70%", where the model gave one; `WEATHER_NONE` for 0. */
   chance: string | null;
-  /** "25 km/h"; null for a past day. */
+  /** "25 km/h" or `WEATHER_NONE`; null for a past day. */
   wind: string | null;
   /** Every figure on the card, in words, for a screen reader. */
   spoken: string;
@@ -198,7 +215,7 @@ const RAIN_FULL_MM: Record<WeatherRowKey, number> = {
 
 function rainLevels(key: WeatherRowKey, mm: number[]): number[] {
   const full = Math.max(RAIN_FULL_MM[key], ...mm);
-  return mm.map((value) => (value > 0 ? value / full : 0));
+  return mm.map((value) => (value >= RAIN_SHOWN_MM ? value / full : 0));
 }
 
 function hourLabel(hour: WeatherHour): string {
@@ -233,23 +250,40 @@ export function weatherRows(
   const rows: WeatherRow[] = [
     {
       key: "hours",
-      title: WEATHER.copy.hours,
+      // A kept copy read late has fewer than a day's hours left: the title says
+      // how many rather than promising 24.
+      title:
+        hours.length < WEATHER_HOURS_SHOWN
+          ? `Next ${hours.length} ${hours.length === 1 ? "hour" : "hours"}`
+          : WEATHER.copy.hours,
       summary: null,
       cards: withSpoken(
         hours.map((hour, i) => {
           const condition = weatherCondition(hour.code);
           const current = i === 0 && hour.at <= now;
+          // The first card of a new date says which day it is, in place of its
+          // hour (spoken, it gives both).
+          const date = hour.time.slice(0, 10);
+          const newDay = i > 0 && date !== hours[i - 1].time.slice(0, 10);
           return {
             key: hour.time,
-            label: current ? WEATHER.copy.now : hourLabel(hour),
+            label: current
+              ? WEATHER.copy.now
+              : newDay
+                ? weekdayLabel(date)
+                : hourLabel(hour),
+            spokenLabel: newDay
+              ? `${weekdayLabel(date)}, ${hourLabel(hour)}`
+              : undefined,
             current,
             glyph: condition.icon,
             glyphLabel: condition.label,
             temperature: `${Math.round(hour.tempC)}°`,
-            rain: formatRainMm(hour.rainMm),
+            rain: rainText(hour.rainMm),
             rainLevel: hourLevels[i],
-            chance: hour.rainChance != null ? `${hour.rainChance}%` : null,
-            wind: `${Math.round(hour.windKmh)} km/h`,
+            chance:
+              hour.rainChance != null ? chanceText(hour.rainChance) : null,
+            wind: windText(hour.windKmh),
           };
         }),
       ),
@@ -291,7 +325,7 @@ export function weatherRows(
           glyph: null,
           glyphLabel: "",
           temperature: null,
-          rain: formatRainMm(day.rainMm),
+          rain: rainText(day.rainMm),
           rainLevel: pastLevels[i],
           chance: null,
           wind: null,
@@ -302,21 +336,24 @@ export function weatherRows(
   return rows.filter((row) => row.cards.length > 0);
 }
 
-function withSpoken(cards: Omit<WeatherCard, "spoken">[]): WeatherCard[] {
-  return cards.map((card) => ({ ...card, spoken: spoken(card) }));
-}
+type BareCard = Omit<WeatherCard, "spoken"> & { spokenLabel?: string };
 
-function spoken(card: Omit<WeatherCard, "spoken">): string {
-  return [
-    card.label,
-    card.glyphLabel,
-    card.temperature,
-    `rain ${card.rain}`,
-    card.chance && `${card.chance} chance`,
-    card.wind && `wind ${card.wind}`,
-  ]
-    .filter(Boolean)
-    .join(", ");
+function withSpoken(cards: BareCard[]): WeatherCard[] {
+  return cards.map(({ spokenLabel, ...card }) => ({
+    ...card,
+    spoken: [
+      spokenLabel ?? card.label,
+      card.glyphLabel,
+      card.temperature,
+      card.rain === WEATHER_NONE ? "no rain" : `rain ${card.rain}`,
+      card.chance &&
+        `${card.chance === WEATHER_NONE ? "0%" : card.chance} chance`,
+      card.wind &&
+        (card.wind === WEATHER_NONE ? "no wind" : `wind ${card.wind}`),
+    ]
+      .filter(Boolean)
+      .join(", "),
+  }));
 }
 
 /** "Updated 3 h ago": how old the figures on screen are. */
