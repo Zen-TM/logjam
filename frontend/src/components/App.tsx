@@ -51,7 +51,10 @@ import {
   reconcileCustomFilters,
   apiFetch,
   getTopoExport,
+  getPlaceDetail,
 } from "../placeUtils";
+import { fillWaySlot, slotIncumbent } from "./dialogs/addWayModel";
+import { useConfirm } from "./sidebar/panels/useConfirm";
 import LayersPopover from "./map/LayersPopover";
 import type { MapTool } from "./map/MapChrome";
 import type { MapKind } from "./sidebar/panels/PlacesPanel";
@@ -99,6 +102,10 @@ import {
   TOPO_OVERLAY_SOURCE,
   GEOPDF_OVERLAY_ATTRIBUTION,
   pickNextTrackColor,
+  ADD_WAY,
+  routeSlotDisplaceConfirm,
+  wayFailureMessage,
+  WayRemovalError,
   TERRAIN_LAYER_DEFAULTS,
   TERRAIN_LAYER_KEYS,
   drawsNswContours,
@@ -271,6 +278,10 @@ function App() {
   // what stands in the way (arming the measure tool over a draft with points).
   const afterRouteCancel = useRef<(() => void) | null>(null);
   const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  // The place whose route slot a new drawing fills, when "Add a way" asked for
+  // the pen; the save links it and the way out comes back to that place.
+  const [drawPlaceId, setDrawPlaceId] = useState<string | null>(null);
+  const displaceConfirm = useConfirm();
   const [savingRoute, setSavingRoute] = useState(false);
   const [namingRoute, setNamingRoute] = useState(false);
   // Persisted: a canyoner who wants creek-following wants it every session.
@@ -1188,10 +1199,13 @@ function App() {
     // The tool is a PAGE, so leaving it has to go somewhere: back to the way
     // being edited, or to the list a new route came from. A save calls this
     // too and then opens the saved way, which wins.
+    setDrawPlaceId(null);
     setActivePanel(
-      editingRouteId && selectedWay?.id === editingRouteId
-        ? "way-detail"
-        : "ways",
+      drawPlaceId
+        ? "place-detail"
+        : editingRouteId && selectedWay?.id === editingRouteId
+          ? "way-detail"
+          : "ways",
     );
     afterRouteCancel.current?.();
     afterRouteCancel.current = null;
@@ -1273,6 +1287,7 @@ function App() {
 
   const startDrawingRoute = () => {
     setEditingRouteId(null);
+    setDrawPlaceId(null);
     routeDraft.reset();
     const nextColor = pickNextTrackColor(routes.map((r) => r.color));
     setDrawColor(nextColor);
@@ -1280,6 +1295,12 @@ function App() {
     // The tool is a PAGE now, not a card over the map: the panel is where a
     // route's figures already live, and the canvas stays clear for drawing.
     setActivePanel("way-draw");
+  };
+
+  /** "Draw a route on the map" from a place's Add a way. */
+  const startDrawingRouteForPlace = (placeId: string) => {
+    startDrawingRoute();
+    setDrawPlaceId(placeId);
   };
 
   /**
@@ -1301,6 +1322,7 @@ function App() {
 
   const startEditingRoute = (route: TRoute) => {
     setEditingRouteId(route.id);
+    setDrawPlaceId(null);
     // Anchors come back with the route, so a snapped line reopens with the
     // user's own handful of points rather than every snapped vertex.
     routeDraft.reset({ points: route.points, anchors: route.anchors });
@@ -1317,6 +1339,31 @@ function App() {
   };
 
   const saveDrawnRoute = async (name: string) => {
+    const placeId = editingRouteId ? null : drawPlaceId;
+    if (!placeId) return void writeDrawnRoute(name, null, null);
+    // Into a place's route slot, which may have filled since the pen was armed:
+    // ask at the moment of the write, as every other source does.
+    setSavingRoute(true);
+    try {
+      const detail = await getPlaceDetail(placeId);
+      const incumbent = slotIncumbent(placeId, routes, detail.media);
+      const copy = routeSlotDisplaceConfirm("web", detail.name, incumbent);
+      setSavingRoute(false);
+      const go = async () => writeDrawnRoute(name, placeId, incumbent);
+      if (copy) displaceConfirm.ask({ copy, run: go });
+      else await go();
+    } catch (err) {
+      console.error(err);
+      setSavingRoute(false);
+      toast.error(wayFailureMessage(err));
+    }
+  };
+
+  const writeDrawnRoute = async (
+    name: string,
+    placeId: string | null,
+    incumbent: ReturnType<typeof slotIncumbent>,
+  ) => {
     setSavingRoute(true);
     try {
       const chosenColor = drawColor ?? undefined;
@@ -1326,16 +1373,42 @@ function App() {
         anchors: routeDraft.anchorIndices,
         ...(chosenColor ? { color: chosenColor } : {}),
       };
-      const result = editingRouteId
-        ? await updateRoute(editingRouteId, payload)
-        : await createRoute(payload);
+      let result: Awaited<ReturnType<typeof createRoute>> | undefined;
+      if (editingRouteId) result = await updateRoute(editingRouteId, payload);
+      else if (placeId) {
+        try {
+          await fillWaySlot({
+            incumbent,
+            source: "draw",
+            write: async () => {
+              result = await createRoute({ ...payload, placeId });
+            },
+          });
+        } catch (err) {
+          // The route is in; only the old way stayed.
+          if (!(err instanceof WayRemovalError)) throw err;
+          toast.error(err.message);
+        }
+      } else result = await createRoute(payload);
       setNamingRoute(false);
       cancelDrawingRoute();
       refetchRoutes();
-      openWay(wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds));
+      if (placeId) {
+        toast.success(ADD_WAY.copy.routeDone);
+        setActivePanel("place-detail");
+      } else {
+        if (result)
+          openWay(
+            wayFromRoute(result, currentUser?.id ?? null, sharedPlaceIds),
+          );
+      }
     } catch (err) {
       console.error(err);
-      toast.error(messageFromError(err, "Couldn't save the route."));
+      toast.error(
+        placeId
+          ? wayFailureMessage(err)
+          : messageFromError(err, "Couldn't save the route."),
+      );
     } finally {
       setSavingRoute(false);
     }
@@ -1583,6 +1656,7 @@ function App() {
             logsView={logsView}
             onLogsViewChange={setLogsView}
             onStartDrawingRoute={startDrawingRoute}
+            onDrawRouteForPlace={startDrawingRouteForPlace}
             waysLoaded={waysLoaded}
             allRoutes={routes}
             placeTracks={placeTracks}
@@ -2062,6 +2136,8 @@ function App() {
             setRouteConfirm(null);
           }}
         />
+
+        {displaceConfirm.dialog}
 
         <RouteNameDialog
           open={namingRoute}

@@ -60,6 +60,7 @@ import {
   TextArea,
   TextField,
   ErrorBanner,
+  FieldBeside,
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
 
@@ -678,15 +679,16 @@ function PlaceDialog({
               requiredMark
               reserveError
             />
-            <Button
-              icon="place"
-              className={classes.pickButton}
-              onClick={handlePickCoords}
-              disabled={saving}
-              disabledReason="Saving…"
-            >
-              {PLACE_FORM.copy.selectOnMap}
-            </Button>
+            <FieldBeside>
+              <Button
+                icon="place"
+                onClick={handlePickCoords}
+                disabled={saving}
+                disabledReason="Saving…"
+              >
+                {PLACE_FORM.copy.selectOnMap}
+              </Button>
+            </FieldBeside>
           </div>
           <p className={classes.hint}>{PLACE_FORM.copy.coordinatesHint}</p>
         </div>
