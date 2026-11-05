@@ -1046,6 +1046,9 @@ export function MapScreen({
     [],
   );
   const [toolsOpen, setToolsOpen] = useState(false);
+  // The speed/elevation chip's drawn height, once it has one: the ornament
+  // margin below prefers it to the estimate.
+  const [chipMeasured, setChipMeasured] = useState<number | null>(null);
   const [namingRoute, setNamingRoute] = useState(false);
   const drawingRoute = routeDraft.active;
   /** The draft the map's taps belong to, or null when no tool is armed. */
@@ -4714,7 +4717,8 @@ export function MapScreen({
     (scaleBarEnabled ? SCALE_BAR_HEIGHT + INSTRUMENT_GAP : 0) +
     (compassEnabled ? compassStripHeight(fontScale) + INSTRUMENT_GAP : 0) +
     (speedElevationEnabled
-      ? readoutChipHeight(fontScale, scaleBarMaxWidth) + INSTRUMENT_GAP
+      ? (chipMeasured ?? readoutChipHeight(fontScale, scaleBarMaxWidth)) +
+        INSTRUMENT_GAP
       : 0);
   /**
    * When the location marker has to be re-inserted to stay on top.
@@ -5689,6 +5693,7 @@ export function MapScreen({
           <SpeedElevationChip
             active={sensorsActive}
             maxWidth={scaleBarMaxWidth}
+            onHeight={setChipMeasured}
           />
         ) : null}
         <LiveCompassStrip
