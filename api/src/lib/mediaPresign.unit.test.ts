@@ -12,6 +12,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   toMediaItem,
   mediaItemsByLinkedId,
+  visibleSourceMediaId,
   type MediaRow,
 } from "./mediaPresign";
 
@@ -33,6 +34,7 @@ function imageRow(overrides: Partial<MediaRow> = {}): MediaRow {
     origin: null,
     displayName: null,
     metadata: {},
+    sourceMediaId: null,
     ...overrides,
   };
 }
@@ -152,5 +154,20 @@ describe("standalone files", () => {
     ]);
     expect([...grouped.keys()]).toEqual(["place-1"]);
     expect(grouped.get("place-1")).toHaveLength(1);
+  });
+});
+describe("visibleSourceMediaId", () => {
+  // Mutation: return row.sourceMediaId unconditionally, and a place's file
+  // (which reaches its sharees) would carry the link.
+  it("shows the link on a trip's file only", () => {
+    expect(
+      visibleSourceMediaId({ linkedType: "tripLog", sourceMediaId: "rec" }),
+    ).toBe("rec");
+    expect(
+      visibleSourceMediaId({ linkedType: "place", sourceMediaId: "rec" }),
+    ).toBeNull();
+    expect(
+      visibleSourceMediaId({ linkedType: "none", sourceMediaId: "rec" }),
+    ).toBeNull();
   });
 });

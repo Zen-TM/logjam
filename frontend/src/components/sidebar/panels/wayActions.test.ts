@@ -3,13 +3,17 @@ import { WAY_SHARE_VERB } from "@logjam/shared";
 import { wayProperties, wayVerbs, type WaySurface } from "./wayActions";
 import type { WayItem } from "./waysModel";
 
-type Subject = Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">;
+type Subject = Pick<
+  WayItem,
+  "kind" | "shared" | "placeId" | "viaPlace" | "hasTrip"
+>;
 
 const route = (over: Partial<Subject> = {}): Subject => ({
   kind: "route",
   shared: false,
   viaPlace: false,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const importFile = (over: Partial<Subject> = {}): Subject => ({
@@ -17,6 +21,7 @@ const importFile = (over: Partial<Subject> = {}): Subject => ({
   shared: false,
   viaPlace: false,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const ids = (subject: Subject, surface: WaySurface = "row") =>
@@ -203,6 +208,14 @@ describe("wayVerbs", () => {
       "logTrip",
     ]);
     expect(ids(track, "detail").slice(0, 2)).toEqual(["openPlace", "logTrip"]);
+  });
+
+  // Mutation: drop `!way.hasTrip` from the logTrip verb, and a recording with
+  // a trip is offered one again.
+  it("stops offering Log a trip on a recording that has a trip", () => {
+    const track = importFile({ kind: "track", hasTrip: true });
+    expect(ids(track, "row")).not.toContain("logTrip");
+    expect(ids(track, "detail")).not.toContain("logTrip");
   });
 
   // A route is a plan and an import is somebody's walk with no day of its own;

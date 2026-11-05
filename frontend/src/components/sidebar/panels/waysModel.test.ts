@@ -40,6 +40,7 @@ const file = (over: Partial<StandaloneFile> = {}): StandaloneFile => ({
   origin: "import",
   metadata: {},
   linkedPlaceId: null,
+  hasTrip: false,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   ...over,
@@ -95,6 +96,18 @@ describe("buildWays", () => {
       ],
     });
     expect(ways.map((way) => way.kind)).toEqual(["track", "import"]);
+  });
+
+  // Mutation: hard-code hasTrip to false in buildWays, and the recording the
+  // API says has a trip is offered "Log a trip" again.
+  it("carries whether a trip was logged from a recording", () => {
+    const ways = build({
+      standaloneFiles: [
+        file({ id: "a", origin: "track", hasTrip: true }),
+        file({ id: "b", origin: "track" }),
+      ],
+    });
+    expect(ways.map((way) => way.hasTrip)).toEqual([true, false]);
   });
 
   it("measures a route from its geometry", () => {

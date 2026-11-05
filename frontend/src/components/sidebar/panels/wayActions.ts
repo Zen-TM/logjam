@@ -84,7 +84,7 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * one verb that makes a copy of its own.
  */
 export function wayVerbs(
-  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace" | "hasTrip">,
   surface: WaySurface,
 ): WayVerb[] {
   const owned = !way.shared;
@@ -107,7 +107,11 @@ export function wayVerbs(
   // A recorded track only, and the owner's: it is attached to the trip as a
   // copy of the file, which is the owner's to take. An import is somebody
   // else's walk with no start of its own, and a route is a plan, not a day out.
-  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
+  // Once a trip has been logged from it the offer is spent: a recording with a
+  // trip is not asking for one.
+  if (owned && way.kind === "track" && !way.hasTrip) {
+    verbs.push(verb("logTrip"));
+  }
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
   // Taking your own copy of someone else's route (`POST /routes/:id/copy`)

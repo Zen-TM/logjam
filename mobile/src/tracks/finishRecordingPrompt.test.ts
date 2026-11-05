@@ -1,72 +1,118 @@
+// What finishing a recording says, and what it offers next. Everything the
+// module reaches for is mocked: what is under test is the wording and the
+// threshold for the "Log a trip" offer.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const answers: boolean[] = [];
-let activeId: string | null = null;
-const finishTrackRecording = vi.fn(
-  async (_id: string): Promise<string | null> => null,
-);
-const discardTrackRecording = vi.fn(async (_id: string) => {});
+import {
+  confirmFinishRecording,
+  onLogTripRequest,
+  onRecordingToast,
+} from "./finishRecordingPrompt";
 
-vi.mock("../ui", () => ({
-  confirm: async () => answers.shift() ?? false,
+const state = vi.hoisted(() => ({
+  guest: false,
+  noticeDue: false,
+  pointCount: 10,
+  mediaId: "media-1" as string | null,
+  logged: [] as string[],
 }));
+
+vi.mock("../ui", () => ({ confirm: vi.fn(async () => true) }));
 vi.mock("../auth/guestModePreference", () => ({
-  readEntryChoice: () => "user",
+  readEntryChoice: () => (state.guest ? "guest" : "account"),
 }));
 vi.mock("./recordingPreferences", () => ({
+  needsTrackBackupNotice: () => state.noticeDue,
   markTrackBackupNoticeShown: vi.fn(),
-  needsTrackBackupNotice: () => false,
 }));
 vi.mock("./trackBackup", () => ({
   retryTrackBackup: vi.fn(),
   TrackBackupError: class extends Error {},
 }));
 vi.mock("./trackRecorder", () => ({
-  finishTrackRecording: (id: string) => finishTrackRecording(id),
-  discardTrackRecording: (id: string) => discardTrackRecording(id),
-  isActiveRecording: async (id: string) => activeId === id,
+  finishTrackRecording: vi.fn(async () => state.mediaId),
+  isActiveRecording: vi.fn(async () => true),
+}));
+vi.mock("../sync/mirrorStore", () => ({
+  listLoggedTrackIds: async () => new Set(state.logged),
+}));
+vi.mock("./tracksDb", () => ({
+  getTrack: vi.fn(async () => ({
+    id: "t1",
+    pointCount: state.pointCount,
+    mediaId: state.mediaId,
+  })),
+}));
+vi.mock("./tripTrackSource", () => ({
+  recordedTrackSource: (track: { id: string }) => ({ name: track.id }),
 }));
 
-const { confirmDiscardRecording, confirmFinishRecording } = await import(
-  "./finishRecordingPrompt"
-);
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+type Toast = { text: string; action?: { label: string; onPress: () => void } };
+
+async function finish(): Promise<Toast> {
+  let toast: Toast | undefined;
+  const off = onRecordingToast((message) => (toast = message));
+  confirmFinishRecording("t1");
+  await vi.waitFor(() => expect(toast).toBeDefined());
+  off();
+  return toast as Toast;
+}
 
 beforeEach(() => {
-  answers.length = 0;
-  activeId = "t1";
-  finishTrackRecording.mockClear();
-  discardTrackRecording.mockClear();
+  state.guest = false;
+  state.noticeDue = false;
+  state.pointCount = 10;
+  state.mediaId = "media-1";
+  state.logged = [];
 });
 
-// Mutation that turns these red: drop the `isActiveRecording` check from
-// either function, and a confirm queued behind another one acts on a track
-// the first already finished or deleted.
-describe("a confirm answered after the recording has ended", () => {
-  it("does not discard a finished track", async () => {
-    answers.push(true);
-    activeId = null;
-    confirmDiscardRecording("t1", vi.fn(), vi.fn());
-    await settle();
-    expect(discardTrackRecording).not.toHaveBeenCalled();
+describe("finishing a recording", () => {
+  it("says it is saved and offers Log a trip", async () => {
+    const toast = await finish();
+    expect(toast.text).toBe("Recording saved.");
+    expect(toast.action?.label).toBe("Log a trip");
   });
 
-  it("does not finish a discarded track", async () => {
-    answers.push(true);
-    activeId = null;
-    confirmFinishRecording("t1");
-    await settle();
-    expect(finishTrackRecording).not.toHaveBeenCalled();
+  it("hands the recording to whoever opens the form when the offer is pressed", async () => {
+    const asked: unknown[] = [];
+    const off = onLogTripRequest((track) => asked.push(track));
+    (await finish()).action?.onPress();
+    off();
+    expect(asked).toEqual([{ name: "t1" }]);
   });
 
-  it("still acts on the recording that is still active", async () => {
-    answers.push(true, true);
-    const onDiscarded = vi.fn();
-    confirmDiscardRecording("t1", onDiscarded, vi.fn());
-    confirmFinishRecording("t1");
-    await settle();
-    expect(discardTrackRecording).toHaveBeenCalledWith("t1");
-    expect(finishTrackRecording).toHaveBeenCalledWith("t1");
-    expect(onDiscarded).toHaveBeenCalled();
+  // Mutation: change `>= 2` to `>= 1` in announceFinished and this goes red.
+  it("offers nothing for a recording with under 2 points: nothing to attach", async () => {
+    state.pointCount = 1;
+    expect((await finish()).action).toBeUndefined();
+  });
+
+  // Mutation: drop the `logged.has` test from announceFinished and the toast
+  // offers a trip for a recording that has one.
+  it("offers nothing for a recording a trip was already logged from", async () => {
+    state.logged = ["media-1"];
+    expect((await finish()).action).toBeUndefined();
+    state.logged = ["another-recording"];
+    expect((await finish()).action?.label).toBe("Log a trip");
+  });
+
+  // Mutation: drop `queued &&` from `notice` and the unqueued case reads the
+  // backup notice.
+  it("says where it went on the first queued recording, keeping the offer", async () => {
+    state.noticeDue = true;
+    const toast = await finish();
+    expect(toast.text).toBe(
+      "Saved on this phone. It goes up when you have signal.",
+    );
+    expect(toast.action?.label).toBe("Log a trip");
+  });
+
+  it("does not claim a backup for a guest, or for a recording that was not queued", async () => {
+    state.noticeDue = true;
+    state.guest = true;
+    expect((await finish()).text).toBe("Recording saved.");
+    state.guest = false;
+    state.mediaId = null;
+    expect((await finish()).text).toBe("Recording saved.");
   });
 });

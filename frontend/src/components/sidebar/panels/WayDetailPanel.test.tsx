@@ -63,6 +63,7 @@ const way: WayItem = {
   placeId: null,
   createdAt: route.createdAt,
   bounds: [150.3, -33.71, 150.31, -33.7],
+  hasTrip: false,
 };
 
 function saveAndRemove() {

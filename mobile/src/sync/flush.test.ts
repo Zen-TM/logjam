@@ -150,15 +150,18 @@ const db = {
   },
   getFirstAsync: (sql: string, ...args: unknown[]) => {
     if (sql.includes("entity_id = ?")) {
-      // isLinkPending's two counts, as flush.ts words them.
+      // isLinkPending's counts, as flush.ts words them.
       if (sql.includes("entity = 'media' AND op = 'create'")) {
+        const states = sql.includes("'blocked'")
+          ? ["queued", "inflight", "blocked"]
+          : ["queued", "inflight"];
         return Promise.resolve({
           n: rows.filter(
             (row) =>
               row.entity === "media" &&
               row.op === "create" &&
               row.entity_id === args[0] &&
-              ["queued", "inflight", "blocked"].includes(row.state),
+              states.includes(row.state),
           ).length,
         });
       }
@@ -694,6 +697,27 @@ describe("media pass", () => {
 
     expect(mediaRuns).toEqual([1]);
     expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen. Mutation: drop the `sourceMediaId` wait from isLinkPending and
+  // the copy runs (and is parked by a 400) before its recording is up.
+  it("runs a trip's copy only after the recording it names has uploaded", async () => {
+    rows = [
+      mediaRow(1, {
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "t-1",
+          sourceMediaId: "media-2",
+        }),
+      }),
+      mediaRow(2),
+    ];
+
+    await flushOutbox();
+
+    // The copy was queued first but waited for the pass after its recording.
+    expect(mediaRuns).toEqual([2, 1]);
   });
 
   it("keeps going past a dead op instead of aborting the pass", async () => {

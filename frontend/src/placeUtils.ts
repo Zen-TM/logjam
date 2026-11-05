@@ -1338,6 +1338,8 @@ type MediaUploadMeta = {
   linkedId: string;
   filename: string;
   mediaType: string;
+  /** A trip's copy of a recorded track: the recording it came from. */
+  sourceMediaId?: string;
   /** A track this one takes over from, deleted with it at confirm. */
   replaces?: string;
 };
@@ -1404,6 +1406,7 @@ export async function uploadMedia(params: {
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
+  sourceMediaId?: string;
   /** The uploaded track on this place that this one replaces. The API swaps
    *  them when the upload is confirmed, so a failed upload keeps the old one. */
   replaces?: string;
@@ -1413,6 +1416,7 @@ export async function uploadMedia(params: {
     linkedId: params.linkedId,
     filename: params.file.name,
     mediaType: params.mediaType,
+    ...(params.sourceMediaId && { sourceMediaId: params.sourceMediaId }),
     replaces: params.replaces,
   };
   // Declared sizes are signed into the presigned PUT's Content-Length, so the

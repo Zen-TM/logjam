@@ -526,7 +526,20 @@ async function isLinkPending(
   const fields = JSON.parse(row.fields_json ?? "{}") as {
     linkedId?: string;
     placeId?: string | null;
+    sourceMediaId?: string;
   };
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen: wait for the recording's own upload (a metered link can leave it
+  // queued while this one is reached). Parked doesn't count, as below.
+  if (fields.sourceMediaId) {
+    const source = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM outbox
+        WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+          AND state IN ('queued', 'inflight')`,
+      fields.sourceMediaId,
+    );
+    if ((source?.n ?? 0) > 0) return true;
+  }
   const targetId = row.op === "link" ? fields.placeId : fields.linkedId;
   if (row.op === "link") {
     const upload = await db.getFirstAsync<{ n: number }>(

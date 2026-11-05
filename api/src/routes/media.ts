@@ -38,8 +38,10 @@ import {
   categoryHasThumbnail,
   isMediaOrigin,
   parseMediaMetadata,
+  parseSourceMediaId,
   parseTrackClimb,
   MediaMetadataError,
+  SourceMediaIdError,
   type MediaLinkedType,
   type MediaOrigin,
   pickNextTrackColor,
@@ -75,8 +77,19 @@ function parseLinkTarget(body: Record<string, unknown>): {
   linkedType: MediaLinkedType;
   linkedId: string | null;
   origin: MediaOrigin | null;
+  sourceMediaId: string | null;
 } {
   const { linkedType, linkedId, origin } = body;
+  let sourceMediaId: string | null;
+  try {
+    sourceMediaId = parseSourceMediaId(body.sourceMediaId);
+  } catch (err) {
+    if (err instanceof SourceMediaIdError) throw malformed(err.message);
+    throw err;
+  }
+  if (sourceMediaId !== null && linkedType !== "tripLog") {
+    throw malformed("Only a trip's file can name a source recording");
+  }
   if (
     linkedType !== "place" &&
     linkedType !== "tripLog" &&
@@ -95,12 +108,12 @@ function parseLinkTarget(body: Record<string, unknown>): {
     if (parsedOrigin === null) {
       throw malformed("A standalone file requires an origin");
     }
-    return { linkedType, linkedId: null, origin: parsedOrigin };
+    return { linkedType, linkedId: null, origin: parsedOrigin, sourceMediaId };
   }
   if (typeof linkedId !== "string" || !linkedId) {
     throw malformed("linkedId is required");
   }
-  return { linkedType, linkedId, origin: parsedOrigin };
+  return { linkedType, linkedId, origin: parsedOrigin, sourceMediaId };
 }
 
 // Only the owner of the target place (or the place owning the trip log) may
@@ -137,6 +150,25 @@ async function assertOwnsTarget(
       throw new AppError(404, say`Couldn't find that trip.`);
   } else {
     throw malformed("Invalid linkedType");
+  }
+}
+
+// A trip's copy may only name one of the caller's own recordings. A foreign
+// id, a missing one and a non-recording all answer the same 400, so the status
+// is no oracle for other people's media ids. Guards: "refuses another account's
+// recording…" and "refuses a source on confirm…" in
+// src/__tests__/tripTrackLink.test.ts.
+async function assertOwnsSourceTrack(
+  userId: string,
+  sourceMediaId: string | null,
+) {
+  if (sourceMediaId === null) return;
+  const source = await prisma.media.findUnique({
+    where: { id: sourceMediaId },
+    select: { ownerId: true, origin: true },
+  });
+  if (!source || source.ownerId !== userId || source.origin !== "track") {
+    throw malformed("sourceMediaId must name one of your recorded tracks");
   }
 }
 
@@ -344,7 +376,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { sizeBytes, thumbnailSizeBytes } = body;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const { category, mediaType } = validateMediaType(
       body.mediaType,
       body.filename,
@@ -383,6 +416,10 @@ router.post(
         return;
       }
     }
+    // After the replay above: a copy that already exists is returned even if
+    // its recording has since been deleted (guard: "answers a replay…" in
+    // tripTrackLink.test.ts).
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
     const replaces = await assertOwnsReplaced(
       user.id,
       body.replaces,
@@ -448,7 +485,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const mediaId = getParam(req.params.mediaId);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const metadata = parseMediaMetadataOr400(origin, body.metadata);
     const { category, mediaType, filename } = validateMediaType(
       body.mediaType,
@@ -471,6 +509,9 @@ router.post(
       return;
     }
 
+    // Authoritative: presign may not have carried the source at all. After the
+    // replay above, for the reason given at presign.
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
     // After the replay above: a swap that already landed has deleted the old
     // file, and its retry must get the new one back, not a 400.
     const replaces = await assertOwnsReplaced(
@@ -584,6 +625,7 @@ router.post(
             linkedType,
             linkedId,
             origin,
+            sourceMediaId,
             displayName,
             metadata,
             s3KeyDisplay: displayKey,
@@ -743,6 +785,20 @@ router.get(
       where: { ownerId: user.id, origin: { not: null } },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
+    // The recordings a trip has been logged from: one query bounded by the
+    // account's trip files, however many recordings it has.
+    const withTrip = new Set(
+      (
+        await prisma.media.findMany({
+          where: {
+            ownerId: user.id,
+            linkedType: "tripLog",
+            sourceMediaId: { not: null },
+          },
+          select: { sourceMediaId: true },
+        })
+      ).map((copy) => copy.sourceMediaId),
+    );
     const files: StandaloneFile[] = rows.flatMap((row) => {
       if (!isMediaOrigin(row.origin)) return [];
       return [
@@ -756,6 +812,7 @@ router.get(
           origin: row.origin,
           metadata: readMediaMetadata(row.origin, row.metadata),
           linkedPlaceId: placeIdOfMedia(row),
+          hasTrip: withTrip.has(row.id),
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
         },

@@ -15,6 +15,7 @@ import {
   listMirrorPlaceTypes,
   listMirrorTrips,
   listMirrorPlaceLinks,
+  listLoggedTrackIds,
   listMirrorRoutes,
   getMirrorPlace,
   getMirrorTrip,
@@ -186,6 +187,14 @@ export function useMirrorIncomingShareOwners(): MirrorQueryState<
   Record<string, string>
 > {
   return useMirrorQuery(readIncomingShareOwners);
+}
+
+/**
+ * The recordings a trip has been logged from — "Log a trip" is not offered on
+ * these (shared/src/trackTrip.ts). Null until first read: offer it meanwhile.
+ */
+export function useMirrorLoggedTrackIds(): MirrorQueryState<Set<string>> {
+  return useMirrorQuery(listLoggedTrackIds);
 }
 
 /** Media attached to one place or trip, pendingUpload rows included. */

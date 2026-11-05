@@ -82,6 +82,7 @@ import { formatBytes, formatMinutes } from "../format";
 import { useApiQuery } from "../api/queries";
 import {
   useMirrorIncomingShareOwners,
+  useMirrorLoggedTrackIds,
   useMirrorRoutes,
   usePendingCreateIds,
   usePendingSyncCount,
@@ -937,6 +938,7 @@ export function SavedScreen({
   const { tracks } = useTracks();
   const savedTracks = tracks.filter((track) => track.state === "done");
   const remoteTracks = useStandaloneTrackMedia();
+  const loggedTrackIds = useMirrorLoggedTrackIds().data ?? undefined;
 
   // --- Unified on-device item list ---
   // Not memoised, nor is anything derived from it below: most of its inputs
@@ -1186,7 +1188,7 @@ export function SavedScreen({
         // The recording's account copy is the GPX it was backed up as; null
         // until that upload is registered.
         syncEntityId: track.mediaId,
-        ...trackActions(track),
+        ...trackActions(track, loggedTrackIds),
       });
     }
 
@@ -1214,7 +1216,7 @@ export function SavedScreen({
             ? `${formatDistanceM(file.metadata.distanceM)} · recorded ${formatDay(file.metadata.startedAt)}`
             : "Recorded on another device",
         sizeBytes: file.fileSizeBytes ?? 0,
-        ...remoteTrackActions(file),
+        ...remoteTrackActions(file, loggedTrackIds),
       });
     }
 

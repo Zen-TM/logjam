@@ -115,6 +115,12 @@ export const TRIPS_FILTER_SHEET = {
   },
 } as const satisfies ScreenContract;
 
+/**
+ * The trip form's chip row of saved places near the ends of the track it was
+ * opened from.
+ */
+export const TRIP_NEAR_TRACK_LABEL = "Near this track";
+
 /** "1 trip", "37 trips". */
 export function tripsCountLabel(count: number): string {
   return `${count} ${count === 1 ? "trip" : "trips"}`;

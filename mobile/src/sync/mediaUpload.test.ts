@@ -150,6 +150,185 @@ describe("attachMediaLocal", () => {
   });
 });
 
+// A trip's copy of a recording names it. Mutation: drop `sourceMediaId` from the
+// INSERT's extra_json and the recording keeps offering "Log a trip" until the
+// next sync; drop it from the outbox fields (or linkBody) and the API never
+// learns it.
+describe("attachMediaLocal with a source recording", () => {
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset().mockResolvedValue({
+      mediaId: "media-1",
+      displayUploadUrl: "https://s3.example/display",
+      thumbnailUploadUrl: null,
+    });
+    canRunNow.mockReset().mockResolvedValue(true);
+  });
+
+  const attach = (source?: string) =>
+    attachMediaLocal(
+      "tripLog",
+      "trip-1",
+      {
+        uri: "file:///docs/imports/x.gpx",
+        mimeType: "application/gpx+xml",
+        fileName: "track.gpx",
+      },
+      source,
+    );
+
+  it("keeps it on the queued row and in the outbox op", async () => {
+    await attach("rec-1");
+    const insertMedia = calls.find((c) => c.sql.includes("INSERT INTO media"));
+    expect(insertMedia?.args).toContain(
+      JSON.stringify({ sourceMediaId: "rec-1" }),
+    );
+    const op = calls.find((c) => c.sql.includes("INSERT INTO outbox"));
+    expect(JSON.parse(op?.args[2] as string).sourceMediaId).toBe("rec-1");
+  });
+
+  it("writes nothing extra when there is no source", async () => {
+    await attach();
+    const insertMedia = calls.find((c) => c.sql.includes("INSERT INTO media"));
+    expect(insertMedia?.args).not.toContain(
+      JSON.stringify({ sourceMediaId: undefined }),
+    );
+    const op = calls.find((c) => c.sql.includes("INSERT INTO outbox"));
+    expect(JSON.parse(op?.args[2] as string)).not.toHaveProperty(
+      "sourceMediaId",
+    );
+  });
+
+  it("sends it at presign and at confirm", async () => {
+    apiFetch
+      .mockResolvedValueOnce({
+        mediaId: "media-1",
+        displayUploadUrl: "https://s3.example/display",
+        thumbnailUploadUrl: null,
+      })
+      .mockResolvedValueOnce({
+        id: "media-1",
+        linkedType: "tripLog",
+        linkedId: "trip-1",
+        mediaType: "application/gpx+xml",
+        filename: "a.gpx",
+        fileSizeBytes: 1,
+        color: null,
+        createdAt: "2026-08-01T00:00:00.000Z",
+      });
+    await runMediaCreateOp({
+      seq: 8,
+      entity_id: "media-1",
+      op: "create",
+      fields_json: JSON.stringify({
+        linkedType: "tripLog",
+        linkedId: "trip-1",
+        sourceMediaId: "rec-1",
+        filename: "a.gpx",
+        mediaType: "application/gpx+xml",
+        sizeBytes: 1,
+        localDisplayPath: "file:///cache/media-cache/media-1.display",
+        localThumbPath: null,
+      }),
+      media_phase: null,
+      attempts: 1,
+    });
+    const bodies = apiFetch.mock.calls.map(
+      (call) => (call[1] as { body: Record<string, unknown> }).body,
+    );
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) expect(body.sourceMediaId).toBe("rec-1");
+  });
+});
+
+// The link is advisory: a copy whose recording the API no longer knows
+// uploads unlinked instead of parking. Mutation: drop `unlinkOn400` from the
+// presign or the confirm call and the op parks `blocked` with the 400.
+describe("a trip's copy whose recording is gone", () => {
+  const row = {
+    seq: 9,
+    entity_id: "copy-1",
+    op: "create",
+    fields_json: JSON.stringify({
+      linkedType: "tripLog",
+      linkedId: "trip-1",
+      sourceMediaId: "rec-1",
+      filename: "a.gpx",
+      mediaType: "application/gpx+xml",
+      sizeBytes: 1,
+      localDisplayPath: "file:///cache/media-cache/copy-1.display",
+      localThumbPath: null,
+    }),
+    media_phase: null,
+    attempts: 1,
+  };
+  const presigned = {
+    mediaId: "copy-1",
+    displayUploadUrl: "https://s3.example/display",
+    thumbnailUploadUrl: null,
+  };
+  const confirmed = {
+    id: "copy-1",
+    linkedType: "tripLog",
+    linkedId: "trip-1",
+    mediaType: "application/gpx+xml",
+    filename: "a.gpx",
+    fileSizeBytes: 1,
+    color: null,
+    createdAt: "2026-08-01T00:00:00.000Z",
+  };
+  const bad = () => Object.assign(new Error("bad"), { status: 400 });
+  const bodies = () =>
+    apiFetch.mock.calls.map(
+      (call) => (call[1] as { body: Record<string, unknown> }).body,
+    );
+
+  beforeEach(() => {
+    calls.length = 0;
+    apiFetch.mockReset();
+    canRunNow.mockReset().mockResolvedValue(true);
+    uploadOutcome = null;
+  });
+
+  it("is presigned again without it, and the queued op forgets it", async () => {
+    apiFetch
+      .mockRejectedValueOnce(bad())
+      .mockResolvedValueOnce(presigned)
+      .mockResolvedValueOnce(confirmed);
+    expect(await runMediaCreateOp(row)).toBe("done");
+    expect(bodies().map((body) => body.sourceMediaId)).toEqual([
+      "rec-1",
+      undefined,
+      undefined,
+    ]);
+    const rewritten = calls.find((call) =>
+      call.sql.includes("UPDATE outbox SET fields_json"),
+    );
+    expect(JSON.parse(rewritten?.args[0] as string)).not.toHaveProperty(
+      "sourceMediaId",
+    );
+  });
+
+  it("is confirmed again without it when only the confirm refuses", async () => {
+    apiFetch
+      .mockResolvedValueOnce(presigned)
+      .mockRejectedValueOnce(bad())
+      .mockResolvedValueOnce(confirmed);
+    expect(await runMediaCreateOp(row)).toBe("done");
+    expect(bodies().map((body) => body.sourceMediaId)).toEqual([
+      "rec-1",
+      "rec-1",
+      undefined,
+    ]);
+  });
+
+  it("parks, not loops, when it is still refused without the link", async () => {
+    apiFetch.mockRejectedValue(bad());
+    expect(await runMediaCreateOp(row)).toBe("blocked");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("runMediaCreateOp", () => {
   beforeEach(() => {
     calls.length = 0;

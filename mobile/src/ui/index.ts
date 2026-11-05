@@ -54,6 +54,6 @@ export { IconTile, Row } from "./Row";
 export { ForecastList, type ForecastRow } from "./ForecastList";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
-export { Toast, type ToastMessage } from "./Toast";
+export { Toast, type ToastAction, type ToastMessage } from "./Toast";
 export { backLabelOf } from "./backLabel";
 export { useNow } from "./useNow";
