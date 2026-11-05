@@ -73,6 +73,7 @@ export function ForecastRail({
         </div>
       </div>
       {/* Focusable so a keyboard can scroll it; the cards are not controls. */}
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- a scroll region is the case the rule's own docs exempt */}
       <ul ref={track} className={classes.track} aria-label={title} tabIndex={0}>
         {cards.map((card) => (
           <li
