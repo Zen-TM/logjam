@@ -1459,7 +1459,7 @@ function TripLogDialog({
                 : TRIP_FORM.copy.addTitle
         }
         size="large"
-        dismissible={!saving}
+        dismissible={!saving && !wayBusy}
         // Inside the picker, every way out means "back to the form" — not
         // "throw away everything I just typed".
         onClose={
