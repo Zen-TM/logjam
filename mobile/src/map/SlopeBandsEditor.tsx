@@ -112,12 +112,14 @@ export function SlopeBandsEditor() {
       <Text style={styles.intro}>{MAP_TERRAIN.copy.slopeBandsIntro}</Text>
 
       <ColourField
+        icon="colour"
         label="Shallowest colour"
         palette={SLOPE_SCALE_COLOURS}
         value={scale.start.slice(0, 7)}
         onChange={(rgb) => setBands(setSlopeScaleColour(bands, "start", rgb))}
       />
       <ColourField
+        icon="colour"
         label="Steepest colour"
         palette={SLOPE_SCALE_COLOURS}
         value={scale.end.slice(0, 7)}

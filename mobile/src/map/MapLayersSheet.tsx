@@ -386,7 +386,6 @@ function TerrainTab({
   onOpenSlopeBands: () => void;
 }) {
   const styles = useStyles();
-  const theme = useTheme();
   const rows = {
     ...Object.fromEntries(
       TERRAIN_LAYER_KEYS.map((key) => {
@@ -428,7 +427,7 @@ function TerrainTab({
         key="slopeBands"
         title={MAP_TERRAIN.copy.slopeBands}
         onPress={onOpenSlopeBands}
-        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+        chevron
       />
     ),
     vegetation: hasVegetation ? (
