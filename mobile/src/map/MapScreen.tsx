@@ -141,6 +141,7 @@ import {
   useMirrorTrips,
   useMirrorPlaceTracks,
   useMirrorRoutes,
+  usePendingSyncCount,
 } from "../sync/useSyncQueries";
 import { config } from "../config";
 import {
@@ -1488,6 +1489,7 @@ export function MapScreen({
   // anyway, so the map itself is unaffected.
   const isGuest = useAccountState().accountState === "guest";
   // "Saved, and synced" is a promise only a connected, empty outbox keeps.
+  const pendingSyncCount = usePendingSyncCount();
   const savedHereOnly =
     connectivity !== "online" || isGuest || pendingSyncCount > 0;
   const overlays = useApiQuery(
