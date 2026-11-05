@@ -5,6 +5,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ToastProvider, useToast } from "./ToastProvider";
@@ -24,9 +25,12 @@ describe("the toast stack joins the top layer", () => {
   // raised while a modal Dialog is open paints under it, where no z-index helps.
   // Re-showing after each change is what lifts it above a Dialog opened later.
   it("is a manual popover, shown again for each toast and hidden when empty", () => {
-    let toast!: ReturnType<typeof useToast>;
+    const grabbed: { toast?: ReturnType<typeof useToast> } = {};
     const Grab = () => {
-      toast = useToast();
+      const api = useToast();
+      useEffect(() => {
+        grabbed.toast = api;
+      });
       return null;
     };
     vi.useFakeTimers();
@@ -37,11 +41,11 @@ describe("the toast stack joins the top layer", () => {
     );
     expect(container.querySelector("[popover=manual]")).not.toBeNull();
     calls.length = 0;
-    act(() => toast.error("Could not share."));
+    act(() => grabbed.toast?.error("Could not share."));
     expect(screen.getByText("Could not share.")).toBeTruthy();
     expect(calls).toEqual(["hide", "show"]);
     calls.length = 0;
-    act(() => toast.done("Saved."));
+    act(() => grabbed.toast?.done("Saved."));
     expect(calls).toEqual(["hide", "show"]);
     calls.length = 0;
     act(() => void vi.advanceTimersByTime(60_000));

@@ -6,6 +6,7 @@ import {
   radius,
   spacing,
   useTheme,
+  wash,
   withAlpha,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
@@ -133,7 +134,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     height: spacing(1),
     overflow: "hidden",
     borderRadius: radius.sm,
-    backgroundColor: withAlpha(theme.text, 0.12),
+    backgroundColor: withAlpha(theme.text, wash.subtle),
   },
   fill: {
     height: "100%",
