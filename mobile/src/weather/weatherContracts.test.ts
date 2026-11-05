@@ -2,7 +2,8 @@
 // the weather verb swaps the map panel's body instead of closing it.
 //
 // Mutations that turn it red: add `{ key: "wind" }` to `WEATHER.sections`;
-// delete `credit` from `WEATHER_SECTIONS`; drop the `return` after
+// delete `credit` from `WEATHER_SECTIONS`; draw a row's cards from anywhere but
+// `weatherRows` in `WeatherView.tsx`; drop the `return` after
 // `weather.refresh()` in `MapPointSheet.tsx` (the panel then closes on the press);
 // drop the `mayFetch` guard from `refresh` in `useWeather.ts`;
 // move the `fetchForecast` call out of `refresh` in `useWeather.ts` (a fetch on
@@ -37,6 +38,15 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(Object.keys(WEATHER_SECTIONS).sort()).toEqual(
       WEATHER.sections.map(({ key }) => key).sort(),
     );
+  });
+
+  it("draws the rows the shared module shapes, with the shared card", () => {
+    const view = read("./WeatherView.tsx");
+    expect(view).toContain("weatherRows(forecast, now)");
+    expect(view).toContain("cards={found.cards}");
+    // A horizontal scroller that hands the sheet its vertical drags.
+    const rail = read("../ui/ForecastRail.tsx");
+    expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);
   });
 
   it("the place page has a weather section, drawn", () => {

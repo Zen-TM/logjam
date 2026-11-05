@@ -51,7 +51,7 @@ export { FieldError } from "./FieldError";
 export { RenameForm } from "./RenameForm";
 export { Screen, ScreenScroll } from "./Screen";
 export { IconTile, Row } from "./Row";
-export { ForecastList, type ForecastRow } from "./ForecastList";
+export { ForecastRail, type ForecastCard } from "./ForecastRail";
 export { StatGrid, type Stat } from "./StatGrid";
 export { ProfileChart } from "./ProfileChart";
 export { Toast, type ToastMessage } from "./Toast";

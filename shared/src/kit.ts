@@ -72,7 +72,7 @@ export const KIT_COMPONENTS = {
   StatGrid: both,
   Meter: both,
   ActivitySpark: both,
-  ForecastList: both,
+  ForecastRail: both,
   StatusPill: both,
   ProgressBar: web("Logjam GPS draws progress as Row's bottom bar"),
   ProfileChart: both,

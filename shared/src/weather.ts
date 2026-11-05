@@ -15,9 +15,14 @@ export const OPEN_METEO_CREDIT_URL = "https://open-meteo.com/";
 
 /** The grid a request is snapped to: coarser than every model's own. */
 export const WEATHER_CELL_DEGREES = 0.1;
-/** The past days whose rain is summed: what a canyon is still draining. */
-export const WEATHER_PAST_DAYS = 3;
+/** The past days whose rain is drawn: what a canyon is still draining. */
+export const WEATHER_PAST_DAYS = 7;
 export const WEATHER_FORECAST_DAYS = 7;
+/** The hours the hourly row shows, from the hour the forecast is read in. */
+export const WEATHER_HOURS_SHOWN = 24;
+/** The hours a forecast keeps, so a copy read later still has its next 24. */
+export const WEATHER_HOURS_KEPT = 48;
+const HOUR_MS = 3_600_000;
 
 export type WeatherCell = {
   latitude: number;
@@ -39,12 +44,40 @@ export type WeatherDay = {
   windMaxKmh: number;
 };
 
+export type WeatherHour = {
+  /** YYYY-MM-DDTHH:00, in the spot's own time zone. */
+  time: string;
+  /** Epoch ms of the start of the hour. */
+  at: number;
+  code: number;
+  tempC: number;
+  rainMm: number;
+  rainChance: number | null;
+  windKmh: number;
+};
+
+/** Where a day's rain figure comes from: the row says so (see `weatherRows`). */
+export type WeatherRainSource = "model" | "gauge";
+
+export type WeatherPastDay = {
+  /** YYYY-MM-DD, in the spot's own time zone. */
+  date: string;
+  rainMm: number;
+};
+
+export type WeatherPastRain = {
+  source: WeatherRainSource;
+  /** The `WEATHER_PAST_DAYS` days before the fetch, oldest first. */
+  days: WeatherPastDay[];
+};
+
 export type WeatherForecast = {
   cell: WeatherCell;
   /** Epoch ms. */
   fetchedAt: number;
-  /** Rain over the `WEATHER_PAST_DAYS` days before the fetch. */
-  pastRainMm: number;
+  /** From the hour of the fetch on, up to `WEATHER_HOURS_KEPT`. */
+  hours: WeatherHour[];
+  past: WeatherPastRain;
   /** Today (at the fetch) and the days after it. */
   days: WeatherDay[];
 };
@@ -83,10 +116,19 @@ const DAILY = [
   "wind_speed_10m_max",
 ] as const;
 
+const HOURLY = [
+  "weather_code",
+  "temperature_2m",
+  "precipitation",
+  "precipitation_probability",
+  "wind_speed_10m",
+] as const;
+
 export function weatherRequestUrl(cell: WeatherCell): string {
   const params = new URLSearchParams({
     latitude: cell.latitude.toFixed(1),
     longitude: cell.longitude.toFixed(1),
+    hourly: HOURLY.join(","),
     daily: DAILY.join(","),
     past_days: String(WEATHER_PAST_DAYS),
     forecast_days: String(WEATHER_FORECAST_DAYS),
@@ -102,6 +144,37 @@ function numbers(value: unknown, length: number): (number | null)[] {
   if (!Array.isArray(value) || value.length !== length)
     throw new Error("Malformed forecast");
   return value.map((item) => (typeof item === "number" ? item : null));
+}
+
+function hours(
+  json: { hourly?: Record<string, unknown>; utc_offset_seconds?: unknown },
+  fetchedAt: number,
+): WeatherHour[] {
+  const hourly = json.hourly;
+  const time = hourly?.time;
+  if (!hourly || !Array.isArray(time)) throw new Error("Malformed forecast");
+  const [code, temp, rain, chance, wind] = HOURLY.map((key) =>
+    numbers(hourly[key], time.length),
+  );
+  const offsetMs =
+    (typeof json.utc_offset_seconds === "number"
+      ? json.utc_offset_seconds
+      : 0) * 1000;
+  const all = time.map((t, i): WeatherHour => {
+    const [y, mo, d, h] = String(t).split(/[-T:]/).map(Number);
+    return {
+      time: String(t),
+      at: Date.UTC(y, mo - 1, d, h) - offsetMs,
+      code: code[i] ?? 0,
+      tempC: temp[i] ?? NaN,
+      rainMm: rain[i] ?? 0,
+      rainChance: chance[i],
+      windKmh: wind[i] ?? NaN,
+    };
+  });
+  return all
+    .filter((hour) => hour.at + HOUR_MS > fetchedAt)
+    .slice(0, WEATHER_HOURS_KEPT);
 }
 
 /** Open-Meteo's answer as a forecast; throws on anything else. */
@@ -130,9 +203,13 @@ export function parseForecast(
   return {
     cell,
     fetchedAt,
-    pastRainMm: days
-      .slice(0, WEATHER_PAST_DAYS)
-      .reduce((sum, day) => sum + day.rainMm, 0),
+    hours: hours(json as Parameters<typeof hours>[0], fetchedAt),
+    past: {
+      source: "model",
+      days: days
+        .slice(0, WEATHER_PAST_DAYS)
+        .map(({ date, rainMm }) => ({ date, rainMm })),
+    },
     days: days.slice(WEATHER_PAST_DAYS),
   };
 }

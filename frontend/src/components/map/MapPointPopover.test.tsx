@@ -103,14 +103,14 @@ describe("MapPointPopover weather", () => {
     );
     await act(async () => {});
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText(WEATHER.copy.pastRain)).toBeTruthy();
+    expect(await screen.findByText(WEATHER.copy.pastModel)).toBeTruthy();
     // The facts are gone while the forecast is up.
     expect(screen.queryByText(MAP_POINT.copy.position)).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: "Back to this point", hidden: true }),
     );
     expect(screen.getByText(MAP_POINT.copy.position)).toBeTruthy();
-    expect(screen.queryByText(WEATHER.copy.pastRain)).toBeNull();
+    expect(screen.queryByText(WEATHER.copy.pastModel)).toBeNull();
   });
 
   it("disables the verb offline and says why", () => {

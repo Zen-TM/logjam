@@ -13,7 +13,22 @@ function isForecast(value: unknown): value is WeatherForecast {
     typeof f === "object" &&
     f !== null &&
     typeof f.fetchedAt === "number" &&
-    typeof f.pastRainMm === "number" &&
+    typeof f.past?.source === "string" &&
+    Array.isArray(f.past.days) &&
+    f.past.days.every(
+      (day) => typeof day?.date === "string" && typeof day.rainMm === "number",
+    ) &&
+    Array.isArray(f.hours) &&
+    f.hours.every(
+      (hour) =>
+        typeof hour?.time === "string" &&
+        typeof hour.at === "number" &&
+        typeof hour.code === "number" &&
+        typeof hour.tempC === "number" &&
+        typeof hour.rainMm === "number" &&
+        typeof hour.windKmh === "number" &&
+        (hour.rainChance === null || typeof hour.rainChance === "number"),
+    ) &&
     typeof f.cell?.latitude === "number" &&
     typeof f.cell?.longitude === "number" &&
     (f.cell.elevationM === null || typeof f.cell.elevationM === "number") &&

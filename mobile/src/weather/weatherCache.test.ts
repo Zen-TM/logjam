@@ -15,7 +15,18 @@ function forecastAt(i: number, fetchedAt: number): WeatherForecast {
   return {
     cell: weatherCell({ latitude: -33 + i / 10, longitude: 150 }, 600),
     fetchedAt,
-    pastRainMm: 2,
+    hours: [
+      {
+        time: "2026-10-18T09:00",
+        at: 1000,
+        code: 3,
+        tempC: 9,
+        rainMm: 0.2,
+        rainChance: null,
+        windKmh: 12,
+      },
+    ],
+    past: { source: "model", days: [{ date: "2026-10-17", rainMm: 2 }] },
     days: [
       {
         date: "2026-10-18",
@@ -31,6 +42,18 @@ function forecastAt(i: number, fetchedAt: number): WeatherForecast {
 }
 
 describe("the kept forecasts", () => {
+  // A copy kept before the rows existed has no hours: reading it as a forecast
+  // would draw a hole. Mutation that turns it red: drop the `hours` check from
+  // `isForecast`.
+  it("reads a forecast kept in the old shape as nothing", () => {
+    const f = forecastAt(0, 1000);
+    const { hours: _hours, past: _past, ...old } = f;
+    const text = JSON.stringify({
+      [weatherCellKey(f.cell)]: { ...old, pastRainMm: 2 },
+    });
+    expect(parseWeatherCache(text)).toEqual({});
+  });
+
   it("round-trips through the file's text", () => {
     const f = forecastAt(0, 1000);
     const text = JSON.stringify(withForecast({}, f));
