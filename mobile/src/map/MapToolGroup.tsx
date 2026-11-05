@@ -212,5 +212,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(0.5),
   },
-  pillLabel: { ...textRole.body, color: theme.text },
+  pillLabel: { ...textRole.body, color: theme.text, flexShrink: 1 },
 }));
