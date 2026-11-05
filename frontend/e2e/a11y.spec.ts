@@ -1173,11 +1173,16 @@ test.describe("desktop", () => {
     // new point: the gauge under it still opens.
     await page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
-    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height / 2, {
+    // Far enough left that the panel (about 300 px wide) stays clear of the
+    // gauge in the middle.
+    await page.mouse.click(box.x + box.width * 0.1, box.y + box.height / 2, {
       button: "right",
     });
     const point = page.getByRole("dialog", { name: "This point" });
     await expect(point).toBeVisible();
+    // Past the gauge's own re-press guard (GAUGE_RETAP_MS), which ignores a
+    // press on the gauge whose panel Escape has just closed.
+    await page.waitForTimeout(600);
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await expect(panel).toBeVisible();
     await expect(point).toHaveCount(0);
