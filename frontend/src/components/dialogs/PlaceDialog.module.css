@@ -31,7 +31,6 @@
   color: var(--color-text-muted);
 }
 
-.coordinates,
 .attribute,
 .source {
   display: flex;
@@ -51,10 +50,13 @@
   min-width: 120px;
 }
 
-/* Sits on the baseline of the two coordinate boxes, whose own hint line makes
-   them taller than the button. */
-.pickButton {
-  margin-bottom: calc(var(--font-xs) + 8px);
+/* From the top, so the button stays on the input line whatever the error
+   line under the inputs does. */
+.coordinates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .addAttribute {
