@@ -131,6 +131,7 @@ function SidebarPanel({
   onOpenRoute,
   onRoutesChanged,
   onOpenRouteById,
+  onDrawRouteForPlace,
   wayDetail,
   plansPanel,
   planDetail,
@@ -234,6 +235,7 @@ function SidebarPanel({
   onRoutesChanged: () => void;
   /** Open a route's page by id (an Inbox row); false when it is gone. */
   onOpenRouteById: (routeId: string) => Promise<boolean>;
+  onDrawRouteForPlace: (placeId: string) => void;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -531,6 +533,7 @@ function SidebarPanel({
             onFocusBounds={onFocusBounds}
             onOpenRoute={onOpenRoute}
             onRoutesChanged={onRoutesChanged}
+            onDrawRoute={onDrawRouteForPlace}
           />
         )}
         {!accountFailed && activePanel === "trip-detail" && (

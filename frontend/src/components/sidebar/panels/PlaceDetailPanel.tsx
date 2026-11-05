@@ -211,6 +211,7 @@ function PlaceDetailPanel({
   onFocusBounds,
   onOpenRoute,
   onRoutesChanged,
+  onDrawRoute,
 }: {
   place: TPlace | undefined;
   places: TPlace[];
@@ -259,6 +260,8 @@ function PlaceDetailPanel({
   onOpenRoute: (route: TRoute) => void;
   /** A route was changed here (unlinked); the Ways list must refetch. */
   onRoutesChanged: () => void;
+  /** Arm the map's pen for this place's route slot. */
+  onDrawRoute: (placeId: string) => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -1237,6 +1240,7 @@ function PlaceDetailPanel({
           currentUserId={currentUserId}
           media={placeMedia}
           onClose={() => setAddingWay(false)}
+          onDrawRoute={() => onDrawRoute(current.id)}
           onFilled={() => {
             reloadPlaceMedia();
             onRoutesChanged();

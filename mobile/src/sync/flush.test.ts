@@ -150,15 +150,18 @@ const db = {
   },
   getFirstAsync: (sql: string, ...args: unknown[]) => {
     if (sql.includes("entity_id = ?")) {
-      // isLinkPending's two counts, as flush.ts words them.
+      // isLinkPending's counts, as flush.ts words them.
       if (sql.includes("entity = 'media' AND op = 'create'")) {
+        const states = sql.includes("'blocked'")
+          ? ["queued", "inflight", "blocked"]
+          : ["queued", "inflight"];
         return Promise.resolve({
           n: rows.filter(
             (row) =>
               row.entity === "media" &&
               row.op === "create" &&
               row.entity_id === args[0] &&
-              ["queued", "inflight", "blocked"].includes(row.state),
+              states.includes(row.state),
           ).length,
         });
       }

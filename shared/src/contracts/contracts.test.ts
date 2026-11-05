@@ -189,6 +189,20 @@ describe("every screen contract", () => {
     );
   });
 
+  // Mutation: delete `onlyWhenAdding` from a TRIP_FORM section and Logjam GPS's
+  // edit sheet is handed a picker it cannot run; mark one `on: "web"` and Logjam
+  // GPS's add form loses it.
+  it("gives the trip form its photos and routes on both clients while adding, and Logjam Web's while editing", () => {
+    for (const key of ["photos", "routes"] as const) {
+      const section = TRIP_FORM.sections.find((s) => s.key === key);
+      expect(section && "onlyWhenAdding" in section, key).toBe(true);
+      expect(contractSectionKeys(TRIP_FORM, "gps", "add")).toContain(key);
+      expect(contractSectionKeys(TRIP_FORM, "gps", "edit")).not.toContain(key);
+      expect(contractSectionKeys(TRIP_FORM, "web", "add")).toContain(key);
+      expect(contractSectionKeys(TRIP_FORM, "web", "edit")).toContain(key);
+    }
+  });
+
   it("hands a client its own sections, in order, and never the other's", () => {
     expect(contractSectionKeys(PLACES_FILTER_SHEET, "web")).toEqual([
       "sort",
