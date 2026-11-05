@@ -86,7 +86,7 @@ const METERED_ROWS: {
     subtitle: "Tens of megabytes each.",
     needs: "topo",
   },
-  // No `needs`: there is no switch for it, only the file in Settings → Map.
+  // No `needs`: there is no switch for it, only the file the first region brings.
   {
     job: "placeNames",
     title: "Place names for search",

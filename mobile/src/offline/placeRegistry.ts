@@ -2,8 +2,8 @@
 // searched as the user types with nothing typed leaving the phone (ADR 0034).
 //
 // WHEN IT IS FETCHED: first with the user's first region download (for a
-// guest too: the file is a public CDN object, not a call to our API), or from
-// Settings → Map. After that it is kept fresh at app start, on return to the
+// guest too: the file is a public CDN object, not a call to our API). After
+// that it is kept fresh at app start, on return to the
 // foreground and on regained signal, as `topoAutoDownload.ts` is, Wi-Fi only
 // by default, and never in offline-only mode or on a timer (ADR 0013).
 //
@@ -56,9 +56,8 @@ import { listArtifacts } from "./registryDb";
 const POINTER_URI = `${PLACE_REGISTRY_DIR}pointer.json`;
 const DOWNLOAD_URI = `${PLACE_REGISTRY_DIR}download.tmp`;
 
-/** "on" once the user started a region download or asked in Settings; "off"
- *  once they removed it, which a later region download does not undo. Unset
- *  (null) on a phone that has done neither. */
+/** "on" once the user started a region download. Unset (null) on a phone that
+ *  has not. The file cannot be removed from the phone, so there is no "off". */
 const WANTED_PREF_KEY = "placeRegistryWanted";
 
 /** The path of a build whose index would not build. Not fetched again; keyed
@@ -426,14 +425,14 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
 }
 
 // --- Toasts -----------------------------------------------------------------
-// Settings → Map's Download and Remove finish wherever the user has got to, so
-// they announce themselves at the app shell (BackgroundToast.tsx), as a region
-// download does. Region-started and automatic fetches stay silent.
+// An explicit download finishes wherever the user has got to, so it announces
+// itself at the app shell (BackgroundToast.tsx), as a region download does.
+// Region-started and automatic fetches stay silent.
 const toastListeners = new Set<
   (message: Omit<ToastMessage, "nonce">) => void
 >();
 
-/** Subscribe to Download's and Remove's outcomes: BackgroundToast only. */
+/** Subscribe to an explicit download's outcome: BackgroundToast only. */
 export function onPlaceRegistryToast(
   listener: (message: Omit<ToastMessage, "nonce">) => void,
 ): () => void {
@@ -456,22 +455,7 @@ export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
   failed: "Download didn't finish.",
 };
 
-/** Delete the file and stop refreshing it, until the user asks again. */
-export async function removePlaceRegistry(): Promise<void> {
-  writePref(WANTED_PREF_KEY, "off");
-  await fetching?.promise.catch(() => {});
-  try {
-    await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
-  } catch (err) {
-    console.error(err);
-    toast("Couldn't remove the place names.");
-    return;
-  }
-  index = null;
-  publish({ stored: null, storedBytes: 0, loadFailed: false });
-}
-
-/** Settings → Map's Download: wanted from now on, on any connection. */
+/** An explicit download: wanted from now on, on any connection. */
 export async function requestPlaceRegistry(): Promise<FetchOutcome> {
   writePref(WANTED_PREF_KEY, "on");
   try {
@@ -491,13 +475,10 @@ export async function requestPlaceRegistry(): Promise<FetchOutcome> {
 
 /**
  * A region download started. The first one brings the file, on the connection
- * the user allowed for the maps; a phone that already has it, or whose user
- * removed it, fetches nothing.
+ * the user allowed for the maps; a phone that already has it fetches nothing.
  */
 export function placeRegistryWithRegion(allowMetered: boolean): void {
-  const wanted = readPref(WANTED_PREF_KEY);
-  if (wanted === "off") return;
-  if (wanted !== "on") writePref(WANTED_PREF_KEY, "on");
+  if (readPref(WANTED_PREF_KEY) !== "on") writePref(WANTED_PREF_KEY, "on");
   if (hasPlaceRegistry()) return;
   // Silent, the space refusal too: the maps' own download says if they fit.
   fetchPlaceRegistry({ allowMetered }).catch((err: unknown) =>
@@ -520,10 +501,9 @@ function requestCheck(): void {
 /**
  * A phone that held a region before Logjam GPS had the registry counts as
  * having asked: its user downloaded for the field before the file existed.
- * Never once they removed it.
  */
 async function adoptForSavedRegions(): Promise<void> {
-  if (readPref(WANTED_PREF_KEY) !== null) return;
+  if (readPref(WANTED_PREF_KEY) === "on") return;
   const artifacts = await listArtifacts();
   if (artifacts.some((artifact) => artifact.kind === "basemap-region")) {
     writePref(WANTED_PREF_KEY, "on");

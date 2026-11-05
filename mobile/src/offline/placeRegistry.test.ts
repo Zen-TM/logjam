@@ -261,18 +261,6 @@ describe("the first download", () => {
     registry.placeRegistryWithRegion(true);
     await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
   });
-
-  // Mutation: drop the `wanted === "off"` return.
-  it("is not fetched again by a region download after the user removed it", async () => {
-    publish(build("2026-10-15"));
-    const registry = await load();
-    await registry.requestPlaceRegistry();
-    await registry.removePlaceRegistry();
-    registry.placeRegistryWithRegion(false);
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
-    expect(registry.hasPlaceRegistry()).toBe(false);
-    expect([...files.keys()]).toEqual([]);
-  });
 });
 
 describe("a phone that held a region before Logjam GPS had the file", () => {
@@ -286,19 +274,14 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
-  // Mutation: adopt whenever the pref is not "on", not only when never set.
-  it.each([
-    ["a user who removed it", "off", ["basemap-region"]],
-    ["a phone with no saved region", undefined, ["topo-overlay"]],
-  ])("fetches nothing for %s", async (_case, wanted, kinds) => {
-    if (wanted) prefs.set("placeRegistryWanted", wanted);
-    artifacts.kinds = kinds;
+  it("fetches nothing for a phone with no saved region", async () => {
+    artifacts.kinds = ["topo-overlay"];
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(prefs.get("placeRegistryWanted")).toBe(wanted);
+    expect(prefs.get("placeRegistryWanted")).toBeUndefined();
   });
 });
 
@@ -636,16 +619,6 @@ describe("the index in memory", () => {
       timer.mock.calls.filter(([, ms]) => ms === 0).length,
     ).toBeGreaterThan(1);
     timer.mockRestore();
-  });
-
-  // Mutation: leave `index` set in `removePlaceRegistry`. The search box reads
-  // it from here on every render, never a copy (MapSearchBar.tsx).
-  it("is freed by Remove", async () => {
-    holdOnPhone(build("2026-09-15"));
-    const registry = await load();
-    await registry.loadPlaceIndex();
-    await registry.removePlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
   });
 
   // Mutation: keep an index built in the refresh's parse step.
