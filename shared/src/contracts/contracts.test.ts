@@ -1590,11 +1590,15 @@ describe("MAP_TOOLS", () => {
       "place",
     ]);
   });
-  // Mutation: leave a description empty or let one run to a second sentence.
-  it("gives every tool a one-line description", () => {
-    for (const tool of MAP_TOOLS) {
-      expect(tool.description.trim(), tool.id).not.toBe("");
-      expect(tool.description, tool.id).not.toMatch(/\.\s+\S/);
+  // Mutation: add a `description` to a tool and `mapTools` hands it to the
+  // clients, who then have a line to draw under the name.
+  it("gives a tool its name alone, no description line", () => {
+    for (const tool of mapTools("web")) {
+      expect(Object.keys(tool).sort(), tool.id).toEqual([
+        "icon",
+        "id",
+        "label",
+      ]);
     }
   });
   it("names Measure by its own contract", () => {

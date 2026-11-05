@@ -9,9 +9,6 @@ type MapToolDeclaration = {
   id: string;
   icon: IconIdea;
   label: string;
-  /** One line under the label, in the helper-text register: one plain
-   *  sentence, an example over a rule. Guard: contracts.test.ts. */
-  description: string;
 } & (
   | { on?: undefined; reason?: undefined; gap?: undefined }
   | { on: ContractPlatform; reason: string; gap?: undefined }
@@ -24,25 +21,21 @@ export const MAP_TOOLS = [
     id: "measure",
     icon: MAP_MEASURE_ICON,
     label: MAP_MEASURE.title,
-    description: "Tap two points to see the distance.",
   },
   {
     id: "route",
     icon: "draw",
     label: "Draw a route",
-    description: "Tap along a ridge to draw a route.",
   },
   {
     id: "place",
     icon: "addPlace",
     label: "Add a place",
-    description: "Tap a spot, like a car park, to add it.",
   },
   {
     id: "makeMap",
     icon: "pickArea",
     label: "Make a map",
-    description: "Frame an area to make a LiDAR map or a GeoPDF.",
     on: "web",
     reason:
       "A LiDAR map is framed at a desk and takes minutes to make, and a GeoPDF is printed there; Logjam GPS shows what Logjam Web made, offline.",
@@ -59,7 +52,6 @@ export type MapToolSpec<P extends ContractPlatform> = {
   id: MapToolIdOn<P>;
   icon: IconIdea;
   label: string;
-  description: string;
 };
 
 /** The tools one client has, in the order it draws them. */
@@ -72,6 +64,5 @@ export function mapTools<P extends ContractPlatform>(
       id: tool.id as MapToolIdOn<P>,
       icon: tool.icon,
       label: tool.label,
-      description: tool.description,
     }));
 }

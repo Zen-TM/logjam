@@ -134,23 +134,8 @@
   background: var(--color-card-pressed);
 }
 
-.trayText {
-  display: flex;
-  flex-direction: column;
-}
-
 .trayLabel {
   white-space: nowrap;
-}
-
-.trayDescription {
-  composes: meta from "../../textRoles.generated.module.css";
-  color: var(--color-text-muted);
-}
-
-/* The hover fill is a step darker than the muted words can stand. */
-.trayItem:hover .trayDescription {
-  color: var(--color-text);
 }
 
 .trayGlyph {

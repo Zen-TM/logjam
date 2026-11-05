@@ -38,7 +38,6 @@ function chrome(selectingArea = false, map: maplibregl.Map | null = null) {
           {
             id: "m",
             label: "Measure",
-            description: "How far.",
             icon: "add",
             onSelect() {},
           },

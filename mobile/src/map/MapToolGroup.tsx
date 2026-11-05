@@ -1,6 +1,6 @@
 // The action column's tool group: one `+` button that opens the map tools as a
-// short list of LABELLED pills (a label and a line saying what it does) beside
-// the column, one per row, from the + row down. The tools themselves are declared once (`MAP_TOOLS`, @logjam/shared),
+// short list of LABELLED pills beside the column, one per row, from the + row
+// down. The tools themselves are declared once (`MAP_TOOLS`, @logjam/shared),
 // so both clients' trays hold the same ones in the same order with the same
 // words; Logjam GPS draws the ones it has. Guard: `mapTools.test.ts`.
 //
@@ -165,7 +165,6 @@ export function MapToolTray({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={tool.label}
-              accessibilityHint={tool.description}
               style={[styles.pill, armed && styles.controlActive]}
               onPress={() => onPickTool(tool.id)}
             >
@@ -174,22 +173,12 @@ export function MapToolTray({
                 size={FAB_ICON}
                 color={armed ? theme.onFill : theme.text}
               />
-              <View style={styles.pillText}>
-                <Text
-                  style={[styles.pillLabel, armed && { color: theme.onFill }]}
-                  numberOfLines={1}
-                >
-                  {tool.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.pillDescription,
-                    armed && { color: theme.onFill },
-                  ]}
-                >
-                  {tool.description}
-                </Text>
-              </View>
+              <Text
+                style={[styles.pillLabel, armed && { color: theme.onFill }]}
+                numberOfLines={1}
+              >
+                {tool.label}
+              </Text>
             </Pressable>
           </Animated.View>
         );
@@ -223,7 +212,5 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingHorizontal: spacing(2),
     paddingVertical: spacing(0.5),
   },
-  pillText: { flexShrink: 1 },
   pillLabel: { ...textRole.body, color: theme.text },
-  pillDescription: { ...textRole.meta, color: theme.textMuted },
 }));
