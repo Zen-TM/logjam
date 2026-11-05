@@ -95,9 +95,6 @@ export const MAP_POINT_NO_FIX_NOTE: Record<ContractPlatform, string> = {
   gps: "Tap the locate button to see the distance.",
 };
 
-/** The gestures a verb can be offered from: a tap asks, a hold commits. */
-type VerbWhere = ContractPlatform | "both";
-
 type PointVerbDeclaration = {
   id: string;
   icon: IconIdea;
@@ -109,7 +106,7 @@ type PointVerbDeclaration = {
    * its reason or gap describe the client that has the verb at all, Options
    * included.
    */
-  hold?: VerbWhere;
+  hold?: ContractPlatform;
 } & (
   | { on?: undefined; reason?: undefined }
   // Only one client has it, and `reason` says why.
@@ -176,7 +173,7 @@ export type MapPointVerbId = (typeof MAP_POINT_VERBS)[number]["id"];
 /** The ids one client's hold draws: a `Record` over them is its parity check. */
 export type MapHoldVerbId<P extends ContractPlatform> = Extract<
   (typeof MAP_POINT_VERBS)[number],
-  { hold: P | "both" }
+  { hold: P }
 >["id"];
 
 export type MapPointVerb = {
@@ -222,10 +219,7 @@ export function mapHoldVerbs(
   savedHereOnly = false,
 ): MapPointVerb[] {
   return (MAP_POINT_VERBS as readonly PointVerbDeclaration[])
-    .filter(
-      (verb) =>
-        verb.hold != null && (verb.hold === "both" || verb.hold === platform),
-    )
+    .filter((verb) => verb.hold === platform)
     .map(asVerb(savedHereOnly));
 }
 
