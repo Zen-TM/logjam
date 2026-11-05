@@ -146,8 +146,77 @@ function numbers(value: unknown, length: number): (number | null)[] {
   return value.map((item) => (typeof item === "number" ? item : null));
 }
 
+/**
+ * The instant a wall-clock time ("2026-10-04T05:00") is in a zone. The hourly
+ * array spans two weeks, so one UTC offset for all of it is an hour out for
+ * the hours on the other side of a daylight-saving change: the zone's own
+ * rules answer for each hour. Where the runtime has no zone data (or the name
+ * is not one), `fallbackOffsetMs` is all there is.
+ */
+export function zonedInstant(
+  time: string,
+  zone: string | undefined,
+  fallbackOffsetMs: number,
+): number {
+  const [y, mo, d, h] = time.split(/[-T:]/).map(Number);
+  const wall = Date.UTC(y, mo - 1, d, h);
+  const offsetAt = zoneOffset(zone);
+  if (!offsetAt) return wall - fallbackOffsetMs;
+  // The offset at the wall time read as UTC is within the change's hour of the
+  // right one; asking again at the instant that gives settles it.
+  return wall - offsetAt(wall - offsetAt(wall));
+}
+
+const zoneFormats = new Map<string, Intl.DateTimeFormat | null>();
+
+/** The zone's UTC offset in ms at an instant, or null without zone data. */
+function zoneOffset(zone: string | undefined): ((at: number) => number) | null {
+  if (!zone) return null;
+  if (!zoneFormats.has(zone)) {
+    try {
+      zoneFormats.set(
+        zone,
+        new Intl.DateTimeFormat("en-US", {
+          timeZone: zone,
+          hourCycle: "h23",
+          year: "numeric",
+          month: "numeric",
+          day: "numeric",
+          hour: "numeric",
+          minute: "numeric",
+          second: "numeric",
+        }),
+      );
+    } catch {
+      zoneFormats.set(zone, null);
+    }
+  }
+  const format = zoneFormats.get(zone);
+  if (!format) return null;
+  return (at) => {
+    const part: Record<string, number> = {};
+    for (const { type, value } of format.formatToParts(at))
+      part[type] = Number(value);
+    return (
+      Date.UTC(
+        part.year,
+        part.month - 1,
+        part.day,
+        part.hour % 24,
+        part.minute,
+        part.second,
+      ) -
+      Math.floor(at / 1000) * 1000
+    );
+  };
+}
+
 function hours(
-  json: { hourly?: Record<string, unknown>; utc_offset_seconds?: unknown },
+  json: {
+    hourly?: Record<string, unknown>;
+    utc_offset_seconds?: unknown;
+    timezone?: unknown;
+  },
   fetchedAt: number,
 ): WeatherHour[] {
   const hourly = json.hourly;
@@ -160,18 +229,18 @@ function hours(
     (typeof json.utc_offset_seconds === "number"
       ? json.utc_offset_seconds
       : 0) * 1000;
-  const all = time.map((t, i): WeatherHour => {
-    const [y, mo, d, h] = String(t).split(/[-T:]/).map(Number);
-    return {
+  const zone = typeof json.timezone === "string" ? json.timezone : undefined;
+  const all = time.map(
+    (t, i): WeatherHour => ({
       time: String(t),
-      at: Date.UTC(y, mo - 1, d, h) - offsetMs,
+      at: zonedInstant(String(t), zone, offsetMs),
       code: code[i] ?? 0,
       tempC: temp[i] ?? NaN,
       rainMm: rain[i] ?? 0,
       rainChance: chance[i],
       windKmh: wind[i] ?? NaN,
-    };
-  });
+    }),
+  );
   return all
     .filter((hour) => hour.at + HOUR_MS > fetchedAt)
     .slice(0, WEATHER_HOURS_KEPT);

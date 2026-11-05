@@ -121,6 +121,11 @@
   color: var(--color-text);
 }
 
+/* None is a dash in the muted ink, so a wet card is the one with a figure. */
+.rain[data-dry="true"] {
+  color: var(--color-text-muted);
+}
+
 .meta {
   composes: meta from "../textRoles.generated.module.css";
 }

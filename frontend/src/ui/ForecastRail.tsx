@@ -40,7 +40,7 @@ export function ForecastRail({
   /** A total for the row ("34 mm"), at its right. */
   summary?: string | null;
   cards: readonly ForecastCard[];
-  /** The two buttons' names. */
+  /** The two buttons' names: each says which row it pages. */
   labels: { back: string; on: string };
 }) {
   const track = useRef<HTMLUListElement>(null);
@@ -95,7 +95,9 @@ export function ForecastRail({
                 style={{ width: `${card.rainLevel * 100}%` }}
               />
             </span>
-            <span className={classes.rain}>{card.rain}</span>
+            <span className={classes.rain} data-dry={card.rainLevel === 0}>
+              {card.rain}
+            </span>
             {card.chance && <span className={classes.meta}>{card.chance}</span>}
             {card.wind && <span className={classes.meta}>{card.wind}</span>}
           </li>
