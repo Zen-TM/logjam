@@ -67,39 +67,50 @@ function losesIndent(notes: string): boolean {
   });
 }
 
+const typed = (source: string): MessageBlock => ({
+  type: "paragraph",
+  children: source
+    .replace(/\n+$/, "")
+    .split("\n")
+    .flatMap((line, i): MessageInline[] => [
+      ...(i > 0 ? [{ type: "break" } as const] : []),
+      { type: "text", text: line },
+    ]),
+});
+
+/** Whether drawing `source` would lose characters, so it is shown as typed. */
+function losesText(source: string, dropped: string[]): boolean {
+  return dropped.length > 0 || UNDERLINE.test(source) || losesIndent(source);
+}
+
 /**
  * The blocks to draw for a place's or a trip's free-text notes: the same
  * Markdown subset, every line break kept. A note is shown as typed, so each
  * top-level block that uses anything the subset cannot draw (a rule, a quote,
  * a table, a task list, a heading underline, a hand-indented line...) is drawn
  * as plain text instead of with characters missing, and the rest of the note
- * still renders. Nothing in the tree is markup, and a link is https, http or
- * mailto only. Guard: planWriteUp.test.ts ("noteBlocks").
+ * still renders. Blank lines between blocks are paragraph gaps, as in drawn
+ * Markdown. A note with a link reference definition (`[g]: https://...`) is
+ * all-or-nothing instead: a definition is read from anywhere in the note, so
+ * a block parsed alone would lose its links. Nothing in the tree is markup,
+ * and a link is https, http or mailto only. Guard: planWriteUp.test.ts
+ * ("noteBlocks").
  */
 export function noteBlocks(notes: string): MessageBlock[] {
-  return Lexer.lex(notes, { ...getDefaults(), breaks: true })
+  const options = { ...getDefaults(), breaks: true };
+  const tokens = Lexer.lex(notes, options);
+  if (tokens.some((token) => token.type === "def")) {
+    const { blocks, dropped } = parseMessageMarkdown(notes, { breaks: true });
+    return losesText(notes, dropped) ? [typed(notes)] : boldHeadings(blocks);
+  }
+  return tokens
     .filter((token) => token.raw.trim())
     .flatMap((token): MessageBlock[] => {
       const { blocks, dropped } = parseMessageMarkdown(token.raw, {
         breaks: true,
       });
-      if (
-        dropped.length === 0 &&
-        !UNDERLINE.test(token.raw) &&
-        !losesIndent(token.raw)
-      )
-        return boldHeadings(blocks);
-      return [
-        {
-          type: "paragraph",
-          children: token.raw
-            .replace(/\n+$/, "")
-            .split("\n")
-            .flatMap((line, i): MessageInline[] => [
-              ...(i > 0 ? [{ type: "break" } as const] : []),
-              { type: "text", text: line },
-            ]),
-        },
-      ];
+      return losesText(token.raw, dropped)
+        ? [typed(token.raw)]
+        : boldHeadings(blocks);
     });
 }

@@ -92,7 +92,7 @@ describe("noteBlocks", () => {
     ],
     ["a tab indent", "a\n\tb", ["a\n\tb"]],
     ["an indent in a later paragraph", "a\n\nb\n  c", ["a", "b\n  c"]],
-  ])("shows a note with %s exactly as typed", (_name, note, typed) => {
+  ])("shows a note with %s as typed", (_name, note, typed) => {
     // Red if a dropped construct is rendered with its characters missing:
     // the author never sees what was lost. Also red if losesIndent is removed:
     // the indented lines come out flush left.
@@ -107,6 +107,26 @@ describe("noteBlocks", () => {
           .join("");
       }),
     ).toEqual(typed);
+  });
+
+  // Mutation: parse `token.raw` per block even when the note has a definition,
+  // and the link is literal text while the definition line vanishes.
+  it("keeps a reference link and its definition together", () => {
+    const blocks = noteBlocks(
+      "See [the guide][g] first.\n\n[g]: https://example.com/guide",
+    );
+    expect(JSON.stringify(blocks)).toContain(
+      '"type":"link","href":"https://example.com/guide"',
+    );
+    expect(JSON.stringify(blocks)).not.toContain("[g]");
+  });
+
+  it("types the whole note when it has a definition and a block that cannot be drawn", () => {
+    const note = "See [the guide][g].\n\n> quoted\n\n[g]: https://example.com";
+    const [block, ...rest] = noteBlocks(note);
+    expect(rest).toEqual([]);
+    expect(JSON.stringify(block)).not.toContain('"type":"link"');
+    expect(JSON.stringify(block)).toContain("[g]: https://example.com");
   });
 
   it("falls back per block: one unrenderable block leaves the rest drawn", () => {
