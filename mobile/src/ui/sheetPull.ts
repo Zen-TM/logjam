@@ -20,19 +20,34 @@ export function sheetRelease({
 }
 
 /**
+ * Whether a finger that has just gone down on the sheet's content pins the
+ * sheet for the whole drag: the content was scrolled away from its top. Such
+ * a drag scrolls the content and stops at the top; it never hands on to the
+ * sheet. A drag that began at the top may. Guard: `sheetPull.test.ts`.
+ */
+export function sheetPins({ scrolled }: { scrolled: number }): boolean {
+  return scrolled > 0;
+}
+
+/**
  * How far down the sheet really is. `pull` is how far the drag has taken it;
  * `scrolled` is how far its content has scrolled. A drag that pulls the sheet
  * down and then turns back scrolls the CONTENT (Android gives a scroll view
  * no way to hand the upward half to its parent), so the sheet is raised by
- * what the content scrolled, up to the whole pull. Guard: `sheetPull.test.ts`.
+ * what the content scrolled, up to the whole pull. A `pinned` sheet (see
+ * `sheetPins`) is not down at all, whatever the hand-off took.
+ * Guard: `sheetPull.test.ts`.
  */
 export function sheetPulled({
   pull,
   scrolled,
+  pinned = false,
 }: {
   pull: number;
   scrolled: number;
+  pinned?: boolean;
 }): number {
+  if (pinned) return 0;
   return pull - Math.min(pull, Math.max(0, scrolled));
 }
 

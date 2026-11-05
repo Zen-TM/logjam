@@ -37,6 +37,7 @@ import { useReducedMotionRef } from "./useReducedMotion";
 import {
   DISMISS_DISTANCE,
   sheetHolds,
+  sheetPins,
   sheetPulled,
   sheetRelease,
   sheetReseats,
@@ -77,6 +78,14 @@ import {
 // the lift, so the content rides with the sheet and nothing appears to scroll
 // until the sheet is back at its open position. Once the finger is off, the
 // lift is folded into the two real scroll offsets (`settle`).
+//
+// Anchored. The dock's content is a constant two screens tall, the sheet at
+// its bottom edge and the spacer taking the rest. A sheet that changes height
+// (a tab with more rows, the keyboard) then grows UP, in the layout pass that
+// draws its new content. With the content as tall as spacer plus sheet, the
+// scroll's end moved with the sheet, the sheet grew DOWN from where it was,
+// and it was a frame or more before the jump to the new end pulled it up.
+// Guard: `sheetPull.test.ts`.
 //
 // ponytail: Android only. iOS does not chain two vertical scroll views inside
 // one gesture, so there a scrollable sheet drags by its header; it needs a
@@ -315,12 +324,23 @@ export function BottomSheet({
     dragged: false,
     closing: false,
     seated: false,
+    // The finger that is down landed on content scrolled away from its top:
+    // the sheet stays put for the whole drag (`sheetPins`). `startedAway` is
+    // what the content saw of that touch, read by the dock when the touch
+    // reaches it.
+    pinned: false,
+    startedAway: false,
   });
   // How far the drag has taken the sheet down, before the lift.
   const rawPull = () =>
     Math.max(0, pull.current.content - pull.current.viewport - pull.current.y);
   const pulled = () =>
-    sheetPulled({ pull: rawPull(), scrolled: viewport.current.y });
+    sheetPulled({
+      pull: rawPull(),
+      scrolled: viewport.current.y,
+      pinned: pull.current.pinned,
+    });
+
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The settle runs from a timer, so it reads the current props through a ref.
   const settleRef = useRef(() => {});
@@ -329,6 +349,12 @@ export function BottomSheet({
     const outerContent = new Animated.Value(0);
     const outerViewport = new Animated.Value(0);
     const innerY = new Animated.Value(0);
+    // 1 while the sheet is pinned (`sheetPins`), 0 otherwise.
+    const pinned = new Animated.Value(0);
+    const free = pinned.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0],
+    });
     // All three from ONE scroll event, so the pull is never computed from a
     // new offset and an old size (a sheet that shrinks is clamped at once).
     const pullNode = Animated.subtract(
@@ -345,11 +371,19 @@ export function BottomSheet({
         extrapolateLeft: "clamp",
       }),
     );
+    // What raises the sheet: the lift, or the whole pull when pinned, which
+    // cancels the hand-off exactly (the sheet is DRAWN pull lower). The
+    // content's frame is held back only by the lift: pinned, its scroll is
+    // not covering for a sheet that moved.
+    const hold = Animated.multiply(free, lift);
+    const raise = Animated.add(hold, Animated.multiply(pinned, pullNode));
     return {
       outerY,
       innerY,
-      values: [outerY, outerContent, outerViewport, innerY],
-      lift,
+      pinned,
+      values: [outerY, outerContent, outerViewport, innerY, pinned],
+      hold,
+      raise,
       onOuterScroll: Animated.event(
         [
           {
@@ -368,6 +402,10 @@ export function BottomSheet({
       ),
     };
   });
+  const pin = (next: boolean) => {
+    pull.current.pinned = next;
+    scroll.pinned.setValue(next ? 1 : 0);
+  };
   const settleSoon = () => {
     if (settleTimer.current != null) clearTimeout(settleTimer.current);
     settleTimer.current = setTimeout(() => settleRef.current(), SETTLE_MS);
@@ -400,6 +438,10 @@ export function BottomSheet({
   };
   const moved = useEffectEvent(() => {
     seat();
+    // The pinned sheet's hand-off is undone once the finger is up (`settle`);
+    // it is the sheet's again when that has landed.
+    if (pull.current.pinned && !pull.current.touching && rawPull() < 1)
+      pin(false);
     const now = pulled();
     const sinking = now > pull.current.last;
     pull.current.last = now;
@@ -445,6 +487,8 @@ export function BottomSheet({
       pull.current.touching = false;
       pull.current.dragged = false;
       pull.current.closing = false;
+      pull.current.startedAway = false;
+      pull.current.pinned = false;
       // Not known until the first scroll event: read as "at rest".
       pull.current.y = Number.POSITIVE_INFINITY;
       pull.current.last = 0;
@@ -483,6 +527,13 @@ export function BottomSheet({
         dragged: pull.current.dragged,
       });
       pull.current.dragged = false;
+      // The hand-off a pinned drag took is undone where nobody sees it (the
+      // sheet is drawn at rest throughout); the sheet is unpinned once it is.
+      if (pull.current.pinned) {
+        if (rawPull() >= 1) outerRef.current?.scrollToEnd({ animated: false });
+        else pin(false);
+        return;
+      }
       // Fold the lift into the real offsets: the sheet's scroll takes it, the
       // content's gives it up, and nothing moves on screen. Not on the way
       // out, where the sheet should leave from where it is.
@@ -545,7 +596,7 @@ export function BottomSheet({
       inputRange: [0, 1],
       outputRange: [SHEET_TRAVEL, 0],
     }),
-    scroll.lift,
+    scroll.raise,
   );
 
   return (
@@ -570,6 +621,10 @@ export function BottomSheet({
         overScrollMode="never"
         bounces={false}
         keyboardShouldPersistTaps="handled"
+        // A constant height, whatever the sheet's own: see "Anchored" above.
+        contentContainerStyle={{
+          minHeight: 2 * Math.max(SHEET_TRAVEL, viewportHeight),
+        }}
         // A child that owns the touch (SheetScrollLock) owns it against the
         // sheet's drag too.
         scrollEnabled={!scrollLocked}
@@ -603,6 +658,14 @@ export function BottomSheet({
         onTouchStart={() => {
           pull.current.touching = false;
           pull.current.closing = false;
+          // The content's own touch arrives here after it has had its say.
+          // A finger away from the content (the handle, the title) always
+          // drags the sheet. Never unpinned while a pinned drag's hand-off is
+          // still being undone: the sheet would jump by it.
+          const next = pull.current.startedAway;
+          pull.current.startedAway = false;
+          if (next !== pull.current.pinned && (next || rawPull() < 1))
+            pin(next);
           settleSoon();
         }}
         {...dragHandlers}
@@ -612,7 +675,7 @@ export function BottomSheet({
             not operable by either — this labelled Pressable is, and it is the
             only announced way out of a sheet apart from the OS back gesture. */}
         <Pressable
-          style={{ height: Math.max(SHEET_TRAVEL, viewportHeight) }}
+          style={styles.spacer}
           accessibilityRole="button"
           accessibilityLabel={`Close ${title}`}
           onPress={closable ? requestClose : undefined}
@@ -689,7 +752,7 @@ export function BottomSheet({
               <Animated.View
                 style={[
                   styles.scrollHold,
-                  { transform: [{ translateY: scroll.lift }] },
+                  { transform: [{ translateY: scroll.hold }] },
                 ]}
               >
                 <Animated.ScrollView
@@ -714,6 +777,13 @@ export function BottomSheet({
                   // What this cannot scroll goes to the sheet's drag (see the top
                   // of the file).
                   nestedScrollEnabled
+                  // A drag that starts on content scrolled away from its top
+                  // never moves the sheet (`sheetPins`).
+                  onTouchStart={() => {
+                    pull.current.startedAway = sheetPins({
+                      scrolled: viewport.current.y,
+                    });
+                  }}
                   {...dragHandlers}
                   // Frozen while a sub-mode covers it: a drag on the overlay must
                   // not scroll the list hidden behind it. Frozen too while a child
@@ -761,6 +831,8 @@ const useStyles = makeStyles((theme, textRole) => ({
   overlay: { ...StyleSheet.absoluteFill, backgroundColor: theme.page },
   backdrop: { ...StyleSheet.absoluteFill, backgroundColor: scrim.light },
   dock: { flex: 1 },
+  // Takes whatever the sheet leaves of the dock's constant height.
+  spacer: { flexGrow: 1 },
   sheet: {
     backgroundColor: theme.page,
     borderTopLeftRadius: radius.xl,
