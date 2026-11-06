@@ -880,6 +880,7 @@ export function updateUserPreferences(
     notifications: Partial<NotificationPreferences>;
     importMergePolicy: PlaceMergePolicy;
     leaderboardOptIn: boolean;
+    copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
   }>,
 ): Promise<TUser> {
@@ -1968,9 +1969,9 @@ export type CopiedPlace = TPlace & {
  *
  * NO `copyMedia` IN THE BODY, deliberately: the server then falls back to the
  * account's `uiPreferences.copyPlaceMedia`, which is what the user last chose
- * on Logjam GPS. Sending a value here would silently override a preference Logjam Web
- * has no switch for. The response says what actually happened to the media,
- * which is what the caller reports.
+ * in Settings. Sending a value here would silently override that preference.
+ * The response says what actually happened to the media, which is what the
+ * caller reports.
  */
 export function copyPlace(placeId: string): Promise<CopiedPlace> {
   return apiFetch<CopiedPlace>(`/places/${placeId}/copy`, { method: "POST" });

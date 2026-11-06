@@ -12,10 +12,25 @@ export const SETTINGS = {
   id: "settings.menu",
   title: "Settings",
   sections: [
-    // What is set, not kept. Logjam Web draws the switches inline; Logjam GPS
-    // splits them by where they are stored (this phone, the account) into
-    // pages, so each page can say once what it needs.
-    { key: "preferences" },
+    // What is set, in the order a user goes looking: Logjam GPS draws one row
+    // per section here that opens a page of its own (split by where the
+    // settings are stored, so each page says once what it needs), Logjam Web
+    // draws each one inline. A section only one client has is below.
+    { key: "display" },
+    {
+      key: "map",
+      on: "gps",
+      reason:
+        "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
+    },
+    { key: "notifications" },
+    {
+      key: "offline",
+      on: "gps",
+      reason:
+        "Offline maps and the downloads that fetch them are stored on the phone. A browser keeps neither.",
+    },
+    { key: "privacy" },
     { key: "categories" },
     { key: "attributes" },
     {
@@ -26,6 +41,13 @@ export const SETTINGS = {
     },
   ],
   copy: {
+    display: "Display",
+    map: "Map",
+    notifications: "Notifications",
+    offline: "Offline and storage",
+    privacy: "Privacy and security",
+    friends: "Friends",
+    copying: "Copying a place",
     categories: "Your own place types",
     attributes: `Your own ${ATTRIBUTE_NOUN.many}`,
     placeTypes: "Place types",
@@ -36,25 +58,12 @@ export const SETTINGS = {
 } as const satisfies ScreenContract;
 
 /**
- * The Logjam GPS settings pages and rows with no Logjam Web twin. Not
- * sections: `preferences` is one section on both clients, and Logjam GPS
- * splits it into pages.
+ * The Logjam GPS rows with no Logjam Web twin, inside a section both clients
+ * draw. A whole page only Logjam GPS has is a section above.
  */
 export const SETTINGS_PHONE_ONLY = [
   {
-    id: "map",
-    on: "gps",
-    reason:
-      "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
-  },
-  {
-    id: "offline",
-    on: "gps",
-    reason:
-      "Offline maps and copied photos are stored on the phone. A browser keeps neither.",
-  },
-  {
-    id: "privacy",
+    id: "deviceGuards",
     on: "gps",
     reason:
       "App lock, crash reports and Save to gallery configure the phone's own lock, error reporting and photo library. Logjam Web leaves each to the browser.",
@@ -72,6 +81,20 @@ export const SETTINGS_PHONE_ONLY = [
       "Logjam Web follows the browser's own zoom and text size, so there is nothing to set. The phone's size is chosen in Logjam GPS.",
   },
 ] as const satisfies readonly ClientOnly[];
+
+/**
+ * The switch under "Copying a place" in Privacy and security, on both
+ * clients: whether a copied place's photos and files come too (they count
+ * against the account's quota). It is the account's `copyPlaceMedia`, which the
+ * server reads whenever a copy request does not say, so a choice made on either
+ * client applies to the other's copies. On by default: not copying silently
+ * loses what the sharee could see (`themeSchemes.ts`).
+ */
+export const COPY_MEDIA_SETTING = {
+  label: "Copy photos too",
+  hint: "Shared place photos and files.",
+  saveFailed: "Couldn't save that setting.",
+} as const;
 
 /** A navigation row's subtitle is live state: how many the user has made. */
 export function ownTypeCountLabel(own: number): string {
@@ -108,7 +131,7 @@ export type NotificationPreferenceGroup = "email" | "inApp";
 
 /**
  * The notification switches, as data: a new preference is one entry. Each is
- * a switch under its group's heading ("Email me about" › "LiDAR maps"), short
+ * a switch under its group's lead ("Email me about" › "LiDAR maps"), short
  * enough for a switch label (`SWITCH_COPY_MAX`) on both clients.
  */
 export const NOTIFICATION_PREFERENCES = [
@@ -124,7 +147,8 @@ export const NOTIFICATION_PREFERENCES = [
   label: string;
 }[];
 
-/** The group's heading, naming the surface: "Notify me in Logjam GPS about". */
+/** The group's lead, naming the surface: "Notify me in Logjam GPS about".
+ *  Logjam GPS draws it as a section header, Logjam Web as a group label. */
 export function notificationGroupLead(
   group: NotificationPreferenceGroup,
   surface: "Logjam Web" | "Logjam GPS",

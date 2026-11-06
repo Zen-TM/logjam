@@ -3,8 +3,6 @@
 // an account-backed job (finished topos, syncing, media uploads) is
 // dead for a guest and says "Needs an account" in place of its subtitle
 // (shared/DESIGN.md §5: disabled when it could apply once an account is linked).
-// "Copy photos too" is not here: it is a server preference and already
-// gated by `serverPrefs`.
 //
 // Pure for the same reason `auth/capabilities.ts` is: mobile tests have no React
 // tree. `Record` makes a new row a type error until it is sorted.

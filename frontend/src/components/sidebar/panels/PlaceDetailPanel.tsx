@@ -568,8 +568,8 @@ function PlaceDetailPanel({
    *
    * The media report comes back on the response rather than being predicted in
    * the confirm. Whether photos come is the account's remembered
-   * `copyPlaceMedia`, which this app has no switch for yet, so the honest thing
-   * is to promise nothing beforehand and say what happened after.
+   * `copyPlaceMedia` (Settings › Privacy and security), so the honest thing is
+   * to promise nothing beforehand and say what happened after.
    */
   async function handleCopyPlace(andRemove: boolean) {
     setCopying(true);

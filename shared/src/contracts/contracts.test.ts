@@ -18,6 +18,8 @@ import {
   leaderboardSeasonLine,
   ACCOUNT_DELETE_BODY,
   ACCOUNT_PHONE_ONLY,
+  COPY_MEDIA_SETTING,
+  SETTINGS,
   SETTINGS_PHONE_ONLY,
   SELECTION_GESTURES,
   noFriendsMatch,
@@ -1536,6 +1538,40 @@ describe("the place form and the trip form", () => {
     expect(PLACE_FORM.copy.saved).toBe("Place saved.");
     expect(TRIP_FORM.copy.logged).toBe("Trip logged.");
     expect(TRIP_FORM.copy.saved).toBe("Trip saved.");
+  });
+});
+
+describe("SETTINGS", () => {
+  // Logjam GPS draws one menu row per section and Logjam Web one section each,
+  // so this order is both clients'. Mutation: move "privacy" above
+  // "notifications", or give "map" no `on`.
+  it("lists the pages in one order, the phone-only ones marked", () => {
+    expect(contractSectionKeys(SETTINGS, "gps").slice(0, 5)).toEqual([
+      "display",
+      "map",
+      "notifications",
+      "offline",
+      "privacy",
+    ]);
+    expect(contractSectionKeys(SETTINGS, "web").slice(0, 3)).toEqual([
+      "display",
+      "notifications",
+      "privacy",
+    ]);
+  });
+
+  // The one entry both clients draw the copy-photos switch from. Mutation:
+  // retype the label on one client (the sheet that defaults from it says the
+  // same words), or move the group out of Privacy and security.
+  it("holds the copy-photos switch under Copying a place", () => {
+    expect(SETTINGS.copy.copying).toBe("Copying a place");
+    expect(COPY_MEDIA_SETTING.label).toBe("Copy photos too");
+  });
+
+  // Mutation: type "Settings › Privacy" into copy.privacy.
+  it("names a page the same on both clients", () => {
+    expect(SETTINGS.copy.offline).toBe("Offline and storage");
+    expect(SETTINGS.copy.privacy).toBe("Privacy and security");
   });
 });
 

@@ -23,7 +23,11 @@
 import { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 
-import { copyAndRemoveConfirm, copyConfirm } from "@logjam/shared";
+import {
+  COPY_MEDIA_SETTING,
+  copyAndRemoveConfirm,
+  copyConfirm,
+} from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
 import { formatBytes } from "../format";
@@ -159,8 +163,8 @@ export function useCopyPanel({
         {media.count > 0 ? (
           <SwitchRow
             icon="photo"
-            // The same words as the Offline setting this choice defaults from.
-            title="Copy photos too"
+            // The same words as the Privacy and security setting this choice defaults from.
+            title={COPY_MEDIA_SETTING.label}
             description={`${
               media.count === 1
                 ? "1 photo or file"

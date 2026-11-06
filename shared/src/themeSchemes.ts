@@ -108,8 +108,9 @@ export type UserUiPreferences = {
    * can read and act on.
    *
    * The SERVER reads this as the fallback when `POST /places/:id/copy` carries
-   * no `copyMedia`, so a client with no switch of its own (Logjam Web, today)
-   * still honours the user's choice instead of quietly doing the other thing.
+   * no `copyMedia`, so a copy that asks nothing still honours the user's choice
+   * (Settings › Privacy and security, on both clients) instead of quietly doing
+   * the other thing.
    */
   copyPlaceMedia: boolean;
   /**
