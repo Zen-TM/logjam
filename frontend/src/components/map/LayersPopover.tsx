@@ -1,10 +1,13 @@
 import { useState, type ReactNode, type RefObject } from "react";
 import {
   contractSectionKeys,
+  FIRE_RAMP,
+  fireLegendRows,
   LAND_CLASSES,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  NSW_FIRE,
   NSW_LAND,
   PLACE_TYPE_COLORS,
   slopeLegendRows,
@@ -163,6 +166,7 @@ export default function LayersPopover({
     showPlaces,
     showWays,
     terrainLayers.land,
+    terrainLayers.fire,
     showGauges,
     showMgaGrid,
   ].filter(Boolean).length;
@@ -319,6 +323,10 @@ export default function LayersPopover({
                   <LandRow
                     checked={terrainLayers.land}
                     onToggle={(on) => onTerrainLayerChange("land", on)}
+                  />
+                  <FireRow
+                    checked={terrainLayers.fire}
+                    onToggle={(on) => onTerrainLayerChange("fire", on)}
                   />
                   <OverlayRow
                     icon="gauge"
@@ -591,6 +599,49 @@ export function LandRow({
         </ul>
         <p>{terrainCopy.landCaveat}</p>
         <p>{NSW_LAND.credit}</p>
+      </Dialog>
+    </>
+  );
+}
+
+/** The Fire history row, with the legend its help button opens. */
+export function FireRow({
+  checked,
+  onToggle,
+}: {
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  const [legendOpen, setLegendOpen] = useState(false);
+  return (
+    <>
+      <OverlayRow
+        icon="layers"
+        hue={FIRE_RAMP[0].colour}
+        title={terrainCopy.fire}
+        checked={checked}
+        onToggle={onToggle}
+        help={{
+          label: terrainCopy.fireAbout,
+          onClick: () => setLegendOpen(true),
+        }}
+      />
+      <Dialog
+        open={legendOpen}
+        title={terrainCopy.fire}
+        onClose={() => setLegendOpen(false)}
+      >
+        <p>{terrainCopy.fireLegend}</p>
+        <ul className={classes.landLegend}>
+          {fireLegendRows().map(({ label, colour }) => (
+            <li key={label}>
+              <IconTile icon="layers" hue={colour} />
+              {label}
+            </li>
+          ))}
+        </ul>
+        <p>{terrainCopy.fireCaveat}</p>
+        <p>{NSW_FIRE.credit}</p>
       </Dialog>
     </>
   );

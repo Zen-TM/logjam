@@ -12,6 +12,7 @@ import { randomUUID } from "expo-crypto";
 import NetInfo from "@react-native-community/netinfo";
 import {
   NSW_CONTOURS,
+  NSW_FIRE,
   NSW_LAND,
   NSW_SLOPE,
   SHARPENED_SOURCE_PREFIX,
@@ -78,6 +79,7 @@ export function regionUpdateSpecs(
       ...(a.logicalKey === NSW_CONTOURS.id ? { contours: true } : {}),
       ...(a.logicalKey === NSW_SLOPE.id ? { slope: true } : {}),
       ...(a.logicalKey === NSW_LAND.id ? { land: true } : {}),
+      ...(a.logicalKey === NSW_FIRE.id ? { fire: true } : {}),
     };
   });
 }

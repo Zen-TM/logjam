@@ -49,7 +49,11 @@ import {
   basemapFallbackNotice,
   basemapToShow,
   contractSectionKeys,
+  FIRE_RAMP,
+  fireLegendRows,
+  isOverlayTerrainKey,
   LAND_CLASSES,
+  NSW_FIRE,
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
@@ -210,7 +214,7 @@ export function MapLayersSheet({
   // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
   const [legend, setLegend] = useState<
-    "vegetation" | "land" | "slope" | "slopeBands" | null
+    "vegetation" | "land" | "fire" | "slope" | "slopeBands" | null
   >(null);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
@@ -255,6 +259,15 @@ export function MapLayersSheet({
         )}
         onLandChange={(on) => onTerrainLayerChange("land", on)}
         onOpenLandLegend={() => setLegend("land")}
+        fire={terrainSwitch(
+          "fire",
+          terrainLayers.fire,
+          basemapId,
+          online,
+          artifacts,
+        )}
+        onFireChange={(on) => onTerrainLayerChange("fire", on)}
+        onOpenFireLegend={() => setLegend("fire")}
       />
     ),
     offline: () => (
@@ -283,6 +296,8 @@ export function MapLayersSheet({
       overlay={
         legend === "land" ? (
           <LandLegend />
+        ) : legend === "fire" ? (
+          <FireLegend />
         ) : legend === "slope" ? (
           <SlopeLegend />
         ) : legend === "vegetation" ? (
@@ -435,7 +450,9 @@ function TerrainTab({
             title={MAP_TERRAIN.copy[key]}
             description={
               state.reason ??
-              (key === "land" ? undefined : MAP_TERRAIN.copy[`${key}Hint`])
+              (isOverlayTerrainKey(key)
+                ? undefined
+                : MAP_TERRAIN.copy[`${key}Hint`])
             }
             disabled={state.disabled}
             style={styles.itemRow}
@@ -513,6 +530,24 @@ function LandLegend() {
         </View>
       ))}
       <Text style={styles.legend}>{MAP_TERRAIN.copy.landCaveat}</Text>
+    </>
+  );
+}
+
+/** What the Fire history overlay's colours mean, and what they don't. */
+function FireLegend() {
+  const styles = useStyles();
+  return (
+    <>
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.fireLegend}</Text>
+      {fireLegendRows().map(({ label, colour }) => (
+        <View key={label} style={styles.landRow}>
+          <View style={[styles.landSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{label}</Text>
+        </View>
+      ))}
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.fireCaveat}</Text>
+      <Text style={styles.legend}>{NSW_FIRE.credit}</Text>
     </>
   );
 }
@@ -612,12 +647,18 @@ function LayersTab({
   land,
   onLandChange,
   onOpenLandLegend,
+  fire,
+  onFireChange,
+  onOpenFireLegend,
 }: {
   layers: LayerToggleEntry[];
   onImportFile: () => void;
   land: TerrainSwitchState;
   onLandChange: (on: boolean) => void;
   onOpenLandLegend: () => void;
+  fire: TerrainSwitchState;
+  onFireChange: (on: boolean) => void;
+  onOpenFireLegend: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -646,6 +687,18 @@ function LayersTab({
         checked={land.checked}
         onChange={onLandChange}
         help={{ label: MAP_TERRAIN.copy.landAbout, onPress: onOpenLandLegend }}
+      />
+    ),
+    fire: () => (
+      <SwitchRow
+        icon="layers"
+        hue={FIRE_RAMP[0].colour}
+        title={MAP_OVERLAYS.copy.fire}
+        description={fire.reason}
+        disabled={fire.disabled}
+        checked={fire.checked}
+        onChange={onFireChange}
+        help={{ label: MAP_TERRAIN.copy.fireAbout, onPress: onOpenFireLegend }}
       />
     ),
     gauges: () => entryRow("gauges"),

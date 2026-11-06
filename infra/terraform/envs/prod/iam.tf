@@ -242,6 +242,14 @@ resource "aws_iam_role_policy" "fire_history" {
         Resource = "arn:aws:s3:::logjam-topo-jobs/fire/*"
       },
       {
+        # The Fire history overlay's archive, which the CDN serves under
+        # /master/. Write only: publish() never reads it back.
+        Sid      = "PublishFireOverlay"
+        Effect   = "Allow"
+        Action   = "s3:PutObject"
+        Resource = "arn:aws:s3:::logjam-topo-jobs/master/fire/*"
+      },
+      {
         # read_legend() in topo/build_fire_history.py lists before it reads,
         # as upload() does for the place registry.
         Sid       = "ListFireHistory"

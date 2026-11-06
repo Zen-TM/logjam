@@ -17,6 +17,7 @@
 import {
   BASEMAP_CATALOG,
   NSW_CONTOURS,
+  NSW_FIRE,
   NSW_LAND,
   NSW_5M,
   NSW_HILLSHADE,
@@ -68,6 +69,8 @@ export type LogicalLayerRef =
   | { kind: "nsw-hillshade"; viewport?: Viewport | null }
   /** The Land overlay (`shared/src/nswLand.ts`); `viewport` as for the slope. */
   | { kind: "nsw-land"; viewport?: Viewport | null }
+  /** The Fire history overlay (`shared/src/nswFire.ts`), the same way. */
+  | { kind: "nsw-fire"; viewport?: Viewport | null }
   | { kind: "geopdf-import"; importId: string }
   | { kind: "vector-import"; importId: string };
 
@@ -117,6 +120,8 @@ export interface MapArtifact {
     | "slope-region"
     /** A clip of the Land overlay, saved the same way. */
     | "land-region"
+    /** A clip of the Fire history overlay, saved the same way. */
+    | "fire-region"
     | "topo-overlay"
     | "geopdf-import"
     | "vector-import";
@@ -599,6 +604,9 @@ export const holdsSlope = (
 export const holdsLand = (artifact: Pick<MapArtifact, "kind">): boolean =>
   artifact.kind === "land-region";
 
+export const holdsFire = (artifact: Pick<MapArtifact, "kind">): boolean =>
+  artifact.kind === "fire-region";
+
 /**
  * Whether a saved file is one the Terrain group can draw offline, whatever
  * its switch says.
@@ -610,6 +618,7 @@ export const drawsTerrain = (
   holdsContours(artifact) ||
   holdsSlope(artifact) ||
   holdsLand(artifact) ||
+  holdsFire(artifact) ||
   holdsHillshade(artifact);
 
 /**
@@ -755,6 +764,14 @@ export function resolveMapSource(
         NSW_LAND,
         "vector",
         "land-region",
+        ctx,
+        mainRegion(ref.viewport),
+      );
+    case "nsw-fire":
+      return resolveStatewide(
+        NSW_FIRE,
+        "vector",
+        "fire-region",
         ctx,
         mainRegion(ref.viewport),
       );

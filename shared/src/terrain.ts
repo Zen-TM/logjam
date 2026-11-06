@@ -1,6 +1,7 @@
 // The statewide Terrain group: contours, slope and hillshade over all of NSW,
-// from the 5 m DEM, with no LiDAR job, and Land (nswLand.ts), from the land
-// tenure layer. Each client only draws these.
+// from the 5 m DEM, with no LiDAR job, and two overlays from statewide archives
+// of their own: Fire history (nswFire.ts) and Land (nswLand.ts). Each client
+// only draws these.
 //
 // Slope is baked once as a fake DEM: a terrarium archive whose "height" is the
 // slope in degrees (ADR 0030 encoding), built by `topo/build_nsw_dem.py slope`.
@@ -38,12 +39,14 @@ export const NSW_HILLSHADE = {
 } as const;
 
 /**
- * The group's layers, top of the map first: contour lines over the slope
- * colours over the tint of who holds the land over the shading. Both clients
- * list them in this order and stack them in it.
+ * The group's layers, top of the map first: contour lines over the tint of
+ * when the ground last burnt over the slope colours over the edges of who
+ * holds the land over the shading. Both clients list them in this order and
+ * stack them in it.
  */
 export const TERRAIN_LAYER_KEYS = [
   "contours",
+  "fire",
   "slope",
   "land",
   "hillshade",
@@ -52,12 +55,28 @@ export const TERRAIN_LAYER_KEYS = [
 export type TerrainLayerKey = (typeof TERRAIN_LAYER_KEYS)[number];
 
 /**
+ * The Terrain layers that are overlays of their own: each drawn from its own
+ * statewide archive rather than a DEM, with its own credit and its row under
+ * Overlays, and none redrawn by a sharpened area or turned on by a job in it.
+ */
+export const OVERLAY_TERRAIN_KEYS = [
+  "fire",
+  "land",
+] as const satisfies readonly TerrainLayerKey[];
+
+export type OverlayTerrainKey = (typeof OVERLAY_TERRAIN_KEYS)[number];
+
+export function isOverlayTerrainKey(key: string): key is OverlayTerrainKey {
+  return (OVERLAY_TERRAIN_KEYS as readonly string[]).includes(key);
+}
+
+/**
  * Where each Terrain layer goes in the vector basemap, as a printed topo map
  * has it: directly under this layer of the Protomaps style (its
  * `@protomaps/basemaps` id, before a client's prefix). The shading lies over
- * the land fills and under the water, with Land's tint on it, so a lake stays a
- * lake; the slope and then the contours lie over the water's fill and under its lines, the roads, the boundaries and every
- * label. Over a raster basemap there is nothing to interleave, and the group
+ * the land fills and under the water, with Land's edges on it, so a lake stays
+ * a lake; the slope, the fire tint and then the contours lie over the water's
+ * fill and under its lines, the roads, the boundaries and every label. Over a raster basemap there is nothing to interleave, and the group
  * sits on top of it. Guards: `terrain.test.ts`, and each client's test that
  * the ids are in the style it draws (frontend `components/map/layerOrder.test.ts`,
  * mobile `map/basemap/protomapsLayers.test.ts`).
@@ -66,6 +85,7 @@ export const TERRAIN_BASEMAP_ANCHORS: Readonly<
   Record<TerrainLayerKey, string>
 > = {
   contours: "water_stream",
+  fire: "water_stream",
   slope: "water_stream",
   land: "water",
   hillshade: "water",
@@ -113,8 +133,8 @@ export function terrainBeforeIds(
 }
 
 /**
- * Every stored Terrain switch: the layers above, Land tenure among them though
- * its row is listed under Overlays, and the sharpened areas' optional vegetation
+ * Every stored Terrain switch: the layers above, the overlays among them though
+ * their rows are listed under Overlays, and the sharpened areas' optional vegetation
  * layer, which is drawn from their own archives rather than stacked into the
  * basemap, so it is not a `TerrainLayerKey`.
  */
@@ -133,6 +153,7 @@ export const TERRAIN_LAYER_DEFAULTS: Readonly<
   Record<TerrainSwitchKey, boolean>
 > = {
   contours: true,
+  fire: false,
   slope: true,
   land: false,
   hillshade: false,
@@ -234,8 +255,8 @@ export function terrainCredit(
 ): string | null {
   const keys = new Set(drawn);
   const names = TERRAIN_LAYER_KEYS.filter(
-    // Land has a credit of its own: `GEOPDF_OVERLAY_ATTRIBUTION`.
-    (key) => key !== "land" && keys.has(key),
+    // Each overlay has a credit of its own.
+    (key) => !isOverlayTerrainKey(key) && keys.has(key),
   );
   if (names.length === 0) return null;
   const list =

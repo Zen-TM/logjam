@@ -83,6 +83,7 @@ export * from "./elevation.js";
 export * from "./demSources.js";
 export * from "./nswContours.js";
 export * from "./overlayZoom.js";
+export * from "./nswFire.js";
 export * from "./nswLand.js";
 export * from "./terrain.js";
 export * from "./demTiles.js";

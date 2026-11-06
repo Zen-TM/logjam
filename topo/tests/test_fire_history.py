@@ -225,11 +225,22 @@ class FakeS3:
     def get_object(self, Bucket, Key):
         return {"Body": io.BytesIO(json.dumps(self.legend).encode())}
 
-    def upload_file(self, path, bucket, key):
+    def upload_file(self, path, bucket, key, ExtraArgs=None):
         self.uploads.append(key)
 
     def put_object(self, Bucket, Key, Body, ContentType):
         self.uploads.append(Key)
+
+
+UPLOADS = [fh.RASTER_KEY, fh.ARCHIVE_KEY, fh.LEGEND_KEY]
+
+
+def _legend(source):
+    return {
+        "source": source,
+        "valid_feature_count": 100,
+        "overlay": {"archive": fh.ARCHIVE_KEY},
+    }
 
 
 class TestPublish(unittest.TestCase):
@@ -241,48 +252,67 @@ class TestPublish(unittest.TestCase):
 
         with (
             mock.patch.object(fh, "build", side_effect=fake_build) as build,
+            mock.patch.object(fh, "build_overlay", return_value=7),
             mock.patch("sys.stdout", io.StringIO()),
         ):
             fh.publish("bucket", s3, service)
         return build
 
-    def test_a_new_source_uploads_the_raster_then_its_legend(self):
-        # Mutation: upload the legend first, and a failed raster upload
-        # leaves a legend that makes next month's run skip the stale raster.
+    def test_a_new_source_uploads_both_then_the_legend(self):
+        # Mutation: upload the legend first, and a failed raster or archive
+        # upload leaves a legend that makes next month's run skip it.
         s3 = FakeS3()
         self._publish(s3, FakeService(3))
-        self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
+        self.assertEqual(s3.uploads, UPLOADS)
 
     def test_an_unchanged_source_uploads_nothing(self):
         # Mutation: drop the comparison with the published legend.
         service = FakeService(3)
-        s3 = FakeS3({"source": fh.source_state(service), "valid_feature_count": 100})
+        s3 = FakeS3(_legend(fh.source_state(service)))
         build = self._publish(s3, service)
         build.assert_not_called()
         self.assertEqual(service.offsets, [])
         self.assertEqual(s3.uploads, [])
 
+    def test_a_legend_from_before_the_overlay_rebuilds(self):
+        # Mutation: drop the `overlay` check, and prod's first run after this
+        # ships skips, leaving the overlay's archive unbuilt until NPWS next
+        # adds a fire.
+        service = FakeService(3)
+        s3 = FakeS3({"source": fh.source_state(service), "valid_feature_count": 100})
+        self._publish(s3, service)
+        self.assertEqual(s3.uploads, UPLOADS)
+
+    def test_the_overlay_reads_the_fire_type(self):
+        # Mutation: fetch RASTER_FIELDS, and the overlay's tap can't say
+        # whether a fire was a wildfire or a burn.
+        read = []
+
+        def stop(out, fields, expected, get):
+            read.extend(fields)
+            raise SystemExit
+
+        with (
+            mock.patch.object(fh, "fetch", side_effect=stop),
+            self.assertRaises(SystemExit),
+        ):
+            self._publish(FakeS3(), FakeService(3))
+        self.assertIn("FireType", read)
+
     def test_a_new_polygon_rebuilds(self):
         # Mutation: leave the count out of source_state().
-        s3 = FakeS3(
-            {"source": fh.source_state(FakeService(3)), "valid_feature_count": 100}
-        )
+        s3 = FakeS3(_legend(fh.source_state(FakeService(3))))
         self._publish(s3, FakeService(4))
-        self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
+        self.assertEqual(s3.uploads, UPLOADS)
 
     def test_a_change_in_any_latest_date_alone_rebuilds(self):
         # Mutation: drop a field from DATE_FIELDS (or compare only the count)
         # and an edit that moves only that date is skipped.
         for field in ("StartDate", "EndDate", "VerDate"):
             with self.subTest(field=field):
-                s3 = FakeS3(
-                    {
-                        "source": fh.source_state(FakeService(3)),
-                        "valid_feature_count": 100,
-                    }
-                )
+                s3 = FakeS3(_legend(fh.source_state(FakeService(3))))
                 self._publish(s3, FakeService(3, latest={field: 1572652800000}))
-                self.assertEqual(s3.uploads, [fh.RASTER_KEY, fh.LEGEND_KEY])
+                self.assertEqual(s3.uploads, UPLOADS)
 
     def test_a_short_read_uploads_nothing(self):
         # Mutation: drop fetch()'s count check and the partial read uploads.

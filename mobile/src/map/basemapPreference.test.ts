@@ -53,6 +53,7 @@ describe("readTerrainLayers", () => {
     expect(readTerrainLayers()).toEqual({
       contours: true,
       slope: true,
+      fire: false,
       land: false,
       hillshade: false,
       vegetation: true,
@@ -68,6 +69,7 @@ describe("readTerrainLayers", () => {
     expect(readTerrainLayers()).toEqual({
       contours: false,
       slope: true,
+      fire: false,
       land: false,
       hillshade: false,
       vegetation: true,

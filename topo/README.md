@@ -19,7 +19,7 @@ Attribution strings are centralised in `shared/src/geoPdfBaseLayers.ts`
 |--------|----------|---------|-----------------|
 | **ELVIS LiDAR** (Geoscience Australia + NSW Spatial Services) | heights, slope, contours, vegetation | CC BY 4.0 | "Elevation data © Geoscience Australia / NSW Spatial Services (CC BY 4.0)" |
 | **NSW State Vegetation Type Map (SVTM)** | vegetation | CC BY 4.0 *(to confirm via SEED portal — see note)* | "Vegetation data © State of NSW (DCCEEW) — State Vegetation Type Map (CC BY 4.0)" |
-| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`) | CC BY 4.0 | "© State Government of NSW and NSW Department of Climate Change, Energy, the Environment and Water 2010" |
+| **NPWS Fire History** (Wildfires and Prescribed Burns) | vegetation (fire-staleness marking, see `apply_fire_history` in `pipeline.py`), and the Fire history overlay | CC BY 4.0 | `NSW_FIRE.credit` in `shared/src/nswFire.ts` |
 | **NSW Land Tenure** (DPIRD, December 2024 v2) | the Land overlay (`build_land_tenure.py`) | CC BY 4.0 | `NSW_LAND.credit` in `shared/src/nswLand.ts` |
 | **OpenStreetMap** | the place registry Logjam searches | ODbL | "© OpenStreetMap contributors" |
 | **SIX Maps** (NSW DCS Spatial Services) | basemap | CC BY | "© Department of Customer Service (NSW) — SIX Maps, [year]" |
@@ -413,16 +413,21 @@ REGENERATE_FIXTURE=1 python3 -m unittest tests.test_place_registry
 
 ## Refreshing the fire history
 
-`build_fire_history.py` turns NPWS Fire History into the most-recent-fire-year
-raster the vegetation pass marks burnt ground from
-(`fire/fire_history_year.tif` in the topo bucket, with its legend beside it).
-A scheduled ECS task runs `publish` monthly; these commands are for trying a
-change by hand, from `topo/`, in the worker image:
+`build_fire_history.py` turns NPWS Fire History into two files from one read:
+the most-recent-fire-year raster the vegetation pass marks burnt ground from
+(`fire/fire_history_year.tif` in the topo bucket, with its legend beside it),
+and the Fire history overlay's vector archive (`NSW_FIRE.archivePath` in
+`shared/src/nswFire.ts`), which holds each area once, with its most recent
+fire's year, month and type. A scheduled ECS task runs `publish` monthly; these
+commands are for trying a change by hand, from `topo/`, in the worker image:
 
 ```bash
 docker compose run --rm topo python3 /app/build_fire_history.py fetch /output/fire.geojson
 docker compose run --rm topo python3 /app/build_fire_history.py build \
   --input /output/fire.geojson --output /output/fire/fire_history_year.tif
+docker compose run --rm topo python3 /app/build_fire_history.py overlay \
+  --input /output/fire.geojson --output /output/fire/nsw-fire-history.pmtiles
+pmtiles show output/fire/nsw-fire-history.pmtiles   # zoom 8 to 12, bounds are NSW
 ```
 
 `fetch` pages through NPWS's ArcGIS map service (SEED's download package
@@ -431,8 +436,15 @@ every polygon the service counts. `build` also takes SEED's shapefile.
 In November 2026 the service held 38,238 polygons: `fetch` took six minutes
 for a 310 MB file, `build` one minute at a 760 MB peak, for a 2.8 MB raster.
 
-`publish` does both, then uploads the raster and its legend, unless the
-service's polygon count and latest dates match those in the published legend.
+`overlay` reads `fetch`'s file only: SEED's shapefile has no `FireType` or
+`OBJECTID`. In November 2026 it took two and a half minutes at a 570 MB peak to
+flatten 23,172 dated fires into 17,434 areas, for a 12 MB archive. At z12,
+4,000 random points in four boxes read the same fire from the tiles as from
+the source.
+
+`publish` does all three, then uploads the raster, the archive and the legend,
+unless the service's polygon count and latest dates match those in the
+published legend and that legend records the archive.
 Publishing is a prod change and the maintainer's to make; the vegetation pass
 reads the new raster from the next job on, with no deploy. Run it from a host
 with GDAL, boto3 and prod AWS credentials, or start the ECS task

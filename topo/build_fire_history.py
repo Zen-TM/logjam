@@ -2,24 +2,31 @@
 """
 build_fire_history.py
 ----------------------
-Rasterize NPWS Fire History into a "most-recent fire year" GeoTIFF. Each
-output cell holds the most recent calendar year in which that ground was known
-to have burned, or 0 (nodata) if the ground has never burned or has no usable
-date on record. The vegetation layer reads it at job time
-(FIRE_HISTORY_S3_PATH in pipeline.py) to mark ground burnt since its survey.
+Build NPWS Fire History's two products from one read of the polygons:
 
-    python3 build_fire_history.py publish --bucket B         # the monthly ECS task
-    python3 build_fire_history.py fetch fire.geojson         # the service's polygons
-    python3 build_fire_history.py build --input fire.geojson # or SEED's shapefile
+- a "most-recent fire year" GeoTIFF. Each cell holds the most recent calendar
+  year in which that ground was known to have burned, or 0 (nodata) if the
+  ground has never burned or has no usable date on record. The vegetation
+  layer reads it at job time (FIRE_HISTORY_S3_PATH in pipeline.py) to mark
+  ground burnt since its survey.
+- the Fire history overlay's vector archive (`NSW_FIRE` in
+  shared/src/nswFire.ts): each area with its most recent fire's year, month
+  and type.
+
+    python3 build_fire_history.py publish --bucket B           # the monthly ECS task
+    python3 build_fire_history.py fetch fire.geojson           # the service's polygons
+    python3 build_fire_history.py build --input fire.geojson   # or SEED's shapefile
+    python3 build_fire_history.py overlay --input fire.geojson # the archive
 
 `publish` pages through NPWS's ArcGIS map service (SEED's download package
-refuses a script), builds the raster and uploads it, then its legend, to
-RASTER_KEY and LEGEND_KEY in the topo bucket. It does nothing when the
-service's count and latest dates match the published legend's, and exits
-non-zero without uploading when a read comes back short.
+refuses a script), builds both and uploads the raster, the archive, then the
+raster's legend, to RASTER_KEY, ARCHIVE_KEY and LEGEND_KEY in the topo bucket.
+It does nothing when the service's count and latest dates match the published
+legend's, and exits non-zero without uploading when a read comes back short.
 
 Outputs: fire_history_year.tif         (uint16, EPSG:3577, 100 m)
          fire_history_year_legend.json (provenance + year range)
+         nsw-fire-history.pmtiles      (vector, z8 to z12)
 
 Source & licence: NPWS Fire History - Wildfires and Prescribed Burns, from
          The Sharing and Enabling Environmental Data (SEED) Portal
@@ -39,6 +46,7 @@ import http.client
 import json
 import math
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -49,6 +57,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Set, Tuple
 
+import shapely
 from osgeo import gdal, ogr, osr
 
 gdal.UseExceptions()
@@ -73,12 +82,24 @@ SOURCE_EPSG = 4283  # GDA94, the service's own
 # UTC on the day.
 DATE_FIELDS = ("StartDate", "EndDate", "VerDate")
 RASTER_FIELDS = ("StartDate", "EndDate")
+OVERLAY_FIELDS = (*RASTER_FIELDS, "FireType")
 PAGE_SIZE = 1000  # the service's maxRecordCount
 HTTP_TRIES = 4
 # FIRE_HISTORY_S3_PATH's default in pipeline.py reads RASTER_KEY.
 # Guard: tests/test_fire_history.py.
 RASTER_KEY = "fire/fire_history_year.tif"
 LEGEND_KEY = "fire/fire_history_year_legend.json"
+# The overlay's archive, its source layer and properties, and its zooms are
+# NSW_FIRE's in shared/src/nswFire.ts. Guard: tests/test_fire_overlay.py.
+ARCHIVE_KEY = "master/fire/nsw-fire-history.pmtiles"
+OVERLAY_LAYER = "fire"
+OVERLAY_ZMIN = 8
+OVERLAY_ZMAX = 12
+OVERLAY_CREDIT = (
+    "Fire history © State Government of NSW and NSW Department of Climate"
+    " Change, Energy, the Environment and Water 2010 — NPWS Fire History -"
+    " Wildfires and Prescribed Burns (CC BY 4.0)"
+)
 # A build with this many fewer dated polygons than the published one is the
 # service losing data, not NPWS removing fires: keep the published raster.
 MIN_VALID_RATIO = 0.9
@@ -93,12 +114,12 @@ READ_ERRORS = (OSError, http.client.HTTPException, ValueError, RuntimeError)
 Query = Callable[[dict], dict]
 
 
-def resolve_fire_year(
+def resolve_fire_date(
     start_date: Optional[date],
     end_date: Optional[date],
     current_year: int,
-) -> Optional[int]:
-    """Map one feature's (StartDate, EndDate) to a valid fire year, or None.
+) -> Optional[date]:
+    """Map one feature's (StartDate, EndDate) to a valid fire date, or None.
 
     Coalesces EndDate -> StartDate: EndDate is preferred when present (it's
     the more precise "fire out" date), falling back to StartDate when the
@@ -114,10 +135,19 @@ def resolve_fire_year(
     fire_date = end_date if end_date is not None else start_date
     if fire_date is None:
         return None
-    year = fire_date.year
-    if year < MIN_VALID_YEAR or year > current_year:
+    if fire_date.year < MIN_VALID_YEAR or fire_date.year > current_year:
         return None
-    return year
+    return fire_date
+
+
+def resolve_fire_year(
+    start_date: Optional[date],
+    end_date: Optional[date],
+    current_year: int,
+) -> Optional[int]:
+    """resolve_fire_date's year: the raster keeps no more."""
+    fire_date = resolve_fire_date(start_date, end_date, current_year)
+    return None if fire_date is None else fire_date.year
 
 
 def _ogr_field_to_date(feature: "ogr.Feature", field_index: int) -> Optional[date]:
@@ -278,6 +308,130 @@ def rasterize_max_year(
     return width, height
 
 
+# ── The overlay's archive ────────────────────────────────────────────────
+
+
+def dated_fires(features: Iterable[dict], current_year: int) -> List[tuple]:
+    """(date, FireType, geometry) of each polygon with a usable date, newest
+    first; a tie on the date goes to the later OBJECTID, so a rebuild draws
+    the same map. `features` are dicts of OBJECTID, StartDate, EndDate (dates
+    or None), FireType and a shapely geometry."""
+    fires = []
+    for f in features:
+        when = resolve_fire_date(f["StartDate"], f["EndDate"], current_year)
+        if when is not None and f["geometry"] is not None:
+            fires.append((when, f["OBJECTID"], f["FireType"], f["geometry"]))
+    fires.sort(key=lambda fire: fire[:2], reverse=True)
+    return [(when, kind, geom) for when, _oid, kind, geom in fires]
+
+
+def polygonal(geom):
+    """The polygons of a geometry, dropping the lines and points that
+    make_valid or a difference can leave beside them, or None."""
+    # Twice, as a collection can hold a multipolygon.
+    parts = shapely.get_parts(shapely.get_parts(geom))
+    polygons = [p for p in parts if p.geom_type == "Polygon" and not p.is_empty]
+    return shapely.multipolygons(polygons) if polygons else None
+
+
+def flatten(fires: List[tuple]) -> Iterable[tuple]:
+    """Each of `fires` (newest first, as dated_fires gives them) less the
+    ground a newer one burnt, so an area keeps only its most recent fire: the
+    overlay's tint is translucent, and overlapping fills would add up."""
+    geoms = [shapely.make_valid(geom) for _when, _kind, geom in fires]
+    tree = shapely.STRtree(geoms)
+    for i, (when, kind, _geom) in enumerate(fires):
+        geom = geoms[i]
+        newer = [j for j in tree.query(geom, predicate="intersects") if j < i]
+        if newer:
+            geom = shapely.difference(
+                geom, shapely.union_all([geoms[j] for j in newer])
+            )
+        geom = polygonal(geom)
+        if geom is not None:
+            yield when, kind, geom
+        if i and i % 2000 == 0:
+            print(f"  flattened {i} of {len(fires)} fires …", flush=True)
+
+
+def overlay_feature(when: date, kind: Optional[int], geom) -> str:
+    """One GeoJSON line for tippecanoe: the properties the clients read."""
+    props = {"year": when.year, "month": when.month}
+    if kind is not None:
+        props["type"] = kind
+    return (
+        '{"type":"Feature","properties":'
+        + json.dumps(props)
+        + ',"geometry":'
+        + shapely.to_geojson(geom)
+        + "}\n"
+    )
+
+
+def read_overlay_features(input_path: str) -> Iterable[dict]:
+    """The polygons at input_path (any OGR source with the OVERLAY_FIELDS),
+    one at a time, as dated_fires reads them."""
+    src_ds = ogr.Open(input_path)
+    if src_ds is None:
+        raise SystemExit(f"OGR could not open {input_path}")
+    layer = src_ds.GetLayer(0)
+    defn = layer.GetLayerDefn()
+    idx = {name: defn.GetFieldIndex(name) for name in ("OBJECTID", *OVERLAY_FIELDS)}
+    missing = [name for name, i in idx.items() if i < 0]
+    if missing:
+        raise SystemExit(f"{input_path} has no {missing}")
+    kind = idx["FireType"]
+    for feature in layer:
+        geom = feature.GetGeometryRef()
+        yield {
+            "OBJECTID": feature.GetFieldAsInteger(idx["OBJECTID"]),
+            "StartDate": _ogr_field_to_date(feature, idx["StartDate"]),
+            "EndDate": _ogr_field_to_date(feature, idx["EndDate"]),
+            "FireType": feature.GetFieldAsInteger(kind)
+            if feature.IsFieldSetAndNotNull(kind)
+            else None,
+            "geometry": None
+            if geom is None
+            else shapely.from_wkb(bytes(geom.ExportToIsoWkb())),
+        }
+
+
+def tippecanoe_command(geojson: Path, out: Path, tmp: Path) -> List[str]:
+    return [
+        *["tippecanoe", "--force", "-q", "-o", str(out), "-t", str(tmp)],
+        *["-l", OVERLAY_LAYER, f"-Z{OVERLAY_ZMIN}", f"-z{OVERLAY_ZMAX}"],
+        *["-n", "NPWS Fire History", "-N", OVERLAY_CREDIT],
+        # One polygon per run of a fire, with the edges two fires share kept
+        # shared, so their outlines draw as one line.
+        *["--coalesce", "--reorder", "--detect-shared-borders"],
+        # A dropped polygon is ground with no answer to a tap, not a thinner map.
+        *["--no-feature-limit", "--no-tile-size-limit"],
+        str(geojson),
+    ]
+
+
+def build_overlay(input_path: str, out_path: Path) -> int:
+    """Write the overlay's archive to out_path from the polygons at
+    input_path, and return how many areas it holds. The source's GDA94 is
+    written as WGS84: they are under 2 m apart, well inside the source's own
+    accuracy."""
+    current_year = datetime.now(timezone.utc).year
+    fires = dated_fires(read_overlay_features(input_path), current_year)
+    print(f"Flattening {len(fires)} dated fires …", flush=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=out_path.parent) as tmp:
+        lines = Path(tmp) / "fire.geojsonl"
+        areas = 0
+        with open(lines, "w", encoding="utf-8") as out:
+            for fire in flatten(fires):
+                out.write(overlay_feature(*fire))
+                areas += 1
+        del fires
+        print(f"Tiling {areas} areas → {out_path} …", flush=True)
+        subprocess.run(tippecanoe_command(lines, out_path, Path(tmp)), check=True)
+    return areas
+
+
 # ── The map service ──────────────────────────────────────────────────────
 
 
@@ -427,13 +581,19 @@ def publish(bucket: str, s3=None, get: Query = query) -> None:
         s3 = boto3.client("s3")
     state = source_state(get)
     old = read_legend(s3, bucket)
-    if old is not None and old.get("source") == state:
+    # A legend from before the overlay has no `overlay` block, so the first
+    # run after it ships builds the archive.
+    if (
+        old is not None
+        and old.get("source") == state
+        and old.get("overlay", {}).get("archive") == ARCHIVE_KEY
+    ):
         print(f"unchanged since the published build: {state}")
         return
     print(f"building from {state}")
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "fire_history.geojson"
-        fetch(src, RASTER_FIELDS, state["count"], get)
+        fetch(src, OVERLAY_FIELDS, state["count"], get)
         tif = Path(tmp) / "fire_history_year.tif"
         legend = build(str(src), tif, state)
         if old is not None and legend["valid_feature_count"] < (
@@ -443,17 +603,28 @@ def publish(bucket: str, s3=None, get: Query = query) -> None:
                 f"refusing to publish {legend['valid_feature_count']} dated polygons "
                 f"over {old['valid_feature_count']}: check the service"
             )
-        # The raster before the legend, so a failed upload leaves an old
-        # legend and the next run builds again. Guard:
-        # tests/test_fire_history.py, test_a_new_source_uploads_the_raster_then_its_legend.
+        archive = Path(tmp) / "nsw-fire-history.pmtiles"
+        legend["overlay"] = {
+            "archive": ARCHIVE_KEY,
+            "areas": build_overlay(str(src), archive),
+        }
+        # The raster and the archive before the legend, so a failed upload
+        # leaves an old legend and the next run builds again. Guard:
+        # tests/test_fire_history.py, test_a_new_source_uploads_both_then_the_legend.
         s3.upload_file(str(tif), bucket, RASTER_KEY)
+        s3.upload_file(
+            str(archive),
+            bucket,
+            ARCHIVE_KEY,
+            ExtraArgs={"ContentType": "application/vnd.pmtiles"},
+        )
         s3.put_object(
             Bucket=bucket,
             Key=LEGEND_KEY,
             Body=json.dumps(legend, indent=2).encode(),
             ContentType="application/json",
         )
-    print(f"published s3://{bucket}/{RASTER_KEY} and its legend")
+    print(f"published s3://{bucket}/{RASTER_KEY}, {ARCHIVE_KEY} and the legend")
 
 
 # ── Build ────────────────────────────────────────────────────────────────
@@ -554,6 +725,13 @@ def main(argv: List[str]) -> int:
         default=Path(__file__).parent / "fire" / "fire_history_year.tif",
         help="Output fire-year raster path.",
     )
+    o = sub.add_parser("overlay", help="build the overlay's archive from a local file")
+    o.add_argument("--input", required=True, help="`fetch`'s GeoJSON.")
+    o.add_argument(
+        "--output",
+        type=Path,
+        default=Path(__file__).parent / "fire" / "nsw-fire-history.pmtiles",
+    )
     args = parser.parse_args(argv)
 
     if args.command == "publish":
@@ -563,7 +741,9 @@ def main(argv: List[str]) -> int:
     elif args.command == "fetch":
         state = source_state()
         print(f"fetching {state}")
-        fetch(args.output, RASTER_FIELDS, state["count"])
+        fetch(args.output, OVERLAY_FIELDS, state["count"])
+    elif args.command == "overlay":
+        print(f"{build_overlay(args.input, args.output)} areas")
     else:
         if not os.path.exists(args.input):
             parser.error(f"input not found: {args.input}")

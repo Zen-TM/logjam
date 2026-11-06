@@ -61,6 +61,7 @@ describe("two saved areas and the Terrain group", () => {
       {
         hillshade: ["hillshade"],
         land: ["land"],
+        fire: ["fire-fill", "fire-edge"],
         slope: ["slope"],
         contours: ["contours"],
       },
@@ -97,6 +98,9 @@ describe("two saved areas and the Terrain group", () => {
       }
     }
     expect(at("slope")).toBeLessThan(at("contours"));
+    expect(at("slope")).toBeLessThan(at("fire-fill"));
+    expect(at("fire-fill")).toBeLessThan(at("fire-edge"));
+    expect(at("fire-edge")).toBeLessThan(at("contours"));
     // Where saves overlap, the newest draws on top.
     expect(at("older/earth")).toBeLessThan(at("newer/earth"));
     expect(at("older/places_locality")).toBeLessThan(
