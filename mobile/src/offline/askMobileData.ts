@@ -1,6 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 
-import { confirm } from "../ui/confirm";
+import { confirm } from "../ui";
 import { isExpensive } from "./networkPolicy";
 
 /**

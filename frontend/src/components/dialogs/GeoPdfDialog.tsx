@@ -939,7 +939,7 @@ function GeoPdfDialog({
         onClose={onClose}
         // "Select on map" and a successful Generate call onClose directly, so
         // neither asks.
-        discard={dirty ? abandonConfirm("export", true) : null}
+        discard={dirty ? abandonConfirm("map", true) : null}
         footer={(requestClose) => (
           <>
             <Button

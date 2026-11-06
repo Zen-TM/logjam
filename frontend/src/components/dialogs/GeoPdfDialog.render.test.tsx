@@ -202,7 +202,7 @@ describe("GeoPdfDialog, closing", () => {
     fireEvent.click(paper("A3"));
     fireEvent.click(closeButton());
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText("Discard this export?")).toBeTruthy();
+    expect(screen.getByText("Discard this map?")).toBeTruthy();
   });
 });
 
@@ -1267,7 +1267,7 @@ describe("GeoPdfDialog, rendering in this tab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Make it" }));
     await screen.findByRole("progressbar");
 
-    const form = screen.getByRole("dialog", { name: "Export an area" });
+    const form = screen.getByRole("dialog", { name: "Make a map" });
     fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
     fireEvent.keyDown(form, { key: "Escape" });
     expect(seen.signal?.aborted).toBe(false);

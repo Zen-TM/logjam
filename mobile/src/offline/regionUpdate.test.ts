@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { MapArtifact } from "../map/sourceResolver";
 
-vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 vi.mock("expo-crypto", () => ({ randomUUID: () => "id" }));
 vi.mock("@react-native-community/netinfo", () => ({
   default: { fetch: vi.fn() },
@@ -133,6 +132,18 @@ describe("a card that cannot be updated", () => {
     expect(canUpdateRegion([member({ id: "z" })])).toBe(true);
     await startRegionUpdate([legacy], "A");
     expect(NetInfo.fetch).not.toHaveBeenCalled();
+    expect(askAllowCellular).not.toHaveBeenCalled();
+  });
+
+  // Mutation: queue the update without the connection check and an offline tap
+  // enqueues jobs that cannot run.
+  it("says so offline and asks nothing", async () => {
+    vi.mocked(NetInfo.fetch).mockResolvedValueOnce({
+      isConnected: false,
+    } as never);
+    expect(await startRegionUpdate([member({ id: "z" })], "A")).toMatch(
+      /needs a connection/,
+    );
     expect(askAllowCellular).not.toHaveBeenCalled();
   });
 });

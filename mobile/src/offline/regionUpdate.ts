@@ -8,7 +8,6 @@
 //
 // PRIVACY: the bbox is read back from the card's own files and goes where a
 // first save sends it: byte ranges to the CDN, never to Logjam's API.
-import { Alert } from "react-native";
 import { randomUUID } from "expo-crypto";
 import NetInfo from "@react-native-community/netinfo";
 import {
@@ -86,25 +85,25 @@ export function regionUpdateSpecs(
 export const canUpdateRegion = (members: readonly MapArtifact[]) =>
   regionUpdateSpecs(members, "", false, () => "") !== null;
 
-/** Ask what an update needs the user to decide, then queue it. */
+/**
+ * Ask what an update needs the user to decide, then queue it. Resolves to why
+ * it was not queued when the caller should say so (offline, no room), or null
+ * when it was queued, there was nothing to update or the user said no.
+ */
 export async function startRegionUpdate(
   members: readonly MapArtifact[],
   groupLabel: string,
-): Promise<void> {
+): Promise<string | null> {
   // Before any question: a card with nothing to update would answer them all
   // and then do nothing.
   const specs = regionUpdateSpecs(members, groupLabel, false, randomUUID);
-  if (!specs) return;
+  if (!specs) return null;
   const state = await NetInfo.fetch();
   if (state.isConnected === false) {
-    Alert.alert(
-      "No connection",
-      "Updating a map needs a connection. Try again when you have one.",
-    );
-    return;
+    return "Updating a map needs a connection. Try again when you have one.";
   }
   const allowCellular = await askAllowCellular();
-  if (allowCellular === null) return;
+  if (allowCellular === null) return null;
   try {
     // The new copy is whole beside the old one before the old one goes.
     await assertSpaceFor(
@@ -112,8 +111,8 @@ export async function startRegionUpdate(
     );
   } catch (err) {
     if (!(err instanceof NotEnoughSpaceError)) throw err;
-    Alert.alert("Not enough space", err.message);
-    return;
+    return `Not enough space. ${err.message}`;
   }
   enqueueRegionDownloads(specs.map((spec) => ({ ...spec, allowCellular })));
+  return null;
 }

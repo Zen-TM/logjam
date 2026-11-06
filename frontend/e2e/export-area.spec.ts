@@ -68,13 +68,13 @@ test("a GIS pick holds Tools off and returns to its own form", async ({
   ).toHaveAttribute("aria-checked", "true");
 });
 
-test("Make a map → Sharpen an area opens its dialog", async ({ page }) => {
+test("Make a map → Sharpen area opens its dialog", async ({ page }) => {
   await openApp(page);
-  await mapTool(page, ["Make a map", "Sharpen an area"]);
+  await mapTool(page, ["Make a map", "Sharpen area"]);
   // Mutation: arm the box pick in App's make-map "topo" entry again, and the
   // dialog never opens: the map waits for a drawn box instead.
   const dialog = page.locator("dialog[open]");
   await expect(
-    dialog.getByRole("heading", { name: "Sharpen an area" }),
+    dialog.getByRole("heading", { name: "Sharpen area" }),
   ).toBeVisible();
 });

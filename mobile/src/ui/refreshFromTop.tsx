@@ -71,7 +71,10 @@ export function mergeScrollProps<A extends object, B extends object>(
   a: A,
   b: B,
 ): A & B {
-  const out: Record<string, unknown> = { ...a, ...b };
+  const out: Record<string, unknown> = { ...a, ...b } as Record<
+    string,
+    unknown
+  >;
   for (const [key, first] of Object.entries(a)) {
     const second = (b as Record<string, unknown>)[key];
     if (typeof first === "function" && typeof second === "function") {

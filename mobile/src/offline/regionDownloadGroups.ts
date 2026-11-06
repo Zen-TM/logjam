@@ -84,6 +84,10 @@ export function retryableJobs(jobs: RegionJob[]): RegionJob[] {
   );
 }
 
+function maps(count: number): string {
+  return `${count} map${count === 1 ? "" : "s"}`;
+}
+
 function layers(count: number): string {
   return `${count} layer${count === 1 ? "" : "s"}`;
 }

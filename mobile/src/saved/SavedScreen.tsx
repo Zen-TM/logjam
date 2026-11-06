@@ -359,7 +359,11 @@ type SavedItem = {
   resolveBbox: () => Promise<Bbox | null>;
   /** A saved area downloaded again over itself. `busy` while a run of this
    *  card is in the queue; `savedOn` is when its files were saved. */
-  update?: { savedLine: string; busy: boolean; run: () => Promise<void> };
+  update?: {
+    savedLine: string;
+    busy: boolean;
+    run: () => Promise<string | null>;
+  };
   /** Persist a new display name. Absent on a shared route or waypoint, which
    *  is read-only — see `AssetActions.rename`. */
   rename?: (name: string) => Promise<unknown>;
@@ -2365,10 +2369,17 @@ export function SavedScreen({
                   onPress={() => {
                     const target = menuItem.update;
                     closeItemSheet();
-                    target?.run().catch((err: unknown) => {
-                      console.error(err);
-                      fail(messageFromError(err, "Couldn't start the update."));
-                    });
+                    target
+                      ?.run()
+                      .then((refused) => {
+                        if (refused) fail(refused);
+                      })
+                      .catch((err: unknown) => {
+                        console.error(err);
+                        fail(
+                          messageFromError(err, "Couldn't start the update."),
+                        );
+                      });
                   }}
                 />
               ) : null}

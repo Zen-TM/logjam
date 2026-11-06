@@ -1119,7 +1119,7 @@ test.describe("desktop", () => {
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard this export?",
+      name: "Discard this map?",
     });
     await expect(confirm).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
@@ -1608,7 +1608,7 @@ test.describe("fits", () => {
   });
 
   // Mutation: drop `wrap` from the Scale rail and "Other" runs off the dialog.
-  test("Export an area's Scale chips all show at phone width", async ({
+  test("Print or GIS map's Scale chips all show at phone width", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -1618,7 +1618,7 @@ test.describe("fits", () => {
       .getByRole("group", { name: "Tools" })
       .getByText("Make a map")
       .click();
-    await page.getByRole("menuitem", { name: "Export an area" }).click();
+    await page.getByRole("menuitem", { name: "Print or GIS map" }).click();
     const scale = page.getByRole("radiogroup", { name: "Scale" });
     await expect(scale.getByRole("radio", { name: "Other" })).toBeInViewport({
       ratio: 1,

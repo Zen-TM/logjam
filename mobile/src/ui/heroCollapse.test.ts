@@ -297,7 +297,10 @@ describe("list screens collapse their hero", () => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     expect(source).toContain("<CollapsingHero collapse={heroCollapse}>");
     expect(source).toContain("<CollapsingHeader collapse={heroCollapse}>");
-    expect(source).toContain("{...heroCollapse.scrollProps}");
+    // A list that also pulls to refresh merges them (`mergeScrollProps`).
+    expect(source).toMatch(
+      /\{\.\.\.(heroCollapse\.scrollProps|mergeScrollProps\(heroCollapse\.scrollProps,)/,
+    );
     expect(source).toContain("heroCollapse.inset(");
     // Saved has no pull to refresh.
     if (!file.includes("SavedScreen"))
