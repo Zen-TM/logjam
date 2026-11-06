@@ -136,8 +136,9 @@ export function RegionDownloadRow({ job }: { job: RegionJob }) {
                       confirmTitle: failed
                         ? "Discard this download?"
                         : "Stop this download?",
-                      confirmBody:
-                        "The download so far will be deleted from this phone.",
+                      confirmBody: spec.update
+                        ? "The map you have saved stays as it is."
+                        : "The download so far will be deleted from this phone.",
                       confirmLabel: failed ? "Discard" : "Stop",
                       tone: "destructive",
                     })

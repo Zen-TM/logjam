@@ -18,6 +18,8 @@ import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
 import LogjamDownloadService from "../../modules/logjam-download-service/src/LogjamDownloadServiceModule";
 import {
+  type RegionDownloadGroup,
+  jobsToStop,
   BACKGROUND_WAIT_MS,
   MAX_BACKGROUND_RESUMES,
   downloadNotice,
@@ -151,6 +153,9 @@ export function onRegionDownloadToast(
 
 /** Groups already announced, so a later publish doesn't repeat the toast. */
 const announcedGroups = new Set<string>();
+/** Runs the user stopped: what they leave is not news, and "updated" would be
+ * false of an update that was cut short. */
+const userStopped = new Set<string>();
 
 // Driven off `publish` rather than off the pump's tail: a group also settles
 // when the last live job is paused by the user or halted by the provider, and
@@ -165,6 +170,7 @@ function announceSettledGroups(): void {
     }
     if (announcedGroups.has(group.groupId)) continue;
     announcedGroups.add(group.groupId);
+    if (userStopped.has(group.groupId)) continue;
     const message = {
       text: regionGroupToastText(group),
       tone: group.unfinished > 0 ? ("error" as const) : ("done" as const),
@@ -281,6 +287,7 @@ function installAutoResumeWatchers(): void {
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
   installAutoResumeWatchers();
+  for (const spec of specs) userStopped.delete(spec.groupId);
   jobs = [
     // Settled jobs from an earlier batch are dropped, not kept: the progress
     // screen is about the download the user just started, and a failure from
@@ -436,6 +443,14 @@ export function cancelRegionDownload(id: string): void {
   deleteAbandonedRegion(id).catch((err) => console.error(err));
 }
 
+/** The Stop on a run's card: see `jobsToStop` for what it takes with it. */
+export function stopRegionGroup(
+  group: Pick<RegionDownloadGroup, "groupId" | "jobs" | "update">,
+): void {
+  userStopped.add(group.groupId);
+  for (const job of jobsToStop(group)) cancelRegionDownload(job.spec.id);
+}
+
 /**
  * Stop EVERYTHING and forget it — the account-transition contract, called by
  * `wipeAllLocalData` before it deletes a byte.
@@ -461,6 +476,7 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   tokens.clear();
   // Module state must not outlive a sign-out (see the note above).
   announcedGroups.clear();
+  userStopped.clear();
   backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
   publish();
 }

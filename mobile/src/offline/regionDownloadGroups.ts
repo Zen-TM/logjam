@@ -118,6 +118,30 @@ export function isGroupBusy(jobs: RegionJob[], groupId: string): boolean {
   );
 }
 
+/** The line a saved card carries while its update runs, or has stopped short. */
+export function updateProgressLine(
+  group: Pick<RegionDownloadGroup, "settled" | "fraction">,
+): string {
+  return group.settled
+    ? "Update didn't finish"
+    : `Updating · ${Math.round(group.fraction * 100)}%`;
+}
+
+/**
+ * The jobs a Stop on a run cancels. A first save drops everything it has
+ * written ("the download so far will be deleted"); an update stops only what
+ * has not saved, because each file it did save already took the place of the
+ * older one, and cancelling that job would delete the only copy.
+ * Guard: `regionDownloadQueue.test.ts` ("stopping an update").
+ */
+export function jobsToStop(
+  group: Pick<RegionDownloadGroup, "jobs" | "update">,
+): RegionJob[] {
+  return group.update
+    ? group.jobs.filter((job) => job.state.kind !== "ready")
+    : group.jobs;
+}
+
 /** What the finish toast says. Names the area and the outcome, never a bbox. */
 export function regionGroupToastText(group: RegionDownloadGroup): string {
   if (group.update) {
