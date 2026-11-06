@@ -7,7 +7,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS, type TPlace, type TUser } from "@logjam/shared";
+import {
+  SYSTEM_PLACE_TYPE_IDS,
+  WAY_IMPORT,
+  type TPlace,
+  type TUser,
+} from "@logjam/shared";
 
 import UnifiedImportDialog from "./UnifiedImportDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -152,7 +157,9 @@ describe("UnifiedImportDialog, files that are not a CSV", () => {
     });
     const text = document.querySelector("dialog")!.textContent!;
     expect(text).toContain('"route.gpx" isn\'t a CSV');
-    expect(text).toContain("add it under Route");
+    expect(text).toContain(
+      `open Ways and choose Add, then “${WAY_IMPORT.menu}”`,
+    );
     expect(text).not.toContain("see console");
   });
 });
