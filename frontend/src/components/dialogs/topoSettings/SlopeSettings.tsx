@@ -2,6 +2,7 @@ import { Fragment, type CSSProperties } from "react";
 import {
   DEFAULT_SLOPE_SCALE,
   MAP_TERRAIN,
+  hasSlopeScaleEnd,
   insertSlopeBand,
   removeSlopeBand,
   rgbaCssFromHex,
@@ -111,18 +112,22 @@ export default function SlopeSettings({ value, onChange }: Props) {
             onChange={(colour) => setScale(colour, scaleEnd)}
           />
         </span>
-        <span className={styles.scaleArrow} aria-hidden>
-          →
-        </span>
-        <span className={styles.scaleEnd}>
-          End
-          <ColourField
-            label="Scale end colour (the steepest band)"
-            hideLabel
-            value={scaleEnd}
-            onChange={(colour) => setScale(scaleStart, colour)}
-          />
-        </span>
+        {hasSlopeScaleEnd(bands) ? (
+          <>
+            <span className={styles.scaleArrow} aria-hidden>
+              →
+            </span>
+            <span className={styles.scaleEnd}>
+              End
+              <ColourField
+                label="Scale end colour (the steepest band)"
+                hideLabel
+                value={scaleEnd}
+                onChange={(colour) => setScale(scaleStart, colour)}
+              />
+            </span>
+          </>
+        ) : null}
         <Button
           compact
           variant="outline"

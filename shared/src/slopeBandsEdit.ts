@@ -46,6 +46,14 @@ export function slopeScale(bands: SlopeBand[]): {
   return { start: bands[0].colour, end: bands[bands.length - 1].colour };
 }
 
+/**
+ * Whether the steepest colour is a choice of its own. A single band is painted
+ * in the start colour alone, so an end colour would change nothing.
+ */
+export function hasSlopeScaleEnd(bands: SlopeBand[]): boolean {
+  return bands.length > 1;
+}
+
 /** Repaint `bands` along a scale (`applySlopeGradient`, named for the editor). */
 export function setSlopeScale(
   bands: SlopeBand[],

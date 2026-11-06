@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_SLOPE_SCALE,
+  hasSlopeScaleEnd,
   insertSlopeBand,
   nextSlopeBandsEdit,
   removeSlopeBand,
@@ -86,6 +87,16 @@ describe("the scale", () => {
   it("offers colours that are plain #rrggbb", () => {
     for (const colour of SLOPE_SCALE_COLOURS)
       expect(colour).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe("the steepest colour", () => {
+  // Mutation: offer it at one band, where choosing it changes nothing.
+  it("is a choice only while there are two bands to paint along it", () => {
+    expect(hasSlopeScaleEnd(BANDS)).toBe(true);
+    expect(hasSlopeScaleEnd(BANDS.slice(0, 1))).toBe(false);
+    const one = setSlopeScaleColour(BANDS.slice(0, 1), "end", "#2563eb");
+    expect(one[0].colour).toBe(BANDS[0].colour);
   });
 });
 

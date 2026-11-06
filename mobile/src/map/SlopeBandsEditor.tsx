@@ -3,15 +3,14 @@
 // editable number is a boundary, so a gap or an overlap cannot be made.
 //
 // An edit is drawn and kept on the phone at once, then sent to the account
-// once the user pauses. There is no outbox for it: account preferences are
-// plain `PATCH /users/me` writes (as the theme and the other settings), so a
-// send that fails says so and the edit stays on this phone.
+// once the user pauses (`slopeBandsPreference.ts`, which also says why there
+// is no outbox for it).
 import { useEffect, useMemo, useState } from "react";
 import { Text, TextInput, View } from "react-native";
 import {
+  hasSlopeScaleEnd,
   insertSlopeBand,
   MAP_TERRAIN,
-  messageFromError,
   nextSlopeBandsEdit,
   removeSlopeBand,
   rgbaCssFromHex,
@@ -28,71 +27,34 @@ import {
   type SlopeBandsEdit,
 } from "@logjam/shared";
 
-import { apiFetch } from "../api/apiFetch";
-import { fetchCurrentUser, useApiQuery } from "../api/queries";
-import type { TUser } from "../api/types";
-import { useAccountState } from "../auth/AccountStateContext";
 import { radius, spacing, makeStyles, useTheme } from "../theme";
 import { Button, ColourField, FieldError, IconButton } from "../ui";
 import {
-  holdAccountSlopeBands,
-  keepEditedSlopeBands,
+  editSlopeBands,
+  flushSlopeBands,
   useSlopeBands,
+  useSlopeBandsSendFailed,
 } from "./slopeBandsPreference";
-
-/** The user pauses, then the account hears: not a request per step of a number. */
-const SEND_DELAY_MS = 800;
 
 const SEND_FAILED =
   "Saved on this phone, but it didn't reach your account. Logjam Web will not show it yet.";
 
-/**
- * The bands as the editor holds them. Edits reach the map and the phone as
- * they are made (the last that is valid), and the account after a pause.
- */
+/** The bands as the editor holds them: what is typed, valid or not. */
 function useSlopeBandsEdit() {
-  const { accountState } = useAccountState();
-  const signedIn = accountState !== "guest";
-  // `/users/me` is cached for a minute in apiFetch, so this is no extra trip.
-  const user = useApiQuery(
-    fetchCurrentUser,
-    "Couldn't load your settings.",
-    signedIn,
-  );
-  const userId = signedIn ? (user.data?.id ?? null) : null;
-
   const kept = useSlopeBands();
   const [edit, setEdit] = useState<SlopeBandsEdit | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
-  const lastValid = edit?.lastValid ?? null;
-
-  useEffect(() => {
-    if (!lastValid) return;
-    keepEditedSlopeBands(lastValid);
-    if (userId == null) return;
-    holdAccountSlopeBands(userId);
-    const timer = setTimeout(() => {
-      apiFetch<TUser>("/users/me", {
-        method: "PATCH",
-        body: { slopeBands: lastValid },
-      })
-        .then(() => {
-          holdAccountSlopeBands(null);
-          setSendError(null);
-        })
-        .catch((err: unknown) => {
-          console.error(messageFromError(err, "Couldn't save slope bands."));
-          setSendError(SEND_FAILED);
-        });
-    }, SEND_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [lastValid, userId]);
+  // Closing the editor sends what is waiting rather than dropping it.
+  useEffect(() => flushSlopeBands, []);
 
   return {
     bands: edit?.bands ?? kept,
-    setBands: (bands: SlopeBand[]) =>
-      setEdit((prev) => nextSlopeBandsEdit(prev, bands)),
-    sendError,
+    setBands: (bands: SlopeBand[]) => {
+      const next = nextSlopeBandsEdit(edit, bands);
+      setEdit(next);
+      if (next.lastValid && next.lastValid !== edit?.lastValid)
+        editSlopeBands(next.lastValid);
+    },
+    sendError: useSlopeBandsSendFailed() ? SEND_FAILED : null,
   };
 }
 
@@ -118,13 +80,15 @@ export function SlopeBandsEditor() {
         value={scale.start.slice(0, 7)}
         onChange={(rgb) => setBands(setSlopeScaleColour(bands, "start", rgb))}
       />
-      <ColourField
-        icon="colour"
-        label="Steepest colour"
-        palette={SLOPE_SCALE_COLOURS}
-        value={scale.end.slice(0, 7)}
-        onChange={(rgb) => setBands(setSlopeScaleColour(bands, "end", rgb))}
-      />
+      {hasSlopeScaleEnd(bands) ? (
+        <ColourField
+          icon="colour"
+          label="Steepest colour"
+          palette={SLOPE_SCALE_COLOURS}
+          value={scale.end.slice(0, 7)}
+          onChange={(rgb) => setBands(setSlopeScaleColour(bands, "end", rgb))}
+        />
+      ) : null}
       <Button
         compact
         variant="outlineAccent"
