@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   ApiError,
   contractSectionKeys,
@@ -585,10 +585,10 @@ function PlanPage({
         contentContainerStyle={styles.bodyContent}
         {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             refreshing={refreshing}
             onRefresh={online ? onRefresh : undefined}
-            enabled={online && pull.enabled}
+            enabled={online}
             tintColor={theme.accent}
           />
         }

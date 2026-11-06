@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { Alert, FlatList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -695,8 +695,7 @@ export function PlansScreen({
           renderItem={renderItem}
           {...pull.scrollProps}
           refreshControl={
-            <RefreshControl
-              enabled={pull.enabled}
+            <pull.Refresh
               refreshing={refreshing}
               onRefresh={() => void poll()}
               tintColor={theme.accent}

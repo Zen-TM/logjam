@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, RefreshControl, SectionList, Text, View } from "react-native";
+import { Alert, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   batchKeyFromRowId,
@@ -1105,8 +1105,7 @@ export function NotificationsScreen({
         removeClippedSubviews
         {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
-            enabled={pull.enabled}
+          <pull.Refresh
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}

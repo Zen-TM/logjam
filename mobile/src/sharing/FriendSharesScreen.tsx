@@ -36,7 +36,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { Alert, FlatList, Text, View } from "react-native";
 
 import {
   buildShareCards,
@@ -576,8 +576,7 @@ export function FriendSharesScreen({
           renderItem={renderItem}
           {...pull.scrollProps}
           refreshControl={
-            <RefreshControl
-              enabled={pull.enabled}
+            <pull.Refresh
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={theme.accent}

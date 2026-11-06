@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   contractSectionKeys,
   LEADERBOARD,
@@ -225,8 +225,7 @@ export function LeaderboardScreen({
         contentContainerStyle={styles.listContent}
         {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
-            enabled={pull.enabled}
+          <pull.Refresh
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={theme.accent}

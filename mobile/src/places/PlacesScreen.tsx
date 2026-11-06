@@ -26,14 +26,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  RefreshControl,
-  Text,
-  View,
-} from "react-native";
+import { Alert, FlatList, Keyboard, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
@@ -793,8 +786,7 @@ export function PlacesScreen({
         removeClippedSubviews
         {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
-            enabled={pull.enabled}
+          <pull.Refresh
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

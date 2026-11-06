@@ -33,7 +33,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  RefreshControl,
   Share,
   Text,
   View,
@@ -406,8 +405,7 @@ export function FriendsScreen({
           keyExtractor={keyExtractor}
           {...pull.scrollProps}
           refreshControl={
-            <RefreshControl
-              enabled={pull.enabled}
+            <pull.Refresh
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={theme.accent}

@@ -20,14 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  Keyboard,
-  RefreshControl,
-  SectionList,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Keyboard, SectionList, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeTripFilterCount,
@@ -532,8 +525,7 @@ export function LogsScreen({
         removeClippedSubviews
         {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
-            enabled={pull.enabled}
+          <pull.Refresh
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
