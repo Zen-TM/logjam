@@ -79,7 +79,7 @@ log = logging.getLogger("export_worker")
 # (shared/DESIGN.md §11). Why a render failed is a developer's detail: it is
 # raw stderr from ogr2ogr, gdal_translate or tippecanoe, with temp paths in it,
 # and stays in the worker's log.
-GENERIC_FAILURE = "This export couldn't be made. Start it again."
+GENERIC_FAILURE = "This map couldn't be made. Start it again."
 
 
 def failure_sentence(error: Exception) -> str:
