@@ -1,12 +1,9 @@
-// The MGA grid on the live map: GDA2020 / MGA lines of the zone at the view's
-// centre, as GeoJSON in lon/lat. Both clients draw it from this one function
+// The MGA grid on the live map: GDA2020 / MGA lines, as GeoJSON in lon/lat.
+// A view across a zone edge gets both zones' grids, each cut at the edge
+// meridian, since the two grids sit at different angles there. Both clients draw it from this one function
 // (ADR 0020); the printed grid in the GeoPDF follows the same two-digit label
 // convention. Guard: mgaGrid.test.ts.
-import {
-  detectMgaZone,
-  fromEastingNorthing,
-  toZoneEastingNorthing,
-} from "./geoPdfExtent.js";
+import { fromEastingNorthing, toZoneEastingNorthing } from "./geoPdfExtent.js";
 
 export interface GridBbox {
   west: number;
@@ -56,14 +53,63 @@ export function mgaGridLabel(metres: number, step: number): string {
     : String(Math.round(metres / 100) % 1000).padStart(3, "0");
 }
 
+type Zone = 54 | 55 | 56;
+type Pt = [number, number];
+
+/** Each zone's longitude span; the outer two run on past NSW. */
+const ZONES: { zone: Zone; west: number; east: number }[] = [
+  { zone: 54, west: -Infinity, east: 144 },
+  { zone: 55, west: 144, east: 150 },
+  { zone: 56, west: 150, east: Infinity },
+];
+
+/** The pieces of `line` between longitudes `west` and `east`, cut exactly at
+ *  them. Interpolates in lon/lat, which is straight enough over one segment. */
+export function clipToLongitudes(
+  line: Pt[],
+  west: number,
+  east: number,
+): Pt[][] {
+  const pieces: Pt[][] = [];
+  let cur: Pt[] = [];
+  const inside = (p: Pt) => p[0] >= west && p[0] <= east;
+  line.forEach((p, i) => {
+    const a = line[i - 1];
+    if (a && inside(a) !== inside(p)) {
+      const lon = (inside(p) ? a : p)[0] < west ? west : east;
+      const t = (lon - a[0]) / (p[0] - a[0]);
+      cur.push([lon, a[1] + t * (p[1] - a[1])]);
+      if (!inside(p)) {
+        pieces.push(cur);
+        cur = [];
+      }
+    }
+    if (inside(p)) cur.push(p);
+  });
+  pieces.push(cur);
+  return pieces.filter((c) => c.length > 1);
+}
+
 export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
   const out: MgaGrid = { type: "FeatureCollection", features: [] };
   const step = mgaGridStep(zoom);
   if (step === null) return out;
+  for (const z of ZONES) {
+    const west = Math.max(bbox.west, z.west);
+    const east = Math.min(bbox.east, z.east);
+    if (west < east) zoneGrid(out, { ...bbox, west, east }, z, step);
+  }
+  return out;
+}
 
-  // ponytail: one zone per view, the centre's. Across a zone edge the far side
-  // keeps the centre zone's grid, which is how the GeoPDF prints it too.
-  const zone = detectMgaZone((bbox.west + bbox.east) / 2);
+/** One zone's lines over `bbox`, cut at the zone's edges but not at the
+ *  view's, so lines still reach past a turned or panning view. */
+function zoneGrid(
+  out: MgaGrid,
+  bbox: GridBbox,
+  { zone, west, east }: (typeof ZONES)[number],
+  step: number,
+) {
   const corners = [
     [bbox.south, bbox.west],
     [bbox.south, bbox.east],
@@ -74,9 +120,9 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
   const eMax = Math.max(...corners.map((c) => c.easting));
   const nMin = Math.min(...corners.map((c) => c.northing));
   const nMax = Math.max(...corners.map((c) => c.northing));
-  if (![eMin, eMax, nMin, nMax].every(Number.isFinite)) return out;
+  if (![eMin, eMax, nMin, nMax].every(Number.isFinite)) return;
 
-  const at = (e: number, n: number): [number, number] => {
+  const at = (e: number, n: number): Pt => {
     const { lat, lon } = fromEastingNorthing(e, n, zone);
     return [lon, lat];
   };
@@ -85,12 +131,14 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
       { length: SEGMENTS + 1 },
       (_, i) => from + ((to - from) * i) / SEGMENTS,
     );
-  const line = (metres: number, coordinates: [number, number][]) =>
-    out.features.push({
-      type: "Feature",
-      properties: { text: mgaGridLabel(metres, step) },
-      geometry: { type: "LineString", coordinates },
-    });
+  const line = (metres: number, coordinates: Pt[]) => {
+    for (const piece of clipToLongitudes(coordinates, west, east))
+      out.features.push({
+        type: "Feature",
+        properties: { text: mgaGridLabel(metres, step) },
+        geometry: { type: "LineString", coordinates: piece },
+      });
+  };
 
   for (let e = Math.ceil(eMin / step) * step; e <= eMax; e += step)
     line(
@@ -102,5 +150,4 @@ export function mgaGrid(bbox: GridBbox, zoom: number): MgaGrid {
       n,
       run(eMin, eMax).map((e) => at(e, n)),
     );
-  return out;
 }
