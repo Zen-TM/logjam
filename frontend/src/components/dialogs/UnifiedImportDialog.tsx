@@ -554,12 +554,17 @@ function UnifiedImportDialog({
 
     if (kind === "place") {
       // A file that names its type (our own CSV export does) lands in it.
-      const { typeId, several } = placeTypeOfFile(
+      const { typeId, several, unknown } = placeTypeOfFile(
         parsed.headers,
         parsed.rows,
         placeTypes,
       );
       const landsIn = typeId ?? importPlaceTypeId;
+      if (unknown) {
+        toast.info(
+          `"${unknown}" isn't one of your place types, so the picker keeps the type you chose.`,
+        );
+      }
       if (several) {
         toast.info(
           "This file has more than one place type, and they all import as the type you picked. Import one type per file to keep them apart.",

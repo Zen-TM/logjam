@@ -6,27 +6,39 @@ import { normalize } from "./placeColumns";
 // field of the user's own.
 export const PLACE_TYPE_HEADER = "placeType";
 
+// The export prefixes a `'` to a cell that starts like a formula
+// (placeExport.ts `neutralizeFormula`); a type named `-Hut` leaves as `'-Hut`.
+function undoFormulaGuard(cell: string): string {
+  return /^'[=+\-@]/.test(cell) ? cell.slice(1) : cell;
+}
+
 /**
- * The one place type a file's `placeType` column names, else null: no such
- * column, an empty or unknown name, or more than one type (`several`). The
- * caller keeps the type the user chose in those cases, so a file without the
- * column imports as before.
+ * The one place type a file's `placeType` column names. `typeId` is null when
+ * there is no such column, a name is empty, or the file has more than one type
+ * (`several`), or the one name is no type of the user's (`unknown`, as the file
+ * spells it). The caller keeps the type the user chose in those cases, so a
+ * file without the column imports as before.
  */
 export function placeTypeOfFile(
   headers: string[],
   rows: Record<string, string>[],
   types: { id: string; name: string }[],
-): { typeId: string | null; several: boolean } {
+): { typeId: string | null; several: boolean; unknown: string | null } {
+  const none = { typeId: null, several: false, unknown: null };
   const header = headers.find(
     (h) => normalize(h) === normalize(PLACE_TYPE_HEADER),
   );
-  if (!header) return { typeId: null, several: false };
-  const found = new Set(
-    rows.map((row) => (row[header] ?? "").trim().toLowerCase()).filter(Boolean),
-  );
-  if (found.size !== 1) return { typeId: null, several: found.size > 1 };
-  const [name] = found;
-  const typeId =
-    types.find((t) => t.name.trim().toLowerCase() === name)?.id ?? null;
-  return { typeId, several: false };
+  if (!header) return none;
+  const names = new Map<string, string>();
+  for (const row of rows) {
+    const name = undoFormulaGuard((row[header] ?? "").trim());
+    if (name && !names.has(name.toLowerCase()))
+      names.set(name.toLowerCase(), name);
+  }
+  if (names.size !== 1) return { ...none, several: names.size > 1 };
+  const [[key, name]] = names;
+  const typeId = types.find((t) => t.name.trim().toLowerCase() === key)?.id;
+  return typeId
+    ? { typeId, several: false, unknown: null }
+    : { ...none, unknown: name };
 }

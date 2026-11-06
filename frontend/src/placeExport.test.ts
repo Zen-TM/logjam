@@ -290,6 +290,32 @@ describe("buildPlaceExport — CSV", () => {
     expect(placeTypeOfFile(headers, rows.slice(0, 1), types)).toEqual({
       typeId: "t-camp",
       several: false,
+      unknown: null,
+    });
+  });
+
+  // Mutation: delete PLACE_TYPE_HEADER from CSV_TEXT_COLUMNS, and `=Hut` leaves
+  // unguarded; a spreadsheet would run it as a formula.
+  it("guards and quotes a custom type's name, and reads it back", async () => {
+    const types = [
+      { id: "t-quoted", name: 'Hut, "big"' },
+      { id: "t-formula", name: "=Hut" },
+      { id: "t-dash", name: "-Hut" },
+    ];
+    const { blob } = buildPlaceExport(
+      types.map((t, i) => place({ id: `c${i}`, placeTypeId: t.id })),
+      "csv",
+      [],
+      types,
+    );
+    const { headers, rows } = await parseCsv(csvFile(await text(blob)));
+    expect(rows.map((row) => row.placeType)).toEqual([
+      'Hut, "big"',
+      "'=Hut",
+      "'-Hut",
+    ]);
+    types.forEach((t, i) => {
+      expect(placeTypeOfFile(headers, [rows[i]], types).typeId).toBe(t.id);
     });
   });
 

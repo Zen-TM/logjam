@@ -118,6 +118,22 @@ describe("UnifiedImportDialog, a file that names its type", () => {
     expect(typeSelect().value).toBe("t-camp");
   });
 
+  // Mutation: drop the `unknown` toast, and a list of huts lands in Canyon
+  // without a word.
+  it("says which type it did not find, and keeps the picker's choice", async () => {
+    render(dialog(user()));
+    await loadCsv(
+      "name,latitude,longitude,placeType\n" +
+        "Test Alpha Gorge,-33.7101,150.3102,Hut\n",
+    );
+    expect(
+      screen.getByText(
+        '"Hut" isn\'t one of your place types, so the picker keeps the type you chose.',
+      ),
+    ).toBeTruthy();
+    expect(typeSelect().value).toBe(SYSTEM_PLACE_TYPE_IDS.canyon);
+  });
+
   it("keeps Canyon for a file without a placeType column", async () => {
     render(dialog(user()));
     await loadCsv();
