@@ -23,7 +23,6 @@ try to make it code; when you convert a rule to code, delete its line.
 | A shared screen's sections, order, words, verbs and empty states                                                            | `contracts/`                                                                     |
 | The word for each thing, and the words copy must not use (the glossary, the error register, "Retry", "the app", Title Case) | `copyRules.ts`, held by `copyRules.test.ts`                                      |
 | Contrast and separation of every rendered pair, and their thresholds                                                        | `scripts/wcag-contrast.mjs`                                                      |
-| Where a user can go: the tabs, the rail and More, in order, with their words                                                | `contracts/nav.ts` (`NAV`)                                                       |
 | A confirm's shape, and the copy for abandoning a form                                                                       | `contracts/confirm.ts`                                                           |
 | How long a switch's label and hint may be: about two lines on a phone                                                       | `SWITCH_COPY_MAX` in `switchCopy.ts`, held by each client's `switchCopy.test.ts` |
 
@@ -64,9 +63,11 @@ renumber.
   (mobile data, credits), or ending something that is running. A step you can
   undo where you are never confirms; it offers Undo. Nothing else asks.
   Guards: `mobile/src/ui/confirm.test.ts` (Logjam GPS asks only through
-  `confirm()`), `contracts.test.ts` (a delete confirm names its thing and says
-  it can't be undone), `useRouteDraft.test.ts` (Clear can be undone). Whether
-  a given step can come back is for review.
+  `confirm()`, bar the sign-out prompt in `App.tsx`, listed in the test's
+  `BASELINE`), `shared/src/contracts/contracts.test.ts` (a delete confirm
+  names its thing and says it can't be undone), and
+  `frontend/src/components/routes/useRouteDraft.test.ts` (Logjam Web: Clear
+  can be undone). Whether a given step can come back is for review.
 - **The warning fill has three uses**: a destructive confirm's button, the
   recording light, and a notice about data being lost right now. It is told
   from the accent by its glyph, never by its luminance: the two share one.
