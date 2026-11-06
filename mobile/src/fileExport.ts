@@ -57,6 +57,17 @@ export class ExportUnsupportedError extends Error {
   }
 }
 
+// "Name.gpx" -> "Name 2026-11-06 1432.gpx" (local time). A second export lands
+// on a new name instead of a clash, because on a clash Android 10 names an
+// unknown MIME type "Name.gpx (1)", which no app opens as GPX. Two exports in
+// the same minute still clash and get Android's naming. Guard: fileExport.test.ts.
+function stampedName(filename: string, now = new Date()): string {
+  const dot = filename.lastIndexOf(".");
+  const p = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}${p(now.getMinutes())}`;
+  return `${filename.slice(0, dot)} ${stamp}${filename.slice(dot)}`;
+}
+
 /**
  * Write one file to a folder the user picks.
  *
@@ -88,7 +99,7 @@ async function saveExportFile(
   // list the folder and count ourselves, but Directory.list() is a synchronous
   // call on the JS thread, one provider query per child, and on Downloads the
   // children's URIs are opaque ids whose names can't be compared.
-  const file = directory.createFile(filename, mimeType);
+  const file = directory.createFile(stampedName(filename), mimeType);
   await file.write(content);
 
   // The real name only when the URI says it. On Downloads the new file's id is
