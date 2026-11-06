@@ -510,54 +510,16 @@ describe("canRecreate", () => {
 describe("shelf copy", () => {
   it("names the field and the thing, and does not say whose text won", () => {
     expect(shelfTitle(shelved())).toBe(
-      "Your notes for “Claustral” were also changed on another device",
+      "Notes for “Claustral” changed on two devices",
     );
-    // Agreement follows the FIELD: e.g. "Your water grade was" rather than "were".
     expect(shelfTitle(shelved({ field: "v_grade" }))).toBe(
-      "Your water grade for “Claustral” was also changed on another device",
+      "Water grade for “Claustral” changed on two devices",
     );
     // The name is captured when the value is shelved, so it survives the row
     // being deleted — this fallback is for entries shelved before that column.
     expect(shelfTitle(shelved({ entityName: null }))).toBe(
-      "Your notes on a place were also changed on another device",
+      "Notes on a place changed on two devices",
     );
-  });
-
-  it("agrees in number with every field label we ship", () => {
-    // The rule is "a plural label ends in s, a singular one doesn't", which is
-    // true of the whole map today and is what `isPluralLabel` reads. A future
-    // label that breaks it (a "status") fails here rather than on a phone.
-    const plural = [
-      "notes",
-      "altNames",
-      "placeIds",
-      "customFields",
-      "fieldValues",
-    ];
-    // `types` is in here on purpose: the FIELD is plural and its LABEL — "trip
-    // type" — is not, and the label is what the sentence has to agree with.
-    const singular = [
-      "name",
-      "types",
-      "v_grade",
-      "a_grade",
-      "commitment",
-      "quality",
-      "hours",
-      "date",
-      "displayName",
-      "elevation",
-      "symbol",
-      "color",
-      "num_abseils",
-      "longest_abseil",
-    ];
-    for (const field of plural) {
-      expect(shelfTitle(shelved({ field })), field).toContain(" were ");
-    }
-    for (const field of singular) {
-      expect(shelfTitle(shelved({ field })), field).toContain(" was ");
-    }
   });
 
   // Mutation: swap the two values back (describe `serverValue` as the winner).
