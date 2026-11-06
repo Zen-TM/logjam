@@ -39,6 +39,7 @@ function open(mode: "share" | "export", onClose = vi.fn()) {
       mode={mode}
       selectedPlaces={[place]}
       placeCustomFieldDefs={[]}
+      placeTypes={[]}
       availablePlaces={[place]}
       ownedPlaceIds={new Set(["p1"])}
       friends={friends}

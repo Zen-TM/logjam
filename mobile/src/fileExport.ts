@@ -31,6 +31,7 @@ import {
   GPX_MIME_TYPE,
   KML_MIME_TYPE,
   buildPlaceExport,
+  type PlaceTypeName,
   routeToGpx,
   routeToKml,
   trackPointsToGpx,
@@ -161,11 +162,13 @@ export async function exportPlace(
   place: TPlace,
   format: TExportFormat,
   defs: ExportFieldLabel[],
+  types: PlaceTypeName[],
 ): Promise<string | null> {
   const { content, mimeType, filename } = buildPlaceExport(
     [place],
     format,
     defs,
+    types,
   );
   return saveExportFile(filename, content, mimeType);
 }

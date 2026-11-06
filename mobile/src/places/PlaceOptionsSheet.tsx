@@ -46,7 +46,7 @@ import {
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { requestSync } from "../sync/syncEngine";
 import { useConnectivity } from "../map/connectivity";
-import { useMirrorTrips } from "../sync/useSyncQueries";
+import { useMirrorPlaceTypes, useMirrorTrips } from "../sync/useSyncQueries";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { deletePlaceLocal } from "../sync/outbox";
 import { useFieldDefs } from "../customFields/useFieldDefs";
@@ -105,6 +105,7 @@ export function PlaceOptionsSheet({
   const [sharing, setSharing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const { defs: fieldDefs } = useFieldDefs("place");
+  const placeTypes = useMirrorPlaceTypes();
   const online = useConnectivity() === "online";
   const trips = useMirrorTrips();
 
@@ -224,10 +225,12 @@ export function PlaceOptionsSheet({
   // written there. A shared place exports too, as the share promise says.
   const save = (format: TExportFormat) => {
     close();
-    exportPlace(place, format, [
-      ...fieldDefs,
-      ...(place.fieldDefsSnapshot ?? []),
-    ])
+    exportPlace(
+      place,
+      format,
+      [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])],
+      placeTypes.data ?? [],
+    )
       .then((filename) => {
         // Null = the user backed out of the folder picker, not a failure.
         if (filename) onInfo(`Saved ${filename}.`);

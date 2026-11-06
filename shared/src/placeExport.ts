@@ -13,6 +13,16 @@ import {
 } from "./routeExport.js";
 import type { TripLogCustomFieldDef } from "./tripLogFields.js";
 
+/**
+ * The CSV column naming a place's type, which Logjam Web's importer reads back
+ * so a file lands in the type it came from. Under this one name only: a plain
+ * "Type" is as likely to be a field of the user's own.
+ */
+export const PLACE_TYPE_HEADER = "placeType";
+
+/** All the CSV needs of a place type: which place it names, and by what. */
+export type PlaceTypeName = { id: string; name: string };
+
 /** All a description needs of a definition: what to call the value. */
 export type ExportFieldLabel = Pick<TripLogCustomFieldDef, "key" | "label">;
 
@@ -221,6 +231,7 @@ const CSV_COLUMNS = [
   "longitude",
   ...EXPORT_PROPERTY_KEYS,
   "sources",
+  PLACE_TYPE_HEADER,
 ] as const;
 
 // Excel/LibreOffice/Sheets treat a cell starting with =, +, -, @ (or a tab/CR
@@ -249,9 +260,15 @@ const CSV_TEXT_COLUMNS = new Set<(typeof CSV_COLUMNS)[number]>([
   "altNames",
   "notes",
   "sources",
+  // A custom type's name is user text.
+  PLACE_TYPE_HEADER,
 ]);
 
-function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
+function csvCell(
+  c: TPlace,
+  column: (typeof CSV_COLUMNS)[number],
+  typeName: string,
+): string {
   switch (column) {
     case "name":
       return c.name;
@@ -259,6 +276,8 @@ function csvCell(c: TPlace, column: (typeof CSV_COLUMNS)[number]): string {
       return String(c.latitude);
     case "longitude":
       return String(c.longitude);
+    case PLACE_TYPE_HEADER:
+      return typeName;
     case "altNames":
       return c.altNames.join("; ");
     case "notes":
@@ -302,13 +321,17 @@ function csvField(value: string): string {
     : value;
 }
 
-function placesToCsv(places: TPlace[]): string {
+function placesToCsv(places: TPlace[], types: PlaceTypeName[]): string {
   const attrKeys = collectFieldKeys(places);
   const header = [...CSV_COLUMNS, ...attrKeys.map((key) => `attr:${key}`)];
   const rows = places.map((c) => {
     const fieldValues = placeFieldValues(c);
     const cells: string[] = CSV_COLUMNS.map((column) => {
-      const cell = csvCell(c, column);
+      const cell = csvCell(
+        c,
+        column,
+        types.find((t) => t.id === c.placeTypeId)?.name ?? "",
+      );
       return CSV_TEXT_COLUMNS.has(column) ? neutralizeFormula(cell) : cell;
     });
     for (const key of attrKeys) {
@@ -330,12 +353,14 @@ function placesToCsv(places: TPlace[]): string {
  * and GeoJSON key by `key` so the file round-trips back through import, and a
  * label is not stable enough to key on (a rename would break the round trip).
  * Absent, a description falls back to the key, which is what a value whose
- * definition has been deleted gets anyway.
+ * definition has been deleted gets anyway. `types` name each place's type in
+ * the CSV; a place whose type is not among them gets an empty cell.
  */
 export function buildPlaceExport(
   places: TPlace[],
   format: TExportFormat,
   defs: ExportFieldLabel[] = [],
+  types: PlaceTypeName[] = [],
 ): PlaceExportFile {
   const filename = buildFilename(places, format);
   switch (format) {
@@ -358,6 +383,10 @@ export function buildPlaceExport(
         filename,
       };
     case "csv":
-      return { content: placesToCsv(places), mimeType: "text/csv", filename };
+      return {
+        content: placesToCsv(places, types),
+        mimeType: "text/csv",
+        filename,
+      };
   }
 }

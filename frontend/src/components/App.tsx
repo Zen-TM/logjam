@@ -2387,6 +2387,7 @@ function App() {
           mode={selectionMode}
           selectedPlaces={selectedAreaPlaces}
           placeCustomFieldDefs={placeCustomFieldDefs}
+          placeTypes={placeTypes}
           availablePlaces={allPlaces}
           ownedPlaceIds={ownedPlaceIds}
           friends={friends}

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { TPlace } from "./apiTypes.js";
-import { buildPlaceExport, PLACE_EXPORT_FORMATS } from "./placeExport.js";
+import {
+  buildPlaceExport,
+  PLACE_EXPORT_FORMATS,
+  PLACE_TYPE_HEADER,
+} from "./placeExport.js";
 
 const place = {
   id: "p1",
@@ -62,5 +66,46 @@ describe.each([["gpx"], ["kml"]] as const)("%s description", (format) => {
     expect(content).toContain(line);
     for (const key of ["v_grade", "a_grade", "commitment"])
       expect(content).not.toContain(`${key}:`);
+  });
+});
+
+// Mutation: drop PLACE_TYPE_HEADER from CSV_COLUMNS, or from CSV_TEXT_COLUMNS
+// (a type named `=Hut` would then reach a spreadsheet unguarded).
+describe("buildPlaceExport, CSV place type", () => {
+  const types = [
+    { id: "t-camp", name: "Campsite" },
+    { id: "t-formula", name: "=Hut" },
+  ];
+  const typed = (placeTypeId: string) =>
+    ({
+      ...place,
+      name: "Gully",
+      notes: "",
+      fieldValues: {},
+      placeTypeId,
+    }) as TPlace;
+
+  it("names each place's type after the sources column, guarded, empty when unknown", () => {
+    const { content } = buildPlaceExport(
+      [typed("t-camp"), typed("t-formula"), typed("gone")],
+      "csv",
+      [],
+      types,
+    );
+    const lines = content.split("\r\n");
+    expect(lines[0].split(",").slice(0, 7)).toEqual([
+      "name",
+      "latitude",
+      "longitude",
+      "altNames",
+      "notes",
+      "sources",
+      PLACE_TYPE_HEADER,
+    ]);
+    expect(lines.slice(1).map((line) => line.split(",").pop())).toEqual([
+      "Campsite",
+      "'=Hut",
+      "",
+    ]);
   });
 });

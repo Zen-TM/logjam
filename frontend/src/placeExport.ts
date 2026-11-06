@@ -1,5 +1,6 @@
 import {
   buildPlaceExport as buildPlaceExportFile,
+  type PlaceTypeName,
   type TExportFormat,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -14,11 +15,13 @@ export function buildPlaceExport(
   places: TPlace[],
   format: TExportFormat,
   defs: TripLogCustomFieldDef[] = [],
+  types: PlaceTypeName[] = [],
 ): { blob: Blob; filename: string } {
   const { content, mimeType, filename } = buildPlaceExportFile(
     places,
     format,
     defs,
+    types,
   );
   return { blob: new Blob([content], { type: mimeType }), filename };
 }
