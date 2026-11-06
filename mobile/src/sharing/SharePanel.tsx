@@ -40,7 +40,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   Text,
   TextInput,
@@ -69,6 +68,7 @@ import {
   statusRowProps,
   unavailableReasonText,
 } from "../auth/capabilities";
+import { getMirrorPlace } from "../sync/mirrorStore";
 import { usePendingCreateIds } from "../sync/useSyncQueries";
 import {
   getFriends,
@@ -80,7 +80,15 @@ import {
 import { getShares, shareItem, unshareItem } from "../api/shares";
 import { sendFileCopy } from "../api/fileSends";
 import type { AssetActions } from "../saved/assetActions";
-import { Avatar, Button, ErrorBanner, SectionHeader, Row, Icon } from "../ui";
+import {
+  Avatar,
+  Button,
+  confirm,
+  ErrorBanner,
+  SectionHeader,
+  Row,
+  Icon,
+} from "../ui";
 import {
   radius,
   spacing,
@@ -89,6 +97,7 @@ import {
   useTheme,
   controlSize,
   muted,
+  wash,
 } from "../theme";
 import { friendListLoadKey } from "./friendListLoad";
 
@@ -270,6 +279,8 @@ export function useSharePanel({
     calls,
     online,
     onServer,
+    stillHeld: async () =>
+      placeId ? (await getMirrorPlace(placeId)) !== null : true,
     // Neither a copy nor a bulk has ONE item whose recipients could be listed,
     // so neither ever loads share state.
     enabled: enabled && target != null && !isCopy && bulkPlan === null,
@@ -356,18 +367,17 @@ export function useSharePanel({
    * The confirm, and the only place a user is told that part of what they
    * picked is going out for keeps. Destructive-styled because half of it is.
    */
-  const confirmBulk = useCallback(() => {
+  const confirmBulk = useCallback(async () => {
     if (!bulkPlan) return;
-    const confirm = bulkShareConfirm(bulkPlan, selected.size);
-    if (!confirm) return;
-    Alert.alert(confirm.title, confirm.body, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: bulkPlan.copies.length > 0 ? "destructive" : "default",
-        onPress: () => void runBulk(),
-      },
-    ]);
+    const ask = bulkShareConfirm(bulkPlan, selected.size);
+    if (!ask) return;
+    const ok = await confirm({
+      confirmTitle: ask.title,
+      confirmBody: ask.body,
+      confirmLabel: ask.confirmLabel,
+      tone: bulkPlan.copies.length > 0 ? "destructive" : "filled",
+    });
+    if (ok) void runBulk();
   }, [bulkPlan, runBulk, selected.size]);
 
   const toggle = useCallback((id: string) => {
@@ -462,6 +472,13 @@ export function useSharePanel({
             disabled={
               selected.size === 0 || sending || plan.actionableCount === 0
             }
+            disabledReason={
+              sending
+                ? "Sending…"
+                : selected.size === 0
+                  ? "Pick at least one friend"
+                  : "None of these can be shared"
+            }
           />
         </View>
       ),
@@ -534,6 +551,7 @@ export function useSharePanel({
             icon="send"
             onPress={() => void send()}
             disabled={selected.size === 0 || sending}
+            disabledReason={sending ? "Sending…" : "Pick at least one friend"}
             loading={sending}
           />
         </View>
@@ -810,8 +828,8 @@ function PromiseBanner({
       style={[
         styles.promise,
         {
-          backgroundColor: withAlpha(hue, 0.12),
-          borderColor: withAlpha(hue, 0.5),
+          backgroundColor: withAlpha(hue, wash.selected),
+          borderColor: hue,
         },
       ]}
     >

@@ -10,15 +10,15 @@
   padding: 0;
   border: none;
   border-radius: var(--radius-lg);
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
   cursor: pointer;
   transition: background-color var(--motion-fast);
 }
 
 .mapButton:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--color-text) 14%, var(--color-page));
+  background: var(--color-card-pressed);
 }
 
 /* Stays filled under the pointer: hover must not read as "off". */
@@ -30,18 +30,38 @@
   color: var(--color-on-fill);
 }
 
+/* Two-tone: the ring in `text` over a `page` gap, so it reads on a map of any
+   colour. An outline, not a shadow alone, so forced colours keep it. */
+.mapButton:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 0;
+  box-shadow: 0 0 0 4px var(--color-page);
+}
+
 .mapButton:disabled {
   color: var(--color-text-muted);
   cursor: default;
 }
 
 .group {
+  position: relative;
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: var(--color-page);
+  background: var(--color-card);
   box-shadow: var(--shadow-float);
+}
+
+/* The edge paints over the buttons, whose opaque fills would hide an inset
+   shadow on the group itself. */
+.group::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  pointer-events: none;
 }
 
 .group .mapButton {
@@ -51,6 +71,15 @@
 
 .group .mapButton + .mapButton {
   border-top: var(--hairline);
+}
+
+@media (forced-colors: active) {
+  .mapButton[aria-pressed="true"],
+  .mapButton[aria-expanded="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 /* Inside a clipped group, the ring goes inside the button. */
@@ -67,10 +96,10 @@
   box-sizing: border-box;
   padding: 0 var(--space-1-5);
   border-radius: var(--radius-pill);
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
   max-width: 100%;
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
 }
 
 /* The end pad centres the round action in the pill's end cap. */
@@ -120,6 +149,17 @@
   color: var(--color-warning);
 }
 
+/* Data is being lost right now: the warning fill, its words `onFill`. Glyph and
+   words on the fill, never the glyph's accent. */
+.notice[data-tone="critical"] {
+  background: var(--color-warning);
+  color: var(--color-on-fill);
+}
+
+.notice[data-tone="critical"] .noticeGlyph {
+  color: var(--color-on-fill);
+}
+
 /* Centred means centred: a notice that wraps keeps its words in the middle of
    itself, not only itself in the middle of the screen. */
 .noticeText {
@@ -138,4 +178,24 @@
   background: var(--color-accent);
   box-shadow: var(--shadow-float);
   pointer-events: none;
+}
+
+/* MapLibre draws the (i) as a fixed black data-URI icon, which a dark scheme
+   inverted and Ghost Gum's light card swallowed. Drawn instead as a mask in the
+   text colour, so it follows every scheme. */
+:global(#map .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-button) {
+  background-image: none;
+  /* MapLibre's own half-white disc (and a grey one when open) would sit under a
+     light glyph on a dark scheme. */
+  background-color: transparent;
+}
+
+:global(#map .maplibregl-ctrl-attrib-button)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--color-text);
+  mask:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z'/%3E%3C/svg%3E")
+    center / 80% no-repeat;
 }

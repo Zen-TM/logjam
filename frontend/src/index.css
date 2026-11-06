@@ -25,14 +25,17 @@
   --gutter: var(--space-2);
 
   --hairline: 1px solid var(--color-line);
-  /* Behind a modal: the page dims rather than disappears. */
-  --scrim: color-mix(in srgb, black 40%, transparent);
+  /* The black veils (`--scrim-light`, `-heavy`, `-photo`) are generated from
+     the shared SCRIM: nothing else on Logjam Web is black with an alpha. */
 
   /* Shadows. Only things floating OVER THE MAP cast one; panels and sheets
      separate with a hairline. */
   --shadow-nav: 8px 0 8px -4px rgba(0, 0, 0, 0.2);
   --shadow-panel: 4px 0 12px rgba(0, 0, 0, 0.2);
   --shadow-float: 0 2px 10px rgba(0, 0, 0, 0.28);
+  /* A control over the map is a card: the float shadow and a hairline edge
+     that holds it apart from a basemap of its own colour. */
+  --shadow-map-card: var(--shadow-float), inset 0 0 0 1px var(--color-line);
   --shadow-modal: 0 4px 12px rgba(0, 0, 0, 0.3);
   /* The narrow-web sheet's top edge, over the map. */
   --shadow-sheet: 0 -4px 12px rgba(0, 0, 0, 0.3);
@@ -48,6 +51,13 @@ html {
   /* iOS enlarges text in landscape without this, which silently breaks every
      size the token scale decides. */
   -webkit-text-size-adjust: 100%;
+}
+
+/* The page itself never scrolls or refreshes on a pull: a narrow sheet's drag
+   (BottomSheet.tsx) and the map's own pan are the only things that move. */
+html,
+body {
+  overscroll-behavior-y: none;
 }
 
 *,
@@ -79,6 +89,23 @@ body {
 :focus-visible {
   outline: 2px solid var(--color-text);
   outline-offset: 2px;
+}
+
+/* Reduced motion, for every surface at once: a transition or animation still
+   runs (so `transitionend` and `animationend` still fire) but ends at once, and
+   nothing scrolls smoothly. The rule is `!important`, so a component's own
+   reduced-motion block cannot beat it: an element that keeps a gentler motion
+   of its own (the indeterminate progress bar's fade) carries `data-own-motion`
+   and is left out here. Guard: `src/reducedMotion.test.ts`. */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-own-motion]),
+  *:not([data-own-motion])::before,
+  *:not([data-own-motion])::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Visually hidden, still read by assistive tech. */

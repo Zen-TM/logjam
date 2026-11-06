@@ -1,0 +1,148 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  DEFAULT_SLOPE_SCALE,
+  hasSlopeScaleEnd,
+  insertSlopeBand,
+  nextSlopeBandsEdit,
+  removeSlopeBand,
+  setSlopeScaleColour,
+  setSlopeThreshold,
+  setSlopeUpper,
+  slopeBoundaryError,
+  slopeBoundaryRange,
+  slopeScale,
+  SLOPE_SCALE_COLOURS,
+} from "./slopeBandsEdit.js";
+import {
+  MAX_SLOPE_BANDS,
+  RASTER_TEMPLATE_DEFAULTS,
+  slopeBandsError,
+  type SlopeBand,
+} from "./topoSettings.js";
+
+const BANDS = RASTER_TEMPLATE_DEFAULTS.slope.bands;
+const valid = (bands: SlopeBand[] | null) =>
+  expect(bands && slopeBandsError(bands)).toBeNull();
+
+// Mutation: let an edit leave a gap or an overlap, and the account would be
+// sent bands the API refuses (or, worse, a map that draws a hole).
+describe("every edit keeps the bands valid", () => {
+  it("setting a threshold, an upper angle, inserting and removing", () => {
+    valid(setSlopeThreshold(BANDS, 10));
+    valid(setSlopeUpper(BANDS, 1, 55));
+    valid(setSlopeUpper(BANDS, BANDS.length - 1, 80));
+    for (let position = 0; position <= BANDS.length; position++)
+      valid(insertSlopeBand(BANDS, position));
+    for (let idx = 0; idx < BANDS.length; idx++)
+      valid(removeSlopeBand(BANDS, idx));
+  });
+
+  it("any whole number in a boundary's range is accepted", () => {
+    const boundaries = ["threshold", 0, 1, 2, 3] as const;
+    for (const boundary of boundaries) {
+      const { min, max } = slopeBoundaryRange(BANDS, boundary);
+      for (const deg of [min, max]) {
+        valid(
+          boundary === "threshold"
+            ? setSlopeThreshold(BANDS, deg)
+            : setSlopeUpper(BANDS, boundary, deg),
+        );
+      }
+    }
+  });
+
+  it("does not change the bands it was given", () => {
+    const before = JSON.stringify(BANDS);
+    insertSlopeBand(BANDS, 2);
+    removeSlopeBand(BANDS, 1);
+    setSlopeUpper(BANDS, 0, 45);
+    expect(JSON.stringify(BANDS)).toBe(before);
+  });
+});
+
+describe("the scale", () => {
+  // Mutation: recolour from the placeholder a new band carries, and a band
+  // added shows the placeholder red instead of its place on the ramp.
+  it("repaints every edit along the ends it had", () => {
+    const scale = slopeScale(BANDS);
+    for (const edited of [
+      insertSlopeBand(BANDS, 2)!,
+      removeSlopeBand(BANDS, 1),
+      setSlopeUpper(BANDS, 0, 45),
+    ])
+      expect(slopeScale(edited)).toEqual(scale);
+    expect(insertSlopeBand(BANDS, 2)!.map((b) => b.colour)).not.toContain(
+      "#ff000080",
+    );
+  });
+
+  it("changes one end's colour and keeps its opacity", () => {
+    const next = setSlopeScaleColour(BANDS, "end", "#2563eb");
+    expect(slopeScale(next).end).toBe(
+      `#2563eb${DEFAULT_SLOPE_SCALE.end.slice(7)}`,
+    );
+    expect(slopeScale(next).start).toBe(DEFAULT_SLOPE_SCALE.start);
+  });
+
+  it("offers colours that are plain #rrggbb", () => {
+    for (const colour of SLOPE_SCALE_COLOURS)
+      expect(colour).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe("the steepest colour", () => {
+  // Mutation: offer it at one band, where choosing it changes nothing.
+  it("is a choice only while there are two bands to paint along it", () => {
+    expect(hasSlopeScaleEnd(BANDS)).toBe(true);
+    expect(hasSlopeScaleEnd(BANDS.slice(0, 1))).toBe(false);
+    const one = setSlopeScaleColour(BANDS.slice(0, 1), "end", "#2563eb");
+    expect(one[0].colour).toBe(BANDS[0].colour);
+  });
+});
+
+describe("limits", () => {
+  it("refuses to insert past the most bands a topo can have", () => {
+    let bands: SlopeBand[] = BANDS;
+    while (bands.length < MAX_SLOPE_BANDS) bands = insertSlopeBand(bands, 0)!;
+    expect(bands).toHaveLength(MAX_SLOPE_BANDS);
+    expect(insertSlopeBand(bands, 1)).toBeNull();
+  });
+
+  it("refuses to insert where there is no room", () => {
+    const tight: SlopeBand[] = [
+      { fromDeg: 0, toDeg: 1, colour: "#ff0000ff" },
+      { fromDeg: 1, toDeg: 2, colour: "#00ff00ff" },
+    ];
+    expect(insertSlopeBand(tight, 0)).toBeNull();
+    expect(insertSlopeBand(tight, 1)).toBeNull();
+  });
+});
+
+describe("the edit held while the user types", () => {
+  it("keeps the last valid bands past an invalid in-between one", () => {
+    const first = nextSlopeBandsEdit(null, BANDS);
+    const broken = [{ ...BANDS[0], fromDeg: 80 }, ...BANDS.slice(1)];
+    const after = nextSlopeBandsEdit(first, broken);
+    expect(after.bands).toBe(broken);
+    expect(after.lastValid).toBe(BANDS);
+  });
+});
+
+describe("the reason a typed angle is refused", () => {
+  const range = slopeBoundaryRange(BANDS, 0); // 41..59 in the defaults
+
+  // Mutation: return null for a value outside the range (or say nothing for
+  // an empty box), and the field snaps back with no reason given.
+  it("names the limits for a number the bands cannot take", () => {
+    for (const raw of ["5", "60", "", "  ", "4.5", "abc", "-3"])
+      expect(slopeBoundaryError(range, raw), raw).toBe(
+        `Use a whole number from ${range.min} to ${range.max}.`,
+      );
+  });
+
+  it("accepts every whole number the bands can take", () => {
+    for (const deg of [range.min, range.max, 50])
+      expect(slopeBoundaryError(range, String(deg))).toBeNull();
+  });
+});

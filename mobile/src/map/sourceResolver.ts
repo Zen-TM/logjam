@@ -131,6 +131,9 @@ export interface MapArtifact {
   maxzoom: number | null;
   sizeBytes: number;
   downloadedAt: string;
+  /** Set when an update replaced an older file of the same card: that file's
+   *  own first-saved time. See `cardDates`. */
+  firstSavedAt?: string | null;
   /**
    * User's display rename for the Saved tab (optional — absent on artifacts
    * built outside the registry). Display only: resolution keys off
@@ -138,7 +141,7 @@ export interface MapArtifact {
    */
   label?: string | null;
   /**
-   * The download run this came from — one "Save maps offline" tap covering one
+   * The download run this came from — one "Save an offline map" tap covering one
    * area with several basemaps. Saved groups its cards by this; `groupLabel` is
    * the name the user gave that area. Both absent on artifacts that predate
    * grouping (and on imports), which then stand alone. Display only, like

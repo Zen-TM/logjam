@@ -80,6 +80,11 @@ class TestSafeErrorMessage(unittest.TestCase):
             self.assertNotIn(worker.JOB_ID, msg)
             self.assertNotRegex(msg, r"subprocess|pipeline|tippecanoe|tiles")
 
+    # There is no support to contact. Mutation: put "contact support" back in
+    # GENERIC_FAILURE.
+    def test_the_generic_sentence_sends_no_one_to_support(self):
+        self.assertNotIn("support", worker.GENERIC_FAILURE.lower())
+
     def test_memory_error(self):
         # One sentence, declared once, for an area too big for memory: an
         # out-of-memory kill here, and sharpen.py's refusal in advance.

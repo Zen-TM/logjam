@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -10,9 +9,8 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
-import * as MediaLibrary from "expo-media-library/legacy";
 import {
+  attachSummary,
   categoryHasThumbnail,
   mediaCategory,
   type MediaCategory,
@@ -27,15 +25,28 @@ import {
   makeStyles,
   useTheme,
   muted,
+  wash,
 } from "../theme";
-import { attachMediaLocal, deleteMediaLocal } from "../sync/mediaUpload";
+import {
+  attachMediaLocal,
+  deleteMediaLocal,
+  type PickedFile,
+} from "../sync/mediaUpload";
 import { attachRecordedTrack } from "../tracks/attachRecordedTrack";
 import type { MirrorMedia } from "../sync/mirrorStore";
-import { savesCapturesToGallery } from "./galleryPreference";
-import { alertPermissionDenied } from "../permissionAlert";
+import { ADD_PHOTO_LABEL, PHOTO_SOURCES, pickMedia } from "./pickMedia";
+import { attachBatch } from "./attachBatch";
+import { stripOffers } from "./stripOffers";
 import { routeFileMimeType } from "./routeFileMime";
 import { listTracks, type Track } from "../tracks/tracksDb";
-import { BottomSheet, Row, SectionHeader, Icon, type Glyph } from "../ui";
+import {
+  BottomSheet,
+  confirm,
+  Row,
+  SectionHeader,
+  Icon,
+  type Glyph,
+} from "../ui";
 import { MediaViewer } from "./MediaViewer";
 
 /**
@@ -60,43 +71,6 @@ import { MediaViewer } from "./MediaViewer";
  * coordinates. Guard: mobile/src/sentry/scrubEvent.test.ts.
  */
 
-/**
- * Copy a just-captured file into the phone's gallery, if the user asked for
- * that (`galleryPreference.ts`).
- *
- * WRITE-ONLY permission: nothing in Logjam GPS reads the gallery — the library
- * picker is expo-image-picker's own, with its own grant — so this asks for the
- * smallest scope that can do the job.
- *
- * Every failure is silent, deliberately, and this is the one place in the file
- * where that is right. The user's actual request (attach this photo) is about
- * to succeed either way; interrupting it with an alert about a side copy, on a
- * ledge, is worse than the copy not existing. A denial is not re-asked either —
- * expo remembers `canAskAgain`, and the switch in Settings is where someone who
- * wants this goes back to.
- *
- * PRIVACY: the file leaves app-private storage here and lands somewhere Logjam
- * GPS no longer controls. That is the whole content of the preference, and why
- * this function is never called without checking it.
- */
-async function saveToGalleryIfWanted(uri: string): Promise<void> {
-  if (!savesCapturesToGallery()) return;
-  try {
-    const existing = await MediaLibrary.getPermissionsAsync(true);
-    const permission = existing.granted
-      ? existing
-      : await MediaLibrary.requestPermissionsAsync(true);
-    if (!permission.granted) return;
-    await MediaLibrary.saveToLibraryAsync(uri);
-  } catch (err) {
-    // No filename, no path: this is media on a place.
-    console.error(
-      "Gallery copy failed",
-      err instanceof Error ? err.name : "unknown",
-    );
-  }
-}
-
 type SourceMode = "sources" | "tracks";
 
 export function MediaStrip({
@@ -108,8 +82,10 @@ export function MediaStrip({
   emptyHint,
   limit,
   onFailed,
+  onAdded,
   onShowRoute,
   onAddWay,
+  readOnly,
 }: {
   /**
    * Which family of attachment this strip owns. Photos/videos and route files
@@ -139,8 +115,10 @@ export function MediaStrip({
    * upload would sit in the outbox as a dead push. Photos are uncapped.
    */
   limit?: number;
-  /** Routed to the screen's toast channel; falls back to an Alert. */
-  onFailed?: (message: string) => void;
+  /** Routed to the screen's toast channel. */
+  onFailed: (message: string) => void;
+  /** Routed to the same channel, for the one line a successful pick leaves. */
+  onAdded: (message: string) => void;
   /**
    * Show a route attachment on the map. Given for `kind="track"`, a tap opens
    * the map rather than the viewer — a line on a basemap is the only useful way
@@ -156,6 +134,8 @@ export function MediaStrip({
    * nothing, and keeps the two file sources below.
    */
   onAddWay?: () => void;
+  /** Someone else owns the row: no Add, no press-and-hold delete. */
+  readOnly?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -181,105 +161,30 @@ export function MediaStrip({
     setSourceMode(null);
   }, []);
 
-  const fail = useCallback(
-    (message: string) => {
-      if (onFailed) onFailed(message);
-      else Alert.alert("Couldn't attach that", message);
-    },
-    [onFailed],
-  );
-
   const attach = useCallback(
-    async (file: {
-      uri: string;
-      mimeType?: string | null;
-      fileName?: string | null;
-    }) => {
+    async (files: PickedFile[]) => {
       setBusy(true);
       try {
-        await attachMediaLocal(linkedType, linkedId, file);
-      } catch (err) {
-        console.error(err);
-        fail("That file couldn't be attached.");
+        const { added, failed } = await attachBatch(files, (file) =>
+          attachMediaLocal(linkedType, linkedId, file),
+        );
+        const summary = attachSummary(
+          added.map((file) => mediaCategory(file.mimeType ?? "image/jpeg")),
+          failed,
+        );
+        if (summary?.tone === "error") onFailed(summary.message);
+        else if (summary) onAdded(summary.message);
       } finally {
         setBusy(false);
       }
     },
-    [fail, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   const captureFrom = useCallback(
     async (source: "camera" | "library", kind: "photo" | "video") => {
-      // NO permission call for the camera here. `launchCameraAsync` always asks
-      // natively (ImagePickerModule.ensureCameraPermissionsAreGranted), so a
-      // second ask from JS is redundant — and on this device that ask is exactly
-      // what hangs: expo's permission request for CAMERA never invokes its
-      // callback, so the promise never settles and the button appears dead.
-      // Asking once, natively, is the smaller surface until that is resolved.
-      if (source === "library") {
-        const existing = await ImagePicker.getMediaLibraryPermissionsAsync();
-        const permission = existing.granted
-          ? existing
-          : await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!permission.granted) {
-          alertPermissionDenied({
-            title: "Photo access needed",
-            askAgainMessage:
-              "Allow photo library access to attach photos and videos.",
-            settingsMessage:
-              "Photo access was previously denied. Enable it for Logjam GPS in system settings.",
-            canAskAgain: permission.canAskAgain,
-          });
-          return;
-        }
-      }
-      const mediaTypes: ImagePicker.MediaType[] =
-        kind === "video"
-          ? ["videos"]
-          : source === "camera"
-            ? ["images"]
-            : ["images", "videos"];
-      let result: ImagePicker.ImagePickerResult;
-      try {
-        result =
-          source === "camera"
-            ? await ImagePicker.launchCameraAsync({ mediaTypes, quality: 1 })
-            : await ImagePicker.launchImageLibraryAsync({
-                mediaTypes,
-                quality: 1,
-              });
-      } catch (err) {
-        // launchCameraAsync REJECTS when CAMERA is denied (its own native
-        // ensureCameraPermissionsAreGranted), so reading the status here
-        // prevents closing the sheet without feedback. READ the status here —
-        // don't ask for it, per the comment above.
-        if (source === "camera") {
-          const permission = await ImagePicker.getCameraPermissionsAsync();
-          if (!permission.granted) {
-            alertPermissionDenied({
-              title: "Camera permission needed",
-              askAgainMessage: "Allow camera access to take a photo here.",
-              settingsMessage:
-                "The camera was previously denied. Enable it for Logjam GPS in system settings.",
-              canAskAgain: permission.canAskAgain,
-            });
-            return;
-          }
-        }
-        throw err;
-      }
-      if (result.canceled || result.assets.length === 0) return;
-      const asset = result.assets[0];
-      // The gallery copy happens BEFORE the attach, and its failure is never
-      // allowed to cost the attachment: the photo the user actually asked for
-      // is the one going onto the place, and a refused media permission must
-      // not take that with it (Settings → Privacy and security).
-      if (source === "camera") await saveToGalleryIfWanted(asset.uri);
-      await attach({
-        uri: asset.uri,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
+      const files = await pickMedia(source, kind);
+      if (files.length > 0) await attach(files);
     },
     [attach],
   );
@@ -295,27 +200,27 @@ export function MediaStrip({
     const asset = result.assets[0];
     const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
-      fail("Pick a .gpx or .kml file.");
+      onFailed("Pick a .gpx or .kml file.");
       return;
     }
-    await attach({ uri: asset.uri, mimeType, fileName: asset.name });
-  }, [attach, fail]);
+    await attach([{ uri: asset.uri, mimeType, fileName: asset.name }]);
+  }, [attach, onFailed]);
 
   const attachTrack = useCallback(
     async (track: Track) => {
       setBusy(true);
       try {
-        if (!(await attachRecordedTrack(linkedType, linkedId, track))) {
-          fail("That track has too few points to attach.");
-        }
+        if (await attachRecordedTrack(linkedType, linkedId, track))
+          onAdded("1 route added.");
+        else onFailed("That track has too few points to attach.");
       } catch (err) {
         console.error(err);
-        fail("That track couldn't be attached.");
+        onFailed("That track couldn't be attached.");
       } finally {
         setBusy(false);
       }
     },
-    [fail, linkedId, linkedType],
+    [onAdded, onFailed, linkedId, linkedType],
   );
 
   // Loaded when the picker opens, not on mount — most visits never attach.
@@ -343,18 +248,21 @@ export function MediaStrip({
       : category === "image" || category === "video";
   });
 
-  const confirmDelete = useCallback((item: MirrorMedia) => {
-    Alert.alert("Delete this attachment?", undefined, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => void deleteMediaLocal(item).catch(console.error),
-      },
-    ]);
+  const confirmDelete = useCallback(async (item: MirrorMedia) => {
+    if (
+      await confirm({
+        confirmTitle: "Delete this attachment?",
+        confirmBody:
+          "It goes from your account and your other devices. This can't be undone.",
+        confirmLabel: "Delete",
+        tone: "destructive",
+      })
+    )
+      void deleteMediaLocal(item).catch(console.error);
   }, []);
 
   const atLimit = limit != null && shown.length >= limit;
+  const offers = stripOffers({ readOnly, atLimit, hasAddWay: !!onAddWay });
 
   return (
     <View>
@@ -363,35 +271,45 @@ export function MediaStrip({
           {/* The slot's panel can REPLACE what is in it, so its tile outlives
               the limit; a strip with no such panel still stops offering "Add"
               at the limit rather than failing on upload. */}
-          {atLimit && !onAddWay ? null : (
+          {offers.add ? (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
                 kind !== "track"
-                  ? "Add a photo or video"
+                  ? ADD_PHOTO_LABEL
                   : onAddWay
                     ? atLimit
                       ? "Replace this place's route"
                       : "Add a way"
                     : "Add a route"
               }
-              onPress={() => (onAddWay ? onAddWay() : setSourceMode("sources"))}
+              accessibilityState={{ busy }}
+              // A second batch would run beside the first.
+              onPress={() => {
+                if (busy) return;
+                if (onAddWay) onAddWay();
+                else setSourceMode("sources");
+              }}
               style={({ pressed }) => [
                 styles.tile,
                 styles.addTile,
                 pressed && styles.addTilePressed,
               ]}
             >
-              <Icon
-                idea={atLimit ? "replace" : "add"}
-                size={20}
-                color={theme.accent}
-              />
+              {busy ? (
+                <ActivityIndicator color={theme.accent} />
+              ) : (
+                <Icon
+                  idea={atLimit ? "replace" : "add"}
+                  size={20}
+                  color={theme.accent}
+                />
+              )}
               <Text style={styles.addTileLabel}>
-                {atLimit ? "Replace" : "Add"}
+                {busy ? "Adding…" : atLimit ? "Replace" : "Add"}
               </Text>
             </Pressable>
-          )}
+          ) : null}
 
           {shown.map((item, itemIndex) => (
             <AttachmentTile
@@ -402,7 +320,9 @@ export function MediaStrip({
                   ? onShowRoute(item)
                   : setViewerIndex(itemIndex)
               }
-              onLongPress={() => confirmDelete(item)}
+              onLongPress={
+                offers.remove ? () => void confirmDelete(item) : undefined
+              }
               online={online}
             />
           ))}
@@ -410,7 +330,7 @@ export function MediaStrip({
           {shown.length === 0 && emptyHint ? (
             <Text style={styles.emptyHint}>{emptyHint}</Text>
           ) : null}
-          {atLimit ? (
+          {atLimit && !readOnly ? (
             <Text style={styles.emptyHint}>
               {limit !== 1
                 ? `This holds up to ${limit} attachments.`
@@ -438,7 +358,7 @@ export function MediaStrip({
           // the button unresponsive.
           void Promise.resolve(job()).catch((err: unknown) => {
             console.error(err);
-            fail("That action didn't work. Please try again.");
+            onFailed("Couldn't finish that. Try again.");
           });
         }}
         title={
@@ -446,34 +366,23 @@ export function MediaStrip({
             ? "Recorded tracks"
             : kind === "track"
               ? "Add a route"
-              : "Add a photo or video"
+              : ADD_PHOTO_LABEL
         }
       >
         {sourceMode === "sources" ? (
           <View style={styles.sheetBody}>
             {kind === "media" ? (
               <>
-                <Row
-                  icon="camera"
-                  title="Take photo"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("camera", "photo"))
-                  }
-                />
-                <Row
-                  icon="video"
-                  title="Record video"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("camera", "video"))
-                  }
-                />
-                <Row
-                  icon="photo"
-                  title="Choose from library"
-                  onPress={() =>
-                    runAfterSheet(() => captureFrom("library", "photo"))
-                  }
-                />
+                {PHOTO_SOURCES.map((entry) => (
+                  <Row
+                    key={entry.title}
+                    icon={entry.icon}
+                    title={entry.title}
+                    onPress={() =>
+                      runAfterSheet(() => captureFrom(entry.source, entry.kind))
+                    }
+                  />
+                ))}
               </>
             ) : (
               <>
@@ -549,7 +458,7 @@ function AttachmentTile({
   item: MirrorMedia;
   online: boolean;
   onPress: () => void;
-  onLongPress: () => void;
+  onLongPress?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -573,13 +482,16 @@ function AttachmentTile({
             styles.tile,
             styles.glyphTile,
             {
-              backgroundColor: withAlpha(tint, 0.16),
-              borderColor: withAlpha(tint, 0.5),
+              backgroundColor: tint,
+              borderColor: tint,
             },
           ]}
         >
-          <Icon idea={glyphFor(category)} size={22} color={tint} />
-          <Text style={styles.glyphLabel} numberOfLines={2}>
+          <Icon idea={glyphFor(category)} size={22} color={theme.onFill} />
+          <Text
+            style={[styles.glyphLabel, { color: theme.onFill }]}
+            numberOfLines={2}
+          >
             {item.filename ?? "Attachment"}
           </Text>
         </View>
@@ -669,12 +581,12 @@ const useStyles = makeStyles((theme, textRole) => ({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.5),
-    backgroundColor: withAlpha(theme.accent, 0.1),
+    borderColor: theme.accent,
+    backgroundColor: withAlpha(theme.accent, wash.selected),
     gap: spacing(0.25),
   },
-  addTilePressed: { backgroundColor: withAlpha(theme.accent, 0.2) },
-  addTileLabel: { ...textRole.caption, color: theme.accent },
+  addTilePressed: { backgroundColor: withAlpha(theme.accent, wash.strong) },
+  addTileLabel: { ...textRole.caption, color: theme.text },
   tileLoading: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

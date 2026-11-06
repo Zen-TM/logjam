@@ -1,4 +1,4 @@
-import { parseMessageMarkdown } from "@logjam/shared";
+import { noteBlocks, parseMessageMarkdown } from "@logjam/shared";
 import { describe, expect, it } from "vitest";
 
 import { listMarker, messageSpans } from "./messageSpans";
@@ -55,5 +55,33 @@ describe("listMarker", () => {
     const [list] = parseMessageMarkdown("- a").blocks;
     if (list.type !== "list") throw new Error("not a list");
     expect(listMarker(list, 0)).toBe("•");
+  });
+});
+
+describe("a note's spans", () => {
+  const spans = (notes: string) =>
+    noteBlocks(notes).flatMap((b) =>
+      b.type === "paragraph" ? messageSpans(b.children) : [],
+    );
+
+  // Mutation: parse a note without line breaks, and RN's Text draws a plain
+  // note's lines as one.
+  it("draws each typed line on its own line", () => {
+    expect(spans("Rope 2 x 60 m\nWetsuit").map((s) => s.text)).toEqual([
+      "Rope 2 x 60 m",
+      "\n",
+      "Wetsuit",
+    ]);
+  });
+
+  // Mutation: let a script link through `parseMessageMarkdown`; tapping it
+  // would hand the string to Linking.openURL.
+  it("carries a link only when it is https, http or mailto", () => {
+    expect(spans("[a](javascript:alert(1))").map((s) => s.href)).toEqual([
+      null,
+    ]);
+    expect(spans("[b](https://example.com)").map((s) => s.href)).toEqual([
+      "https://example.com",
+    ]);
   });
 });

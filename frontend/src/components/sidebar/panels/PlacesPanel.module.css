@@ -9,10 +9,9 @@
   flex-direction: column;
 }
 
+/* The kit's band, as on every other panel, so the chips sit at one height. */
 .typeRail {
-  flex-shrink: 0;
-  /* The rail's pad on Logs, Ways and Inbox, so the chips sit at one height. */
-  padding: 10px var(--gutter) var(--space-1);
+  composes: rails from "../../../ui/Chip.module.css";
 }
 
 .search {
@@ -68,15 +67,6 @@
   gap: 6px;
   /* Room for each card's focus ring inside the scroller. */
   padding: 4px var(--gutter) var(--gutter);
-}
-
-.emptyArea {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 var(--gutter) 15%;
 }
 
 .loading {

@@ -12,42 +12,59 @@
 // is the only thing that can notice a fix has gone stale, and 2 s is as coarse
 // as it can be while a 20 s staleness cliff still lands promptly.
 //
-// TWO LABELLED COLUMNS, FIXED WIDTH. Both halves are numbers with units, and
+// TWO LABELLED COLUMNS, A STEADY WIDTH. Both halves are numbers with units, and
 // units alone don't say which is which — "3.4 km/h · 253 m" needs reading, a
-// labelled column is glanced at. The width is fixed and the values centred so
-// the chip does not breathe with every fix: it sits in a stack above the scale
+// labelled column is glanced at. The width has a floor and the values are
+// centred so the chip does not breathe with every fix (it grows only with the
+// system text size, each value on one line): it sits in a stack above the scale
 // bar and the compass tape, and a box that changes width while you walk drags
 // the eye to the one instrument that has nothing new to say.
 //
 // PRIVACY: two numbers, no position, and — like every instrument here — never
 // logged.
 import { memo, useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { formatSpeedMps } from "@logjam/shared";
 
 import {
   fontSize,
   radius,
+  textScale,
   spacing,
   withAlpha,
   makeStyles,
   muted,
+  veil,
 } from "../theme";
-import { READOUT_STALE_MS, useLiveReadout } from "./liveReadout";
+import { keepWithValue, readoutFigures, useLiveReadout } from "./liveReadout";
+import {
+  readoutChipHeight as chipHeight,
+  readoutChipLayout,
+} from "./readoutChipSize";
 
 // The height of one line of each text, as the font draws it (the same estimate
 // the scale bar makes): the chip is a fixed box around them.
 const LABEL_LINE = Math.round(fontSize.xs * 1.2);
 const VALUE_LINE = Math.round(fontSize.sm * 1.35);
 
-/** Its drawn height, exported for the same reason `SCALE_BAR_HEIGHT` is: the
+/** Its drawn height at the default text size (a larger system font grows the
+ *  chip past it), exported for the same reason `SCALE_BAR_HEIGHT` is: the
  *  native compass ornament is positioned by a NUMBER and has to clear the whole
  *  stack (see MapScreen's `ornamentMarginY`). */
 export const READOUT_CHIP_HEIGHT = LABEL_LINE + VALUE_LINE + spacing(1);
 
-/** Wide enough for the longest pair either column produces ("12.5 km/h",
- *  "1234 m") without the columns touching, and never wider. */
-const CHIP_WIDTH = 168;
+/** The chip's height at the system text size `fontScale`, in the `maxWidth`
+ *  the map leaves it. */
+export const readoutChipHeight = (
+  fontScale: number,
+  maxWidth: number,
+): number =>
+  chipHeight(
+    LABEL_LINE + VALUE_LINE,
+    spacing(1),
+    fontScale,
+    readoutChipLayout(fontScale, textScale, maxWidth).stacked,
+  );
 
 /** Coarse on purpose — see the header. */
 const TICK_MS = 2000;
@@ -58,12 +75,21 @@ const UNKNOWN = "—";
 
 export const SpeedElevationChip = memo(function SpeedElevationChip({
   active,
+  maxWidth,
+  onHeight,
 }: {
   /** The map's own `mapFocused && appActive`. A ticker behind a dark screen is
    *  a wakeup nobody sees. */
   active: boolean;
+  /** What the map leaves it beside the action column (the scale bar's). A
+   *  larger text size stacks the two readings rather than widening past it. */
+  maxWidth: number;
+  /** Its drawn height, for the compass ornament's margin: the stack's own
+   *  measure, not an estimate of it. */
+  onHeight: (height: number) => void;
 }) {
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
 
   const readout = useLiveReadout();
   const [now, setNow] = useState(() => Date.now());
@@ -74,37 +100,55 @@ export const SpeedElevationChip = memo(function SpeedElevationChip({
     return () => clearInterval(timer);
   }, [active]);
 
-  // A stale fix invalidates the SPEED but not the height: you have not moved,
-  // so the ground under you is still the ground under you.
-  const stale = readout == null || now - readout.atMs > READOUT_STALE_MS;
+  const figures = readoutFigures(readout, now);
   const speed =
-    readout == null || stale || readout.speedMps == null
+    figures.speedMps == null
       ? UNKNOWN
-      : formatSpeedMps(readout.speedMps);
+      : keepWithValue(formatSpeedMps(figures.speedMps));
   const elevation =
-    readout?.elevationM == null
+    figures.elevationM == null
       ? UNKNOWN
-      : `${Math.round(readout.elevationM)} m`;
+      : keepWithValue(`${Math.round(figures.elevationM)} m`);
+  // Every figure from the position says how far to trust it: its age once the
+  // fix is stale, "about" when it is a tower's guess (gpsSignal.ts). It takes
+  // the label's place (over the figure, so "about" reads into it) because the
+  // name plus the age does not fit a column at a large system font.
+  const note = figures.age ?? (figures.quality === "coarse" ? "about" : null);
+  const grey = figures.quality === "stale";
+  const { width, stacked } = readoutChipLayout(fontScale, textScale, maxWidth);
 
   return (
-    <View style={styles.chip} pointerEvents="none">
-      <View style={styles.column}>
-        <Text style={styles.label}>Speed</Text>
-        <Text style={styles.value} accessibilityLabel={`Speed ${speed}`}>
+    <View
+      style={[styles.chip, { minWidth: width }, stacked && styles.chipStacked]}
+      pointerEvents="none"
+      onLayout={(e) => onHeight(Math.round(e.nativeEvent.layout.height))}
+    >
+      <View style={[styles.column, stacked && styles.columnStacked]}>
+        <Text style={styles.label} numberOfLines={1}>
+          {note && figures.speedMps != null ? note : "Speed"}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={[styles.value, grey && styles.grey]}
+          accessibilityLabel={`Speed ${speed}`}
+        >
           {speed}
         </Text>
       </View>
-      <View style={styles.divider} />
-      <View style={styles.column}>
+      <View style={[styles.divider, stacked && styles.dividerStacked]} />
+      <View style={[styles.column, stacked && styles.columnStacked]}>
         {/* No provenance glyph on screen: a DEM reading and a GPS one are not
             the same measurement, but displaying that permanently in a
             two-word chip clutters the UI when the distinction only matters to
             someone already asking. The screen reader still gets it, on the
             value below. */}
-        <Text style={styles.label}>Elevation</Text>
+        <Text style={styles.label} numberOfLines={1}>
+          {note && figures.elevationM != null ? note : "Elevation"}
+        </Text>
         <Text
-          style={styles.value}
-          accessibilityLabel={`Elevation ${elevation}${readout?.fromTerrain ? ", from terrain data" : ""}`}
+          numberOfLines={1}
+          style={[styles.value, grey && styles.grey]}
+          accessibilityLabel={`Elevation ${elevation}${note ? `, ${note}` : ""}${readout?.fromTerrain ? ", from terrain data" : ""}`}
         >
           {elevation}
         </Text>
@@ -119,25 +163,37 @@ const useStyles = makeStyles((theme, textRole) => ({
   chip: {
     flexDirection: "row",
     alignItems: "center",
-    width: CHIP_WIDTH,
-    height: READOUT_CHIP_HEIGHT,
-    backgroundColor: withAlpha(theme.page, 0.8),
+    minHeight: READOUT_CHIP_HEIGHT,
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.sm,
     paddingHorizontal: spacing(0.5),
   },
+  chipStacked: { flexDirection: "column", alignItems: "stretch" },
   column: { flex: 1, alignItems: "center" },
+  // Stacked, each reading is as tall as its two lines. `flex: 1` there (a
+  // zero flex basis in a column of unset height) let each half balloon to
+  // several times its text.
+  columnStacked: { flexGrow: 0, flexShrink: 0, flexBasis: "auto" },
   label: { ...muted(theme, textRole.meta) },
   value: {
     ...textRole.control,
     color: theme.text,
     fontVariant: ["tabular-nums"],
   },
+  dividerStacked: {
+    width: undefined,
+    height: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    marginVertical: 0,
+    marginHorizontal: spacing(1),
+  },
+  grey: { color: theme.textMuted },
   // A hairline rather than a gap: two centred columns with nothing between them
   // read as one wrapped sentence at a glance.
   divider: {
     width: StyleSheet.hairlineWidth,
     alignSelf: "stretch",
     marginVertical: spacing(1),
-    backgroundColor: withAlpha(theme.text, 0.25),
+    backgroundColor: theme.line,
   },
 }));

@@ -5,7 +5,7 @@ import { getInvitedPreview, joinPlan, leavePlan } from "../../plansApi";
 import PlanInvitedPage from "./PlanInvitedPage";
 
 vi.mock("../feedback/ToastProvider", () => ({
-  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
+  useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));
 vi.mock("../../plansApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../plansApi")>()),

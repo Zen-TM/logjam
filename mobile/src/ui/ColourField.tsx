@@ -10,8 +10,9 @@ import {
   useTheme,
   opacity,
 } from "../theme";
-import { Icon } from "./Icon";
+import { Icon, type Glyph } from "./Icon";
 import { IconButton } from "./IconButton";
+import { Row } from "./Row";
 
 const SWATCH = 32;
 const CELL = 48;
@@ -30,6 +31,9 @@ const CELL = 48;
  * `hideLabel` keeps the label as the name and draws only the disc, for a bar
  * that already says what the colour is for (the route-drawing toolbar).
  *
+ * `icon` draws it as a settings row instead: the card, the icon tile and the
+ * disc at the right, all of it pressing, so it sits among its card siblings.
+ *
  * Words are text-coloured and the tick is the one ink, `onFill`; the palette is
  * light precisely so a mark on top of a swatch stays legible.
  */
@@ -41,6 +45,8 @@ export function ColourField({
   nameOf,
   hideLabel = false,
   disabled = false,
+  icon,
+  hue,
 }: {
   label: string;
   /** The closed list to choose from. Logjam Web's `ColourField` takes the same
@@ -53,6 +59,9 @@ export function ColourField({
   nameOf?: (color: string) => string;
   hideLabel?: boolean;
   disabled?: boolean;
+  icon?: Glyph;
+  /** The tile's hue under `icon`, as the sibling rows in an options sheet take. */
+  hue?: string;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -60,25 +69,49 @@ export function ColourField({
   const [open, setOpen] = useState(false);
   const chosen = value ? (nameOf?.(value) ?? value) : "No colour";
   return (
-    <View style={styles.field}>
-      {hideLabel ? null : <Text style={styles.label}>{label}</Text>}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${label}: ${chosen}`}
-        accessibilityState={{ expanded: open, disabled }}
-        disabled={disabled}
-        hitSlop={hitSlop}
-        onPress={() => setOpen(true)}
-        style={({ pressed }) => [
-          styles.trigger,
-          pressed && styles.pressed,
-          disabled && styles.disabled,
-        ]}
-      >
-        <View
-          style={[styles.swatch, { backgroundColor: value ?? "transparent" }]}
+    <View style={icon ? undefined : styles.field}>
+      {icon ? (
+        <Row
+          icon={icon}
+          hue={hue}
+          title={label}
+          accessibilityLabel={`${label}: ${chosen}`}
+          disabled={disabled}
+          onPress={() => setOpen(true)}
+          right={
+            <View
+              style={[
+                styles.swatch,
+                { backgroundColor: value ?? "transparent" },
+              ]}
+            />
+          }
         />
-      </Pressable>
+      ) : (
+        <>
+          {hideLabel ? null : <Text style={styles.label}>{label}</Text>}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${label}: ${chosen}`}
+            accessibilityState={{ expanded: open, disabled }}
+            disabled={disabled}
+            hitSlop={hitSlop}
+            onPress={() => setOpen(true)}
+            style={({ pressed }) => [
+              styles.trigger,
+              pressed && styles.pressed,
+              disabled && styles.disabled,
+            ]}
+          >
+            <View
+              style={[
+                styles.swatch,
+                { backgroundColor: value ?? "transparent" },
+              ]}
+            />
+          </Pressable>
+        </>
+      )}
 
       <Modal
         visible={open}

@@ -38,12 +38,14 @@ async function settled(page: Page) {
       [...document.querySelectorAll("dialog[open]")].every(
         (dialog) => Number(getComputedStyle(dialog).opacity) === 1,
       ) &&
-      // A button's 150 ms background-color transition otherwise lets axe read
-      // a half-way colour.
+      // A button's 150 ms background-color transition, or the Tools tray
+      // folding out, otherwise lets axe read a half-way colour.
       document
         .getAnimations()
         .every(
-          (a) => !(a instanceof CSSTransition) || a.playState !== "running",
+          (a) =>
+            !(a instanceof CSSTransition || a instanceof CSSAnimation) ||
+            a.playState !== "running",
         ),
   );
 }
@@ -121,6 +123,66 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "#map");
   });
 
+  test("Tab shows a ring on each stop, forced colours keep it, and reduced motion stills transitions", async ({
+    page,
+  }) => {
+    await page.emulateMedia({
+      forcedColors: "active",
+      reducedMotion: "reduce",
+    });
+    await openApp(page);
+    // Every stop through the rail and the chrome draws an outline: a ring that
+    // is a box-shadow, or nothing, is gone under forced colours.
+    const missing: string[] = [];
+    for (let stop = 0; stop < 12; stop++) {
+      await page.keyboard.press("Tab");
+      const ring = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || el === document.body) return null;
+        const draws = (node: Element) => {
+          const style = getComputedStyle(node);
+          return (
+            style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0
+          );
+        };
+        const name = el.getAttribute("aria-label") ?? el.tagName;
+        if (draws(el)) return { name, drawn: true };
+        // A stop may draw its ring on the card or field around it, but only
+        // WHILE focused: an outline an ancestor carries anyway is not it.
+        const around = [el.parentElement, el.parentElement?.parentElement];
+        const lit = around.filter(
+          (node): node is HTMLElement => !!node && draws(node),
+        );
+        el.blur();
+        const drawnByFocus = lit.some((node) => !draws(node));
+        el.focus();
+        return { name, drawn: drawnByFocus };
+      });
+      if (ring && !ring.drawn) missing.push(ring.name);
+    }
+    expect(missing).toEqual([]);
+
+    // The global rule is what stills them: with motion allowed the same buttons
+    // transition, so removing the rule fails the second check.
+    const longestTransition = () =>
+      page.evaluate(() =>
+        Math.max(
+          ...[...document.querySelectorAll("button")].map((el) =>
+            Math.max(
+              ...getComputedStyle(el)
+                .transitionDuration.split(",")
+                .map(
+                  (d) => parseFloat(d) * (d.trim().endsWith("ms") ? 1 : 1000),
+                ),
+            ),
+          ),
+        ),
+      );
+    expect(await longestTransition()).toBeLessThan(1);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    expect(await longestTransition()).toBeGreaterThan(50);
+  });
+
   test("Friends, a request, the sharing audit and the share dialog", async ({
     page,
   }) => {
@@ -134,7 +196,9 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "aside");
 
     // Adding someone is a dialog, not a box above the list.
-    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Add friend", exact: true })
+      .click();
     const addDialog = page.locator("dialog[open]");
     await expect(
       addDialog.getByRole("searchbox", { name: "Search by username" }),
@@ -159,7 +223,7 @@ test.describe("desktop", () => {
       aside.getByRole("radio", { name: /^You share/ }),
     ).toBeVisible();
     await expect(
-      aside.getByRole("button", { name: "Unshare" }).first(),
+      aside.getByRole("button", { name: "Stop sharing" }).first(),
     ).toBeVisible();
     await expectNoViolations(page, "aside");
 
@@ -173,7 +237,7 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toBeVisible();
     await expectNoViolations(page, "aside");
 
-    await aside.getByRole("button", { name: /^Unshare 1 from/ }).click();
+    await aside.getByRole("button", { name: /^Stop sharing 1 with/ }).click();
     await expect(page.getByRole("alertdialog")).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
     await page
@@ -185,6 +249,11 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("group", { name: "Selection" })).toHaveCount(
       0,
     );
+    // One layer per press: the selection went, the page did not.
+    // Mutation: drop the `defaultPrevented` guard in `useEscape`.
+    await expect(
+      aside.getByRole("radio", { name: /^You share/ }),
+    ).toBeVisible();
   });
 
   test("Plans: the list, a plan's page and its views", async ({ page }) => {
@@ -355,7 +424,8 @@ test.describe("desktop", () => {
     await expect(dialog).toHaveCount(0);
 
     // Add a copy: alice's own places and ways, ticked and priced.
-    await aside.getByRole("button", { name: "Add a place or way" }).click();
+    await aside.getByRole("button", { name: "Add", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Add a place or way" }).click();
     await expect(dialog.getByRole("radio", { name: /^Places/ })).toBeVisible();
     await dialog.getByRole("checkbox").first().check();
     await expectNoViolations(page, "dialog");
@@ -367,7 +437,8 @@ test.describe("desktop", () => {
     page,
   }) => {
     // The plan's trip, already over: Start a trip log then asks which of its
-    // places the trip links. Only the dates are rewritten.
+    // places the trip links, and the seed's meeting point is not one of
+    // alice's own, so it says none can be. Only the dates are rewritten.
     await page.route(/\/plans\/[0-9a-f-]{36}$/, async (route) => {
       if (route.request().method() !== "GET") return route.continue();
       const response = await route.fetch();
@@ -395,12 +466,12 @@ test.describe("desktop", () => {
     // The page's notice asks for Safety contacts first; the verb is in ⋯.
     await aside.getByRole("button", { name: "Plan actions" }).click();
     await page
-      .getByRole("menuitem", { name: "Start a trip log from this plan" })
+      .getByRole("menuitem", { name: "Log a trip from this plan" })
       .click();
     const dialog = page.locator("dialog[open]");
-    await expect(
-      dialog.getByRole("checkbox", { name: "Wollangambe meeting point" }),
-    ).toBeVisible();
+    await expect(dialog).toContainText(
+      "None of this plan's places are in your places, so the trip links none.",
+    );
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
@@ -463,7 +534,7 @@ test.describe("desktop", () => {
     // only looks.
     await button.click();
     await expect(
-      aside.getByRole("heading", { level: 2, name: "#2 of 3" }),
+      aside.getByRole("heading", { level: 2, name: "Leaderboard" }),
     ).toBeVisible();
     await expect(aside.getByRole("button", { name: "Dismiss" })).toBeVisible();
     await expectNoViolations(page, "aside");
@@ -521,8 +592,6 @@ test.describe("desktop", () => {
 
     // Its editor is a DIALOG, like every other create in the app, and its form
     // is the icon grid and the swatch line, both radio groups.
-    // The hero's button and the list's end are one button drawn twice
-    // (UX §9, `listEnd.test.ts`), so the first is the hero's.
     await aside
       .getByRole("button", { name: "Add a place type" })
       .first()
@@ -651,6 +720,35 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("a place's Add a way dialog: its sources and a route list", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const list = page.locator("aside");
+    await list
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await list
+      .getByRole("button", { name: /^(Add a way|Replace this place's route)$/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Add a way" });
+    await expectNoViolations(page, "dialog");
+
+    // A source opens a sub-view; Escape undoes that one layer, then the dialog.
+    await dialog
+      .getByRole("button", { name: /^Choose a route you drew/ })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Choose a route you drew" }),
+    ).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("a selection of places, and what can be done with it", async ({
     page,
   }) => {
@@ -663,18 +761,20 @@ test.describe("desktop", () => {
 
     // The tile IS the checkbox (DESIGN.md), and the bar replaces the rail.
     await list.getByRole("checkbox").first().click();
-    await list.getByRole("button", { name: "Share or export" }).click();
+    await list.getByRole("button", { name: "Share", exact: true }).click();
 
-    const dialog = page.getByRole("dialog", { name: /place/ });
+    const dialog = page.getByRole("dialog", { name: /^Share \d+ place/ });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole("heading", { name: "Export" })).toBeVisible();
     await expectNoViolations(page, "dialog");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
 
-    // The destructive verb confirms, and says what goes and what stays.
-    await dialog.getByRole("button", { name: /^Delete / }).click();
+    // The destructive verb is the bar's, and it confirms, saying what goes and
+    // what stays.
+    await list.getByRole("button", { name: "Delete", exact: true }).click();
     const confirm = page.getByRole("alertdialog");
     await expect(confirm).toBeVisible();
-    await expect(confirm).toContainText("stay in your logbook");
+    await expect(confirm).toContainText("stay, unlinked");
     await expectNoViolations(page, "[role='alertdialog']");
     await page.keyboard.press("Escape");
     await expect(confirm).toBeHidden();
@@ -759,7 +859,7 @@ test.describe("desktop", () => {
     // also be the close request that dismisses it.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this place?",
     });
     await expect(confirm).toBeVisible();
     await page.waitForTimeout(300);
@@ -773,12 +873,12 @@ test.describe("desktop", () => {
     await expect(form.getByLabel(/^Name/).first()).toHaveValue("Unsaved name");
   });
 
-  test("Logs, a trip, its form, and Stats", async ({ page }) => {
+  test("Trips, a trip, its form, and Stats", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("button", { name: "Logs", exact: true }).click();
+    await page.getByRole("button", { name: "Trips", exact: true }).click();
     const aside = page.locator("aside");
     await expect(
-      aside.getByRole("heading", { level: 2, name: "Logs", exact: true }),
+      aside.getByRole("heading", { level: 2, name: "Trips", exact: true }),
     ).toBeVisible({ timeout: 15_000 });
     await expectNoViolations(page, "aside");
 
@@ -805,8 +905,8 @@ test.describe("desktop", () => {
     await expect(aside.getByRole("heading", { name: "Notes" })).toBeVisible();
 
     // Back to the logbook, where Stats opens from the hero.
-    await aside.getByRole("button", { name: "Back to Logs" }).click();
-    await aside.getByRole("button", { name: "Logbook stats" }).click();
+    await aside.getByRole("button", { name: "Back to Trips" }).click();
+    await aside.getByRole("button", { name: "Trip stats" }).click();
     await expect(
       aside.getByRole("heading", { level: 2, name: /out$/ }),
     ).toBeVisible();
@@ -965,35 +1065,32 @@ test.describe("desktop", () => {
 
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this request?",
     });
     await confirm.getByRole("button", { name: "Discard" }).click();
     await expect(dialog).toHaveCount(0);
   });
 
-  test("Export an area: GeoPDF, its edges, and a GIS format", async ({
-    page,
-  }) => {
+  test("Make a map: GeoPDF, its edges, and a GIS format", async ({ page }) => {
     await openApp(page);
     await page.getByRole("button", { name: "Tools", exact: true }).click();
     await page
       .getByRole("group", { name: "Tools" })
       .getByText("Make a map")
       .click();
-    await page.getByRole("menuitem", { name: "Export an area" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Export an area" }),
+      dialog.getByRole("heading", { name: "Make a map" }),
     ).toBeVisible();
-    // Closed, the Area section is paper, scale and the button to the map.
+    // Closed, the Area section is paper, scale and the two ways to set the area.
     await expect(
       dialog.getByRole("button", { name: "Pick on the map" }),
     ).toBeVisible();
     await expectNoViolations(page, "dialog");
 
-    // Type the edges swaps the map button for the four edges.
-    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    // Type the coordinates opens the four edges under the Area row.
+    await dialog.getByRole("button", { name: "Type the coordinates" }).click();
     await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
@@ -1015,14 +1112,14 @@ test.describe("desktop", () => {
     // format's layers.
     await dialog.getByRole("radio", { name: "GeoTIFF" }).click();
     await expect(dialog.getByRole("button", { name: "Heights" })).toBeVisible();
-    await dialog.getByRole("radio", { name: "Type the edges" }).click();
+    await dialog.getByRole("button", { name: "Type the coordinates" }).click();
     await expect(dialog.getByRole("textbox", { name: "North" })).toBeVisible();
     await expectNoViolations(page, "dialog");
 
     // Picking a paper size is real work, so leaving asks before it goes.
     await page.keyboard.press("Escape");
     const confirm = page.getByRole("alertdialog", {
-      name: "Discard unsaved changes?",
+      name: "Discard this map?",
     });
     await expect(confirm).toBeVisible();
     await expectNoViolations(page, "[role='alertdialog']");
@@ -1033,14 +1130,34 @@ test.describe("desktop", () => {
   test("the importer: the drop zone, the column map and the confirm", async ({
     page,
   }) => {
+    // Merge settings appear only when a row matches a place you have, and the
+    // seed has none of the fixture's names: the list gains one, read-only.
+    await page.route("**/places", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      const places: { id: string; name: string }[] = await response.json();
+      await route.fulfill({
+        response,
+        json: [
+          ...places,
+          {
+            ...places[0],
+            id: "00000000-0000-4000-8000-00000000a11a",
+            name: "Test Alpha Gorge",
+            latitude: -33.7101,
+            longitude: 150.3102,
+          },
+        ],
+      });
+    });
     await openApp(page);
     await page.getByRole("button", { name: "Places", exact: true }).click();
     await page.getByRole("button", { name: /^Add/ }).first().click();
-    await page.getByRole("menuitem", { name: "Import from file" }).click();
+    await page.getByRole("menuitem", { name: "Import from CSV" }).click();
 
     const dialog = page.locator("dialog[open]");
     await expect(
-      dialog.getByRole("heading", { name: "Import data" }),
+      dialog.getByRole("heading", { name: "Import from CSV" }),
     ).toBeVisible();
     // Nothing dropped yet: the zone is a real <button>, not a div with a click.
     await expect(
@@ -1095,6 +1212,11 @@ test.describe("desktop", () => {
     await expect(
       page.getByRole("dialog", { name: "Map layers" }),
     ).toBeVisible();
+    await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
+    await page
+      .getByRole("dialog", { name: "Map layers" })
+      .getByRole("radio", { name: /^Overlays/ })
+      .click();
     await expectNoViolations(page, "[role='dialog'][aria-label='Map layers']");
 
     // Escape closes it and puts focus back on the button that opened it.
@@ -1168,6 +1290,30 @@ test.describe("desktop", () => {
       await expect(panel).toBeVisible({ timeout: 1_500 });
     }).toPass({ timeout: 15_000 });
     await expectNoViolations(page, "[role='dialog'][aria-label='River gauge']");
+
+    // A press that closes a point panel only stops that click asking about a
+    // new point: the gauge under it still opens.
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    // Far enough left that the panel (about 300 px wide) stays clear of the
+    // gauge in the middle.
+    await page.mouse.click(box.x + box.width * 0.1, box.y + box.height / 2, {
+      button: "right",
+    });
+    const point = page.getByRole("dialog", { name: "This point" });
+    await expect(point).toBeVisible();
+    // Past the gauge's own re-press guard (GAUGE_RETAP_MS), which ignores a
+    // press on the gauge whose panel Escape has just closed.
+    await page.waitForTimeout(600);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(panel).toBeVisible();
+    await expect(point).toHaveCount(0);
+
+    // And a press on empty map closes the gauge panel and asks nothing new.
+    await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.2);
+    await expect(panel).toHaveCount(0);
+    await page.waitForTimeout(600);
+    await expect(point).toHaveCount(0);
   });
 
   test("the Layers popover's Terrain tab, and its slope bands", async ({
@@ -1190,7 +1336,7 @@ test.describe("desktop", () => {
     await expectNoViolations(page, "[role='dialog'][aria-label='Slope bands']");
   });
 
-  test("What is here?: asked by a right-click, drawn at the point", async ({
+  test("A right-click opens the point panel on Options; What is here? by Enter", async ({
     page,
   }) => {
     await openApp(page);
@@ -1200,32 +1346,106 @@ test.describe("desktop", () => {
     const canvas = page.locator("canvas.maplibregl-canvas");
     const box = (await canvas.boundingBox())!;
     // A right-click asks wherever it lands, so a seeded pin under the pointer
-    // cannot swallow the press.
+    // cannot swallow the press. It is the same panel a click opens, on Options,
+    // so there is no facts view to go back to.
     await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
       button: "right",
     });
-    const panel = page.getByRole("dialog", { name: "This point" });
-    await expect(panel).toBeVisible();
-    await expect(
-      panel.getByRole("button", { name: "Add a place here" }),
-    ).toBeVisible();
-    await expect(
-      panel.getByRole("button", { name: "Copy coordinates" }),
-    ).toBeVisible();
+    const hold = page.getByRole("dialog", { name: "This point" });
+    await expect(hold).toBeVisible();
+    for (const name of [
+      "Draw a route from here",
+      "Add a place here",
+      "Measure from here",
+    ])
+      await expect(hold.getByRole("button", { name })).toBeVisible();
+    await expect(hold.getByRole("button", { name: /^Back/ })).toHaveCount(0);
     await expectNoViolations(page, "[role='dialog'][aria-label='This point']");
 
     // Escape closes it, takes the dot with it and gives focus back to the map.
     await page.keyboard.press("Escape");
-    await expect(panel).toHaveCount(0);
+    await expect(hold).toHaveCount(0);
     await expect(page.locator(".maplibregl-marker")).toHaveCount(0);
     await expect(canvas).toBeFocused();
 
     // Reachable without a pointer: Enter on the focused map asks about the
-    // middle of what is visible, and Tab walks the panel's own controls.
+    // middle of what is visible, and Tab walks the panel's own controls: the
+    // coordinates copy where they are pressed, and Options holds the verbs.
+    const panel = page.getByRole("dialog", { name: "This point" });
+    // Where the panel and its dot are the first frame it is on screen, read in
+    // the page before anything can settle it: the panel opens beside its dot,
+    // never in the top left to jump there later.
+    await page.evaluate(() => {
+      const seen = window as unknown as { firstFrame?: unknown };
+      const watch = new MutationObserver(() => {
+        const element = document.querySelector(
+          "[role='dialog'][aria-label='This point']",
+        );
+        if (!element) return;
+        watch.disconnect();
+        requestAnimationFrame(() => {
+          const box = (target: Element | null) => {
+            const rect = target?.getBoundingClientRect();
+            return rect && { x: rect.x, y: rect.y, bottom: rect.bottom };
+          };
+          seen.firstFrame = {
+            panel: box(element),
+            dot: box(document.querySelector(".maplibregl-marker")),
+          };
+        });
+      });
+      watch.observe(document.body, { childList: true, subtree: true });
+    });
     await page.keyboard.press("Enter");
     await expect(panel).toBeVisible();
+    const first = await page.waitForFunction(
+      () => (window as unknown as { firstFrame?: unknown }).firstFrame,
+    );
+    const { panel: at, dot } = (await first.jsonValue()) as {
+      panel: { x: number; y: number; bottom: number };
+      dot: { x: number; y: number; bottom: number } | null;
+    };
+    expect(dot).not.toBeNull();
+    // Beside the dot (8 px gap, clamped to the viewport), above or below it.
+    expect(Math.abs(at.x - dot!.x)).toBeLessThanOrEqual(24);
+    expect(
+      Math.min(Math.abs(at.y - dot!.bottom), Math.abs(at.bottom - dot!.y)),
+    ).toBeLessThanOrEqual(24);
+    await expect(panel.getByRole("button", { name: "Close" })).toHaveCount(0);
     await page.keyboard.press("Tab");
-    await expect(panel.getByRole("button", { name: "Close" })).toBeFocused();
+    await expect(
+      panel.getByRole("button", { name: /^Position: .*\. Copy$/ }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByRole("button", { name: "Options" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      panel.getByRole("button", { name: "Add a place here" }),
+    ).toBeVisible();
+  });
+
+  test("What is here?: a press on the map closes the panel and asks nothing new", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const canvas = page.locator("canvas.maplibregl-canvas");
+    const box = (await canvas.boundingBox())!;
+    const panel = page.getByRole("dialog", { name: "This point" });
+    // Empty map, away from the seeded pins at the left and from the panel.
+    const press = () =>
+      page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.2);
+    await canvas.focus();
+    await page.keyboard.press("Enter");
+    await expect(panel).toBeVisible();
+    await press();
+    await expect(panel).toHaveCount(0);
+    // Past the single-press delay a click that asked would have opened one.
+    await page.waitForTimeout(600);
+    await expect(panel).toHaveCount(0);
+    // The next press is the map's again.
+    await press();
+    await expect(panel).toBeVisible();
   });
 
   test("Measure: armed from the Tools tray or a point, a page in the panel", async ({
@@ -1245,6 +1465,39 @@ test.describe("desktop", () => {
     await page.keyboard.press("Escape");
     await expect(tray).toHaveCount(0);
     await expect(tools).toBeFocused();
+
+    // Closing fades EVERY pill (100 ms): sampled mid-way, none is at full
+    // opacity. Mutation: put the fade back on the tray's container, or drop it.
+    await tools.click();
+    await expect(tray).toBeVisible();
+    await page.waitForTimeout(400);
+    const midFade = await page.evaluate(async () => {
+      (
+        document.querySelector("button[aria-label='Tools']") as HTMLElement
+      ).click();
+      await new Promise((resolve) => setTimeout(resolve, 45));
+      return [
+        ...document.querySelectorAll(
+          "[role='group'][aria-label='Tools'] > button",
+        ),
+      ].map((item) => Number(getComputedStyle(item).opacity));
+    });
+    expect(midFade).toHaveLength(5);
+    expect(midFade.every((opacity) => opacity < 0.95)).toBe(true);
+    await expect(tray).toHaveCount(0);
+
+    // A press on the map closes the tray and asks about no point.
+    await tools.click();
+    const mapBox = (await canvas.boundingBox())!;
+    await page.mouse.click(
+      mapBox.x + mapBox.width * 0.85,
+      mapBox.y + mapBox.height * 0.2,
+    );
+    await expect(tray).toHaveCount(0);
+    await page.waitForTimeout(600);
+    await expect(page.getByRole("dialog", { name: "This point" })).toHaveCount(
+      0,
+    );
 
     await tools.click();
     await tray.getByRole("button", { name: "Measure distance" }).click();
@@ -1268,7 +1521,9 @@ test.describe("desktop", () => {
     await expect(aside.locator("dd").first()).toHaveText(/\d (m|km)$/);
     await expectNoViolations(page, "aside");
 
-    await aside.getByRole("button", { name: "Clear", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Clear all points", exact: true })
+      .click();
     await expect(status).toHaveText("Click the map to measure");
 
     // Nothing is kept, so leaving asks nothing.
@@ -1289,6 +1544,272 @@ test.describe("desktop", () => {
       aside.getByRole("heading", { level: 2, name: "Measure distance" }),
     ).toBeVisible();
     await expect(aside.getByRole("status")).toHaveText("1 point");
+
+    // "Draw a route from here" arms the route tool, which opens as a page.
+    await aside.getByRole("button", { name: "Close" }).click();
+    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5, {
+      button: "right",
+    });
+    await page
+      .getByRole("dialog", { name: "This point" })
+      .getByRole("button", { name: "Draw a route from here" })
+      .click();
+    await expect(
+      aside.getByRole("heading", { level: 2, name: "New route" }),
+    ).toBeVisible();
+  });
+});
+
+/**
+ * What the layout does when the window is small (a laptop at 150% or 200% zoom,
+ * a phone). Nothing here is a contrast or a name, so axe cannot see it.
+ */
+test.describe("fits", () => {
+  // Mutation: put the rail's `scrollIntoView` back in Chip.tsx and the form
+  // opens scrolled to its rail.
+  test("a long form opens at its title, not scrolled to its rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 700 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    await aside.getByRole("button", { name: /^Actions for / }).click();
+    await page.getByRole("menuitem", { name: "Edit place" }).click();
+    const form = page.getByRole("dialog", { name: "Edit place" });
+    await expect(form).toBeVisible();
+    await expect(
+      form.locator(":scope > div[id]").evaluate((body) => body.scrollTop),
+    ).resolves.toBe(0);
+  });
+
+  // Mutation: remove the `max-height` block from NavRail.module.css and the
+  // last item is cut off at 600px.
+  test("the nav rail's last item fits a 150% zoom window", async ({ page }) => {
+    await page.setViewportSize({ width: 960, height: 600 });
+    await openApp(page);
+    const rail = page.getByRole("navigation", { name: "Pages" });
+    await expect(rail.getByRole("button", { name: "Settings" })).toBeInViewport(
+      { ratio: 1 },
+    );
+  });
+
+  // Mutation: remove the short-window branch of BottomSheet.tsx and the
+  // sheet shows its hero, rail and about one row at 200% zoom.
+  test("the phone sheet shows several rows at 200% zoom", async ({ page }) => {
+    await page.setViewportSize({ width: 720, height: 450 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const rows = page
+      .locator("aside, [role='region']")
+      .locator("[data-place-id]");
+    await expect(rows.nth(2)).toBeInViewport({ ratio: 1 });
+  });
+
+  // Mutation: drop `wrap` from the Scale rail and "Other" runs off the dialog.
+  test("Make a map's Scale chips all show at phone width", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page);
+    await page.getByRole("button", { name: "Tools", exact: true }).click();
+    await page
+      .getByRole("group", { name: "Tools" })
+      .getByText("Make a map")
+      .click();
+    const scale = page.getByRole("radiogroup", { name: "Scale" });
+    await expect(scale.getByRole("radio", { name: "Other" })).toBeInViewport({
+      ratio: 1,
+    });
+  });
+});
+
+/**
+ * The keyboard's promises (frontend/DESIGN.md): a list is one tab stop, a page
+ * is entered at its back arrow and left by Escape onto the row that opened it,
+ * and Escape lifts an armed tool. axe cannot see any of it.
+ */
+test.describe("keyboard", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  async function openPlaces(page: Page) {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const aside = page.locator("aside");
+    await expect(aside.locator("[data-place-id]").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    return aside;
+  }
+
+  // Mutation: drop `useListKeys` from `PanelBody` and every row is three tab
+  // stops again.
+  test("a list is one tab stop, moved by the arrow keys", async ({ page }) => {
+    const aside = await openPlaces(page);
+    const rows = aside.locator("[data-place-id]");
+    expect(await rows.count()).toBeGreaterThan(10);
+
+    const tabStops = await rows
+      .first()
+      .evaluate(
+        (row) =>
+          [
+            ...(
+              row.closest("[data-list]") as HTMLElement
+            ).querySelectorAll<HTMLElement>("button, a[href], input"),
+          ].filter(
+            (el) => el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled,
+          ).length,
+      );
+    // The row's title, and the list's "Add a place" at its end.
+    expect(tabStops).toBeLessThanOrEqual(2);
+
+    const first = rows.nth(0).locator("[data-row-open]");
+    const second = rows.nth(1).locator("[data-row-open]");
+    await first.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(second).toBeFocused();
+    await page.keyboard.press("ArrowUp");
+    await expect(first).toBeFocused();
+
+    // Tab leaves the list: not into the next row's tile or its ⋯.
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.activeElement?.closest("[data-row]")),
+      )
+      .toBeNull();
+    await page.keyboard.press("Shift+Tab");
+    await expect(first).toBeFocused();
+
+    // Space ticks the tile, Shift+F10 opens the actions, Enter opens the page.
+    await page.keyboard.press("Space");
+    await expect(rows.nth(0).getByRole("checkbox")).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(rows.nth(0).getByRole("checkbox")).not.toBeChecked();
+    await page.keyboard.press("Shift+F10");
+    await expect(page.getByRole("menu")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  // Mutation: draw a page's rows in a plain `div` instead of a `RowList` (drop
+  // it from PlacesPanel) and that page has no list, so its case goes red.
+  for (const panel of [
+    "Places",
+    "Trips",
+    "Ways",
+    "Plans",
+    "Friends",
+    "Inbox",
+  ]) {
+    test(`${panel}: its rows are a list with one tab stop`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await page.getByRole("button", { name: new RegExp(`^${panel}`) }).click();
+      const aside = page.locator("aside");
+      await expect(aside.locator("[data-row-open]").first()).toBeVisible({
+        timeout: 15_000,
+      });
+      const { lists, stops } = await aside.evaluate((root) => {
+        const lists = [...root.querySelectorAll("[data-list]")].filter((list) =>
+          list.querySelector("[data-row-open]"),
+        );
+        const stops = [
+          ...root.querySelectorAll<HTMLButtonElement>(
+            '[data-row-open], [data-row] [role="checkbox"], [data-row] [aria-haspopup="menu"]',
+          ),
+        ].filter((el) => el.tabIndex >= 0 && !el.disabled);
+        return { lists: lists.length, stops: stops.length };
+      });
+      expect(lists).toBeGreaterThan(0);
+      expect(stops).toBe(lists);
+      await expect(aside.getByRole("list").first()).toBeVisible();
+    });
+  }
+
+  // Mutation: drop `usePanelFocus` and focus is the page's body after Enter,
+  // and Escape does nothing.
+  test("a place: Enter lands on the back arrow, Escape returns to its row", async ({
+    page,
+  }) => {
+    const aside = await openPlaces(page);
+    const row = aside.locator("[data-place-id]").nth(2);
+    const open = row.locator("[data-row-open]");
+    const name = (await open.textContent()) ?? "";
+    await open.focus();
+    await page.keyboard.press("Enter");
+
+    await expect(
+      page.getByRole("button", { name: "Back to Places" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(
+      aside.getByRole("button", { name, exact: true }),
+    ).toBeFocused();
+  });
+
+  test("Settings: Escape leaves a sub-page for the row that opened it", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    const aside = page.locator("aside");
+    const row = aside.locator("[data-row-open]").first();
+    const name = (await row.textContent()) ?? "";
+    await row.focus();
+    await page.keyboard.press("Enter");
+    await expect(aside.getByRole("button", { name: /^Back/ })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(
+      aside.getByRole("button", { name, exact: true }),
+    ).toBeFocused();
+  });
+
+  test("Skip to panel moves focus into the open panel", async ({ page }) => {
+    await openPlaces(page);
+    await page.getByRole("link", { name: "Skip to panel" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("aside")).toBeFocused();
+  });
+
+  // Mutation: drop the document listener in App.tsx and Measure stays armed.
+  test("Escape lifts an armed Measure tool, and the Draw tool asks first", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    const aside = page.locator("aside");
+    const tools = page.getByRole("button", { name: "Tools", exact: true });
+    const tray = page.getByRole("group", { name: "Tools" });
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Measure distance" }).click();
+    const heading = aside.getByRole("heading", {
+      level: 2,
+      name: "Measure distance",
+    });
+    await expect(heading).toBeVisible();
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Escape");
+    await expect(heading).toHaveCount(0);
+
+    await tools.click();
+    await tray.getByRole("button", { name: "Draw a route" }).click();
+    const draw = aside.getByRole("heading", { level: 2, name: "New route" });
+    await expect(draw).toBeVisible();
+    await page.locator("canvas.maplibregl-canvas").focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(draw).toBeVisible();
   });
 });
 
@@ -1356,8 +1877,7 @@ test.describe("narrow web", () => {
 
   test("Plans at phone width: the list and a plan's page", async ({ page }) => {
     await openApp(page);
-    await page.getByRole("button", { name: /^More/ }).click();
-    await page.getByRole("menuitem", { name: /^Plans/ }).click();
+    await page.getByRole("button", { name: /^Plans/ }).click();
     await expect(page.getByRole("radio", { name: /^Upcoming/ })).toBeVisible({
       timeout: 15_000,
     });
@@ -1457,7 +1977,11 @@ test.describe("narrow web", () => {
   // note, the distance and Undo, with the map left to press. Dragging it up (the
   // keyboard does the same through the grab bar) brings back the rest.
   for (const tool of [
-    { name: "Measure distance", title: "Measure distance", rest: "Clear" },
+    {
+      name: "Measure distance",
+      title: "Measure distance",
+      rest: "Clear all points",
+    },
     { name: "Draw a route", title: "Draw a route", rest: "Save" },
   ]) {
     test(`${tool.name}: the tool's page opens at the peek, over little of the map`, async ({
@@ -1546,6 +2070,28 @@ test.describe("narrow web", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("a place's Add a way dialog stays inside the phone", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await sheet
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    const place = page.locator("aside");
+    await place
+      .getByRole("button", { name: /^(Add a way|Replace this place's route)$/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Add a way" });
+    await expect(dialog).toBeVisible();
+    await expectNoViolations(page, "dialog");
+    const box = (await dialog.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
+    await page.keyboard.press("Escape");
+  });
+
   test("the bottom sheet is a named landmark whose height the keyboard sets", async ({
     page,
   }) => {
@@ -1578,10 +2124,202 @@ test.describe("narrow web", () => {
     await page.keyboard.press("ArrowUp");
     await expect(height).toHaveAttribute("aria-valuetext", "Full height");
 
+    // And it has no peek: half is the lowest the keys go.
     await page.keyboard.press("Home");
-    await expect(height).toHaveAttribute("aria-valuetext", "Peek");
-    await expect.poll(topAt).toBeGreaterThan(half);
+    await expect(height).toHaveAttribute("aria-valuetext", "Half height");
+    await expect.poll(topAt).toBe(half);
   });
+
+  // Narrow web has no Map tab: a panel is a sheet over the map, and closing it
+  // is how a user gets back. Mutation that turns it red: put the Map button back
+  // in NavRail, or drop Plans from the narrow tabs in NAV.
+  test("the tab bar is Places, Trips, Ways, Plans and More, with no Map", async ({
+    page,
+  }) => {
+    await openApp(page);
+    const tabs = page.getByRole("navigation", { name: "Pages" });
+    await expect(tabs.getByRole("button")).toHaveText([
+      "Places",
+      "Trips",
+      "Ways",
+      "Plans",
+      "More",
+    ]);
+    await expect(tabs.getByRole("button", { name: "Map" })).toHaveCount(0);
+  });
+
+  // Mutation that turns it red: stop the grab bar's release from closing.
+  test("swiping a panel down closes it and leaves the map to use", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    await expect(sheet).toBeVisible();
+
+    const grip = (await page
+      .getByRole("slider", { name: "Panel height" })
+      .boundingBox())!;
+    const x = grip.x + grip.width / 2;
+    const y = grip.y + grip.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y + 150, { steps: 6 });
+    await page.mouse.move(x, 844, { steps: 6 });
+    await page.mouse.up();
+
+    await expect(sheet).toHaveCount(0);
+    // The map answers: its zoom control works and nothing covers the canvas.
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    const canvas = (await page
+      .locator("canvas.maplibregl-canvas")
+      .boundingBox())!;
+    const covered = await page.evaluate(
+      ({ cx, cy }) =>
+        !document.elementFromPoint(cx, cy)?.closest(".maplibregl-map"),
+      { cx: canvas.x + canvas.width / 2, cy: canvas.y + canvas.height / 2 },
+    );
+    expect(covered).toBe(false);
+  });
+
+  // The pull is a touch on the list, not the grab bar. Mutation that turns it
+  // red: remove the content's touch listeners from BottomSheet.tsx.
+  test("pulling down on a list scrolled to its top closes the panel", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const sheet = page.getByRole("complementary", { name: "Places" });
+    const row = sheet.locator("[data-place-id]").first();
+    await expect(row).toBeVisible({ timeout: 15_000 });
+
+    const at = (await row.boundingBox())!;
+    const x = at.x + at.width / 2;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: string, y?: number) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: y === undefined ? [] : [{ x, y }],
+      });
+    await touch("touchStart", at.y);
+    for (let y = at.y; y < 840; y += 40) await touch("touchMove", y);
+    await touch("touchEnd");
+
+    await expect(sheet).toHaveCount(0);
+  });
+
+  // A finger-sized hit area on the grab bar, whatever the pointer, grown upward
+  // so it never covers the page. Mutation that turns it red: shrink `::after`
+  // back to `--control-lg` (36px for a mouse), or grow it down into the hero.
+  test("the grab bar is 44px to hit, and never covers the page's first button", async ({
+    page,
+  }) => {
+    await openApp(page);
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    const grip = (await page
+      .getByRole("slider", { name: "Panel height" })
+      .boundingBox())!;
+    const bottom = grip.y + grip.height;
+    const hits = await page.evaluate(
+      ({ x, bottom }) =>
+        [1, 43].map(
+          (up) =>
+            document.elementFromPoint(x, bottom - up)?.getAttribute("role") ===
+            "slider",
+        ),
+      { x: grip.x + grip.width / 2, bottom },
+    );
+    expect(hits).toEqual([true, true]);
+
+    // The top edge of the hero's ✕ is the page's, not the bar's.
+    const close = page
+      .locator("aside")
+      .getByRole("button", { name: "Close", exact: true });
+    await close.click({ position: { x: 10, y: 1 } });
+    await expect(page.locator("aside")).toHaveCount(0);
+  });
+
+  // Every narrow page has a ✕ that closes it. Mutation that turns it red: draw a
+  // `Hero` with `onClose={null}` on any of them.
+  test("every panel closes by its Close button", async ({ page }) => {
+    await openApp(page);
+    const aside = page.locator("aside");
+    const pages: [string, boolean][] = [
+      ["Places", false],
+      ["Trips", false],
+      ["Ways", false],
+      ["Plans", false],
+      ["Inbox", true],
+      ["Friends", true],
+      ["Settings", true],
+      ["Account", true],
+    ];
+    for (const [name, inMore] of pages) {
+      if (inMore) {
+        await page.getByRole("button", { name: /^More/ }).click();
+        await page
+          .getByRole("menuitem", { name: new RegExp(`^${name}`) })
+          .click();
+      } else {
+        await page
+          .getByRole("button", { name: new RegExp(`^${name}`) })
+          .click();
+      }
+      const close = aside.getByRole("button", { name: "Close", exact: true });
+      await expect(close, name).toBeVisible({ timeout: 15_000 });
+      await close.click();
+      await expect(aside, name).toHaveCount(0);
+    }
+
+    // A page opened from a row.
+    await page.getByRole("button", { name: "Places", exact: true }).click();
+    await aside
+      .getByRole("button", { name: "Claustral Canyon", exact: true })
+      .click();
+    const close = aside.getByRole("button", { name: "Close", exact: true });
+    await expect(close).toBeVisible();
+    await close.click();
+    await expect(aside).toHaveCount(0);
+  });
+
+  // The route tool's ✕ asks before it discards a line, so a swipe bottoms out at
+  // its peek; Measure keeps nothing, so a swipe closes it. Mutation that turns
+  // it red: pass `onClose` to the route tool's sheet, or withhold it from
+  // Measure's.
+  for (const tool of [
+    { name: "Measure distance", title: "Measure distance", closes: true },
+    { name: "Draw a route", title: "Draw a route", closes: false },
+  ]) {
+    test(`${tool.name}: a swipe down ${tool.closes ? "closes" : "stops at the peek"}`, async ({
+      page,
+    }) => {
+      await openApp(page);
+      await expect(page.getByRole("button", { name: "Zoom in" })).toBeEnabled();
+      await page.getByRole("button", { name: "Tools", exact: true }).click();
+      await page.getByRole("button", { name: tool.name }).click();
+      const sheet = page.getByRole("complementary", { name: tool.title });
+      await expect(sheet).toBeVisible();
+      const grip = (await page
+        .getByRole("slider", { name: "Panel height" })
+        .boundingBox())!;
+      const x = grip.x + grip.width / 2;
+      const y = grip.y + grip.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, 700, { steps: 6 });
+      await page.mouse.move(x, 843, { steps: 6 });
+      await page.mouse.up();
+      if (tool.closes) {
+        await expect(sheet).toHaveCount(0);
+      } else {
+        await expect(sheet).toBeVisible();
+        await expect(
+          page.getByRole("slider", { name: "Panel height" }),
+        ).toHaveAttribute("aria-valuetext", "Peek");
+      }
+    });
+  }
 
   test("the sign-in card", async ({ page }) => {
     // The other width for a screen that is ONLY ever seen before any app shell
@@ -1635,15 +2373,20 @@ test.describe("surfaces fake auth never shows", () => {
     // Sign-up is where the two ticks live. The Terms and Privacy links are in
     // the first one's sentence, which is not a <label>, so reading the terms
     // doesn't answer the question about them (TermsTick.tsx).
-    await page.getByRole("button", { name: "Sign up", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Create an account", exact: true })
+      .click();
     await expect(page.getByLabel("Confirm password")).toBeVisible();
     await expectNoViolations(page);
     // The way in is never disabled: pressing it says what is missing
     // (shared/DESIGN.md §5).
-    const create = page.getByRole("button", { name: "Sign up", exact: true });
+    const create = page.getByRole("button", {
+      name: "Create account",
+      exact: true,
+    });
     await expect(create).toBeEnabled();
     await page.getByRole("checkbox", { name: /agree to the Terms/ }).check();
-    await page.getByRole("checkbox", { name: /18 years of age/ }).check();
+    await page.getByRole("checkbox", { name: /18 or older/ }).check();
     await expect(create).toBeEnabled();
 
     // And back out to the reset form, which is the third reachable state.
@@ -1694,7 +2437,7 @@ test.describe("surfaces fake auth never shows", () => {
       page.getByRole("checkbox", { name: /agree to the Terms of Use/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("checkbox", { name: /18 years of age/ }),
+      page.getByRole("checkbox", { name: /18 or older/ }),
     ).toBeVisible();
     await expectNoViolations(page);
   });

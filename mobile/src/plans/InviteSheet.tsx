@@ -4,16 +4,18 @@
 // it asks to join and a leader lets each one in. The list of live links
 // shows when each was made and ends, not the link.
 import { Fragment, useEffect, useState } from "react";
-import { Clipboard, Share, Text } from "react-native";
+import { Clipboard, Share, Text, View } from "react-native";
 import {
   contractSectionKeys,
   messageFromError,
   planInviteUrl,
   tripPlanInviteLinkLine,
+  tripPlanInviteLists,
   tripPlanInviteMessage,
   tripPlanInviteePill,
   tripPlanRoleWord,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_ROLES_PICK_ORDER,
   type SectionKeysOn,
   type TripPlanInviteView,
@@ -21,6 +23,7 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
+import { getFriends, type Friend } from "../api/friends";
 import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
 import { UserSearch } from "../screens/UserSearch";
@@ -57,22 +60,7 @@ export function InviteSheet({
   online: boolean;
   onClose: () => void;
 }) {
-  return (
-    <BottomSheet
-      visible={visible}
-      onClose={onClose}
-      title={TRIP_PLAN_INVITE.title}
-    >
-      {/* Mounted on open, so each opening starts a fresh search. */}
-      {visible ? <InviteBody plan={plan} online={online} /> : null}
-    </BottomSheet>
-  );
-}
-
-function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
   const styles = useStyles();
-  const [role, setRole] = useState<TripPlanRole>("member");
-  const [invitedIds, setInvitedIds] = useState<string[]>([]);
   // A row's or a link button's failure: not the search field's, so a banner.
   const [error, setError] = useState<string | null>(null);
   const [links, setLinks] = useState<TripPlanInviteView[]>([]);
@@ -87,24 +75,10 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       // The list is a courtesy; inviting works without it.
       .catch(console.error);
   useEffect(() => {
+    if (!visible) return;
     void refreshLinks();
-    // Once per opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plan.id]);
-
-  const invite = (userId: string, username: string) => {
-    setError(null);
-    setBusyId(userId);
-    inviteMember(plan.id, username, role)
-      .then(() => {
-        setInvitedIds((ids) => [...ids, userId]);
-        return afterPlanWrite(plan.id);
-      })
-      .catch((err: unknown) =>
-        setError(messageFromError(err, copy.inviteFailed)),
-      )
-      .finally(() => setBusyId(null));
-  };
+  }, [visible, plan.id]);
 
   // Each press mints a new link: the token is never kept to hand out twice.
   // The mint, the hand-off and the list each fail on their own: a link made
@@ -150,9 +124,129 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       .finally(() => setBusyId(null));
   };
 
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      title={TRIP_PLAN_INVITE.title}
+      // Each opening starts clean.
+      onClosed={() => {
+        setError(null);
+        setCopied(false);
+      }}
+      // The link buttons stay in reach however long the friend list grows.
+      footer={
+        <View style={styles.footer}>
+          {error ? <ErrorBanner message={error} /> : null}
+          <Button
+            label={copy.linkCopy}
+            icon="link"
+            variant="outlineAccent"
+            loading={making === "copy"}
+            disabled={!online}
+            disabledReason={OFFLINE}
+            reasonShown
+            onPress={() => void makeLink("copy")}
+          />
+          <Button
+            label={copy.linkShare}
+            icon="shareFriend"
+            variant="outlineAccent"
+            loading={making === "share"}
+            disabled={!online}
+            disabledReason={OFFLINE}
+            reasonShown
+            onPress={() => void makeLink("share")}
+          />
+          {/* The buttons only dim: the words go under them (ui/Button.tsx). */}
+          {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
+          {copied ? <Text style={styles.hint}>{copy.linkCopied}</Text> : null}
+        </View>
+      }
+    >
+      {/* Mounted on open, so each opening starts a fresh search. */}
+      {visible ? (
+        <InviteBody
+          plan={plan}
+          online={online}
+          links={links}
+          busyId={busyId}
+          setBusyId={setBusyId}
+          setError={setError}
+          revoke={revoke}
+        />
+      ) : null}
+    </BottomSheet>
+  );
+}
+
+function InviteBody({
+  plan,
+  online,
+  links,
+  busyId,
+  setBusyId,
+  setError,
+  revoke,
+}: {
+  plan: TripPlanView;
+  online: boolean;
+  links: TripPlanInviteView[];
+  busyId: string | null;
+  setBusyId: (id: string | null) => void;
+  setError: (message: string | null) => void;
+  revoke: (link: TripPlanInviteView) => void;
+}) {
+  const styles = useStyles();
+  const [role, setRole] = useState<TripPlanRole>("member");
+  const [invitedIds, setInvitedIds] = useState<string[]>([]);
+
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    // A courtesy: the username search works without it.
+    if (online) getFriends().then(setFriends).catch(console.error);
+    // Once per opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan.id]);
+
+  const invite = (userId: string, username: string) => {
+    setError(null);
+    setBusyId(userId);
+    inviteMember(plan.id, username, role)
+      .then(() => {
+        setInvitedIds((ids) => [...ids, userId]);
+        return afterPlanWrite(plan.id);
+      })
+      .catch((err: unknown) =>
+        setError(messageFromError(err, copy.inviteFailed)),
+      )
+      .finally(() => setBusyId(null));
+  };
+
   const statusOf = new Map(
     plan.members.map((member) => [member.user.id, member.status]),
   );
+  const lists = tripPlanInviteLists(friends, [], query);
+  const action = (user: { id: string; username: string }) => {
+    const pill = invitedIds.includes(user.id)
+      ? copy.invited
+      : tripPlanInviteePill(statusOf.get(user.id));
+    return pill ? (
+      <StatusPill label={pill} tone="outline" />
+    ) : (
+      <Button
+        label={copy.inviteSend}
+        compact
+        loading={busyId === user.id}
+        disabled={!online}
+        disabledReason={OFFLINE}
+        reasonShown
+        onPress={() => invite(user.id, user.username)}
+      />
+    );
+  };
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLAN_INVITE, "gps">,
     React.ReactNode
@@ -168,55 +262,49 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           value={role}
           onChange={setRole}
         />
+        {TRIP_PLAN_ROLES_PICK_ORDER.map((value) => (
+          <Text key={value} style={styles.hint}>
+            <Text style={styles.bold}>{tripPlanRoleWord(value)}</Text>{" "}
+            {TRIP_PLAN_ROLE_ABOUT[value]}
+          </Text>
+        ))}
         <UserSearch
           label={copy.searchField}
           failed={copy.searchFailed}
           offline={online ? undefined : OFFLINE}
-          onChange={() => setError(null)}
-          right={(user) => {
-            const pill = invitedIds.includes(user.id)
-              ? copy.invited
-              : tripPlanInviteePill(statusOf.get(user.id));
-            return pill ? (
-              <StatusPill label={pill} tone="outline" />
-            ) : (
-              <Button
-                label={copy.inviteSend}
-                compact
-                loading={busyId === user.id}
-                disabled={!online}
-                disabledReason={OFFLINE}
-                onPress={() => invite(user.id, user.username)}
-              />
-            );
+          onChange={(next) => {
+            setError(null);
+            setQuery(next);
           }}
+          only={(found) => tripPlanInviteLists(friends, found, query).others}
+          quietEmpty={lists.friends.length > 0}
+          resultsTitle={copy.others}
+          belowField={
+            lists.friends.length > 0 ? (
+              <>
+                <SectionHeader
+                  title={copy.friends}
+                  count={lists.friends.length}
+                />
+                {lists.friends.map((friend) => (
+                  <Row
+                    key={friend.id}
+                    icon="account"
+                    title={friend.username}
+                    right={action(friend)}
+                  />
+                ))}
+              </>
+            ) : null
+          }
+          right={action}
         />
+        <Text style={styles.hint}>{copy.othersHint}</Text>
       </>
     ),
     link: (
       <>
         <Text style={styles.hint}>{copy.linkHint}</Text>
-        <Button
-          label={copy.linkCopy}
-          icon="link"
-          variant="outlineAccent"
-          loading={making === "copy"}
-          disabled={!online}
-          disabledReason={OFFLINE}
-          onPress={() => void makeLink("copy")}
-        />
-        <Button
-          label={copy.linkShare}
-          icon="shareFriend"
-          variant="outlineAccent"
-          loading={making === "share"}
-          disabled={!online}
-          disabledReason={OFFLINE}
-          onPress={() => void makeLink("share")}
-        />
-        {/* The buttons only dim: the words go under them (ui/Button.tsx). */}
-        {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
-        {copied ? <Text style={styles.hint}>{copy.linkCopied}</Text> : null}
         {links.length > 0 ? (
           <SectionHeader title={copy.linksLive} count={links.length} />
         ) : null}
@@ -224,6 +312,8 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
           <Row
             key={link.id}
             icon="date"
+            // Wraps rather than cutting the end date off.
+            titleNumberOfLines={3}
             title={tripPlanInviteLinkLine(link)}
             subtitle={online ? undefined : OFFLINE}
             right={
@@ -234,6 +324,7 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
                 loading={busyId === link.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => revoke(link)}
               />
             }
@@ -248,7 +339,6 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
       {contractSectionKeys(TRIP_PLAN_INVITE, "gps").map((key) => (
         <Fragment key={key}>{sections[key]}</Fragment>
       ))}
-      {error ? <ErrorBanner message={error} /> : null}
     </FormStack>
   );
 }
@@ -256,4 +346,6 @@ function InviteBody({ plan, online }: { plan: TripPlanView; online: boolean }) {
 const useStyles = makeStyles((theme, textRole) => ({
   label: { ...muted(theme, textRole.detail) },
   hint: { ...muted(theme, textRole.detail), marginTop: spacing(1) },
+  footer: { gap: spacing(1) },
+  bold: { ...muted(theme, textRole.control) },
 }));

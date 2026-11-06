@@ -1,75 +1,39 @@
+import { navFor, type NavEntry, type NavIdOn } from "@logjam/shared";
 import type { PanelId } from "./panels";
-import { type Glyph } from "../../ui";
 
 /**
- * Panels reachable from the nav. The rest of `PanelId` is opened
- * programmatically — a pin, a row, a line on the map — and is never a nav item.
- * `navItems.test.ts` keeps this list equal to the panels the rail does not
- * carry.
+ * Panels reachable from the nav: Logjam Web's entries in `NAV`. The rest of
+ * `PanelId` is opened programmatically — a pin, a row, a line on the map — and
+ * is never a nav item. `navItems.test.ts` keeps the two lists equal.
  */
-export type NavItemId = Exclude<
-  PanelId,
-  | "place-detail"
-  | "trip-detail"
-  | "way-detail"
-  | "plan-detail"
-  | "way-draw"
-  | "measure"
->;
+export type NavItemId = Extract<NavIdOn<"web">, PanelId>;
 
-export type NavItem = {
-  id: NavItemId;
-  label: string;
-  icon: Glyph;
-  /** What its badge counts, in its accessible name: "Plans, 1 invited". */
-  badgeNoun?: string;
-};
+export type NavItem = Omit<NavEntry, "id"> & { id: NavItemId };
 
 /** Unread/attention counts keyed by the item they belong to. A count of 0 or an
  *  absent key means "no badge". */
 export type NavBadgeCounts = Partial<Record<NavItemId, number>>;
 
+// The order, the words and the icons are `NAV`'s (shared/src/contracts/nav.ts).
+const WEB: NavItem[] = navFor("web");
+
 /** The pages — the rail's top group. */
-const PAGE_ITEMS: NavItem[] = [
-  { id: "places", label: "Places", icon: "place" },
-  { id: "logs", label: "Logs", icon: "trip" },
-  // The umbrella for routes, recorded tracks and imports. "Routes" would name
-  // one of its own three kinds.
-  { id: "ways", label: "Ways", icon: "route" },
-  // An invite waiting on the user is what its badge counts.
-  { id: "plans", label: "Plans", icon: "plan", badgeNoun: "invited" },
-  { id: "friends", label: "Friends", icon: "friends" },
-];
+const PAGE_ITEMS: NavItem[] = WEB.filter((item) => item.group === "page");
 
 /** Personal and status pages — the rail's bottom group, below the spacer. */
-const PERSONAL_ITEMS: NavItem[] = [
-  { id: "inbox", label: "Inbox", icon: "notifications" },
-  { id: "account", label: "Account", icon: "account" },
-  { id: "settings", label: "Settings", icon: "settings" },
-];
+const PERSONAL_ITEMS: NavItem[] = WEB.filter(
+  (item) => item.group === "personal",
+);
 
 const ALL_ITEMS: NavItem[] = [...PAGE_ITEMS, ...PERSONAL_ITEMS];
 
-/** Narrow web keeps Logjam GPS's tab bar — Map · Places · Logs · Ways · More —
- *  so a user who knows one knows the other. `Map` is not a page (it closes the
- *  open one), so it is not in this list. */
-const NARROW_TAB_IDS: NavItemId[] = ["places", "logs", "ways"];
+/** Narrow web's tab bar: Places · Trips · Ways · Plans · More. It has no Map
+ *  tab (Logjam GPS does): a panel is a sheet over the map, so closing it is
+ *  how a user gets there. */
+const TAB_ITEMS: NavItem[] = WEB.filter((item) => item.tab);
 
-/** The More menu, most- to least-reached. Inbox first: it is the badged item,
- *  and landing on it is what makes More's badge pay off in one glance. */
-const MORE_ITEM_IDS: NavItemId[] = [
-  "inbox",
-  "plans",
-  "friends",
-  "account",
-  "settings",
-];
-
-function itemById(id: NavItemId): NavItem {
-  const item = ALL_ITEMS.find((candidate) => candidate.id === id);
-  if (!item) throw new Error(`No nav item registered for panel "${id}"`);
-  return item;
-}
+/** The More menu, in `NAV`'s order: Inbox first, the badged item. */
+const MORE_ITEMS: NavItem[] = WEB.filter((item) => !item.tab);
 
 export type NavPartition = {
   /** Rendered directly on the rail (or as tabs on narrow web). */
@@ -81,7 +45,7 @@ export type NavPartition = {
 };
 
 /** Split the nav into rail items and More items. The 84px desktop rail holds
- *  all eight; narrow web holds three tabs beside Map and More. */
+ *  all eight; narrow web holds four tabs beside More. */
 export function partitionNavItems(isNarrow: boolean): NavPartition {
   if (!isNarrow) {
     return {
@@ -91,8 +55,8 @@ export function partitionNavItems(isNarrow: boolean): NavPartition {
     };
   }
   return {
-    railItems: NARROW_TAB_IDS.map(itemById),
-    moreItems: MORE_ITEM_IDS.map(itemById),
+    railItems: TAB_ITEMS,
+    moreItems: MORE_ITEMS,
     spacerAfterIndex: null,
   };
 }
@@ -115,14 +79,5 @@ export function isPanelInMore(
 
 /** More's badge sums items that count different things (unread, invited). */
 export const MORE_BADGE_NOUN = "new";
-
-/** "Inbox, 3 unread" — the badge is aria-hidden, so its count joins the name. */
-export function labelWithBadge(
-  label: string,
-  count: number,
-  noun = "unread",
-): string {
-  return count > 0 ? `${label}, ${count} ${noun}` : label;
-}
 
 export const NAV_ITEMS_FOR_TEST = { ALL_ITEMS, PAGE_ITEMS, PERSONAL_ITEMS };

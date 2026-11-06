@@ -14,8 +14,10 @@ import {
   formatFieldValue,
   formatTripDate,
   mediaCategory,
+  navLabel,
   TRIP_PAGE,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripTypeLabel,
   tripTitle,
   tripVerbs,
@@ -30,6 +32,7 @@ import { useToast } from "../../feedback/ToastProvider";
 import { messageFromError } from "../../../errors/messageFromError";
 import MediaGallery from "../../media/MediaGallery";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import { TripGaugeReading } from "../../gauges/TripGaugeReading";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -123,12 +126,12 @@ function TripDetailPanel({
       setConfirmingDelete(false);
       onRefetchTripLogs();
       onQuotaChanged();
-      toast.success("Trip deleted.");
+      toast.done(tripDeleteDone(1));
       onAfterDelete();
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't delete this trip. Please try again."),
+        messageFromError(err, "Couldn't delete this trip. Try again."),
       );
     } finally {
       setDeleting(false);
@@ -138,12 +141,16 @@ function TripDetailPanel({
   if (!tripLog) {
     return (
       <div className={classes.root}>
-        <Hero title="Trip" onBack={onBack} backLabel="Back to Logs" />
+        <Hero
+          title="Trip"
+          onBack={onBack}
+          backLabel={`Back to ${navLabel("logs")}`}
+        />
         <div className={classes.body}>
           <EmptyState
             icon="edit"
             title="No trip selected"
-            body="Pick one from Logs, or from the place it visited."
+            body={`Pick one from ${navLabel("logs")}, or from the place it visited.`}
           />
         </div>
       </div>
@@ -183,7 +190,7 @@ function TripDetailPanel({
       : [item];
   });
   const copy = TRIP_PAGE.copy;
-  const deleteCopy = tripDeleteConfirm(1);
+  const deleteCopy = tripDeleteConfirm({ title });
 
   // Exhaustive by type: a section the contract names and this page does not
   // draw, or the reverse, fails `tsc` (`TRIP_PAGE`, shared/src/contracts).
@@ -283,7 +290,7 @@ function TripDetailPanel({
       <section className={classes.section}>
         <SectionHeader title={copy.notes} />
         {trip.notes ? (
-          <p className={classes.notes}>{trip.notes}</p>
+          <NoteBody notes={trip.notes} />
         ) : (
           <p className={classes.muted}>{copy.notesEmpty}</p>
         )}
@@ -312,7 +319,7 @@ function TripDetailPanel({
         <Hero
           title={title}
           onBack={onBack}
-          backLabel="Back to Logs"
+          backLabel={`Back to ${navLabel("logs")}`}
           actions={
             <>
               <Menu
@@ -361,8 +368,7 @@ function TripDetailPanel({
 
       <ConfirmDialog
         open={confirmingDelete}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={{ ...deleteCopy, confirmLabel: "Delete", tone: "destructive" }}
         busy={deleting}
         onConfirm={() => void handleDelete()}
         onClose={() => setConfirmingDelete(false)}

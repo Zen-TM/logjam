@@ -7,6 +7,7 @@
 // plan's verbs").
 import type { IconIdea } from "../icons.js";
 import type { TripPlanRole } from "../tripPlans.js";
+import type { ConfirmCopy } from "./confirm.js";
 import type { ContractPlatform } from "./types.js";
 
 type PlanVerbDeclaration = {
@@ -21,6 +22,8 @@ type PlanVerbDeclaration = {
   /** Only this client has it, and `reason` says why. */
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client; never with a `reason`. */
+  gap?: string;
   danger?: boolean;
   separated?: boolean;
 };
@@ -50,7 +53,7 @@ export const PLAN_VERBS = [
   {
     id: "tripLog",
     icon: "trip",
-    label: "Start a trip log from this plan",
+    label: "Log a trip from this plan",
     roles: ANY,
     whenArchived: true,
   },
@@ -260,12 +263,6 @@ export function planVerbs(
 
 // ── Confirms: what goes, what stays, counted ────────────────────────
 
-export type PlanConfirmCopy = {
-  confirmTitle: string;
-  confirmBody: string;
-  confirmLabel: string;
-};
-
 function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -288,21 +285,24 @@ export function planCountsLabel(
 export function planDeleteConfirm(
   name: string,
   counts: { places: number; ways: number },
-): PlanConfirmCopy {
+): ConfirmCopy {
   const things = planCountsLabel(counts);
   return {
     confirmTitle: `Delete ${name}?`,
-    confirmBody: `Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.`,
-    confirmLabel: "Delete plan",
+    confirmBody: `Its write-up, ${things ? `${things}, ` : ""}forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.`,
+    confirmLabel: "Delete",
+    tone: "destructive",
   };
 }
 
-export function planLeaveConfirm(name: string): PlanConfirmCopy {
+export function planLeaveConfirm(name: string): ConfirmCopy {
   return {
     confirmTitle: `Leave ${name}?`,
     confirmBody:
       "You lose access at once. Your answers to its forms go. What you added stays in the plan, and its files keep counting against your storage.",
     confirmLabel: "Leave plan",
+    tone: "destructive",
+    icon: "leave",
   };
 }
 
@@ -314,11 +314,13 @@ export function planLeaveDeleteAddedLabel(
   return `Also delete what I added (${planCountsLabel(counts, size)})`;
 }
 
-export function planSectionDeleteConfirm(title: string): PlanConfirmCopy {
+export function planSectionDeleteConfirm(title: string): ConfirmCopy {
   return {
     confirmTitle: `Delete ${title}?`,
-    confirmBody: "Its text goes, for everyone in the plan.",
+    confirmBody:
+      "Its text goes, for everyone in the plan. This can't be undone.",
     confirmLabel: "Delete",
+    tone: "destructive",
   };
 }
 
@@ -328,16 +330,17 @@ export function planFormDeleteConfirm(form: {
   title: string;
   answers: readonly unknown[];
   myAnswer: unknown | null;
-}): PlanConfirmCopy {
+}): ConfirmCopy {
   const title = form.title;
   const answers = form.answers.length + (form.myAnswer ? 1 : 0);
   return {
     confirmTitle: `Delete ${title}?`,
     confirmBody:
       answers > 0
-        ? `Its questions and ${plural(answers, "answer")} go, for everyone in the plan.`
-        : "Its questions go, for everyone in the plan.",
-    confirmLabel: "Delete form",
+        ? `Its questions and ${plural(answers, "answer")} go, for everyone in the plan. This can't be undone.`
+        : "Its questions go, for everyone in the plan. This can't be undone.",
+    confirmLabel: "Delete",
+    tone: "destructive",
   };
 }
 
@@ -350,7 +353,7 @@ export const PLAN_MEMBER_VERBS = [
   { id: "makeMember", icon: "account", label: "Make a member", roles: LEADERS },
   {
     id: "remove",
-    icon: "unshare",
+    icon: "removeFriend",
     label: "Remove from plan",
     roles: LEADERS,
     danger: true,
@@ -431,10 +434,7 @@ export function planItemVerbs(
 }
 
 /** `photos`: a place's, which go with it (counted, shared/DESIGN.md §9). */
-export function planItemDeleteConfirm(
-  title: string,
-  photos = 0,
-): PlanConfirmCopy {
+export function planItemDeleteConfirm(title: string, photos = 0): ConfirmCopy {
   const theirs =
     photos === 0
       ? ""
@@ -443,8 +443,9 @@ export function planItemDeleteConfirm(
         : ` Its ${photos} photos go too.`;
   return {
     confirmTitle: `Delete ${title} from the plan?`,
-    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay.`,
+    confirmBody: `It goes for everyone in the plan.${theirs} Copies people saved stay. This can't be undone.`,
     confirmLabel: "Delete",
+    tone: "destructive",
   };
 }
 
@@ -457,7 +458,7 @@ export function planRemoveConfirm(
   username: string,
   planName: string,
   files: { count: number; size: string } | null,
-): PlanConfirmCopy & { deleteFilesLabel: string | null } {
+): ConfirmCopy & { deleteFilesLabel: string | null } {
   const counted = files ? `${plural(files.count, "file")}, ${files.size}` : "";
   return {
     confirmTitle: `Remove ${username} from ${planName}?`,
@@ -467,6 +468,8 @@ export function planRemoveConfirm(
         : ""
     }`,
     confirmLabel: "Remove",
+    tone: "destructive",
+    icon: "unshare",
     deleteFilesLabel: files ? `Delete their files instead (${counted})` : null,
   };
 }
@@ -476,7 +479,7 @@ export function planRemoveConfirm(
 export function planSelfRoleConfirm(
   role: "editor" | "member",
   otherLeaders: readonly string[],
-): PlanConfirmCopy {
+): ConfirmCopy {
   const becoming = `Make yourself ${role === "editor" ? "an editor" : "a member"}`;
   const names =
     otherLeaders.length > 1
@@ -488,14 +491,16 @@ export function planSelfRoleConfirm(
       otherLeaders.length > 1 ? "The leaders" : "The leader"
     } ${names} can.`,
     confirmLabel: becoming,
+    tone: "filled",
   };
 }
 
-export function planTurnDownConfirm(username: string): PlanConfirmCopy {
+export function planTurnDownConfirm(username: string): ConfirmCopy {
   return {
-    confirmTitle: `Turn down ${username}?`,
+    confirmTitle: `Decline ${username}?`,
     confirmBody:
-      "They're told their request was turned down. They can ask again with the link.",
-    confirmLabel: "Turn down",
+      "They're told their request was declined. They can ask again with the link.",
+    confirmLabel: "Decline",
+    tone: "filled",
   };
 }

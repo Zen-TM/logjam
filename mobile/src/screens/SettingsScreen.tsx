@@ -11,10 +11,8 @@
 // outbox (`customFields/fieldDefsStore.ts`), so they do not gate on connection
 // or an account.
 //
-// LAYOUT: a plain list, so per DESIGN.md it keeps `ScreenScroll` and the
-// native header rather than being given a hero. There is no headline metric
-// here; a hero whose only content is the word "Settings" is exactly the pattern
-// the hero rule exists to replace.
+// LAYOUT: a plain list under the title-and-back Hero `AppShell` draws, as on
+// every destination in More.
 //
 // Row subtitles: none on the page rows (§7 — a navigation row's subtitle is live
 // STATE, never an explanation of what is behind it). The field rows keep theirs
@@ -39,7 +37,8 @@ import {
 import { type CustomFieldEntity } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION } from "../config";
+import { CLIENT_VERSION_LABEL } from "../config";
+import { LegalLinks } from "./LegalLinks";
 import {
   CustomFieldList,
   useCustomFieldForm,
@@ -55,7 +54,7 @@ import { useTypeAttributesStep } from "../customFields/useTypeAttributesStep";
 import { useMirrorPlaceTypes } from "../sync/useSyncQueries";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
-import { makeStyles, useTheme, muted } from "../theme";
+import { makeStyles, muted } from "../theme";
 import {
   BottomSheet,
   Button,
@@ -63,9 +62,8 @@ import {
   ScreenScroll,
   SectionHeader,
   Toast,
-  type ToastMessage,
-  Icon,
   type Glyph,
+  type ToastMessage,
 } from "../ui";
 
 /** The sub-pages, in the order someone goes looking for them. */
@@ -78,17 +76,13 @@ export type SettingsPage =
 
 const copy = SETTINGS.copy;
 
-const PAGES: {
-  page: SettingsPage;
-  icon: Glyph;
-  title: string;
-}[] = [
-  { page: "display", icon: "typography", title: "Display" },
-  { page: "map", icon: "map", title: "Map" },
-  { page: "notifications", icon: "notifications", title: "Notifications" },
-  { page: "offline", icon: "device", title: "Offline and storage" },
-  { page: "privacy", icon: "private", title: "Privacy and security" },
-];
+const PAGE_ICONS: Record<SettingsPage, Glyph> = {
+  display: "typography",
+  map: "map",
+  notifications: "notifications",
+  offline: "device",
+  privacy: "private",
+};
 
 type SheetMode =
   | { kind: "closed" }
@@ -107,14 +101,13 @@ export function SettingsScreen({
 }: {
   onOpenPage: (page: SettingsPage) => void;
 }) {
-  const theme = useTheme();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
   const online = useConnectivity() === "online";
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -168,31 +161,33 @@ export function SettingsScreen({
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 
+  const pageRow = (page: SettingsPage) => (
+    <Row
+      key={page}
+      icon={PAGE_ICONS[page]}
+      title={copy[page]}
+      // Notifications is an account-backed page, so it says so on the way
+      // in rather than after the tap (DESIGN.md). Offline and storage
+      // opens for a guest and sorts its own rows.
+      {...(page === "notifications"
+        ? capabilityRowProps("serverPrefs", accountState, online)
+        : {})}
+      onPress={() => onOpenPage(page)}
+      chevron
+    />
+  );
+
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
   const sections: Record<
     SectionKeysOn<typeof SETTINGS, "gps">,
     () => ReactNode
   > = {
-    preferences: () => (
-      <>
-        {PAGES.map(({ page, icon, title }) => (
-          <Row
-            key={page}
-            icon={icon}
-            title={title}
-            // Notifications is an account-backed page, so it says so on the way
-            // in rather than after the tap (DESIGN.md). Offline and storage
-            // opens for a guest and sorts its own rows.
-            {...(page === "notifications"
-              ? capabilityRowProps("serverPrefs", accountState, online)
-              : {})}
-            onPress={() => onOpenPage(page)}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-          />
-        ))}
-      </>
-    ),
+    display: () => pageRow("display"),
+    map: () => pageRow("map"),
+    notifications: () => pageRow("notifications"),
+    offline: () => pageRow("offline"),
+    privacy: () => pageRow("privacy"),
     categories: () => (
       <>
         {/* A list you keep, not a preference you set — which is why the LIST
@@ -209,7 +204,7 @@ export function SettingsScreen({
               .length,
           )}
           onPress={() => setSheet({ kind: "placeTypes" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
       </>
     ),
@@ -221,21 +216,22 @@ export function SettingsScreen({
           title={copy.tripAttributes}
           subtitle={ownAttributeCountLabel(ownCount(tripFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "tripLog" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
         <Row
           icon="tag"
           title={copy.placeAttributes}
           subtitle={ownAttributeCountLabel(ownCount(placeFields.defs))}
           onPress={() => setSheet({ kind: "fields", entity: "place" })}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+          chevron
         />
       </>
     ),
     about: () => (
       <>
         <SectionHeader title={copy.about} />
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
       </>
     ),
   };

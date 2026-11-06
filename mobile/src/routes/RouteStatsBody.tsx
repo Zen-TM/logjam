@@ -52,7 +52,7 @@ export function RouteStatsBody({
       <StatGrid
         stats={pairedStatLayout([
           {
-            label: "Distance",
+            label: PAIRED_STAT_LABELS.distance,
             value: formatDistanceM(routeLengthM(route.points)),
           },
           {

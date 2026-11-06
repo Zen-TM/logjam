@@ -46,7 +46,7 @@ describe("signOutConfirm", () => {
       intro: "This removes from this phone:",
       lines: [
         "3 changes not yet synced. These are lost for good.",
-        "2 saved map regions (250 MB)",
+        "2 offline maps (250 MB)",
         "1 imported GeoPDF. An imported file can only come back from the original file.",
         "4 sharpened areas",
       ],

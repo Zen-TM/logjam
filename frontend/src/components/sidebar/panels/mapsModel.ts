@@ -28,7 +28,7 @@ export const MAP_IDENTITY: Record<
   topo: {
     icon: "lidar",
     hue: "var(--hue-overlay)",
-    label: "LiDAR topo",
+    label: "LiDAR map",
   },
   // A finished LiDAR job: the Terrain layers made sharper over its area.
   sharpened: {

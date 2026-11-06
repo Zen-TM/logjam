@@ -1,11 +1,24 @@
-import { useState, useEffect, useId, useMemo, useRef } from "react";
+import {
+  Fragment,
+  useState,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from "react";
 import type {
   ScopedCustomFieldDef,
   TripLogCustomFieldType,
   MediaItem,
 } from "@logjam/shared";
 import {
+  abandonConfirm,
   coerceFieldValue,
+  contractSectionKeys,
+  placeAttributesTitle,
+  PLACE_FORM,
+  type SectionKeysOn,
   mediaCategory,
   buildCustomFieldDef,
   fieldValue,
@@ -18,11 +31,10 @@ import {
   isSystemFieldDef,
   isValidLatitude,
   isValidLongitude,
+  coordinateNumber,
+  PLACE_PAGE,
 } from "@logjam/shared";
-import {
-  numericFieldError,
-  type NumericFieldConstraints,
-} from "../../numberInput";
+import type { NumericFieldConstraints } from "../../numberInput";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 import {
   updatePlace,
@@ -34,10 +46,9 @@ import {
 } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
+import { discardUploads } from "./discardUploads";
 import AddCustomFieldForm from "./AddCustomFieldForm";
 import CustomFieldInput, { customFieldValueError } from "./CustomFieldInput";
-import ConfirmDialog from "./ConfirmDialog";
 import DeleteCustomFieldDialog from "./DeleteCustomFieldDialog";
 import MediaUpload from "../media/MediaUpload";
 import MediaGallery from "../media/MediaGallery";
@@ -52,7 +63,7 @@ import {
   TextArea,
   TextField,
   ErrorBanner,
-  FieldError,
+  FieldBeside,
 } from "../../ui";
 import classes from "./PlaceDialog.module.css";
 
@@ -137,13 +148,11 @@ function PlaceDialog({
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Which field failed validation, so the input can show error state + aria-invalid.
-  const [invalidField, setInvalidField] = useState<"name" | "coords" | null>(
-    null,
-  );
-  // Set on a Save attempt so every out-of-range numeric field shows its inline
-  // error at once (before that, errors only show after a field is blurred).
+  // Set on a Save attempt so every bad or missing field shows its inline error
+  // at once (before that, errors only show after a field is blurred).
   const [showFieldErrors, setShowFieldErrors] = useState(false);
+  const nameError =
+    showFieldErrors && !name.trim() ? PLACE_FORM.copy.nameMissing : null;
 
   // Add custom field form state
   const [showAddField, setShowAddField] = useState(false);
@@ -166,6 +175,13 @@ function PlaceDialog({
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const [draftPlaceId, setDraftPlaceId] = useState<string | null>(null);
+  // Files this open of the dialog has uploaded. They are saved the moment they
+  // land, so they count as an unsaved change and Discard takes them back out.
+  const [uploadedIds, setUploadedIds] = useState<string[]>([]);
+  // Uploads in flight, across the dialog's drop zones.
+  const [uploading, setUploading] = useState(0);
+  const handleUploadBusy = (busy: boolean) =>
+    setUploading((n) => n + (busy ? 1 : -1));
   const committedRef = useRef(false);
   const draftPromiseRef = useRef<Promise<string> | null>(null);
 
@@ -272,7 +288,6 @@ function PlaceDialog({
       }),
     );
     setError(null);
-    setInvalidField(null);
     setShowFieldErrors(false);
     setShowAddField(false);
     setNewFieldLabel("");
@@ -284,6 +299,7 @@ function PlaceDialog({
     // Reset media/draft tracking each time the dialog opens.
     setMedia([]);
     setDraftPlaceId(null);
+    setUploadedIds([]);
     setFormSession((session) => session + 1);
     // Focus is the kit Dialog's: it moves to `data-autofocus` (the name field)
     // when the dialog is shown, and back to the opener on close.
@@ -296,22 +312,22 @@ function PlaceDialog({
 
   // Real dirty-check: current form fields vs. the snapshot taken when the
   // dialog was (re)populated — not just "the dialog is open".
-  // Media/custom-field-def edits are excluded: both persist immediately
-  // (media uploads, and add/delete-field through their own endpoints), so
-  // they're never "unsaved" by the time a close is attempted.
+  // Custom-field-def edits are excluded: they persist through their own
+  // endpoint. Uploads persist too, but only Discard can undo them.
   const isDirty =
     open &&
     initialFormSnapshot !== null &&
-    JSON.stringify({
-      name,
-      altNames,
-      latitude,
-      longitude,
-      notes,
-      sources,
-      fieldValues,
-      placeTypeId,
-    }) !== initialFormSnapshot;
+    (uploadedIds.length > 0 ||
+      JSON.stringify({
+        name,
+        altNames,
+        latitude,
+        longitude,
+        notes,
+        sources,
+        fieldValues,
+        placeTypeId,
+      }) !== initialFormSnapshot);
 
   // In edit mode, fetch the place's existing media (fresh presigned URLs).
   useEffect(() => {
@@ -333,8 +349,8 @@ function PlaceDialog({
     if (draftPlaceId) return Promise.resolve(draftPlaceId);
     if (draftPromiseRef.current) return draftPromiseRef.current;
 
-    const parsedLat = parseFloat(latitude);
-    const parsedLng = parseFloat(longitude);
+    const parsedLat = coordinateNumber(latitude);
+    const parsedLng = coordinateNumber(longitude);
     if (
       !name.trim() ||
       !latitude ||
@@ -375,11 +391,13 @@ function PlaceDialog({
 
   function handleMediaUploaded(item: MediaItem) {
     setMedia((prev) => [...prev, item]);
+    setUploadedIds((prev) => [...prev, item.id]);
     onMediaChanged?.();
   }
 
   function handleMediaDeleted(id: string) {
     setMedia((prev) => prev.filter((m) => m.id !== id));
+    setUploadedIds((prev) => prev.filter((u) => u !== id));
     onMediaChanged?.();
   }
 
@@ -394,9 +412,20 @@ function PlaceDialog({
       } catch (err) {
         console.error(err);
         setError(
+          messageFromError(err, "Couldn't discard uploaded media. Try again."),
+        );
+        return;
+      }
+    }
+    if (isEdit && !committedRef.current && uploadedIds.length > 0) {
+      try {
+        await discardUploads(uploadedIds, handleMediaDeleted);
+      } catch (err) {
+        console.error(err);
+        setError(
           messageFromError(
             err,
-            "Couldn't discard uploaded media. Please try again.",
+            "Couldn't discard uploaded files. Please try again.",
           ),
         );
         return;
@@ -405,11 +434,6 @@ function PlaceDialog({
     onCancelPickCoords();
     onClose();
   }
-
-  const guard = useUnsavedChangesGuard(
-    isDirty,
-    () => void handleRequestClose(),
-  );
 
   function handlePickCoords() {
     setPicking(true);
@@ -431,37 +455,23 @@ function PlaceDialog({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    setInvalidField(null);
     try {
-      const parsedLat = parseFloat(latitude);
-      const parsedLng = parseFloat(longitude);
-      if (!name.trim()) {
-        // Inline under the Name field (FieldError), not the bottom banner.
-        setInvalidField("name");
-        setSaving(false);
-        return;
-      }
-      if (!latitude || !longitude || isNaN(parsedLat) || isNaN(parsedLng)) {
-        // Inline under the coordinate fields (FieldError), not the bottom banner.
-        setInvalidField("coords");
-        setSaving(false);
-        return;
-      }
+      const parsedLat = coordinateNumber(latitude);
+      const parsedLng = coordinateNumber(longitude);
 
-      // Range/format validation for the coordinates and for every attribute
-      // this form showed. Scoped for the same reason the
-      // write below is: a field this form did not render cannot have an
-      // invalid value the user could go and fix, so blocking Save on one would
-      // be an unfixable error message.
-      const numericInvalid =
-        numericFieldError(latitude, LAT_CONSTRAINTS) ??
-        numericFieldError(longitude, LNG_CONSTRAINTS);
-      const attributeInvalid = typeFieldDefs.some(
-        (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
-      );
-      if (numericInvalid || attributeInvalid) {
-        setShowFieldErrors(true);
-        setError("Please fix the highlighted fields.");
+      // Every check runs, so one press lights every bad field. Scoped to the
+      // attributes this form showed: a field it did not render cannot have an
+      // invalid value the user could go and fix.
+      setShowFieldErrors(true);
+      const invalid =
+        !name.trim() ||
+        !isValidLatitude(parsedLat) ||
+        !isValidLongitude(parsedLng) ||
+        typeFieldDefs.some(
+          (def) => customFieldValueError(def, getFieldValue(def.key)) != null,
+        );
+      if (invalid) {
+        setError(PLACE_FORM.copy.fixFields);
         setSaving(false);
         return;
       }
@@ -524,11 +534,11 @@ function PlaceDialog({
       }
       committedRef.current = true;
       onSaved();
-      toast.success("Place saved.");
+      toast.done(isEdit ? PLACE_FORM.copy.saved : PLACE_FORM.copy.added);
       onClose();
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Couldn't save place. Please try again."));
+      setError(messageFromError(err, PLACE_FORM.copy.saveFailed));
     } finally {
       setSaving(false);
     }
@@ -580,7 +590,7 @@ function PlaceDialog({
     } catch (err) {
       console.error(err);
       setAddFieldError(
-        messageFromError(err, "Couldn't save custom field. Please try again."),
+        messageFromError(err, "Couldn't save the attribute. Try again."),
       );
     } finally {
       setAddingField(false);
@@ -604,34 +614,344 @@ function PlaceDialog({
 
   const retyped = isEdit && place != null && placeTypeId !== place.placeTypeId;
 
+  const typeName =
+    placeTypes.find((type) => type.id === placeTypeId)?.name ?? null;
+
+  const sections: Record<SectionKeysOn<typeof PLACE_FORM, "web">, ReactNode> = {
+    type: (
+      <>
+        {/* TYPE FIRST. It decides what the rest of this form is, so it goes
+              above the fields it governs rather than at the bottom with them —
+              and it is the same rail, with the same glyphs and hues, that the
+              Places page filters by. Offered on an EDIT too: miscategorising is
+              inevitable, and the server parks any value the new type has no
+              definition for rather than dropping it, so retyping is reversible,
+              which is what makes it safe to offer. */}
+        <div className={classes.field}>
+          <span className={classes.fieldLabel}>{PLACE_FORM.copy.type}</span>
+          <ChipRail
+            label={PLACE_FORM.copy.type}
+            options={placeTypes.map((type) => ({
+              value: type.id,
+              label: type.name,
+              icon: placeTypeLucideIcon(type.iconKey),
+              hue: type.color,
+            }))}
+            value={placeTypeId}
+            onChange={setPlaceTypeId}
+          />
+          {retyped && (
+            <p className={classes.hint}>
+              Values this type has no field for are kept on the place, and can
+              be added to it later.
+            </p>
+          )}
+        </div>
+      </>
+    ),
+    name: (
+      <>
+        <TextField
+          label={PLACE_FORM.copy.name}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          required
+          requiredMark
+          reserveError
+          error={nameError}
+          data-autofocus
+        />
+      </>
+    ),
+    alsoKnownAs: (
+      <>
+        <TextField
+          label={PLACE_FORM.copy.alsoKnownAs}
+          hint={PLACE_FORM.copy.alsoKnownAsHint}
+          value={altNames}
+          onChange={(event) => setAltNames(event.target.value)}
+        />
+      </>
+    ),
+    position: (
+      <>
+        <div className={classes.field}>
+          <div className={classes.coordinates}>
+            <NumberField
+              label={PLACE_FORM.copy.latitude}
+              className={classes.grow}
+              value={latitude}
+              onChange={setLatitude}
+              coordinate={{
+                axis: "latitude",
+                onPair: (pair) => {
+                  setLatitude(pair.latitude);
+                  setLongitude(pair.longitude);
+                },
+              }}
+              constraints={LAT_CONSTRAINTS}
+              emptyError={PLACE_FORM.copy.latitudeMissing}
+              invalidError={PLACE_FORM.copy.latitudeInvalid}
+              showError={showFieldErrors}
+              required
+              requiredMark
+              reserveError
+            />
+            <NumberField
+              label={PLACE_FORM.copy.longitude}
+              className={classes.grow}
+              value={longitude}
+              onChange={setLongitude}
+              coordinate={{
+                axis: "longitude",
+                onPair: (pair) => {
+                  setLatitude(pair.latitude);
+                  setLongitude(pair.longitude);
+                },
+              }}
+              constraints={LNG_CONSTRAINTS}
+              emptyError={PLACE_FORM.copy.longitudeMissing}
+              invalidError={PLACE_FORM.copy.longitudeInvalid}
+              showError={showFieldErrors}
+              required
+              requiredMark
+              reserveError
+            />
+            <FieldBeside>
+              <Button
+                icon="place"
+                onClick={handlePickCoords}
+                disabled={saving}
+                disabledReason="Saving…"
+              >
+                {PLACE_FORM.copy.selectOnMap}
+              </Button>
+            </FieldBeside>
+          </div>
+          <p className={classes.hint}>{PLACE_FORM.copy.coordinatesHint}</p>
+        </div>
+      </>
+    ),
+    notes: (
+      <>
+        <TextArea
+          label={PLACE_FORM.copy.notes}
+          hint={PLACE_FORM.copy.notesHint}
+          value={notes}
+          onChange={(event) => setNotes(event.target.value)}
+          rows={3}
+        />
+      </>
+    ),
+    attributes: (
+      <>
+        {/* The chosen type's own attributes — the canyon grades among them,
+              each drawn by the shape of its definition. */}
+        <section className={classes.section}>
+          <SectionHeader title={placeAttributesTitle(typeName)} />
+          {typeFieldDefs.length === 0 && !showAddField && (
+            <p className={classes.muted}>
+              This type records nothing beyond a name and a place on the map.
+            </p>
+          )}
+          {typeFieldDefs.map((def) => (
+            <div key={def.key} className={classes.attribute}>
+              <div className={classes.grow}>
+                <CustomFieldInput
+                  def={def}
+                  value={getFieldValue(def.key)}
+                  onChange={(value) => setFieldValue(def.key, value)}
+                  showError={showFieldErrors}
+                />
+              </div>
+              {/* Absent on a built-in, not disabled (DESIGN.md): the
+                    server owns those definitions and refuses deletion, so
+                    the action does not exist here rather than being disabled. */}
+              {!isSystemFieldDef(def) && (
+                <FieldBeside>
+                  <IconButton
+                    icon="delete"
+                    label={`Delete the attribute ${def.label}`}
+                    tone="danger"
+                    onClick={() => setFieldToDelete(def)}
+                  />
+                </FieldBeside>
+              )}
+            </div>
+          ))}
+          {showAddField ? (
+            <AddCustomFieldForm
+              label={newFieldLabel}
+              onLabelChange={setNewFieldLabel}
+              type={newFieldType}
+              onTypeChange={setNewFieldType}
+              onAdd={handleAddField}
+              onCancel={resetAddField}
+              adding={addingField}
+              error={addFieldError}
+              bounds={{
+                bounded: newFieldBounded,
+                onBoundedChange: setNewFieldBounded,
+                min: newFieldMin,
+                onMinChange: setNewFieldMin,
+                max: newFieldMax,
+                onMaxChange: setNewFieldMax,
+              }}
+            />
+          ) : (
+            <Button
+              compact
+              icon="add"
+              className={classes.addAttribute}
+              onClick={() => {
+                setAddFieldError(null);
+                setShowAddField(true);
+              }}
+            >
+              Add an attribute
+            </Button>
+          )}
+        </section>
+      </>
+    ),
+    sources: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={PLACE_FORM.copy.sources} />
+          {sources.map((source, index) => (
+            <div key={index} className={classes.source}>
+              <TextField
+                label="Label"
+                className={classes.grow}
+                value={source.label}
+                onChange={(event) => {
+                  const next = [...sources];
+                  next[index] = { ...next[index], label: event.target.value };
+                  setSources(next);
+                }}
+              />
+              <TextField
+                label="Link"
+                className={classes.grow}
+                value={source.url}
+                placeholder="https://"
+                onChange={(event) => {
+                  const next = [...sources];
+                  next[index] = { ...next[index], url: event.target.value };
+                  setSources(next);
+                }}
+              />
+              <IconButton
+                icon="delete"
+                label={`Delete the source ${source.label || index + 1}`}
+                tone="danger"
+                onClick={() =>
+                  setSources(sources.filter((_, other) => other !== index))
+                }
+              />
+            </div>
+          ))}
+          <Button
+            compact
+            icon="add"
+            className={classes.addAttribute}
+            onClick={() => setSources([...sources, { label: "", url: "" }])}
+          >
+            Add a source
+          </Button>
+        </section>
+      </>
+    ),
+    photos: (
+      <>
+        {/* Media — photos/videos and a single optional track. In create mode
+              the first upload lazily materialises a draft place to link to. */}
+        <section className={classes.section}>
+          <SectionHeader title={PLACE_FORM.copy.photos} />
+          {mediaLoading ? (
+            <p className={classes.muted} role="status">
+              Loading files…
+            </p>
+          ) : (
+            <MediaGallery
+              media={media}
+              variant="visual"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText="No photos or videos yet."
+            />
+          )}
+          <MediaUpload
+            category="visual"
+            linkedType="place"
+            linkedId={place ? place.id : ""}
+            resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
+            onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
+            disabled={saving}
+          />
+        </section>
+      </>
+    ),
+    route: (
+      <>
+        <section className={classes.section}>
+          <SectionHeader title={PLACE_FORM.copy.route} />
+          {!mediaLoading && (
+            <MediaGallery
+              media={media}
+              variant="tracks"
+              canDelete
+              onDeleted={handleMediaDeleted}
+              emptyText={PLACE_PAGE.copy.routeEmpty}
+            />
+          )}
+          <MediaUpload
+            category="track"
+            maxFiles={1}
+            linkedType="place"
+            linkedId={place ? place.id : ""}
+            resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
+            onUploaded={handleMediaUploaded}
+            onBusyChange={handleUploadBusy}
+            disabled={saving}
+            disabledReason={
+              media.some((m) => mediaCategory(m.mediaType) === "track")
+                ? "This place already has a route. Delete it to add another."
+                : undefined
+            }
+          />
+        </section>
+      </>
+    ),
+  };
+
   return (
     <>
       <Dialog
         open={open}
-        title={isEdit ? "Edit place" : "Add a place"}
+        title={isEdit ? PLACE_FORM.copy.editTitle : PLACE_FORM.copy.addTitle}
         size="large"
-        dismissible={!saving}
-        onClose={guard.requestClose}
-        footer={
+        // A file still landing would miss the delete Discard does.
+        dismissible={!saving && uploading === 0}
+        onClose={() => void handleRequestClose()}
+        discard={isDirty ? abandonConfirm("place", !isEdit) : null}
+        footer={(requestClose) => (
           <>
-            {/* Not "Cancel": the add-attribute sub-form renders its own
-                "Cancel" that only backs out of that sub-form, and both can be
-                on screen at once. In edit mode the object is the *changes*,
-                not the place. */}
             <Button
-              onClick={guard.requestClose}
-              disabled={saving}
-              disabledReason="Saving…"
+              onClick={requestClose}
+              disabled={saving || uploading > 0}
+              disabledReason={saving ? "Saving…" : "Uploading…"}
             >
-              {isEdit ? "Discard changes" : "Discard place"}
+              Cancel
             </Button>
             {/* type="submit" with no onClick — handleSubmit is the only save
                 path, so a click can't fire alongside the form's submit. */}
             <Button type="submit" form={formId} variant="filled" busy={saving}>
-              {isEdit ? "Save changes" : "Add place"}
+              {isEdit ? PLACE_FORM.copy.saveSubmit : PLACE_FORM.copy.addSubmit}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -639,263 +959,9 @@ function PlaceDialog({
           noValidate
           onSubmit={handleSubmit}
         >
-          <TextField
-            label="Name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            error={invalidField === "name" ? "Name is required" : null}
-            data-autofocus
-          />
-
-          {/* TYPE FIRST. It decides what the rest of this form is, so it goes
-              above the fields it governs rather than at the bottom with them —
-              and it is the same rail, with the same glyphs and hues, that the
-              Places page filters by. Offered on an EDIT too: miscategorising is
-              inevitable, and the server parks any value the new type has no
-              definition for rather than dropping it, so retyping is reversible,
-              which is what makes it safe to offer. */}
-          <div className={classes.field}>
-            <span className={classes.fieldLabel}>Type</span>
-            <ChipRail
-              label="Type"
-              options={placeTypes.map((type) => ({
-                value: type.id,
-                label: type.name,
-                icon: placeTypeLucideIcon(type.iconKey),
-                hue: type.color,
-              }))}
-              value={placeTypeId}
-              onChange={setPlaceTypeId}
-            />
-            {retyped && (
-              <p className={classes.hint}>
-                Values this type has no field for are kept on the place, and can
-                be added to it later.
-              </p>
-            )}
-          </div>
-
-          <TextField
-            label="Other names"
-            hint="Separate them with commas."
-            value={altNames}
-            onChange={(event) => setAltNames(event.target.value)}
-          />
-
-          <div className={classes.field}>
-            <div className={classes.coordinates}>
-              <NumberField
-                label="Latitude"
-                className={classes.grow}
-                value={latitude}
-                onChange={setLatitude}
-                constraints={LAT_CONSTRAINTS}
-                showError={showFieldErrors || invalidField === "coords"}
-                hint="Decimal degrees (WGS84)."
-                required
-              />
-              <NumberField
-                label="Longitude"
-                className={classes.grow}
-                value={longitude}
-                onChange={setLongitude}
-                constraints={LNG_CONSTRAINTS}
-                showError={showFieldErrors || invalidField === "coords"}
-                hint="Decimal degrees (WGS84)."
-                required
-              />
-              <Button
-                icon="place"
-                className={classes.pickButton}
-                onClick={handlePickCoords}
-                disabled={saving}
-                disabledReason="Saving…"
-              >
-                Pick on map
-              </Button>
-            </div>
-            <FieldError
-              message={
-                invalidField === "coords"
-                  ? "Valid coordinates are required"
-                  : null
-              }
-            />
-          </div>
-
-          <TextArea
-            label="Notes"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            rows={3}
-          />
-
-          {/* The chosen type's own attributes — the canyon grades among them,
-              each drawn by the shape of its definition. */}
-          <section className={classes.section}>
-            <SectionHeader title="Attributes" />
-            {typeFieldDefs.length === 0 && !showAddField && (
-              <p className={classes.muted}>
-                This type records nothing beyond a name and a place on the map.
-              </p>
-            )}
-            {typeFieldDefs.map((def) => (
-              <div key={def.key} className={classes.attribute}>
-                <div className={classes.grow}>
-                  <CustomFieldInput
-                    def={def}
-                    value={getFieldValue(def.key)}
-                    onChange={(value) => setFieldValue(def.key, value)}
-                    showError={showFieldErrors}
-                  />
-                </div>
-                {/* Absent on a built-in, not disabled (DESIGN.md): the
-                    server owns those definitions and refuses deletion, so
-                    the action does not exist here rather than being disabled. */}
-                {!isSystemFieldDef(def) && (
-                  <IconButton
-                    icon="delete"
-                    label={`Delete the attribute ${def.label}`}
-                    tone="danger"
-                    onClick={() => setFieldToDelete(def)}
-                  />
-                )}
-              </div>
-            ))}
-            {showAddField ? (
-              <AddCustomFieldForm
-                label={newFieldLabel}
-                onLabelChange={setNewFieldLabel}
-                type={newFieldType}
-                onTypeChange={setNewFieldType}
-                onAdd={handleAddField}
-                onCancel={resetAddField}
-                adding={addingField}
-                error={addFieldError}
-                bounds={{
-                  bounded: newFieldBounded,
-                  onBoundedChange: setNewFieldBounded,
-                  min: newFieldMin,
-                  onMinChange: setNewFieldMin,
-                  max: newFieldMax,
-                  onMaxChange: setNewFieldMax,
-                }}
-              />
-            ) : (
-              <Button
-                compact
-                icon="add"
-                className={classes.addAttribute}
-                onClick={() => {
-                  setAddFieldError(null);
-                  setShowAddField(true);
-                }}
-              >
-                Add an attribute
-              </Button>
-            )}
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Sources" />
-            {sources.map((source, index) => (
-              <div key={index} className={classes.source}>
-                <TextField
-                  label="Label"
-                  className={classes.grow}
-                  value={source.label}
-                  onChange={(event) => {
-                    const next = [...sources];
-                    next[index] = { ...next[index], label: event.target.value };
-                    setSources(next);
-                  }}
-                />
-                <TextField
-                  label="Link"
-                  className={classes.grow}
-                  value={source.url}
-                  placeholder="https://"
-                  onChange={(event) => {
-                    const next = [...sources];
-                    next[index] = { ...next[index], url: event.target.value };
-                    setSources(next);
-                  }}
-                />
-                <IconButton
-                  icon="delete"
-                  label={`Delete the source ${source.label || index + 1}`}
-                  tone="danger"
-                  onClick={() =>
-                    setSources(sources.filter((_, other) => other !== index))
-                  }
-                />
-              </div>
-            ))}
-            <Button
-              compact
-              icon="add"
-              className={classes.addAttribute}
-              onClick={() => setSources([...sources, { label: "", url: "" }])}
-            >
-              Add a source
-            </Button>
-          </section>
-
-          {/* Media — photos/videos and a single optional track. In create mode
-              the first upload lazily materialises a draft place to link to. */}
-          <section className={classes.section}>
-            <SectionHeader title="Photos & videos" />
-            {mediaLoading ? (
-              <p className={classes.muted} role="status">
-                Loading files…
-              </p>
-            ) : (
-              <MediaGallery
-                media={media}
-                variant="visual"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No photos or videos yet."
-              />
-            )}
-            <MediaUpload
-              category="visual"
-              linkedType="place"
-              linkedId={place ? place.id : ""}
-              resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-            />
-          </section>
-
-          <section className={classes.section}>
-            <SectionHeader title="Track" />
-            {!mediaLoading && (
-              <MediaGallery
-                media={media}
-                variant="tracks"
-                canDelete
-                onDeleted={handleMediaDeleted}
-                emptyText="No track yet."
-              />
-            )}
-            <MediaUpload
-              category="track"
-              maxFiles={1}
-              linkedType="place"
-              linkedId={place ? place.id : ""}
-              resolveLinkedId={place ? undefined : ensureLinkedPlaceId}
-              onUploaded={handleMediaUploaded}
-              disabled={saving}
-              disabledReason={
-                media.some((m) => mediaCategory(m.mediaType) === "track")
-                  ? "This place already has a track. Delete it to add another."
-                  : undefined
-              }
-            />
-          </section>
-
+          {contractSectionKeys(PLACE_FORM, "web").map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
@@ -905,16 +971,6 @@ function PlaceDialog({
         def={fieldToDelete}
         onClose={() => setFieldToDelete(null)}
         onDeleted={handleFieldDeleted}
-      />
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
       />
     </>
   );

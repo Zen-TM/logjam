@@ -14,15 +14,37 @@ export type ContractPlatform = "web" | "gps";
 /**
  * One section of a surface. `on` defaults to both clients; a section only one
  * client draws says which, and `reason` says what about the medium rules it
- * out on the other.
+ * out on the other (or `gap`, when the other client just lacks it yet).
  */
 export type ContractSection<K extends string = string> = {
   key: K;
   on?: ContractPlatform;
   reason?: string;
+  /** Not built yet on the other client: a sentence or an issue. A section with
+   *  `on` has a `reason` or a `gap`, never both. */
+  gap?: string;
   /** Drawn only on something the viewer owns: a page of a shared item has no
    *  such section, on either client. Not a platform difference, so no reason. */
   ownerOnly?: true;
+  /** A friend the item is shared with sees this section. The owner's page says
+   *  so in the section's title, so the owner knows what they hand over. */
+  shareeSees?: true;
+  /** A form's section that one client draws only while ADDING: an existing
+   *  item has it elsewhere on that client. The sentence says where, so the
+   *  edit-mode gap is on the record rather than a `null` in a renderer. */
+  onlyWhenAdding?: { on: ContractPlatform; gap: string };
+};
+
+/**
+ * A difference no section or verb carries because it is not a block of the
+ * screen: a way in, a gesture, a confirm. One client does it, and `reason`
+ * says what about the medium rules it out on the other.
+ * `contracts.test.ts` holds every list of these to a non-empty `reason`.
+ */
+export type ClientOnly = {
+  id: string;
+  on: ContractPlatform;
+  reason: string;
 };
 
 export type ScreenContract<
@@ -66,12 +88,38 @@ export function contractSectionsFor<
     .map((section) => section.key) as SectionKeysOn<C, P>[];
 }
 
-/** A client's sections, in the contract's order. */
+/** A client's sections, in the contract's order. `mode: "edit"` leaves out
+ *  the ones that client draws only while adding (`onlyWhenAdding`). */
 export function contractSectionKeys<
   C extends { sections: readonly ContractSection[] },
   P extends ContractPlatform,
->(contract: C, platform: P): SectionKeysOn<C, P>[] {
+>(
+  contract: C,
+  platform: P,
+  mode: "add" | "edit" = "add",
+): SectionKeysOn<C, P>[] {
   return contract.sections
-    .filter((section) => section.on == null || section.on === platform)
+    .filter(
+      (section) =>
+        (section.on == null || section.on === platform) &&
+        !(mode === "edit" && section.onlyWhenAdding?.on === platform),
+    )
     .map((section) => section.key) as SectionKeysOn<C, P>[];
+}
+
+/** The mark on a form field that cannot be left empty: both clients' text
+ *  fields draw it beside the label when told the field is `required`. */
+export const FORM_REQUIRED = "Required";
+
+/** What a list's data is: still coming, could not be had, or in hand. */
+export type LoadState = "loading" | "failed" | "ready";
+
+/**
+ * `loaded` is "a successful result is in hand", so a failed first load is
+ * `failed` and never `ready` with nothing in it: a list read as empty says
+ * "add your first place" over an error. A refetch that fails under a list
+ * already shown stays `ready`; its error is a toast.
+ */
+export function loadStateOf(loaded: boolean, error: string | null): LoadState {
+  return loaded ? "ready" : error ? "failed" : "loading";
 }

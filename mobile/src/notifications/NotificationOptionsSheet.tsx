@@ -23,7 +23,7 @@
 // PRIVACY: the sheet's title is the row's own label, which may carry a place
 // name or a filename — user text, rendered and never logged (shared/DESIGN.md §13).
 // Guard: mobile/src/sentry/scrubEvent.test.ts.
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { TNotification } from "../api/types";
 import {
@@ -31,7 +31,7 @@ import {
   type NotificationDestination,
 } from "./notificationDestination";
 import { spacing, useTheme } from "../theme";
-import { BottomSheet, Row } from "../ui";
+import { BottomSheet, confirm, Row } from "../ui";
 import {
   notificationDeleteConfirm,
   notificationLabel,
@@ -91,24 +91,22 @@ export function NotificationOptionsSheet({
     run();
   };
 
+  // One notification, so the sentence is short — but it is still a dialog,
+  // because a delete is not undoable and there is no trash to fish it out
+  // of (mobile/DESIGN.md).
   const confirmDelete = () =>
-    act(() =>
-      // One notification, so the sentence is short — but it is still a dialog,
-      // because a delete is not undoable and there is no trash to fish it out
-      // of (mobile/DESIGN.md).
-      Alert.alert(
-        notificationDeleteConfirm(1).confirmTitle,
-        notificationDeleteConfirm(1).confirmBody,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => onDelete(notification),
-          },
-        ],
-      ),
-    );
+    act(() => {
+      void (async () => {
+        if (
+          await confirm({
+            ...notificationDeleteConfirm(1),
+            confirmLabel: "Delete",
+            tone: "destructive",
+          })
+        )
+          onDelete(notification);
+      })();
+    });
 
   return (
     <BottomSheet

@@ -78,7 +78,7 @@ export function BulkShareSheet<C extends BulkShareCandidate>({
    * eight files went is neither "sent" nor "failed" and two screens choosing
    * their own word for it is exactly the drift this sheet prevents.
    */
-  onDone: (report: { text: string; tone: "info" | "error" }) => void;
+  onDone: (report: { text: string; tone: "done" | "error" }) => void;
 }) {
   // Which of the picked rows the account does not hold yet. Read here rather
   // than in each screen so Saved and Places cannot disagree about it: a row

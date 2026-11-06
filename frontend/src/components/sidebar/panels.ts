@@ -1,9 +1,9 @@
-import { MAP_MEASURE, TRIP_PLANS_LIST } from "@logjam/shared";
+import { MAP_MEASURE, navLabel, TRIP_PLANS_LIST } from "@logjam/shared";
 
 /**
  * The pages of Logjam Web. One per question a user arrives with:
- * Places · Logs (and Stats) · Ways (routes, tracks, imports) · Plans ·
- * Friends, then Inbox · Account · Settings. What is on
+ * Places · Trips (and Stats) · Ways (routes, tracks, imports) · Plans ·
+ * Friends, then Inbox · Settings · Account. What is on
  * the map is not a page: it is the Layers control over the map.
  */
 export type PanelId =
@@ -33,6 +33,11 @@ const DRAFT_PANELS: readonly PanelId[] = ["way-draw", "measure"];
 export const isDraftPanel = (panel: PanelId | null) =>
   panel !== null && DRAFT_PANELS.includes(panel);
 
+/** The drawing tools whose ✕ asks before it discards work (the route's
+ *  `cancelRouteGuard`). Narrow, a swipe must not close them around that
+ *  question; Measure keeps nothing, so its ✕, and a swipe, close at once. */
+export const closeAsksFirst = (panel: PanelId | null) => panel === "way-draw";
+
 /** How much of a drawing tool's sheet shows at its peek, in px: the grab bar,
  *  the hero (57, or 73 for a finger) and one row, which is `DraftPeek`. Taller
  *  than a title's peek, which would show the hero and none of the readout. */
@@ -41,7 +46,7 @@ export const DRAFT_PEEK_REVEAL_PX = 152;
 /** Each page's name — its header, and the document title while it is open. */
 export const PANEL_TITLES: Record<PanelId, string> = {
   places: "Places",
-  logs: "Logs",
+  logs: navLabel("logs"),
   ways: "Ways",
   plans: TRIP_PLANS_LIST.title,
   friends: "Friends",
@@ -59,3 +64,18 @@ export const PANEL_TITLES: Record<PanelId, string> = {
 /** A page with several views swaps its content in place under one rail of
  *  chips, rather than being several pages. */
 export type LogsView = "logs" | "stats";
+
+// The lists wait on the account load (frontend/AGENTS.md: no user data loads
+// before it settles), so one that failed leaves each of them with nothing to
+// show but "Loading…". They say it once instead.
+const WAITS_ON_ACCOUNT: readonly PanelId[] = [
+  "places",
+  "logs",
+  "ways",
+  "plans",
+  "friends",
+  "inbox",
+];
+
+export const waitsOnAccount = (panel: PanelId | null) =>
+  panel !== null && WAITS_ON_ACCOUNT.includes(panel);

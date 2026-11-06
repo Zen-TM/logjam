@@ -14,6 +14,7 @@ import type { WayItem } from "./waysModel";
 
 const api = vi.hoisted(() => ({
   copyRoute: vi.fn(),
+  updateRoute: vi.fn(),
   unshareEntityWith: vi.fn(),
   getEntityShares: vi.fn(async () => []),
 }));
@@ -60,20 +61,22 @@ const way: WayItem = {
   color: route.color,
   shared: true,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
   createdAt: route.createdAt,
   bounds: [150.3, -33.71, 150.31, -33.7],
+  hasTrip: false,
 };
 
-function saveAndRemove() {
+function mount(initialVerb: string, over: Partial<WayItem> = {}) {
   render(
     <ToastProvider>
       <WayDetailPanel
-        way={way}
+        way={{ ...way, ...over }}
         route={route}
         file={null}
         placeTrack={null}
-        initialVerb="copyAndRemove"
+        initialVerb={initialVerb as never}
         onVerbConsumed={() => {}}
         friends={[]}
         ownedPlaces={[]}
@@ -90,6 +93,10 @@ function saveAndRemove() {
       />
     </ToastProvider>,
   );
+}
+
+function saveAndRemove() {
+  mount("copyAndRemove");
   fireEvent.click(screen.getByRole("button", { name: "Save and remove" }));
 }
 
@@ -112,6 +119,22 @@ describe("WayDetailPanel: save a shared route and remove the share", () => {
     );
     expect(api.copyRoute.mock.invocationCallOrder[0]).toBeLessThan(
       api.unshareEntityWith.mock.invocationCallOrder[0],
+    );
+  });
+});
+
+describe("WayDetailPanel: rename a route", () => {
+  // Mutation: withhold "rename" from a route in `wayVerbs`, or send the
+  // name through `renameMedia` instead of `updateRoute`.
+  it("renames an owned route in one step", async () => {
+    api.updateRoute.mockResolvedValueOnce({ ...route, name: "Spur" });
+    mount("rename", { shared: false });
+    fireEvent.change(screen.getByLabelText("Route name"), {
+      target: { value: "Spur" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(api.updateRoute).toHaveBeenCalledWith("r1", { name: "Spur" }),
     );
   });
 });

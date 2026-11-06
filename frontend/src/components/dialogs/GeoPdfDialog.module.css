@@ -186,7 +186,9 @@
 /* The area's size, and the button that leaves the form to place it. */
 .areaCell {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1);
 }
 
@@ -196,7 +198,7 @@
   white-space: nowrap;
 }
 
-/* Under the error banner while a GeoPDF renders in this tab. */
+/* In its own dialog while a GeoPDF renders in this tab. */
 .progress {
   display: flex;
   flex-direction: column;

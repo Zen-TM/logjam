@@ -29,7 +29,7 @@ PUSH_TITLES = {
     "place_shared": "A place was shared with you",
     "topo_complete": "Topo processing complete",
     "topo_failed": "Topo processing failed",
-    "topo_export_complete": "Topo export finished",
+    "topo_export_complete": "Map finished",
     "topo_export_skipped": "Auto-export skipped",
 }
 GENERIC_TITLE = "Logjam notification"

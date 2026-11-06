@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AREA_EXPORT_FAILED,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -16,6 +17,7 @@ import {
   bulkReadAction,
   collapseBatches,
   countBatchRows,
+  BUG_REPORT_URL,
   expandBatchSelection,
   findNotificationBatches,
   CLEAR_READ_CONFIRM,
@@ -32,8 +34,6 @@ import {
   notificationHaystack,
   notificationKind,
   notificationLabel,
-  notificationPlaceId,
-  notificationPlanTarget,
   type NotificationPlanTarget,
   notificationsTruncated,
   notificationVerb,
@@ -41,6 +41,7 @@ import {
   type SectionKeysOn,
   tallyNotifications,
   type NotificationActions,
+  type ConfirmCopy,
   type NotificationBatch,
   type NotificationInlineAction,
   type NotificationKind,
@@ -57,6 +58,12 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from "../../../placeUtils";
+import {
+  approveMember,
+  joinPlan,
+  leavePlan,
+  removeMember,
+} from "../../../plansApi";
 import { triggerDownload } from "../../../download";
 import type { PanelId } from "../panels";
 import type { GeoJsonPolygonal } from "../../dialogs/TopoDialog";
@@ -73,9 +80,11 @@ import {
   IconTile,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   type Glyph,
@@ -115,9 +124,7 @@ const KIND_HUE: Record<NotificationKind, string> = {
 type Bucket = "all" | "unread" | "read";
 
 type PendingConfirm = {
-  title: string;
-  message: string;
-  confirmLabel: string;
+  copy: ConfirmCopy;
   run: () => Promise<void>;
 };
 
@@ -153,10 +160,12 @@ function NotificationsPanel({
   onRefetchNotifications,
   onOverrideRead,
   onRefetchFriends,
+  onRefetchPlans,
   setSelectedPlaceID,
   setActivePanel,
   onTopoFlyTarget,
   onOpenPlan,
+  onOpenRoute,
   onShowSharpened,
 }: {
   notifications: TNotification[];
@@ -168,10 +177,13 @@ function NotificationsPanel({
   /** Show a read state now, ahead of its write (`null` takes it back). */
   onOverrideRead: (ids: string[], read: boolean | null) => void;
   onRefetchFriends: () => void;
+  onRefetchPlans: () => void;
   setSelectedPlaceID: (id: string | null) => void;
   setActivePanel: (panel: PanelId | null) => void;
   onTopoFlyTarget: (footprint: GeoJsonPolygonal) => void;
   onOpenPlan: (target: NotificationPlanTarget) => void;
+  /** Open a route's page; false when the user no longer holds it. */
+  onOpenRoute: (routeId: string) => Promise<boolean>;
   /** Opens the Layers popover on Terrain → Sharpened areas. */
   onShowSharpened: () => void;
 }) {
@@ -367,14 +379,10 @@ function NotificationsPanel({
       setMessageOf(n);
       return;
     }
-    if (!n.read) void setRead([n.id], true);
-    const placeId = notificationPlaceId(n);
-    if (placeId) {
-      setSelectedPlaceID(placeId);
-      setActivePanel("place-detail");
-    }
-    const plan = notificationPlanTarget(n);
-    if (plan) onOpenPlan(plan);
+    // Every row opens what it is about, as its ⋯ menu's first entry does.
+    const destination = inboxDestination(n);
+    if (destination) goTo(n, destination);
+    else if (!n.read) void setRead([n.id], true);
   };
 
   // In Unread, the read row leaves as the dialog closes and takes the focus
@@ -416,6 +424,19 @@ function NotificationsPanel({
       return;
     }
     if (destination.kind === "plan") return onOpenPlan(destination.target);
+    if (destination.kind === "way") {
+      // A failed lookup is not "removed": it keeps its own error.
+      void onOpenRoute(destination.routeId).then(
+        (found) => {
+          if (!found) toast.error(copy.removed);
+        },
+        (err) => {
+          console.error(err);
+          toast.error(messageFromError(err, "Couldn't open that route."));
+        },
+      );
+      return;
+    }
     if (destination.kind === "sharpened") {
       onShowSharpened();
     } else {
@@ -449,7 +470,7 @@ function NotificationsPanel({
     hide(ids);
     try {
       await Promise.all(ids.map((id) => deleteNotification(id)));
-      toast.success(
+      toast.done(
         ids.length === 1
           ? "Notification deleted."
           : `Deleted ${ids.length} notifications.`,
@@ -466,9 +487,11 @@ function NotificationsPanel({
 
   const confirmDelete = (ids: string[]) =>
     setPendingConfirm({
-      title: notificationDeleteConfirm(ids.length).confirmTitle,
-      message: notificationDeleteConfirm(ids.length).confirmBody,
-      confirmLabel: "Delete",
+      copy: {
+        ...notificationDeleteConfirm(ids.length),
+        confirmLabel: "Delete",
+        tone: "destructive",
+      },
       run: async () => {
         await deleteNotifications(ids);
         clearSelection();
@@ -481,7 +504,7 @@ function NotificationsPanel({
   const applyReadAction = async () => {
     if (!readAction) return;
     if (await setRead(readAction.ids, readAction.read))
-      toast.success(readAction.success);
+      toast.done(readAction.success);
   };
 
   const markAllRead = async () => {
@@ -489,6 +512,7 @@ function NotificationsPanel({
     onOverrideRead(unreadIds, true);
     try {
       await markAllNotificationsRead();
+      toast.done(INBOX.copy.markedAllRead);
     } catch (err) {
       console.error(err);
       toast.error(messageFromError(err, "Couldn't mark notifications read."));
@@ -500,9 +524,12 @@ function NotificationsPanel({
 
   const confirmClearRead = () =>
     setPendingConfirm({
-      title: CLEAR_READ_CONFIRM.confirmTitle,
-      message: CLEAR_READ_CONFIRM.confirmBody,
-      confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+      copy: {
+        confirmTitle: CLEAR_READ_CONFIRM.confirmTitle,
+        confirmBody: CLEAR_READ_CONFIRM.confirmBody,
+        confirmLabel: CLEAR_READ_CONFIRM.confirmLabel,
+        tone: "destructive",
+      },
       run: async () => {
         try {
           await clearReadNotifications();
@@ -525,7 +552,7 @@ function NotificationsPanel({
   ) => {
     const run = async () => {
       setBusyId(n.id);
-      // Only a file ACCEPT leaves the notification alive (as "Download again");
+      // Only a file ACCEPT leaves the notification alive (as the finished "Saved" row);
       // the server purges the notification on the other three.
       const survives = target.type === "file_sent" && action.kind === "accept";
       try {
@@ -534,6 +561,18 @@ function NotificationsPanel({
             ? acceptFriendRequest
             : declineFriendRequest)(target.targetId);
           onRefetchFriends();
+        } else if (target.type === "plan_invite") {
+          await (action.kind === "accept" ? joinPlan : leavePlan)(
+            target.targetId,
+          );
+          onRefetchPlans();
+        } else if (target.type === "plan_join_request") {
+          // Told the status the leader saw, so it acts on no one who has since
+          // moved on (a 409, which clears the row below).
+          await (action.kind === "accept"
+            ? approveMember(target.targetId, target.requesterId!)
+            : removeMember(target.targetId, target.requesterId!, "requested"));
+          onRefetchPlans();
         } else if (action.kind === "accept") {
           const { downloadUrl, filename } = await acceptFileSend(
             target.targetId,
@@ -541,7 +580,7 @@ function NotificationsPanel({
           triggerDownload(downloadUrl);
           // Logjam Web has no Saved: accepting a copy here IS the download, so
           // the phone's "find it in Saved" would send the user looking for nothing.
-          toast.success(`Downloading ${filename}.`);
+          toast.done(`Downloading ${filename}.`);
         } else {
           await declineFileSend(target.targetId);
         }
@@ -550,7 +589,7 @@ function NotificationsPanel({
           if (!n.read) void setRead([n.id], true);
         } else {
           hide([n.id]);
-          toast.success(action.success);
+          toast.done(action.success);
         }
       } catch (err) {
         console.error(err);
@@ -572,9 +611,13 @@ function NotificationsPanel({
     };
     if (action.confirm) {
       setPendingConfirm({
-        title: action.confirm.title,
-        message: action.confirm.body,
-        confirmLabel: action.confirm.confirmLabel,
+        // Declining an invite or a request loses nothing of the user's own.
+        copy: {
+          confirmTitle: action.confirm.title,
+          confirmBody: action.confirm.body,
+          confirmLabel: action.confirm.confirmLabel,
+          tone: "filled",
+        },
         run,
       });
     } else {
@@ -654,15 +697,22 @@ function NotificationsPanel({
   // The row's own answer, inside the card. Inert while a selection runs: a
   // press meant for a checkbox must not accept a friend request.
   const rowFooter = (n: TNotification): ReactNode => {
-    const target = notificationActions(n);
+    const target = notificationActions(n, "web");
     if (target) {
       return target.actions.map((action) => (
         <Button
           key={action.kind}
           compact
           // Decline is the outline: two filled buttons side by side make "no"
-          // look like the thing to press.
-          variant={action.kind === "decline" ? "outline" : "filled"}
+          // look like the thing to press. A second fetch of a finished send
+          // is plain: it is not the thing to press.
+          variant={
+            action.quiet
+              ? "plain"
+              : action.kind === "decline"
+                ? "outline"
+                : "filled"
+          }
           disabled={selecting || busyId !== null}
           disabledReason={selecting ? "Not while selecting" : "Working…"}
           onClick={() => answer(n, target, action)}
@@ -688,11 +738,32 @@ function NotificationsPanel({
             void downloadJobFile(
               n,
               async () => (await getTopoExport(exportJobId)).downloadUrl,
-              "Couldn't download the export.",
+              "Couldn't download the map.",
             )
           }
         >
           Download
+        </Button>
+      );
+    }
+    // A failed export has no support to contact; the bug form is the way on,
+    // for the failure that tells the owner nothing to do. Too large, outside
+    // NSW and the rest say their own next step.
+    if (
+      n.type === "topo_export_complete" &&
+      n.payload.errorMessage === AREA_EXPORT_FAILED
+    ) {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() =>
+            window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer")
+          }
+        >
+          Report a bug
         </Button>
       );
     }
@@ -743,7 +814,7 @@ function NotificationsPanel({
       title = label.text;
       subtitle = [
         label.detail,
-        notificationActions(row)?.pill,
+        notificationActions(row, "web")?.pill,
         formatTime(row.createdAt),
       ]
         .filter(Boolean)
@@ -875,12 +946,14 @@ function NotificationsPanel({
         <EmptyState
           icon="selectAll"
           title={copy.noUnreadTitle}
+          body={copy.noUnreadBody}
           actions={showEverything}
         />
       ) : (
         <EmptyState
           icon="notifications"
           title={copy.noReadTitle}
+          body={copy.noReadBody}
           actions={showEverything}
         />
       ),
@@ -903,7 +976,7 @@ function NotificationsPanel({
               count={countBatchRows(section.data, batches)}
               className={classes.dayHead}
             />
-            {section.data.map(renderRow)}
+            <RowList>{section.data.map(renderRow)}</RowList>
           </section>
         );
       })}
@@ -929,18 +1002,16 @@ function NotificationsPanel({
                       selection, and the count line says the unread tally that
                       decides it. */}
                 {readAction && (
-                  <IconButton
-                    icon={readAction.icon}
-                    label={readAction.label}
-                    onClick={() => void applyReadAction()}
-                  />
+                  <SelectionVerb onClick={() => void applyReadAction()}>
+                    {readAction.label}
+                  </SelectionVerb>
                 )}
-                <IconButton
-                  icon="delete"
-                  label="Delete"
-                  tone="danger"
+                <SelectionVerb
+                  danger
                   onClick={() => confirmDelete(selected.map((n) => n.id))}
-                />
+                >
+                  Delete
+                </SelectionVerb>
               </SelectionBar>
             ) : (
               <ChipRail
@@ -1000,10 +1071,7 @@ function NotificationsPanel({
 
       <ConfirmDialog
         open={pendingConfirm != null}
-        title={pendingConfirm?.title ?? ""}
-        message={pendingConfirm?.message ?? ""}
-        confirmLabel={pendingConfirm?.confirmLabel}
-        confirmColor="error"
+        copy={pendingConfirm?.copy}
         busy={confirming}
         onConfirm={() => {
           if (!pendingConfirm) return;

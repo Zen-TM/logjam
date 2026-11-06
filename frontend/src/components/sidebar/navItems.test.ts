@@ -10,8 +10,6 @@ import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
-  MORE_BADGE_NOUN,
   NAV_ITEMS_FOR_TEST,
   type NavItem,
   type NavItemId,
@@ -32,8 +30,8 @@ describe("partitionNavItems", () => {
       "plans",
       "friends",
       "inbox",
-      "account",
       "settings",
+      "account",
     ]);
     expect(moreItems).toEqual([]);
   });
@@ -46,15 +44,16 @@ describe("partitionNavItems", () => {
     expect(railItems[spacerAfterIndex! + 1].id).toBe(PERSONAL_ITEMS[0].id);
   });
 
-  it("gives narrow web Logjam GPS's tabs: Places, Logs, Ways between Map and More", () => {
+  // Mutation: put a Map entry back in `NAV`'s tabs, or drop Plans from them.
+  it("gives narrow web Places, Trips, Ways and Plans before More, and no Map", () => {
     const { railItems, spacerAfterIndex } = partitionNavItems(true);
-    expect(ids(railItems)).toEqual(["places", "logs", "ways"]);
+    expect(ids(railItems)).toEqual(["places", "logs", "ways", "plans"]);
     expect(spacerAfterIndex).toBeNull();
   });
 
   it("fits five 72px tabs in a 390px viewport", () => {
     const { railItems } = partitionNavItems(true);
-    expect((railItems.length + 2) * 72).toBeLessThanOrEqual(390); // + Map and More
+    expect((railItems.length + 1) * 72).toBeLessThanOrEqual(390); // + More
   });
 
   it("partitions narrow items exhaustively and without overlap", () => {
@@ -126,17 +125,6 @@ describe("isPanelInMore", () => {
 
   it("never selects More on desktop, where the group is empty", () => {
     expect(isPanelInMore([], "inbox")).toBe(false);
-  });
-});
-
-describe("labelWithBadge", () => {
-  it("names the count so the visual badge can be hidden from assistive tech", () => {
-    expect(labelWithBadge("Inbox", 3)).toBe("Inbox, 3 unread");
-    expect(labelWithBadge("Inbox", 0)).toBe("Inbox");
-    expect(labelWithBadge("Plans", 1, "invited")).toBe("Plans, 1 invited");
-    // More counts several kinds at once, so it says neither "unread" nor
-    // "invited" (NavRail's More button).
-    expect(labelWithBadge("More", 2, MORE_BADGE_NOUN)).toBe("More, 2 new");
   });
 });
 

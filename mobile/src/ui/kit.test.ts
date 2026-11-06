@@ -60,3 +60,30 @@ describe("kit containers that stack children", () => {
     expect(src).toMatch(new RegExp(`\\b${style}: \\{[^}]*\\bgap:`));
   });
 });
+
+// Screen-reader roles. Mutation: drop
+// `accessibilityRole="header"` from Hero's title, `radiogroup` from ChipRail,
+// `choice="multi"` from ChipPicker, one of ChipRail's two radiogroups, or
+// `checked` from a choice chip's state.
+describe("kit screen-reader roles", () => {
+  const source = (file: string) =>
+    readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
+
+  it("heads a Hero by its title", () => {
+    expect(source("Hero.tsx")).toMatch(
+      /accessibilityRole="header"\s+style=\{styles\.title\}/,
+    );
+  });
+
+  it("makes a chip rail a radio group and a picker's chips checkboxes", () => {
+    // Both layouts: the wrapped group and the scrolling rail.
+    expect(
+      source("ChipRail.tsx").split('accessibilityRole="radiogroup"'),
+    ).toHaveLength(3);
+    expect(source("ChipRail.tsx")).toContain('choice="single"');
+    expect(source("ChipPicker.tsx")).toContain('choice="multi"');
+    expect(source("Chip.tsx")).toMatch(/"radio"[\s\S]*"checkbox"/);
+    // A radio or checkbox reports `checked`, not `selected`.
+    expect(source("Chip.tsx")).toContain("{ checked: active, disabled }");
+  });
+});

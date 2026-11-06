@@ -20,7 +20,7 @@ import { lat2tileY, lon2tileX } from "./geoPdfTileMath.js";
  */
 export const LIDAR_JOB_COPY = {
   make: "Sharpen an area",
-  makeHere: "Sharpen the area here",
+  makeHere: "Sharpen an area here",
   noun: "Sharpened area",
   starting: "Starting to sharpen",
   startingLine: "Uploaded. Checking it over and starting to sharpen…",

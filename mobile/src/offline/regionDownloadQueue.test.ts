@@ -36,12 +36,21 @@ vi.mock(
 vi.mock("./networkPolicy", () => ({ connectionWorthResuming: () => false }));
 // Every run finds no connection.
 vi.mock("./regionMbtiles", () => ({ deleteRegionFile: vi.fn() }));
+const swapSuperseded = vi.hoisted(() =>
+  vi.fn((_artifact: unknown, _failed: number) => Promise.resolve(true)),
+);
+const renameArtifactGroup = vi.hoisted(() => vi.fn());
+vi.mock("./registryDb", () => ({ renameArtifactGroup }));
 vi.mock("./regionDownloads", () => ({
   deleteClipFile: vi.fn(),
   deleteDownloadedArtifact: vi.fn(),
+  swapSuperseded,
 }));
 const runRegionDownload = vi.hoisted(() =>
-  vi.fn(() => Promise.resolve({ status: "paused", reason: "connectivity" })),
+  vi.fn(
+    (): Promise<unknown> =>
+      Promise.resolve({ status: "paused", reason: "connectivity" }),
+  ),
 );
 vi.mock("./regionTileDownload", () => ({
   connectionAllows: () => Promise.resolve(false),
@@ -51,9 +60,13 @@ vi.mock("./regionTileDownload", () => ({
 const {
   cancelAllRegionDownloads,
   enqueueRegionDownloads,
+  onRegionDownloadToast,
   pauseRegionDownload,
+  renameRegionGroup,
+  stopRegionGroup,
 } = await import("./regionDownloadQueue");
 const { deleteRegionFile } = await import("./regionMbtiles");
+const { deleteDownloadedArtifact } = await import("./regionDownloads");
 
 const job = (id: string) => ({
   taskKind: "tile-pyramid" as const,
@@ -126,5 +139,143 @@ describe("a runner that throws", () => {
     enqueueRegionDownloads([job("throws"), job("next")]);
     await vi.advanceTimersByTimeAsync(0);
     expect(runRegionDownload).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("an update", () => {
+  const ready = (artifact: object, failed = 0) => ({
+    status: "ready",
+    artifact,
+    gaps: 0,
+    failed,
+  });
+
+  // Mutation: swap before the run settles, or for a run that did not finish,
+  // and a failed update leaves the user without the map they had.
+  it("swaps the old file out only after the new one is saved", async () => {
+    swapSuperseded.mockClear();
+    runRegionDownload.mockResolvedValueOnce({
+      status: "failed",
+      code: "unknown",
+    });
+    enqueueRegionDownloads([job("fails")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(swapSuperseded).not.toHaveBeenCalled();
+    const artifact = { id: "new" };
+    runRegionDownload.mockResolvedValueOnce(ready(artifact, 2));
+    enqueueRegionDownloads([job("saves")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(swapSuperseded).toHaveBeenCalledWith(artifact, 2);
+  });
+
+  // Mutation: ignore swapSuperseded's answer, and a download too poor to
+  // replace the older copy is reported as saved.
+  it("reports a download that could not replace the old copy as failed", async () => {
+    const toasts: { tone: string }[] = [];
+    const stop = onRegionDownloadToast((message) => toasts.push(message));
+    swapSuperseded.mockResolvedValueOnce(false);
+    runRegionDownload.mockResolvedValueOnce(ready({ id: "holey" }, 3));
+    enqueueRegionDownloads([job("holey")]);
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    expect(toasts.at(-1)).toMatchObject({ tone: "error" });
+  });
+
+  // Mutation: have Saved's rename call renameArtifactGroup alone, and the
+  // files still downloading are written under the old name.
+  it("writes the files still to come under a name given meanwhile", async () => {
+    runRegionDownload.mockClear();
+    const a = { ...job("one"), groupId: "g" };
+    const b = { ...job("two"), groupId: "g" };
+    enqueueRegionDownloads([a, b]);
+    await renameRegionGroup("g", "Renamed");
+    await vi.advanceTimersByTimeAsync(0);
+    expect((runRegionDownload.mock.calls as unknown[][])[1]?.[0]).toMatchObject(
+      {
+        groupLabel: "Renamed",
+      },
+    );
+    expect(renameArtifactGroup).toHaveBeenCalledWith("g", "Renamed");
+  });
+});
+
+describe("stopping an update", () => {
+  const updateJob = (id: string) => ({
+    ...job(id),
+    groupId: "card",
+    update: true as const,
+  });
+  const jobOf = (id: string, kind: "ready" | "paused") => ({
+    spec: { ...updateJob(id) },
+    state:
+      kind === "ready"
+        ? ({ kind: "ready", gaps: 0, failed: 0 } as const)
+        : ({ kind: "paused", reason: "connectivity" } as const),
+    progress: {} as never,
+  });
+  const ready = (id: string) => ({
+    status: "ready",
+    artifact: { id },
+    gaps: 0,
+    failed: 0,
+  });
+
+  // Mutation: stop every job of an update, as a first save does, and the
+  // files it already saved, which took their older copies' place, go too.
+  it("keeps the files it already saved", async () => {
+    vi.mocked(deleteDownloadedArtifact).mockClear();
+    runRegionDownload.mockResolvedValueOnce(ready("done"));
+    enqueueRegionDownloads([updateJob("done"), updateJob("waiting")]);
+    await vi.advanceTimersByTimeAsync(0);
+    stopRegionGroup({
+      groupId: "card",
+      update: true,
+      jobs: [jobOf("done", "ready"), jobOf("waiting", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const deleted = vi.mocked(deleteDownloadedArtifact).mock.calls.flat();
+    expect(deleted).toContain("waiting");
+    expect(deleted).not.toContain("done");
+  });
+
+  it("stops everything a first save wrote", async () => {
+    vi.mocked(deleteDownloadedArtifact).mockClear();
+    const first = (id: string) => ({ ...job(id), groupId: "card" });
+    runRegionDownload.mockResolvedValueOnce(ready("done"));
+    enqueueRegionDownloads([first("done"), first("waiting")]);
+    await vi.advanceTimersByTimeAsync(0);
+    stopRegionGroup({
+      groupId: "card",
+      update: false,
+      jobs: [jobOf("done", "ready"), jobOf("waiting", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.mocked(deleteDownloadedArtifact).mock.calls.flat()).toContain(
+      "done",
+    );
+  });
+
+  // Mutation: announce a stopped run, and what is left of an update the user
+  // cut short is reported as "updated".
+  it("says nothing of a run the user stopped", async () => {
+    const toasts: unknown[] = [];
+    const stop = onRegionDownloadToast((message) => toasts.push(message));
+    runRegionDownload.mockResolvedValueOnce({
+      status: "ready",
+      artifact: { id: "a" },
+      gaps: 0,
+      failed: 0,
+    });
+    enqueueRegionDownloads([updateJob("a"), updateJob("b")]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(toasts).toEqual([]);
+    stopRegionGroup({
+      groupId: "card",
+      update: true,
+      jobs: [jobOf("a", "ready"), jobOf("b", "paused")],
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    stop();
+    expect(toasts).toEqual([]);
   });
 });

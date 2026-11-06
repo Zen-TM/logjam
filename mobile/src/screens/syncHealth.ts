@@ -9,7 +9,7 @@
 // PRIVACY: counts and timestamps only. Never a row's contents, never a server
 // error message (shared/DESIGN.md §11 — failure copy is ours, not the error's).
 
-export type SyncTone = "ok" | "pending" | "problem";
+export type SyncTone = "ok" | "info" | "pending" | "problem";
 
 export type SyncHealth = {
   /** The answer, as a sentence. */
@@ -24,8 +24,13 @@ export type SyncHealthInput = {
   state: "idle" | "syncing" | "error";
   /** ISO instant of the last successful cycle. */
   lastSyncAt: string | null;
-  /** Outbox rows not yet accepted by the server. */
+  /** Things (places, tracks, trips) not yet accepted by the server. */
   pendingCount: number;
+  /**
+   * The queued ops behind them, which is what the bulk-upload wording is
+   * tuned against. Defaults to `pendingCount`.
+   */
+  pendingOpCount?: number;
   /** Parked ops + shelved conflicts — things only the user can resolve. */
   issueCount: number;
   /**
@@ -47,7 +52,7 @@ export type SyncHealthInput = {
 };
 
 /**
- * Above this many queued changes, a running cycle is a bulk upload rather than
+ * Above this many queued ops (`pendingOpCount`, not the things they make up), a running cycle is a bulk upload rather than
  * an ordinary catch-up, and needs copy that reads as progress. A guest who
  * links after a season has hundreds of ops and a photo backlog that can take
  * hours; "Sending 847 changes…" with no sense of scale reads as a hang, and the
@@ -158,11 +163,13 @@ export function syncIssuesSubtitle(issueCount: number): string {
  * not that nothing is queued.
  */
 export function syncIssuesTitle(issueCount: number): string {
-  return issueCount > 0 ? "Some changes need you" : syncIssuesSubtitle(0);
+  if (issueCount === 0) return syncIssuesSubtitle(0);
+  return issueCount === 1 ? "A change needs you" : "Some changes need you";
 }
 
 export function syncHealth(input: SyncHealthInput): SyncHealth {
   const { online, state, lastSyncAt, pendingCount, issueCount } = input;
+  const bulk = (input.pendingOpCount ?? pendingCount) >= BULK_UPLOAD_THRESHOLD;
   const now = input.now ?? Date.now();
 
   // 0. No account. Every branch below is a claim about a server this user
@@ -173,7 +180,9 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
     return {
       headline: "Saved on this phone",
       detail: "You don't have an account, so nothing is uploaded or backed up.",
-      tone: "ok",
+      // Not "ok": a check beside "nothing is backed up" says done to a user who
+      // has a risk to know about.
+      tone: "info",
     };
   }
 
@@ -239,7 +248,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
   //    (guard: mobile/src/screens/syncHealth.test.ts) — "Syncing…" with no
   //    signal is the optimistic label shared/DESIGN.md §10 forbids.
   if (state === "syncing" && online) {
-    if (pendingCount >= BULK_UPLOAD_THRESHOLD) {
+    if (bulk) {
       return {
         headline: `Uploading ${plural(pendingCount, "change", "changes")}…`,
         detail:
@@ -259,7 +268,7 @@ export function syncHealth(input: SyncHealthInput): SyncHealth {
 
   // 3. Work is queued. Which sentence is true depends on whether it CAN move.
   if (pendingCount > 0) {
-    if (pendingCount >= BULK_UPLOAD_THRESHOLD && online) {
+    if (bulk && online) {
       return {
         headline: `${plural(pendingCount, "change", "changes")} to upload`,
         detail: "They upload in batches. This can take a while.",

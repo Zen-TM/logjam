@@ -57,7 +57,7 @@
   justify-content: center;
   padding: 8px;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.55);
+  background-color: var(--scrim-heavy);
   color: #fff;
   pointer-events: none;
 }
@@ -72,14 +72,14 @@
   padding: 6px;
   border: none;
   border-radius: 50%;
-  background-color: rgba(0, 0, 0, 0.45);
+  background-color: var(--scrim-light);
   color: #fff;
   cursor: pointer;
   transition: background-color var(--motion-fast);
 }
 
 .arrow:hover {
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: var(--scrim-heavy);
 }
 
 .arrowLeft {

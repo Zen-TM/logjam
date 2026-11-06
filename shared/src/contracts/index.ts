@@ -13,7 +13,10 @@ import { ACCOUNT } from "./account.js";
 import { SETTINGS } from "./settings.js";
 import { INBOX } from "./inbox.js";
 import { PLACE_PAGE } from "./placePage.js";
+import { ADD_WAY } from "./addWay.js";
 import { TRIP_PAGE } from "./tripPage.js";
+import { PLACE_FORM } from "./placeForm.js";
+import { TRIP_FORM } from "./tripForm.js";
 import { TRIPS_ADD, TRIPS_FILTER_SHEET, TRIPS_LIST } from "./tripLogs.js";
 import { PLACES_FILTER_SHEET } from "./placesFilterSheet.js";
 import { PLACES_ADD, PLACES_LIST } from "./placesList.js";
@@ -28,13 +31,19 @@ import {
 import type { ScreenContract } from "./types.js";
 
 export * from "./types.js";
+export * from "./confirm.js";
 export * from "./placesList.js";
 export * from "./placesFilterSheet.js";
 export * from "./placeVerbs.js";
 export * from "./placePage.js";
+export * from "./addWay.js";
 export * from "./tripVerbs.js";
 export * from "./tripPage.js";
+export * from "./placeForm.js";
+export * from "./tripForm.js";
 export * from "./tripLogs.js";
+export * from "./nav.js";
+export * from "./ways.js";
 export * from "./inbox.js";
 export * from "./friends.js";
 export * from "./leaderboard.js";
@@ -44,6 +53,7 @@ export * from "./mapLayers.js";
 export * from "./mapOverlays.js";
 export * from "./mapTerrain.js";
 export * from "./mapMeasure.js";
+export * from "./mapTools.js";
 export * from "./mapPoint.js";
 export * from "./share.js";
 export * from "./stats.js";
@@ -62,7 +72,10 @@ export const SCREEN_CONTRACTS: readonly ScreenContract[] = [
   PLACES_ADD,
   PLACES_FILTER_SHEET,
   PLACE_PAGE,
+  ADD_WAY,
   TRIP_PAGE,
+  PLACE_FORM,
+  TRIP_FORM,
   TRIPS_LIST,
   TRIPS_ADD,
   TRIPS_FILTER_SHEET,

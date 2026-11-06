@@ -1,4 +1,4 @@
-import { Button, Checkbox, Notice } from "../../ui";
+import { Button, Checkbox, Notice, takeDismissingPress } from "../../ui";
 import {
   useEffect,
   useEffectEvent,
@@ -17,11 +17,15 @@ import maplibreWorkerUrl from "virtual:maplibre-worker-url";
 setWorkerUrl(maplibreWorkerUrl);
 import { PMTiles, Protocol } from "pmtiles";
 import {
-  INK,
   MAP_INK,
   mgaGrid,
   MGA_GRID_STYLE,
   MAP_LABEL_MIN_ZOOM,
+  MAP_LABEL_SIZE,
+  PIN_CASING_COLOR,
+  PIN_CASING_WIDTH,
+  PIN_HALO_COLOR,
+  pinHaloRadius,
   CONTOUR_LABELS_MIN_ZOOM,
   CONTOURS_MIN_ZOOM,
   CONTOURS_MINOR_MIN_ZOOM,
@@ -55,6 +59,7 @@ import { useTerrainReapply } from "./useTerrainReapply";
 import { useBoxDraw } from "./useBoxDraw";
 import MapPointPopover from "./MapPointPopover";
 import GaugePopover from "../gauges/GaugePopover";
+import { sheetCoverPx } from "../sidebar/sheetSnap";
 import { GaugeLoadNotice } from "../gauges/GaugeLoadNotice";
 import { useGauges } from "../gauges/useGauges";
 import {
@@ -134,7 +139,8 @@ function isTerminalTopoSourceError(error: unknown): boolean {
 }
 import classes from "./Map.module.css";
 import MapSearchBox from "./MapSearchBox";
-import MapChrome, { type MapTool } from "./MapChrome";
+import MapChrome from "./MapChrome";
+import { type MapToolActions, webMapTools } from "./mapToolList";
 import { collectLngLatPairs } from "./topoFootprint";
 import {
   afterEase,
@@ -148,6 +154,7 @@ import {
 } from "./geoPdfFrame";
 import type { ReactNode } from "react";
 import { MOBILE_MAX_WIDTH_PX, useMediaQuery } from "../../useIsMobile";
+import { collapseCreditsOnce } from "./collapseCredits";
 import type {
   TPlace,
   TFilters,
@@ -210,6 +217,13 @@ const NOTHING_MUTED: ReadonlySet<string> = new Set();
 /** Below this the pin's dot is under 13px across, no bigger than its badge. */
 const PLACE_BADGE_MIN_ZOOM = 10;
 
+/** A pin's circle radius by zoom, `grow` applied to each end (the halo's). */
+function pinRadius(
+  grow: (r: number) => number = (r) => r,
+): maplibregl.ExpressionSpecification {
+  return ["interpolate", ["linear"], ["zoom"], 7, grow(4), 14, grow(10)];
+}
+
 /** A layer's opacity, lowered on a feature stamped `muted`: the user's own
  *  things beside an open plan's (`mutedIds`). */
 function dimmed(opacity: number): maplibregl.ExpressionSpecification {
@@ -226,7 +240,7 @@ function readCssVar(name: string, fallback: string): string {
 function applyPlaceThemePaint(map: maplibregl.Map) {
   // A place whose type has not loaded wears the palette's first colour.
   const fallback = PLACE_TYPE_COLORS[0];
-  const ink = INK;
+  const ink = PIN_CASING_COLOR;
   // The accent is the scheme's own colour and follows it onto the map; a
   // label and its halo are drawn on the basemap, so they do not (MAP_INK).
   const accent = readCssVar("--color-accent", "#deb188");
@@ -242,7 +256,11 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("place-circles", "circle-stroke-width", 1.5);
+    map.setPaintProperty(
+      "place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   // A shared pin is the SAME pin as your own, with a thin ring set apart from
   // it — a mark on a pin rather than a louder pin — as on Logjam GPS.
@@ -253,7 +271,11 @@ function applyPlaceThemePaint(map: maplibregl.Map) {
       fallback,
     ]);
     map.setPaintProperty("shared-place-circles", "circle-stroke-color", ink);
-    map.setPaintProperty("shared-place-circles", "circle-stroke-width", 1.5);
+    map.setPaintProperty(
+      "shared-place-circles",
+      "circle-stroke-width",
+      PIN_CASING_WIDTH,
+    );
   }
   for (const id of ["place-highlight", "shared-place-highlight"]) {
     if (!map.getLayer(id)) continue;
@@ -419,7 +441,17 @@ const WEB_LABEL_BASE_SCALE = 1.75;
 // labelScale and the web base bump. Single source for every topo label layer.
 function labelTextSizeExpr(scale: number): maplibregl.ExpressionSpecification {
   const s = scale * WEB_LABEL_BASE_SCALE;
-  return ["interpolate", ["linear"], ["zoom"], 14, 9 * s, 18, 12 * s];
+  const [zFrom, sizeFrom] = MAP_LABEL_SIZE.rampFrom;
+  const [zTo, sizeTo] = MAP_LABEL_SIZE.rampTo;
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    zFrom,
+    sizeFrom * s,
+    zTo,
+    sizeTo * s,
+  ];
 }
 
 // Paint the statewide contours in place via setPaintProperty. Called when the
@@ -562,6 +594,7 @@ function Map({
   selectTrack,
   onAddPlaceAt,
   onMeasureFrom,
+  onDrawRouteFrom,
   routeHover,
   drawingRoute,
   measuring,
@@ -609,7 +642,7 @@ function Map({
   placeHighlight,
   placeTypes,
   layersButton,
-  mapTools,
+  mapToolActions,
   notices,
   onTopoSourceUnavailable,
 }: {
@@ -645,6 +678,7 @@ function Map({
   /** "What is here?" verbs: each hands the point to the flow that exists. */
   onAddPlaceAt: (point: MapPointCoord) => void;
   onMeasureFrom: (point: MapPointCoord) => void;
+  onDrawRouteFrom: (point: MapPointCoord) => void;
   /** Where along a line the elevation-profile cursor sits, marked on the map so
    *  the chart and the ground read as the same place. A CHANNEL, not a value:
    *  it changes many times a second (see the subscribing effect). */
@@ -762,7 +796,7 @@ function Map({
   placeTypes: TPlaceType[];
   /** The Layers control, owned by App because App owns what it toggles. */
   layersButton?: ReactNode;
-  mapTools: readonly MapTool[];
+  mapToolActions: MapToolActions;
   /** Pinned notices about what the map shows right now. */
   notices?: ReactNode;
   // Fired once per topo overlay entry (jobId-layerName) whose PMTiles source
@@ -840,17 +874,16 @@ function Map({
   const [asked, setAsked] = useState<{
     point: MapPointCoord;
     from: MapPointCoord | null;
+    /** A right-click: the panel opens on Options. */
+    startAt?: "options";
   } | null>(null);
   // The latest fix, in memory only: it feeds the distance and bearing in that
   // panel and goes nowhere else (see the GeolocateControl note below).
   const userFixRef = useRef<MapPointCoord | null>(null);
-  // When the panel last closed, so the press that closed it (a click elsewhere
-  // on the map) is not also read as a new question.
-  const askedClosedAt = useRef(0);
-  const closeAsked = useCallback(() => {
-    askedClosedAt.current = Date.now();
-    setAsked(null);
-  }, []);
+  // The press that closes the panel (a click elsewhere on the map) is not also
+  // read as a new question: the panel marks it (`takeDismissingPress`), and the
+  // click handler below skips it. A route, place or gauge under it still acts.
+  const closeAsked = useCallback(() => setAsked(null), []);
   // The river gauge pressed, if any; the drops come from the public file.
   const [gaugeId, setGaugeId] = useState<string | null>(null);
   const [searchPin, setSearchPin] = useState<SearchPin | null>(null);
@@ -1052,12 +1085,14 @@ function Map({
     geolocate.on("trackuserlocationend", () => {
       userFixRef.current = null;
     });
-    // Compact: it collapses to an (i) once the map is moved, which OSMF's
-    // attribution guideline allows while the credit stays one press away.
+    // Compact: the credit is an (i) that opens on a press, which OSMF's
+    // attribution guideline allows while it stays one press away.
     map.addControl(
       new maplibregl.AttributionControl({ compact: true }),
       "bottom-right",
     );
+    const credits = map.getContainer().querySelector(".maplibregl-ctrl-attrib");
+    if (credits) collapseCreditsOnce(credits);
     map.addControl(
       new maplibregl.ScaleControl({
         unit: "metric",
@@ -1455,15 +1490,33 @@ function Map({
         });
       }
 
+      // The white halo round each pin's casing, under both pins so a shared
+      // pin's halo never cuts into your own (mapPin.ts).
+      for (const [id, source] of [
+        ["place-halo", "places"],
+        ["shared-place-halo", "shared-places"],
+      ] as const) {
+        map.addLayer({
+          id,
+          type: "circle",
+          source,
+          paint: {
+            "circle-radius": pinRadius(pinHaloRadius),
+            "circle-color": PIN_HALO_COLOR,
+            ...(source === "places" ? { "circle-opacity": dimmed(1) } : {}),
+          },
+        });
+      }
+
       map.addLayer({
         id: "place-circles",
         type: "circle",
         source: "places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": PLACE_TYPE_COLORS[0],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
           "circle-opacity": dimmed(1),
           "circle-stroke-opacity": dimmed(1),
         },
@@ -1474,10 +1527,10 @@ function Map({
         type: "circle",
         source: "shared-places",
         paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 7, 4, 14, 10],
+          "circle-radius": pinRadius(),
           "circle-color": readCssVar("--color-accent", "#3b82f6"),
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 1.5,
+          "circle-stroke-color": PIN_CASING_COLOR,
+          "circle-stroke-width": PIN_CASING_WIDTH,
         },
       });
 
@@ -1542,7 +1595,7 @@ function Map({
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1562,7 +1615,7 @@ function Map({
         layout: {
           "text-field": PLACE_LABEL_FIELD,
           "text-font": ["Noto Sans Medium"],
-          "text-size": 12,
+          "text-size": MAP_LABEL_SIZE.pin,
           "text-offset": [0, 1.2],
           "text-anchor": "top",
         },
@@ -1605,7 +1658,7 @@ function Map({
             "text-rotation-alignment": "viewport",
             "text-field": ["get", "text"],
             "text-font": ["Noto Sans Medium"],
-            "text-size": 11,
+            "text-size": MAP_LABEL_SIZE.pin,
           },
           paint: {
             "text-color": MAP_INK.label,
@@ -1660,7 +1713,7 @@ function Map({
             visibility: "none",
             "text-field": ["get", "name"],
             "text-font": ["Noto Sans Medium"],
-            "text-size": 12,
+            "text-size": MAP_LABEL_SIZE.pin,
             "text-max-width": 10,
             "text-offset": [0, 1.2],
             "text-anchor": "top",
@@ -2008,9 +2061,11 @@ function Map({
   }, [standaloneTracks, mapLoaded, loadTrackSource, muteBy]);
 
   // "What is here?": a press on EMPTY map asks (no tool armed and no pin, line
-  // or feature under it), a right-click asks wherever it lands, and Enter on
-  // the focused map asks about the middle of what is visible. The panel is
-  // drawn by `MapPointPopover`; this only decides when it is asked.
+  // or feature under it), and Enter on the focused map asks about the middle of
+  // what is visible. The panel is drawn by `MapPointPopover`; this only decides
+  // when it is asked. A right-click, or an Android long-press (the browser's
+  // `contextmenu`; iOS Safari sends none), asks the same panel and opens it on
+  // Options, wherever it lands.
   //
   // A tap asks and a press-and-hold commits (shared/DESIGN.md §3), so nothing
   // here writes anything: its verbs hand off to flows that confirm for
@@ -2022,23 +2077,22 @@ function Map({
     const PRESSABLE = [...PRESSABLE_LAYERS, GAUGE_LAYER];
     // Long enough for a double-click to zoom without a panel flashing up.
     const SINGLE_PRESS_MS = 250;
-    // Pressing the panel's own dismissal and the map in one gesture.
-    const JUST_CLOSED_MS = 300;
     let pending: ReturnType<typeof setTimeout> | null = null;
     const cancel = () => {
       if (pending) clearTimeout(pending);
       pending = null;
     };
     const armed = () => pickModeRef.current || drawingRouteRef.current;
-    const ask = (latitude: number, longitude: number) =>
+    const ask = (latitude: number, longitude: number, startAt?: "options") =>
       setAsked({
         point: { latitude, longitude },
         from: userFixRef.current,
+        ...(startAt ? { startAt } : {}),
       });
 
     const onClick = (e: maplibregl.MapMouseEvent) => {
-      if (armed() || Date.now() - askedClosedAt.current < JUST_CLOSED_MS)
-        return;
+      // Taken first: it is spent by the click it belongs to, armed or not.
+      if (takeDismissingPress() || armed()) return;
       const layers = PRESSABLE.filter((id) => map.getLayer(id));
       if (map.queryRenderedFeatures(e.point, { layers }).length > 0) return;
       cancel();
@@ -2052,7 +2106,7 @@ function Map({
       if (armed()) return;
       e.originalEvent.preventDefault();
       cancel();
-      ask(e.lngLat.lat, e.lngLat.lng);
+      ask(e.lngLat.lat, e.lngLat.lng, "options");
     };
     // Enter on the focused map is a press on the middle of it: it asks what is
     // there, or, with a drawing tool armed, places the next point there. With
@@ -2123,6 +2177,8 @@ function Map({
   useEffect(() => {
     if (!mapLoaded || !mapRef.current) return;
     const vis = (show: boolean) => (show ? "visible" : "none");
+    for (const id of ["place-halo", "shared-place-halo"])
+      mapRef.current.setLayoutProperty(id, "visibility", vis(showPlaces));
     mapRef.current.setLayoutProperty(
       "place-circles",
       "visibility",
@@ -3140,6 +3196,13 @@ function Map({
     onTopoFlyConsumedRef.current?.();
   }, [topoFlyTarget, mapLoaded]);
 
+  // A fit (a way, a plan) keeps its extent in the strip above the narrow
+  // sheet, however thin, and 80 px from the edge on wide.
+  const fitBottom = () => {
+    const cover = sheetCoverPx(window.innerHeight, 80 + 24, 96);
+    return cover > 0 ? cover + 24 : 80;
+  };
+
   const onFlyToBoundsConsumedRef = useRef(onFlyToBoundsConsumed);
   useEffect(() => {
     onFlyToBoundsConsumedRef.current = onFlyToBoundsConsumed;
@@ -3153,7 +3216,12 @@ function Map({
     const [west, south, east, north] = flyToBounds;
     if ([west, south, east, north].every((value) => Number.isFinite(value))) {
       mapRef.current.fitBounds([west, south, east, north], {
-        padding: 80,
+        padding: {
+          top: 80,
+          left: 80,
+          right: 80,
+          bottom: fitBottom(),
+        },
         duration: 1200,
         maxZoom: 16,
       });
@@ -3184,6 +3252,10 @@ function Map({
         center: [flyToPlace.lng, flyToPlace.lat],
         zoom: 16,
         duration: 1500,
+        // Centred in what the narrow sheet leaves, not behind it. An offset,
+        // not `padding`: MapLibre keeps a flyTo's padding on the camera, and
+        // every later fit would start from it.
+        offset: [0, -sheetCoverPx(window.innerHeight) / 2],
       });
     } else {
       // The warning names no coordinate: they are the place's.
@@ -3536,9 +3608,9 @@ function Map({
       if (quiet) {
         // Coming back after an area selection: they have seen it.
       } else if (window.matchMedia("(pointer: coarse)").matches) {
-        toast.info("Use two fingers to pan and pinch to zoom in 3D mode.");
+        toast.done("Use two fingers to pan and pinch to zoom in 3D mode.");
       } else {
-        toast.info(
+        toast.done(
           "Use right-click + drag (OR Ctrl + drag) to pan and scroll to zoom in 3D mode.",
         );
       }
@@ -3593,7 +3665,7 @@ function Map({
         is3D={is3D}
         onToggle3D={toggleTerrain}
         layersButton={layersButton}
-        tools={mapTools}
+        tools={webMapTools(mapToolActions)}
         selectingArea={selectingArea}
         notices={notices}
         search={
@@ -3635,13 +3707,15 @@ function Map({
       />
       {asked && drawableMap && (
         <MapPointPopover
-          key={`${asked.point.latitude},${asked.point.longitude}`}
+          key={`${asked.point.latitude},${asked.point.longitude},${asked.startAt ?? ""}`}
           map={drawableMap}
           point={asked.point}
           from={asked.from}
+          {...(asked.startAt ? { startAt: asked.startAt } : {})}
           onClose={closeAsked}
           onAddPlace={onAddPlaceAt}
           onMeasure={onMeasureFrom}
+          onDrawRoute={onDrawRouteFrom}
         />
       )}
       {openGauge && gaugeFile && drawableMap && showGauges && (

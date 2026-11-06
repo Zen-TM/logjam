@@ -22,7 +22,7 @@
 //                                    everything that CAN be tapped on the map
 //                                    has one sheet, above.
 //
-// A verb whose panel needs a surface (Share, Send a copy, "Attach to a place")
+// A verb whose panel needs a surface (Share, Send a copy, "Link to a place")
 // is rendered INSIDE the sheet that owns the verb, never handed to the caller
 // as a callback: a callback is only as good as the caller that remembers to
 // pass it, which is the same asymmetry in a different shape. The place picker
@@ -109,6 +109,19 @@ function removeConfirmFields(
   return { confirmTitle: title, confirmBody: body };
 }
 
+/**
+ * The words on a delete row, by what the delete reaches. A row that also
+ * removes the account's copy says "Delete"; "from device" is only true of a
+ * file that lives on this phone alone.
+ */
+export function deleteLabel(
+  removal: { synced: boolean },
+  memberCount = 1,
+): string {
+  if (removal.synced) return "Delete";
+  return memberCount > 1 ? "Delete all from device" : "Delete from device";
+}
+
 export type AssetActions = {
   /**
    * Someone else owns this — the reason every write verb below is absent.
@@ -171,6 +184,12 @@ export type AssetActions = {
   delete?: {
     confirmTitle: string;
     confirmBody: string;
+    /**
+     * Whether the delete reaches the account (and so Logjam Web and other
+     * devices), not only this phone. Required, so no kind defaults into the
+     * "from device" wording; `assetActions.test.ts` holds each descriptor's.
+     */
+    synced: boolean;
     run: () => Promise<unknown>;
   };
   /**
@@ -200,7 +219,7 @@ export type AssetActions = {
    * and linking connects the existing standalone media row without duplicating
    * the underlying file.
    */
-  attachToPlace?: (placeId: string) => Promise<unknown>;
+  attachToPlace?: (placeId: string, replaces?: string) => Promise<unknown>;
   /**
    * Present on a track that can be attached to a trip: "Log a trip" opens the
    * trip form on the track's day, and the track goes with the trip. The track
@@ -283,9 +302,9 @@ export function geoPdfActions(geoPdf: GeoPdfImport): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete this GeoPDF?",
-      confirmBody:
-        "The imported map and its tiles are removed from the device.",
+      confirmTitle: `Delete ${geoPdf.label}?`,
+      synced: false,
+      confirmBody: "The imported map is removed from the device.",
       run: () => deleteGeoPdfImport(geoPdf.id),
     },
   };
@@ -375,12 +394,13 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
     // The import stays in Saved, keeps its identity, and survives both being
     // replaced and the place being deleted (see IMPORT_TO_PLACE_PROMISE in
     // routeSlot.ts).
-    attachToPlace: (placeId: string) =>
-      linkStandaloneMediaLocal(imported.id, placeId),
+    attachToPlace: (placeId: string, replaces?: string) =>
+      linkStandaloneMediaLocal(imported.id, placeId, replaces),
     delete: {
-      confirmTitle: "Delete this import?",
+      confirmTitle: `Delete ${imported.name}?`,
       // Imports sync across devices, so deletion removes the file from the
       // account and therefore from every device.
+      synced: true,
       confirmBody:
         "This deletes the file from your account, so it goes from Logjam Web and your other devices too.",
       run: () => deleteVectorImport(imported.id),
@@ -397,7 +417,11 @@ export function vectorImportActions(imported: VectorImport): AssetActions {
  * a feature nobody has asked for — what this row is for is knowing the trip is
  * safe, being able to name it, and being able to get rid of it.
  */
-export function remoteTrackActions(file: MirrorMedia): AssetActions {
+export function remoteTrackActions(
+  file: MirrorMedia,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   const bbox = file.metadata.bbox ?? null;
   return {
     locatable: bbox !== null,
@@ -406,9 +430,17 @@ export function remoteTrackActions(file: MirrorMedia): AssetActions {
     // The file is a recording of the account's own, so it can go into a trip
     // like one made here: its bytes are fetched once if they are not on the
     // phone (`needsConnection` says so, for the sheet that offers it).
-    logTrip: syncedTrackSource({ ...file, title: mediaDisplayName(file) }),
+    ...(loggedTrackIds?.has(file.id)
+      ? {}
+      : {
+          logTrip: syncedTrackSource({
+            ...file,
+            title: mediaDisplayName(file),
+          }),
+        }),
     delete: {
-      confirmTitle: "Delete this recording?",
+      confirmTitle: `Delete ${mediaDisplayName(file)}?`,
+      synced: true,
       confirmBody:
         "This deletes it from your account, so it goes from Logjam Web and the phone that recorded it too.",
       run: () => deleteMediaLocal(file),
@@ -476,7 +508,8 @@ export function routeActions(
           rename: (name: string) => updateRouteLocal(route.id, { name }),
           editableRouteId: route.id,
           delete: {
-            confirmTitle: "Delete route?",
+            confirmTitle: `Delete ${route.name}?`,
+            synced: true,
             confirmBody:
               "The route is removed from every device on your account. This can't be undone.",
             run: () => deleteRouteLocal(route.id),
@@ -486,7 +519,11 @@ export function routeActions(
   };
 }
 
-export function trackActions(track: Track): AssetActions {
+export function trackActions(
+  track: Track,
+  /** The recordings a trip has been logged from (`useMirrorLoggedTrackIds`). */
+  loggedTrackIds?: ReadonlySet<string>,
+): AssetActions {
   return {
     locatable: track.pointCount > 0,
     // A track's extent isn't stored; derive it from its points on demand.
@@ -494,7 +531,11 @@ export function trackActions(track: Track): AssetActions {
     rename: (name) => updateTrack(track.id, { name }),
     setColor: (color: string) => updateTrack(track.id, { color }),
     // Attaching writes the points out as a GPX, which needs a line to write.
-    ...(track.pointCount >= 2 ? { logTrip: recordedTrackSource(track) } : {}),
+    // Not offered again once a trip has been logged from it.
+    ...(track.pointCount >= 2 &&
+    !(track.mediaId && loggedTrackIds?.has(track.mediaId))
+      ? { logTrip: recordedTrackSource(track) }
+      : {}),
     // A recording is an observation and stays immutable; this makes a SEPARATE
     // route from it, which is the editable thing. Both exist afterwards.
     ...(track.pointCount >= MIN_ROUTE_POINTS
@@ -566,7 +607,8 @@ export function trackActions(track: Track): AssetActions {
         }
       : {}),
     delete: {
-      confirmTitle: "Delete track?",
+      confirmTitle: `Delete ${track.name}?`,
+      synced: true,
       // A finished recording is backed up to the account as a file; leaving
       // the backup behind would put the same trip straight back in this list as a
       // recorded-elsewhere row, which reads as the delete having failed.

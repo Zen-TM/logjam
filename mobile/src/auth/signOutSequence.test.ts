@@ -6,7 +6,8 @@
 // sessions after the confirm and before anything is wiped" goes red; swallow
 // its error (or `assertCanSignOutEverywhere`'s) and the matching "aborts" test
 // goes red; ask `confirm` before the forced refresh and the refresh-failure
-// test sees `confirm` called.
+// test sees `confirm` called; drop `dropNotificationTap` from the sequence and
+// the order tests lose "dropTap".
 import { describe, expect, it, vi } from "vitest";
 
 import { runSignOut, type SignOutSteps } from "./signOutSequence";
@@ -28,6 +29,7 @@ function steps(
     signOutEverywhereAtProvider: log("globalSignOut"),
     reportEverywhereFailed: vi.fn(() => void calls.push("alert")),
     unregisterPush: log("unregisterPush"),
+    dropNotificationTap: vi.fn(() => void calls.push("dropTap")),
     wipe: log("wipe", { failed: [] }),
     reportWipeIncomplete: vi.fn(() => void calls.push("wipeAlert")),
     finish: log("finish"),
@@ -45,6 +47,7 @@ describe("sign out everywhere", () => {
       "confirm",
       "globalSignOut",
       "unregisterPush",
+      "dropTap",
       "wipe",
       "finish",
     ]);
@@ -83,7 +86,13 @@ describe("an ordinary sign out", () => {
   it("never touches the provider's sign-out-everywhere", async () => {
     const { s, calls } = steps(() => ({ everywhere: false }));
     await runSignOut(s);
-    expect(calls).toEqual(["confirm", "unregisterPush", "wipe", "finish"]);
+    expect(calls).toEqual([
+      "confirm",
+      "unregisterPush",
+      "dropTap",
+      "wipe",
+      "finish",
+    ]);
   });
 
   it("does not ask after the account was deleted", async () => {
@@ -92,7 +101,7 @@ describe("an ordinary sign out", () => {
       accountDeleted: true,
     }));
     await runSignOut(s);
-    expect(calls).toEqual(["unregisterPush", "wipe", "finish"]);
+    expect(calls).toEqual(["unregisterPush", "dropTap", "wipe", "finish"]);
   });
 
   it("says so when part of the wipe failed, and still signs out", async () => {
@@ -107,6 +116,7 @@ describe("an ordinary sign out", () => {
     expect(calls).toEqual([
       "confirm",
       "unregisterPush",
+      "dropTap",
       "wipe",
       "wipeAlert",
       "finish",

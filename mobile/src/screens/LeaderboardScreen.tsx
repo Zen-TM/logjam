@@ -16,7 +16,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   contractSectionKeys,
   LEADERBOARD,
@@ -45,6 +45,9 @@ import {
   Avatar,
   BottomSheet,
   Button,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroScrollView,
   EmptyState,
   ErrorBanner,
   ErrorState,
@@ -54,7 +57,10 @@ import {
   LoadingState,
   Row,
   Toast,
+  useHeroCollapse,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { dismissPodium, isPodiumDismissed } from "./leaderboard";
 
@@ -67,6 +73,8 @@ type SectionProps = {
   podiumShown: boolean;
   onBack: () => void;
   backLabel: string;
+  /** The board's scroll, which folds the hero to its one row. */
+  heroCollapse: ReturnType<typeof useHeroCollapse>;
   onDismissPodium: () => void;
   onOpenRules: () => void;
 };
@@ -77,22 +85,31 @@ export const LEADERBOARD_SECTIONS: Record<
   SectionKeysOn<typeof LEADERBOARD, "gps">,
   (props: SectionProps) => ReactNode
 > = {
-  hero: ({ board, onBack, backLabel, onOpenRules }) => {
+  hero: ({ board, onBack, backLabel, onOpenRules, heroCollapse }) => {
     const { rank, size } = selfStanding(board);
+    const standing = leaderboardHeroTitle(rank, size);
     return (
-      <Hero
-        title={leaderboardHeroTitle(rank, size)}
-        value={leaderboardSeasonLine(board.season)}
-        onBack={onBack}
-        backLabel={backLabel}
-        actions={
-          <IconButton
-            icon="help"
-            accessibilityLabel={copy.rulesTitle}
-            onPress={onOpenRules}
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
+              compact ? `${LEADERBOARD.title} · ${standing}` : LEADERBOARD.title
+            }
+            // The rank, then the season, as Logjam Web's line under the title.
+            value={`${standing} · ${leaderboardSeasonLine(board.season)}`}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              <IconButton
+                icon="help"
+                accessibilityLabel={copy.rulesTitle}
+                onPress={onOpenRules}
+              />
+            }
           />
-        }
-      />
+        )}
+      </CollapsingHero>
     );
   },
   podium: ({ board, podiumShown, onDismissPodium }) =>
@@ -121,6 +138,7 @@ export function LeaderboardScreen({
   backLabel: string;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -181,6 +199,7 @@ export function LeaderboardScreen({
   }, [season]);
 
   const [rulesOpen, setRulesOpen] = useState(false);
+  const heroCollapse = useHeroCollapse();
 
   // Every state but the board keeps a hero, so the back arrow is always there.
   const gate = (body: ReactNode) => (
@@ -210,6 +229,7 @@ export function LeaderboardScreen({
     podiumShown,
     onBack,
     backLabel,
+    heroCollapse,
     onDismissPodium,
     onOpenRules: () => setRulesOpen(true),
   };
@@ -217,12 +237,19 @@ export function LeaderboardScreen({
   return (
     <View style={styles.root}>
       {/* The hero is pinned; everything under it scrolls (shared/DESIGN.md §2). */}
-      {LEADERBOARD_SECTIONS[hero](props)}
-      <ScrollView
+      <CollapsingHeader collapse={heroCollapse}>
+        {LEADERBOARD_SECTIONS[hero](props)}
+      </CollapsingHeader>
+      <HeroScrollView
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          heroCollapse.inset(spacing(1.5)),
+        ]}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={theme.accent}
@@ -235,7 +262,7 @@ export function LeaderboardScreen({
         {rest.map((key) => (
           <Fragment key={key}>{LEADERBOARD_SECTIONS[key](props)}</Fragment>
         ))}
-      </ScrollView>
+      </HeroScrollView>
       <BottomSheet
         visible={rulesOpen}
         onClose={() => setRulesOpen(false)}
@@ -336,7 +363,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: spacing(2),
-    paddingTop: spacing(1.5),
     gap: spacing(1),
     paddingBottom: spacing(4),
   },

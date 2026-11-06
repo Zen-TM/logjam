@@ -147,8 +147,9 @@ export const ASSET_HUES = {
   route: "#8FBFA6",
   /** Imported files (GPX/KML/GeoJSON) — waterhole blue. */
   import: "#86B5D4",
-  /** Recorded tracks — heath flower. */
-  track: "#B79EC0",
+  /** Recorded tracks — heath pink. The heath violet is reserved for "shared"
+   *  (`SHARED_PLACE_COLOR`); `sharedHue.test.ts` holds it out of every hue map. */
+  track: "#E0A8C4",
   /** Marked points — waratah, the most forward colour in the muted range: a
    *  waypoint is a thing you are trying to FIND again. Lifted for contrast as
    *  a glyph on Sandstone. */
@@ -163,7 +164,7 @@ export const ASSET_HUES = {
  * takes the accent; these are the rest. Same palette rule as `ASSET_HUES`.
  */
 export const TRIP_TYPE_OPEN_HUES = {
-  heath: "#B79EC0",
+  mist: "#A7C4C9",
   dryGrass: "#C9B37B",
   lichen: "#8FBFAE",
   waratah: "#D3A0A0",
@@ -243,8 +244,8 @@ export const FORM_RHYTHM = {
  * both clients and the scale is the only thing that differs between them.
  */
 export const FONT = {
-  gps: { xs: 12, sm: 14, base: 16, lg: 20, xl: 24 },
-  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 20 },
+  gps: { xs: 12, sm: 14, base: 16, lg: 20, xl: 24, xxl: 28 },
+  web: { xs: 12, sm: 13, base: 14, lg: 18, xl: 22, xxl: 28 },
 } as const;
 
 /** Type weights, the same on both media. */
@@ -270,6 +271,8 @@ type TextRoleSpec = {
   /** Lines set apart so several read in a row: 22 dp on Logjam GPS
    *  (theme.ts), 1.5 on Logjam Web. A role without it takes the font's own. */
   leading?: true;
+  /** Digits of equal width, so a figure that changes does not jitter. */
+  tabular?: true;
 };
 export const TEXT_ROLES = {
   /** A screen's or a page's own title. */
@@ -297,6 +300,9 @@ export const TEXT_ROLES = {
   caption: { size: "xs", weight: "medium" },
   /** A section heading or a stat caption: the only capitals. */
   section: { size: "xs", weight: "medium", uppercase: true },
+  /** A figure read at arm's length while moving: distance, bearing and
+   *  recording time. */
+  instrument: { size: "xxl", weight: "bold", tabular: true },
 } as const satisfies Record<string, TextRoleSpec>;
 
 /**
@@ -317,5 +323,22 @@ export const TOUCH_TARGET_MIN = 48;
 /** Transition durations in ms. */
 export const MOTION = { fast: 150, med: 200 } as const;
 
-/** Opacity of a control that exists but cannot be used right now. */
-export const OPACITY = { disabled: 0.5 } as const;
+/** Opacity of a control that exists but cannot be used right now (`disabled`),
+ *  and of a glyph-only control or a fill while it is pressed (`pressed`). */
+export const OPACITY = { disabled: 0.5, pressed: 0.7 } as const;
+
+/** A tint of a role over a surface. Words on a wash are `text`. */
+export const WASH = { subtle: 0.08, selected: 0.12, strong: 0.16 } as const;
+
+/** Icon sizes in px. */
+export const ICON_SIZE = { sm: 16, md: 20, lg: 24 } as const;
+
+/** How long a toast stays in ms. An error, or a toast with an action, stays `error`. */
+export const TOAST_MS = { done: 4000, error: 8000 } as const;
+
+/** MapLibre label sizes (px): a pin's name, and the topo label ramp by zoom. */
+export const MAP_LABEL_SIZE = {
+  pin: 12,
+  rampFrom: [14, 9],
+  rampTo: [18, 12],
+} as const;

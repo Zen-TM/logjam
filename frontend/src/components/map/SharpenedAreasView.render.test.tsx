@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../feedback/ToastProvider";
 import type { CompletedTopoJob } from "../../topoLayerTypes";
 import SharpenedAreasView from "./SharpenedAreasView";
+import type { TopoJob } from "../dialogs/TopoDialog";
 
 const api = vi.hoisted(() => ({ apiFetch: vi.fn(async () => ({})) }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
@@ -58,11 +59,15 @@ const job = (over: Partial<CompletedTopoJob>): CompletedTopoJob => ({
   ...over,
 });
 
-function draw(jobs: CompletedTopoJob[], loaded = true) {
+function draw(
+  jobs: CompletedTopoJob[],
+  loaded = true,
+  activeTopoJobs: TopoJob[] = [],
+) {
   const props = {
     onBack: vi.fn(),
     onClose: vi.fn(),
-    activeTopoJobs: [],
+    activeTopoJobs,
     completedTopoJobs: jobs,
     friends: [],
     loaded,
@@ -82,12 +87,12 @@ function draw(jobs: CompletedTopoJob[], loaded = true) {
 }
 
 describe("the sharpened areas view", () => {
-  it("lists areas with a Shared pill on one shared with you, and flies to a row", () => {
+  it("lists areas with a pill on one shared with you, and flies to a row", () => {
     const props = draw([
       job({}),
       job({ jobId: "j2", name: "Friend's ridge", syncRole: "shared" }),
     ]);
-    expect(screen.getAllByText("Shared")).toHaveLength(1);
+    expect(screen.getAllByText("Shared with you")).toHaveLength(1);
     fireEvent.click(screen.getAllByText("Made-up gully")[0]!);
     expect(props.onFlyTo).toHaveBeenCalledWith(footprint);
   });
@@ -113,9 +118,7 @@ describe("the sharpened areas view", () => {
     expect(screen.queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /^Share/ })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "Remove" })).toBeTruthy();
-    expect(
-      screen.getByRole("menuitem", { name: "Export this area…" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Make a map…" })).toBeTruthy();
   });
 
   // Mutation: drop the `loaded` gate and the view says "None yet." while the
@@ -126,7 +129,28 @@ describe("the sharpened areas view", () => {
     expect(screen.queryByText(/None yet/)).toBeNull();
   });
 
-  it("arms the pick from the Sharpen an area button", () => {
+  // Mutation: drop `beingMade.length === 0` from the empty line's condition.
+  it('does not say "None yet" above a job that is queued', () => {
+    draw([], true, [
+      {
+        id: "q1",
+        status: "pending",
+        name: "Made-up gully",
+        footprint: null,
+        tileCount: 1,
+        estimatedSeconds: null,
+        layerOptions: null,
+        errorMessage: null,
+        createdAt: "2026-10-01T00:00:00Z",
+        updatedAt: "2026-10-01T00:00:00Z",
+        syncRole: "owner",
+      },
+    ]);
+    expect(screen.queryByText(/None yet/)).toBeNull();
+    expect(screen.getByText("Queued")).toBeTruthy();
+  });
+
+  it("opens the dialog from the Sharpen an area button", () => {
     const props = draw([]);
     fireEvent.click(screen.getByRole("button", { name: "Sharpen an area" }));
     expect(props.onSharpen).toHaveBeenCalled();

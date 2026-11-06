@@ -2,27 +2,22 @@ import { useEffect, useRef, type ReactNode } from "react";
 import {
   WEATHER,
   WEATHER_CREDIT_URL,
+  WEATHER_MODELS,
   contractSectionKeys,
-  formatRainMm,
-  localDate,
   weatherAge,
-  weatherDayFacts,
   weatherDaysFrom,
+  weatherRows,
   type WeatherForecast,
+  type WeatherModelId,
+  type WeatherRow,
 } from "@logjam/shared";
-import {
-  Button,
-  ErrorState,
-  ForecastList,
-  LoadingState,
-  StatGrid,
-} from "../../ui";
+import { Button, ErrorState, ForecastRail, LoadingState, Menu } from "../../ui";
 import type { WeatherState } from "./useWeather";
 import classes from "./WeatherView.module.css";
 
 /**
- * The weather at a spot, drawn from `WEATHER` (shared/contracts): the rain that
- * has fallen, the days ahead, and the credit CC BY 4.0 asks for. It only draws;
+ * The weather at a spot, drawn from `WEATHER` (shared/contracts): the hours and
+ * days ahead, the rain that has fallen, and the credit CC BY 4.0 asks for. It only draws;
  * `useWeather` is what fetches, and only on a press.
  */
 export function WeatherView(props: {
@@ -30,6 +25,11 @@ export function WeatherView(props: {
   online: boolean;
   /** Fetches again: Refresh, and Try again after a failure. */
   onLoad: () => void;
+  /** The forecast model asked for, and what choosing another does. */
+  model: WeatherModelId;
+  onModel: (model: WeatherModelId) => void;
+  /** Folds the forecast back to its row; the figures stay for the next open. */
+  onHide?: () => void;
   now?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -57,6 +57,9 @@ function WeatherBody({
   state,
   online,
   onLoad,
+  model,
+  onModel,
+  onHide,
   now: fixedNow,
 }: Parameters<typeof WeatherView>[0]) {
   if (state.status === "idle" || state.status === "loading")
@@ -70,43 +73,33 @@ function WeatherBody({
     );
   const { forecast } = state;
   const now = fixedNow ?? state.now;
-  const days = weatherDaysFrom(forecast, now);
+  const rows = weatherRows(forecast, now);
+  const row = (key: WeatherRow["key"]) => {
+    const found = rows.find((r) => r.key === key);
+    if (found)
+      return (
+        <ForecastRail
+          title={found.title}
+          summary={found.summary}
+          labels={{
+            back: `${WEATHER.copy.earlier}: ${found.title}`,
+            on: `${WEATHER.copy.later}: ${found.title}`,
+          }}
+          cards={found.cards}
+        />
+      );
+    // Every day the forecast held is past; its hours went with them.
+    return key === "days" && weatherDaysFrom(forecast, now).length === 0 ? (
+      <p className={classes.muted}>{WEATHER.copy.outOfDate}</p>
+    ) : null;
+  };
   const sections: Record<
     (typeof WEATHER.sections)[number]["key"],
     () => ReactNode
   > = {
-    pastRain: () => (
-      <StatGrid
-        stats={[
-          {
-            label: WEATHER.copy.pastRain,
-            value: formatRainMm(forecast.pastRainMm),
-            span: true,
-          },
-        ]}
-      />
-    ),
-    days: () =>
-      days.length === 0 ? (
-        <p className={classes.muted}>{WEATHER.copy.outOfDate}</p>
-      ) : (
-        <ForecastList
-          label={WEATHER.title}
-          rows={days.map((day) => {
-            const facts = weatherDayFacts(day, now);
-            return {
-              key: facts.date,
-              day: facts.day,
-              glyph: facts.condition.icon,
-              glyphLabel: facts.condition.label,
-              temperature: facts.temperature,
-              rain: facts.rain,
-              wind: facts.wind,
-              current: facts.date === localDate(now),
-            };
-          })}
-        />
-      ),
+    hours: () => row("hours"),
+    days: () => row("days"),
+    past: () => row("past"),
     credit: () => (
       <a
         className={classes.credit}
@@ -120,7 +113,15 @@ function WeatherBody({
   };
   return (
     <div className={classes.view}>
-      <Header forecast={forecast} online={online} now={now} onLoad={onLoad} />
+      <Header
+        forecast={forecast}
+        online={online}
+        now={now}
+        onLoad={onLoad}
+        model={model}
+        onModel={onModel}
+        onHide={onHide}
+      />
       {contractSectionKeys(WEATHER, "web").map((key) => (
         <div key={key}>{sections[key]()}</div>
       ))}
@@ -133,25 +134,64 @@ function Header({
   online,
   now,
   onLoad,
+  model,
+  onModel,
+  onHide,
 }: {
   forecast: WeatherForecast;
   online: boolean;
   now: number;
   onLoad: () => void;
+  model: WeatherModelId;
+  onModel: (model: WeatherModelId) => void;
+  onHide?: () => void;
 }) {
+  const current = WEATHER_MODELS.find((m) => m.id === model);
   return (
     <div className={classes.header}>
       <span className={classes.age}>{weatherAge(forecast.fetchedAt, now)}</span>
-      <Button
-        variant="outline"
-        compact
-        icon="refresh"
-        onClick={onLoad}
-        disabled={!online}
-        disabledReason={WEATHER.copy.needsConnection}
-      >
-        {WEATHER.copy.refresh}
-      </Button>
+      <div className={classes.actions}>
+        <Menu
+          label={WEATHER.copy.model}
+          title={WEATHER.copy.model}
+          placement="bottom-end"
+          entries={WEATHER_MODELS.map(({ id, label }) => ({
+            id,
+            label,
+            icon: id === model ? "done" : undefined,
+            accessibleLabel: id === model ? `${label}, current` : undefined,
+            // Offline a choice could only show nothing (shared/DESIGN.md §5).
+            disabledReason: online ? undefined : WEATHER.copy.needsConnection,
+            onSelect: () => onModel(id),
+          }))}
+          trigger={(props) => (
+            <Button
+              {...props}
+              variant="outline"
+              compact
+              trailingIcon="expand"
+              aria-label={`${WEATHER.copy.model}: ${current?.label}`}
+            >
+              {current?.label}
+            </Button>
+          )}
+        />
+        <Button
+          variant="outline"
+          compact
+          icon="refresh"
+          onClick={onLoad}
+          disabled={!online}
+          disabledReason={WEATHER.copy.needsConnection}
+        >
+          {WEATHER.copy.refresh}
+        </Button>
+        {onHide && (
+          <Button variant="outline" compact onClick={onHide}>
+            {WEATHER.copy.hide}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

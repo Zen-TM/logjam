@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Clipboard, Text, View } from "react-native";
 import {
   attributeRows,
+  canyonGradeRows,
   formatElevationM,
   mapPointPosition,
   messageFromError,
@@ -25,6 +26,7 @@ import { unavailableReasonText } from "../auth/capabilities";
 import { placeTypeGlyph } from "../places/placeTypeIcon";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaViewer, type ViewerMedia } from "../media/MediaViewer";
+import { NoteBody } from "./WriteUpBody";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
 import { BottomSheet, Icon, Row, SectionHeader } from "../ui";
 import { openPlanMedia, usePlanFilesOnPhone } from "./PlanDownload";
@@ -43,7 +45,7 @@ export function PlanPlaceSheet({
   place: TripPlanPlace | null;
   online: boolean;
   onClose: () => void;
-  onInfo: (message: string, tone?: "info" | "error") => void;
+  onInfo: (message: string, tone?: "done" | "error") => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -93,7 +95,10 @@ export function PlanPlaceSheet({
   // A plan place is always of a system type, so the system definitions
   // label its attributes.
   const attributes = place
-    ? attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues))
+    ? canyonGradeRows(
+        attributeRows(SYSTEM_FIELD_DEFS, userFieldValues(place.fieldValues)),
+        place.fieldValues,
+      )
     : [];
   return (
     <BottomSheet
@@ -127,11 +132,7 @@ export function PlanPlaceSheet({
               {PLACE_PAGE.copy.alsoKnownAs} {place.altNames.join(", ")}
             </Text>
           ) : null}
-          {place.notes ? (
-            <Text style={styles.notes} selectable>
-              {place.notes}
-            </Text>
-          ) : null}
+          {place.notes ? <NoteBody notes={place.notes} /> : null}
           <SectionHeader title={PLACE_PAGE.copy.position} />
           <Row
             icon="place"
@@ -223,5 +224,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
   typeLine: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   detail: { ...muted(theme, textRole.detail) },
-  notes: { ...textRole.body, color: theme.text },
 }));

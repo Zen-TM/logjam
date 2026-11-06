@@ -7,7 +7,12 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS, type TPlace, type TUser } from "@logjam/shared";
+import {
+  SYSTEM_PLACE_TYPE_IDS,
+  WAY_IMPORT,
+  type TPlace,
+  type TUser,
+} from "@logjam/shared";
 
 import UnifiedImportDialog from "./UnifiedImportDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
@@ -68,6 +73,11 @@ const CSV =
   "Test Alpha Gorge,-33.7101,150.3102\n" +
   "Test Bravo Chasm,-33.9202,150.5203\n";
 
+const CAMPSITE: TPlaceType = {
+  id: "t-camp",
+  name: "Campsite",
+} as TPlaceType;
+
 function dialog(currentUser: TUser | null) {
   return (
     <ToastProvider>
@@ -78,7 +88,7 @@ function dialog(currentUser: TUser | null) {
         customFieldDefs={[]}
         onCustomFieldDefsChange={() => {}}
         placeCustomFieldDefs={[]}
-        placeTypes={[CANYON]}
+        placeTypes={[CANYON, CAMPSITE]}
         currentUser={currentUser}
         onRefetchPlaces={() => {}}
         onRefetchTripLogs={() => {}}
@@ -88,14 +98,53 @@ function dialog(currentUser: TUser | null) {
   );
 }
 
-async function loadCsv() {
+async function loadCsv(content = CSV) {
   const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
-  const file = new File([CSV], "places.csv", { type: "text/csv" });
+  const file = new File([content], "places.csv", { type: "text/csv" });
   await act(async () => {
     fireEvent.change(input, { target: { files: [file] } });
   });
   await screen.findByRole("heading", { name: /^Place columns/ });
 }
+
+// Mutation: drop the `setImportPlaceTypeId(landsIn)` in the file loader, or
+// let an old file without the column change the type.
+describe("UnifiedImportDialog, a file that names its type", () => {
+  const typeSelect = () =>
+    screen.getByRole("combobox", { name: /place type/i }) as HTMLSelectElement;
+
+  it("lands in that type; a file without the column keeps the default", async () => {
+    render(dialog(user()));
+    await loadCsv(
+      "name,latitude,longitude,placeType\n" +
+        "Test Alpha Gorge,-33.7101,150.3102,Campsite\n" +
+        "Test Bravo Chasm,-33.9202,150.5203,campsite\n",
+    );
+    expect(typeSelect().value).toBe("t-camp");
+  });
+
+  // Mutation: drop the `unknown` toast, and a list of huts lands in Canyon
+  // without a word.
+  it("says which type it did not find, and keeps the picker's choice", async () => {
+    render(dialog(user()));
+    await loadCsv(
+      "name,latitude,longitude,placeType\n" +
+        "Test Alpha Gorge,-33.7101,150.3102,Hut\n",
+    );
+    expect(
+      screen.getByText(
+        '"Hut" isn\'t one of your place types, so the picker keeps the type you chose.',
+      ),
+    ).toBeTruthy();
+    expect(typeSelect().value).toBe(SYSTEM_PLACE_TYPE_IDS.canyon);
+  });
+
+  it("keeps Canyon for a file without a placeType column", async () => {
+    render(dialog(user()));
+    await loadCsv();
+    expect(typeSelect().value).toBe(SYSTEM_PLACE_TYPE_IDS.canyon);
+  });
+});
 
 // A refetch, consent, or late first load keeps the loaded file, column map,
 // and review intact while open; only reopening starts over.
@@ -135,5 +184,51 @@ describe("UnifiedImportDialog, while open", () => {
     await waitFor(() =>
       expect(document.querySelector("dialog")!.textContent).toBe(reviewText),
     );
+  });
+});
+
+// Mutation that turns these red: send a GPX through parseCsv again, or put
+// "(see console)" back in the parse-warning toast.
+describe("UnifiedImportDialog, files that are not a CSV", () => {
+  it("refuses a GPX with a message that says what is accepted and where GPX goes", async () => {
+    render(dialog(user()));
+    const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+    const file = new File(["<gpx></gpx>"], "route.gpx", {
+      type: "application/gpx+xml",
+    });
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+    const text = document.querySelector("dialog")!.textContent!;
+    expect(text).toContain('"route.gpx" isn\'t a CSV');
+    expect(text).toContain(
+      `open Ways and choose Add, then “${WAY_IMPORT.menu}”`,
+    );
+    expect(text).not.toContain("see console");
+  });
+});
+
+describe("UnifiedImportDialog, confirm step", () => {
+  it("names the skipped row and hides Merge settings when nothing matches", async () => {
+    render(dialog(user()));
+    const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+    const file = new File(
+      [
+        "name,latitude,longitude\n" +
+          "Test Bravo Chasm,-33.9202,150.5203\n" +
+          "Test Charlie Cave,not-a-number,150.1\n",
+      ],
+      "places.csv",
+      { type: "text/csv" },
+    );
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [file] } });
+    });
+    await screen.findByRole("heading", { name: /^Place columns/ });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText(/ready to import/);
+    const text = document.querySelector("dialog")!.textContent!;
+    expect(text).toContain("1 row can't be read and will be skipped (row 3).");
+    expect(text).not.toContain("Merge settings");
   });
 });

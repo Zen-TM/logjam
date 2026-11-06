@@ -4,8 +4,12 @@ import {
   DRAFT_LINE,
   FONT,
   FORM_RHYTHM,
+  ICON_SIZE,
+  OPACITY,
   SPACE,
   TEXT_ROLES,
+  TOAST_MS,
+  WASH,
 } from "./designTokens.js";
 
 describe("FORM_RHYTHM", () => {
@@ -37,6 +41,7 @@ describe("TEXT_ROLES", () => {
         role.weight,
         "leading" in role,
         "uppercase" in role,
+        "tabular" in role,
       ]);
       expect(
         seen.get(key),
@@ -52,10 +57,11 @@ describe("TEXT_ROLES", () => {
   });
 
   // Mutation: add `muted: true` to a role.
-  it("carries no colour: size, weight, leading and capitals only", () => {
+  it("carries no colour: size, weight, leading, capitals and figure width only", () => {
     for (const [name, role] of Object.entries(TEXT_ROLES)) {
       const extra = Object.keys(role).filter(
-        (k) => !["size", "weight", "leading", "uppercase"].includes(k),
+        (k) =>
+          !["size", "weight", "leading", "uppercase", "tabular"].includes(k),
       );
       expect(extra, `${name} carries ${extra.join(", ")}`).toEqual([]);
     }
@@ -83,5 +89,27 @@ describe("DRAFT_LINE", () => {
       px(DRAFT_LINE.measureCasingDash, DRAFT_LINE.measureCasingWidth),
     ).toEqual(px(DRAFT_LINE.measureDash, DRAFT_LINE.coreWidth));
     expect(DRAFT_LINE.measureCasingWidth).toBeGreaterThan(DRAFT_LINE.coreWidth);
+  });
+});
+
+describe("toast, wash and icon tokens", () => {
+  // An error must outlast a done toast by enough to be read (shared/DESIGN.md
+  // §11). Mutation that turns it red: set `TOAST_MS.error` to 5000.
+  it("keeps an error toast at least twice as long as a done one", () => {
+    expect(TOAST_MS.error).toBeGreaterThanOrEqual(2 * TOAST_MS.done);
+  });
+
+  // A wash is a tint that stays under a press, or a press would not show on
+  // it. Mutation: set `WASH.strong` to 0.7, or reorder two steps.
+  it("ascends in WASH and stays under a press", () => {
+    const steps = Object.values(WASH);
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(new Set(steps).size).toBe(steps.length);
+    for (const step of steps) expect(step).toBeLessThan(OPACITY.pressed);
+  });
+
+  // Mutation: set `ICON_SIZE.md` to 18.
+  it("draws icons on a 4px grid", () => {
+    for (const px of Object.values(ICON_SIZE)) expect(px % 4).toBe(0);
   });
 });

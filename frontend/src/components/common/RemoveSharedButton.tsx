@@ -56,7 +56,7 @@ export default function RemoveSharedButton({
     try {
       await remove();
       setConfirming(false);
-      toast.success(`${itemName} removed.`);
+      toast.done(`${itemName} removed.`);
       onRemoved();
     } catch (err) {
       console.error(err);
@@ -85,7 +85,7 @@ export default function RemoveSharedButton({
         >
           {children ?? (
             <>
-              <Icon idea="unshare" size={14} /> Remove
+              <Icon idea="hide" size={14} /> Remove
             </>
           )}
         </button>
@@ -93,7 +93,7 @@ export default function RemoveSharedButton({
         <Button
           compact
           variant="outline"
-          icon="unshare"
+          icon="hide"
           title={label}
           disabled={Boolean(off)}
           disabledReason={off ?? ""}
@@ -105,12 +105,14 @@ export default function RemoveSharedButton({
 
       <ConfirmDialog
         open={confirming}
-        title={confirm.title}
-        message={confirm.body}
-        confirmLabel="Remove"
-        // Not `error`: removing a share destroys nothing, and the red button
-        // the delete confirms use would say otherwise.
-        confirmColor="primary"
+        // Not destructive: removing a share destroys nothing, and the warning
+        // button the delete confirms use would say otherwise.
+        copy={{
+          confirmTitle: confirm.title,
+          confirmBody: confirm.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={() => void handleConfirm()}
         onClose={() => setConfirming(false)}

@@ -8,9 +8,10 @@
   border: 0;
 }
 
+/* A field's label, like TextField's. */
 .label {
-  composes: control from "../textRoles.generated.module.css";
-  color: var(--color-text);
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text-muted);
 }
 
 .summary {

@@ -13,7 +13,6 @@
 // username-only; recipients never see this section at all.
 import { Fragment, useCallback, useState, type ReactNode } from "react";
 import {
-  Alert,
   Clipboard,
   Linking,
   Platform,
@@ -28,19 +27,25 @@ import {
   isReservedFieldKey,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
+  placeLinkedToast,
+  formatPlacePosition,
   placeAttributesTitle,
+  placeSectionTitle,
   placeSources,
   placeStatusLabel,
   placeVerbs,
   type PlaceVerbIdOn,
   type SectionKeysOn,
   userFieldValues,
+  withRowUnit,
   distinctTripTypes,
   formatCanyonGrade,
+  canyonGradeRows,
   formatDistanceM,
   formatTripDate,
   mediaCategory,
   messageFromError,
+  placeRoute,
   routeLengthM,
   placeStatus,
   attributeRows,
@@ -57,11 +62,14 @@ import { useSharePanel } from "../sharing/SharePanel";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { useConnectivity } from "../map/connectivity";
+import { MapCoverageRow } from "../offline/MapCoverageRow";
+import { PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 import { PlaceGaugeSection } from "../gauges/PlaceGaugeSection";
 import { PlaceWeatherSection } from "../weather/PlaceWeatherSection";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
 import { AddWaySheet } from "./AddWaySheet";
+import { NoteBody } from "../plans/WriteUpBody";
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import type { MirrorPlace, MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -81,6 +89,8 @@ import {
   useMirrorMedia,
   useMirrorRoutes,
   useMirrorPlaceLinks,
+  useMirrorIncomingShareOwners,
+  useMirrorShareCounts,
   useMirrorPlaceTypes,
   useMirrorTrips,
 } from "../sync/useSyncQueries";
@@ -90,6 +100,7 @@ import {
   EmptyState,
   ErrorState,
   Hero,
+  Icon,
   IconButton,
   LoadingState,
   Row,
@@ -97,8 +108,8 @@ import {
   StatusPill,
   TextField,
   Toast,
+  confirm,
   type ToastMessage,
-  Icon,
 } from "../ui";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
@@ -180,7 +191,7 @@ export function PlaceDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpenRequest, setShareOpenRequest] = useState(0);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     setToast((prev) => ({ text, tone, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
 
@@ -198,6 +209,8 @@ export function PlaceDetailScreen({
   const [foreignKey, setForeignKey] = useState<string | null>(null);
   const [resolvingForeign, setResolvingForeign] = useState(false);
 
+  const shareOwners = useMirrorIncomingShareOwners();
+  const shareCounts = useMirrorShareCounts();
   const place = query.data;
 
   if (query.loading && !place) return <LoadingState />;
@@ -216,8 +229,9 @@ export function PlaceDetailScreen({
     trip.places.some((link) => link.id === placeId),
   );
   const status = placeStatus(place, linkedTrips.length);
+  const isShared = (shareCounts.data?.[placeId] ?? 0) > 0;
   const statusMeta = placeStatusMeta(theme)[status];
-  const grade = formatCanyonGrade(place);
+  const grade = formatCanyonGrade(place.fieldValues);
 
   const photoCount = attachments.filter((item) => {
     const category = mediaCategory(item.mediaType);
@@ -226,8 +240,9 @@ export function PlaceDetailScreen({
   // The place's route slot, as filled by a DRAWN route. It is a Route row,
   // not media, so nothing in MediaStrip would ever show it — and a link that
   // appears to do nothing is worse than no link at all.
-  const linkedRoute =
-    (routes.data ?? []).find((route) => route.placeId === placeId) ?? null;
+  const slot = placeRoute(placeId, routes.data ?? [], attachments);
+  const linkedRoute = slot?.kind === "drawn" ? slot.route : null;
+  const hasRoute = slot !== null;
   // Symmetric and many-to-many, unlike the route slot: a carpark serving three
   // canyons off one trailhead is linked from all three, and the link is stored
   // once with this place at either end.
@@ -268,16 +283,19 @@ export function PlaceDetailScreen({
       ?.name ?? "Place";
   const storedFields = userFieldValues(place.fieldValues);
   const labellingDefs = [...fieldDefs, ...(place.fieldDefsSnapshot ?? [])];
-  const customFields = attributeRows(labellingDefs, storedFields);
+  const customFields = canyonGradeRows(
+    attributeRows(labellingDefs, storedFields),
+    place.fieldValues,
+  ).map(withRowUnit);
 
   // Position is what every place has. Type-specific attributes render in the
   // type's own attribute table below rather than in bespoke stat tiles.
-  const position = `${place.latitude.toFixed(5)}, ${place.longitude.toFixed(5)}`;
+  const position = formatPlacePosition(place.latitude, place.longitude);
   const copyPosition = () => {
     // RN core Clipboard: deprecated upstream but still shipped, and it needs no
     // native module — the same copy the waypoint and tapped-point sheets use.
     Clipboard.setString(position);
-    notify(PLACE_PAGE.copy.copyPosition, "info");
+    notify(PLACE_PAGE.copy.copyPosition, "done");
   };
 
   /**
@@ -299,7 +317,7 @@ export function PlaceDetailScreen({
             : action === "notes"
               ? "Added to the notes."
               : "Discarded.",
-          "info",
+          "done",
         );
       })
       .catch((err: unknown) => {
@@ -316,10 +334,7 @@ export function PlaceDetailScreen({
         ? `maps:0,0?q=${label}@${place.latitude},${place.longitude}`
         : `geo:${place.latitude},${place.longitude}?q=${place.latitude},${place.longitude}(${label})`;
     Linking.openURL(url).catch(() => {
-      Alert.alert(
-        "Couldn't open maps",
-        "No maps app is available on this device.",
-      );
+      notify("No maps app is available on this device.", "error");
     });
   };
 
@@ -345,11 +360,14 @@ export function PlaceDetailScreen({
         <View style={styles.pillRow}>
           {/* The grade rides as a pill rather than as the eyebrow: the eyebrow
               style is uppercase, and a place grade is written with a lowercase
-              v/a ("v4a4 III") — upcasing it renders a grade nobody writes. */}
+              v/a ("v4a4III") — upcasing it renders a grade nobody writes. */}
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           <StatusPill
-            label={placeStatusLabel(status, linkedTrips.length)}
-            icon={statusMeta.icon}
+            label={placeStatusLabel(
+              status,
+              linkedTrips.length,
+              shareOwners.data?.[placeId],
+            )}
             hue={statusMeta.hue}
           />
         </View>
@@ -392,11 +410,23 @@ export function PlaceDetailScreen({
           accessibilityLabel={`Copy the coordinates of ${place.name}`}
           onPress={copyPosition}
         />
+        <MapCoverageRow
+          bbox={[
+            place.longitude - PLACE_FOCUS_DEGREES,
+            place.latitude - PLACE_FOCUS_DEGREES,
+            place.longitude + PLACE_FOCUS_DEGREES,
+            place.latitude + PLACE_FOCUS_DEGREES,
+          ]}
+        />
       </>
     ),
 
     navigate: () => (
-      <Row icon="navigateTo" title={copy.openInMaps} onPress={openInMapsApp} />
+      <Row
+        icon="openExternal"
+        title={copy.openInMaps}
+        onPress={openInMapsApp}
+      />
     ),
 
     weather: () => <PlaceWeatherSection place={place} />,
@@ -405,7 +435,13 @@ export function PlaceDetailScreen({
     gauge: () =>
       place.gaugeId || isOwner ? (
         <>
-          <SectionHeader title={copy.gauge} />
+          <SectionHeader
+            title={placeSectionTitle("gauge", copy.gauge, {
+              owned: isOwner,
+              shared: isShared,
+              filled: Boolean(place.gaugeId),
+            })}
+          />
           <PlaceGaugeSection
             latitude={place.latitude}
             longitude={place.longitude}
@@ -427,7 +463,13 @@ export function PlaceDetailScreen({
     attributes: () =>
       customFields.length > 0 ? (
         <>
-          <SectionHeader title={placeAttributesTitle(placeTypeName)} />
+          <SectionHeader
+            title={placeSectionTitle(
+              "attributes",
+              placeAttributesTitle(placeTypeName),
+              { owned: isOwner, shared: isShared, filled: true },
+            )}
+          />
           <AttributeTable rows={customFields} />
         </>
       ) : null,
@@ -450,9 +492,7 @@ export function PlaceDetailScreen({
               icon="help"
               title={item.label}
               subtitle={foreignValueText(item.value)}
-              right={
-                <Icon idea="disclosure" size={20} color={theme.textMuted} />
-              }
+              chevron
               onPress={() => setForeignKey(item.key)}
             />
           ))}
@@ -462,10 +502,14 @@ export function PlaceDetailScreen({
     notes: () => (
       <>
         <SectionHeader
-          title={place.notes && isOwner ? copy.notesVisible : copy.notes}
+          title={placeSectionTitle("notes", copy.notes, {
+            owned: isOwner,
+            shared: isShared,
+            filled: Boolean(place.notes),
+          })}
         />
         {place.notes ? (
-          <Text style={styles.notes}>{place.notes}</Text>
+          <NoteBody notes={place.notes} />
         ) : (
           <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
@@ -475,7 +519,14 @@ export function PlaceDetailScreen({
     sources: () =>
       sources.length > 0 ? (
         <>
-          <SectionHeader title={copy.sources} count={sources.length} />
+          <SectionHeader
+            title={placeSectionTitle("sources", copy.sources, {
+              owned: isOwner,
+              shared: isShared,
+              filled: true,
+            })}
+            count={sources.length}
+          />
           {sources.map((source, index) => (
             <Row
               key={index}
@@ -499,7 +550,11 @@ export function PlaceDetailScreen({
     photos: () => (
       <>
         <SectionHeader
-          title={copy.photos}
+          title={placeSectionTitle("photos", copy.photos, {
+            owned: isOwner,
+            shared: isShared,
+            filled: photoCount > 0,
+          })}
           count={photoCount > 0 ? photoCount : undefined}
         />
         <MediaStrip
@@ -509,14 +564,22 @@ export function PlaceDetailScreen({
           linkedId={placeId}
           media={attachments}
           emptyHint={copy.photosEmpty}
+          readOnly={!isOwner}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "done")}
         />
       </>
     ),
 
     route: () => (
       <>
-        <SectionHeader title={copy.route} />
+        <SectionHeader
+          title={placeSectionTitle("route", copy.route, {
+            owned: isOwner,
+            shared: isShared,
+            filled: hasRoute,
+          })}
+        />
         {/* One route per place — the API enforces it, so the UI has to as well
             (see `limit` in MediaStrip).
 
@@ -559,7 +622,9 @@ export function PlaceDetailScreen({
             linkedId={placeId}
             media={attachments}
             emptyHint={copy.routeEmpty}
+            readOnly={!isOwner}
             onFailed={(text) => notify(text, "error")}
+            onAdded={(text) => notify(text, "done")}
             onShowRoute={(item) => {
               resolveRouteAttachmentBbox({
                 mediaId: item.id,
@@ -654,9 +719,7 @@ export function PlaceDetailScreen({
                 hue={theme.accent}
                 title={tripTitle(trip)}
                 subtitle={formatTripDate(trip.date)}
-                right={
-                  <Icon idea="disclosure" size={20} color={theme.textMuted} />
-                }
+                chevron
                 onPress={() => onOpenTrip(trip)}
               />
             ))
@@ -686,8 +749,6 @@ export function PlaceDetailScreen({
           <IconButton
             icon="overflow"
             accessibilityLabel={`Actions for ${place.name}`}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }
@@ -714,7 +775,7 @@ export function PlaceDetailScreen({
         onShowOnMap={onShowOnMap}
         onLogTrip={() => setLogging(true)}
         onEdit={() => setEditing(true)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
         onGone={onDeleted}
       />
@@ -723,7 +784,7 @@ export function PlaceDetailScreen({
         visible={editing}
         place={place}
         onClose={() => setEditing(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <TripEditSheet
@@ -733,7 +794,7 @@ export function PlaceDetailScreen({
         initialPlaces={[{ id: place.id, name: place.name }]}
         existingTypes={distinctTripTypes(trips.data ?? [])}
         onClose={() => setLogging(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       {/* Changing what fills the route slot, from the place it belongs to —
@@ -784,10 +845,10 @@ export function PlaceDetailScreen({
                     onPress={() => {
                       setLinking(false);
                       createPlaceLinkLocal(placeId, row.id)
-                        .then(() => notify(`Linked to ${row.name}.`, "info"))
+                        .then(() => notify(placeLinkedToast(row.name), "done"))
                         .catch((err: unknown) => {
                           console.error(err);
-                          notify("Couldn't link that place.", "error");
+                          notify(copy.linkFailed, "error");
                         });
                     }}
                   />
@@ -814,8 +875,8 @@ export function PlaceDetailScreen({
           <Row
             icon="link"
             hue={theme.warning}
-            title="Unlink from this place"
-            subtitle="Both places are kept."
+            title={copy.unlinkFromPlace}
+            subtitle={copy.unlinkHint}
             onPress={() => {
               const target = (placeLinks.data ?? []).find(
                 (link) =>
@@ -825,10 +886,10 @@ export function PlaceDetailScreen({
               setLinkMenuId(null);
               if (!target) return;
               deletePlaceLinkLocal(target.id)
-                .then(() => notify("Unlinked.", "info"))
+                .then(() => notify(copy.unlinked, "done"))
                 .catch((err: unknown) => {
                   console.error(err);
-                  notify("Couldn't unlink that place.", "error");
+                  notify(copy.unlinkFailed, "error");
                 });
             }}
           />
@@ -893,18 +954,18 @@ export function PlaceDetailScreen({
             onPress={() => {
               const item = foreignItem;
               if (!item) return;
-              Alert.alert(
-                `Discard "${item.label}"?`,
-                "The value is removed from this place. This can't be undone.",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Discard",
-                    style: "destructive",
-                    onPress: () => runForeignAction("discard"),
-                  },
-                ],
-              );
+              void (async () => {
+                if (
+                  await confirm({
+                    confirmTitle: `Discard "${item.label}"?`,
+                    confirmBody:
+                      "The value is removed from this place. This can't be undone.",
+                    confirmLabel: "Discard",
+                    tone: "destructive",
+                  })
+                )
+                  runForeignAction("discard");
+              })();
             }}
           />
         </View>
@@ -937,7 +998,7 @@ export function PlaceDetailScreen({
               setRouteSlotMenu(false);
               if (!target) return;
               updateRouteLocal(target.id, { placeId: null })
-                .then(() => notify("Route unlinked.", "info"))
+                .then(() => notify("Route unlinked.", "done"))
                 .catch((err: unknown) => {
                   console.error(err);
                   notify(
@@ -960,7 +1021,7 @@ export function PlaceDetailScreen({
         visible={addingWay}
         onClose={() => setAddingWay(false)}
         onDrawRoute={onDrawRoute ? () => onDrawRoute(placeId) : undefined}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
       />
 
@@ -1072,10 +1133,6 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   action: { flex: 1 },
   muted: { ...muted(theme, textRole.detail) },
-  notes: {
-    ...textRole.paragraph,
-    color: theme.text,
-  },
   spinner: { alignSelf: "flex-start" },
   sheetBody: { gap: spacing(1) },
   // A table, not a card: a filled card reads as a tappable control, which

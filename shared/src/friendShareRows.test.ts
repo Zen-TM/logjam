@@ -159,7 +159,7 @@ describe("unshareAllConfirm", () => {
       friendName: FRIEND,
       includesPlace: false,
     });
-    expect(confirm.title).toBe("Unshare 3 items from bob?");
+    expect(confirm.title).toBe("Stop sharing 3 items with bob?");
     expect(confirm.body).toContain("You stay friends");
     expect(confirm.body).toContain("no undo");
     // Never claims it recalls what the friend already copied.
@@ -179,7 +179,7 @@ describe("unshareAllConfirm", () => {
     expect(
       unshareAllConfirm({ count: 1, friendName: FRIEND, includesPlace: false })
         .title,
-    ).toBe("Unshare 1 item from bob?");
+    ).toBe("Stop sharing 1 item with bob?");
   });
 });
 
@@ -240,7 +240,7 @@ describe("outcome messages", () => {
   it("reports a clean copy run as info", () => {
     expect(copyOutcomeMessage({ copied: 2, failed: [] })).toEqual({
       text: "Saved 2 copies.",
-      tone: "info",
+      tone: "done",
     });
   });
 
@@ -351,7 +351,7 @@ describe("copyAndRemoveOutcomeMessage", () => {
       copyAndRemoveOutcomeMessage({ ...clean, done: ["Claustral"] }),
     ).toEqual({
       text: "Saved 1 copy and removed the shared one.",
-      tone: "info",
+      tone: "done",
     });
   });
 

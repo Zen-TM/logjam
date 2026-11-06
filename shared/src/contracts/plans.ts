@@ -28,8 +28,10 @@ import {
 import { SYSTEM_PLACE_TYPES } from "../placeTypes.js";
 import type { ScreenContract } from "./types.js";
 import { formatBytes } from "../format.js";
+import { friendMatches } from "../friendSearch.js";
 import { mediaSkippedSentence } from "../friendShareRows.js";
 import { todayDateKey } from "../logbook.js";
+import { PLACE_FORM } from "./placeForm.js";
 
 export const TRIP_PLANS_LIST = {
   id: "plans.list",
@@ -55,6 +57,7 @@ export const TRIP_PLANS_LIST = {
       "A plan is where a group gets ready for a trip: the write-up, the places and ways, who's coming and their details.",
     noUpcomingTitle: "Nothing coming up",
     noPastTitle: "No past plans",
+    noPastBody: "A plan moves here once its dates have passed.",
     noArchivedTitle: "Nothing archived",
     // The hero's line and Logjam GPS's More row, when nothing is coming up.
     nothingPlanned: "Nothing planned",
@@ -180,6 +183,9 @@ export function tripPlansEmpty(
         : bucket === "past"
           ? copy.noPastTitle
           : copy.noArchivedTitle,
+    // A new plan would not land here, so the state says where plans arrive
+    // instead of offering one.
+    body: bucket === "past" ? copy.noPastBody : undefined,
   };
 }
 
@@ -286,7 +292,7 @@ export function tripPlanRowSubtitle(
 }
 
 export function tripPlanWaitingLine(username: string): string {
-  return `Waiting for ${username} to let you in`;
+  return `Waiting for ${username} to accept you`;
 }
 
 /** How many plans wait on the caller: invites they have not answered. Drives
@@ -394,6 +400,9 @@ export const TRIP_PLAN_PAGE = {
 
     // The write-up.
     writeUpEmpty: "Nothing written yet.",
+    writeUpEmptyTitle: "No write-up yet",
+    writeUpEmptyBody:
+      "Sections for the route, the meeting point and what to bring go here.",
     sectionTitle: "Write-up section",
     sectionNewTitle: "New write-up section",
     sectionTitleField: "Title",
@@ -436,7 +445,7 @@ export const TRIP_PLAN_PAGE = {
     printFormsNote:
       "Only the Carpooling and Safety contacts forms can be printed, and only when everyone in the plan sees the answers.",
     printIntro:
-      "For someone not on the trip, such as a parent. It\u2019s a file you keep or send, not a link.",
+      "For someone not on the trip, such as a parent. It's a file you keep or send, not a link.",
     printGoing: "Who's going",
     printSubmit: "Print or save as PDF",
     printLeaders: "Leaders:",
@@ -444,8 +453,8 @@ export const TRIP_PLAN_PAGE = {
     itemNotes: "Notes",
     itemSaveFailed: "Couldn't save that.",
     itemGone: "This was deleted from the plan.",
-    itemOtherNames: "Other names",
-    itemOtherNamesHint: "Separate them with commas.",
+    itemAlsoKnownAs: PLACE_FORM.copy.alsoKnownAs,
+    itemAlsoKnownAsHint: PLACE_FORM.copy.alsoKnownAsHint,
     itemLatitude: "Latitude",
     itemLongitude: "Longitude",
     itemElevation: "Elevation (m)",
@@ -454,15 +463,16 @@ export const TRIP_PLAN_PAGE = {
     placeTypeFallback: "Place",
     placeSetAside: "Set aside",
     placeSetAsideHint:
-      "The person who added this place had these attributes, and its type here has no field for them. Save a copy to keep them.",
+      "The person who added this place had these attributes, and its type here doesn't have them. Save a copy to keep them.",
     placeCopyFailed: "Couldn't copy the coordinates.",
     tripLogPlaces: "Places on this trip",
     tripLogNext: "Next",
 
     // Forms.
-    formsEmptyLeader:
-      "No forms yet. Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
-    formsEmpty: "No forms yet.",
+    formsEmpty: "No forms yet",
+    formsEmptyBodyLeader:
+      "Start from gear, carpooling, experience, first aid, safety contacts or trip rules.",
+    formsEmptyBody: "A leader adds forms for everyone to fill in.",
     pillNotAnswered: "Not answered",
     seenByLeaders: "Leaders see answers",
     seenByMembers: "Everyone sees answers",
@@ -476,12 +486,12 @@ export const TRIP_PLAN_PAGE = {
     peopleAsking: "Asking to join",
     peopleGoing: "Going",
     peopleInvited: "Invited",
-    letIn: "Let in",
-    turnDown: "Turn down",
+    letIn: "Accept",
+    turnDown: "Decline",
     roleFailed: "Couldn't change their role.",
-    letInFailed: "Couldn't let them in.",
-    turnDownFailed: "Couldn't turn them down.",
-    turnedDown: "Request turned down.",
+    letInFailed: "Couldn't accept them.",
+    turnDownFailed: "Couldn't decline them.",
+    turnedDown: "Request declined.",
     removeFailed: "Couldn't remove them.",
     cancelInvite: "Cancel invite",
     personUnanswered: "Hasn't answered",
@@ -760,7 +770,11 @@ export const TRIP_PLAN_INVITE = {
   ],
   copy: {
     back: "Back to people",
-    searchField: "Search by username",
+    searchField: "Search friends or usernames",
+    friends: "Friends",
+    others: "Other people",
+    othersHint:
+      "Not a friend yet? Type their username to find them. People you invite need not be friends.",
     role: "Role",
     inviteSend: "Invite",
     invited: "Invited.",
@@ -779,6 +793,30 @@ export const TRIP_PLAN_INVITE = {
     searchFailed: "Couldn't search users.",
   },
 } as const satisfies ScreenContract;
+
+/** What each role can do, as Invite people tells it before a leader picks.
+ *  Which verbs a role runs is `PLAN_VERBS` and the lists beside it. */
+export const TRIP_PLAN_ROLE_ABOUT: Record<TripPlanRole, string> = {
+  member: "sees the plan, adds places and ways, answers forms and can leave.",
+  editor: "also edits the plan and its write-up.",
+  leader:
+    "also invites people, sets roles, runs forms, archives and deletes the plan.",
+};
+
+/** Invite people's two lists: friends matching what is typed (all of them
+ *  when nothing is), then the people the username search found who are not
+ *  friends. */
+export function tripPlanInviteLists<P extends { id: string; username: string }>(
+  friends: readonly P[],
+  found: readonly P[],
+  query: string,
+): { friends: P[]; others: P[] } {
+  const ids = new Set(friends.map((friend) => friend.id));
+  return {
+    friends: friends.filter((friend) => friendMatches(friend.username, query)),
+    others: found.filter((person) => !ids.has(person.id)),
+  };
+}
 
 /** A live invite link's row: "Made Mon 19 Oct, works until Mon 26 Oct",
  *  each the day it is where the reader is. */
@@ -809,7 +847,7 @@ export function tripPlanInPlanNow(words: string): string {
 
 /** The toast after asking to join through a link. */
 export function tripPlanAskedMessage(leader: string): string {
-  return `Asked to join. ${leader} will let you in.`;
+  return `Asked to join. ${leader} will accept you.`;
 }
 
 /** What goes in the message a plan link is sent with. */
@@ -873,7 +911,7 @@ export const TRIP_PLAN_FORMS = {
       key: "list",
       on: "gps",
       reason:
-        "A phone has no room for a column per question, so each person's answers stack under their name.",
+        "A phone is too narrow for a column per question, so each person's answers stack under their name.",
     },
   ],
   copy: {
@@ -928,10 +966,6 @@ export const TRIP_PLAN_FORMS = {
     saveForm: "Save",
     formSaveFailed: "Couldn't save the form.",
     titleNeeded: "Give the form a title.",
-    discardTitle: "Discard changes?",
-    discardBody: "What you changed in this form will be lost.",
-    discardKeep: "Keep editing",
-    discardConfirm: "Discard changes",
     // The chooser a new form starts from.
     chooseTemplates: "Templates",
     chooseMine: "From your other plans",
@@ -1517,32 +1551,29 @@ export function tripPlanAddOutcome(args: {
   outOfSpace: boolean;
   /** The stop's reason, when one stopped the run. */
   why: string | null;
-}): { message: string; tone: "info" | "error" } | null {
+}): { message: string; tone: "done" | "error" } | null {
   if (args.added === 0) return null;
   const photos = mediaSkippedSentence(args.skipped, args.outOfSpace);
   return {
     message: [tripPlanAddedMessage(args.added, args.asked), photos, args.why]
       .filter(Boolean)
       .join(" "),
-    tone: photos || args.why ? "error" : "info",
+    tone: photos || args.why ? "error" : "done",
   };
 }
 
-/** Start a trip log's line: what saving the picked places brings. Photos
- *  are promised only when a picked place has some. */
+/** Start a trip log's line: which of the plan's places the trip can link.
+ *  Only those already in the caller's places are listed. */
 export function tripPlanTripLogPlacesLine(
-  picked: readonly { media: readonly unknown[] }[],
-  withPhotos: boolean,
+  matched: number,
+  total: number,
 ): string {
-  if (!picked.some((place) => place.media.length > 0))
-    return "Each place you pick is saved to your places first, then linked.";
-  return `Each place you pick is saved to your places first, ${withPhotos ? "with" : "without"} its photos, then linked.`;
-}
-
-/** Start a trip log stopped partway: what is in the user's places already. */
-export function tripPlanTripLogStopped(saved: number, why: string): string {
-  if (saved === 0) return why;
-  return `${saved === 1 ? "1 copy" : `${saved} copies`} saved to your places. ${why}`;
+  if (matched === 0)
+    return "None of this plan's places are in your places, so the trip links none.";
+  const left = total - matched;
+  if (left === 0)
+    return "These are all in your places, so the trip can link any of them.";
+  return `Only places you already have are listed; the other ${left} ${left === 1 ? "is" : "are"} left out.`;
 }
 
 /** Where Save a copy put it. */

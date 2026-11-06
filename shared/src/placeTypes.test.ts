@@ -6,6 +6,8 @@ import {
   SYSTEM_FIELD_DEFS,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_COLOR_NAMES,
+  PLACE_TYPE_ICON_KEYS,
+  NEW_PLACE_TYPE_ICON_KEY,
   placeTypeColorName,
   RESERVED_FIELD_KEYS,
   SHARED_PLACE_COLOR,
@@ -295,5 +297,15 @@ describe("VISITED_PLACE_COLOR", () => {
       (PLACE_TYPE_COLORS as readonly string[]).map((c) => c.toUpperCase()),
     ).not.toContain(visited);
     expect(visited).not.toBe(SHARED_PLACE_COLOR.toUpperCase());
+  });
+});
+
+// Mutation that turns this red: set NEW_PLACE_TYPE_ICON_KEY to "map-pin".
+describe("NEW_PLACE_TYPE_ICON_KEY", () => {
+  it("is a choosable icon that no built-in type wears", () => {
+    expect(PLACE_TYPE_ICON_KEYS).toContain(NEW_PLACE_TYPE_ICON_KEY);
+    for (const type of SYSTEM_PLACE_TYPES) {
+      expect(type.iconKey).not.toBe(NEW_PLACE_TYPE_ICON_KEY);
+    }
   });
 });

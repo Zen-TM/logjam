@@ -1,5 +1,5 @@
 // A plan's People view: people asking to join first (leaders
-// only), let in or turned down on their row; then
+// only), accepted or declined on their row; then
 // who's going, leaders first; then who's invited (leaders only). A leader's ⋯
 // on someone going changes their role or removes them.
 import { useState } from "react";
@@ -80,7 +80,7 @@ export default function PlanPeople({
     busy.start(id);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       onChanged();
     } catch (err) {
       console.error(err);
@@ -188,21 +188,25 @@ export default function PlanPeople({
               trailing={
                 !archived && (
                   <>
-                    <IconButton
+                    <Button
+                      compact
+                      variant="filled"
                       icon="accept"
-                      tone="filled"
-                      label={copy.letIn}
-                      disabled={busy.isBusy(member.user.id)}
-                      disabledReason="Replying…"
+                      busy={busy.isBusy(member.user.id)}
                       onClick={() => letIn(member)}
-                    />
-                    <IconButton
+                    >
+                      {copy.letIn}
+                    </Button>
+                    <Button
+                      compact
+                      variant="outline"
                       icon="ignore"
-                      label={copy.turnDown}
                       disabled={busy.isBusy(member.user.id)}
                       disabledReason="Replying…"
                       onClick={() => setTurningDown(member)}
-                    />
+                    >
+                      {copy.turnDown}
+                    </Button>
                   </>
                 )
               }
@@ -289,6 +293,7 @@ export default function PlanPeople({
         open={personView != null}
         title={personView?.name}
         onClose={() => setPersonId(null)}
+        footer={<Button onClick={() => setPersonId(null)}>Close</Button>}
       >
         {person && personView && (
           <div className={classes.list}>
@@ -324,20 +329,7 @@ export default function PlanPeople({
       </Dialog>
       <ConfirmDialog
         open={removeCopy != null}
-        title={removeCopy?.confirmTitle}
-        message={
-          <>
-            <p>{removeCopy?.confirmBody}</p>
-            {removeCopy?.deleteFilesLabel && (
-              <Checkbox
-                label={removeCopy.deleteFilesLabel}
-                checked={deleteFiles}
-                onChange={setDeleteFiles}
-              />
-            )}
-          </>
-        }
-        confirmLabel={removeCopy?.confirmLabel}
+        copy={removeCopy}
         busy={busy.isBusy(removing?.user.id)}
         onClose={() => setRemoving(null)}
         onConfirm={() => {
@@ -350,12 +342,18 @@ export default function PlanPeople({
             tripPlanRemovedMessage(who.user.username),
           ).then(() => setRemoving(null));
         }}
-      />
+      >
+        {removeCopy?.deleteFilesLabel && (
+          <Checkbox
+            label={removeCopy.deleteFilesLabel}
+            checked={deleteFiles}
+            onChange={setDeleteFiles}
+          />
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={steppingCopy != null}
-        title={steppingCopy?.confirmTitle}
-        message={steppingCopy?.confirmBody}
-        confirmLabel={steppingCopy?.confirmLabel}
+        copy={steppingCopy}
         busy={busy.isBusy(myUserId)}
         onClose={() => setStepping(null)}
         onConfirm={() => {
@@ -370,10 +368,7 @@ export default function PlanPeople({
       />
       <ConfirmDialog
         open={turnDownCopy != null}
-        title={turnDownCopy?.confirmTitle}
-        message={turnDownCopy?.confirmBody}
-        confirmLabel={turnDownCopy?.confirmLabel}
-        confirmColor="primary"
+        copy={turnDownCopy}
         busy={busy.isBusy(turningDown?.user.id)}
         onClose={() => setTurningDown(null)}
         onConfirm={() => {

@@ -85,7 +85,7 @@ export async function createAndLaunchTopoExport(
     if (queued >= MAX_QUEUED_PER_USER) {
       throw new AppError(
         429,
-        say`You can run ${MAX_QUEUED_PER_USER} exports at a time. Wait for one to finish.`,
+        say`You can make ${MAX_QUEUED_PER_USER} maps at a time. Wait for one to finish.`,
       );
     }
     const live = await tx.topoExportJob.count({
@@ -94,7 +94,7 @@ export async function createAndLaunchTopoExport(
     if (live >= MAX_LIVE_PER_USER) {
       throw new AppError(
         429,
-        say`You have ${MAX_LIVE_PER_USER} exports already. They are deleted after 7 days, so try again once one expires.`,
+        say`You have ${MAX_LIVE_PER_USER} map files already. They are deleted after 7 days, so try again once one expires.`,
       );
     }
     return tx.topoExportJob.create({
@@ -134,10 +134,10 @@ export async function createAndLaunchTopoExport(
         where: { id: exportJob.id },
         data: {
           status: "failed",
-          errorMessage: say`Couldn't start this export. Try again.`,
+          errorMessage: say`Couldn't start this map. Try again.`,
         },
       });
-      throw new AppError(500, say`Couldn't start that export. Try again.`);
+      throw new AppError(500, say`Couldn't start that map. Try again.`);
     }
   }
 

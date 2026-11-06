@@ -19,7 +19,7 @@
 // tool's own panel acting on the draft (DraftToolPanel.tsx) with the line
 // visible.
 import { useMemo, useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   messageFromError,
   copyAndRemoveOutcomeMessage,
@@ -28,7 +28,7 @@ import {
 } from "@logjam/shared";
 
 import { spacing, useTheme, useHues } from "../theme";
-import { BottomSheet, closedSheet, RenameForm, Row } from "../ui";
+import { BottomSheet, closedSheet, confirm, RenameForm, Row } from "../ui";
 import { useSharePanel, useShareRowProps } from "../sharing/SharePanel";
 import { useCopyPanel } from "../sharing/CopySheet";
 import { requestSync } from "../sync/syncEngine";
@@ -45,6 +45,8 @@ import { updateRouteLocal } from "../sync/outbox";
 import type { MirrorRoute } from "../sync/mirrorStore";
 import { exportRoute, ExportUnsupportedError } from "../fileExport";
 import { RouteStatsBody } from "./RouteStatsBody";
+import { MapCoverageRow } from "../offline/MapCoverageRow";
+import { bboxOfPoints } from "../saved/bboxOfPoints";
 
 export function RouteOptionsSheet({
   route,
@@ -233,6 +235,10 @@ export function RouteOptionsSheet({
     onClose();
   };
 
+  const routeBox = bboxOfPoints(
+    route.points.map(([lon, lat]) => ({ lon, lat })),
+  );
+
   const save = (format: "gpx" | "kml") => {
     close();
     setBusy(true);
@@ -253,44 +259,41 @@ export function RouteOptionsSheet({
       .finally(() => setBusy(false));
   };
 
-  const confirmRemoveShare = () => {
+  const confirmRemoveShare = async () => {
     const removal = actions.removeShare;
     if (!removal) return;
     close();
-    Alert.alert(removal.confirmTitle, removal.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        // NOT `destructive`: the owner keeps the route, and the red button the
-        // delete confirm uses would say otherwise.
-        text: "Remove",
-        onPress: () =>
-          removal
-            .run()
-            .then(() => onInfo("Removed."))
-            .catch((err: unknown) => {
-              console.error(err);
-              onError(messageFromError(err, "Couldn't remove that route."));
-            }),
-      },
-    ]);
+    const ok = await confirm({
+      ...removal,
+      confirmLabel: "Remove",
+      // Not `destructive`: the owner keeps the route.
+      tone: "filled",
+    });
+    if (!ok) return;
+    removal
+      .run()
+      .then(() => onInfo("Removed."))
+      .catch((err: unknown) => {
+        console.error(err);
+        onError(messageFromError(err, "Couldn't remove that route."));
+      });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     const removal = actions.delete;
     if (!removal) return;
     close();
-    Alert.alert(removal.confirmTitle, removal.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () =>
-          removal.run().catch((err: unknown) => {
-            console.error(err);
-            onError("Couldn't delete that route.");
-          }),
-      },
-    ]);
+    const ok = await confirm({
+      confirmTitle: `Delete ${route.name}?`,
+      confirmBody: removal.confirmBody,
+      confirmLabel: "Delete",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    removal.run().catch((err: unknown) => {
+      console.error(err);
+      onError("Couldn't delete that route.");
+    });
   };
 
   // Every sub-mode backs out to the verb list; only the list itself closes the
@@ -373,6 +376,13 @@ export function RouteOptionsSheet({
               onPress={onShowOnMap}
             />
           ) : null}
+          {routeBox ? (
+            <MapCoverageRow
+              bbox={routeBox}
+              route={route.points}
+              onSave={close}
+            />
+          ) : null}
           <Row
             title="View stats"
             icon="stats"
@@ -450,7 +460,7 @@ export function RouteOptionsSheet({
             absent rather than offered and refused. */}
           {actions.delete ? (
             <Row
-              title="Delete route"
+              title={wayVerbLabel("delete", "gps")}
               icon="delete"
               hue={theme.warning}
               disabled={busy}
@@ -488,7 +498,7 @@ export function RouteOptionsSheet({
           {actions.removeShare ? (
             <Row
               title={wayVerbLabel("removeShare", "gps")}
-              icon="unshare"
+              icon="hide"
               hue={theme.warning}
               {...shareRowProps}
               disabled={busy || shareRowProps.disabled}

@@ -7,6 +7,7 @@
 // in: that is edited where the way was made.
 import { useId, useState } from "react";
 import {
+  abandonConfirm,
   customFieldDisplayLabel,
   formatFieldValue,
   LATITUDE_RANGE,
@@ -29,8 +30,6 @@ import CustomFieldInput, {
   customFieldValueError,
 } from "../dialogs/CustomFieldInput";
 import { numericFieldError } from "../../numberInput";
-import ConfirmDialog from "../dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import { patchPlanItem } from "../../plansApi";
@@ -102,7 +101,6 @@ export default function PlanItemEditDialog({
       : null;
   const theirsHint = (field: string) =>
     theirs(field) != null ? tripPlanInPlanNow(theirs(field)!) : undefined;
-  const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Record<string, string>) => {
     setValues((was) => ({ ...was, ...next }));
     setError(null);
@@ -150,12 +148,13 @@ export default function PlanItemEditDialog({
         open
         title={place ? copy.itemEditPlace : copy.itemEditWay}
         size="large"
-        onClose={guard.requestClose}
+        onClose={onClose}
+        discard={dirty ? abandonConfirm(place ? "place" : "way", false) : null}
         dismissible={!busy}
-        footer={
+        footer={(requestClose) => (
           <>
             <Button
-              onClick={guard.requestClose}
+              onClick={requestClose}
               disabled={busy}
               disabledReason="Saving…"
             >
@@ -165,7 +164,7 @@ export default function PlanItemEditDialog({
               {copy.sectionSave}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -186,10 +185,10 @@ export default function PlanItemEditDialog({
           {place && (
             <>
               <TextField
-                label={copy.itemOtherNames}
+                label={copy.itemAlsoKnownAs}
                 value={values.altNames}
                 onChange={(event) => set({ altNames: event.target.value })}
-                hint={theirsHint("altNames") ?? copy.itemOtherNamesHint}
+                hint={theirsHint("altNames") ?? copy.itemAlsoKnownAsHint}
               />
               <div className={classes.pair}>
                 <NumberField
@@ -197,6 +196,7 @@ export default function PlanItemEditDialog({
                   required
                   value={values.latitude}
                   onChange={(latitude) => set({ latitude })}
+                  coordinate={{ axis: "latitude", onPair: set }}
                   constraints={LATITUDE}
                   showError={asked}
                   hint={theirsHint("latitude")}
@@ -206,6 +206,7 @@ export default function PlanItemEditDialog({
                   required
                   value={values.longitude}
                   onChange={(longitude) => set({ longitude })}
+                  coordinate={{ axis: "longitude", onPair: set }}
                   constraints={LONGITUDE}
                   showError={asked}
                   hint={theirsHint("longitude")}
@@ -269,14 +270,6 @@ export default function PlanItemEditDialog({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }

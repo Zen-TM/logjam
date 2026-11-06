@@ -46,13 +46,6 @@
   color: var(--color-text-muted);
 }
 
-.notes {
-  composes: paragraph from "../../../textRoles.generated.module.css";
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
 .attributes {
   display: flex;
   flex-direction: column;

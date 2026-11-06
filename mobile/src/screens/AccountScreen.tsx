@@ -19,7 +19,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
@@ -27,6 +27,7 @@ import {
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
   formatCredits,
+  formatCreditsOf,
   confirmEmailChange,
   messageFromError,
   requestEmailChange,
@@ -42,7 +43,8 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { deleteAccountEverywhere } from "../auth/deleteAccount";
 import { getSession } from "../auth/oidcSession";
 import { capabilityRowProps, changeEmailRowProps } from "../auth/capabilities";
-import { CLIENT_VERSION, config } from "../config";
+import { CLIENT_VERSION_LABEL, config } from "../config";
+import { LegalLinks } from "./LegalLinks";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { countLocalEntities, type LocalEntityCounts } from "../sync/syncDb";
@@ -52,6 +54,7 @@ import {
   BottomSheet,
   Button,
   Meter,
+  confirm,
   ErrorBanner,
   ErrorState,
   Hero,
@@ -63,7 +66,6 @@ import {
   TextField,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 
 const copy = ACCOUNT.copy;
@@ -102,7 +104,7 @@ function GuestAccountScreen({
     };
   }, []);
 
-  const startLinking = () => {
+  const startLinking = async () => {
     const message = counts ? linkConfirmationMessage(counts) : null;
     // Nothing recorded yet — there is nothing to warn about, so don't make
     // them dismiss a dialog about their zero places.
@@ -110,10 +112,13 @@ function GuestAccountScreen({
       linkAccount();
       return;
     }
-    Alert.alert("Add this phone's data to an account?", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Continue", onPress: linkAccount },
-    ]);
+    const ok = await confirm({
+      confirmTitle: "Add this phone's data to an account?",
+      confirmBody: message,
+      confirmLabel: "Continue",
+      tone: "filled",
+    });
+    if (ok) linkAccount();
   };
 
   const summary = counts ? describeLocalData(counts) : null;
@@ -157,7 +162,8 @@ function GuestAccountScreen({
           there&apos;s no way to un-upload it.
         </Text>
 
-        <Text style={styles.version}>{CLIENT_VERSION}</Text>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
       </ScreenScroll>
     </View>
   );
@@ -183,12 +189,10 @@ export function AccountScreen({
   onBack,
   backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
   backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const { accountState } = useAccountState();
   // A guest has no account record, no quotas and nothing to sign out of, so
@@ -201,7 +205,6 @@ export function AccountScreen({
       onBack={onBack}
       backLabel={backLabel}
       onSignOut={onSignOut}
-      onOpenFriends={onOpenFriends}
     />
   );
 }
@@ -210,12 +213,10 @@ function LinkedAccountScreen({
   onBack,
   backLabel,
   onSignOut,
-  onOpenFriends,
 }: {
   onBack: () => void;
   backLabel: string;
   onSignOut: SignOutHandler;
-  onOpenFriends: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -226,7 +227,7 @@ function LinkedAccountScreen({
   const [sheet, setSheet] = useState<SheetMode>("closed");
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -314,8 +315,10 @@ function LinkedAccountScreen({
           legend={false}
         />
         <Text style={styles.meterLabel}>
-          {formatCredits(user.monthlyComputeUsage)} of{" "}
-          {formatCredits(user.monthlyComputeCredits)}
+          {formatCreditsOf(
+            user.monthlyComputeUsage,
+            user.monthlyComputeCredits,
+          )}
           {creditsResetLabel ? (
             <Text style={styles.meterHint}> · resets {creditsResetLabel}</Text>
           ) : null}
@@ -323,28 +326,21 @@ function LinkedAccountScreen({
         </Text>
       </>
     ),
-    signIn: () => (
-      <>
-        <SectionHeader title={copy.signIn} />
-        {COGNITO_ACCOUNT ? (
+    // Friends lives on More; the Email row is all that belongs under Sign-in.
+    signIn: () =>
+      COGNITO_ACCOUNT ? (
+        <>
+          <SectionHeader title={copy.signIn} />
           <Row
             icon="email"
             title={copy.email}
             subtitle={online ? user.email : undefined}
             {...changeEmailRowProps(online, config.authMode)}
             onPress={() => setSheet("email")}
-            right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+            chevron
           />
-        ) : null}
-        <Row
-          icon="friends"
-          title="Friends"
-          {...capabilityRowProps("friends", "linked", online)}
-          onPress={onOpenFriends}
-          right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
-        />
-      </>
-    ),
+        </>
+      ) : null,
     leaving: () => (
       <>
         <SectionHeader title={copy.leaving} />
@@ -366,14 +362,19 @@ function LinkedAccountScreen({
         ) : null}
         <Row
           icon="delete"
-          hue={theme.warning}
+          hue={theme.accent}
           title={copy.deleteAccount}
           {...capabilityRowProps("serverPrefs", "linked", online)}
           onPress={() => setSheet("delete")}
         />
       </>
     ),
-    footer: () => <Text style={styles.version}>{CLIENT_VERSION}</Text>,
+    footer: () => (
+      <>
+        <Text style={styles.version}>{CLIENT_VERSION_LABEL}</Text>
+        <LegalLinks />
+      </>
+    ),
   };
   const keys = contractSectionKeys(ACCOUNT, "gps");
 
@@ -658,6 +659,7 @@ function DeleteAccountForm({
         variant="outlineAccent"
         loading={busy}
         disabled={!matches}
+        disabledReason="Type the phrase above first"
         onPress={() => void run()}
       />
     </View>

@@ -261,18 +261,6 @@ describe("the first download", () => {
     registry.placeRegistryWithRegion(true);
     await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
   });
-
-  // Mutation: drop the `wanted === "off"` return.
-  it("is not fetched again by a region download after the user removed it", async () => {
-    publish(build("2026-10-15"));
-    const registry = await load();
-    await registry.requestPlaceRegistry();
-    await registry.removePlaceRegistry();
-    registry.placeRegistryWithRegion(false);
-    expect(await registry.refreshPlaceRegistry()).toBe("skipped");
-    expect(registry.hasPlaceRegistry()).toBe(false);
-    expect([...files.keys()]).toEqual([]);
-  });
 });
 
 describe("a phone that held a region before Logjam GPS had the file", () => {
@@ -286,19 +274,50 @@ describe("a phone that held a region before Logjam GPS had the file", () => {
     expect(prefs.get("placeRegistryWanted")).toBe("on");
   });
 
-  // Mutation: adopt whenever the pref is not "on", not only when never set.
-  it.each([
-    ["a user who removed it", "off", ["basemap-region"]],
-    ["a phone with no saved region", undefined, ["topo-overlay"]],
-  ])("fetches nothing for %s", async (_case, wanted, kinds) => {
-    if (wanted) prefs.set("placeRegistryWanted", wanted);
-    artifacts.kinds = kinds;
+  // A phone that used Remove, when the file could be removed, still holds
+  // "off". It is public data and cannot be removed now, so it is fetched again.
+  // Mutation: restore `!== null` in `adoptForSavedRegions` (the "off" phone
+  // with a region would be left without the file).
+  it('takes a legacy "off" phone with a saved region back to "on" and fetches', async () => {
+    prefs.set("placeRegistryWanted", "off");
+    artifacts.kinds = ["basemap-region"];
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    expect(prefs.get("placeRegistryWanted")).toBe("on");
+  });
+
+  // Mutation: adopt without looking for a region.
+  it('leaves a legacy "off" phone with no saved region alone', async () => {
+    prefs.set("placeRegistryWanted", "off");
+    artifacts.kinds = ["topo-overlay"];
     publish(build("2026-10-15"));
     const registry = await load();
     registry.registerPlaceRegistryRefresh();
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(prefs.get("placeRegistryWanted")).toBe(wanted);
+    expect(prefs.get("placeRegistryWanted")).toBe("off");
+  });
+
+  // Mutation: restore the `=== "off"` return in `placeRegistryWithRegion`.
+  it('fetches for a region download on a legacy "off" phone, and turns it "on"', async () => {
+    prefs.set("placeRegistryWanted", "off");
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.placeRegistryWithRegion(false);
+    await vi.waitFor(() => expect(registry.hasPlaceRegistry()).toBe(true));
+    expect(prefs.get("placeRegistryWanted")).toBe("on");
+  });
+
+  it("fetches nothing for a phone with no saved region", async () => {
+    artifacts.kinds = ["topo-overlay"];
+    publish(build("2026-10-15"));
+    const registry = await load();
+    registry.registerPlaceRegistryRefresh();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(prefs.get("placeRegistryWanted")).toBeUndefined();
   });
 });
 
@@ -307,7 +326,7 @@ describe("the saved file", () => {
   it("is read as the plain JSON the platform saved", async () => {
     publish(build("2026-10-15"));
     const registry = await load();
-    await registry.requestPlaceRegistry();
+    await registry.fetchPlaceRegistry({ allowMetered: true });
     await registry.loadPlaceIndex();
     expect(reads).toEqual([
       `text ${DIR}download.tmp`,
@@ -320,7 +339,9 @@ describe("the saved file", () => {
     const built = build("2026-10-15", ["Wollangambe"]);
     publish(built, built.gzipped);
     const registry = await load();
-    expect(await registry.requestPlaceRegistry()).toBe("updated");
+    expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
+      "updated",
+    );
     expect((await registry.loadPlaceIndex())?.names).toEqual(["Wollangambe"]);
   });
 });
@@ -460,16 +481,15 @@ describe("free space", () => {
   const needs = (built: ReturnType<typeof build>) => built.plain.length;
 
   // Mutation: drop the `assertSpaceFor` call.
-  it("refuses a download the user asked for, saying so", async () => {
+  it("refuses a download the user asked for, by rejecting", async () => {
     const built = build("2026-10-15");
     publish(built);
     disk.free = needs(built);
     const registry = await load();
-    const toasts: string[] = [];
-    registry.onPlaceRegistryToast(({ text }) => toasts.push(text));
-    expect(await registry.requestPlaceRegistry()).toBe("failed");
+    await expect(
+      registry.fetchPlaceRegistry({ allowMetered: true }),
+    ).rejects.toThrow(/^Needs about/);
     expect(download).not.toHaveBeenCalled();
-    expect(toasts).toEqual([expect.stringMatching(/^Needs about/)]);
   });
 
   // Mutation: let a joining refresh await the refused run's rejection.
@@ -478,10 +498,12 @@ describe("free space", () => {
     publish(built);
     disk.free = needs(built);
     const registry = await load();
-    const asked = registry.requestPlaceRegistry();
+    const asked = registry
+      .fetchPlaceRegistry({ allowMetered: true })
+      .catch((err: unknown) => err);
     const refresh = registry.refreshPlaceRegistry();
     expect(await refresh).toBe("skipped");
-    expect(await asked).toBe("failed");
+    expect(await asked).toBeInstanceOf(Error);
   });
 
   // Mutation: drop the `hasSpaceFor` call.
@@ -504,24 +526,9 @@ describe("one fetch at a time", () => {
     network.expensive = true;
     const registry = await load();
     const refresh = registry.refreshPlaceRegistry();
-    const asked = registry.requestPlaceRegistry();
+    const asked = registry.fetchPlaceRegistry({ allowMetered: true });
     expect(await refresh).toBe("skipped");
     expect(await asked).toBe("updated");
-  });
-});
-
-describe("what Download says", () => {
-  // Mutation: toast from `fetchPlaceRegistry`, for every caller.
-  it("toasts the user's own download, and nothing for a region's", async () => {
-    network.connected = false;
-    const registry = await load();
-    const toasts: string[] = [];
-    registry.onPlaceRegistryToast(({ text }) => toasts.push(text));
-    registry.placeRegistryWithRegion(false);
-    await registry.fetchPlaceRegistry({});
-    expect(toasts).toEqual([]);
-    await registry.requestPlaceRegistry();
-    expect(toasts).toEqual(["Needs a connection"]);
   });
 });
 
@@ -638,16 +645,6 @@ describe("the index in memory", () => {
     timer.mockRestore();
   });
 
-  // Mutation: leave `index` set in `removePlaceRegistry`. The search box reads
-  // it from here on every render, never a copy (MapSearchBar.tsx).
-  it("is freed by Remove", async () => {
-    holdOnPhone(build("2026-09-15"));
-    const registry = await load();
-    await registry.loadPlaceIndex();
-    await registry.removePlaceRegistry();
-    expect(registry.placeIndex()).toBeNull();
-  });
-
   // Mutation: keep an index built in the refresh's parse step.
   it("is not built by a refresh nobody searched after", async () => {
     prefs.set("placeRegistryWanted", "on");
@@ -679,7 +676,9 @@ describe("one ranking, on the phone and on the API", () => {
         strToU8(JSON.stringify(fixture)),
       );
       const registry = await load();
-      expect(await registry.requestPlaceRegistry()).toBe("updated");
+      expect(await registry.fetchPlaceRegistry({ allowMetered: true })).toBe(
+        "updated",
+      );
       const index = await registry.loadPlaceIndex();
       if (!index) throw new Error("the fixture did not load");
       const expected = searchPlaces(indexPlaceRegistry(fixture), query, 8);

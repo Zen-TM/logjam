@@ -6,6 +6,7 @@
 // is (`adoptTheirs`), so a save never sends another leader's change back.
 import { useEffect, useId, useRef, useState } from "react";
 import {
+  abandonConfirm,
   parseTripPlanFormCreate,
   TRIP_PLAN_FORM_TITLE_MAX_LENGTH,
   TRIP_PLAN_MAX_OPTIONS,
@@ -34,7 +35,6 @@ import {
   TextField,
 } from "../../ui";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import { ApiError } from "../../errors/ApiError";
 import {
@@ -126,7 +126,6 @@ function Builder({
   // Against what a Save would compare: a new form against nothing at all.
   const base = seen ?? picked0;
   const dirty = values != null && base != null && !tripPlanSame(values, base);
-  const guard = useUnsavedChangesGuard(dirty, onClose);
   // The API refuses widening a form others answered for leaders only.
   const widenLocked =
     form != null && form.visibleTo === "leaders" && form.answers.length > 0;
@@ -174,13 +173,9 @@ function Builder({
   }
 
   const [leaving, setLeaving] = useState(false);
-  const footer = (
+  const footer = (requestClose: () => void) => (
     <>
-      <Button
-        onClick={guard.requestClose}
-        disabled={busy}
-        disabledReason="Saving…"
-      >
+      <Button onClick={requestClose} disabled={busy} disabledReason="Saving…">
         Cancel
       </Button>
       {!form && values && (
@@ -207,7 +202,8 @@ function Builder({
         open
         size="large"
         title={form ? copy.editTitle : copy.newTitle}
-        onClose={guard.requestClose}
+        onClose={onClose}
+        discard={dirty ? abandonConfirm("form", !form) : null}
         dismissible={!busy}
         footer={footer}
       >
@@ -426,20 +422,8 @@ function Builder({
         )}
       </Dialog>
       <ConfirmDialog
-        open={guard.guardOpen}
-        title={form ? "Discard unsaved changes?" : "Discard this form?"}
-        message={
-          form ? "Your changes will be lost." : "What you made will be lost."
-        }
-        confirmLabel="Discard"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
-      <ConfirmDialog
         open={leaving}
-        title={copy.discardTitle}
-        message={copy.discardBody}
-        confirmLabel={copy.discardConfirm}
+        copy={abandonConfirm("form", !form)}
         onConfirm={() => {
           setLeaving(false);
           setValues(null);

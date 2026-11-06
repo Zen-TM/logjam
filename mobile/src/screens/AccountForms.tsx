@@ -13,9 +13,11 @@ import {
   isValidPassword,
   messageFromError,
   PASSWORD_HINT,
+  SIGN_IN_COPY,
   signUpFormProblem,
   USERNAME_HINT,
   USERNAME_TAKEN,
+  verifyIntro,
 } from "@logjam/shared";
 
 import { accountCalls } from "../auth/oidcSession";
@@ -152,7 +154,7 @@ export function AccountForms({
       setError("Enter your password.");
       return;
     }
-    return submit("Sign in failed. Please try again.", () => signInWith());
+    return submit("Couldn't sign in. Try again.", () => signInWith());
   };
 
   const onSignUp = () => {
@@ -169,7 +171,7 @@ export function AccountForms({
     setUsernameError(problem?.field === "username" ? problem.message : null);
     setError(problem?.field === "form" ? problem.message : null);
     if (problem) return;
-    return submit("Sign up failed. Please try again.", async () => {
+    return submit("Couldn't sign up. Try again.", async () => {
       if (!(await isUsernameFree(username.trim()))) {
         setUsernameError(USERNAME_TAKEN);
         return;
@@ -185,7 +187,7 @@ export function AccountForms({
   };
 
   const onConfirmSignUp = () =>
-    submit("Confirmation failed. Please try again.", async () => {
+    submit("Couldn't confirm your code. Try again.", async () => {
       await accountCalls.confirmSignUp(email.trim(), code.trim());
       // The password is held from the form that led here, so the just-verified
       // account signs in without asking again.
@@ -291,16 +293,14 @@ export function AccountForms({
     return (
       <FormStack>
         <Text style={styles.heading}>Check your email</Text>
-        <Text style={styles.body}>
-          We sent a code to {email.trim()}. Check your spam folder too.
-        </Text>
+        <Text style={styles.body}>{verifyIntro(email)}</Text>
         {codeField("Verification code")}
         {noticeText}
         {banner}
         <Button label="Verify" onPress={onConfirmSignUp} loading={submitting} />
         <View style={styles.secondary}>
           <Button
-            label="Send a new code"
+            label={SIGN_IN_COPY.resendCode}
             variant="ghost"
             onPress={() =>
               submit("Couldn't send a code. Try again.", () =>
@@ -322,7 +322,7 @@ export function AccountForms({
     return (
       <FormStack>
         <Text style={styles.heading}>Reset your password</Text>
-        <Text style={styles.body}>We will email you a code.</Text>
+        <Text style={styles.body}>{SIGN_IN_COPY.resetIntro}</Text>
         {emailField()}
         {banner}
         <Button
@@ -391,18 +391,18 @@ export function AccountForms({
         {passwordFields("Password")}
         <TermsSwitch checked={agreed} onChange={setAgreed} />
         <SwitchRow
-          title="I am 18 or older"
+          title={SIGN_IN_COPY.ageConfirm}
           checked={ageConfirmed}
           onChange={setAgeConfirmed}
         />
         {banner}
         <Button
-          label="Create account"
+          label={SIGN_IN_COPY.createAccount}
           onPress={onSignUp}
           loading={submitting}
         />
         <Button
-          label="Have an account? Sign in"
+          label={`${SIGN_IN_COPY.haveAccount} ${SIGN_IN_COPY.signIn}`}
           variant="ghost"
           onPress={() => goTo("signIn")}
         />
@@ -437,7 +437,7 @@ export function AccountForms({
       {/* Everything below is deliberately quieter than Sign in. */}
       <View style={styles.secondary}>
         <Button
-          label="Create an account"
+          label={SIGN_IN_COPY.goToSignUp}
           variant="outlineAccent"
           onPress={() => goTo("signUp")}
         />

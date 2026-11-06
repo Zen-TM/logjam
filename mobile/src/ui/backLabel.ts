@@ -1,4 +1,4 @@
-import { FRIENDS, INBOX, LEADERBOARD, TRIP_PLANS_LIST } from "@logjam/shared";
+import { LEADERBOARD, navLabel } from "@logjam/shared";
 
 type StackRoute = { key: string; name: string; params?: object | undefined };
 type Param = (params: Record<string, unknown>) => string | undefined;
@@ -13,18 +13,19 @@ const param =
 
 const LABELS: Record<string, string | Param> = {
   MapView: "Map",
-  PlaceList: "Places",
-  TripList: "Logs",
-  SavedHome: "Saved",
+  PlaceList: navLabel("places"),
+  TripList: navLabel("logs"),
+  SavedHome: navLabel("saved"),
   MoreHome: "More",
-  Inbox: INBOX.title,
-  Plans: TRIP_PLANS_LIST.title,
+  Inbox: navLabel("inbox"),
+  Plans: navLabel("plans"),
   Plan: param("name"),
-  Friends: FRIENDS.title,
+  Friends: navLabel("friends"),
   FriendShares: param("username"),
   Leaderboard: LEADERBOARD.title,
-  Account: "Account",
-  SyncIssues: "Sync issues",
+  Account: navLabel("account"),
+  Settings: navLabel("settings"),
+  SyncIssues: navLabel("syncIssues"),
   TripStats: "Stats",
   MapPlaceDetail: "Place",
   PlaceDetail: "Place",

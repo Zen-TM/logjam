@@ -36,12 +36,6 @@ const GPS_GOTCHAS = [
   },
   {
     selector:
-      "CallExpression[callee.object.name='Alert'][callee.property.name='alert'][arguments.2.type='ArrayExpression'][arguments.2.elements.length>3]",
-    message:
-      "Android drops a fourth Alert button. A list of choices is a BottomSheet; Alert is for a destructive confirm only (mobile/DESIGN.md §4).",
-  },
-  {
-    selector:
       "Property[key.name=/^(shadowColor|shadowOffset|shadowOpacity|shadowRadius)$/]",
     message:
       "No shadows: a sheet is the page colour sliding up and its rows are cards (mobile/DESIGN.md §1).",
@@ -62,6 +56,12 @@ const GPS_GOTCHAS = [
     selector: `Property[key.name=/${SPACING_PROPS}/] > Literal[value!=0][raw=/^[0-9.]+$/], Property[key.name=/${SPACING_PROPS}/] > UnaryExpression > Literal`,
     message:
       "Space is a step of the scale: spacing(0.5), spacing(1), … (shared/src/designTokens.ts SPACE). A raw number, a negative or an off-scale fraction leaves it.",
+  },
+  {
+    selector:
+      "CallExpression[callee.name='withAlpha'][arguments.1.type='Literal'][arguments.1.value!=0]",
+    message:
+      "A tint is a named alpha: withAlpha(token, wash.subtle | selected | strong), or veil.* for a surface over the map. A literal alpha is a value nobody measured (mobile/DESIGN.md §1).",
   },
   {
     selector:

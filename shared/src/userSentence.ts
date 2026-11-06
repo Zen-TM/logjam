@@ -47,7 +47,7 @@ export function withoutQuoted(sentence: string): string {
 }
 
 /** For a request only a bug in a client, or a hand-made request, can send. */
-export const MALFORMED_REQUEST_SENTENCE = say`That didn't work because of a fault in Logjam, not something you did.`;
+export const MALFORMED_REQUEST_SENTENCE = say`Couldn't do that because of a fault in Logjam, not something you did.`;
 
 /** For a failure on our side that trying again may get past. */
-export const SERVER_FAULT_SENTENCE = say`Something went wrong on our end. Please try again.`;
+export const SERVER_FAULT_SENTENCE = say`Something went wrong on our end. Try again.`;

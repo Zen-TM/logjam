@@ -6,6 +6,7 @@
 // GPS draws every kind of line its phone holds (routes, imported ways, tracks)
 // and GeoPDFs as rows of their own, Logjam Web draws one "Ways" row.
 import { MAP_TERRAIN } from "./mapTerrain.js";
+import { WAY_IMPORT } from "./ways.js";
 import type { ScreenContract } from "./types.js";
 
 export const MAP_LAYERS = {
@@ -19,7 +20,7 @@ export const MAP_LAYERS = {
       key: "offline",
       on: "gps",
       reason:
-        "Saved maps and 'offline maps only' are phone features: Logjam Web is never used without a connection.",
+        "Saved maps and 'use only saved maps' are phone features: Logjam Web is never used without a connection.",
     },
   ],
   copy: {
@@ -29,7 +30,8 @@ export const MAP_LAYERS = {
     tabOffline: "Offline",
     places: "Places",
     ways: "Ways",
-    // The overlays list ends with the way to add one (Logjam Web).
-    importFile: "Import a file",
+    // The overlays list ends with the way to add one, named the same on both
+    // clients: GPX, KML and GeoJSON (`WAY_IMPORT`).
+    importFile: WAY_IMPORT.file,
   },
 } as const satisfies ScreenContract;

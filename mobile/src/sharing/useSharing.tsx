@@ -23,7 +23,7 @@
 // copy is OURS, never the server's message — interpolating a response into a
 // row is how a place name reaches a screenshot (shared/DESIGN.md §13).
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
+import { ActivityIndicator } from "react-native";
 
 import { messageFromError } from "@logjam/shared";
 
@@ -31,8 +31,10 @@ import { useAccountState } from "../auth/AccountStateContext";
 import { shareCapabilityStatus } from "../auth/capabilities";
 import type { Friend } from "../api/friends";
 import type { ShareRecipient } from "../api/shares";
-import { Avatar, ErrorBanner, IconButton, Row } from "../ui";
+import { Avatar, confirm, ErrorBanner, IconButton, Row } from "../ui";
+import { getSyncStatus, requestSync } from "../sync/syncEngine";
 import { useTheme } from "../theme";
+import { shareGrantNotFound } from "./notOnServer";
 
 /**
  * The three endpoints, for whichever kind this is.
@@ -66,6 +68,7 @@ export function useSharing({
   enabled = true,
   itemLabel,
   revokeBody,
+  stillHeld,
 }: {
   calls: SharingCalls;
   online: boolean;
@@ -81,12 +84,16 @@ export function useSharing({
   enabled?: boolean;
   /** The item's name, for the revoke confirm. */
   itemLabel: string;
+  /** Whether this phone's mirror still holds the item, for a grant that 404s. */
+  stillHeld?: () => Promise<boolean>;
   /** What the recipient loses, in this kind's words. */
   revokeBody: (username: string) => string;
 }) {
   const [recipients, setRecipients] = useState<ShareRecipient[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // The grant 404ed for the sharer's own item: offer the sync that fixes it.
+  const [syncFixes, setSyncFixes] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const { accountState } = useAccountState();
@@ -116,53 +123,59 @@ export function useSharing({
     if (canShare && enabled) void load();
   }, [load, canShare, enabled]);
 
+  // Every new attempt starts clean, so a banner and its Sync now never outlive
+  // the failure they were raised for.
+  const clearError = useCallback(() => {
+    setActionError(null);
+    setSyncFixes(false);
+  }, []);
+
   const grant = useCallback(
     async (friend: Friend) => {
       setBusyId(friend.id);
-      setActionError(null);
+      clearError();
       try {
         await calls.grant(friend.id);
         await load();
         return true;
       } catch (err) {
         console.error(err);
-        setActionError(messageFromError(err, "Couldn't share that."));
+        const missing = shareGrantNotFound(
+          err,
+          stillHeld ? await stillHeld().catch(() => true) : true,
+        );
+        setSyncFixes(missing?.syncFixes ?? false);
+        setActionError(
+          missing?.message ?? messageFromError(err, "Couldn't share that."),
+        );
         return false;
       } finally {
         setBusyId(null);
       }
     },
-    [calls, load],
+    [calls, load, stillHeld, clearError],
   );
 
   const confirmRevoke = useCallback(
-    (recipient: ShareRecipient) => {
-      Alert.alert(
-        `Stop sharing with ${recipient.sharedWith.username}?`,
-        revokeBody(recipient.sharedWith.username),
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Unshare",
-            style: "destructive",
-            onPress: () => {
-              setBusyId(recipient.id);
-              setActionError(null);
-              Promise.resolve(calls.revoke(recipient.sharedWith.id))
-                .then(() => load())
-                .catch((err: unknown) => {
-                  console.error(err);
-                  setActionError(
-                    messageFromError(err, "Couldn't stop sharing that."),
-                  );
-                })
-                .finally(() => setBusyId(null));
-            },
-          },
-        ],
-      );
+    async (recipient: ShareRecipient) => {
+      const ok = await confirm({
+        confirmTitle: `Stop sharing with ${recipient.sharedWith.username}?`,
+        confirmBody: revokeBody(recipient.sharedWith.username),
+        confirmLabel: "Stop sharing",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      setBusyId(recipient.id);
+      clearError();
+      Promise.resolve(calls.revoke(recipient.sharedWith.id))
+        .then(() => load())
+        .catch((err: unknown) => {
+          console.error(err);
+          setActionError(messageFromError(err, "Couldn't stop sharing that."));
+        })
+        .finally(() => setBusyId(null));
     },
-    [calls, load, revokeBody],
+    [calls, load, revokeBody, clearError],
   );
 
   return {
@@ -171,6 +184,8 @@ export function useSharing({
     sharedIds: new Set((recipients ?? []).map((r) => r.sharedWith.id)),
     busyId,
     actionError,
+    syncFixes,
+    clearError,
     loadFailed,
     canShare,
     shareStatus,
@@ -224,7 +239,26 @@ export function RecipientRows({
 
 /** Whatever went wrong with the last grant/revoke, in our words. */
 export function SharingError({ sharing }: { sharing: Sharing }) {
+  const [syncing, setSyncing] = useState(false);
+  // A clean cycle clears the banner, so the user can share again; a failed one
+  // keeps it, and the sync's own health line says why.
+  const syncNow = async () => {
+    setSyncing(true);
+    await requestSync();
+    setSyncing(false);
+    if (getSyncStatus().state !== "error") sharing.clearError();
+  };
   return sharing.actionError ? (
-    <ErrorBanner message={sharing.actionError} />
+    <ErrorBanner
+      message={sharing.actionError}
+      onRetry={
+        sharing.syncFixes
+          ? syncing
+            ? () => {}
+            : () => void syncNow()
+          : undefined
+      }
+      retryLabel={syncing ? "Syncing…" : "Sync now"}
+    />
   ) : null;
 }

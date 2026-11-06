@@ -57,6 +57,7 @@ const props = {
   podiumShown: true,
   onBack: () => {},
   backLabel: "More",
+  heroCollapse: {} as never,
   onDismissPodium: () => {},
   onOpenRules: () => {},
 };

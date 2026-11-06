@@ -28,4 +28,15 @@ describe("useRouteDraft undo", () => {
     act(() => result.current.undo());
     expect(result.current.points).toEqual([A]);
   });
+
+  // Mutation: make `clear` call `reset`, which forgets the history.
+  it("brings the points back after Clear", () => {
+    const { result } = renderHook(() => useRouteDraft());
+    act(() => result.current.addAnchor(A));
+    act(() => result.current.addAnchor(B));
+    act(() => result.current.clear());
+    expect(result.current.points).toEqual([]);
+    act(() => result.current.undo());
+    expect(result.current.points).toEqual([A, B]);
+  });
 });

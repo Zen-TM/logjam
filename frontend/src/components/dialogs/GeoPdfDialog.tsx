@@ -1,4 +1,4 @@
-// Export an area. A GeoPDF, chosen on every open, is a printable map of one
+// Make a map. A GeoPDF, chosen on every open, is a printable map of one
 // area, on one sheet of paper, at one scale: the form asks the paper and the
 // scale, which size the area, then where it is, then what goes on top. For a
 // GIS (GeoTIFF, GeoPackage, MBTiles) the area is a free box with no paper, and
@@ -11,7 +11,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TBbox } from "../map/Map";
 import BasemapGallery from "../map/BasemapGallery";
-import { PRINTABLE_BASE_LAYERS, seedBaseLayer } from "./geoPdfBaseLayer";
+import {
+  PRINTABLE_BASE_LAYERS,
+  seedBaseLayer,
+  UNPRINTABLE_NOTE,
+} from "./geoPdfBaseLayer";
 import {
   contoursPrintedHere,
   hillshadeShadowedHere,
@@ -27,8 +31,6 @@ import { downloadBlob } from "../../download";
 import { vegetationUrlsFor } from "./geoPdfVegetation";
 import { messageFromError } from "../../errors/messageFromError";
 import { useToast } from "../feedback/ToastProvider";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import ConfirmDialog from "./ConfirmDialog";
 import { sanitizeDecimalInput } from "../../numberInput";
 import {
   extentFieldErrors,
@@ -48,6 +50,7 @@ import type {
   CoordMode,
 } from "@logjam/shared";
 import {
+  abandonConfirm,
   getPaperDimensions,
   getMapDimensions,
   GEOPDF_PADDING_MM,
@@ -97,6 +100,7 @@ import {
 } from "./geoPdfArea";
 import {
   Button,
+  IconButton,
   Checkbox,
   ChipPicker,
   ChipRail,
@@ -159,19 +163,14 @@ const COORD_OPTIONS: ChipOption<CoordMode>[] = [
   { value: "enNorthing", label: "E/N" },
 ];
 
-/** How the area is set: framed on the map, or typed as four edges. */
-type AreaView = "map" | "edges";
-
-const AREA_VIEW_OPTIONS: ChipOption<AreaView>[] = [
-  { value: "map", label: "On the map" },
-  { value: "edges", label: "Type the edges" },
-];
+// Land tenure is a Terrain layer to the map's stacking but an overlay to the
+// user, in the layers control and here: who holds the land is no part of the
+// shape of the ground (`MAP_TERRAIN`).
+const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter((key) => key !== "land");
 
 // The Overlays group's chips that are not layers of the map.
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
-const SHARED_PLACES_HINT =
-  "Shared places are ones a friend shared with you, not with whoever you hand the PDF to.";
 
 const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
@@ -202,6 +201,20 @@ const PHASE_TEXT: Record<GeoPdfProgress["phase"], string> = {
 /** How long the area, scale and layers stand still before tiles are prefetched. */
 const PREFETCH_AFTER_MS = 1000;
 const NO_AREA = { north: 0, south: 0, east: 0, west: 0 };
+
+/** The sheet's area re-centred on a point, at its current paper and scale. */
+function centredOn(
+  prev: ExtentState,
+  center: { lat: number; lng: number },
+): ExtentState {
+  const paper = getPaperDimensions(prev);
+  const widthM = prev.scale * ((paper.w - 2 * GEOPDF_PADDING_MM) / 1000);
+  const heightM = prev.scale * ((paper.h - 2 * GEOPDF_PADDING_MM) / 1000);
+  return {
+    ...prev,
+    ...extentFromCentreAndSize(center.lat, center.lng, widthM, heightM),
+  };
+}
 
 function GeoPdfDialog({
   open,
@@ -280,6 +293,12 @@ function GeoPdfDialog({
   // Map elements
   const [titleEnabled, setTitleEnabled] = useState(false);
   const [titleText, setTitleText] = useState("");
+  // The file name and the title follow each other until both are typed in:
+  // `touched` is whether the user has typed in one, so a field they have not
+  // touched shows the other's text.
+  const [fileText, setFileText] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [fileTouched, setFileTouched] = useState(false);
   const [compassEnabled, setCompassEnabled] = useState(true);
   const [scaleTextEnabled, setScaleTextEnabled] = useState(true);
   const [scaleBarEnabled, setScaleBarEnabled] = useState(true);
@@ -316,7 +335,9 @@ function GeoPdfDialog({
   // error, and whether they are the view showing.
   const gisFocused = useRef<"n" | "s" | "e" | "w" | "scale" | null>(null);
   const [gisRaw, setGisRaw] = useState<ExtentFieldValues>(NO_EDGES_TYPED);
-  const [gisAreaView, setGisAreaView] = useState<AreaView>("map");
+  const [gisCoordsOpen, setGisCoordsOpen] = useState(false);
+  // The box was drawn on the map, not seeded or typed.
+  const [gisPicked, setGisPicked] = useState(false);
   // Make it was pressed with something missing: a requirement shows from then
   // on, where a limit shows live (shared/DESIGN.md §11).
   const [gisTried, setGisTried] = useState(false);
@@ -357,10 +378,11 @@ function GeoPdfDialog({
   const [rawScale, setRawScale] = useState("");
   // Other was pressed: its field stays open even at a preset's number.
   const [scaleOtherPicked, setScaleOtherPicked] = useState(false);
-  // The area view starts on the map on every open; Make it switches to Type
-  // the edges when a field there needs fixing, so the field the banner points
-  // at can be seen.
-  const [areaView, setAreaView] = useState<AreaView>("map");
+  // The coordinates start folded away on every open; Make it opens them when a
+  // field there needs fixing, so the field the banner points at can be seen.
+  const [coordsOpen, setCoordsOpen] = useState(false);
+  // The area was framed on the map, not only seeded from where it was looking.
+  const [areaPicked, setAreaPicked] = useState(false);
 
   // The last settings, applied over the form once per genuine open. A field
   // the stored value lacks keeps the seed already set.
@@ -380,7 +402,8 @@ function GeoPdfDialog({
       if (c.scale !== undefined) updated = applyScaleChange(updated, c.scale);
       return updated;
     });
-    if (c.baseLayer) setSelectedBaseLayer(c.baseLayer);
+    if (c.baseLayer)
+      setSelectedBaseLayer(seedBaseLayer(activeLayerId, c.baseLayer));
     if (c.overlays) setSelectedOverlays(new Set(c.overlays));
     if (c.terrainPinned) setTerrainFollowsMap(false);
     if (c.compass !== undefined) setCompassEnabled(c.compass);
@@ -416,28 +439,16 @@ function GeoPdfDialog({
         setTerrainFollowsMap(true);
         applyLastSettings();
         const center = mapCenter;
-        if (center) {
-          setExtentState((prev) => {
-            const paper = getPaperDimensions(prev);
-            const mapW = paper.w - 2 * GEOPDF_PADDING_MM;
-            const mapH = paper.h - 2 * GEOPDF_PADDING_MM;
-            const widthM = prev.scale * (mapW / 1000);
-            const heightM = prev.scale * (mapH / 1000);
-            const bounds = extentFromCentreAndSize(
-              center.lat,
-              center.lng,
-              widthM,
-              heightM,
-            );
-            return { ...prev, ...bounds };
-          });
-        }
+        if (center) setExtentState((prev) => centredOn(prev, center));
       }
     } else if (!returningFromMapSelect) {
       setSeededView(false);
       setExtentState(DEFAULT_EXTENT_STATE);
       setTitleEnabled(false);
       setTitleText("");
+      setFileText("");
+      setTitleTouched(false);
+      setFileTouched(false);
       setCompassEnabled(true);
       setScaleTextEnabled(true);
       setScaleBarEnabled(true);
@@ -452,21 +463,21 @@ function GeoPdfDialog({
       setRawW("");
       setRawScale("");
       setScaleOtherPicked(false);
-      setAreaView("map");
+      setCoordsOpen(false);
+      setAreaPicked(false);
       setGisBox(null);
       setGisLayers(new Set(AREA_EXPORT_LAYERS));
       setGisRaw(NO_EDGES_TYPED);
-      setGisAreaView("map");
+      setGisCoordsOpen(false);
+      setGisPicked(false);
       setGisTried(false);
       setDirty(false);
     }
   }
 
   // Populate extent from map selection — always receives both extent and scale.
-  // This fires only when the user actually confirms a pick on the map (App
-  // only sets these props from onGeoPdfExtentConfirmed), so — unlike the
-  // open-time seed and settings-apply steps — it represents real user work
-  // and must mark the form dirty.
+  // A pick is not marked dirty: it is one tap to redo, and a form with nothing
+  // else touched closes without asking.
   const [pendingAppliedFor, setPendingAppliedFor] = useState({
     pendingExtent: null as TBbox | null,
     pendingScale: null as number | null,
@@ -485,11 +496,12 @@ function GeoPdfDialog({
         west: pendingExtent.west,
         scale: pendingScale,
       }));
-      setDirty(true);
+      setAreaPicked(true);
+      setCoordsOpen(false);
     }
   }
 
-  // The box drawn for a GIS format, as the extent above: real user work.
+  // The box drawn for a GIS format, as the extent above.
   const [pendingAreaAppliedFor, setPendingAreaAppliedFor] = useState<
     TBbox | null | undefined
   >(null);
@@ -497,7 +509,8 @@ function GeoPdfDialog({
     setPendingAreaAppliedFor(pendingArea);
     if (pendingArea) {
       setGisBox(pendingArea);
-      setDirty(true);
+      setGisPicked(true);
+      setGisCoordsOpen(false);
     }
   }
 
@@ -657,7 +670,10 @@ function GeoPdfDialog({
       gisChosenLayers.length === 0
     ) {
       setGisTried(true);
-      if (edgeError) setGisAreaView("edges");
+      if (edgeError) {
+        setGisCoordsOpen(true);
+        setGisPicked(false);
+      }
       setError("A field below needs fixing first.");
       return;
     }
@@ -668,16 +684,14 @@ function GeoPdfDialog({
         method: "POST",
         body: { bbox: gisArea, layers: gisChosenLayers, format: gisFormat },
       });
-      toast.success(
-        "Making your export. It comes to your Inbox, and downloads itself if this tab is still open.",
+      toast.done(
+        "Making your map. It comes to your Inbox, and downloads itself if this tab is still open.",
       );
       onExportQueued?.();
       onClose();
     } catch (e) {
       console.error(e);
-      setError(
-        messageFromError(e, "Couldn't queue the export. Please try again."),
-      );
+      setError(messageFromError(e, "Couldn't queue the map. Try again."));
     } finally {
       setGenerating(false);
     }
@@ -756,6 +770,11 @@ function GeoPdfDialog({
     completedTopoJobs,
   ]);
 
+  const titleShown = titleTouched ? titleText : fileTouched ? fileText : "";
+  // The file name is only what was typed there; empty, the download takes
+  // the title's (the renderer's fallback) and the placeholder says so.
+  const fileDefault = (titleEnabled && titleShown.trim()) || "logjam-geopdf";
+
   const handleGenerate = useCallback(async () => {
     if (
       !extentValid ||
@@ -763,8 +782,10 @@ function GeoPdfDialog({
       scaleInputError !== null ||
       tooLarge
     ) {
-      if (!extentValid || hasExtentFieldError(extentInputErrors))
-        setAreaView("edges");
+      if (!extentValid || hasExtentFieldError(extentInputErrors)) {
+        setCoordsOpen(true);
+        setAreaPicked(false);
+      }
       setError("A field below needs fixing first.");
       return;
     }
@@ -789,7 +810,7 @@ function GeoPdfDialog({
       baseLayer: selectedBaseLayer,
       overlays: printedOverlays,
       elements: {
-        ...(titleEnabled ? { title: titleText } : {}),
+        ...(titleEnabled ? { title: titleShown } : {}),
         compass: compassEnabled,
         scaleText: scaleTextEnabled,
         scaleBar: scaleBarEnabled,
@@ -820,6 +841,7 @@ function GeoPdfDialog({
           areas: completedTopoJobs.flatMap((job) => job.sharpened ?? []),
           vegetationUrls: vegetationUrlsFor(completedTopoJobs, config.extent),
           origin: location.origin,
+          fileName: fileText.trim() || undefined,
         },
         { onProgress: setProgress, signal: controller.signal },
       );
@@ -831,7 +853,7 @@ function GeoPdfDialog({
             terrainPinned: !terrainFollowsMap,
           }),
         );
-        toast.success("Your GeoPDF is downloading.");
+        toast.done("Your GeoPDF is downloading.");
         onClose();
       } else if (result.reason === "too-large") {
         setError(GEOPDF_TOO_LARGE);
@@ -851,7 +873,8 @@ function GeoPdfDialog({
     selectedBaseLayer,
     printedOverlays,
     titleEnabled,
-    titleText,
+    titleShown,
+    fileText,
     compassEnabled,
     scaleTextEnabled,
     scaleBarEnabled,
@@ -889,13 +912,6 @@ function GeoPdfDialog({
     [overlays],
   );
 
-  // Esc / backdrop / X / Cancel route through this so a dirty form prompts
-  // before discarding. "Select on map" bypasses it entirely (it calls
-  // onSelectOnMap, never onClose/requestClose — App flips `open` to false
-  // itself for that round trip). A successful Generate also bypasses it by
-  // calling the raw onClose directly.
-  const guard = useUnsavedChangesGuard(dirty, onClose);
-
   // The renderer is its own chunk: start fetching it on open, so Make it
   // doesn't wait. A failure here resurfaces when Make it imports it again.
   useEffect(() => {
@@ -915,20 +931,19 @@ function GeoPdfDialog({
     <>
       <Dialog
         open={open}
-        title="Export an area"
+        title="Make a map"
         size="large"
-        dismissible={!generating || progress !== null}
-        onClose={guard.requestClose}
-        footer={
+        dismissible={!generating}
+        onClose={onClose}
+        // "Select on map" and a successful Generate call onClose directly, so
+        // neither asks.
+        discard={dirty ? abandonConfirm("map", true) : null}
+        footer={(requestClose) => (
           <>
             <Button
-              onClick={
-                progress
-                  ? () => renderAbort.current?.abort()
-                  : guard.requestClose
-              }
-              disabled={generating && !progress}
-              disabledReason="Starting the export…"
+              onClick={requestClose}
+              disabled={generating}
+              disabledReason="Making it…"
             >
               Cancel
             </Button>
@@ -940,24 +955,12 @@ function GeoPdfDialog({
               Make it
             </Button>
           </>
-        }
+        )}
       >
         <div className={classes.form}>
           <p className={classes.wideHint}>This is easier on a bigger screen.</p>
 
           {error && <ErrorBanner message={error} />}
-          {progress && (
-            <div className={classes.progress}>
-              <ProgressBar
-                label="Making your GeoPDF"
-                value={progress.fraction * 100}
-              />
-              <p className={classes.note}>
-                <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
-                {Math.round(progress.fraction * 100)}%
-              </p>
-            </div>
-          )}
 
           <section className={classes.group}>
             <SectionHeader title="Format" />
@@ -990,8 +993,17 @@ function GeoPdfDialog({
               }}
               edgeErrors={gisEdgeErrors}
               focusedFieldRef={gisFocused}
-              areaView={gisAreaView}
-              onAreaViewChange={setGisAreaView}
+              coordsOpen={gisCoordsOpen}
+              onToggleCoords={() => {
+                setGisCoordsOpen(!gisCoordsOpen);
+                setGisPicked(false);
+              }}
+              onClear={() => {
+                setGisBox(null);
+                setGisRaw(NO_EDGES_TYPED);
+                setGisPicked(false);
+                markDirty();
+              }}
               onCoordModeChange={(coordMode) => {
                 // The text moves with the mode (see the GeoPDF chip).
                 if (gisArea)
@@ -1007,6 +1019,7 @@ function GeoPdfDialog({
                 setGisBox(area);
                 markDirty();
               }}
+              picked={gisPicked}
               onPick={() => {
                 setReturningFromMapSelect(true);
                 onPickArea?.();
@@ -1111,6 +1124,7 @@ function GeoPdfDialog({
                 <SettingsRow label="Scale" tooltip={SCALE_TOOLTIP}>
                   <ChipRail
                     label="Scale"
+                    wrap
                     className={classes.railCell}
                     options={SCALE_OPTIONS}
                     value={scaleChoice(extentState.scale, scaleOtherPicked)}
@@ -1162,33 +1176,29 @@ function GeoPdfDialog({
                 )}
                 <FieldError message={scaleInputError} />
 
-                <ChipRail
-                  label="Set the area"
-                  className={classes.railCell}
-                  options={AREA_VIEW_OPTIONS}
-                  value={areaView}
-                  onChange={setAreaView}
+                <AreaRow
+                  size={sheetSizeLabel(
+                    (extentState.scale * mapMm.w) / 1000,
+                    (extentState.scale * mapMm.h) / 1000,
+                  )}
+                  picked={areaPicked}
+                  onPick={handleSelectOnMap}
+                  coordsOpen={coordsOpen}
+                  onToggleCoords={() => {
+                    setCoordsOpen(!coordsOpen);
+                    setAreaPicked(false);
+                  }}
+                  onClear={() => {
+                    setAreaPicked(false);
+                    setExtentState((prev) =>
+                      mapCenter
+                        ? centredOn(prev, mapCenter)
+                        : { ...prev, ...NO_AREA },
+                    );
+                    markDirty();
+                  }}
                 />
-                {areaView === "map" ? (
-                  <SettingsRow label="Area">
-                    <div className={classes.areaCell}>
-                      <span className={classes.areaSize}>
-                        {sheetSizeLabel(
-                          (extentState.scale * mapMm.w) / 1000,
-                          (extentState.scale * mapMm.h) / 1000,
-                        )}
-                      </span>
-                      <Button
-                        icon="pickArea"
-                        compact
-                        variant="outline"
-                        onClick={handleSelectOnMap}
-                      >
-                        Pick on the map
-                      </Button>
-                    </div>
-                  </SettingsRow>
-                ) : (
+                {coordsOpen && (
                   <div className={classes.group}>
                     <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
                       <ChipRail
@@ -1322,22 +1332,24 @@ function GeoPdfDialog({
                     mapView={mapCenter ?? null}
                     oneRow
                   />
+                  {UNPRINTABLE_NOTE && (
+                    <p className={classes.note}>{UNPRINTABLE_NOTE}</p>
+                  )}
                 </div>
                 <ChipPicker
                   label={MAP_TERRAIN.title}
-                  options={TERRAIN_LAYER_KEYS.map((key) => ({
+                  options={SHAPE_KEYS.map((key) => ({
                     value: key,
                     label: MAP_TERRAIN.copy[key],
                     disabled: offReason(key) !== null,
                   }))}
-                  selected={TERRAIN_LAYER_KEYS.filter(
+                  selected={SHAPE_KEYS.filter(
                     (key) => offReason(key) === null && overlays.has(key),
                   )}
                   onToggle={toggleOverlay}
                   hint={
-                    TERRAIN_LAYER_KEYS.map(offReason)
-                      .filter(Boolean)
-                      .join(" ") || undefined
+                    SHAPE_KEYS.map(offReason).filter(Boolean).join(" ") ||
+                    undefined
                   }
                 />
                 <ChipPicker
@@ -1351,6 +1363,7 @@ function GeoPdfDialog({
                     ),
                     { value: MY_PLACES, label: "My places" },
                     { value: SHARED_PLACES, label: "Shared places" },
+                    { value: "land", label: MAP_TERRAIN.copy.land },
                   ]}
                   selected={[
                     ...(lidarOverlap ? LIDAR_ONLY_OVERLAYS : [])
@@ -1358,6 +1371,7 @@ function GeoPdfDialog({
                       .filter((name) => overlays.has(name)),
                     ...(showOwnedPlacesOnPdf ? [MY_PLACES] : []),
                     ...(showSharedPlacesOnPdf ? [SHARED_PLACES] : []),
+                    ...(overlays.has("land") ? ["land"] : []),
                   ]}
                   onToggle={(value) => {
                     if (value === MY_PLACES)
@@ -1366,7 +1380,6 @@ function GeoPdfDialog({
                       setShowSharedPlacesOnPdf(!showSharedPlacesOnPdf);
                     else toggleOverlay(value);
                   }}
-                  hint={SHARED_PLACES_HINT}
                 />
               </section>
 
@@ -1388,9 +1401,10 @@ function GeoPdfDialog({
                         hideLabel
                         className={classes.elementField}
                         placeholder="Map title"
-                        value={titleText}
+                        value={titleShown}
                         onChange={(event) => {
                           setTitleText(event.target.value);
+                          setTitleTouched(true);
                           markDirty();
                         }}
                       />
@@ -1454,22 +1468,99 @@ function GeoPdfDialog({
                     )}
                   </div>
                 </div>
+                <TextField
+                  label="File name"
+                  hint="Optional. Empty, it is the title when there is one. .pdf is added."
+                  placeholder={fileDefault}
+                  value={fileText}
+                  onChange={(event) => {
+                    setFileText(event.target.value);
+                    setFileTouched(true);
+                    markDirty();
+                  }}
+                />
               </section>
             </>
           )}
         </div>
       </Dialog>
 
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your changes will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
+      <Dialog
+        open={progress !== null}
+        title="Making your GeoPDF"
+        onClose={() => renderAbort.current?.abort()}
+        footer={
+          <Button onClick={() => renderAbort.current?.abort()}>Cancel</Button>
+        }
+      >
+        {progress && (
+          <div className={classes.progress}>
+            <ProgressBar
+              label="Making your GeoPDF"
+              value={progress.fraction * 100}
+            />
+            <p className={classes.note}>
+              <span role="status">{PHASE_TEXT[progress.phase]}</span>{" "}
+              {Math.round(progress.fraction * 100)}%
+            </p>
+          </div>
+        )}
+      </Dialog>
     </>
+  );
+}
+
+/**
+ * The Area row: its size, then the two ways to set it. Pick on the map leaves
+ * for the map and takes the accent once the area was picked there; Type the
+ * coordinates takes it while the edges are open beneath the row. They are one
+ * choice: the parent un-picks when the edges open and closes them on a pick.
+ */
+function AreaRow({
+  size,
+  picked,
+  onPick,
+  coordsOpen,
+  onToggleCoords,
+  onClear,
+}: {
+  size: string;
+  picked: boolean;
+  onPick: () => void;
+  coordsOpen: boolean;
+  onToggleCoords: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <SettingsRow label="Area">
+      <div className={classes.areaCell}>
+        <span className={classes.areaSize}>{size}</span>
+        <Button
+          icon="pickArea"
+          compact
+          variant={picked ? "filled" : "outline"}
+          onClick={onPick}
+        >
+          Pick on the map
+        </Button>
+        {picked && (
+          <IconButton
+            icon="close"
+            label="Clear the picked area"
+            size={14}
+            onClick={onClear}
+          />
+        )}
+        <Button
+          compact
+          variant={coordsOpen ? "filled" : "outline"}
+          aria-expanded={coordsOpen}
+          onClick={onToggleCoords}
+        >
+          Type the coordinates
+        </Button>
+      </div>
+    </SettingsRow>
   );
 }
 
@@ -1577,11 +1668,13 @@ function AreaExportFields({
   onDraft,
   edgeErrors,
   focusedFieldRef,
-  areaView,
-  onAreaViewChange,
+  coordsOpen,
+  onToggleCoords,
+  onClear,
   onCoordModeChange,
   onAreaChange,
   onPick,
+  picked,
   layers,
   onToggleLayer,
   noLayers,
@@ -1595,11 +1688,13 @@ function AreaExportFields({
   onDraft: (which: ExtentFieldKey, value: string) => void;
   edgeErrors: ExtentFieldErrors;
   focusedFieldRef: React.RefObject<"n" | "s" | "e" | "w" | "scale" | null>;
-  areaView: AreaView;
-  onAreaViewChange: (view: AreaView) => void;
+  coordsOpen: boolean;
+  onToggleCoords: () => void;
+  onClear: () => void;
   onCoordModeChange: (mode: CoordMode) => void;
   onAreaChange: (area: TBbox) => void;
   onPick: () => void;
+  picked: boolean;
   layers: ReadonlySet<AreaExportLayer>;
   onToggleLayer: (layer: AreaExportLayer) => void;
   noLayers: boolean;
@@ -1612,36 +1707,20 @@ function AreaExportFields({
     <>
       <section className={classes.group}>
         <SectionHeader title="Area" />
-        {area && (
-          <ChipRail
-            label="Set the area"
-            className={classes.railCell}
-            options={AREA_VIEW_OPTIONS}
-            value={areaView}
-            onChange={onAreaViewChange}
-          />
-        )}
-        {(!area || areaView === "map") && (
-          <SettingsRow label="Area">
-            <div className={classes.areaCell}>
-              <span className={classes.areaSize}>
-                {size
-                  ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
-                  : "None yet"}
-              </span>
-              <Button
-                icon="pickArea"
-                compact
-                variant="outline"
-                onClick={onPick}
-              >
-                Pick on the map
-              </Button>
-            </div>
-          </SettingsRow>
-        )}
+        <AreaRow
+          size={
+            size
+              ? sheetSizeLabel(size.widthKm * 1000, size.heightKm * 1000)
+              : "None yet"
+          }
+          picked={picked}
+          onPick={onPick}
+          coordsOpen={coordsOpen}
+          onToggleCoords={onToggleCoords}
+          onClear={onClear}
+        />
         <FieldError message={areaError} />
-        {area && areaView === "edges" && (
+        {coordsOpen && (
           <div className={classes.group}>
             <SettingsRow label="Coordinates" tooltip={COORD_TOOLTIP}>
               <ChipRail
@@ -1664,7 +1743,7 @@ function AreaExportFields({
                     onDraft={(next) => onDraft(field.which, next)}
                     onCommit={(degrees) =>
                       onAreaChange({
-                        ...area,
+                        ...(area ?? NO_AREA),
                         [EDGE_OF[field.which]]: degrees,
                       })
                     }
@@ -1709,7 +1788,7 @@ function AreaExportFields({
         </p>
         <p className={classes.note}>
           It comes to your Inbox, and downloads itself if this tab is still
-          open. Exports are kept for 7 days.
+          open. Map files are kept for 7 days.
         </p>
         <p className={classes.note}>
           What comes out is drawn from the government's survey, and it may be

@@ -83,11 +83,7 @@ function LeaderboardPage({
     hero: () => (
       <>
         <Hero
-          title={
-            standing
-              ? leaderboardHeroTitle(standing.rank, standing.size)
-              : LEADERBOARD.title
-          }
+          title={LEADERBOARD.title}
           onBack={onBack}
           backLabel="Back to friends"
           actions={
@@ -100,6 +96,8 @@ function LeaderboardPage({
         />
         {joined && (
           <p className={classes.season}>
+            {standing &&
+              `${leaderboardHeroTitle(standing.rank, standing.size)} · `}
             {leaderboardSeasonLine(joined.season)}
           </p>
         )}
@@ -180,6 +178,7 @@ function LeaderboardPage({
         title={copy.rulesTitle}
         size="small"
         onClose={() => setRulesOpen(false)}
+        footer={<Button onClick={() => setRulesOpen(false)}>Close</Button>}
       >
         <ul className={classes.rules}>
           {copy.rules.split("\n").map((rule) => (

@@ -7,7 +7,8 @@ const NOW = Date.parse("2026-10-18T12:00:00");
 const forecast = (date: string): WeatherForecast => ({
   cell: weatherCell({ latitude: -33.5, longitude: 150.4 }, 600),
   fetchedAt: NOW - 3_600_000,
-  pastRainMm: 0,
+  hours: [],
+  past: { source: "model", days: [] },
   days: [
     {
       date,

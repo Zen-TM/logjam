@@ -23,20 +23,17 @@
 // is as sensitive as a note. Nothing here logs one.
 import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  Text,
-  View,
-  type LayoutChangeEvent,
-} from "react-native";
+import { Pressable, Text, View, type LayoutChangeEvent } from "react-native";
 import {
   drawsYoursHeading,
   isSystemPlaceTypeId,
+  NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_COLORS,
   PLACE_TYPE_ICON_KEYS,
+  placeCountLabel,
   placeTypeColorName,
   placeTypeDeleteConfirm,
+  placeTypeInUseNote,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
   SETTINGS_LIST,
@@ -47,7 +44,8 @@ import {
 import { radius, spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorPlaceType } from "../sync/mirrorStore";
 import { placeTypeFormKey } from "./placeTypeDraft";
-import { listMirrorPlaces, listMirrorPlaceTypes } from "../sync/mirrorStore";
+import { listMirrorPlaceTypes } from "../sync/mirrorStore";
+import { useMirrorPlaces } from "../sync/useSyncQueries";
 import {
   createPlaceTypeLocal,
   deletePlaceTypeLocal,
@@ -55,6 +53,7 @@ import {
 } from "../sync/outbox";
 import {
   Button,
+  confirm,
   ErrorBanner,
   Field,
   FormStack,
@@ -83,6 +82,9 @@ export function PlaceTypeList({
   onEdit: (type: MirrorPlaceType) => void;
 }) {
   const styles = useStyles();
+  const places = useMirrorPlaces();
+  const countOf = (type: MirrorPlaceType) =>
+    (places.data ?? []).filter((place) => place.placeTypeId === type.id).length;
 
   // BUILT-INS LAST, the same way the attribute list orders itself: the user's
   // own types are the half with verbs on them, and the three that ship with the
@@ -103,6 +105,7 @@ export function PlaceTypeList({
           icon={placeTypeGlyph(type.iconKey)}
           hue={type.color}
           title={type.name}
+          subtitle={placeCountLabel(countOf(type))}
           onPress={() => onEdit(type)}
         />
       ))}
@@ -113,6 +116,7 @@ export function PlaceTypeList({
           icon={placeTypeGlyph(type.iconKey)}
           hue={type.color}
           title={type.name}
+          subtitle={placeCountLabel(countOf(type))}
         />
       ))}
     </View>
@@ -148,6 +152,14 @@ export function usePlaceTypeForm({
 }): { body: ReactNode; footer: ReactNode } {
   const theme = useTheme();
   const styles = useStyles();
+  const places = useMirrorPlaces();
+  // THE SERVER REFUSES A TYPE THAT STILL HAS PLACES ON IT (409), and queuing
+  // the delete anyway would park a dead push whose reason the user never sees.
+  // So Delete is not offered while any place is on it.
+  const inUse = editing
+    ? (places.data ?? []).filter((place) => place.placeTypeId === editing.id)
+        .length
+    : 0;
 
   const formKey = placeTypeFormKey(open, editing);
   const [draft, setDraft] = useState(() => seedDraft(editing));
@@ -228,51 +240,22 @@ export function usePlaceTypeForm({
 
   const confirmDelete = useCallback(() => {
     if (!editing) return;
-    // THE SERVER REFUSES A TYPE THAT STILL HAS PLACES ON IT (409, "Move them to
-    // another type first"), so the count is taken here and the delete is
-    // refused here. Queuing it anyway would park a dead push whose reason the
-    // user never sees — the same rule the place form follows by validating
-    // before it enqueues.
-    listMirrorPlaces()
-      .then((places) => {
-        const inUse = places.filter(
-          (place) => place.placeTypeId === editing.id,
-        ).length;
-        if (inUse > 0) {
-          Alert.alert(
-            `“${editing.name}” is still in use`,
-            `${inUse} place${inUse === 1 ? "" : "s"} ${inUse === 1 ? "is" : "are"} this type. Change ${inUse === 1 ? "it" : "them"} to another type first.`,
-          );
-          return;
-        }
-        const { confirmTitle, confirmBody } = placeTypeDeleteConfirm(
-          editing.name,
-        );
-        Alert.alert(confirmTitle, confirmBody, [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: copy.deleteType,
-            style: "destructive",
-            onPress: () => {
-              deletePlaceTypeLocal(editing.id)
-                .then(() => {
-                  onSaved("Type deleted.");
-                  onDone();
-                })
-                .catch((err: unknown) => {
-                  console.error(err);
-                  // Same reasoning as `save`'s catch: the sheet is still up,
-                  // so this is the banner, not a toast under it.
-                  setFormError("Couldn't delete that type.");
-                });
-            },
-          },
-        ]);
-      })
-      .catch((err: unknown) => {
-        console.error(err);
-        setFormError("Couldn't check which places use this type.");
-      });
+    // Delete is not offered while a place is on the type (the server refuses
+    // it), so there is no count to take here.
+    void confirm(placeTypeDeleteConfirm(editing.name)).then((yes) => {
+      if (!yes) return;
+      deletePlaceTypeLocal(editing.id)
+        .then(() => {
+          onSaved("Type deleted.");
+          onDone();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          // Same reasoning as `save`'s catch: the sheet is still up,
+          // so this is the banner, not a toast under it.
+          setFormError("Couldn't delete that type.");
+        });
+    });
   }, [editing, onDone, onSaved]);
 
   const body = (
@@ -340,7 +323,9 @@ export function usePlaceTypeForm({
         A ring around a pin means the place was shared with you by a friend.
       </Text>
 
-      {editing ? (
+      {editing && inUse > 0 ? (
+        <Text style={styles.hint}>{placeTypeInUseNote(inUse)}</Text>
+      ) : editing ? (
         <Row
           icon="delete"
           hue={theme.warning}
@@ -407,13 +392,13 @@ type PlaceTypeDraft = {
   color: string;
 };
 
-/** A NEW type starts on the neutral pin and the first palette entry rather than
+/** A NEW type starts on the shared default glyph and the first palette entry rather than
  *  on nothing: a form whose preview is blank until two more taps reads as
  *  broken, and both defaults are valid answers. */
 function seedDraft(editing: MirrorPlaceType | null): PlaceTypeDraft {
   return {
     name: editing?.name ?? "",
-    iconKey: (editing?.iconKey as PlaceTypeIconKey) ?? PLACE_TYPE_ICON_KEYS[0],
+    iconKey: (editing?.iconKey as PlaceTypeIconKey) ?? NEW_PLACE_TYPE_ICON_KEY,
     color: editing?.color ?? PLACE_TYPE_COLORS[0],
   };
 }

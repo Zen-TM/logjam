@@ -45,7 +45,8 @@ export const ICONS = {
   moveCopy: { web: "archive", gps: "archive" }, // save a copy and remove the original
   send: { web: "send", gps: "send" },
   shareFriend: { web: "share-2", gps: "share-2" },
-  unshare: { web: "user-minus", gps: "user-minus" }, // unshare, remove a friend
+  unshare: { web: "user-x", gps: "user-x" }, // the owner stops sharing
+  removeFriend: { web: "user-minus", gps: "user-minus" }, // end a friendship, drop someone from a plan
   export: { web: "share", gps: "share" }, // write a new file
   download: { web: "download", gps: "download" }, // stored bytes
   saveOffline: { web: "cloud-download", gps: "download-cloud" },
@@ -73,9 +74,10 @@ export const ICONS = {
   northUp: { web: "arrow-up", gps: "arrow-up" },
   play: { web: "play", gps: "play" },
   pause: { web: "pause", gps: "pause" },
+  signIn: { web: "log-in", gps: "log-in" },
   signOut: { web: "log-out", gps: "log-out" },
   accept: { web: "user-check", gps: "user-check" },
-  ignore: { web: "user-x", gps: "user-x" },
+  ignore: { web: "circle-x", gps: "x-circle" }, // decline an offer
   addFriend: { web: "user-plus", gps: "user-plus" },
   loading: { web: "loader", gps: "loader" },
   dragHandle: { web: "grip-vertical", gps: "mci:drag-vertical" },
@@ -85,6 +87,8 @@ export const ICONS = {
 
   // — structure: where the user is, and how it opens —
   disclosure: { web: "chevron-right", gps: "chevron-right" }, // opens a sub-view
+  scrollBack: { web: "chevrons-left", gps: "chevrons-left" }, // a row of cards, a page back
+  scrollOn: { web: "chevrons-right", gps: "chevrons-right" }, // ...a page on
   expand: { web: "chevron-down", gps: "chevron-down" },
   collapse: { web: "chevron-up", gps: "chevron-up" },
   overflow: { web: "ellipsis-vertical", gps: "more-vertical" }, // a thing's verbs
@@ -143,7 +147,7 @@ export const ICONS = {
   colour: { web: "palette", gps: "mci:palette-outline" },
   sensors: { web: "cpu", gps: "cpu" },
   elevation: { web: "trending-up", gps: "trending-up" },
-  scaleBar: { web: "ruler-dimension-line", gps: "mci:ruler-square-compass" },
+  scaleBar: { web: "ruler-dimension-line", gps: "mci:arrow-expand-horizontal" },
   weather: { web: "umbrella", gps: "umbrella" }, // the forecast for a spot
 
   // — weather: one per `WEATHER_CONDITIONS` entry. Feather's plain cloud is

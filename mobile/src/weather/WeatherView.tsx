@@ -6,42 +6,49 @@ import { Linking, Pressable, Text, View } from "react-native";
 import {
   WEATHER,
   WEATHER_CREDIT_URL,
-  formatRainMm,
+  WEATHER_MODELS,
   weatherAge,
-  weatherDayFacts,
+  weatherRows,
   type SectionKeysOn,
-  type WeatherDay,
   type WeatherForecast,
+  type WeatherRow,
 } from "@logjam/shared";
 
 import { hitSlop, makeStyles, muted, spacing } from "../theme";
-import { Button, ForecastList, StatGrid, type ForecastRow } from "../ui";
+import { Button, ChipRail, ForecastRail } from "../ui";
 import type { Weather } from "./useWeather";
 import { weatherViewState } from "./weatherState";
 
 type SectionProps = {
   forecast: WeatherForecast;
-  days: WeatherDay[];
-  now: number;
+  rows: WeatherRow[];
 };
+
+function RowSection({
+  rows,
+  row,
+}: {
+  rows: WeatherRow[];
+  row: WeatherRow["key"];
+}) {
+  const found = rows.find((r) => r.key === row);
+  return found ? (
+    <ForecastRail
+      title={found.title}
+      summary={found.summary}
+      cards={found.cards}
+    />
+  ) : null;
+}
 
 /** One drawing per contract section; `tsc` and `weatherContracts.test.ts` hold the set. */
 export const WEATHER_SECTIONS: Record<
   SectionKeysOn<typeof WEATHER, "gps">,
   (props: SectionProps) => React.ReactNode
 > = {
-  pastRain: ({ forecast }) => (
-    <StatGrid
-      stats={[
-        {
-          label: WEATHER.copy.pastRain,
-          value: formatRainMm(forecast.pastRainMm),
-          span: true,
-        },
-      ]}
-    />
-  ),
-  days: ({ days, now }) => <DayRows days={days} now={now} />,
+  hours: ({ rows }) => <RowSection rows={rows} row="hours" />,
+  days: ({ rows }) => <RowSection rows={rows} row="days" />,
+  past: ({ rows }) => <RowSection rows={rows} row="past" />,
   credit: () => <Credit />,
 };
 
@@ -71,7 +78,7 @@ export function WeatherView({ weather }: { weather: Weather }) {
     );
 
   const { forecast } = state;
-  const days = state.kind === "forecast" ? state.days : [];
+  const rows = weatherRows(forecast, now);
   return (
     <View style={styles.stack}>
       <View style={styles.header}>
@@ -94,6 +101,22 @@ export function WeatherView({ weather }: { weather: Weather }) {
           onPress={weather.refresh}
         />
       </View>
+      <View style={styles.model}>
+        <Text style={styles.note}>{copy.modelHint}</Text>
+        <ChipRail
+          options={WEATHER_MODELS.map(({ id, label }) => ({
+            value: id,
+            label,
+            // Offline a choice could only show nothing (shared/DESIGN.md §5).
+            disabled: !weather.canFetch,
+          }))}
+          value={weather.model}
+          onChange={weather.chooseModel}
+          // One line that scrolls sideways (maintainer's call): a wrapped
+          // block pushed the forecast down, most in the map point sheet.
+          scroll
+        />
+      </View>
       {WEATHER.sections.map(({ key }) => {
         if (key === "days" && state.kind === "outOfDate")
           return (
@@ -102,30 +125,11 @@ export function WeatherView({ weather }: { weather: Weather }) {
             </Text>
           );
         return (
-          <View key={key}>
-            {WEATHER_SECTIONS[key]({ forecast, days, now })}
-          </View>
+          <View key={key}>{WEATHER_SECTIONS[key]({ forecast, rows })}</View>
         );
       })}
     </View>
   );
-}
-
-function DayRows({ days, now }: { days: WeatherDay[]; now: number }) {
-  const rows = days.map((day): ForecastRow => {
-    const facts = weatherDayFacts(day, now);
-    return {
-      key: facts.date,
-      day: facts.day,
-      glyph: facts.condition.icon,
-      glyphLabel: facts.condition.label,
-      temperature: facts.temperature,
-      rain: facts.rain,
-      wind: facts.wind,
-      current: facts.day === WEATHER.copy.today,
-    };
-  });
-  return <ForecastList rows={rows} label={WEATHER.title} />;
 }
 
 function Credit() {
@@ -145,6 +149,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   stack: { gap: spacing(1.5) },
   header: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   headerText: { flex: 1 },
+  model: { gap: spacing(1) },
   note: { ...muted(theme, textRole.detail) },
   credit: {
     ...muted(theme, textRole.meta),

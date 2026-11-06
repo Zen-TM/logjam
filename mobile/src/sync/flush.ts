@@ -221,10 +221,11 @@ async function applyOpResult(
         const base = row.base_fields_json
           ? (JSON.parse(row.base_fields_json) as Record<string, unknown>)
           : {};
-        // `shelved_json` is what the USER wrote and `server_json` is what won
-        // — the Sync Issues screen renders them as "Discarded" and "Kept".
-        // Filling both columns from serverValue would show the other
-        // device's value labelled as their own and lose their own edits.
+        // `shelved_json` is what the USER wrote, which the account took (the
+        // later arrival wins); `server_json` is the value it replaced, and the
+        // only copy of it. The Sync Issues screen shows them as "Yours" and
+        // "Replaced". Filling both from serverValue would show the other
+        // device's value as the user's own.
         const ownFields = row.fields_json
           ? (JSON.parse(row.fields_json) as Record<string, unknown>)
           : {};
@@ -245,10 +246,14 @@ async function applyOpResult(
               ? (JSON.parse(queued.fields_json) as Record<string, unknown>)
               : {},
           );
-        const real = later.reduce(
-          (kept, fields) => filterSelfConflicts(kept, base, fields),
-          filterSelfConflicts(result.conflicts, base, ownFields),
-        );
+        // A receipt whose replaced value is nothing replaced nothing: the field
+        // was empty on the account, and the user's text is simply saved.
+        const real = later
+          .reduce(
+            (kept, fields) => filterSelfConflicts(kept, base, fields),
+            filterSelfConflicts(result.conflicts, base, ownFields),
+          )
+          .filter((receipt) => receipt.serverValue != null);
         const at = new Date().toISOString();
         // The server's own confirmed row is the name's source, and this is the
         // only moment it is guaranteed to be in hand: the mirror row can be
@@ -404,7 +409,11 @@ async function flushMediaOps(): Promise<boolean> {
   let firstError: unknown = null;
 
   for (const row of rows) {
-    if (row.op === "create" && (await isLinkPending(db, row))) continue;
+    if (
+      (row.op === "create" || row.op === "link") &&
+      (await isLinkPending(db, row))
+    )
+      continue;
 
     await db.runAsync(
       "UPDATE outbox SET state = 'inflight', attempts = attempts + 1 WHERE seq = ?",
@@ -502,23 +511,57 @@ function runMediaOp(row: MediaOpRow & { op: string }): Promise<MediaOpOutcome> {
   }
 }
 
-/** A media create must wait for its linked entity's create to fully flush:
- * an outbox row still targeting linkedId means the row may not exist
- * server-side yet. PARKED ops don't count — a parked link is never going to
- * flush on its own, and counting it would leave the photos of a blocked place
- * create sitting queued forever: never uploaded, never parked, and so never
- * shown in Sync Issues either. */
+/** A media create, or a link that moves a file onto a place, must wait for the
+ * place (or trip) it points at to fully flush: an outbox row still targeting
+ * that id means the row may not exist server-side yet. A link also waits for
+ * the file's own upload, since the API cannot move a file it has not seen.
+ *
+ * Held while the target's CREATE is parked too, not only while it is queued: a
+ * photo sent behind a create that never lands presigns, 404s and parks as an
+ * issue of its own, and a link's 404 is read as "already gone" and deleted, so
+ * the way vanishes without a word. The parked create is the one Sync Issue; its
+ * discard takes the held ops with it (`discardParkedOp`), and its Retry lets
+ * them go. A parked UPDATE does not hold anything: the row exists. `retrying`
+ * counts for the reason `selectFlushBatch` gives its dependents. A link holds
+ * for a `blocked` upload the same way: Retry on the upload releases it. */
 async function isLinkPending(
   db: Awaited<ReturnType<typeof getSyncDb>>,
-  row: MediaOpRow,
+  row: MediaOpRow & { op: string },
 ): Promise<boolean> {
-  const fields = JSON.parse(row.fields_json ?? "{}") as { linkedId?: string };
-  if (!fields.linkedId) return false;
+  const fields = JSON.parse(row.fields_json ?? "{}") as {
+    linkedId?: string;
+    placeId?: string | null;
+    sourceMediaId?: string;
+  };
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen: wait for the recording's own upload (a metered link can leave it
+  // queued while this one is reached). Parked doesn't count, as below.
+  if (fields.sourceMediaId) {
+    const source = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM outbox
+        WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+          AND state IN ('queued', 'inflight')`,
+      fields.sourceMediaId,
+    );
+    if ((source?.n ?? 0) > 0) return true;
+  }
+  const targetId = row.op === "link" ? fields.placeId : fields.linkedId;
+  if (row.op === "link") {
+    const upload = await db.getFirstAsync<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM outbox
+        WHERE entity = 'media' AND op = 'create' AND entity_id = ?
+          AND state IN ('queued', 'inflight', 'blocked')`,
+      row.entity_id,
+    );
+    if ((upload?.n ?? 0) > 0) return true;
+  }
+  if (!targetId) return false;
   const pending = await db.getFirstAsync<{ n: number }>(
     `SELECT COUNT(*) AS n FROM outbox
       WHERE entity_id = ? AND entity != 'media'
-        AND state IN ('queued', 'inflight')`,
-    fields.linkedId,
+        AND (state IN ('queued', 'inflight', 'retrying')
+             OR (op = 'create' AND state IN ('blocked', 'deadRemote')))`,
+    targetId,
   );
   return (pending?.n ?? 0) > 0;
 }

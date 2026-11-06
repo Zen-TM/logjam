@@ -1,8 +1,8 @@
 /**
  * Local persistence for a half-written trip log.
  *
- * This is the counterpart to `useUnsavedChangesGuard`, not a replacement. The
- * guard covers *deliberate* exits — Cancel, Esc, the X — where the user is
+ * This is the counterpart to `Dialog`'s `discard`, not a replacement. The
+ * confirm covers *deliberate* exits — Cancel, Esc, the X — where the user is
  * present to answer a prompt. This covers the exits no prompt can catch: the OS
  * evicting the tab, a phone call, a flat battery. Between them, "I typed it and
  * it's gone" has no path left.

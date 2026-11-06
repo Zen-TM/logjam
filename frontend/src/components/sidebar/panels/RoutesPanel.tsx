@@ -2,8 +2,7 @@
 // they imported, and the tracks on places friends shared with them.
 //
 // The page answers "what lines have I got?" (shared/DESIGN.md §2). One pinned rail
-// narrows it by kind, using Logjam GPS's own vocabulary (`CATEGORY_META` in
-// mobile/src/saved/savedKeys.ts); what each kind IS is `waysModel.ts`.
+// narrows it by kind, using the kinds `WAY_KIND_WORDS` declares for both clients; what each kind IS is `waysModel.ts`.
 //
 // A row OPENS — whatever kind it is — and its ⋯ acts. Which verbs it offers is
 // `wayActions.ts`, the same list the way's own page offers: a row shows the
@@ -15,10 +14,14 @@ import {
   exportFilename,
   formatDistanceM,
   GPX_MIME_TYPE,
+  incomingLabel,
   KML_MIME_TYPE,
   routeToGpx,
   routeToKml,
   type StandaloneFile,
+  WAY_IMPORT,
+  WAY_KIND_WORDS,
+  WAY_KINDS,
   wayVerbIcon,
 } from "@logjam/shared";
 import type { TFriend, TPlace, TRoute, PlaceTrack } from "../../../placeUtils";
@@ -34,6 +37,7 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   StatusPill,
   type MenuEntry,
@@ -44,8 +48,6 @@ import {
 import { wayVerbs, type WayVerbId } from "./wayActions";
 import {
   buildWays,
-  WAY_KIND_LABELS,
-  WAY_KINDS,
   wayKindCounts,
   wayMatchesSearch,
   type WayItem,
@@ -103,7 +105,7 @@ export default function RoutesPanel({
   places,
   sharedPlaces,
   onStartDrawingRoute,
-  onOpenUnifiedImport,
+  onImportWay,
   onOpenWay,
   onOpenPlace,
 }: {
@@ -125,7 +127,7 @@ export default function RoutesPanel({
    *  (`WayItem.viaPlace`). */
   sharedPlaces: TPlace[];
   onStartDrawingRoute: () => void;
-  onOpenUnifiedImport: () => void;
+  onImportWay: () => void;
   /**
    * Open a way's own page, which also centres the map on it. `verb` arms one
    * of that page's actions — how a row offers Share, Rename and Delete without
@@ -161,6 +163,14 @@ export default function RoutesPanel({
     [sharedPlaces],
   );
 
+  // `places` is owned plus shared: what is not shared is owned, and a shared
+  // list still loading leaves those places out of both.
+  const ownPlaceIds = useMemo(
+    () =>
+      new Set(places.filter((p) => !sharedPlaceIds.has(p.id)).map((p) => p.id)),
+    [places, sharedPlaceIds],
+  );
+
   const ways = useMemo(
     () =>
       buildWays({
@@ -169,8 +179,16 @@ export default function RoutesPanel({
         placeTracks,
         currentUserId,
         sharedPlaceIds,
+        ownPlaceIds,
       }),
-    [routes, standaloneFiles, placeTracks, currentUserId, sharedPlaceIds],
+    [
+      routes,
+      standaloneFiles,
+      placeTracks,
+      currentUserId,
+      sharedPlaceIds,
+      ownPlaceIds,
+    ],
   );
 
   const searched = useMemo(
@@ -272,9 +290,9 @@ export default function RoutesPanel({
             },
             {
               id: "import",
-              label: "Import from file",
+              label: WAY_IMPORT.menu,
               icon: "upload",
-              onSelect: onOpenUnifiedImport,
+              onSelect: onImportWay,
             },
           ]}
           trigger={(props) => (
@@ -301,7 +319,7 @@ export default function RoutesPanel({
           { value: ANY_KIND, label: "All", count: counts.all },
           ...WAY_KINDS.map((each) => ({
             value: each,
-            label: WAY_KIND_LABELS[each],
+            label: WAY_KIND_WORDS[each].plural,
             count: counts[each],
             icon: KIND_IDENTITY[each].icon,
             hue: KIND_IDENTITY[each].hue,
@@ -337,13 +355,8 @@ export default function RoutesPanel({
       >
         Draw a route
       </Button>
-      <Button
-        compact
-        variant="outline"
-        icon="upload"
-        onClick={onOpenUnifiedImport}
-      >
-        Import
+      <Button compact variant="outline" icon="upload" onClick={onImportWay}>
+        {WAY_IMPORT.file}
       </Button>
     </>
   );
@@ -356,8 +369,8 @@ export default function RoutesPanel({
     <div className={classes.emptyArea}>
       <EmptyState
         icon="route"
-        title="No lines yet"
-        body="Draw a route on the map, or bring a GPX or KML in from another app. Tracks you record in Logjam GPS appear here too."
+        title="No ways yet"
+        body="Draw a route on the map. Tracks you record in Logjam GPS appear here too."
         actions={addWayButtons}
       />
     </div>
@@ -382,11 +395,14 @@ export default function RoutesPanel({
       />
     </div>
   ) : (
-    <div className={classes.list}>
+    <RowList className={classes.list}>
       {visible.map((way) => {
         const identity = KIND_IDENTITY[way.kind];
+        // A file seen through a shared place is the place owner's.
         const ownerId =
-          way.kind === "route" ? routeById.get(way.id)?.ownerId : undefined;
+          way.kind === "route"
+            ? routeById.get(way.id)?.ownerId
+            : placeById.get(way.placeId ?? "")?.ownerId;
         const owner =
           way.shared && ownerId ? ownerUsername(friends, ownerId) : null;
         return (
@@ -396,12 +412,12 @@ export default function RoutesPanel({
             data-way-kind={way.kind}
             title={way.title}
             subtitle={subtitleOf(way)}
-            description={WAY_KIND_LABELS[way.kind]}
+            description={WAY_KIND_WORDS[way.kind].plural}
             leading={
               <IconTile
                 icon={identity.icon}
                 hue={identity.hue}
-                label={WAY_KIND_LABELS[way.kind]}
+                label={WAY_KIND_WORDS[way.kind].plural}
               />
             }
             // Every kind opens, and opening centres the map on it.
@@ -410,7 +426,8 @@ export default function RoutesPanel({
               <>
                 {way.shared && (
                   <StatusPill
-                    label={owner ? `From ${owner}` : "Shared"}
+                    label={incomingLabel(owner)}
+                    icon="friends"
                     tone="outline"
                   />
                 )}
@@ -433,7 +450,7 @@ export default function RoutesPanel({
         );
       })}
       <ListEnd>{addWayButtons}</ListEnd>
-    </div>
+    </RowList>
   );
 
   return (

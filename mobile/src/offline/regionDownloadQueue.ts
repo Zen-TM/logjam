@@ -18,6 +18,8 @@ import NetInfo from "@react-native-community/netinfo";
 import type { ToastMessage } from "../ui";
 import LogjamDownloadService from "../../modules/logjam-download-service/src/LogjamDownloadServiceModule";
 import {
+  type RegionDownloadGroup,
+  jobsToStop,
   BACKGROUND_WAIT_MS,
   MAX_BACKGROUND_RESUMES,
   downloadNotice,
@@ -151,6 +153,9 @@ export function onRegionDownloadToast(
 
 /** Groups already announced, so a later publish doesn't repeat the toast. */
 const announcedGroups = new Set<string>();
+/** Runs the user stopped: what they leave is not news, and "updated" would be
+ * false of an update that was cut short. */
+const userStopped = new Set<string>();
 
 // Driven off `publish` rather than off the pump's tail: a group also settles
 // when the last live job is paused by the user or halted by the provider, and
@@ -165,9 +170,10 @@ function announceSettledGroups(): void {
     }
     if (announcedGroups.has(group.groupId)) continue;
     announcedGroups.add(group.groupId);
+    if (userStopped.has(group.groupId)) continue;
     const message = {
       text: regionGroupToastText(group),
-      tone: group.unfinished > 0 ? ("error" as const) : ("info" as const),
+      tone: group.unfinished > 0 ? ("error" as const) : ("done" as const),
     };
     for (const listener of toastListeners) listener(message);
   }
@@ -281,6 +287,7 @@ function installAutoResumeWatchers(): void {
 
 export function enqueueRegionDownloads(specs: RegionTaskSpec[]): void {
   installAutoResumeWatchers();
+  for (const spec of specs) userStopped.delete(spec.groupId);
   jobs = [
     // Settled jobs from an earlier batch are dropped, not kept: the progress
     // screen is about the download the user just started, and a failure from
@@ -332,8 +339,7 @@ async function drain(): Promise<void> {
     // A runner that throws ends its job as failed rather than leaving it
     // "downloading" for good, its token held and the jobs behind it stalled.
     // Guard: regionDownloadQueue.test.ts ("a runner that throws").
-    const outcome: RegionRunOutcome = await (next.spec.taskKind ===
-    "tile-pyramid"
+    let outcome: RegionRunOutcome = await (next.spec.taskKind === "tile-pyramid"
       ? runRegionDownload(next.spec, report, token)
       : import("./regionDownloads").then((m) =>
           m.runRegionClip(next.spec as RegionClipTask, report, token),
@@ -342,7 +348,11 @@ async function drain(): Promise<void> {
       console.error(err);
       return { status: "failed", code: "unknown" } as const;
     });
-    tokens.delete(next.spec.id);
+    // The token stays until the job's state says what the run became: from the
+    // moment a file is registered until then, a Stop only marks the token, so
+    // it cannot delete a file the swap below has just made the only copy.
+    // Guard: regionDownloadQueue.test.ts ("an update that is stopped at every
+    // step of its run").
 
     // The spec was snapshotted before the run; the user may have renamed the
     // area while it was in flight (the naming prompt is deliberately non-
@@ -356,9 +366,32 @@ async function drain(): Promise<void> {
       }
     }
 
+    // An update's file replaces the older one only if it is no worse.
+    if (outcome.status === "ready") {
+      const { artifact, failed } = outcome;
+      const kept = await import("./regionDownloads")
+        .then((m) => m.swapSuperseded(artifact, failed))
+        .catch((err: unknown) => {
+          console.error(err);
+          return true;
+        });
+      if (!kept) outcome = { status: "failed", code: "provider-errors" };
+    }
+
+    const stoppedLate = token.stop === "cancel";
+    tokens.delete(next.spec.id);
     if (outcome.status === "cancelled") {
       jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
       publish();
+      continue;
+    }
+    // A Stop that came after the file was saved: a first save is cancelled as
+    // it would have been a moment sooner; an update's file has already taken
+    // the older one's place, so it is kept.
+    if (stoppedLate && outcome.status === "ready" && !next.spec.update) {
+      jobs = jobs.filter((job) => job.spec.id !== next.spec.id);
+      publish();
+      deleteAbandonedRegion(next.spec.id).catch((err) => console.error(err));
       continue;
     }
     patch(next.spec.id, {
@@ -373,7 +406,9 @@ async function drain(): Promise<void> {
 }
 
 /**
- * Name the area a run is downloading, while it downloads.
+ * Name the area a run is downloading, while it downloads. Saved's rename of a
+ * card takes the same path (`renameRegionGroup`), so a rename during an update
+ * is not undone by the files it is still writing.
  *
  * The prompt goes up the moment the jobs are enqueued (the download must not
  * wait on typing), so the name can arrive before, during or after any given
@@ -381,16 +416,22 @@ async function drain(): Promise<void> {
  * label into the artifact they write, and rows already written are updated in
  * place.
  */
-export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
+export async function renameRegionGroup(
+  groupId: string,
+  groupLabel: string,
+): Promise<void> {
   jobs = jobs.map((job) =>
     job.spec.groupId === groupId
       ? { ...job, spec: { ...job.spec, groupLabel } }
       : job,
   );
   publish();
-  void import("./registryDb")
-    .then((registry) => registry.renameArtifactGroup(groupId, groupLabel))
-    .catch((err) => console.error(err));
+  const registry = await import("./registryDb");
+  await registry.renameArtifactGroup(groupId, groupLabel);
+}
+
+export function setRegionGroupLabel(groupId: string, groupLabel: string): void {
+  renameRegionGroup(groupId, groupLabel).catch((err) => console.error(err));
 }
 
 /** Stop for now; the partial MBTiles keeps every tile already fetched. */
@@ -412,9 +453,30 @@ export function cancelRegionDownload(id: string): void {
     token.stop = "cancel";
     return; // the pump removes the row when the run returns "cancelled"
   }
+  // A Stop answered from a screen that was drawn before the job saved: an
+  // update's saved file is the only copy of its map, never this call's to delete.
+  const live = jobs.find((job) => job.spec.id === id);
+  if (live?.spec.update && live.state.kind === "ready") return;
   jobs = jobs.filter((job) => job.spec.id !== id);
   publish();
   deleteAbandonedRegion(id).catch((err) => console.error(err));
+}
+
+/** The Stop on a run's card: see `jobsToStop` for what it takes with it. */
+export function stopRegionGroup(
+  group: Pick<RegionDownloadGroup, "groupId" | "jobs" | "update">,
+): void {
+  userStopped.add(group.groupId);
+  // The queue's jobs as they are now, not as the screen drew them when its
+  // confirm opened: a job that saved while the user decided is no longer
+  // something to stop.
+  const live = jobs.filter((job) => job.spec.groupId === group.groupId);
+  for (const job of jobsToStop({
+    jobs: live,
+    update: live.some((job) => job.spec.update),
+  })) {
+    cancelRegionDownload(job.spec.id);
+  }
 }
 
 /**
@@ -442,6 +504,7 @@ export async function cancelAllRegionDownloads(): Promise<void> {
   tokens.clear();
   // Module state must not outlive a sign-out (see the note above).
   announcedGroups.clear();
+  userStopped.clear();
   backgroundResumesLeft = MAX_BACKGROUND_RESUMES;
   publish();
 }

@@ -72,7 +72,7 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await joinPlan(planId);
-      toast.success(TRIP_PLAN_JOIN.copy.joined);
+      toast.done(TRIP_PLAN_JOIN.copy.joined);
       onJoined();
     } catch (err) {
       console.error(err);
@@ -86,7 +86,7 @@ export default function PlanInvitedPage({
     setBusy(true);
     try {
       await leavePlan(planId);
-      toast.success(TRIP_PLAN_PREVIEW.copy.declined);
+      toast.done(TRIP_PLAN_PREVIEW.copy.declined);
       onDeclined();
     } catch (err) {
       console.error(err);
@@ -192,9 +192,12 @@ export default function PlanInvitedPage({
     <div className={classes.root}>
       <ConfirmDialog
         open={declining}
-        title={TRIP_PLAN_JOIN.copy.declineTitle}
-        message={TRIP_PLAN_JOIN.copy.declineBody}
-        confirmLabel={copy.decline}
+        copy={{
+          confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
+          confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
+          confirmLabel: copy.decline,
+          tone: "filled",
+        }}
         busy={busy}
         onClose={() => setDeclining(false)}
         onConfirm={() => void decline().then(() => setDeclining(false))}

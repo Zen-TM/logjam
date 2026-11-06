@@ -5,8 +5,13 @@ import { DEM_SOURCE_ID, type DownloadableTileSourceId } from "@logjam/shared";
 import {
   downloadNotice,
   groupRegionJobs,
+  isGroupBusy,
+  jobsToStop,
+  updateProgressLine,
   mayResumeOnReconnect,
+  regionGroupStatusLine,
   regionGroupToastText,
+  retryableJobs,
 } from "./regionDownloadGroups";
 import type { RegionJob, RegionJobState } from "./regionDownloadQueue";
 
@@ -98,7 +103,6 @@ describe("the DEM that rides along with every run", () => {
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
       demJob({ kind: "downloading" }),
     ]);
-    expect(group.unfinished).toBe(0);
     expect(group.done).toBe(false);
     const [finished] = groupRegionJobs([
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
@@ -107,15 +111,16 @@ describe("the DEM that rides along with every run", () => {
     expect(finished.done).toBe(true);
   });
 
-  it("is work, but is not one of the maps", () => {
+  // The saved row counts the DEM among its layers, so the run counts it too:
+  // a card that said "5 of 6" over a row that says "7 layers" is the bug.
+  it("is a layer like the rest", () => {
     const [group] = groupRegionJobs([
       job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
       demJob({ kind: "downloading" }),
     ]);
-    expect(group.mapCount).toBe(1);
+    expect(group.layerCount).toBe(2);
     expect(group.ready).toBe(1);
-    expect(group.unfinished).toBe(0);
-    // Still half the run's progress, and still not finished.
+    expect(group.unfinished).toBe(1);
     expect(group.fraction).toBeCloseTo(0.5);
     expect(group.done).toBe(false);
   });
@@ -127,7 +132,7 @@ describe("the DEM that rides along with every run", () => {
     ]);
     expect(group.demUnfinished).toBe(true);
     expect(regionGroupToastText(group)).toBe(
-      "Test region saved · 1 map · no elevation data",
+      "Test region saved with 1 layer missing · no elevation data",
     );
   });
 });
@@ -140,19 +145,53 @@ describe("regionGroupToastText", () => {
   ])[0];
 
   it("names the area and the tally", () => {
-    expect(regionGroupToastText(base)).toBe("Test region saved · 3 maps");
+    expect(regionGroupToastText(base)).toBe("Test region saved · 3 layers");
   });
 
-  it("says how many didn't finish", () => {
+  it("does not say saved without saying what is missing", () => {
     expect(regionGroupToastText({ ...base, ready: 2, unfinished: 1 })).toBe(
-      "Test region saved · 2 maps · 1 map didn't finish",
+      "Test region saved with 1 layer missing",
     );
   });
 
   it("does not claim a save when nothing landed", () => {
     expect(regionGroupToastText({ ...base, ready: 0, unfinished: 3 })).toBe(
-      "Test region · nothing saved · 3 maps didn't finish",
+      "Test region · nothing saved",
     );
+  });
+});
+
+// The card and the toast are one run told twice. Mutation that turns it red:
+// count "maps" or leave the failed layers out of either line.
+describe("regionGroupStatusLine", () => {
+  const running = groupRegionJobs([
+    job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+    job("b", "run-1", { kind: "downloading" }),
+  ])[0];
+
+  it("counts layers while it runs", () => {
+    expect(regionGroupStatusLine(running)).toBe("1 of 2 layers saved");
+  });
+
+  it("says what is missing once it stops", () => {
+    const [stopped] = groupRegionJobs([
+      job("a", "run-1", { kind: "ready", gaps: 0, failed: 0 }),
+      job("b", "run-1", { kind: "failed", code: "unknown" }),
+    ]);
+    expect(regionGroupStatusLine(stopped)).toBe("Saved with 1 layer missing");
+  });
+});
+
+describe("retryableJobs", () => {
+  it("offers a retry for a dropped connection, not for a refused area", () => {
+    const failed = (id: string, code: "unknown" | "region-rejected") =>
+      job(id, "run-1", { kind: "failed", code });
+    expect(
+      retryableJobs([
+        failed("a", "unknown"),
+        failed("b", "region-rejected"),
+      ]).map((j) => j.spec.id),
+    ).toEqual(["a"]);
   });
 });
 
@@ -215,5 +254,82 @@ describe("mayResumeOnReconnect", () => {
     expect(mayResumeOnReconnect("active", 0)).toBe(true);
     expect(mayResumeOnReconnect("background", 1)).toBe(true);
     expect(mayResumeOnReconnect("background", 0)).toBe(false);
+  });
+});
+
+describe("isGroupBusy", () => {
+  const ready = { kind: "ready", gaps: 0, failed: 0 } as const;
+  // Mutation: count every job in the group and a saved card says "Updating…"
+  // until some other download is queued.
+  it("counts only work still to run", () => {
+    expect(isGroupBusy([job("a", "g", ready)], "g")).toBe(false);
+    expect(
+      isGroupBusy([job("a", "g", { kind: "failed", code: "unknown" })], "g"),
+    ).toBe(false);
+    expect(isGroupBusy([job("a", "g", { kind: "queued" })], "g")).toBe(true);
+    expect(
+      isGroupBusy([job("a", "g", { kind: "paused", reason: "user" })], "g"),
+    ).toBe(true);
+    expect(isGroupBusy([job("a", "other", { kind: "queued" })], "g")).toBe(
+      false,
+    );
+  });
+});
+
+describe("an update's finish toast", () => {
+  const updating = (id: string, state: RegionJobState) => {
+    const j = job(id, "g", state);
+    return { ...j, spec: { ...j.spec, update: true as const } };
+  };
+  const text = (jobs: RegionJob[]) =>
+    regionGroupToastText(groupRegionJobs(jobs)[0]);
+
+  // Mutation: use the first-save wording and a failed update reads as
+  // "nothing saved", as if the card were lost.
+  it("says the saved map is unchanged when nothing was replaced", () => {
+    expect(text([updating("a", { kind: "failed", code: "unknown" })])).toBe(
+      "Couldn't update Test region · your saved map is unchanged",
+    );
+  });
+
+  it("says what was kept when only some files were replaced", () => {
+    expect(
+      text([
+        updating("a", { kind: "ready", gaps: 0, failed: 0 }),
+        updating("b", { kind: "failed", code: "unknown" }),
+      ]),
+    ).toBe(
+      "Test region partly updated · 1 map didn't finish · older copies kept",
+    );
+  });
+
+  it("says updated when every file was replaced", () => {
+    expect(text([updating("a", { kind: "ready", gaps: 0, failed: 0 })])).toBe(
+      "Test region updated · 1 map",
+    );
+  });
+});
+
+describe("an updating card", () => {
+  it("says how far along it is, or that it stopped short", () => {
+    expect(updateProgressLine({ settled: false, fraction: 0.426 })).toBe(
+      "Updating · 43%",
+    );
+    expect(updateProgressLine({ settled: true, fraction: 0.5 })).toBe(
+      "Update didn't finish",
+    );
+  });
+
+  // Mutation: return every job for an update, and Stop deletes what was saved.
+  it("stops only what has not saved when it is an update", () => {
+    const saved = job("a", "g", { kind: "ready", gaps: 0, failed: 0 });
+    const waiting = job("b", "g", { kind: "queued" });
+    expect(jobsToStop({ update: true, jobs: [saved, waiting] })).toEqual([
+      waiting,
+    ]);
+    expect(jobsToStop({ update: false, jobs: [saved, waiting] })).toEqual([
+      saved,
+      waiting,
+    ]);
   });
 });

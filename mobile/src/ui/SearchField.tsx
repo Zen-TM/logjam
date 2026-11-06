@@ -9,7 +9,6 @@ import {
   spacing,
   radius,
   useTheme,
-  withAlpha,
 } from "../theme";
 import { Icon } from "./Icon";
 import { IconButton } from "./IconButton";
@@ -82,7 +81,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingLeft: spacing(1.5),
     borderRadius: radius.pill,
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.45),
+    borderColor: theme.accent,
     backgroundColor: theme.field,
   },
   // The clear button's own box insets the end when it is there.

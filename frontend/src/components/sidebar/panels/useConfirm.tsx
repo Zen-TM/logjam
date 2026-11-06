@@ -1,14 +1,11 @@
 // One confirm for a whole page, asked for by whichever verb needs it — the Maps
 // views raise a dozen different confirms and hold one dialog for all of them.
 import { useCallback, useState, type ReactNode } from "react";
+import type { ConfirmCopy } from "@logjam/shared";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
 
 type ConfirmRequest = {
-  title: string;
-  message: ReactNode;
-  confirmLabel: string;
-  /** `primary` when nothing is destroyed (removing a share). */
-  tone?: "error" | "primary";
+  copy: ConfirmCopy;
   /** Reports its own failure; the dialog closes when it settles either way. */
   run: () => Promise<void>;
 };
@@ -37,10 +34,7 @@ export function useConfirm(): {
     dialog: (
       <ConfirmDialog
         open={pending != null}
-        title={pending?.title ?? ""}
-        message={pending?.message}
-        confirmLabel={pending?.confirmLabel}
-        confirmColor={pending?.tone ?? "error"}
+        copy={pending?.copy}
         busy={busy}
         onConfirm={() => void confirm()}
         onClose={() => setPending(null)}

@@ -259,7 +259,7 @@ function FriendSharingSection({
     setBusy(true);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       setPendingBulk(null);
       clearSelection();
       load();
@@ -282,7 +282,7 @@ function FriendSharingSection({
         friend.friendshipId,
         picked.map(shareCardItem),
       );
-      toast.success(
+      toast.done(
         unshareOutcomeMessage({ revokedCount, friendName: friend.username }),
       );
     }, copy.unshareFailed);
@@ -307,7 +307,7 @@ function FriendSharingSection({
     }
     const outcome = removeOutcomeMessage({ removed, failed });
     if (outcome.tone === "error") toast.error(outcome.text);
-    else toast.success(outcome.text);
+    else toast.done(outcome.text);
     setPendingBulk(null);
     clearSelection();
     load();
@@ -353,7 +353,7 @@ function FriendSharingSection({
               />
             )}
             {/* Neither verb is a bin: both end a grant, and the record outlives
-                  them. `user-minus` for "they stop seeing it", `eye-off` for "I
+                  them. `user-x` for "they stop seeing it", `eye-off` for "I
                   stop seeing it" — the same two glyphs Logjam GPS uses here. */}
             {direction === "theySee" ? (
               <IconButton
@@ -481,6 +481,21 @@ function FriendSharingSection({
     ),
   };
 
+  const unshare = unshareAllConfirm({
+    count: selected.length,
+    friendName: friend.username,
+    includesPlace: selected.some((card) => card.row.entityType === "place"),
+  });
+  const removeAll = removeAllConfirm({
+    count: selected.filter((card) => card.removable).length,
+    friendName: friend.username,
+    // ZERO on purpose: the sentence it unlocks offers to save a copy
+    // first, and this screen has no copy verb to offer. Saying so
+    // mid-confirm would send someone looking for a control that is on
+    // the place's own page and nowhere near here.
+    copyableCount: 0,
+  });
+
   return (
     <div className={classes.root} ref={rootRef}>
       {contractSectionKeys(FRIEND_SHARES, "web").map((key) => (
@@ -490,25 +505,13 @@ function FriendSharingSection({
       {/* Impact-aware confirmations, from the one place that words them. */}
       <ConfirmDialog
         open={pendingBulk === "unshare"}
-        title={
-          unshareAllConfirm({
-            count: selected.length,
-            friendName: friend.username,
-            includesPlace: selected.some(
-              (card) => card.row.entityType === "place",
-            ),
-          }).title
-        }
-        message={
-          unshareAllConfirm({
-            count: selected.length,
-            friendName: friend.username,
-            includesPlace: selected.some(
-              (card) => card.row.entityType === "place",
-            ),
-          }).body
-        }
-        confirmLabel={`Unshare ${selected.length}`}
+        copy={{
+          confirmTitle: unshare.title,
+          confirmBody: unshare.body,
+          confirmLabel: `Stop sharing ${selected.length}`,
+          tone: "destructive",
+          icon: "unshare",
+        }}
         busy={busy}
         onConfirm={() => void unshareSelected()}
         onClose={() => setPendingBulk(null)}
@@ -516,28 +519,14 @@ function FriendSharingSection({
 
       <ConfirmDialog
         open={pendingBulk === "remove"}
-        title={
-          removeAllConfirm({
-            count: selected.filter((card) => card.removable).length,
-            friendName: friend.username,
-            // ZERO on purpose: the sentence it unlocks offers to save a copy
-            // first, and this screen has no copy verb to offer. Saying so
-            // mid-confirm would send someone looking for a control that is on
-            // the place's own page and nowhere near here.
-            copyableCount: 0,
-          }).title
-        }
-        message={
-          removeAllConfirm({
-            count: selected.filter((card) => card.removable).length,
-            friendName: friend.username,
-            copyableCount: 0,
-          }).body
-        }
-        confirmLabel="Remove"
-        // Not `error`: removing a share destroys nothing, and a red button here
-        // would say otherwise.
-        confirmColor="primary"
+        // Not destructive: removing a share destroys nothing, and a warning
+        // button here would say otherwise.
+        copy={{
+          confirmTitle: removeAll.title,
+          confirmBody: removeAll.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={() => void removeSelected()}
         onClose={() => setPendingBulk(null)}

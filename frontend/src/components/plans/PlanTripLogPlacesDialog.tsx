@@ -1,83 +1,47 @@
 // Start a trip log from this plan, its one step: which of the plan's places
-// the trip links. A trip links only its owner's places, so each one picked is
-// saved as the caller's copy first, in order. A failure stops before the trip
-// form opens and says how many copies landed; Next again saves only the rest.
-import { useId, useRef, useState } from "react";
+// the trip links. A trip links only its owner's places, so only a plan place
+// the caller already has (same name and coordinates) is listed, and linked as
+// the caller's own; the others are left out, never copied.
+import { useId, useMemo, useState } from "react";
 import {
-  mediaSkippedSentence,
   MAX_PLACES_PER_TRIP,
-  saveTripPlanPlaces,
   TRIP_PLACES_CAP_SENTENCE,
   TRIP_PLAN_PAGE,
+  tripPlanTripLogMatches,
   tripPlanTripLogPlacesLine,
   type TripPlanPlace,
 } from "@logjam/shared";
-import { useToast } from "../feedback/ToastProvider";
-import { Button, Checkbox, Dialog, ErrorBanner } from "../../ui";
-import { messageFromError } from "../../errors/messageFromError";
-import { savePlanItem } from "../../plansApi";
+import { Button, Checkbox, Dialog } from "../../ui";
+import type { TPlace } from "../../placeUtils";
 import classes from "./plans.module.css";
 
 const copy = TRIP_PLAN_PAGE.copy;
 
 export default function PlanTripLogPlacesDialog({
-  planId,
   places,
-  onCopied,
-  onStale,
+  own,
   onDone,
   onClose,
 }: {
-  planId: string;
   places: TripPlanPlace[];
-  /** A copy landed in the caller's places. */
-  onCopied: () => void;
-  /** The API refused a save (the place may have left the plan): fetch the
-   *  plan again, so its row goes. */
-  onStale: () => void;
-  /** The caller's new copies' ids, in the plan's order, and their types
-   *  (the form needs them before the user's places refetch). */
+  /** The caller's own places, which the trip may link. */
+  own: TPlace[];
+  /** The caller's own places' ids, in the plan's order, and their types. */
   onDone: (placeIds: string[], placeTypeIds: string[]) => void;
   onClose: () => void;
 }) {
-  const toast = useToast();
   const formId = useId();
   const [picked, setPicked] = useState<string[]>([]);
-  // The plan's place id → the caller's copy, kept across a failed Next.
-  const [copies, setCopies] = useState<Record<string, string>>({});
-  // The photos that didn't come, summed across a stopped run and its retry.
-  const lost = useRef({ count: 0, outOfSpace: false });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const matches = useMemo(
+    () => tripPlanTripLogMatches(places, own),
+    [places, own],
+  );
 
-  async function submit() {
-    setBusy(true);
-    const chosen = places.filter((place) => picked.includes(place.id));
-    const run = await saveTripPlanPlaces({
-      picked: chosen,
-      copies,
-      save: (placeId) => savePlanItem(planId, "place", placeId),
-      why: (err) => messageFromError(err, copy.saveCopyFailed),
-    });
-    setCopies(run.copies);
-    lost.current.count += run.skipped;
-    lost.current.outOfSpace ||= run.outOfSpace;
-    if (run.added > 0) onCopied();
-    setBusy(false);
-    if (run.stopped) {
-      console.error(run.stopped.error);
-      setError(run.stopped.message);
-      if (run.stopped.refetch) onStale();
-      return;
-    }
-    const photos = mediaSkippedSentence(
-      lost.current.count,
-      lost.current.outOfSpace,
-    );
-    if (photos) toast.error(photos);
+  function submit() {
+    const chosen = matches.filter((m) => picked.includes(m.place.id));
     onDone(
-      chosen.map((place) => run.copies[place.id]),
-      chosen.map((place) => place.placeTypeId),
+      chosen.map((m) => m.own.id),
+      chosen.map((m) => m.own.placeTypeId),
     );
   }
 
@@ -86,13 +50,10 @@ export default function PlanTripLogPlacesDialog({
       open
       title={copy.tripLogPlaces}
       onClose={onClose}
-      dismissible={!busy}
       footer={
         <>
-          <Button onClick={onClose} disabled={busy} disabledReason="Saving…">
-            Cancel
-          </Button>
-          <Button type="submit" form={formId} variant="filled" busy={busy}>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" form={formId} variant="filled">
             {copy.tripLogNext}
           </Button>
         </>
@@ -103,17 +64,14 @@ export default function PlanTripLogPlacesDialog({
         className={classes.form}
         onSubmit={(event) => {
           event.preventDefault();
-          if (!busy) void submit();
+          submit();
         }}
       >
         <p className={classes.note}>
-          {tripPlanTripLogPlacesLine(
-            places.filter((place) => picked.includes(place.id)),
-            true,
-          )}
+          {tripPlanTripLogPlacesLine(matches.length, places.length)}
         </p>
         <div className={classes.question}>
-          {places.map((place) => (
+          {matches.map(({ place }) => (
             <Checkbox
               key={place.id}
               label={place.name}
@@ -123,21 +81,19 @@ export default function PlanTripLogPlacesDialog({
                 !picked.includes(place.id) &&
                 picked.length >= MAX_PLACES_PER_TRIP
               }
-              onChange={(next) => {
-                setError(null);
+              onChange={(next) =>
                 setPicked((was) =>
                   next
                     ? [...was, place.id]
                     : was.filter((id) => id !== place.id),
-                );
-              }}
+                )
+              }
             />
           ))}
         </div>
         {picked.length >= MAX_PLACES_PER_TRIP && (
           <p className={classes.note}>{TRIP_PLACES_CAP_SENTENCE}</p>
         )}
-        {error && <ErrorBanner message={error} />}
       </form>
     </Dialog>
   );

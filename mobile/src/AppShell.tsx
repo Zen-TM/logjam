@@ -9,25 +9,35 @@
 // Local storage is untouched by that distinction: guest mutations still write
 // the mirror and still enqueue to the outbox, which is precisely what makes
 // linking an account later a flush rather than a migration.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Linking, useWindowDimensions, View } from "react-native";
 import {
   DarkTheme,
   DefaultTheme,
+  createNavigationContainerRef,
   NavigationContainer,
-  type NavigationContainerRef,
 } from "@react-navigation/native";
 import * as Notifications from "expo-notifications";
 import type { SignOutHandler } from "./offline/signOutConfirm";
-import { isRouteEditing } from "./map/routeEditLock";
-import { keepAccountSlopeBands } from "./map/slopeBandsPreference";
+import { announceRouteLeaveBlocked, isRouteEditing } from "./map/routeEditLock";
+import {
+  keepAccountSlopeBands,
+  setSlopeBandsAccount,
+} from "./map/slopeBandsPreference";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   currentConsentVersionOf,
+  navLabel,
   isThemeSchemeId,
   needsReconsent,
+  SETTINGS,
   TRIP_PLANS_LIST,
   type IconIdea,
 } from "@logjam/shared";
@@ -43,13 +53,7 @@ import { getCachedUnreadCount } from "./sync/notificationsCache";
 import { onMirrorChanged } from "./sync/syncDb";
 import { registerShellTriggers } from "./shellTriggers";
 import { registerSyncTriggers } from "./sync/syncEngine";
-import {
-  makeThemed,
-  setThemeSchemeId,
-  spacing,
-  useTheme,
-  useThemeMode,
-} from "./theme";
+import { makeThemed, setThemeSchemeId, useTheme, useThemeMode } from "./theme";
 import { MapScreen } from "./map/MapScreen";
 import { RegionDownloadScreen } from "./map/RegionDownloadScreen";
 import type { BasemapId } from "./map/sourceResolver";
@@ -58,9 +62,17 @@ import { registerSavedGaugeHistoryRefresh } from "./gauges/savedPlaceHistories";
 import { registerPlaceRegistryRefresh } from "./offline/placeRegistry";
 import { canRunNow } from "./offline/networkPolicy";
 import { BackgroundToast } from "./BackgroundToast";
+import { ConfirmHost } from "./ConfirmHost";
 import { registerForPushNotifications } from "./notifications/pushRegistration";
 import { planPushRefresh } from "./notifications/planPushRefresh";
-import { notificationTapTarget } from "./notifications/tapTarget";
+import { ongoingTapKind } from "./notifications/ongoingTap";
+import { createTapIntake } from "./notifications/tapIntake";
+import {
+  destinationCall,
+  notificationTapTarget,
+  tapTargetCall,
+  type DestinationTarget,
+} from "./notifications/tapTarget";
 import { PLACE_FOCUS_DEGREES } from "./saved/bboxOfPoints";
 import { SavedScreen, type SavedItemReveal } from "./saved/SavedScreen";
 import type { SavedCategory } from "./saved/savedKeys";
@@ -96,18 +108,17 @@ import type { MirrorTrip } from "./sync/mirrorStore";
 import { LogsScreen } from "./logs/LogsScreen";
 import { StatsScreen } from "./logs/StatsScreen";
 import { TripDetailScreen } from "./logs/TripDetailScreen";
-import { backLabelOf, Icon, LoadingState } from "./ui";
-
-// Said in one place because it is said from two: the tab bar and the
-// notification-response listener are both ways off the map, and two copies of
-// this sentence would be two chances for them to drift apart.
-function alertFinishRouteFirst(): void {
-  Alert.alert(
-    "Finish your route first",
-    "Save it, or delete the draft, before leaving the map.",
-    [{ text: "OK" }],
-  );
-}
+import {
+  backLabelOf,
+  Hero,
+  Icon,
+  LoadingState,
+  tabBadgeLabel,
+  tabBadgeStyle,
+  TAB_BAR_TOP_PAD,
+  ToastHost,
+  useTabBarHeight,
+} from "./ui";
 
 function useNavigationTheme() {
   const theme = useTheme();
@@ -179,9 +190,9 @@ type MapStackParams = {
     | undefined;
   MapPlaceDetail: { placeId: string; name: string };
   MapTripDetail: { trip: MirrorTrip };
-  // Where the map was looking when "Save maps for offline use" was tapped, so
+  // Where the map was looking when "Save an offline map" was tapped, so
   // the download screen opens on the same ground. Params only, never persisted.
-  // A plan's Download the map for this area passes its items' bounds.
+  // A plan's Save an offline map of this area passes its items' bounds.
   MapRegionDownload: RegionDownloadParams;
 };
 
@@ -254,6 +265,8 @@ type SavedStackParams = {
   SavedPickPoint:
     | { latitude: number; longitude: number; placeId?: string }
     | undefined;
+  // Saved's "Save an offline map", pushed here so Back is Saved.
+  SavedRegionDownload: RegionDownloadParams;
 };
 
 type MoreStackParams = {
@@ -265,7 +278,7 @@ type MoreStackParams = {
   // Reached from a notification that refers to a place — pushed inside the
   // More stack so Back returns to the inbox, not to another tab's history.
   MorePlaceDetail: { placeId: string };
-  // A plan's Download the map for this area, pushed here so Back is the plan.
+  // A plan's Save an offline map of this area, pushed here so Back is the plan.
   MoreRegionDownload: RegionDownloadParams;
   MoreTripDetail: { trip: MirrorTrip };
   // A plan left or deleted comes back here with what happened.
@@ -289,9 +302,8 @@ type MoreStackParams = {
   Leaderboard: undefined;
   SyncIssues: undefined;
   Settings: undefined;
-  // Settings sub-pages. One route each rather than one parameterised route: a
-  // native header wants its own title per screen, and the back stack reads
-  // Settings › Map the way the user got there.
+  // Settings sub-pages. One route each rather than one parameterised route: the
+  // back stack reads Settings › Map the way the user got there.
   SettingsDisplay: undefined;
   SettingsMap: undefined;
   SettingsNotifications: undefined;
@@ -314,9 +326,6 @@ const TripsStack = createNativeStackNavigator<TripsStackParams>();
 const SavedStack = createNativeStackNavigator<SavedStackParams>();
 const MoreStack = createNativeStackNavigator<MoreStackParams>();
 const Tabs = createBottomTabNavigator();
-/** `@react-navigation/bottom-tabs`' own TABBAR_HEIGHT_UIKIT, which it does not export. */
-const TAB_BAR_BASE_HEIGHT = 49;
-const TAB_BAR_TOP_PAD = spacing(0.5);
 
 /**
  * Map focus for one place — a tight box around its point (~1 km across), which
@@ -344,9 +353,36 @@ const useStackScreenOptions = makeThemed(
     }) as const,
 );
 
-// One download screen for two stacks: the Map tab's, and the More tab's for a
-// plan's "Download the map for this area", so Back returns to that plan, named
-// by `backLabelOf`, instead of the Map tab.
+// A settings page under the same in-page Hero as the rest of More.
+function SettingsPageRoute({
+  title,
+  navigation,
+  route,
+  children,
+}: {
+  title: string;
+  navigation: {
+    goBack: () => void;
+    getState: () => Parameters<typeof backLabelOf>[0];
+  };
+  route: { key: string };
+  children: ReactNode;
+}) {
+  return (
+    <View style={{ flex: 1 }}>
+      <Hero
+        title={title}
+        onBack={() => navigation.goBack()}
+        backLabel={backLabelOf(navigation.getState(), route.key)}
+      />
+      {children}
+    </View>
+  );
+}
+
+// One download screen for three stacks: the Map tab's, the Saved tab's and the
+// More tab's for a plan's "Save an offline map of this area", so Back returns to
+// where it was opened from, named by `backLabelOf`, instead of the Map tab.
 function RegionDownloadRoute({
   navigation,
   route,
@@ -579,12 +615,8 @@ function SavedStackNav() {
                   : undefined,
               })
             }
-            // Open the region download framing screen directly.
-            onDownloadRegion={() =>
-              navigation.getParent()?.navigate("Map", {
-                screen: "MapRegionDownload",
-              })
-            }
+            // Pushed in this stack, not the Map tab's, so Back is Saved.
+            onDownloadRegion={() => navigation.navigate("SavedRegionDownload")}
             onEditRoute={(routeId) =>
               navigation.getParent()?.navigate("Map", {
                 screen: "MapView",
@@ -656,6 +688,14 @@ function SavedStackNav() {
               navigation.goBack();
             }}
           />
+        )}
+      </SavedStack.Screen>
+      <SavedStack.Screen
+        name="SavedRegionDownload"
+        options={{ headerShown: false }}
+      >
+        {({ navigation, route }) => (
+          <RegionDownloadRoute navigation={navigation} route={route} />
         )}
       </SavedStack.Screen>
     </SavedStack.Navigator>
@@ -881,6 +921,82 @@ function TabIcon({ idea, color }: { idea: IconIdea; color: string }) {
   return <Icon idea={idea} size={22} color={color} />;
 }
 
+// Module-level: the intake outlives a shell remount (a sign-in change), which
+// is what keeps one tap from being followed twice. The ref is untyped across
+// nested navigators; runtime routes are the tab/screen names registered below.
+const navigationRef = createNavigationContainerRef<never>();
+type TapNav = { navigate: (name: string, params?: object) => void };
+
+/** The one way a destination is opened, from an Inbox row and from a tap on
+ *  its push alike (the route itself is `destinationCall`). */
+function openDestination(nav: TapNav, destination: DestinationTarget) {
+  const call = destinationCall(destination, Date.now());
+  nav.navigate(call.name, call.params);
+}
+
+/** Where a tapped notification goes. Cold start, warm start and the app in the
+ *  foreground all end here, via `tapIntake`. */
+function openNotificationTap(nav: TapNav, data: unknown) {
+  // Where the tap goes — including the guard the tab bar applies, for the
+  // same reason. The precedence lives in notifications/tapTarget, pure and
+  // tested, because nothing in mobile/ can run this component.
+  const target = notificationTapTarget({
+    data,
+    routeEditing: isRouteEditing(),
+  });
+  if (target.kind === "blocked") {
+    // With the toast, so the tap is answered rather than silently ignored.
+    announceRouteLeaveBlocked();
+    return;
+  }
+  // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
+  // glance, often from a lock screen, whereas read means "seen, nothing
+  // left to do here". The unread list is the queue of things the user
+  // still has to deal with, and emptying it on the strength of a
+  // tap-through takes rows out of the one list they are looked for in.
+  // Opening the row is what reads it. An announcement push opens its
+  // message on the inbox, and the message is read when the user closes it.
+  const call = tapTargetCall(target, Date.now());
+  nav.navigate(call.name, call.params);
+}
+
+const tapIntake = createTapIntake<unknown>(
+  () => navigationRef.isReady(),
+  (data) => openNotificationTap(navigationRef as unknown as TapNav, data),
+);
+
+function offerTap(response: Notifications.NotificationResponse) {
+  tapIntake.offer(
+    response.notification.request.identifier,
+    response.notification.request.content.data,
+  );
+}
+
+// The ongoing notifications' taps (`ongoingTap.ts`) join the push taps in
+// `tapIntake`, so they wait for the navigator and meet the same guards. A warm
+// tap is a `url` event, always new. The launching URL is read once per shell
+// MOUNT, under an id of its own: `getInitialURL` keeps returning it, so one
+// mount must not follow it twice, but the foreground services outlive the
+// activity, so a tap after a swipe from Recents starts a new activity under a
+// JS runtime that is still alive, and that mount must read it afresh. The cost:
+// a shell that mounts again (sign-in change) follows the launching tap again.
+// A task relaunched from Recents after the process died replays its original
+// intent into a fresh runtime and is followed too; that is not told apart.
+// Guard: `tapIntake.test.ts`.
+let ongoingTapCount = 0;
+let launchMounts = 0;
+function offerOngoingUrl(url: string | null | undefined, id: string) {
+  const ongoing = ongoingTapKind(url);
+  if (ongoing) tapIntake.offer(id, { ongoing });
+}
+
+/** Sign-out: a tap held for, or still waiting in the phone's last-response
+ *  slot for, the account that is leaving must not open for the next one. */
+export function dropPendingNotificationTap() {
+  tapIntake.clear();
+  Notifications.clearLastNotificationResponse();
+}
+
 // Foreground pushes show as banners; the inbox badge is refreshed on focus.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -912,8 +1028,8 @@ export function AppShell({
   );
   const [consented, setConsented] = useState(false);
   const [unreadCount, setUnreadCount] = useState<number | null>(null);
-  const navigationRef = useRef<NavigationContainerRef<never>>(null);
-  const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const tabBarHeight = useTabBarHeight();
 
   // Register this device for pushes once authenticated (best-effort), and
   // route notification taps: a place reference deep-links to its detail,
@@ -955,9 +1071,13 @@ export function AppShell({
   }, [userQuery.data?.uiPreferences?.themeSchemeId]);
 
   // The account's slope bands, kept on the phone so the map has them offline.
+  // The same account is where an edit made in the layers sheet is sent.
+  const slopeBandsFetched = userQuery.data?.uiPreferences?.slopeBands;
+  const accountId = userQuery.data?.id;
   useEffect(() => {
-    keepAccountSlopeBands(userQuery.data?.uiPreferences?.slopeBands);
-  }, [userQuery.data?.uiPreferences?.slopeBands]);
+    setSlopeBandsAccount({ signedIn: !isGuest, id: accountId ?? null });
+    keepAccountSlopeBands(slopeBandsFetched, accountId);
+  }, [slopeBandsFetched, accountId, isGuest]);
 
   useEffect(() => {
     // No account, no device row to register the push token against. The tap
@@ -967,64 +1087,19 @@ export function AppShell({
     // This registers the token only when notification permission is ALREADY
     // granted; it never prompts (Settings → Notifications asks).
     if (!isGuest) void registerForPushNotifications();
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        // The ref is untyped across nested navigators; runtime routes are
-        // the tab/screen names registered below.
-        const nav = navigationRef.current as unknown as {
-          navigate: (name: string, params?: object) => void;
-        } | null;
-        if (!nav) return;
-        // Where the tap goes — including the guard the tab bar applies, for the
-        // same reason. The precedence lives in
-        // notifications/tapTarget, pure and tested, because this listener is
-        // inside a component and nothing in mobile/ can run one.
-        const target = notificationTapTarget({
-          data: response.notification.request.content.data,
-          routeEditing: isRouteEditing(),
-        });
-        if (target.kind === "blocked") {
-          // With the Alert, so the tap is answered rather than silently ignored.
-          alertFinishRouteFirst();
-          return;
-        }
-        // A TAP DELIBERATELY DOES NOT MARK THE NOTIFICATION READ: a banner is a
-        // glance, often from a lock screen, whereas read means "seen, nothing
-        // left to do here". The unread list is the queue of things the user
-        // still has to deal with, and emptying it on the strength of a
-        // tap-through takes rows out of the one list they are looked for in.
-        // Opening the row is what reads it. An announcement push opens its
-        // message on the inbox, and the message is read when the user closes it.
-        if (target.kind === "place") {
-          nav.navigate("Places", {
-            screen: "PlaceDetail",
-            params: { placeId: target.placeId, name: "Place" },
-          });
-        } else if (target.kind === "plan") {
-          nav.navigate("More", {
-            screen: "Plan",
-            params: {
-              planId: target.planId,
-              name: TRIP_PLANS_LIST.title,
-              view: target.view,
-              invited: target.invited,
-            },
-          });
-        } else if (target.kind === "announcement") {
-          nav.navigate("More", {
-            screen: "Inbox",
-            params: {
-              openAnnouncement: {
-                announcementId: target.announcementId,
-                nonce: Date.now(),
-              },
-            },
-          });
-        } else {
-          // Inbox lives inside the More stack.
-          nav.navigate("More", { screen: "Inbox" });
-        }
-      },
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener(offerTap);
+    // A tap that STARTED the app is not delivered to a listener added after it:
+    // it waits in the last-response slot until the shell mounts.
+    const launching = Notifications.getLastNotificationResponse();
+    if (launching) {
+      offerTap(launching);
+      // Read once: the native slot outlives a JS reload, and `tapIntake` does
+      // not.
+      Notifications.clearLastNotificationResponse();
+    }
+    const ongoingSubscription = Linking.addEventListener("url", (event) =>
+      offerOngoingUrl(event.url, `ongoing-${ongoingTapCount++}`),
     );
     // A plan push while Logjam GPS is open: the list and that plan are
     // fetched again, so neither reads stale, if the connection rule allows.
@@ -1046,9 +1121,17 @@ export function AppShell({
     );
     return () => {
       subscription.remove();
+      ongoingSubscription.remove();
       received.remove();
     };
   }, [isGuest, accountState]);
+
+  useEffect(() => {
+    const id = `ongoing-launch-${launchMounts++}`;
+    void Linking.getInitialURL()
+      .then((url) => offerOngoingUrl(url, id))
+      .catch(console.error);
+  }, []);
 
   // Badge count prefers the notifications cache: it incorporates optimistic
   // (offline) mark-reads immediately and stays correct offline. Only when no
@@ -1115,8 +1198,20 @@ export function AppShell({
         on any tab, so their outcome has no screen of its own to be announced
         from. */}
       <View style={{ flex: 1 }}>
-        <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+        <NavigationContainer
+          ref={navigationRef}
+          theme={navigationTheme}
+          onReady={tapIntake.flush}
+        >
           <Tabs.Navigator
+            // Hidden tabs stay attached to the window, `display: none`. By default
+            // react-native-screens detaches an inactive tab's native views and
+            // re-attaches the whole tree on every switch (a 220-330 ms mount
+            // batch on the S9). Costs: the native views stay in memory, a hidden
+            // tab keeps re-rendering (react-native-screens ignores freezeOnBlur
+            // when it is not detaching), and nothing is drawn or laid out for it.
+            // Guard: tabAttach.test.ts.
+            detachInactiveScreens={false}
             // A route being drawn or edited owns the map's taps and has no home
             // anywhere else, so the tab bar refuses to take you off it. The draft
             // does survive (routeDraftStore), but nothing on another tab says so —
@@ -1127,7 +1222,7 @@ export function AppShell({
                 const target = event.target ?? "";
                 if (target.startsWith("Map")) return;
                 event.preventDefault();
-                alertFinishRouteFirst();
+                announceRouteLeaveBlocked();
               },
             }}
             screenOptions={{
@@ -1143,7 +1238,7 @@ export function AppShell({
                 // same amount — and a set height replaces the library's, so it has
                 // to carry the bottom inset itself (the library still pads by it).
                 paddingTop: TAB_BAR_TOP_PAD,
-                height: TAB_BAR_BASE_HEIGHT + TAB_BAR_TOP_PAD + insets.bottom,
+                height: tabBarHeight,
               },
               tabBarActiveTintColor: theme.accent,
               tabBarInactiveTintColor: theme.textMuted,
@@ -1160,6 +1255,7 @@ export function AppShell({
             <Tabs.Screen
               name="Places"
               options={{
+                tabBarLabel: navLabel("places"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="place" color={color} />
                 ),
@@ -1170,6 +1266,7 @@ export function AppShell({
             <Tabs.Screen
               name="Logs"
               options={{
+                tabBarLabel: navLabel("logs"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="trip" color={color} />
                 ),
@@ -1180,6 +1277,7 @@ export function AppShell({
             <Tabs.Screen
               name="Saved"
               options={{
+                tabBarLabel: navLabel("saved"),
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="saved" color={color} />
                 ),
@@ -1197,16 +1295,21 @@ export function AppShell({
                 tabBarIcon: ({ color }) => (
                   <TabIcon idea="moreTab" color={color} />
                 ),
-                ...(unreadCount ? { tabBarBadge: unreadCount } : {}),
+                ...(unreadCount
+                  ? {
+                      tabBarBadge: tabBadgeLabel(unreadCount),
+                      tabBarBadgeStyle: tabBadgeStyle(
+                        tabBadgeLabel(unreadCount),
+                        fontScale,
+                      ),
+                    }
+                  : {}),
               }}
             >
               {() => (
                 <MoreStack.Navigator screenOptions={stackScreenOptions}>
-                  {/* Every screen here except Settings leads with its own
-                  Hero, which owns the back affordance (DESIGN.md).
-                  Settings is a plain settings list, so it keeps the native
-                  header — the rule that a bare-label hero is the pattern being
-                  replaced cuts both ways. */}
+                  {/* Every screen here leads with its own Hero, which owns the
+                  back affordance (DESIGN.md). */}
                   <MoreStack.Screen
                     name="MoreHome"
                     options={{ headerShown: false }}
@@ -1257,18 +1360,19 @@ export function AppShell({
                         // The filter alone when the notification names the thing
                         // but not the row (see notificationDestination.ts).
                         onOpenSaved={(filter, highlightKey) =>
-                          navigation.getParent()?.navigate("Saved", {
-                            screen: "SavedHome",
-                            params: {
-                              filter,
-                              nonce: Date.now(),
-                              ...(highlightKey ? { highlightKey } : {}),
-                            },
-                          })
+                          openDestination(
+                            navigation.getParent() as unknown as TapNav,
+                            { tab: "saved", filter, highlightKey },
+                          )
                         }
-                        // Pushed INSIDE the More stack, like the place above, so
-                        // Back returns to the inbox rather than to another tab.
-                        onOpenFriends={() => navigation.navigate("Friends")}
+                        // Pushed on the More stack above the inbox, like the
+                        // place above, so Back returns to the inbox.
+                        onOpenFriends={() =>
+                          openDestination(
+                            navigation.getParent() as unknown as TapNav,
+                            { tab: "friends" },
+                          )
+                        }
                       />
                     )}
                   </MoreStack.Screen>
@@ -1467,7 +1571,6 @@ export function AppShell({
                           route.key,
                         )}
                         onSignOut={onSignOut}
-                        onOpenFriends={() => navigation.navigate("Friends")}
                       />
                     )}
                   </MoreStack.Screen>
@@ -1550,60 +1653,110 @@ export function AppShell({
                       />
                     )}
                   </MoreStack.Screen>
-                  {/* Settings and its sub-pages are plain preference lists, so they
-                  keep the native header and its back button (DESIGN.md). */}
+                  {/* Settings and its sub-pages lead with the same in-page Hero
+                  as the rest of More, so the way back reads alike. */}
                   <MoreStack.Screen
                     name="Settings"
-                    options={{ title: "Settings" }}
+                    options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <SettingsScreen
-                        onOpenPage={(page) =>
-                          navigation.navigate(SETTINGS_ROUTES[page])
-                        }
-                      />
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={navLabel("settings")}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <SettingsScreen
+                          onOpenPage={(page) =>
+                            navigation.navigate(SETTINGS_ROUTES[page])
+                          }
+                        />
+                      </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsDisplay"
-                    component={DisplaySettingsScreen}
-                    options={{ title: "Display" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.display}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <DisplaySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsMap"
-                    component={MapSettingsScreen}
-                    options={{ title: "Map" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.map}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <MapSettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsNotifications"
-                    component={NotificationSettingsScreen}
-                    options={{ title: "Notifications" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.notifications}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <NotificationSettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsOffline"
-                    options={{ title: "Offline and storage" }}
+                    options={{ headerShown: false }}
                   >
-                    {({ navigation }) => (
-                      <OfflineSettingsScreen
-                        onOpenSaved={() =>
-                          navigation
-                            .getParent()
-                            ?.navigate("Saved", { screen: "SavedHome" })
-                        }
-                      />
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.offline}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <OfflineSettingsScreen
+                          onOpenSaved={() =>
+                            navigation
+                              .getParent()
+                              ?.navigate("Saved", { screen: "SavedHome" })
+                          }
+                        />
+                      </SettingsPageRoute>
                     )}
                   </MoreStack.Screen>
                   <MoreStack.Screen
                     name="SettingsPrivacy"
-                    component={PrivacySettingsScreen}
-                    options={{ title: "Privacy and security" }}
-                  />
+                    options={{ headerShown: false }}
+                  >
+                    {({ navigation, route }) => (
+                      <SettingsPageRoute
+                        title={SETTINGS.copy.privacy}
+                        navigation={navigation}
+                        route={route}
+                      >
+                        <PrivacySettingsScreen />
+                      </SettingsPageRoute>
+                    )}
+                  </MoreStack.Screen>
                 </MoreStack.Navigator>
               )}
             </Tabs.Screen>
           </Tabs.Navigator>
         </NavigationContainer>
         <BackgroundToast />
+        <ConfirmHost />
+        <ToastHost />
       </View>
     </AccountStateProvider>
   );

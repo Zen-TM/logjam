@@ -59,10 +59,7 @@ logging.basicConfig(
 log = logging.getLogger("worker")
 
 
-GENERIC_FAILURE = (
-    "This LiDAR map couldn't be made. Make it again, and contact support if it "
-    "keeps failing."
-)
+GENERIC_FAILURE = "This LiDAR map couldn't be made. Make it again."
 
 
 class JobInputError(Exception):
@@ -74,7 +71,7 @@ class JobInputError(Exception):
 # `test_an_unmarked_job_is_refused_before_its_download`).
 OLD_JOB = (
     "This LiDAR map was started before LiDAR maps sharpened their area, and "
-    "can't be made now. Sharpen the area again."
+    "can't be made now. Sharpen an area again."
 )
 
 

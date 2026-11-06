@@ -1,6 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAP_TERRAIN, NSW_LAND, TERRAIN_LAYER_DEFAULTS } from "@logjam/shared";
+import {
+  MAP_TERRAIN,
+  NSW_LAND,
+  RASTER_TEMPLATE_DEFAULTS,
+  TERRAIN_LAYER_DEFAULTS,
+} from "@logjam/shared";
 import { LandRow, TerrainPane } from "./LayersPopover";
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
@@ -25,6 +30,7 @@ function draw(
     onChange: vi.fn(),
     activeLayerId,
     onOpenSlopeBands: vi.fn(),
+    slopeBands: RASTER_TEMPLATE_DEFAULTS.slope.bands,
     hasVegetation,
     sharpenedCount: 2,
     onOpenSharpened: vi.fn(),
@@ -40,6 +46,19 @@ describe("the Terrain group on Logjam Web", () => {
     const text = document.body.textContent ?? "";
     expect(text.indexOf(copy.contours)).toBeLessThan(text.indexOf(copy.slope));
     expect(text.indexOf(copy.slope)).toBeLessThan(text.indexOf(copy.hillshade));
+  });
+
+  // Mutation: drop a hint from the row, or the help button from Slope, and a
+  // user who never opened the bands editor has nothing saying what the colours mean.
+  it("says what each layer is, and opens the slope key from Slope's help", () => {
+    draw();
+    expect(screen.getByText(copy.contoursHint)).toBeTruthy();
+    expect(screen.getByText(copy.slopeHint)).toBeTruthy();
+    expect(screen.getByText(copy.hillshadeHint)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: copy.slopeAbout }));
+    expect(screen.getByText(copy.slopeLegend)).toBeTruthy();
+    expect(screen.getByText("40–50°")).toBeTruthy();
+    expect(screen.getByText("70°+")).toBeTruthy();
   });
 
   it("switches each layer by its key", () => {
@@ -81,6 +100,43 @@ describe("the Terrain group on Logjam Web", () => {
     const props = draw();
     fireEvent.click(screen.getByText(`${copy.sharpenedAreas} · 2`));
     expect(props.onOpenSharpened).toHaveBeenCalled();
+  });
+
+  // Mutation: drop `onPress` from `row`, and only the small switch toggles.
+  // Mutation: let the help button's press reach the card, and reading about a
+  // layer also switches it.
+  it("switches a layer from anywhere on its card but a button inside it", () => {
+    const props = draw("protomaps", undefined, true);
+    fireEvent.click(screen.getByText(copy.hillshade));
+    expect(props.onChange).toHaveBeenCalledWith("hillshade", true);
+    fireEvent.click(screen.getByText(copy.vegetationHint));
+    expect(props.onChange).toHaveBeenCalledWith("vegetation", false);
+    props.onChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: copy.vegetationAbout }));
+    fireEvent.click(screen.getByRole("button", { name: copy.slopeBands }));
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.onOpenSlopeBands).toHaveBeenCalled();
+  });
+
+  // Mutation: drop `|| shadowed` from the card's press, and a press on imagery's
+  // Hillshade card switches a layer that cannot draw.
+  it("leaves a disabled layer's card alone", () => {
+    const props = draw("six-imagery");
+    fireEvent.click(screen.getByText(copy.hillshade));
+    expect(props.onChange).not.toHaveBeenCalled();
+  });
+
+  // Mutation: drop the help button or the Dialog, and a sharpened area is a
+  // row nobody can read about.
+  it("opens the sharpened areas' about dialog without opening the areas", () => {
+    const props = draw();
+    fireEvent.click(
+      screen.getByRole("button", { name: copy.sharpenedAreasAbout }),
+    );
+    expect(
+      screen.getByRole("dialog", { name: copy.sharpenedAreas }).textContent,
+    ).toContain(copy.sharpenedAreasLegend);
+    expect(props.onOpenSharpened).not.toHaveBeenCalled();
   });
 
   it("opens the slope bands from the Slope row", () => {
@@ -154,6 +210,10 @@ describe("the Land tenure row on Logjam Web", () => {
     expect(land.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(land);
     expect(onToggle).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText(copy.land));
+    expect(onToggle).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole("button", { name: copy.landAbout }));
+    expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   // Mutation: drop the caveat, and Sydney's gaps and Land Council freehold

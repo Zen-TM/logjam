@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   consentFormProblem,
   consentSubmitFailure,
+  SIGN_IN_COPY,
   USERNAME_HINT,
 } from "@logjam/shared";
 import { recordConsent, type TUser } from "../placeUtils";
@@ -93,7 +94,7 @@ function ConsentGate({
         <p className={classes.body}>
           {newAccount
             ? "Choose your public display name and review the terms to finish creating your account."
-            : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Please review them and confirm your agreement to keep using Logjam.`}
+            : `Logjam's Terms of Use and Privacy Policy have changed (last updated ${consentVersion}). Review them and confirm your agreement to keep using Logjam.`}
         </p>
         {newAccount && (
           <TextField
@@ -119,7 +120,7 @@ function ConsentGate({
         />
         {newAccount && (
           <Checkbox
-            label="I confirm I am 18 years of age or older."
+            label={SIGN_IN_COPY.ageConfirm}
             checked={ageConfirmed}
             onChange={(next) => {
               setAgeConfirmed(next);

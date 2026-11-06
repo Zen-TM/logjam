@@ -9,7 +9,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ScopedCustomFieldDef } from "@logjam/shared";
 
 import type { TPlaceType } from "../../../placeUtils";
+import { reassignPlaceType } from "../../../placeUtils";
 import PlaceTypeSection from "./PlaceTypeSection";
+
+const { toast } = vi.hoisted(() => ({
+  toast: { done: vi.fn(), error: vi.fn(), info: vi.fn() },
+}));
+vi.mock("../../feedback/ToastProvider", () => ({ useToast: () => toast }));
 
 const CANYON: TPlaceType = {
   id: "type-canyon",
@@ -71,10 +77,23 @@ HTMLDialogElement.prototype.close = function close() {
   this.removeAttribute("open");
 };
 
-function renderSection() {
+// jsdom has no Popover API (the row menu), nor layout (it measures its anchor).
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement) {
+    this.removeAttribute("popover");
+  },
+  hidePopover() {},
+});
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+function renderSection(types = [CANYON, HUT]) {
   return render(
     <PlaceTypeSection
-      types={[CANYON, HUT]}
+      types={types}
       loading={false}
       onTypesChange={() => {}}
       placeDefs={DEFS}
@@ -122,5 +141,36 @@ describe("a new place type leads into its attributes", () => {
     fireEvent.click(screen.getByText("Save"));
     await waitFor(() => expect(openDialog()).toBeNull());
     expect(screen.queryByText(/attributes$/)).toBeNull();
+  });
+});
+
+/**
+ * Merge moves every place of a type and deletes the type, with no undo. Red
+ * when the select opens on a type (the first other one) instead of "Choose a
+ * type", or the Merge button works before a target is picked.
+ */
+describe("merging a place type", () => {
+  it("moves nothing until the user picks where the places go, then says what moved", async () => {
+    renderSection([CANYON, { ...HUT, placeCount: 2 }, CAVE]);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Hut" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Merge/ }));
+
+    const dialog = document.querySelector("dialog[open]")!;
+    const select = dialog.querySelector("select")!;
+    const merge = screen.getByRole("button", { name: "Merge" });
+    expect(select.value).toBe("");
+    expect(merge.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(merge);
+    expect(reassignPlaceType).not.toHaveBeenCalled();
+
+    fireEvent.change(select, { target: { value: CAVE.id } });
+    expect(dialog.textContent).toContain('Merge "Hut" into "Cave"?');
+    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    await waitFor(() =>
+      expect(reassignPlaceType).toHaveBeenCalledWith(HUT.id, CAVE.id),
+    );
+    await waitFor(() =>
+      expect(toast.done).toHaveBeenCalledWith("2 places moved to Cave"),
+    );
   });
 });

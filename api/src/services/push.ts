@@ -26,7 +26,7 @@ const PUSH_TITLES: Record<string, string> = {
   place_shared: "A place was shared with you",
   topo_complete: "Topo processing complete",
   topo_failed: "Topo processing failed",
-  topo_export_complete: "Topo export finished",
+  topo_export_complete: "Map finished",
   topo_export_skipped: "Auto-export skipped",
   item_shared: "Something was shared with you",
   file_sent: "A friend sent you a file",

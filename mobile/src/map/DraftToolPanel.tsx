@@ -9,6 +9,8 @@
 // at the top of the screen — search is not reachable mid-draw anyway, and on a
 // phone the map is the thing being worked in, so the chrome should not eat a
 // third of it. Compact rows: what you have drawn, then what you can do about it.
+// Snapping is a disclosure from the action row, like the colour palette: a
+// setting set once, not a block kept on screen.
 //
 // The route tool also carries the two properties of the LINE it is making —
 // direction and colour. They live here rather than in the route's options sheet
@@ -23,19 +25,22 @@
 // The colour palette is a DISCLOSURE, not a permanent strip: ten swatches is a
 // third of a phone's map, and this is a toolbar over the thing being worked in.
 //
-// The two destructive controls are deliberately different verbs:
-//   Clear  — empty the points, stay in the tool. Start the line again.
-//   Trash  — discard and leave. Route draw confirms first (in the caller);
+// Two controls that remove things, and the trash is only ever the first:
+//   Trash  — clear every point, stay in the tool, undoable.
+//            The same glyph, the same words and the same meaning on Logjam Web.
+//   ×      — leave the tool. Route draw confirms first (in the caller);
 //            measure does not, because a measurement is a question asked once.
 // Having these the other way round would read as "cancel throws my work away"
 // and leave the trash looking like the safer of the two.
 //
 // Gain/loss come from the DEM on demand and are simply absent offline — which
 // is the case these tools are built for.
+import { useState } from "react";
 import { Text, View } from "react-native";
 import {
   formatDistanceM,
   routeLengthM,
+  MAP_MEASURE,
   mapMeasurePointsLabel,
   mapMeasureVerbs,
   type MapMeasureVerb,
@@ -54,10 +59,13 @@ import {
   makeStyles,
   useTheme,
   muted,
+  veil,
 } from "../theme";
 import { Button, IconButton, ColourField, FieldError } from "../ui";
 import { ElevationReadout } from "./ElevationReadout";
 import { SnapPicker } from "./SnapPicker";
+
+const SAVING = "Saving…";
 import { useElevationProfile } from "./useElevationProfile";
 const VERBS = Object.fromEntries(
   mapMeasureVerbs("gps").map((verb) => [verb.id, verb]),
@@ -116,6 +124,7 @@ export function DraftToolPanel({
 
   const { profile, loading } = useElevationProfile([points], { allowNetwork });
   const hasLine = points.length >= 2;
+  const [snapOpen, setSnapOpen] = useState(false);
 
   return (
     <View style={styles.bar}>
@@ -125,7 +134,7 @@ export function DraftToolPanel({
             ? formatDistanceM(routeLengthM(points as [number, number][]))
             : "—"}
         </Text>
-        <Text style={styles.meta} numberOfLines={1}>
+        <Text style={styles.meta}>
           {anchorCount === 0
             ? tool === "measure"
               ? MAP_MEASURE_START_NOTE.gps
@@ -133,8 +142,8 @@ export function DraftToolPanel({
             : mapMeasurePointsLabel(anchorCount)}
         </Text>
         <View style={styles.spacer} />
-        <ElevationReadout profile={profile} loading={loading} />
       </View>
+      <ElevationReadout profile={profile} loading={loading} />
 
       {editingName ? (
         <Text style={styles.editing} numberOfLines={1}>
@@ -148,12 +157,6 @@ export function DraftToolPanel({
         />
       ) : null}
 
-      <SnapPicker
-        mode={snapMode}
-        onChange={onSnapModeChange}
-        disabled={saving}
-      />
-
       {/* Two groups in one row: what you do to the line on the left, what the
           line is and how you leave it on the right. The picked point's delete
           verb is NOT here — it rides next to the point itself on the map
@@ -164,14 +167,24 @@ export function DraftToolPanel({
             icon="undo"
             accessibilityLabel={VERBS.undo.label}
             disabled={!canUndo || saving}
+            disabledReason={saving ? SAVING : "Nothing to undo"}
             onPress={onUndo}
           />
-          <Button
-            label={VERBS.clear.label}
-            variant="outlineAccent"
-            compact
+          <IconButton
+            icon="delete"
+            accessibilityLabel={VERBS.clear.label}
             disabled={points.length === 0 || saving}
+            disabledReason={saving ? SAVING : "Nothing to clear"}
             onPress={onClear}
+          />
+          <Button
+            label={MAP_MEASURE.copy.snap}
+            icon={snapOpen ? "collapse" : "expand"}
+            variant="ghost"
+            compact
+            disabled={saving}
+            disabledReason={SAVING}
+            onPress={() => setSnapOpen((open) => !open)}
           />
         </View>
         <View style={styles.group}>
@@ -180,6 +193,7 @@ export function DraftToolPanel({
               icon="reverse"
               accessibilityLabel="Reverse the direction of this route"
               disabled={!hasLine || saving}
+              disabledReason={saving ? SAVING : "Needs two points"}
               onPress={onReverse}
             />
           ) : null}
@@ -200,14 +214,12 @@ export function DraftToolPanel({
             />
           ) : null}
           <IconButton
-            icon="delete"
-            color={theme.warning}
+            icon="close"
             accessibilityLabel={
-              tool === "measure"
-                ? VERBS.leave.label
-                : "Discard this route and close the tool"
+              tool === "measure" ? VERBS.leave.label : "Cancel drawing"
             }
             disabled={saving}
+            disabledReason={SAVING}
             onPress={onDiscard}
           />
           {onSave ? (
@@ -216,26 +228,40 @@ export function DraftToolPanel({
               icon="done"
               compact
               disabled={!hasLine || saving}
+              disabledReason={saving ? SAVING : "Needs two points"}
               onPress={onSave}
             />
           ) : null}
         </View>
       </View>
+
+      {snapOpen ? (
+        <SnapPicker
+          mode={snapMode}
+          onChange={onSnapModeChange}
+          disabled={saving}
+        />
+      ) : null}
     </View>
   );
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
   bar: {
-    backgroundColor: withAlpha(theme.page, 0.94),
+    backgroundColor: withAlpha(theme.page, veil.map),
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: withAlpha(theme.accent, 0.4),
+    borderColor: theme.accent,
     paddingHorizontal: spacing(1.5),
     paddingVertical: spacing(1),
     gap: spacing(1),
   },
-  readoutRow: { flexDirection: "row", alignItems: "baseline", gap: spacing(1) },
+  readoutRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    columnGap: spacing(1),
+  },
   distance: {
     ...textRole.heading,
     color: theme.text,

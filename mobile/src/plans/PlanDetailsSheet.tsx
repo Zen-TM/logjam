@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import {
+  abandonConfirm,
   messageFromError,
   parseTripPlanCreate,
   tripPlanAdoptTheirs,
@@ -37,7 +38,6 @@ import {
   DatePicker,
   ErrorBanner,
   FormStack,
-  Icon,
   Row,
   TextField,
   type ChipOption,
@@ -154,16 +154,18 @@ export function PlanDetailsSheet({
   const datesRow = (
     <Row
       icon="date"
-      title={tripPlanDatesLabel(values.startDate, values.endDate)}
-      subtitle={TRIP_PLAN_PAGE.copy.datesField}
-      right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+      title={TRIP_PLAN_PAGE.copy.datesField}
+      subtitle={tripPlanDatesLabel(values.startDate, values.endDate)}
+      chevron
       onPress={() => setMode("dates")}
     />
   );
 
+  const dirty = mode === "form" && !tripPlanSame(values, seen);
   return (
     <BottomSheet
       visible={visible}
+      discard={dirty ? abandonConfirm("plan", !plan) : null}
       // Inside the date sub-mode, a drag or × is back to the form, not away
       // with everything typed.
       onClose={mode === "form" ? onClose : toForm}

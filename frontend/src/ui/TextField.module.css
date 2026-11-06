@@ -4,9 +4,34 @@
   gap: var(--form-label);
 }
 
+/* Does not stretch or shrink beside the inputs that share its row. */
+.beside {
+  flex: none;
+}
+
+/* A row too narrow to hold the button beside its inputs wraps it under them
+   (the row is a size container); the spacer would only leave a gap above it. */
+@container (max-width: 400px) {
+  .beside > .label {
+    display: none;
+  }
+}
+
 /* Sentence case, like every other control's label. Uppercase belongs to section
    titles, which a field label sitting under one must not mimic. */
 .label {
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+
+.required {
   composes: detail from "../textRoles.generated.module.css";
   color: var(--color-text-muted);
 }
@@ -28,10 +53,9 @@
   color: var(--color-text-muted);
 }
 
+/* The global ring (index.css) shows focus; the accent edge only backs it up. */
 .input:focus-visible {
-  outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .input[aria-invalid="true"] {
@@ -102,7 +126,8 @@
 
 .search:focus-within {
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 1px var(--color-accent);
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 .searchGlyph {
@@ -122,6 +147,30 @@
 
 .searchInput::placeholder {
   color: var(--color-text-muted);
+}
+
+/* The browser's own clear button is a saturated blue × in every scheme. It keeps
+   its behaviour and gets a × from two token-coloured strokes. */
+.searchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0 var(--space-0-5);
+  cursor: pointer;
+  background:
+    linear-gradient(
+      45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 43%,
+      var(--color-text-muted) 43% 57%,
+      transparent 57%
+    );
 }
 
 /* The pill draws the focus state. */

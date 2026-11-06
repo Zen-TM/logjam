@@ -12,7 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   ApiError,
   contractSectionKeys,
@@ -88,6 +88,7 @@ import {
   type ChipOption,
   type ToastMessage,
   useNow,
+  useRefreshFromTop,
 } from "../ui";
 import { FormBuilderSheet, type FormBuilderState } from "./FormBuilderSheet";
 import { FormSheet, type FormSheetState } from "./FormSheet";
@@ -355,6 +356,7 @@ function PlanPage({
   joined?: boolean;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { assetHue } = useHues();
   const styles = useStyles();
   const { plan } = cached;
@@ -366,10 +368,10 @@ function PlanPage({
   const [formBuilder, setFormBuilder] = useState<FormBuilderState>(null);
   const [toast, setToast] = useState<ToastMessage | null>(
     joined
-      ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "info", nonce: 1 }
+      ? { text: TRIP_PLAN_JOIN.copy.joined, tone: "done", nonce: 1 }
       : null,
   );
-  const notify = (text: string, tone: ToastMessage["tone"] = "info") =>
+  const notify = (text: string, tone: ToastMessage["tone"] = "done") =>
     setToast({ text, tone, nonce: Date.now() });
   // Stable: FormSheet hands a refusal over from an effect.
   const notifyError = useCallback(
@@ -581,8 +583,9 @@ function PlanPage({
       <ScrollView
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
+        {...pull.scrollProps}
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
             refreshing={refreshing}
             onRefresh={online ? onRefresh : undefined}
             enabled={online}
@@ -711,6 +714,7 @@ function WriteUp({
       variant="outlineAccent"
       disabled={!online}
       disabledReason={OFFLINE}
+      reasonShown
       onPress={() => onSection({ mode: "add" })}
     />
   );
@@ -732,7 +736,11 @@ function WriteUp({
     return (
       <>
         {dates}
-        <EmptyState icon="notes" title={copy.writeUpEmpty} />
+        <EmptyState
+          icon="notes"
+          title={copy.writeUpEmptyTitle}
+          hint={copy.writeUpEmptyBody}
+        />
         {add}
       </>
     );
@@ -783,7 +791,7 @@ function Items({
   canAdd: boolean;
   /** The caller's user id: a member changes only what they added. */
   me: string | null;
-  onInfo: (message: string, tone?: "info" | "error") => void;
+  onInfo: (message: string, tone?: "done" | "error") => void;
   onError: (message: string) => void;
   onDrawRoute: () => void;
 }) {
@@ -801,15 +809,8 @@ function Items({
         variant="outlineAccent"
         disabled={!online}
         disabledReason={OFFLINE}
+        reasonShown
         onPress={() => setAdding(true)}
-      />
-      <Button
-        label={planAddVerbLabel("route")}
-        icon="route"
-        variant="outlineAccent"
-        disabled={!online}
-        disabledReason={OFFLINE}
-        onPress={onDrawRoute}
       />
       {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
       {addingMounted ? (
@@ -820,6 +821,7 @@ function Items({
           me={me}
           onClose={() => setAdding(false)}
           onDone={onInfo}
+          onDrawRoute={onDrawRoute}
         />
       ) : null}
     </ListEnd>
@@ -900,6 +902,8 @@ function Items({
           // Its actions all need a connection.
           subtitle={subtitle(addedBy(route), false)}
           right={menu(route)}
+          // A row on the card colour answers a press; its ⋯ is its only verb.
+          onPress={menu(route) ? () => setMenuItem(route) : undefined}
         />
       ))}
       {plan.files.map((file) => {
@@ -935,7 +939,9 @@ function Items({
                     )
                       .then(setViewing)
                       .catch(failed)
-                : undefined
+                : menu(file)
+                  ? () => setMenuItem(file)
+                  : undefined
             }
           />
         );
@@ -1017,8 +1023,11 @@ function Forms({
     return (
       <EmptyState
         icon="form"
-        title={
-          plan.myRole === "leader" ? copy.formsEmptyLeader : copy.formsEmpty
+        title={copy.formsEmpty}
+        hint={
+          plan.myRole === "leader"
+            ? copy.formsEmptyBodyLeader
+            : copy.formsEmptyBody
         }
       />
     );

@@ -91,7 +91,7 @@ describe("errorHandler", () => {
     );
     expect(status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith({
-      error: "Something went wrong on our end. Please try again.",
+      error: "Something went wrong on our end. Try again.",
       requestId: "req-1",
     });
   });
@@ -111,7 +111,7 @@ describe("a malformed request", () => {
     expect(status).toHaveBeenCalledWith(400);
     expect(json).toHaveBeenCalledWith({
       error:
-        "That didn't work because of a fault in Logjam, not something you did.",
+        "Couldn't do that because of a fault in Logjam, not something you did.",
       detail: "ops[3].opId is required",
       requestId: "req-1",
     });
@@ -162,7 +162,7 @@ describe("a fault of ours", () => {
     );
     expect(status).toHaveBeenCalledWith(500);
     expect(json).toHaveBeenCalledWith({
-      error: "Something went wrong on our end. Please try again.",
+      error: "Something went wrong on our end. Try again.",
       requestId: "req-1",
     });
     expect(log.warn.mock.calls[0][0].detail).toBe(

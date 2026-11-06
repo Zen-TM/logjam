@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   ATTRIBUTE_NOUN,
-  attributesEmptyHint,
+  attributesHint,
   buildCustomFieldDef,
   CUSTOM_FIELD_TYPES,
   customFieldDisplayLabel,
@@ -107,7 +107,7 @@ function CustomFieldSection({
         actions={
           <Button
             compact
-            variant="outline"
+            variant="filled"
             icon="add"
             onClick={() => setEditing("new")}
           >
@@ -121,9 +121,7 @@ function CustomFieldSection({
           <LoadingState />
         ) : (
           <>
-            {own.length === 0 && (
-              <p className={classes.note}>{attributesEmptyHint(rowNoun)}</p>
-            )}
+            <p className={classes.note}>{attributesHint(rowNoun)}</p>
             {/* "Yours" only earns a line when there is a "Built in" opposite
                 it. Every system definition is place-scoped, so a trip's list
                 is nothing but the user's own, and a heading dividing a list
@@ -181,6 +179,7 @@ function CustomFieldSection({
             {system.length > 0 && (
               <>
                 <SectionHeader title={listCopy.builtIn} count={system.length} />
+                <p className={classes.note}>{listCopy.builtInAttributesWhy}</p>
                 {system.map((def) => (
                   <Row
                     key={def.key}

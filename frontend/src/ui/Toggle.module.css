@@ -45,6 +45,27 @@
   background: var(--color-on-fill);
 }
 
+@media (forced-colors: active) {
+  .toggle {
+    forced-color-adjust: none;
+    background: Canvas;
+    border-color: ButtonText;
+  }
+
+  .thumb {
+    background: ButtonText;
+  }
+
+  .toggle[aria-checked="true"] {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .toggle[aria-checked="true"] .thumb {
+    background: HighlightText;
+  }
+}
+
 .toggle:disabled {
   opacity: var(--opacity-disabled);
   cursor: default;
@@ -78,9 +99,14 @@
   outline-offset: 2px;
 }
 
+/* The reason replaces the description, so it stays at full strength; the title
+   and the switch dim (Row.module.css). */
 .row[data-disabled] {
-  opacity: var(--opacity-disabled);
   cursor: default;
+}
+
+.row[data-disabled] .title {
+  opacity: var(--opacity-disabled);
 }
 
 .text {

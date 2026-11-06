@@ -2,7 +2,7 @@ import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   ACCOUNT,
   contractSectionKeys,
-  formatCredits,
+  formatCreditsOf,
   SIGN_OUT_EVERYWHERE_BODY,
   SIGN_OUT_EVERYWHERE_FAILED,
   type SectionKeysOn,
@@ -120,10 +120,13 @@ function AccountPanel({
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      toast.done(
+        "Your data was downloaded as a JSON file. Photos and videos aren't in it.",
+      );
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't download your data. Please try again."),
+        messageFromError(err, "Couldn't download your data. Try again."),
       );
     } finally {
       setExporting(false);
@@ -187,8 +190,10 @@ function AccountPanel({
             )}
           />
           <p className={classes.meterLabel}>
-            {formatCredits(currentUser.monthlyComputeUsage)} of{" "}
-            {formatCredits(currentUser.monthlyComputeCredits)}
+            {formatCreditsOf(
+              currentUser.monthlyComputeUsage,
+              currentUser.monthlyComputeCredits,
+            )}
             {creditsResetLabel && (
               <span className={classes.meterHint}>
                 {" "}
@@ -231,12 +236,16 @@ function AccountPanel({
           <SectionHeader title={copy.yourData} />
           <Button
             variant="outline"
-            icon="export"
+            icon="download"
             busy={exporting}
             onClick={handleExport}
           >
             Download my data
           </Button>
+          <p className={classes.state}>
+            A JSON file of your places, trips and shares for this account.
+            Photos and videos aren't in it, so it isn't a full backup.
+          </p>
         </>
       ) : null,
     leaving: () =>
@@ -256,7 +265,7 @@ function AccountPanel({
             </Button>
           )}
           <Row
-            leading={<IconTile icon="delete" hue="var(--color-warning)" />}
+            leading={<IconTile icon="delete" hue="var(--color-accent)" />}
             title={copy.deleteAccount}
             onOpen={() => setDeleteAccountOpen(true)}
           />

@@ -18,7 +18,15 @@ import { Icon } from "./Icon";
  * errors — every one today is a few fields tall. Give ScreenScroll the same
  * context when one isn't.
  */
-export function FieldError({ message }: { message?: string | null }) {
+export function FieldError({
+  message,
+  reserve = false,
+}: {
+  message?: string | null;
+  /** Keeps the line's height while there is no message, so a form whose
+   *  submit lights its errors does not shift under the thumb. */
+  reserve?: boolean;
+}) {
   const theme = useTheme();
   const styles = useStyles();
 
@@ -28,7 +36,7 @@ export function FieldError({ message }: { message?: string | null }) {
   useEffect(() => {
     if (shown && reveal != null && ref.current != null) reveal(ref.current);
   }, [shown, reveal]);
-  if (!shown) return null;
+  if (!shown) return reserve ? <View style={styles.reserved} /> : null;
   return (
     // Not collapsable: Android flattens a style-less View away, and a flattened
     // view cannot be measured against the sheet's content.
@@ -47,4 +55,5 @@ const useStyles = makeStyles((theme, textRole) => ({
   line: { flexDirection: "row", alignItems: "flex-start", gap: spacing(0.5) },
   // The glyph sits on the first line of the text, whatever the text size.
   error: { ...textRole.detail, flex: 1, color: theme.text },
+  reserved: { minHeight: textRole.detail.lineHeight },
 }));

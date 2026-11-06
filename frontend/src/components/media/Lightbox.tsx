@@ -94,7 +94,7 @@ export default function Lightbox({
         {failed ? (
           <div className={classes.lightboxFallback}>
             <Icon idea="missingMedia" size={32} />
-            <span>Couldn&rsquo;t load {item.filename}.</span>
+            <span>Couldn't load {item.filename}.</span>
           </div>
         ) : mediaCategory(item.mediaType) === "video" ? (
           <video

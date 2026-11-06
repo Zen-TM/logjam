@@ -7,15 +7,6 @@
   flex-direction: column;
 }
 
-/* Two rails: which map the page is about, then which of its lists. */
-.rails {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gutter) 8px;
-}
-
 /* What is still being made, pinned under the list and above the page's edge,
    so it is in view from every tab and does not scroll away mid-wait. Separated
    by the same hairline the panel uses, never a shadow — nothing here floats

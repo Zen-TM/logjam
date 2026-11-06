@@ -67,14 +67,10 @@ export type WayVerb = {
 /** Which surface is asking. The two differ by one verb, and only one. */
 export type WaySurface = "row" | "detail";
 
-// The words are the contract's (`WAY_VERBS`); Delete is the one verb whose
-// noun depends on the way, so it is said here.
-const LABELS: Record<WayVerbId, string> = {
-  ...(Object.fromEntries(
-    WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
-  ) as Record<Exclude<WayVerbId, "delete">, string>),
-  delete: "Delete",
-};
+// The words are the contract's (`WAY_VERBS`).
+const LABELS = Object.fromEntries(
+  WAY_VERBS.map((verb) => [verb.id, wayVerbLabel(verb.id, "web")]),
+) as Record<WayVerbId, string>;
 
 /** A route's geometry is inline, so the browser can write it out itself. A
  *  file's is an object in S3 that the page has not downloaded. */
@@ -88,7 +84,10 @@ const EXPORTABLE_KINDS: readonly WayKind[] = ["route"];
  * one verb that makes a copy of its own.
  */
 export function wayVerbs(
-  way: Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">,
+  way: Pick<
+    WayItem,
+    "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin" | "hasTrip"
+  >,
   surface: WaySurface,
 ): WayVerb[] {
   const owned = !way.shared;
@@ -111,7 +110,11 @@ export function wayVerbs(
   // A recorded track only, and the owner's: it is attached to the trip as a
   // copy of the file, which is the owner's to take. An import is somebody
   // else's walk with no start of its own, and a route is a plan, not a day out.
-  if (owned && way.kind === "track") verbs.push(verb("logTrip"));
+  // Once a trip has been logged from it the offer is spent: a recording with a
+  // trip is not asking for one.
+  if (owned && way.kind === "track" && !way.hasTrip) {
+    verbs.push(verb("logTrip"));
+  }
 
   if (owned && way.kind === "route") verbs.push(verb("edit"));
   // Taking your own copy of someone else's route (`POST /routes/:id/copy`)
@@ -122,7 +125,7 @@ export function wayVerbs(
   // route is a row `POST /shares` can grant, a file is not and is handed over
   // as a copy instead (`POST /file-sends/from-media`, owner only).
   if (owned && WAY_SHARE_VERB[way.kind] === "share") verbs.push(verb("share"));
-  if (owned && WAY_SHARE_VERB[way.kind] === "sendCopy") {
+  if (owned && way.hasOrigin && WAY_SHARE_VERB[way.kind] === "sendCopy") {
     verbs.push(verb("sendCopy"));
   }
   if (EXPORTABLE_KINDS.includes(way.kind)) {
@@ -133,8 +136,10 @@ export function wayVerbs(
   // `POST /media/download-urls`, which is where the egress gate lives, and a
   // file on someone else's place is not the caller's to pull.
   if (owned && way.kind !== "route") verbs.push(verb("download"));
-  // A route is renamed by the form that named it; a file is renamed in place.
-  if (owned && way.kind !== "route") verbs.push(verb("rename"));
+  // A file with no origin was attached in a place's form, which names it.
+  if (owned && (way.kind === "route" || way.hasOrigin)) {
+    verbs.push(verb("rename"));
+  }
 
   // Below the rule: the ways this stops being something the user carries.
   // "Save to my Ways and remove" sits with Remove rather than with Copy because
@@ -154,7 +159,7 @@ export function wayVerbs(
  * being a habit each panel follows differently.
  */
 export function wayProperties(
-  way: Pick<WayItem, "kind" | "shared" | "placeId">,
+  way: Pick<WayItem, "kind" | "shared" | "placeId" | "hasOrigin">,
 ): { colour: boolean; place: boolean } {
   const owned = !way.shared;
   return {
@@ -162,7 +167,9 @@ export function wayProperties(
     // can be changed from here; a recording's lives on the phone that made it
     // (its own table), so a picker here would paint a line that phone never
     // redraws.
-    colour: owned && (way.kind === "route" || way.kind === "import"),
+    colour:
+      owned &&
+      (way.kind === "route" || (way.kind === "import" && way.hasOrigin)),
     // Which place it belongs to: shown always, changeable by the owner.
     place: true,
   };

@@ -1,8 +1,8 @@
 // The map's record control: start a recording, and — once one is running — say
 // so and open its stats.
 //
-// It is the same size as the search pill, in the opposite top corner, because
-// what it mostly does is report: a pulsing dot says "still going" for the
+// It is the same size as the map's other buttons, in the action column under
+// Locate, because what it mostly does is report: a pulsing dot says "still going" for the
 // price of one button without covering a third of the map, while numbers live
 // behind a tap.
 //
@@ -18,11 +18,15 @@ import { Animated, Easing, Pressable, View } from "react-native";
 
 import { SEARCH_SIZE } from "../map/mapChrome";
 import { radius, makeStyles } from "../theme";
+import { holdTick, useReducedMotion } from "../ui";
 
 /** One breath. Slow on purpose: at the map's scale this reads as alive rather
  *  than as an alarm, and it is a redraw every two seconds, not every frame of
  *  a fast blink. */
 const PULSE_MS = 2000;
+
+/** Where the halo rests when motion is reduced: a steady glow, mid-breath. */
+const STEADY_PULSE = 0.4;
 
 const RING = 26;
 const CORE = 12;
@@ -51,11 +55,19 @@ export function RecordButton({
   const recording = state === "recording";
   const [pulse] = useState(() => new Animated.Value(0));
 
+  // The system's Remove animations setting. The recording stays a light, not a
+  // beat: the halo holds still and the ring and core carry the state.
+  const reduceMotion = useReducedMotion();
+
   useEffect(() => {
     if (!recording || !animate) {
       // Reset rather than freeze: a halo stopped mid-breath at half opacity
       // reads as a third state that means nothing.
       pulse.setValue(0);
+      return;
+    }
+    if (reduceMotion) {
+      pulse.setValue(STEADY_PULSE);
       return;
     }
     const loop = Animated.loop(
@@ -74,7 +86,7 @@ export function RecordButton({
       loop.stop();
       pulse.setValue(0);
     };
-  }, [recording, animate, pulse]);
+  }, [recording, animate, reduceMotion, pulse]);
 
   return (
     <Pressable
@@ -88,7 +100,14 @@ export function RecordButton({
       }
       style={styles.button}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={
+        onLongPress
+          ? () => {
+              holdTick();
+              onLongPress();
+            }
+          : undefined
+      }
     >
       {/* Behind the ring, and driven by scale + opacity only, so the whole
           breath runs on the native driver. */}
@@ -124,8 +143,7 @@ export function RecordButton({
 }
 
 const useStyles = makeStyles((theme) => ({
-  // Mirrors MapSearchBar's pill: the two corners of the map's top edge have to
-  // read as one family, not as a button and a lookalike.
+  // The same circle as the action column's other buttons.
   //
   // ONE background in every state: a translucent or tinted background lets
   // the map show straight through over a busy raster, obscuring the control

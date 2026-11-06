@@ -12,13 +12,14 @@ import type { ComponentProps } from "react";
 import {
   planAddVerbLabel,
   TRIP_PLAN_MAX_FORMS,
-  mediaSkippedSentence,
   MAX_PLACES_PER_TRIP,
   TRIP_PLACES_CAP_SENTENCE,
   todayDateKey,
   TRIP_PLAN_FORMS,
   tripPlanRequiredSummary,
+  tripPlanTripLogPlacesLine,
   TRIP_PLAN_INVITE,
+  TRIP_PLAN_ROLE_ABOUT,
   TRIP_PLAN_JOIN,
   TRIP_PLAN_PAGE,
   TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE,
@@ -49,6 +50,7 @@ import PlanJoinDialog from "./PlanJoinDialog";
 import PlanInvitePage from "./PlanInvitePage";
 import { approveMember } from "../../plansApi";
 import PlanPeople from "./PlanPeople";
+import PlanPlacePage from "./PlanPlacePage";
 import PlanSectionDialog from "./PlanSectionDialog";
 import PlanFormPage from "./PlanFormPage";
 import PlanAnswerDialog from "./PlanAnswerDialog";
@@ -58,7 +60,7 @@ import PlanAddCopyDialog from "./PlanAddCopyDialog";
 import PlanTripLogPlacesDialog from "./PlanTripLogPlacesDialog";
 import type { TPlace } from "../../placeUtils";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 
 const plan: TripPlanView = {
@@ -111,6 +113,11 @@ vi.mock("../../plansApi", async (importOriginal) => ({
 }));
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
+  getFriends: async () => [
+    { id: "u2", username: "bob", friendshipId: "f1" },
+    { id: "u5", username: "erin", friendshipId: "f2" },
+    { id: "u6", username: "frank", friendshipId: "f3" },
+  ],
   searchUsers: async () => ({
     data: [
       { id: "u3", username: "carol" },
@@ -358,9 +365,10 @@ describe("Edit form over another leader's save", () => {
   });
 });
 
-describe("a plan's page ends each list with its add button", () => {
-  // Mutation: drop the ListEnd, and a long write-up has no way to add below.
-  it("ends the write-up with Add a write-up section", () => {
+describe("a plan's page keeps its adds in the hero", () => {
+  // Mutation: put a `<ListEnd>` add back under the write-up, and the page
+  // draws the same verb twice.
+  it("draws Add a write-up section once, in the hero's menu", () => {
     renderPanel({
       view: {
         ...plan,
@@ -369,20 +377,26 @@ describe("a plan's page ends each list with its add button", () => {
       },
     });
     expect(
-      screen.getAllByRole("button", { name: planAddVerbLabel("section") })
-        .length,
-    ).toBeGreaterThan(0);
+      screen.queryByRole("button", { name: planAddVerbLabel("section") }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(
+      screen.getByRole("menuitem", { name: planAddVerbLabel("section") }),
+    ).toBeTruthy();
   });
 
-  // Mutation: drop `disabled={formsFull}`, and the API refuses the 21st form.
+  // Mutation: drop `disabledReason` from the form entry, and the API refuses
+  // the 21st form.
   it("stops offering Add a form at the cap", () => {
     const forms = Array.from({ length: TRIP_PLAN_MAX_FORMS }, (_, i) => ({
       ...contacts,
       id: `f${i}`,
     }));
     renderPanel({ view: { ...plan, myRole: "leader", forms } });
-    fireEvent.click(screen.getByRole("radio", { name: /^Forms/ }));
-    const add = screen.getByRole("button", { name: planAddVerbLabel("form") });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const add = screen.getByRole("menuitem", {
+      name: new RegExp(planAddVerbLabel("form")),
+    });
     expect(
       (add as HTMLButtonElement).disabled ||
         add.getAttribute("aria-disabled") === "true",
@@ -417,6 +431,37 @@ describe("answering a form whose audience changes", () => {
     expect(
       screen.getByText(TRIP_PLAN_VISIBILITY_CHANGED_SENTENCE),
     ).toBeTruthy();
+  });
+});
+
+describe("Invite people offers friends", () => {
+  // Mutation: draw only the username search, and a friend accepted a minute
+  // ago cannot be found without knowing their exact username.
+  it("lists friends before anything is typed, and narrows them", async () => {
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={() => {}} />,
+    );
+    expect(await screen.findByText("erin")).toBeTruthy();
+    expect(screen.getByText("frank")).toBeTruthy();
+    // bob is in the plan already: a pill, not an Invite.
+    expect(screen.getByText(TRIP_PLAN_INVITE.copy.inPlan)).toBeTruthy();
+    fireEvent.change(
+      screen.getByRole("searchbox", {
+        name: TRIP_PLAN_INVITE.copy.searchField,
+      }),
+      { target: { value: "er" } },
+    );
+    expect(screen.queryByText("frank")).toBeNull();
+    expect(screen.getByText("erin")).toBeTruthy();
+  });
+
+  // Mutation: delete a role's sentence from the screen.
+  it("says what each role can do", async () => {
+    render(
+      <PlanInvitePage plan={plan} onBack={() => {}} onInvited={() => {}} />,
+    );
+    for (const about of Object.values(TRIP_PLAN_ROLE_ABOUT))
+      expect(await screen.findByText(about)).toBeTruthy();
   });
 });
 
@@ -469,7 +514,7 @@ describe("Invite people after a refused invite", () => {
     });
     fireEvent.click(carol);
     fireEvent.click(dave);
-    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    await waitFor(() => expect(toast.done).toHaveBeenCalled());
     await waitFor(() => expect(dave.getAttribute("aria-busy")).toBeNull());
     expect(carol.getAttribute("aria-busy")).toBe("true");
     send();
@@ -479,8 +524,8 @@ describe("Invite people after a refused invite", () => {
 
 describe("someone asking to join", () => {
   // Mutation: put the buttons back in a footer, or label them by their
-  // glyph: the row loses its Let in / Turn down on the name's own line.
-  it("is let in or turned down by labelled buttons on their own row", () => {
+  // glyph: the row loses its Accept / Decline on the name's own line.
+  it("is accepted or declined by labelled buttons on their own row", () => {
     const asking = {
       ...plan,
       members: [
@@ -504,9 +549,9 @@ describe("someone asking to join", () => {
       />,
     );
     expect(screen.queryByText("See answers")).toBeNull();
-    const letIn = screen.getByRole("button", { name: "Let in" });
+    const letIn = screen.getByRole("button", { name: "Accept" });
     expect(letIn.closest('[class*="footer"]')).toBeNull();
-    expect(screen.getByRole("button", { name: "Turn down" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decline" })).toBeTruthy();
     fireEvent.click(letIn);
     expect(approveMember).toHaveBeenCalledWith(asking.id, "u9");
   });
@@ -819,58 +864,61 @@ describe("Add a place or way stopped halfway", () => {
   });
 });
 
-describe("Start a trip log after a copy failed", () => {
-  // Mutations: save every picked place again on Next, and a retry puts a
-  // second copy of the first place in the user's places; drop `onStale`,
-  // and a place gone from the plan 404s on every retry; count only the last
-  // run's photos, and the first copy's missing photo goes unsaid.
-  it("saves only the places not copied yet, then links them all", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.mocked(savePlanItem)
-      .mockResolvedValueOnce({ id: "copy-a", mediaSkipped: 1 })
-      .mockRejectedValueOnce(new ApiError(404, "/plans/p1", "POST"))
-      .mockResolvedValueOnce({ id: "copy-b", mediaSkipped: 1 });
+describe("Start a trip log from a plan", () => {
+  const place = (id: string, name: string, latitude: number) =>
+    ({
+      kind: "place",
+      id,
+      name,
+      latitude,
+      longitude: 150,
+      placeTypeId: "canyon",
+      media: [],
+    }) as unknown as TripPlanPlace;
+  const mine = (id: string, name: string, latitude: number) =>
+    ({
+      id,
+      name,
+      latitude,
+      longitude: 150,
+      placeTypeId: "waterfall",
+    }) as unknown as TPlace;
+
+  // Mutations: save a copy of each pick first (savePlanItem is called, and the
+  // user's places gain a duplicate); link the plan place's id; list a place
+  // the caller doesn't have.
+  it("lists and links only places the caller already has, saving nothing", () => {
+    vi.mocked(savePlanItem).mockClear();
     const onDone = vi.fn();
-    const onCopied = vi.fn();
-    const onStale = vi.fn();
-    const place = (id: string, name: string) =>
-      ({
-        kind: "place",
-        id,
-        name,
-        placeTypeId: "canyon",
-        media: [],
-      }) as unknown as TripPlanPlace;
     render(
       <PlanTripLogPlacesDialog
-        planId="p1"
-        places={[place("a", "Claustral"), place("b", "Ranon")]}
-        onCopied={onCopied}
-        onStale={onStale}
+        places={[place("a", "Claustral", -33), place("b", "Ranon", -34)]}
+        own={[mine("mine-a", "Claustral", -33)]}
         onDone={onDone}
         onClose={() => {}}
       />,
     );
+    expect(screen.getByText(tripPlanTripLogPlacesLine(1, 2))).toBeTruthy();
+    expect(screen.queryByRole("checkbox", { name: "Ranon" })).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Claustral" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: "Ranon" }));
-    const next = screen.getByRole("button", {
-      name: TRIP_PLAN_PAGE.copy.tripLogNext,
-    });
-    fireEvent.click(next);
-    expect(
-      await screen.findByText(/^1 copy saved to your places\./),
-    ).toBeTruthy();
-    expect(onCopied).toHaveBeenCalledTimes(1);
-    expect(onStale).toHaveBeenCalledTimes(1);
-    fireEvent.click(next);
-    await waitFor(() =>
-      expect(onDone).toHaveBeenCalledWith(
-        ["copy-a", "copy-b"],
-        ["canyon", "canyon"],
-      ),
+    fireEvent.click(
+      screen.getByRole("button", { name: TRIP_PLAN_PAGE.copy.tripLogNext }),
     );
-    expect(savePlanItem).toHaveBeenCalledTimes(3);
-    expect(toast.error).toHaveBeenCalledWith(mediaSkippedSentence(2, false));
+    expect(onDone).toHaveBeenCalledWith(["mine-a"], ["waterfall"]);
+    expect(savePlanItem).not.toHaveBeenCalled();
+  });
+
+  it("says so, with nothing to pick, when none match", () => {
+    render(
+      <PlanTripLogPlacesDialog
+        places={[place("a", "Claustral", -33)]}
+        own={[]}
+        onDone={() => {}}
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText(tripPlanTripLogPlacesLine(0, 1))).toBeTruthy();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
   });
 });
 
@@ -885,16 +933,18 @@ describe("Start a trip log with many places", () => {
           kind: "place",
           id: `p${i}`,
           name: `Place ${i}`,
+          latitude: i,
+          longitude: 150,
           placeTypeId: "canyon",
           media: [],
         }) as unknown as TripPlanPlace,
     );
     render(
       <PlanTripLogPlacesDialog
-        planId="p1"
         places={places}
-        onCopied={() => {}}
-        onStale={() => {}}
+        own={places.map(
+          (p) => ({ ...p, id: `mine-${p.id}` }) as unknown as TPlace,
+        )}
         onDone={() => {}}
         onClose={() => {}}
       />,
@@ -1139,5 +1189,38 @@ describe("a form's answers table on a narrow panel", () => {
     expect(
       screen.getByRole("dialog", { name: `bob · ${longLabel}` }),
     ).toBeTruthy();
+  });
+});
+
+describe("a plan place's coordinates", () => {
+  // Mutation: copy from a separate button again, or stop wiring `onCopy`, and
+  // pressing the coordinates writes nothing.
+  it("copy where they are pressed, with the place page's sentence", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const place = {
+      kind: "place",
+      name: "Claustral",
+      altNames: [],
+      latitude: -33.71234,
+      longitude: 150.31188,
+      elevation: 412,
+      placeTypeId: SYSTEM_PLACE_TYPE_IDS.canyon,
+      typeName: null,
+      typeIconKey: null,
+      notes: null,
+      fieldValues: {},
+      foreignFields: null,
+      media: [],
+    } as unknown as TripPlanPlace;
+    render(<PlanPlacePage place={place} onBack={() => {}} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: /^Coordinates: .*\. Copy$/ }),
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("-33.71234, 150.31188"),
+    );
+    expect(toast.done).toHaveBeenCalledWith("Coordinates copied.");
+    vi.unstubAllGlobals();
   });
 });

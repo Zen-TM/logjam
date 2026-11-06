@@ -4,6 +4,7 @@ import {
   MIN_FRAME_PX,
   bboxToFrame,
   defaultFrameInsets,
+  detailLabel,
   frameToBbox,
   metresPerPixel,
   moveFrameEdge,
@@ -227,5 +228,14 @@ describe("startingArea", () => {
     });
     expect(frame.left).toBeCloseTo(400 * (0.12 / 1.24), 0);
     expect(frame.left).toBeLessThan(defaultFrameInsets(view).left);
+  });
+});
+
+describe("detailLabel", () => {
+  // Mutation: print the z-level ("z16") instead of the ground distance.
+  it("names a level by the ground it resolves, never by its z-level", () => {
+    expect(detailLabel(16, -33.5)).toBe("Fine, 2 m");
+    expect(detailLabel(12, -33.5)).toBe("Overview, 32 m");
+    expect(detailLabel(18, -33.5)).toBe("Finest, 0.5 m");
   });
 });

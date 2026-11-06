@@ -62,7 +62,7 @@ describe("tripPlanPerson", () => {
   });
 
   // Mutation: offer Let in on an archived plan, or role verbs on a request.
-  it("offers a request Let in and Turn down, an invite Cancel invite", () => {
+  it("offers a request Accept and Decline, an invite Cancel invite", () => {
     const p = plan();
     expect(
       ids(tripPlanPerson(p, member("ask", "requested"), "me", TODAY)),

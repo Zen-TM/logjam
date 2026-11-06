@@ -24,7 +24,6 @@ import {
   EmptyState,
   IconButton,
   IconTile,
-  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -208,14 +207,15 @@ export default function PlanItems({
           })}
         </div>
       ))}
-      {addCopy && shown.length > 0 && <ListEnd>{addCopy}</ListEnd>}
 
       <ConfirmDialog
         open={saving != null}
-        title={saveLabel}
-        message={<p>{copy.saveCopyLine}</p>}
-        confirmLabel={saveLabel}
-        confirmColor="primary"
+        copy={{
+          confirmTitle: saveLabel,
+          confirmBody: copy.saveCopyLine,
+          confirmLabel: saveLabel,
+          tone: "filled",
+        }}
         busy={busy}
         onClose={() => setSaving(null)}
         onConfirm={() => {
@@ -235,16 +235,14 @@ export default function PlanItems({
             );
             const saved = tripPlanSavedMessage(item.kind);
             if (skipped) toast.error(`${saved} ${skipped}`);
-            else toast.success(saved);
+            else toast.done(saved);
             onSaved();
           });
         }}
       />
       <ConfirmDialog
         open={deleteCopy != null}
-        title={deleteCopy?.confirmTitle}
-        message={deleteCopy?.confirmBody}
-        confirmLabel={deleteCopy?.confirmLabel}
+        copy={deleteCopy}
         busy={busy}
         onClose={() => setDeleting(null)}
         onConfirm={() => {
@@ -256,7 +254,7 @@ export default function PlanItems({
           ).then((done) => {
             setDeleting(null);
             if (done) {
-              toast.success(copy.itemDeleted);
+              toast.done(copy.itemDeleted);
               onSaved();
             }
             onChanged(done ? undefined : { quiet: true });

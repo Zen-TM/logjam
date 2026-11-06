@@ -908,11 +908,33 @@ export function formatDistanceM(distanceM: number): string {
   return `${(distanceM / 1000).toFixed(1)} km`;
 }
 
+/** "3.4 km/h" as ["3.4", " km/h"]: a figure and its unit, for a display that
+ *  sets them in two sizes. No unit leaves the second empty. */
+export function splitUnit(text: string): [string, string] {
+  const at = text.indexOf(" ");
+  return at < 0 ? [text, ""] : [text.slice(0, at), text.slice(at)];
+}
+
 /** Human speed: km/h with one decimal. Null (no timestamps) reads as unknown. */
 export function formatSpeedMps(speedMps: number | null): string {
   if (speedMps == null || !Number.isFinite(speedMps) || speedMps < 0)
     return "—";
   return `${(speedMps * 3.6).toFixed(1)} km/h`;
+}
+
+/**
+ * A running clock: "0:07", "12:03", "1:02:03". A recording's first minute reads
+ * as seconds, not "0 min", so a clock that is running can be seen to run.
+ */
+export function formatClockMs(durationMs: number): string {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "—";
+  const totalSeconds = Math.floor(durationMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`
+    : `${minutes}:${seconds}`;
 }
 
 /** Human duration: "47 min", "3 h 12 min". */

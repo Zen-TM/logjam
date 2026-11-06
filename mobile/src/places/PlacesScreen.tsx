@@ -26,19 +26,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  FlatList,
-  Keyboard,
-  RefreshControl,
-  Text,
-  View,
-} from "react-native";
+import { Keyboard, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activePlaceFilterCount,
   placeMatchesSearch,
   comparePlaces,
+  PLACE_SORT_OPTIONS,
   contractSectionKeys,
   distinctTripTypes,
   EMPTY_PLACE_FILTERS,
@@ -51,7 +45,7 @@ import {
   PLACES_FILTER_SHEET,
   PLACES_LIST,
   placeDeleteConfirm,
-  placesCountLabel,
+  placeDeleteDone,
   placesEmptyKind,
   placeTypeHasTab,
   isSystemPlaceTypeId,
@@ -59,6 +53,7 @@ import {
   placesEmptyState,
   placesFilterNote,
   placesHeroTitle,
+  incomingLabel,
   placeStatus,
   placeSummary,
   qualityLabel,
@@ -77,12 +72,14 @@ import {
   useTheme,
   useHues,
   muted,
+  wash,
 } from "../theme";
 import type { MirrorPlace } from "../sync/mirrorStore";
 import { useConnectivity } from "../map/connectivity";
 import {
   useMirrorPlaces,
   useMirrorPlaceTypes,
+  useMirrorIncomingShareOwners,
   useMirrorShareCounts,
   useMirrorTrips,
   usePendingSyncCount,
@@ -90,10 +87,14 @@ import {
 } from "../sync/useSyncQueries";
 import {
   BottomSheet,
-  Button,
   Meter,
   Hero,
-  ListEnd,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroFlatList,
+  useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   Icon,
   IconButton,
   LoadingState,
@@ -103,14 +104,19 @@ import {
   ChipRail,
   SelectionBar,
   SearchField,
+  StatusPill,
   SyncStatusPills,
   Toast,
+  confirm,
   useBulkSelection,
   type MeterSegment,
   type ChipOption,
   type ToastMessage,
   EmptyState,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
+import { useStoredSort } from "../sortPreference";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
 import { PlaceEditSheet } from "./PlaceEditSheet";
@@ -143,6 +149,9 @@ type Countable = MirrorPlace & {
   _count?: { tripLogLinks: number; shares: number };
 };
 
+/** The page's name: the full hero's eyebrow and the compact row's title. */
+const PAGE_NAME = "Places";
+
 export function PlacesScreen({
   onOpenPlace,
   onShowOnMap,
@@ -166,6 +175,8 @@ export function PlacesScreen({
   onPickArea: () => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -175,6 +186,7 @@ export function PlacesScreen({
   const query = useMirrorPlaces();
   const tripsQuery = useMirrorTrips();
   const shareCounts = useMirrorShareCounts();
+  const shareOwners = useMirrorIncomingShareOwners();
   const typesQuery = useMirrorPlaceTypes();
   const syncStatus = useSyncStatus();
   const places = useMemo(() => query.data ?? [], [query.data]);
@@ -184,7 +196,11 @@ export function PlacesScreen({
   const [bucket, setBucket] = useState<Bucket>("all");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<PlaceFilters>(EMPTY_PLACE_FILTERS);
-  const [sort, setSort] = useState<PlaceSortKey>("name");
+  const [sort, setSort] = useStoredSort<PlaceSortKey>(
+    "places",
+    PLACE_SORT_OPTIONS.map((option) => option.key),
+    "name",
+  );
   const [sheet, setSheet] = useState<
     "filters" | "bulkShare" | "placeTypeForm" | "typeAttributes" | null
   >(null);
@@ -264,7 +280,7 @@ export function PlacesScreen({
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
-    setToast({ text, tone: "info", nonce: toastNonce.current });
+    setToast({ text, tone: "done", nonce: toastNonce.current });
   }, []);
   const fail = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -389,33 +405,28 @@ export function PlacesScreen({
     }, [clearSelection]),
   );
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedItems;
     const count = targets.length;
-    const confirm = placeDeleteConfirm({ count });
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            let failures = 0;
-            for (const place of targets) {
-              try {
-                await deletePlaceLocal(place.id);
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            if (failures === 0) info(`Deleted ${placesCountLabel(count)}.`);
-            else fail(`${failures} of ${count} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    const only = targets.length === 1 ? targets[0] : undefined;
+    if (
+      !(await confirm(
+        placeDeleteConfirm(only ? { name: only.name } : { count }),
+      ))
+    )
+      return;
+    let failures = 0;
+    for (const place of targets) {
+      try {
+        await deletePlaceLocal(place.id);
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    if (failures === 0) info(placeDeleteDone(count));
+    else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Every selectable place is one this user OWNS (`isDeletable` above), so a
@@ -593,7 +604,6 @@ export function PlacesScreen({
   // What a CLEAR button could actually clear. A type tab is not it — the tab
   // is visible, one tap from All, and an empty panel telling someone to clear
   // "filters" they never opened is a dead end.
-  const filtering = hiddenFilterCount > 0 || search.trim() !== "";
   const menuPlace = places.find((place) => place.id === menuPlaceId) ?? null;
 
   // Stable identities so the memoised rows never re-render for a state change
@@ -614,6 +624,7 @@ export function PlacesScreen({
         status={statusOf(item)}
         typeLabel={typeLabelOf(item.placeTypeId)}
         sharedWith={item._count?.shares ?? 0}
+        owner={shareOwners.data?.[item.id]}
         onOpen={openPlace}
         onMenu={openMenu}
         selecting={selecting}
@@ -630,6 +641,7 @@ export function PlacesScreen({
       selectedKeys,
       selectItem,
       typeLabelOf,
+      shareOwners.data,
     ],
   );
 
@@ -660,41 +672,56 @@ export function PlacesScreen({
     ReactNode
   > = {
     hero: (
-      <Hero
-        eyebrow="Places"
-        title={placesHeroTitle(places.length)}
-        actions={
-          <View style={styles.heroActions}>
-            <IconButton
-              icon="filter"
-              accessibilityLabel={PLACES_FILTER_SHEET.title}
-              color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={hiddenFilterCount > 0}
-              onPress={() => {
-                // Drop the keyboard BEFORE the sheet mounts: a sheet opening
-                // over a live IME inherits the shrunk frame and stops short of
-                // the bottom edge.
-                Keyboard.dismiss();
-                setSheet("filters");
-              }}
-            />
-            {/* One way in on this client, so a button and no menu. */}
-            {contractSectionKeys(PLACES_ADD, "gps").map((key) => (
-              <Button
-                key={key}
-                label={PLACES_ADD.copy[key]}
-                icon={PLACES_ADD_ICON[key]}
-                compact
-                onPress={() => startEditing(null)}
-              />
-            ))}
-          </View>
-        }
-      >
-        <Meter segments={heroSegments} />
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            eyebrow={PAGE_NAME}
+            title={
+              compact
+                ? compactHeroTitle(PAGE_NAME, places.length)
+                : placesHeroTitle(places.length)
+            }
+            actions={
+              <View style={styles.heroActions}>
+                <IconButton
+                  icon="filter"
+                  accessibilityLabel={PLACES_FILTER_SHEET.title}
+                  color={hiddenFilterCount > 0 ? theme.accent : theme.textMuted}
+                  filled={hiddenFilterCount > 0}
+                  onPress={() => {
+                    // Drop the keyboard BEFORE the sheet mounts: a sheet opening
+                    // over a live IME inherits the shrunk frame and stops short of
+                    // the bottom edge.
+                    Keyboard.dismiss();
+                    setSheet("filters");
+                  }}
+                />
+                {/* One way in on this client, so a button and no menu. With no
+                  places the empty state carries the one add. */}
+                {places.length > 0 &&
+                  contractSectionKeys(PLACES_ADD, "gps").map((key) => (
+                    <HeroAdd
+                      key={key}
+                      label={PLACES_ADD.copy[key]}
+                      icon={PLACES_ADD_ICON[key]}
+                      compact={compact}
+                      onPress={() => startEditing(null)}
+                    />
+                  ))}
+              </View>
+            }
+          >
+            {compact ? undefined : (
+              <>
+                <Meter segments={heroSegments} />
 
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
+                <SyncStatusPills online={online} pendingCount={pendingCount} />
+              </>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
 
     // ALWAYS ON SCREEN: the rail carries the only way to create a type from
@@ -714,7 +741,7 @@ export function PlacesScreen({
             }
             onClear={clearSelection}
             onSelectAll={selectAll}
-            onDelete={deleteSelected}
+            onDelete={() => void deleteSelected()}
           />
         ) : (
           <ChipRail
@@ -777,9 +804,10 @@ export function PlacesScreen({
     ) : null,
 
     list: (
-      <FlatList
+      <HeroFlatList
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         data={visible}
         keyExtractor={keyExtractor}
         keyboardShouldPersistTaps="handled"
@@ -790,7 +818,8 @@ export function PlacesScreen({
         windowSize={5}
         removeClippedSubviews
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
@@ -801,19 +830,6 @@ export function PlacesScreen({
             }}
             tintColor={theme.accent}
           />
-        }
-        ListFooterComponent={
-          // The list ends with the button its empty state offers.
-          places.length > 0 && !filtering ? (
-            <ListEnd>
-              <Button
-                label={PLACES_ADD.copy.add}
-                icon={PLACES_ADD_ICON.add}
-                variant="outlineAccent"
-                onPress={() => startEditing(null)}
-              />
-            </ListEnd>
-          ) : undefined
         }
         ListEmptyComponent={
           <EmptyPanel
@@ -835,9 +851,14 @@ export function PlacesScreen({
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(PLACES_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(PLACES_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
 
       {/* Per-place actions, titled with the place so a mis-tap can't destroy
           the wrong one — the SAME sheet the map opens on a place pin, so the
@@ -957,6 +978,7 @@ const PlaceRow = memo(function PlaceRow({
   status,
   typeLabel,
   sharedWith,
+  owner,
   onOpen,
   onMenu,
   selecting,
@@ -969,6 +991,8 @@ const PlaceRow = memo(function PlaceRow({
   /** The place's type name, or null while a type tab is filtering the list. */
   typeLabel: string | null;
   sharedWith: number;
+  /** The sharer's username, when this place is shared with the viewer. */
+  owner: string | undefined;
   onOpen: (place: MirrorPlace) => void;
   onMenu: (place: MirrorPlace) => void;
   selecting: boolean;
@@ -997,12 +1021,17 @@ const PlaceRow = memo(function PlaceRow({
       title={place.name}
       titleNumberOfLines={2}
       subtitle={subtitle || undefined}
+      subtitleNumberOfLines={2}
       selected={selected}
       disabled={selecting && !deletable}
       onLongPress={onToggle}
       onPress={selecting ? onToggle : () => onOpen(place)}
+      rightBelow
       right={
         <View style={styles.rowTrailing}>
+          {place.syncRole === "shared" ? (
+            <StatusPill label={incomingLabel(owner)} tone="outline" />
+          ) : null}
           {quality ? <Text style={styles.quality}>{quality}</Text> : null}
           {sharedWith > 0 ? (
             <View style={styles.badge}>
@@ -1096,7 +1125,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingLeft: spacing(1.5),
     paddingRight: spacing(0.5),
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(theme.accent, 0.12),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   filterText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },

@@ -32,6 +32,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 import { invalidateCurrentUser } from "../api/apiFetch";
 import { stopGeoPdfImportRun } from "../geopdf/importRunner";
+import { forgetSlopeBandsEdit } from "../map/slopeBandsPreference";
 import { clearRecentSearches } from "../map/recentSearches";
 import { stopSharpenedAreasForWipe } from "../map/sharpenedArchives";
 import { stopPlansForWipe } from "../plans/plansCache";
@@ -109,6 +110,9 @@ export async function wipeAllLocalData(): Promise<WipeResult> {
   // a minute to stop eight screens re-fetching it; a minute is long enough for
   // the next account to read the departing one's name off a settings screen.
   invalidateCurrentUser();
+
+  // A slope-band edit not yet sent belongs to the account that made it.
+  forgetSlopeBandsEdit();
 
   // Recent map searches are place names in the device prefs store, which the
   // wipe otherwise leaves alone.

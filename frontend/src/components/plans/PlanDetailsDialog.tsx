@@ -7,6 +7,7 @@
 // changed shows what the plan now says.
 import { useId, useMemo, useState } from "react";
 import {
+  abandonConfirm,
   parseTripPlanCreate,
   settleDayRange,
   TRIP_PLAN_NAME_MAX_LENGTH,
@@ -27,9 +28,7 @@ import {
   ErrorBanner,
   TextField,
 } from "../../ui";
-import ConfirmDialog from "../dialogs/ConfirmDialog";
 import { tripTypeOptions } from "../sidebar/panels/tripTypeIcon";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
 import { messageFromError } from "../../errors/messageFromError";
 import {
   TRIP_PLAN_FIELD_GROUPS,
@@ -100,7 +99,6 @@ function PlanDetailsForm({
 
   // Against what a Save would compare: after a refetch, the plan as it is.
   const dirty = !tripPlanSame(values, seen);
-  const guard = useUnsavedChangesGuard(dirty, onClose);
   const set = (next: Partial<Values>) => {
     setValues((current) => ({ ...current, ...next }));
     setError(null);
@@ -155,12 +153,13 @@ function PlanDetailsForm({
       <Dialog
         open
         title={plan ? copy.editTitle : copy.newTitle}
-        onClose={guard.requestClose}
+        onClose={onClose}
+        discard={dirty ? abandonConfirm("plan", !plan) : null}
         dismissible={!busy}
-        footer={
+        footer={(requestClose) => (
           <>
             <Button
-              onClick={guard.requestClose}
+              onClick={requestClose}
               disabled={busy}
               disabledReason="Saving…"
             >
@@ -170,7 +169,7 @@ function PlanDetailsForm({
               {plan ? copy.save : copy.make}
             </Button>
           </>
-        }
+        )}
       >
         <form
           id={formId}
@@ -236,16 +235,6 @@ function PlanDetailsForm({
           {error && <ErrorBanner message={error} />}
         </form>
       </Dialog>
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title={plan ? "Discard unsaved changes?" : "Discard this plan?"}
-        message={
-          plan ? "Your changes will be lost." : "What you typed will be lost."
-        }
-        confirmLabel="Discard"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }

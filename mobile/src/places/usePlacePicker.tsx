@@ -17,7 +17,9 @@ import { Text, View } from "react-native";
 import {
   TRACK_MIME_TYPES,
   messageFromError,
+  SHARE_SENTENCES,
   truncationHint,
+  WayRemovalError,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
@@ -63,7 +65,11 @@ export function usePlacePicker({
   /** Offered as the first row when the asset is already linked somewhere. */
   onUnlink?: () => Promise<unknown>;
   /** Write the new way into this place. The caller says what happened. */
-  attach: (placeId: string, placeName: string) => Promise<unknown>;
+  attach: (
+    placeId: string,
+    placeName: string,
+    replaces?: string,
+  ) => Promise<unknown>;
   /** Filled — leave the sub-mode. */
   onDone: () => void;
   onError: (message: string) => void;
@@ -105,7 +111,11 @@ export function usePlacePicker({
         // renders UNDER an open sheet (a Modal), so a failure reported with the
         // picker still up is a failure the user never sees.
         onDone();
-        onError(messageFromError(err, failure));
+        onError(
+          err instanceof WayRemovalError
+            ? err.message
+            : messageFromError(err, failure),
+        );
       })
       .finally(() => setBusy(false));
   };
@@ -123,11 +133,11 @@ export function usePlacePicker({
           placeName,
           source,
           occupant,
-          write: () => attach(placeId, placeName),
+          write: (replaces) => attach(placeId, placeName, replaces),
         }).then((filled) => {
           if (filled) onDone();
         }),
-      "Couldn't attach that to the place.",
+      "Couldn't link that to the place.",
     );
   };
 
@@ -138,9 +148,7 @@ export function usePlacePicker({
     header: (
       <View style={styles.header}>
         {promise ? <Text style={styles.hint}>{promise}</Text> : null}
-        <Text style={styles.hint}>
-          Anyone you share a place with can see linked routes.
-        </Text>
+        <Text style={styles.hint}>{SHARE_SENTENCES.linkedRoutes}</Text>
         <TextField label="Find a place" value={query} onChangeText={setQuery} />
       </View>
     ),

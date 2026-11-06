@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { placeStatus, placeSummary, qualityLabel } from "./placeStatus.js";
+import {
+  incomingLabel,
+  placeStatus,
+  placeSummary,
+  qualityLabel,
+} from "./placeStatus.js";
 
 describe("placeStatus", () => {
   it("is done for an owned place with at least one of the viewer's trips", () => {
@@ -40,6 +45,33 @@ function summaryOf(fields: {
   });
 }
 
+describe("placeSummary without facts", () => {
+  // Mutation that turns it red: drop the notes fallback (a campsite's line is
+  // empty again), or let notes win over facts.
+  it("shows the first line of the notes, bare of Markdown marks", () => {
+    expect(placeSummary({ notes: "\n## Flat spot by the creek\nMore." })).toBe(
+      "Flat spot by the creek",
+    );
+  });
+
+  // Mutation: strip every leading `-`, or drop the length cap.
+  it("keeps a minus sign that is not a bullet, and cuts a long line", () => {
+    expect(placeSummary({ notes: "-33.86, 151.20" })).toBe("-33.86, 151.20");
+    expect(placeSummary({ notes: "- gate code 1234" })).toBe("gate code 1234");
+    const long = placeSummary({ notes: "word ".repeat(100) });
+    expect(long.length).toBeLessThanOrEqual(80);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("keeps the facts when there are any, and is empty with neither", () => {
+    expect(
+      placeSummary({ fieldValues: { hours: 5 }, notes: "Gate is locked" }),
+    ).toBe("5 h");
+    expect(placeSummary({ notes: "  \n " })).toBe("");
+    expect(placeSummary({})).toBe("");
+  });
+});
+
 describe("placeSummary", () => {
   it("leads with the grade, then time and rope length", () => {
     expect(
@@ -51,7 +83,7 @@ describe("placeSummary", () => {
         longestAbseil: 30,
         numAbseils: 8,
       }),
-    ).toBe("v4a3 III · 6 h · 30 m max");
+    ).toBe("v4a3III · 6 h · 30 m max");
   });
 
   it("caps at three facts, but promotes a lower-priority one when a gap frees a slot", () => {
@@ -96,5 +128,15 @@ describe("qualityLabel", () => {
     expect(qualityLabel(undefined)).toBeNull();
     expect(qualityLabel(0)).toBe("★ 0");
     expect(qualityLabel(4)).toBe("★ 4");
+  });
+});
+
+describe("incomingLabel", () => {
+  // Mutation: return "Shared" for an unknown owner, and the fallback is the
+  // bare word again.
+  it("names the owner, and says whose it is even when the owner is unknown", () => {
+    expect(incomingLabel("bob")).toBe("From bob");
+    expect(incomingLabel(null)).toBe("Shared with you");
+    expect(incomingLabel(undefined)).toBe("Shared with you");
   });
 });

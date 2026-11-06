@@ -82,7 +82,7 @@ export async function runBatchFileAction({
  */
 export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
   text: string;
-  tone: "info" | "error";
+  tone: "done" | "error";
 } {
   const { kind, done, failed, total } = outcome;
   if (done === 0) {
@@ -90,7 +90,7 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
       text:
         kind === "accept"
           ? `Couldn't save ${countOf(total, "file")}.`
-          : `Couldn't turn ${total === 1 ? "that down" : "those down"}.`,
+          : `Couldn't decline ${total === 1 ? "that" : "those"}.`,
       tone: "error",
     };
   }
@@ -99,7 +99,7 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
       text:
         kind === "accept"
           ? `Saved ${done} of ${total} — ${countOf(failed, "file")} couldn't be saved. Try those again from the list.`
-          : `Turned down ${done} of ${total} — ${failed} couldn't be.`,
+          : `Declined ${done} of ${total} — ${failed} couldn't be.`,
       tone: "error",
     };
   }
@@ -107,8 +107,8 @@ export function batchFileActionMessage(outcome: BatchFileActionOutcome): {
     text:
       kind === "accept"
         ? `Saved ${countOf(done, "file")} — find ${done === 1 ? "it" : "them"} in Saved.`
-        : `Turned down ${countOf(done, "file")}.`,
-    tone: "info",
+        : `Declined ${countOf(done, "file")}.`,
+    tone: "done",
   };
 }
 

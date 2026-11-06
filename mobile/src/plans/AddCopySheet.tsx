@@ -82,6 +82,7 @@ export function AddCopySheet({
   me,
   onClose,
   onDone,
+  onDrawRoute,
 }: {
   plan: TripPlanView;
   visible: boolean;
@@ -89,7 +90,9 @@ export function AddCopySheet({
   me: string | null;
   online: boolean;
   onClose: () => void;
-  onDone: (message: string, tone: "info" | "error") => void;
+  onDone: (message: string, tone: "done" | "error") => void;
+  /** A way that is not drawn yet is made on the map, so the sheet offers it. */
+  onDrawRoute: () => void;
 }) {
   const theme = useTheme();
   const { assetHue } = useHues();
@@ -271,6 +274,7 @@ export function AddCopySheet({
             loading={busy}
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => void add()}
           />
           {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}
@@ -279,6 +283,16 @@ export function AddCopySheet({
     >
       <View style={styles.body}>
         <Text style={styles.muted}>{copy.addCopyLine}</Text>
+        <Row
+          icon="route"
+          hue={assetHue.route}
+          title={planAddVerbLabel("route")}
+          disabled={busy}
+          onPress={() => {
+            onClose();
+            onDrawRoute();
+          }}
+        />
         <ChipRail
           scroll
           value={group}

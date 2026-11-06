@@ -1,57 +1,32 @@
 // Plan mode on the map: what the map frames when a plan opens on it. Built at
 // navigation time and never stored, like a place's focus: a region of
 // interest stays off the server (mobile/AGENTS.md).
-import type { TripPlanView } from "@logjam/shared";
+import { planExtent, type TripPlanView } from "@logjam/shared";
 
-import type { MapArtifact } from "../map/sourceResolver";
-
-import { bboxOfPoints, PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
+import { coveredByOfflineMaps } from "../offline/coveredByOfflineMaps";
+import { PLACE_FOCUS_DEGREES } from "../saved/bboxOfPoints";
 
 /** The plan's places and ways, as `[west, south, east, north]`, or null. At
  *  least a place's frame on each axis, so places metres apart frame ground as
- *  one place's Show on map does. */
+ *  one place's Show on map does. Logjam Web pads differently (`planBounds`). */
 export function planBbox(
   plan: Pick<TripPlanView, "places" | "routes">,
 ): [number, number, number, number] | null {
-  const box = bboxOfPoints([
-    ...plan.places.map((place) => ({
-      lon: place.longitude,
-      lat: place.latitude,
-    })),
-    ...plan.routes.flatMap((route) =>
-      route.points.map(([lon, lat]) => ({ lon, lat })),
-    ),
-  ]);
+  const box = planExtent(plan);
   if (!box) return null;
   const widen = (low: number, high: number): [number, number] => {
     const mid = (low + high) / 2;
     const half = Math.max((high - low) / 2, PLACE_FOCUS_DEGREES);
     return [mid - half, mid + half];
   };
-  const [west, east] = widen(box[0], box[2]);
-  const [south, north] = widen(box[1], box[3]);
+  const [west, east] = widen(box.west, box.east);
+  const [south, north] = widen(box.south, box.north);
   return [west, south, east, north];
 }
 
 /** Whether one saved map region already holds the whole of a plan's area,
- *  so "Download the map for this area" has nothing left to save. */
-export function planMapSaved(
-  bbox: [number, number, number, number],
-  artifacts: readonly Pick<MapArtifact, "kind" | "bbox">[],
-): boolean {
-  const [west, south, east, north] = bbox;
-  // ponytail: one region must hold it all; two that tile the area together
-  // still offer the row. A union check if that turns up.
-  return artifacts.some(
-    ({ kind, bbox: region }) =>
-      kind === "basemap-region" &&
-      region !== null &&
-      region[0] <= west &&
-      region[1] <= south &&
-      region[2] >= east &&
-      region[3] >= north,
-  );
-}
+ *  so "Save an offline map of this area" has nothing left to save. */
+export const planMapSaved = coveredByOfflineMaps;
 
 /** Whether a pressed pin is one of the plan's places, not one of the user's:
  *  a plan's pin opens its place sheet, the user's their own options. */

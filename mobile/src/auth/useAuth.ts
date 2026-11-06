@@ -152,7 +152,7 @@ export function useAuth() {
     setSessionRejectedHandler(() => {
       setState((prev) => {
         if (prev !== "authenticated") return prev;
-        setError("Your session has expired. Please sign in again.");
+        setError("Your session has expired. Sign in again.");
         return "signIn";
       });
     });
@@ -170,7 +170,7 @@ export function useAuth() {
           if (classifySessionError(err) === "rejected") {
             setState((prev) => {
               if (prev !== "authenticated") return prev;
-              setError("Your session has expired. Please sign in again.");
+              setError("Your session has expired. Sign in again.");
               return "signIn";
             });
           }
@@ -202,7 +202,7 @@ export function useAuth() {
       return true;
     } catch (err) {
       console.error(err);
-      setError(messageFromError(err, "Sign in failed."));
+      setError(messageFromError(err, "Couldn't sign in. Try again."));
       return false;
     }
   }, []);

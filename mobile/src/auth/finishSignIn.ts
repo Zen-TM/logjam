@@ -38,7 +38,7 @@ export async function finishSignIn(signIn: {
     return {
       ok: false,
       error:
-        "Sign-in didn't return an account identity, so it was cancelled. Please try again.",
+        "Sign-in didn't return an account identity, so it was cancelled. Try again.",
     };
   }
   const previous = await readPreviousIdentity();

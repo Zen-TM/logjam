@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   attributeDeleteConfirm,
-  SETTINGS_LIST,
   type ScopedCustomFieldDef,
   type TripLogCustomFieldDef,
 } from "@logjam/shared";
@@ -69,10 +68,7 @@ function DeleteCustomFieldDialog({
     } catch (err) {
       console.error(err);
       setError(
-        messageFromError(
-          err,
-          "Couldn't delete the attribute. Please try again.",
-        ),
+        messageFromError(err, "Couldn't delete the attribute. Try again."),
       );
     } finally {
       setDeleting(false);
@@ -88,19 +84,14 @@ function DeleteCustomFieldDialog({
   return (
     <ConfirmDialog
       open={def !== null}
-      title={confirm.confirmTitle}
-      message={
-        <>
-          <p>{confirm.confirmBody}</p>
-          {impactError && <ErrorBanner message={impactError} />}
-          {error && <ErrorBanner message={error} />}
-        </>
-      }
-      confirmLabel={SETTINGS_LIST.copy.deleteAttribute}
+      copy={confirm}
       busy={deleting}
       onConfirm={handleConfirm}
       onClose={handleClose}
-    />
+    >
+      {impactError && <ErrorBanner message={impactError} />}
+      {error && <ErrorBanner message={error} />}
+    </ConfirmDialog>
   );
 }
 

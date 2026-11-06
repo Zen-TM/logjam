@@ -25,7 +25,8 @@ const ALLOWED: { file: string; reason: string }[] = [
   },
   {
     file: "components/dialogs/SelectedPlacesDialog.tsx",
-    reason: "share and delete are one at a time: one in flight locks the other",
+    reason:
+      "nothing to send until a friend is ticked, and a request in flight locks it",
   },
 ];
 

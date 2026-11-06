@@ -2,7 +2,7 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 import { NSW_CONTOURS, NSW_HILLSHADE, NSW_SLOPE } from "@logjam/shared";
 import { baseTilePng, statewideArchives } from "./__fixtures__/geoPdfTiles";
 
-// Make it in Export an area renders the GeoPDF in the tab: tile reads are
+// Make it in Make a map renders the GeoPDF in the tab: tile reads are
 // stubbed (made-up fixtures, slowed so the render outlasts the interaction),
 // the PDF arrives as a download, and the page answers input meanwhile. Needs
 // fake auth and the seeded API to open the dialog, as export-area.spec.ts
@@ -13,8 +13,8 @@ import { baseTilePng, statewideArchives } from "./__fixtures__/geoPdfTiles";
 // stubbed, so the spec never depends on MiniStack's CORS or Range handling.
 //
 // Mutations: POST /geo-pdf again from handleGenerate (no download, and the
-// request is asserted absent); render on the main thread (the chip click
-// would wait out the render); drop the progress bar (the visibility check).
+// request is asserted absent); render on the main thread (the focus check
+// would wait out the render); drop the progress dialog (the visibility check).
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
 test.skip(
@@ -102,11 +102,10 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     .getByRole("group", { name: "Tools" })
     .getByText("Make a map")
     .click();
-  await page.getByRole("menuitem", { name: "Export an area" }).click();
   const dialog = page.locator("dialog[open]");
 
   // A made-up area in the far west, clear of every seeded footprint.
-  await dialog.getByRole("radio", { name: "Type the edges" }).click();
+  await dialog.getByRole("button", { name: "Type the coordinates" }).click();
   for (const [name, value] of [
     ["North", "-31.00"],
     ["West", "142.00"],
@@ -116,18 +115,21 @@ test("Make it downloads a PDF made in the tab, and the page stays live", async (
     await field.blur();
   }
 
+  await dialog.getByRole("textbox", { name: "File name" }).fill("Far west.pdf");
+
   const download = page.waitForEvent("download", { timeout: 90_000 });
   made = true;
   await dialog.getByRole("button", { name: "Make it" }).click();
-  await expect(dialog.getByRole("progressbar")).toBeVisible();
+  const progress = page.getByRole("dialog", { name: "Making your GeoPDF" });
+  await expect(progress.getByRole("progressbar")).toBeVisible();
 
   // The page answers while the worker draws.
-  const chip = dialog.getByRole("radio", { name: "Landscape" });
-  await chip.click({ timeout: 5_000 });
-  await expect(chip).toHaveAttribute("aria-checked", "true");
+  const cancel = progress.getByRole("button", { name: "Cancel" });
+  await cancel.focus();
+  await expect(cancel).toBeFocused({ timeout: 5_000 });
 
   const file = await download;
-  expect(file.suggestedFilename()).toMatch(/\.pdf$/);
+  expect(file.suggestedFilename()).toBe("Far west.pdf");
   const path = await file.path();
   const head = (await import("node:fs")).readFileSync(path).subarray(0, 5);
   expect(head.toString("latin1")).toBe("%PDF-");

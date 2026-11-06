@@ -25,6 +25,7 @@ vi.mock("./SignInTerrain", () => ({ default: () => null }));
 vi.mock("./useSignInArea", () => ({ default: () => null }));
 vi.mock("./Footer", () => ({ default: () => null }));
 
+import { SIGN_IN_COPY } from "@logjam/shared";
 import SignIn from "./SignIn";
 
 const onRedirect = vi.fn(async () => {});
@@ -51,7 +52,7 @@ const EMAIL = "a@example.com";
 const PASSWORD = "Aa1!aaaa";
 
 function fillSignUp() {
-  press("Sign up");
+  press(SIGN_IN_COPY.goToSignUp);
   type("Name", "A");
   type("Email", EMAIL);
   type("Username", "canyoneer");
@@ -80,8 +81,8 @@ describe("SignIn under another issuer", () => {
 
   it("redirects on click and shows a failure above the button", () => {
     oidc.hasCognitoAccount.mockReturnValue(false);
-    draw("Sign in failed. Please try again.");
-    expect(screen.getByText("Sign in failed. Please try again.")).toBeTruthy();
+    draw("Couldn't sign in. Try again.");
+    expect(screen.getByText("Couldn't sign in. Try again.")).toBeTruthy();
     press("Sign in or create an account");
     expect(onRedirect).toHaveBeenCalledOnce();
   });
@@ -100,14 +101,14 @@ describe("SignIn under Cognito", () => {
   });
 
   it("keeps the form and shows what Cognito refused", async () => {
-    const refused = new Error("Incorrect username or password.");
+    const refused = new Error("Incorrect email or password.");
     refused.name = "NotAuthorizedException";
     onPasswordSignIn.mockRejectedValueOnce(refused);
     draw();
     type("Email", EMAIL);
     type("Password", PASSWORD);
     press("Sign in");
-    await screen.findByText("Incorrect username or password.");
+    await screen.findByText("Incorrect email or password.");
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
   });
 
@@ -140,8 +141,8 @@ describe("SignIn under Cognito", () => {
   it("will not sign up without the terms", async () => {
     draw();
     fillSignUp();
-    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
-    press("Sign up");
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 or older/ }));
+    press(SIGN_IN_COPY.createAccount);
     await screen.findByText(/Agree to the Terms of Use/);
     expect(oidc.signUp).not.toHaveBeenCalled();
   });
@@ -152,8 +153,8 @@ describe("SignIn under Cognito", () => {
     fillSignUp();
     type("Name", "");
     fireEvent.click(screen.getByRole("checkbox", { name: /Terms of Use/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
-    press("Sign up");
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 or older/ }));
+    press(SIGN_IN_COPY.createAccount);
     await screen.findByText("Enter your name.");
     expect(oidc.signUp).not.toHaveBeenCalled();
   });
@@ -162,8 +163,8 @@ describe("SignIn under Cognito", () => {
     draw();
     fillSignUp();
     fireEvent.click(screen.getByRole("checkbox", { name: /agree to the/ }));
-    press("Sign up");
-    await screen.findByText(/18 or older/);
+    press(SIGN_IN_COPY.createAccount);
+    await screen.findByText(/Confirm you are 18 or older/);
     expect(oidc.signUp).not.toHaveBeenCalled();
   });
 
@@ -174,7 +175,7 @@ describe("SignIn under Cognito", () => {
     unconfirmed.name = "UserNotConfirmedException";
     onPasswordSignIn.mockRejectedValueOnce(unconfirmed);
     draw();
-    press("Sign up");
+    press(SIGN_IN_COPY.goToSignUp);
     type("Username", "typed_not_sent");
     fireEvent.click(screen.getAllByRole("button", { name: "Sign in" })[0]);
     type("Email", EMAIL);
@@ -199,8 +200,8 @@ describe("SignIn under Cognito", () => {
     draw();
     fillSignUp();
     fireEvent.click(screen.getByRole("checkbox", { name: /agree to the/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
-    press("Sign up");
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 or older/ }));
+    press(SIGN_IN_COPY.createAccount);
     await screen.findByText("That username is taken. Choose another.");
     expect(oidc.signUp).not.toHaveBeenCalled();
     expect(usernameAvailable).toHaveBeenCalledWith("canyoneer");
@@ -209,7 +210,7 @@ describe("SignIn under Cognito", () => {
   it("says a username is taken on leaving the field", async () => {
     usernameAvailable.mockResolvedValue(false);
     draw();
-    press("Sign up");
+    press(SIGN_IN_COPY.goToSignUp);
     type("Username", "canyoneer");
     fireEvent.blur(screen.getByLabelText(/^Username/));
     await screen.findByText("That username is taken. Choose another.");
@@ -223,7 +224,7 @@ describe("SignIn under Cognito", () => {
       () => new Promise((resolve) => (answer = resolve)),
     );
     draw();
-    press("Sign up");
+    press(SIGN_IN_COPY.goToSignUp);
     type("Username", "canyoneer");
     fireEvent.blur(screen.getByLabelText(/^Username/));
     type("Username", "canyoneer2");
@@ -237,8 +238,8 @@ describe("SignIn under Cognito", () => {
     draw();
     fillSignUp();
     fireEvent.click(screen.getByRole("checkbox", { name: /agree to the/ }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /18 years/ }));
-    press("Sign up");
+    fireEvent.click(screen.getByRole("checkbox", { name: /18 or older/ }));
+    press(SIGN_IN_COPY.createAccount);
     await screen.findByLabelText("Verification code", { exact: false });
     expect(oidc.signUp).toHaveBeenCalledWith(EMAIL, PASSWORD, "A");
     type("Verification code", "123456");
@@ -264,7 +265,7 @@ describe("SignIn under Cognito", () => {
     type("New password", PASSWORD);
     type("Confirm new password", PASSWORD);
     press("Reset password");
-    await screen.findByText("Password reset — please sign in.");
+    await screen.findByText("Password reset. Sign in to continue.");
     expect(oidc.confirmForgotPassword).toHaveBeenCalledWith(
       EMAIL,
       "123456",
@@ -278,7 +279,7 @@ describe("the terms tick", () => {
   // and opening the terms answers the question about them.
   it("links its words, and opening one leaves the box alone", () => {
     draw();
-    press("Sign up");
+    press(SIGN_IN_COPY.goToSignUp);
     const tick = screen.getByRole("checkbox", {
       name: "I agree to the Terms of Use and acknowledge the Privacy Policy.",
     }) as HTMLInputElement;
@@ -290,5 +291,19 @@ describe("the terms tick", () => {
     expect(tick.checked).toBe(false);
     fireEvent.click(screen.getByText(/I agree to the/));
     expect(tick.checked).toBe(true);
+  });
+});
+
+// Mutation: delete the `setPassword("")` in `goTo`.
+describe("SignIn, going from Sign in to Sign up", () => {
+  afterEach(cleanup);
+  it("does not carry the password typed on Sign in", () => {
+    draw();
+    type("Email", EMAIL);
+    type("Password", "wrong-password");
+    press(SIGN_IN_COPY.goToSignUp);
+    for (const field of screen.getAllByLabelText(/password/i)) {
+      expect((field as HTMLInputElement).value).toBe("");
+    }
   });
 });

@@ -1,8 +1,10 @@
+import type { LatLng } from "@logjam/shared";
+
 import type { MirrorMedia } from "../sync/mirrorStore";
 import { ensureDisplayCached } from "../sync/mediaCache";
 import { attachMediaLocal } from "../sync/mediaUpload";
 import { attachRecordedTrack } from "./attachRecordedTrack";
-import type { Track } from "./tracksDb";
+import { listTrackPoints, type Track } from "./tracksDb";
 
 /**
  * A track a trip can be logged FROM ("Log a trip" on a track): what the form
@@ -26,6 +28,9 @@ export type TripTrackSource = {
   /** Resolves false when the track could not be attached (too few points, a
    *  file that could not be fetched). A local write: the upload follows. */
   attach: (tripId: string) => Promise<boolean>;
+  /** Where it began and ended, for offering the places near it. Only a
+   *  recording made here knows: a synced file carries its extent, not its ends. */
+  ends?: () => Promise<LatLng[]>;
 };
 
 /** A recording made on this phone. */
@@ -35,6 +40,14 @@ export function recordedTrackSource(track: Track): TripTrackSource {
     startedAt: track.startedAt,
     needsConnection: false,
     attach: (tripId) => attachRecordedTrack("tripLog", tripId, track),
+    ends: async () => {
+      const points = await listTrackPoints(track.id);
+      const first = points[0];
+      const last = points[points.length - 1];
+      return first && last
+        ? [first, last].map((p) => ({ latitude: p.lat, longitude: p.lon }))
+        : [];
+    },
   };
 }
 
@@ -53,11 +66,16 @@ export function syncedTrackSource(
       // Cached already, or fetched once and cached: null offline.
       const uri = await ensureDisplayCached(file.id);
       if (!uri) return false;
-      await attachMediaLocal("tripLog", tripId, {
-        uri,
-        mimeType: file.mediaType,
-        fileName: file.filename ?? `${file.title}.gpx`,
-      });
+      await attachMediaLocal(
+        "tripLog",
+        tripId,
+        {
+          uri,
+          mimeType: file.mediaType,
+          fileName: file.filename ?? `${file.title}.gpx`,
+        },
+        file.id,
+      );
       return true;
     },
   };

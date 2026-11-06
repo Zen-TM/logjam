@@ -11,8 +11,9 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
+  abandonConfirm,
   answersFromDraft,
   ApiError,
   contractSectionKeys,
@@ -49,6 +50,7 @@ import {
   IconButton,
   Row,
   SectionHeader,
+  confirm,
 } from "../ui";
 import { AnswersTable } from "./AnswersTable";
 import { PlanFormFields } from "./PlanFormFields";
@@ -118,6 +120,8 @@ export function FormSheet({
   // caller's answer, and a form changed under it (a 409, then the refetch)
   // keeps what still fits (`fitAnswerDraft`).
   const [draft, setDraft] = useState<TripPlanAnswerDraft>({});
+  // The draft as it started, to tell an answer being typed from one just opened.
+  const [openedDraft, setOpenedDraft] = useState<TripPlanAnswerDraft>({});
   const [draftFor, setDraftFor] = useState<Pick<
     TripPlanFormView,
     "id" | "updatedAt" | "questions" | "visibleTo"
@@ -131,7 +135,12 @@ export function FormSheet({
     if (draftFor) setDraftFor(null);
   } else if (draftFor?.id !== form.id) {
     setDraftFor(form);
-    setDraft(draftFromAnswers(form.questions, form.myAnswer?.answers ?? {}));
+    const started = draftFromAnswers(
+      form.questions,
+      form.myAnswer?.answers ?? {},
+    );
+    setDraft(started);
+    setOpenedDraft(started);
     setError(null);
     setChanged(false);
   } else if (draftFor.updatedAt !== form.updatedAt) {
@@ -214,25 +223,16 @@ export function FormSheet({
     }
   }
 
-  function remove(target: TripPlanFormView) {
-    const confirm = planFormDeleteConfirm(target);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => {
-          onState(null);
-          deleteForm(plan.id, target.id)
-            .then(() => afterPlanWrite(plan.id))
-            .then(() => onInfo(copy.deleted))
-            .catch(async (err: unknown) => {
-              if (err instanceof ApiError) await afterPlanWrite(plan.id);
-              onError(messageFromError(err, copy.deleteFailed));
-            });
-        },
-      },
-    ]);
+  async function remove(target: TripPlanFormView) {
+    if (!(await confirm(planFormDeleteConfirm(target)))) return;
+    onState(null);
+    deleteForm(plan.id, target.id)
+      .then(() => afterPlanWrite(plan.id))
+      .then(() => onInfo(copy.deleted))
+      .catch(async (err: unknown) => {
+        if (err instanceof ApiError) await afterPlanWrite(plan.id);
+        onError(messageFromError(err, copy.deleteFailed));
+      });
   }
 
   const sees = form ? tripPlanSeesAnswers(plan.myRole, form.visibleTo) : false;
@@ -286,6 +286,7 @@ export function FormSheet({
                     label={form.myAnswer ? copy.change : copy.answer}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() => onState({ formId: form.id, mode: "answer" })}
                   />
                   {online ? null : (
@@ -323,9 +324,14 @@ export function FormSheet({
         }
       : null;
 
+  const dirty =
+    answering && JSON.stringify(draft) !== JSON.stringify(openedDraft);
   return (
     <BottomSheet
       visible={form != null}
+      discard={
+        dirty && form ? abandonConfirm("answer", form.myAnswer == null) : null
+      }
       // Inside answering, every way out (drag, back, ×) backs out one layer.
       onClose={back ?? close}
       title={saying ? (said.title ?? form.title) : (form?.title ?? "")}
@@ -349,6 +355,7 @@ export function FormSheet({
               loading={busy}
               disabled={!online}
               disabledReason={OFFLINE}
+              reasonShown
               onPress={() => void send(form)}
             />
             {online ? null : <Text style={styles.offline}>{OFFLINE}</Text>}

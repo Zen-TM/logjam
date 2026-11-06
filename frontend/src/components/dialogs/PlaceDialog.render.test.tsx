@@ -1,14 +1,52 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PLACE_FORM, PLACE_PAGE, SYSTEM_PLACE_TYPE_IDS } from "@logjam/shared";
 
 import PlaceDialog from "./PlaceDialog";
 import { ToastProvider } from "../feedback/ToastProvider";
+import { deleteMedia } from "../../placeUtils";
+import { ApiError } from "../../errors/ApiError";
 import type { TPlace, TPlaceType } from "../../placeUtils";
 
 vi.mock("../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ media: [] })),
+  deleteMedia: vi.fn(async () => {}),
+}));
+// The real one needs a file chooser: this one "uploads" (m1, m2, ...) on a
+// press, and reports a slow one on another.
+const upload = vi.hoisted(() => ({ n: 0 }));
+vi.mock("../media/MediaUpload", () => ({
+  default: ({
+    onUploaded,
+    onBusyChange,
+  }: {
+    onUploaded: (item: unknown) => void;
+    onBusyChange: (busy: boolean) => void;
+  }) => (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          onUploaded({ id: `m${++upload.n}`, mediaType: "image/jpeg" })
+        }
+      >
+        Fake upload
+      </button>
+      <button type="button" onClick={() => onBusyChange(true)}>
+        Start slow upload
+      </button>
+      <button type="button" onClick={() => onBusyChange(false)}>
+        Finish slow upload
+      </button>
+    </>
+  ),
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
@@ -97,5 +135,137 @@ describe("PlaceDialog, while open", () => {
     rerender(dialog(place("p2", "Bravo Chasm")));
 
     expect(nameBox().value).toBe("Bravo Chasm");
+  });
+});
+
+const box = (label: RegExp) => screen.getByLabelText(label) as HTMLInputElement;
+
+// Mutation: put NumberField's sanitising back
+// on the coordinate fields, and the pair is joined into -33.62901503156.
+describe("PlaceDialog, a coordinate pair pasted into Latitude", () => {
+  it("fills Latitude and Longitude", () => {
+    render(dialog(null));
+    fireEvent.change(box(/^Latitude/), {
+      target: { value: "-33.6290, 150.3156" },
+    });
+    expect(box(/^Latitude/).value).toBe("-33.629");
+    expect(box(/^Longitude/).value).toBe("150.3156");
+  });
+
+  it("keeps other text as typed, and flags it", () => {
+    render(dialog(null));
+    fireEvent.change(box(/^Latitude/), { target: { value: "-33,6290 150" } });
+    expect(box(/^Latitude/).value).toBe("-33,6290 150");
+    expect(box(/^Longitude/).value).toBe("");
+    fireEvent.blur(box(/^Latitude/));
+    expect(screen.getByText(PLACE_FORM.copy.latitudeInvalid)).toBeTruthy();
+  });
+});
+
+// The form names its route section and its empty slot with the words the place
+// page uses. Mutation: write either back as a literal ("Track", "No track yet.").
+describe("PlaceDialog, route section", () => {
+  it("says route where the place page does", async () => {
+    render(dialog(place("p1", "Claustral")));
+    expect(
+      (await screen.findByRole("heading", { name: PLACE_PAGE.copy.route }))
+        .textContent,
+    ).toBe("Route");
+    expect(await screen.findByText(PLACE_PAGE.copy.routeEmpty)).toBeTruthy();
+  });
+});
+
+// Uploads land on the server the moment they finish, so Discard has to take
+// them back out. Mutations: drop `uploadedIds` from `isDirty`; move
+// `onGone` out of `discardUploads`'s loop (a retry then deletes the first file
+// twice); treat a 404 as a failure; drop `uploading` from the Cancel button.
+describe("PlaceDialog, editing, after an upload", () => {
+  const onClose = vi.fn();
+  beforeEach(() => {
+    upload.n = 0;
+    onClose.mockClear();
+    vi.mocked(deleteMedia).mockReset();
+    vi.mocked(deleteMedia).mockResolvedValue(undefined);
+  });
+
+  const open = () => {
+    render(
+      <ToastProvider>
+        <PlaceDialog
+          place={place("p1", "Alpha Gorge")}
+          open
+          onClose={onClose}
+          onSaved={() => {}}
+          onPickCoords={() => {}}
+          onCancelPickCoords={() => {}}
+          customFieldDefs={[]}
+          onCustomFieldDefsChange={() => {}}
+          placeTypes={[CANYON]}
+        />
+      </ToastProvider>,
+    );
+  };
+  const upload1 = () => fireEvent.click(screen.getAllByText("Fake upload")[0]);
+  const cancel = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  const discard = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+  it("asks before closing, and deletes the upload on Discard", async () => {
+    open();
+    upload1();
+    cancel();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(deleteMedia).not.toHaveBeenCalled();
+
+    discard();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(deleteMedia).toHaveBeenCalledWith("m1");
+  });
+
+  it("stays open when a delete fails, and a retry deletes only what is left", async () => {
+    open();
+    upload1();
+    upload1();
+    vi.mocked(deleteMedia)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("offline"));
+    cancel();
+    discard();
+    await screen.findByText(/Couldn't discard uploaded files/);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(vi.mocked(deleteMedia).mock.calls).toEqual([["m1"], ["m2"]]);
+
+    cancel();
+    discard();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(vi.mocked(deleteMedia).mock.calls).toEqual([["m1"], ["m2"], ["m2"]]);
+  });
+
+  it("counts a file the server no longer has as deleted", async () => {
+    open();
+    upload1();
+    vi.mocked(deleteMedia).mockRejectedValueOnce(
+      new ApiError(404, "/media/m1", "DELETE"),
+    );
+    cancel();
+    discard();
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("holds Cancel while a file is still uploading", () => {
+    open();
+    fireEvent.click(screen.getAllByText("Start slow upload")[0]);
+    expect(
+      screen
+        .getByRole("button", { name: "Cancel" })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+    fireEvent.click(screen.getAllByText("Finish slow upload")[0]);
+    expect(
+      screen
+        .getByRole("button", { name: "Cancel" })
+        .getAttribute("aria-disabled"),
+    ).toBeNull();
   });
 });

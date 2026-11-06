@@ -9,6 +9,7 @@ import {
   MEDAL_HUES,
   MOTION,
   OPACITY,
+  SCRIM,
   PLACE_STATUS_HUES,
   ASSET_HUES,
   RADIUS,
@@ -92,6 +93,7 @@ describe("tokens.generated.css", () => {
       ...Object.keys(CONTROL.web).map((n) => `--control-${n}`),
       ...Object.keys(MOTION).map((n) => `--motion-${n}`),
       ...Object.keys(OPACITY).map((n) => `--opacity-${n}`),
+      ...Object.keys(SCRIM).map((n) => `--scrim-${n}`),
       ...colourNames,
     ].sort();
     expect(namesIn(":root")).toEqual(expected);

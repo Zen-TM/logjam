@@ -23,6 +23,7 @@ import {
   listSelectionLabel,
   sortTrips,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripFilterFieldDefs,
   tripsEmptyKind,
   tripsEmptyState,
@@ -34,6 +35,7 @@ import {
   tripTypeLabel,
   tripVerbs,
   type CustomFieldFilter,
+  type LoadState,
   type ScopedCustomFieldDef,
   type SectionKeysOn,
   type TripSortKey,
@@ -58,13 +60,15 @@ import {
   ListEnd,
   Menu,
   Row,
+  RowList,
   SearchField,
   SectionHeader,
   SelectionBar,
+  SelectionVerb,
   TileCheckbox,
   type MenuEntry,
   Icon,
-  LoadingState,
+  ListBody,
 } from "../../../ui";
 import { usePanelSheet } from "./usePanelSheet";
 import TripLogFilterSheet from "./TripLogFilterSheet";
@@ -91,7 +95,8 @@ function TripLogsPanel({
   onOpenStats,
   tripLogs,
   tripLogsTotal,
-  loaded,
+  state,
+  error,
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -111,7 +116,9 @@ function TripLogsPanel({
   tripLogsTotal: number | null;
   /** False until the first fetch settles — an empty list before then is not
    *  "no trips yet". */
-  loaded: boolean;
+  state: LoadState;
+  /** Our sentence for a first load that failed. */
+  error: string | null;
   onRefetchTripLogs: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -229,13 +236,13 @@ function TripLogsPanel({
   // A remembered type the logbook no longer has would narrow the list with no
   // chip lit to say so.
   useEffect(() => {
-    if (!loaded || typeFilter === ALL_TYPES) return;
+    if (state !== "ready" || typeFilter === ALL_TYPES) return;
     const exists =
       typeFilter === NO_TYPE_FILTER_VALUE
         ? anyUntyped
         : distinctTypes.includes(typeFilter);
     if (!exists) setTypeFilter(ALL_TYPES);
-  }, [loaded, typeFilter, anyUntyped, distinctTypes, setTypeFilter]);
+  }, [state, typeFilter, anyUntyped, distinctTypes, setTypeFilter]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
   // would I get if I pressed this" rather than "how many are showing now".
@@ -382,9 +389,7 @@ function TripLogsPanel({
     try {
       if (ids.length === 1) await deleteTripLog(ids[0]);
       else await bulkDeleteTripLogs(ids);
-      toast.success(
-        ids.length === 1 ? "Trip deleted." : `Deleted ${ids.length} trips.`,
-      );
+      toast.done(tripDeleteDone(ids.length));
       setPendingDelete(null);
       clearSelection();
     } catch (err) {
@@ -426,7 +431,15 @@ function TripLogsPanel({
   };
 
   // ── Render ───────────────────────────────────────────────────────────
-  const deleteCopy = tripDeleteConfirm(pendingDelete?.length ?? 1);
+  const pendingTrip =
+    pendingDelete?.length === 1
+      ? tripLogs.find((trip) => trip.id === pendingDelete[0])
+      : undefined;
+  const deleteCopy = tripDeleteConfirm(
+    pendingTrip
+      ? { title: tripTitle(pendingTrip) }
+      : { count: pendingDelete?.length ?? 1 },
+  );
   const rangeText = rangeSet
     ? dateRangeLabel(dateFrom || null, dateTo || null)
     : null;
@@ -495,12 +508,12 @@ function TripLogsPanel({
           countLabel={listSelectionLabel(selected.length)}
           onClear={clearSelection}
         >
-          <IconButton
-            icon="delete"
-            label="Delete"
-            tone="danger"
+          <SelectionVerb
+            danger
             onClick={() => setPendingDelete(selected.map((trip) => trip.id))}
-          />
+          >
+            Delete
+          </SelectionVerb>
         </SelectionBar>
       ) : (
         tripLogs.length > 0 && (
@@ -580,7 +593,7 @@ function TripLogsPanel({
   };
 
   const emptyState =
-    loaded && visible.length === 0
+    state === "ready" && visible.length === 0
       ? tripsEmptyState(tripsEmptyKind({ total: tripLogs.length }), {
           platform: "web",
         })
@@ -608,49 +621,53 @@ function TripLogsPanel({
     </>
   );
 
-  const list = !loaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : emptyState ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon={emptyState.icon}
-        title={emptyState.title}
-        body={emptyState.body}
-        actions={
-          emptyState.action === "add" ? (
-            addTripButtons
-          ) : filtering ? (
-            <Button compact variant="outline" onClick={clearEverything}>
-              {copy.clearFilters}
-            </Button>
-          ) : undefined
-        }
-      />
-    </div>
-  ) : (
-    <div className={classes.list}>
-      {years.map((group) => {
-        const headingId = `${yearIdPrefix}-${group.year}`;
-        return (
-          <section
-            key={group.year}
-            className={classes.year}
-            aria-labelledby={headingId}
-          >
-            <SectionHeader
-              id={headingId}
-              title={`${group.year}`}
-              count={group.trips.length}
-              className={classes.yearHead}
-            />
-            {group.trips.map(renderRow)}
-          </section>
-        );
-      })}
-      <ListEnd>{addTripButtons}</ListEnd>
-    </div>
+  const list = (
+    <ListBody
+      state={state}
+      loadingLabel={copy.loading}
+      error={error}
+      onRetry={onRefetchTripLogs}
+      empty={
+        emptyState ? (
+          <EmptyState
+            icon={emptyState.icon}
+            title={emptyState.title}
+            body={emptyState.body}
+            actions={
+              emptyState.action === "add" ? (
+                addTripButtons
+              ) : filtering ? (
+                <Button compact variant="outline" onClick={clearEverything}>
+                  {copy.clearFilters}
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null
+      }
+    >
+      <div className={classes.list}>
+        {years.map((group) => {
+          const headingId = `${yearIdPrefix}-${group.year}`;
+          return (
+            <section
+              key={group.year}
+              className={classes.year}
+              aria-labelledby={headingId}
+            >
+              <SectionHeader
+                id={headingId}
+                title={`${group.year}`}
+                count={group.trips.length}
+                className={classes.yearHead}
+              />
+              <RowList>{group.trips.map(renderRow)}</RowList>
+            </section>
+          );
+        })}
+        <ListEnd>{addTripButtons}</ListEnd>
+      </div>
+    </ListBody>
   );
 
   const sheet = sheetOpen && (
@@ -733,7 +750,7 @@ function TripLogsPanel({
     truncated: tripLogsTotal != null && tripLogsTotal > tripLogs.length && (
       <p className={classes.note}>
         Showing your {tripLogs.length} most recent trips of {tripLogsTotal}.
-        Older ones aren&rsquo;t loaded.
+        Older ones aren't loaded.
       </p>
     ),
     list,
@@ -790,8 +807,7 @@ function TripLogsPanel({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={() => void confirmDelete()}
         onClose={() => setPendingDelete(null)}

@@ -6,7 +6,7 @@
 // the status the leader saw, so a stale row removes nobody (409). Every write
 // is online-only, so offline each control is disabled with its reason.
 import { Fragment, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
   ApiError,
   formatBytes,
@@ -38,9 +38,11 @@ import {
   Button,
   IconButton,
   ListEnd,
+  RequestRow,
   Row,
   SectionHeader,
   StatusPill,
+  confirm,
 } from "../ui";
 import { InviteSheet } from "./InviteSheet";
 import { approveMember, removeMember, setMemberRole } from "./plansApi";
@@ -48,6 +50,7 @@ import { afterPlanWrite } from "./plansCache";
 
 const copy = TRIP_PLAN_PAGE.copy;
 const OFFLINE = unavailableReasonText("needs-connection");
+const WORKING = "Working…";
 
 export function PeopleView({
   plan,
@@ -96,9 +99,9 @@ export function PeopleView({
       .finally(() => setBusyId(null));
   };
 
-  const remove = (member: TripPlanMemberView) => {
+  const remove = async (member: TripPlanMemberView) => {
     const files = tripPlanFilesChargedTo(plan, member.user.id);
-    const confirm = planRemoveConfirm(
+    const words = planRemoveConfirm(
       member.user.username,
       plan.name,
       files.count > 0
@@ -112,23 +115,21 @@ export function PeopleView({
         tripPlanRemovedMessage(member.user.username),
         copy.removeFailed,
       );
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      ...(confirm.deleteFilesLabel
-        ? [
-            {
-              text: confirm.deleteFilesLabel,
-              style: "destructive" as const,
-              onPress: () => go(true),
-            },
-          ]
-        : []),
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => go(false),
-      },
-    ]);
+    if (!(await confirm(words))) return;
+    // Removing is one confirm; what happens to their files is a second. Its
+    // "Keep files" does not back out: the member is removed either way.
+    const deleteFiles =
+      files.count > 0 &&
+      (await confirm(
+        {
+          confirmTitle: `Delete ${member.user.username}'s files too?`,
+          confirmBody: `Their files (${files.count} ${files.count === 1 ? "file" : "files"}, ${formatBytes(files.bytes)}) otherwise count against your storage. ${member.user.username} is removed either way.`,
+          confirmLabel: "Delete files",
+          tone: "destructive",
+        },
+        { cancelLabel: "Keep files" },
+      ));
+    go(deleteFiles);
   };
 
   const letIn = (member: TripPlanMemberView) =>
@@ -167,35 +168,26 @@ export function PeopleView({
       member.role === "leader" &&
       role !== "leader"
     ) {
-      const confirm = planSelfRoleConfirm(
-        role,
-        going
-          .filter((each) => each.role === "leader" && each.user.id !== myId)
-          .map((each) => each.user.username),
-      );
-      return Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        { text: confirm.confirmLabel, style: "destructive", onPress: change },
-      ]);
+      return void confirm(
+        planSelfRoleConfirm(
+          role,
+          going
+            .filter((each) => each.role === "leader" && each.user.id !== myId)
+            .map((each) => each.user.username),
+        ),
+      ).then((ok) => ok && change());
     }
     change();
   };
 
-  const turnDown = (member: TripPlanMemberView) => {
-    const confirm = planTurnDownConfirm(member.user.username);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        onPress: () =>
-          write(
-            member,
-            () => removeMember(plan.id, member.user.id, "requested"),
-            copy.turnedDown,
-            copy.turnDownFailed,
-          ),
-      },
-    ]);
+  const turnDown = async (member: TripPlanMemberView) => {
+    if (!(await confirm(planTurnDownConfirm(member.user.username)))) return;
+    write(
+      member,
+      () => removeMember(plan.id, member.user.id, "requested"),
+      copy.turnedDown,
+      copy.turnDownFailed,
+    );
   };
 
   const leader = plan.myRole === "leader";
@@ -223,33 +215,33 @@ export function PeopleView({
         <SectionHeader title={copy.peopleAsking} count={asking.length} />
       ) : null}
       {asking.map((member) => (
-        <Row
+        <RequestRow
           key={member.user.id}
           icon="account"
           title={member.user.username}
           subtitle={online ? undefined : OFFLINE}
           onPress={() => setPersonId(member.user.id)}
-          right={
-            <View style={styles.right}>
-              {/* An archived plan takes no one in; turning down still works. */}
-              {archived ? null : (
-                <IconButton
-                  icon="accept"
-                  filled
-                  color={theme.accent}
-                  accessibilityLabel={copy.letIn}
-                  disabled={!online || busyId === member.user.id}
-                  onPress={() => letIn(member)}
-                />
-              )}
-              <IconButton
-                icon="ignore"
-                accessibilityLabel={copy.turnDown}
-                disabled={!online || busyId === member.user.id}
-                onPress={() => turnDown(member)}
-              />
-            </View>
-          }
+          // An archived plan takes no one in; turning down still works.
+          answers={[
+            ...(archived
+              ? []
+              : [
+                  {
+                    key: "letIn",
+                    label: copy.letIn,
+                    onPress: () => letIn(member),
+                  },
+                ]),
+            {
+              key: "turnDown",
+              label: copy.turnDown,
+              decline: true,
+              onPress: () => turnDown(member),
+            },
+          ]}
+          disabled={!online || busyId === member.user.id}
+          disabledReason={online ? WORKING : OFFLINE}
+          reasonShown={!online}
         />
       ))}
       {headed && going.length > 0 ? (
@@ -279,6 +271,7 @@ export function PeopleView({
                     )}
                     color={theme.textMuted}
                     disabled={busyId === member.user.id}
+                    disabledReason={WORKING}
                     onPress={() => setPersonId(member.user.id)}
                   />
                 ) : null}
@@ -312,6 +305,7 @@ export function PeopleView({
                 loading={busyId === member.user.id}
                 disabled={!online}
                 disabledReason={OFFLINE}
+                reasonShown
                 onPress={() => cancelInvite(member)}
               />
             )
@@ -327,6 +321,7 @@ export function PeopleView({
             variant="outlineAccent"
             disabled={!online}
             disabledReason={OFFLINE}
+            reasonShown
             onPress={() => setInviteOpen(true)}
           />
           {/* The button only dims: the words go under it (ui/Button.tsx). */}
@@ -386,6 +381,7 @@ export function PeopleView({
 
 const useStyles = makeStyles((theme, textRole) => ({
   right: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  // Two labelled buttons beside a name don't fit at a large text size.
   verbs: { gap: spacing(1) },
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: theme.line },
   detail: { ...muted(theme, textRole.detail) },

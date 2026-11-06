@@ -31,22 +31,21 @@ export class ApiError extends Error {
 
 // ── Cognito account-call error mapping ────────────────────────────────────────
 
-const AUTH_ERROR_CODES: Record<string, string> = {
-  NotAuthorizedException: "Incorrect username or password.",
-  UserNotConfirmedException:
-    "Please confirm your email address before signing in.",
+export const AUTH_ERROR_CODES: Record<string, string> = {
+  NotAuthorizedException: "Incorrect email or password.",
+  UserNotConfirmedException: "Confirm your email address before signing in.",
   UserNotFoundException: "No account found with that email address.",
   UsernameExistsException: "An account with that email already exists.",
   InvalidPasswordException:
     "Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.",
   CodeMismatchException:
-    "Incorrect verification code. Please check your email (check spam) and try again.",
+    "Incorrect verification code. Check your email (and spam) and try again.",
   ExpiredCodeException:
-    "That verification code has expired. Please request a new one.",
+    "That verification code has expired. Request a new one.",
   LimitExceededException:
-    "Too many attempts. Please wait a few minutes and try again.",
-  InvalidParameterException: "Please check your details and try again.",
-  NetworkError: "Couldn't connect. Please check your internet connection.",
+    "Too many attempts. Wait a few minutes and try again.",
+  InvalidParameterException: "Check your details and try again.",
+  NetworkError: "Couldn't connect. Check your internet connection.",
 };
 
 export function mapAuthError(err: unknown): string | null {
@@ -61,15 +60,15 @@ export function mapAuthError(err: unknown): string | null {
 
 const SERVER_ERROR_MESSAGE: string = SERVER_FAULT_SENTENCE;
 const NETWORK_ERROR_MESSAGE =
-  "Couldn't reach Logjam. Please check your connection and try again.";
+  "Couldn't reach Logjam. Check your connection and try again.";
 
+// 403 and 404 are absent on purpose: only the caller knows what it was after
+// ("Couldn't find this place."), so its fallback beats a generic sentence.
 const STATUS_MESSAGES: Record<number, string | undefined> = {
-  401: "You're not authorised to do that. Please sign in and try again.",
-  403: "You don't have permission to do that.",
-  404: "The requested item could not be found.",
-  429: "Too many requests. Please wait a moment and try again.",
+  401: "You're signed out. Sign in and try again.",
+  429: "Too many requests. Wait a moment and try again.",
   500: SERVER_ERROR_MESSAGE,
-  503: "Logjam is temporarily unavailable. Please try again shortly.",
+  503: "Logjam is unavailable for a moment. Try again shortly.",
 };
 
 /**

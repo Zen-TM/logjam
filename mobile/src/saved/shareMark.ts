@@ -14,6 +14,8 @@
 //               of the time, and a repeated word down a list stops being read
 //               while eating the width the title needs (shared/DESIGN.md §11).
 
+import { incomingLabel } from "@logjam/shared";
+
 export type ShareMark = {
   /** Trailing pill for a row shared WITH the viewer. Absent on owned rows. */
   pill?: { label: string; tone: "outline" };
@@ -49,7 +51,7 @@ export function shareMark(input: {
     // "Shared" — that is the ambiguity this file exists to remove.
     return {
       pill: {
-        label: owner ? `From ${owner}` : "Shared with you",
+        label: incomingLabel(owner),
         tone: "outline",
       },
     };

@@ -1,11 +1,13 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useIsMobile } from "../../useIsMobile";
 import BottomSheet from "./BottomSheet";
 import type { SheetSnap } from "./BottomSheet";
 import {
   DRAFT_PEEK_REVEAL_PX,
+  closeAsksFirst,
   isDraftPanel,
   PANEL_TITLES,
+  waitsOnAccount,
   type LogsView,
   type PanelId,
 } from "./panels";
@@ -27,8 +29,14 @@ import type {
   ScopedCustomFieldDef,
 } from "@logjam/shared";
 import type { GeoJsonPolygonal } from "../dialogs/TopoDialog";
-import { TRIPS_LIST, type NotificationPlanTarget } from "@logjam/shared";
+import {
+  TRIPS_LIST,
+  type LoadState,
+  type NotificationPlanTarget,
+} from "@logjam/shared";
 import { PanelCloseContext } from "../../ui/Hero";
+import { useListKeys } from "../../ui/useListKeys";
+import { usePanelFocus } from "../../ui/usePanelFocus";
 import classes from "./SidebarPanel.module.css";
 import PlacesPanel, { type MapKind } from "./panels/PlacesPanel";
 import FriendsPanel from "./panels/FriendsPanel";
@@ -41,9 +49,23 @@ import RoutesPanel from "./panels/RoutesPanel";
 import type { WayItem } from "./panels/waysModel";
 import type { WayVerbId } from "./panels/wayActions";
 import AccountPanel from "./panels/AccountPanel";
+import AccountFailedPanel from "./panels/AccountFailedPanel";
 import SettingsPanel from "./panels/SettingsPanel";
 import TripLogsPanel from "./panels/TripLogsPanel";
 import AnalyticsPanel from "./panels/AnalyticsPanel";
+
+/** The page's body: where its keys and its focus moves live. Mounted only while
+ *  a panel is open, so its listeners have an element to attach to. */
+function PanelBody({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  usePanelFocus(ref);
+  useListKeys(ref);
+  return (
+    <div ref={ref} className={classes.panelBody}>
+      {children}
+    </div>
+  );
+}
 
 function SidebarPanel({
   activePanel,
@@ -56,11 +78,13 @@ function SidebarPanel({
   waysLoaded,
   // Places
   places,
-  placesLoaded,
+  placesState,
+  placesError,
   placesTotal,
   sharedPlaces,
   onAddPlace,
   onOpenUnifiedImport,
+  onImportWay,
   onRefetch,
   filters,
   onChangeFilters,
@@ -72,8 +96,10 @@ function SidebarPanel({
   onHoverPlace,
   onMakeMap,
   onSharePlaces,
+  onExportPlaces,
   // LiDAR
   onQuotaChanged,
+  onWaysChanged,
   currentUser,
   currentUserError,
   onRetryCurrentUser,
@@ -82,6 +108,7 @@ function SidebarPanel({
   friends,
   friendRequests,
   onRefetchFriends,
+  onRefetchPlans,
   onRefetchShared,
   // Notifications
   notifications,
@@ -101,6 +128,11 @@ function SidebarPanel({
   standaloneFilesError,
   onRetryStandaloneFiles,
   onOpenWay,
+  onFocusBounds,
+  onOpenRoute,
+  onRoutesChanged,
+  onOpenRouteById,
+  onDrawRouteForPlace,
   wayDetail,
   plansPanel,
   planDetail,
@@ -116,7 +148,8 @@ function SidebarPanel({
   selectedTripLogId,
   setSelectedTripLogId,
   tripLogsTotal,
-  tripLogsLoaded,
+  tripLogsState,
+  tripLogsError,
   onRefetchTripLogs,
   customFieldDefs,
   onCustomFieldDefsChange,
@@ -140,11 +173,14 @@ function SidebarPanel({
   waysLoaded: boolean;
   // Places
   places: TPlace[];
-  placesLoaded: boolean;
+  placesState: LoadState;
+  placesError: string | null;
   placesTotal: number | null;
   sharedPlaces: TPlace[];
   onAddPlace: () => void;
   onOpenUnifiedImport: () => void;
+  /** Opens the picker for a GPX, KML or GeoJSON file (Ways). */
+  onImportWay: () => void;
   onRefetch: () => void;
   filters: TFilters;
   onChangeFilters: (f: TFilters) => void;
@@ -159,7 +195,9 @@ function SidebarPanel({
   onHoverPlace: (id: string | null) => void;
   onMakeMap: (bounds: RegionBbox, kind: MapKind) => void;
   onSharePlaces: (ids: string[]) => void;
+  onExportPlaces: (ids: string[]) => void;
   onQuotaChanged: () => void;
+  onWaysChanged: () => void;
   currentUser: TUser | null;
   /** Set when the signed-in user's own record failed to load — the one fetch
    *  the Account page has no fallback for. */
@@ -170,6 +208,7 @@ function SidebarPanel({
   friends: TFriend[];
   friendRequests: TFriendRequest[];
   onRefetchFriends: () => void;
+  onRefetchPlans: () => void;
   onRefetchShared: () => void;
   // Notifications
   notifications: TNotification[];
@@ -193,6 +232,13 @@ function SidebarPanel({
   onRetryStandaloneFiles: () => void;
   /** Open a way's page, centring the map on it; `verb` arms one of its actions. */
   onOpenWay: (way: WayItem, verb?: WayVerbId) => void;
+  /** Fit the map to a box without opening anything. */
+  onFocusBounds: (bounds: [number, number, number, number]) => void;
+  onOpenRoute: (route: TRoute) => void;
+  onRoutesChanged: () => void;
+  /** Open a route's page by id (an Inbox row); false when it is gone. */
+  onOpenRouteById: (routeId: string) => Promise<boolean>;
+  onDrawRouteForPlace: (placeId: string) => void;
   /**
    * The open way's page and the route tool, built by App because App owns the
    * draft and the selection. Passed as nodes rather than as the fourteen props
@@ -217,7 +263,8 @@ function SidebarPanel({
   setSelectedTripLogId: (id: string | null) => void;
   tripLogsTotal: number | null;
   /** False until the first trip fetch settles. */
-  tripLogsLoaded: boolean;
+  tripLogsState: LoadState;
+  tripLogsError: string | null;
   onRefetchTripLogs: () => void;
   customFieldDefs: ScopedCustomFieldDef[];
   onCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
@@ -322,16 +369,27 @@ function SidebarPanel({
     );
   };
 
+  const accountFailed =
+    !currentUser && currentUserError !== null && waitsOnAccount(activePanel);
+
   // Every hero in a panel draws the ×, and it does what the rail icon does.
   const panelContent = (
     <PanelCloseContext.Provider value={onClose}>
-      <div className={classes.panelBody}>
-        {activePanel === "places" && (
+      <PanelBody>
+        {activePanel && accountFailed ? (
+          <AccountFailedPanel
+            panel={activePanel}
+            onRetry={onRetryCurrentUser}
+          />
+        ) : null}
+        {!accountFailed && activePanel === "places" && (
           <PlacesPanel
             places={places}
-            placesLoaded={placesLoaded}
+            placesState={placesState}
+            placesError={placesError}
             placesTotal={placesTotal}
             sharedPlaces={sharedPlaces}
+            friends={friends}
             placeTypes={placeTypes}
             onPlaceTypesChange={onPlaceTypesChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
@@ -352,11 +410,12 @@ function SidebarPanel({
             onHoverPlace={onHoverPlace}
             onMakeMap={onMakeMap}
             onSharePlaces={onSharePlaces}
+            onExportPlaces={onExportPlaces}
             onPlaceVerb={(id) => setPlaceVerbRequest({ id })}
             onExpandSheet={expandSheetToFull}
           />
         )}
-        {activePanel === "friends" && (
+        {!accountFailed && activePanel === "friends" && (
           <FriendsPanel
             leaderboardOptIn={
               currentUser?.uiPreferences?.leaderboardOptIn ?? false
@@ -368,7 +427,7 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
           />
         )}
-        {activePanel === "inbox" && (
+        {!accountFailed && activePanel === "inbox" && (
           <NotificationsPanel
             notifications={notifications}
             notificationsLoaded={notificationsLoaded}
@@ -377,31 +436,36 @@ function SidebarPanel({
             onRefetchNotifications={onRefetchNotifications}
             onOverrideRead={onOverrideNotificationRead}
             onRefetchFriends={onRefetchFriends}
+            onRefetchPlans={onRefetchPlans}
             setSelectedPlaceID={setSelectedPlaceID}
             setActivePanel={setActivePanel}
             onTopoFlyTarget={onTopoFlyTarget}
             onOpenPlan={onOpenPlan}
+            onOpenRoute={onOpenRouteById}
             onShowSharpened={onShowSharpened}
           />
         )}
-        {activePanel === "logs" && logsView === "stats" && (
+        {!accountFailed && activePanel === "logs" && logsView === "stats" && (
           <AnalyticsPanel
             onBack={backToLogs}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loaded={tripLogsLoaded}
+            state={tripLogsState}
+            error={tripLogsError}
+            onRetry={onRefetchTripLogs}
             places={places}
             customFieldDefs={customFieldDefs}
             placeCustomFieldDefs={placeCustomFieldDefs}
             placeTypes={placeTypes}
           />
         )}
-        {activePanel === "logs" && logsView === "logs" && (
+        {!accountFailed && activePanel === "logs" && logsView === "logs" && (
           <TripLogsPanel
             onOpenStats={() => onLogsViewChange("stats")}
             tripLogs={tripLogs}
             tripLogsTotal={tripLogsTotal}
-            loaded={tripLogsLoaded}
+            state={tripLogsState}
+            error={tripLogsError}
             onRefetchTripLogs={onRefetchTripLogs}
             onOpenTrip={openTripDetail}
             onFiltersOpenChange={onFiltersOpenChange}
@@ -416,16 +480,18 @@ function SidebarPanel({
             onOpenUnifiedImport={onOpenUnifiedImport}
           />
         )}
-        {activePanel === "account" && (
+        {!accountFailed && activePanel === "account" && (
           <AccountPanel
             currentUser={currentUser}
             error={currentUserError}
             onRetry={onRetryCurrentUser}
           />
         )}
-        {activePanel === "settings" && (
+        {!accountFailed && activePanel === "settings" && (
           <SettingsPanel
             currentUser={currentUser}
+            currentUserError={currentUserError}
+            onRetryCurrentUser={onRetryCurrentUser}
             customFieldDefs={customFieldDefs}
             onCustomFieldDefsChange={onCustomFieldDefsChange}
             placeCustomFieldDefs={placeCustomFieldDefs}
@@ -435,7 +501,7 @@ function SidebarPanel({
             onCurrentUserChange={onCurrentUserChange}
           />
         )}
-        {activePanel === "place-detail" && (
+        {!accountFailed && activePanel === "place-detail" && (
           <PlaceDetailPanel
             place={place}
             places={places}
@@ -453,6 +519,7 @@ function SidebarPanel({
             onPlaceCustomFieldDefsChange={onPlaceCustomFieldDefsChange}
             placeTypes={placeTypes}
             onQuotaChanged={onQuotaChanged}
+            onWaysChanged={onWaysChanged}
             onRefetchTripLogs={onRefetchTripLogs}
             onBack={() => setActivePanel("places")}
             onOpenTrip={openTripDetail}
@@ -460,13 +527,19 @@ function SidebarPanel({
               const bounds = placesBounds([target]);
               if (bounds) onMakeMap(bounds, kind);
             }}
-            onSharePlace={(id) => onSharePlaces([id])}
+            onExportPlace={(id) => onExportPlaces([id])}
             verbRequest={placeVerbRequest}
             onVerbRequestConsumed={() => setPlaceVerbRequest(null)}
             onAfterDelete={() => setActivePanel("places")}
+            routes={allRoutes}
+            currentUserId={currentUserId}
+            onFocusBounds={onFocusBounds}
+            onOpenRoute={onOpenRoute}
+            onRoutesChanged={onRoutesChanged}
+            onDrawRoute={onDrawRouteForPlace}
           />
         )}
-        {activePanel === "trip-detail" && (
+        {!accountFailed && activePanel === "trip-detail" && (
           <TripDetailPanel
             tripLog={tripLogs.find((trip) => trip.id === selectedTripLogId)}
             places={places}
@@ -483,12 +556,12 @@ function SidebarPanel({
             onAfterDelete={() => setActivePanel("logs")}
           />
         )}
-        {activePanel === "way-detail" && wayDetail}
-        {activePanel === "plans" && plansPanel}
-        {activePanel === "plan-detail" && planDetail}
-        {activePanel === "way-draw" && drawPanel}
-        {activePanel === "measure" && measurePanel}
-        {activePanel === "ways" && (
+        {!accountFailed && activePanel === "way-detail" && wayDetail}
+        {!accountFailed && activePanel === "plans" && plansPanel}
+        {!accountFailed && activePanel === "plan-detail" && planDetail}
+        {!accountFailed && activePanel === "way-draw" && drawPanel}
+        {!accountFailed && activePanel === "measure" && measurePanel}
+        {!accountFailed && activePanel === "ways" && (
           <RoutesPanel
             routes={allRoutes}
             waysLoaded={waysLoaded}
@@ -501,12 +574,12 @@ function SidebarPanel({
             places={[...places, ...sharedPlaces]}
             sharedPlaces={sharedPlaces}
             onStartDrawingRoute={onStartDrawingRoute}
-            onOpenUnifiedImport={onOpenUnifiedImport}
+            onImportWay={onImportWay}
             onOpenWay={onOpenWay}
             onOpenPlace={openPlaceDetail}
           />
         )}
-      </div>
+      </PanelBody>
     </PanelCloseContext.Provider>
   );
 
@@ -515,6 +588,12 @@ function SidebarPanel({
       <BottomSheet
         snap={sheetSnap}
         onSnapChange={setSheetSnap}
+        // A swipe closes what the ✕ closes, except mid-flow (the map is being
+        // pressed) and for a tool whose ✕ asks first.
+        onClose={
+          collapseToPeek || closeAsksFirst(activePanel) ? undefined : onClose
+        }
+        peek={isDraftPanel(activePanel) || collapseToPeek}
         title={title}
         peekReveal={
           isDraftPanel(activePanel) ? DRAFT_PEEK_REVEAL_PX : undefined
@@ -526,7 +605,13 @@ function SidebarPanel({
   }
 
   return (
-    <aside className={classes.panel} aria-label={title}>
+    // The target of the "Skip to panel" link (App.tsx).
+    <aside
+      id="panel"
+      tabIndex={-1}
+      className={classes.panel}
+      aria-label={title}
+    >
       {panelContent}
     </aside>
   );

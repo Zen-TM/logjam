@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { mediaCategory, type MediaItem } from "@logjam/shared";
+import {
+  mediaCategory,
+  trackDisplayName,
+  type MediaItem,
+} from "@logjam/shared";
 import { deleteMedia } from "../../placeUtils";
 import { messageFromError } from "../../errors/messageFromError";
 import ConfirmDialog from "../dialogs/ConfirmDialog";
@@ -134,14 +138,14 @@ export default function MediaGallery({
                   <Icon idea="export" size={16} />
                 )
               }
-              title={m.filename}
+              title={trackDisplayName(m.filename)}
               href={m.displayUrl}
               download={m.filename}
               trailing={
                 canDelete && (
                   <Menu
-                    label={`Actions for ${m.filename}`}
-                    title={m.filename}
+                    label={`Actions for ${trackDisplayName(m.filename)}`}
+                    title={trackDisplayName(m.filename)}
                     placement="right-start"
                     entries={[
                       {
@@ -156,7 +160,7 @@ export default function MediaGallery({
                       <IconButton
                         {...props}
                         icon="overflow"
-                        label={`Actions for ${m.filename}`}
+                        label={`Actions for ${trackDisplayName(m.filename)}`}
                       />
                     )}
                   />
@@ -173,22 +177,24 @@ export default function MediaGallery({
 
       <ConfirmDialog
         open={pendingDelete != null}
-        title="Delete file?"
-        message={
-          <>
-            This permanently deletes <b>{pendingDelete?.filename}</b>. This
-            cannot be undone.
-            {/* Rendered inside the dialog (not the page behind it) — the
-                modal backdrop would otherwise hide a page-level ErrorBanner. */}
-            {error && (
-              <ErrorBanner message={error} onDismiss={() => setError(null)} />
-            )}
-          </>
+        copy={
+          pendingDelete && {
+            confirmTitle: `Delete ${pendingDelete.filename}?`,
+            confirmBody: "The file is deleted and can't be brought back.",
+            confirmLabel: "Delete",
+            tone: "destructive",
+          }
         }
         busy={deletingId === pendingDelete?.id}
         onConfirm={() => pendingDelete && void handleDelete(pendingDelete.id)}
         onClose={() => setPendingDelete(null)}
-      />
+      >
+        {/* Rendered inside the dialog (not the page behind it) — the
+            modal backdrop would otherwise hide a page-level ErrorBanner. */}
+        {error && (
+          <ErrorBanner message={error} onDismiss={() => setError(null)} />
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

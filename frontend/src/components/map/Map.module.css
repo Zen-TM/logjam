@@ -106,9 +106,9 @@
 }
 
 :global(#map .maplibregl-ctrl-attrib) {
-  background: var(--color-page);
+  background: var(--color-card);
   color: var(--color-text);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-map-card);
 }
 
 :global(#map .maplibregl-ctrl-attrib a) {
@@ -143,9 +143,13 @@
   padding: 2px calc(var(--space-3) + var(--space-0-5)) 2px var(--space-1-5);
 }
 
-/* MapLibre draws the (i) as a dark data-URI icon; every scheme is dark. */
-:global(#map .maplibregl-ctrl-attrib-button) {
-  filter: invert(1);
+/* MapLibre's own focus style on the (i) is a blue box-shadow, which forced
+   colours drop. The ring goes on the box, not the button. */
+:global(
+  #map .maplibregl-ctrl-attrib:has(.maplibregl-ctrl-attrib-button:focus-visible)
+) {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
 }
 
 /* MapLibre's blue focus glow → Logjam Web's one focus ring. */
@@ -196,6 +200,22 @@
     bottom: calc(var(--bottom-nav-height) + 8px);
   }
 
+  /* Open, the credits are too wide to share the row with the compass and the
+     scale bar, so they sit on the row above rather than over them, and take the
+     whole width that row leaves. */
+  :global(#map .maplibregl-ctrl-bottom-right:has(.maplibregl-compact-show)) {
+    bottom: calc(
+      var(--bottom-nav-height) +
+      var(--space-1) +
+      var(--map-button-size) +
+      var(--space-1)
+    );
+  }
+
+  :global(#map .maplibregl-ctrl-attrib.maplibregl-compact-show) {
+    max-width: calc(100vw - var(--map-actions-clear) - var(--space-1-5));
+  }
+
   .geoPdfConfirmBar {
     bottom: calc(40px + var(--bottom-nav-height));
   }
@@ -225,7 +245,7 @@
      still apply and must not sit in the scrim. Above the canvas, which is
      unpositioned. */
   z-index: 0;
-  box-shadow: 0 0 0 9999px color-mix(in srgb, black 40%, transparent);
+  box-shadow: 0 0 0 9999px var(--scrim-light);
 }
 
 .geoPdfConfirmBar {

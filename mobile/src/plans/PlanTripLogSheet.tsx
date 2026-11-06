@@ -1,11 +1,9 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import {
   distinctTripTypes,
-  mediaSkippedSentence,
-  messageFromError,
   MAX_PLACES_PER_TRIP,
-  saveTripPlanPlaces,
+  tripPlanTripLogMatches,
   tripPlanTripLogPlacesLine,
   tripPlanTripLogPrefill,
   TRIP_PLACES_CAP_SENTENCE,
@@ -13,26 +11,22 @@ import {
   type TripPlanView,
 } from "@logjam/shared";
 
-import { unavailableReasonText } from "../auth/capabilities";
 import { TripEditSheet } from "../logs/TripEditSheet";
-import { requestSync } from "../sync/syncEngine";
 import { useMirrorPlaces, useMirrorTrips } from "../sync/useSyncQueries";
 import { makeStyles, muted, spacing } from "../theme";
-import { BottomSheet, Button, ErrorBanner, Row, SelectionMark } from "../ui";
-import { savePlanItem } from "./plansApi";
-import { afterPlanWrite } from "./plansCache";
+import { BottomSheet, Button, Row, SelectionMark } from "../ui";
 
 const copy = TRIP_PLAN_PAGE.copy;
-const OFFLINE = unavailableReasonText("needs-connection");
 
 /**
  * "Start a trip log from this plan": the same trip form as everywhere
  * (shared/DESIGN.md §10), opened on the plan's first day with its name, types
  * and write-up (`tripPlanTripLogPrefill`). A plan with places asks first
- * which were on the trip: each picked one is saved as the caller's own copy
- * (Save a copy, online), in the plan's order, always with its photos, and the trip links the
- * copies, as frontend/src/components/plans/PlanTripLogPlacesDialog.tsx does.
- * Picking none goes straight to the form, which queues offline.
+ * which were on the trip: only a plan place the caller already has (same name
+ * and coordinates) is listed, and the trip links that one of theirs; the rest
+ * are left out, never copied, as
+ * frontend/src/components/plans/PlanTripLogPlacesDialog.tsx does. Nothing is
+ * saved, so it works offline. Picking none goes straight to the form.
  */
 export function PlanTripLogSheet({
   plan,
@@ -44,7 +38,7 @@ export function PlanTripLogSheet({
   plan: TripPlanView | null;
   online: boolean;
   onClose: () => void;
-  onSaved: (message: string, tone: "info" | "error") => void;
+  onSaved: (message: string, tone: "done") => void;
 }) {
   const styles = useStyles();
   const places = useMirrorPlaces();
@@ -58,112 +52,51 @@ export function PlanTripLogSheet({
     [plan],
   );
 
-  // "saved": the copies are made and the places sheet is closing; the form
-  // opens once it has gone (`onClosed`), as one modal can't open while
-  // another closes on Android.
+  // "saved": the places sheet is closing; the form opens once it has gone
+  // (`onClosed`), as one modal can't open while another closes on Android.
   const [step, setStep] = useState<"places" | "saved" | "form">("places");
   const [picked, setPicked] = useState<string[]>([]);
-  // Plan place id → its copy's id: a retry after a stop saves only the rest.
-  const [copies, setCopies] = useState<Record<string, string>>({});
-  // The photos that didn't come, counted across retries and said once when
-  // the flow ends (a toast now would draw under the form that opens at
-  // once). A ref: it is read where the flow ends, not drawn.
-  const lost = useRef({ count: 0, outOfSpace: false });
-  // The form's "Trip logged.", kept for the close that follows it in the
-  // same tick, so the photo note joins it rather than replacing it.
-  const logged = useRef<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const openKey = plan?.id ?? null;
   const [openedFor, setOpenedFor] = useState<string | null>(null);
   if (openKey !== openedFor) {
     setOpenedFor(openKey);
     setStep(plan && plan.places.length > 0 ? "places" : "form");
     setPicked([]);
-    setCopies({});
-    setError(null);
   }
   const asking = plan !== null && step === "places";
-  // Picks still in the plan, in its order (a refetch can take one away).
-  const chosen = plan ? plan.places.filter((p) => picked.includes(p.id)) : [];
-
-  async function next(target: TripPlanView) {
-    setBusy(true);
-    setError(null);
-    const run = await saveTripPlanPlaces({
-      picked: chosen,
-      copies,
-      save: (placeId) => savePlanItem(target.id, "place", placeId, true),
-      why: (err) => messageFromError(err, copy.saveCopyFailed),
-    });
-    setCopies(run.copies);
-    lost.current.count += run.skipped;
-    lost.current.outOfSpace ||= run.outOfSpace;
-    // The copies reach the phone by the next pull: asked for now.
-    if (run.added > 0) void requestSync().catch(console.error);
-    if (run.stopped) {
-      setError(run.stopped.message);
-      // Gone from the plan meanwhile: fetched again, its row goes too.
-      if (run.stopped.refetch)
-        await afterPlanWrite(target.id).catch(console.error);
-    } else setStep("saved");
-    setBusy(false);
-  }
-
-  // The flow's end (the form closed, saved or not, or the places step
-  // left): the photos that didn't come, said once.
-  const finish = () => {
-    const note = mediaSkippedSentence(
-      lost.current.count,
-      lost.current.outOfSpace,
-    );
-    lost.current = { count: 0, outOfSpace: false };
-    if (note)
-      onSaved(logged.current ? `${logged.current} ${note}` : note, "error");
-  };
-
-  const initialPlaces = chosen.flatMap((place) =>
-    copies[place.id] ? [{ id: copies[place.id], name: place.name }] : [],
+  // The trip API takes only the caller's own places, not a shared one.
+  const matches = useMemo(
+    () =>
+      plan
+        ? tripPlanTripLogMatches(
+            plan.places,
+            (places.data ?? []).filter((p) => p.syncRole === "owner"),
+          )
+        : [],
+    [plan, places.data],
   );
+  // Picks still in the plan, in its order (a refetch can take one away).
+  const chosen = matches.filter((m) => picked.includes(m.place.id));
+  const initialPlaces = chosen.map((m) => ({ id: m.own.id, name: m.own.name }));
   const full = chosen.length >= MAX_PLACES_PER_TRIP;
 
   return (
     <>
       <BottomSheet
         visible={asking}
-        onClose={() => {
-          finish();
-          onClose();
-        }}
-        // Not while saving: the loop would land on the next session.
-        closable={!busy}
+        onClose={onClose}
         onClosed={() => setStep((was) => (was === "saved" ? "form" : was))}
         title={copy.tripLogPlaces}
         footer={
-          plan ? (
-            <View style={styles.footer}>
-              {error ? <ErrorBanner message={error} /> : null}
-              <Button
-                label={copy.tripLogNext}
-                loading={busy}
-                // Picking none needs no connection: nothing is saved.
-                disabled={!online && chosen.length > 0}
-                disabledReason={OFFLINE}
-                onPress={() => void next(plan)}
-              />
-              {!online && chosen.length > 0 ? (
-                <Text style={styles.muted}>{OFFLINE}</Text>
-              ) : null}
-            </View>
-          ) : undefined
+          <Button label={copy.tripLogNext} onPress={() => setStep("saved")} />
         }
       >
         {plan ? (
           <View style={styles.body}>
             <Text style={styles.muted}>
-              {tripPlanTripLogPlacesLine(chosen, true)}
+              {tripPlanTripLogPlacesLine(matches.length, plan.places.length)}
             </Text>
-            {plan.places.map((place) => {
+            {matches.map(({ place }) => {
               const on = picked.includes(place.id);
               return (
                 <Row
@@ -172,7 +105,7 @@ export function PlanTripLogSheet({
                   title={place.name}
                   selected={on}
                   right={<SelectionMark selected={on} />}
-                  disabled={busy || (!on && full)}
+                  disabled={!on && full}
                   subtitle={!on && full ? TRIP_PLACES_CAP_SENTENCE : undefined}
                   onPress={() =>
                     setPicked((was) =>
@@ -194,19 +127,8 @@ export function PlanTripLogSheet({
         initialPlaces={initialPlaces}
         prefill={prefill}
         existingTypes={existingTypes}
-        onClose={() => {
-          finish();
-          onClose();
-        }}
-        // Plainly: an attribute added inside the form says so too, and the
-        // form stays open; only a close in the same tick joins it.
-        onSaved={(message) => {
-          logged.current = message;
-          queueMicrotask(() => {
-            logged.current = null;
-          });
-          onSaved(message, "info");
-        }}
+        onClose={onClose}
+        onSaved={(message) => onSaved(message, "done")}
       />
     </>
   );
@@ -215,5 +137,4 @@ export function PlanTripLogSheet({
 const useStyles = makeStyles((theme, textRole) => ({
   body: { gap: spacing(1) },
   muted: { ...muted(theme, textRole.detail) },
-  footer: { gap: spacing(1) },
 }));

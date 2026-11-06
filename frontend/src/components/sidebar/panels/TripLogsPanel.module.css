@@ -9,11 +9,7 @@
 }
 
 .rails {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px var(--gutter) 8px;
+  composes: rails from "../../../ui/Chip.module.css";
 }
 
 .search {
@@ -79,15 +75,6 @@
   display: inline-flex;
   align-items: center;
   padding: 0 2px;
-}
-
-.emptyArea {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 var(--gutter) 15%;
 }
 
 .loading {

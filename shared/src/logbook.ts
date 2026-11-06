@@ -39,6 +39,11 @@ export function todayDateKey(now: Date = new Date()): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/** "Track 3 Nov 2026" — a recording's name until the user renames it. */
+export function defaultTrackName(now: Date = new Date()): string {
+  return `Track ${formatDateKey(todayDateKey(now))}`;
+}
+
 /** "Sun 15 Mar 2026" — a logbook entry's own line; the year group supplies context. */
 export function formatTripDate(isoDate: string): string {
   return new Date(isoDate).toLocaleDateString(undefined, {
@@ -300,7 +305,7 @@ export function yearBuckets(
 // the hard way (the comments say which).
 
 /** The label a tag-less trip is filed under, everywhere on a stats screen. */
-export const UNTAGGED_ACTIVITY_LABEL = "Untagged";
+export const UNTAGGED_ACTIVITY_LABEL = "No type";
 
 export function logbookActivityLabel(type: string): string {
   return type === UNTAGGED_ACTIVITY
@@ -384,7 +389,7 @@ export function statsCadence(
   }
   if (stats.averageGapDays != null && stats.longestGapDays != null) {
     lines.push(
-      `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${stats.longestGapDays}`,
+      `every ${pluralCount(stats.averageGapDays, "day")} on average · longest gap ${pluralCount(stats.longestGapDays, "day")}`,
     );
   }
   lines.push(
@@ -435,7 +440,7 @@ export function statsHeadline(
     : [
         { label: "Trips", value: `${stats.trips}` },
         { label: "Places visited", value: `${stats.places}` },
-        { label: "Activity types", value: `${stats.activities}` },
+        { label: "Trip types", value: `${stats.activities}` },
         ground,
       ];
 }

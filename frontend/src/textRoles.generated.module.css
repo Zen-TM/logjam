@@ -54,3 +54,9 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+
+.instrument {
+  font-size: var(--font-xxl);
+  font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
+}

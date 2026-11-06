@@ -274,7 +274,7 @@ export function bulkShareButtonLabel(
  */
 export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
   text: string;
-  tone: "info" | "error";
+  tone: "done" | "error";
 } {
   const failed = outcome.copiesFailed.length;
   const parts: string[] = [];
@@ -312,7 +312,7 @@ export function bulkShareOutcomeMessage(outcome: BulkShareOutcome): {
   if (outcome.shareError) {
     return { text: `${done} ${outcome.shareError}`, tone: "error" };
   }
-  return { text: done, tone: "info" };
+  return { text: done, tone: "done" };
 }
 
 /** "a", "a and b", "a, b and c" — joins reasons grammatically when multiple are present. */

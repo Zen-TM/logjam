@@ -130,7 +130,7 @@ function RopeWikiReviewDialog({
         result.linked > 0 ? `${result.linked} linked` : null,
         result.skipped > 0 ? `${result.skipped} skipped` : null,
       ].filter(Boolean);
-      toast.success(
+      toast.done(
         parts.length > 0
           ? `Review applied: ${parts.join(", ")}.`
           : "Review applied.",

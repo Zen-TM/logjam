@@ -7,8 +7,9 @@
 // and shows the plan's value under a field the plan changed meanwhile
 // (`tripPlanInPlanNow`); an item gone from the plan closes the sheet.
 import { Fragment, useRef, useState } from "react";
-import { Alert, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import {
+  abandonConfirm,
   ApiError,
   itemFieldDefs,
   itemPatch,
@@ -30,6 +31,7 @@ import {
   type PlanItemVerbId,
   type TripPlanItem,
   type TripPlanRole,
+  coordinateEntry,
 } from "@logjam/shared";
 
 import { unavailableReasonText } from "../auth/capabilities";
@@ -48,6 +50,7 @@ import {
   Row,
   SectionHeader,
   TextField,
+  confirm,
 } from "../ui";
 import { deletePlanItem, patchPlanItem } from "./plansApi";
 import { afterPlanWrite } from "./plansCache";
@@ -141,27 +144,21 @@ export function PlanItemSheet({
       ).filter((verb) => verb.id !== "download")
     : [];
 
-  const confirmDelete = (target: TripPlanItem) => {
-    const confirm = planItemDeleteConfirm(
-      itemTitle(target),
-      target.kind === "place" ? target.media.length : 0,
+  const confirmDelete = async (target: TripPlanItem) => {
+    const ok = await confirm(
+      planItemDeleteConfirm(
+        itemTitle(target),
+        target.kind === "place" ? target.media.length : 0,
+      ),
     );
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: confirm.confirmLabel,
-        style: "destructive",
-        onPress: () => {
-          deletePlanItem(planId, target.kind, target.id)
-            .then(() => afterPlanWrite(planId))
-            .then(() => onInfo(copy.itemDeleted))
-            .catch((err: unknown) => {
-              if (err instanceof ApiError) void afterPlanWrite(planId);
-              onError(messageFromError(err, copy.itemDeleteFailed));
-            });
-        },
-      },
-    ]);
+    if (!ok) return;
+    deletePlanItem(planId, target.kind, target.id)
+      .then(() => afterPlanWrite(planId))
+      .then(() => onInfo(copy.itemDeleted))
+      .catch((err: unknown) => {
+        if (err instanceof ApiError) void afterPlanWrite(planId);
+        onError(messageFromError(err, copy.itemDeleteFailed));
+      });
   };
 
   const run = (id: PlanItemVerbId, target: TripPlanItem) => {
@@ -235,9 +232,19 @@ export function PlanItemSheet({
       : undefined;
   const dateDef = attrDefs.find((def) => def.key === dateKey);
   const dateValue = dateKey ? (values[ITEM_ATTR + dateKey] ?? "") : "";
+  const dirty =
+    editing &&
+    !dateKey &&
+    seen != null &&
+    !tripPlanSame(values, itemWords(seen));
   return (
     <BottomSheet
       visible={item !== null}
+      discard={
+        dirty
+          ? abandonConfirm(item?.kind === "place" ? "place" : "way", false)
+          : null
+      }
       onClose={back ?? onClose}
       onBack={back}
       closable={!busy}
@@ -267,6 +274,7 @@ export function PlanItemSheet({
               loading={busy}
               disabled={!online}
               disabledReason={OFFLINE}
+              reasonShown
               onPress={() => void submit(item)}
             />
             {/* The button only dims: the words go under it (ui/Button.tsx). */}
@@ -327,9 +335,9 @@ export function PlanItemSheet({
           {item.kind === "place" ? (
             <>
               <TextField
-                label={copy.itemOtherNames}
+                label={copy.itemAlsoKnownAs}
                 value={values.altNames}
-                hint={theirs("altNames") ?? copy.itemOtherNamesHint}
+                hint={theirs("altNames") ?? copy.itemAlsoKnownAsHint}
                 autoCapitalize="words"
                 onChangeText={(altNames) => set({ altNames })}
               />
@@ -340,7 +348,9 @@ export function PlanItemSheet({
                     value={values.latitude}
                     hint={theirs("latitude")}
                     keyboardType="numbers-and-punctuation"
-                    onChangeText={(latitude) => set({ latitude })}
+                    onChangeText={(next) =>
+                      set(coordinateEntry(next, "latitude", values.latitude))
+                    }
                   />
                 </View>
                 <View style={styles.coordField}>
@@ -349,7 +359,9 @@ export function PlanItemSheet({
                     value={values.longitude}
                     hint={theirs("longitude")}
                     keyboardType="numbers-and-punctuation"
-                    onChangeText={(longitude) => set({ longitude })}
+                    onChangeText={(next) =>
+                      set(coordinateEntry(next, "longitude", values.longitude))
+                    }
                   />
                 </View>
               </View>

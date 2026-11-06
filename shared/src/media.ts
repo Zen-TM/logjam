@@ -200,6 +200,12 @@ export interface MediaItem {
   displayName: string | null;
   /** Row-level stats — see shared/src/mediaMetadata.ts. `{}` when origin is null. */
   metadata: MediaMetadata;
+  /**
+   * On a trip's attachment made by "Log a trip": the recorded track it is a
+   * copy of (a media row with origin "track"). Null everywhere else, and
+   * always null on place media, so a sharee never receives one.
+   */
+  sourceMediaId: string | null;
 }
 
 /**
@@ -242,6 +248,9 @@ export interface StandaloneFile {
   metadata: MediaMetadata;
   /** The place it is linked to as that place's way, or null. */
   linkedPlaceId: string | null;
+  /** A trip has been logged from this recording ("Log a trip" is not offered
+   *  again). Always false for an import. */
+  hasTrip: boolean;
   createdAt: string;
   updatedAt: string;
 }

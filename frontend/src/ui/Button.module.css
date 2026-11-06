@@ -53,8 +53,15 @@
   color: var(--color-on-fill);
 }
 
+/* A fill answers the pointer with `--opacity-pressed`, as on Logjam GPS, but on
+   the fill alone: dimming the element would fade the label too, and the label
+   falls under 4.5:1 on a pale page (the pair is held in chipFill.test.ts). */
 .filled:hover:not(:disabled, [aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-text));
+  background: color-mix(
+    in srgb,
+    var(--color-accent) calc(var(--opacity-pressed) * 100%),
+    transparent
+  );
 }
 
 /* Accent as the EDGE, the label in the text colour. Accent text clears 4.5:1
@@ -81,7 +88,11 @@
 }
 
 .destructive:hover:not(:disabled, [aria-disabled="true"]) {
-  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-text));
+  background: color-mix(
+    in srgb,
+    var(--color-warning) calc(var(--opacity-pressed) * 100%),
+    transparent
+  );
 }
 
 .button:disabled,

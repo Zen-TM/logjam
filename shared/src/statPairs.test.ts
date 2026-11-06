@@ -29,6 +29,17 @@ describe("pairedStatLayout", () => {
     ]);
   });
 
+  // Red when the pair leaves STAT_PAIRS: a track's Time and Distance then
+  // take a row each again.
+  it("puts a track's time and distance on one row", () => {
+    const out = pairedStatLayout([stat(L.time), stat(L.distance)]);
+    expect(out.map((s) => [s.label, Boolean(s.span)])).toEqual([
+      [L.time, false],
+      [L.distance, false],
+    ]);
+    expect(pairedStatLayout([stat(L.distance)])[0].span).toBe(true);
+  });
+
   it("spans a stat whose partner is not on the grid", () => {
     expect(pairedStatLayout([stat(L.ascent)])[0].span).toBe(true);
   });

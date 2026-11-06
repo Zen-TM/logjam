@@ -7,7 +7,11 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INBOX } from "@logjam/shared";
+import {
+  AREA_EXPORT_FAILED,
+  AREA_EXPORT_TOO_LARGE,
+  INBOX,
+} from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
 import type { TNotification } from "../../../placeUtils";
 import { ToastProvider } from "../../feedback/ToastProvider";
@@ -15,6 +19,16 @@ import NotificationsPanel from "./NotificationsPanel";
 
 const api = vi.hoisted(() => ({
   markNotificationRead: vi.fn(async () => {}),
+}));
+const plans = vi.hoisted(() => ({
+  joinPlan: vi.fn(async () => {}),
+  leavePlan: vi.fn(async () => {}),
+  approveMember: vi.fn(async () => {}),
+  removeMember: vi.fn(async () => {}),
+}));
+vi.mock("../../../plansApi", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../plansApi")>()),
+  ...plans,
 }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
@@ -66,7 +80,13 @@ const announcement: TNotification = {
 const noop = () => {};
 
 // Read marks really apply, as App's do, so a row read in Unread leaves it.
-function Harness({ rows }: { rows: TNotification[] }) {
+function Harness({
+  rows,
+  onOpenRoute = async () => true,
+}: {
+  rows: TNotification[];
+  onOpenRoute?: (routeId: string) => Promise<boolean>;
+}) {
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     new Map(),
   );
@@ -90,11 +110,13 @@ function Harness({ rows }: { rows: TNotification[] }) {
           })
         }
         onRefetchFriends={noop}
+        onRefetchPlans={noop}
         setSelectedPlaceID={noop}
         setActivePanel={noop}
         onShowSharpened={noop}
         onTopoFlyTarget={noop}
         onOpenPlan={noop}
+        onOpenRoute={onOpenRoute}
       />
     </ToastProvider>
   );
@@ -110,7 +132,7 @@ function readInUnread(title: string) {
   row.focus();
   fireEvent.click(row);
   const dialog = screen.getByRole("dialog", { name: title });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+  fireEvent.click(within(dialog).getAllByRole("button", { name: "Close" })[1]!);
 }
 
 describe("NotificationsPanel: an announcement", () => {
@@ -130,7 +152,9 @@ describe("NotificationsPanel: an announcement", () => {
     expect(dialog.querySelector("strong")?.textContent).toBe("share a track");
     expect(api.markNotificationRead).not.toHaveBeenCalled();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    fireEvent.click(
+      within(dialog).getAllByRole("button", { name: "Close" })[1]!,
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(api.markNotificationRead).toHaveBeenCalledWith("n1", true);
   });
@@ -196,5 +220,124 @@ describe("NotificationsPanel: an announcement", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: INBOX.title }),
     );
+  });
+});
+
+const planRow = (type: string, payload: Record<string, unknown>) =>
+  ({
+    id: "n2",
+    type,
+    payload: { planId: "p1", planName: "Kanangra Walls loop", ...payload },
+    read: false,
+    createdAt: new Date().toISOString(),
+  }) as TNotification;
+
+// A plan's invite and a join request answer in the row, as a friend request
+// does. Mutation: return null for either kind in `notificationActions`, or
+// wire Accept on a join request to `joinPlan`.
+describe("NotificationsPanel: plan questions", () => {
+  it("accepts an invite from the row", async () => {
+    renderPanel([planRow("plan_invited", { invitedByUsername: "carol" })]);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await vi.waitFor(() => expect(plans.joinPlan).toHaveBeenCalledWith("p1"));
+  });
+
+  it("accepts a join request from the row", async () => {
+    renderPanel([
+      planRow("plan_join_request", {
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Accept" }));
+    await vi.waitFor(() =>
+      expect(plans.approveMember).toHaveBeenCalledWith("p1", "u2"),
+    );
+  });
+
+  it("declines a join request after asking", async () => {
+    renderPanel([
+      planRow("plan_join_request", {
+        requesterId: "u2",
+        requesterUsername: "carol",
+      }),
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Decline" }));
+    expect(plans.removeMember).not.toHaveBeenCalled();
+    const ask = screen.getByRole("alertdialog", { name: "Decline carol?" });
+    fireEvent.click(within(ask).getByRole("button", { name: "Decline" }));
+    await vi.waitFor(() =>
+      expect(plans.removeMember).toHaveBeenCalledWith("p1", "u2", "requested"),
+    );
+  });
+});
+
+describe("NotificationsPanel: a shared route", () => {
+  const shared: TNotification = {
+    id: "n2",
+    type: "item_shared",
+    payload: { entityType: "route", entityId: "r1", sharedByUsername: "bob" },
+    read: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Mutation: drop the `way` branch from `goTo`, and the tap opens nothing.
+  it("opens the route when the row is tapped, and reads it", () => {
+    const onOpenRoute = vi.fn(async () => true);
+    render(<Harness rows={[shared]} onOpenRoute={onOpenRoute} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "bob shared a route with you" }),
+    );
+    expect(onOpenRoute).toHaveBeenCalledWith("r1");
+    expect(api.markNotificationRead).toHaveBeenCalledWith("n2", true);
+  });
+
+  // Mutation: ignore the false return, and a revoked share fails silently.
+  it("says so when the route is gone", async () => {
+    render(<Harness rows={[shared]} onOpenRoute={async () => false} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "bob shared a route with you" }),
+    );
+    expect(await screen.findByText("This was removed.")).toBeTruthy();
+  });
+});
+
+describe("NotificationsPanel: a failed export", () => {
+  const failed: TNotification = {
+    id: "n9",
+    type: "topo_export_complete",
+    payload: {
+      format: "gpkg",
+      status: "failed",
+      errorMessage: AREA_EXPORT_FAILED,
+    },
+    read: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Mutation: drop the failed-export branch of `rowFooter`, or open anything
+  // but the bug form.
+  it("offers Report a bug, since there is no support to contact", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderPanel([failed]);
+    fireEvent.click(screen.getByRole("button", { name: "Report a bug" }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("/issues/new?template=bug.yml"),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+
+  // Mutation: show the button for any failed export, and a row that already
+  // says "Choose a smaller area" also offers a bug report.
+  it("leaves it off a failure that says what to do", () => {
+    renderPanel([
+      {
+        ...failed,
+        payload: { ...failed.payload, errorMessage: AREA_EXPORT_TOO_LARGE },
+      },
+    ]);
+    expect(screen.queryByRole("button", { name: "Report a bug" })).toBeNull();
   });
 });

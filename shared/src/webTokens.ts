@@ -14,6 +14,7 @@ import {
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
+  SCRIM,
   SPACE,
   TEXT_ROLES,
 } from "./designTokens.js";
@@ -59,6 +60,7 @@ export function webTextRolesCss(): string {
       // The page's own line height (index.css), written so the role does not
       // depend on where it is composed.
       ...("leading" in role ? ["line-height: 1.5"] : []),
+      ...("tabular" in role ? ["font-variant-numeric: tabular-nums"] : []),
     ];
     return `.${name} {\n${props.map((p) => `  ${p};`).join("\n")}\n}\n`;
   });
@@ -109,6 +111,10 @@ export function webScaleProperties(): [string, string][] {
       `--opacity-${n}`,
       String(v),
     ]),
+    ...Object.entries(SCRIM).map(([n, v]): [string, string] => [
+      `--scrim-${n}`,
+      v.replace(/,/g, ", "),
+    ]),
   ];
 }
 
@@ -134,14 +140,21 @@ export function webTokensCss(): string {
     ...webScaleProperties(),
     ...webSchemeProperties(THEME_SCHEMES[DEFAULT_THEME_SCHEME_ID]),
   ]);
-  // A coarse pointer (a finger) gets the touch sizes. Keyed to the POINTER,
-  // not the width: a narrow desktop window still has a mouse.
+  // A coarse pointer (a finger) gets the touch control sizes and Logjam GPS's
+  // type scale. Keyed to the POINTER, not the width: a narrow desktop window
+  // still has a mouse.
   const coarse =
     "@media (pointer: coarse) {\n" +
-    block(
-      "  :root",
-      Object.entries(CONTROL.touch).map(([n, v]) => [`--control-${n}`, px(v)]),
-    )
+    block("  :root", [
+      ...Object.entries(CONTROL.touch).map(([n, v]): [string, string] => [
+        `--control-${n}`,
+        px(v),
+      ]),
+      ...Object.entries(FONT.gps).map(([n, v]): [string, string] => [
+        `--font-${n}`,
+        rem(v),
+      ]),
+    ])
       .replace(/\n {2}(--)/g, "\n    $1")
       .replace(/\n\}\n$/, "\n  }\n") +
     "}\n";

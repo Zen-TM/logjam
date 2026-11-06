@@ -33,8 +33,16 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import { StyleSheet, Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
   BASEMAP_UNAVAILABLE_LABEL,
@@ -45,11 +53,13 @@ import {
   MAP_LAYERS,
   MAP_OVERLAYS,
   MAP_TERRAIN,
+  slopeLegendRows,
   TERRAIN_LAYER_KEYS,
   type SectionKeysOn,
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
+import { type LayersOpen } from "./layersOpen";
 import {
   spacing,
   makeStyles,
@@ -60,18 +70,20 @@ import {
 } from "../theme";
 import {
   BottomSheet,
+  ChipRail,
+  Icon,
   Row,
   SectionHeader,
-  ChipRail,
-  Toggle,
-  Icon,
-  type Glyph,
   SwitchRow,
+  Toggle,
+  type Glyph,
 } from "../ui";
 import { BasemapThumb } from "./BasemapThumb";
 import { MOBILE_BASEMAPS } from "./basemapMeta";
 import { basemapFallbackFor } from "./basemapReachability";
 import type { Connectivity } from "./connectivity";
+import { useSlopeBands } from "./slopeBandsPreference";
+import { SlopeBandsEditor } from "./SlopeBandsEditor";
 import { terrainSwitch, type TerrainSwitchState } from "./terrainSwitches";
 import type { BasemapId, MapArtifact } from "./sourceResolver";
 
@@ -130,6 +142,29 @@ export type LayerToggleEntry = {
   }[];
 };
 
+/** The sheet, subscribed to `open` itself so MapScreen need not be. */
+export function MapLayersSheetHost({
+  open,
+  onOpened,
+  ...rest
+}: Omit<ComponentProps<typeof MapLayersSheet>, "visible" | "onClose"> & {
+  open: LayersOpen;
+  /** Runs each time the sheet opens (the basemap reachability probe). */
+  onOpened: () => void;
+}) {
+  const visible = useSyncExternalStore(open.subscribe, open.get);
+  useEffect(() => {
+    if (visible) onOpened();
+  }, [visible, onOpened]);
+  return (
+    <MapLayersSheet
+      {...rest}
+      visible={visible}
+      onClose={() => open.set(false)}
+    />
+  );
+}
+
 export function MapLayersSheet({
   visible,
   onClose,
@@ -174,7 +209,9 @@ export function MapLayersSheet({
   const [tab, setTab] = useState<Tab>("basemap");
   // A layer's legend: a sub-mode of this sheet, never a second one
   // (DESIGN.md), reset whenever the sheet opens or closes.
-  const [legend, setLegend] = useState<"vegetation" | "land" | null>(null);
+  const [legend, setLegend] = useState<
+    "vegetation" | "land" | "slope" | "slopeBands" | null
+  >(null);
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
@@ -201,7 +238,8 @@ export function MapLayersSheet({
         online={online}
         artifacts={artifacts}
         hasVegetation={hasVegetation}
-        onOpenLegend={() => setLegend("vegetation")}
+        onOpenLegend={setLegend}
+        onOpenSlopeBands={() => setLegend("slopeBands")}
       />
     ),
     overlays: () => (
@@ -240,26 +278,36 @@ export function MapLayersSheet({
       onBack={legend ? () => setLegend(null) : undefined}
       title={legend ? MAP_TERRAIN.copy[legend] : MAP_LAYERS.title}
       // Over the tab rather than in place of it, so the sheet keeps its height.
+      // The slope bands editor is taller than any tab, so it takes the tab's
+      // place instead.
       overlay={
         legend === "land" ? (
           <LandLegend />
+        ) : legend === "slope" ? (
+          <SlopeLegend />
         ) : legend === "vegetation" ? (
           <Text style={styles.legend}>{MAP_TERRAIN.copy.vegetationLegend}</Text>
         ) : null
       }
     >
-      <View style={styles.rail}>
-        <ChipRail
-          options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
-            value: key,
-            label: TAB_LABEL[key],
-          }))}
-          value={tab}
-          onChange={(next) => setTab(next as Tab)}
-        />
-      </View>
+      {legend === "slopeBands" ? (
+        <SlopeBandsEditor />
+      ) : (
+        <>
+          <View style={styles.rail}>
+            <ChipRail
+              options={contractSectionKeys(MAP_LAYERS, "gps").map((key) => ({
+                value: key,
+                label: TAB_LABEL[key],
+              }))}
+              value={tab}
+              onChange={(next) => setTab(next as Tab)}
+            />
+          </View>
 
-      {panes[tab]()}
+          {panes[tab]()}
+        </>
+      )}
     </BottomSheet>
   );
 }
@@ -346,7 +394,7 @@ function BasemapTab({
 
 /**
  * The Terrain group: one switch per layer, in `MAP_TERRAIN`'s order. The
- * slope's bands are the account's, chosen on Logjam Web.
+ * slope's bands are the account's, edited from the row under the Slope switch.
  */
 function TerrainTab({
   layers,
@@ -356,6 +404,7 @@ function TerrainTab({
   artifacts,
   hasVegetation,
   onOpenLegend,
+  onOpenSlopeBands,
 }: {
   layers: Readonly<Record<TerrainSwitchKey, boolean>>;
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
@@ -365,7 +414,8 @@ function TerrainTab({
   artifacts: readonly MapArtifact[];
   /** A sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
-  onOpenLegend: () => void;
+  onOpenLegend: (legend: "vegetation" | "slope") => void;
+  onOpenSlopeBands: () => void;
 }) {
   const styles = useStyles();
   const rows = {
@@ -383,14 +433,34 @@ function TerrainTab({
           <SwitchRow
             key={key}
             title={MAP_TERRAIN.copy[key]}
-            description={state.reason}
+            description={
+              state.reason ??
+              (key === "land" ? undefined : MAP_TERRAIN.copy[`${key}Hint`])
+            }
             disabled={state.disabled}
             style={styles.itemRow}
             checked={state.checked}
             onChange={(on) => onChange(key, on)}
+            help={
+              key === "slope"
+                ? {
+                    label: MAP_TERRAIN.copy.slopeAbout,
+                    onPress: () => onOpenLegend("slope"),
+                  }
+                : undefined
+            }
           />,
         ];
       }),
+    ),
+    // Under the Slope switch it colours (the contract's order).
+    slopeBands: (
+      <Row
+        key="slopeBands"
+        title={MAP_TERRAIN.copy.slopeBands}
+        onPress={onOpenSlopeBands}
+        chevron
+      />
     ),
     vegetation: hasVegetation ? (
       <SwitchRow
@@ -402,7 +472,7 @@ function TerrainTab({
         onChange={(on) => onChange("vegetation", on)}
         help={{
           label: MAP_TERRAIN.copy.vegetationAbout,
-          onPress: onOpenLegend,
+          onPress: () => onOpenLegend("vegetation"),
         }}
       />
     ) : null,
@@ -411,6 +481,22 @@ function TerrainTab({
     <View style={styles.body}>
       {contractSectionKeys(MAP_TERRAIN, "gps").map((key) => rows[key])}
     </View>
+  );
+}
+
+/** What the slope's colours mean: the account's bands, chosen on Logjam Web. */
+function SlopeLegend() {
+  const styles = useStyles();
+  return (
+    <>
+      <Text style={styles.legend}>{MAP_TERRAIN.copy.slopeLegend}</Text>
+      {slopeLegendRows(useSlopeBands()).map(({ label, colour }) => (
+        <View key={label} style={styles.landRow}>
+          <View style={[styles.slopeSwatch, { backgroundColor: colour }]} />
+          <Text style={styles.legend}>{label}</Text>
+        </View>
+      ))}
+    </>
   );
 }
 
@@ -631,7 +717,6 @@ function OfflineTab({
   artifacts: MapArtifact[];
   visible: boolean;
 }) {
-  const theme = useTheme();
   const { assetHue } = useHues();
   const styles = useStyles();
 
@@ -648,7 +733,7 @@ function OfflineTab({
       <Row
         icon="saveOffline"
         hue={assetHue.region}
-        title="Save maps for offline use"
+        title="Save an offline map"
         subtitle={online ? "Pick an area and the maps" : "Needs a connection"}
         disabled={!online}
         onPress={onSaveArea}
@@ -656,7 +741,7 @@ function OfflineTab({
       <SwitchRow
         icon="offline"
         hue={assetHue.region}
-        title="Offline maps only"
+        title="Use only saved maps"
         description="Even when you have signal"
         descriptionNumberOfLines={2}
         checked={offlineOnly}
@@ -669,18 +754,18 @@ function OfflineTab({
         hue={assetHue.region}
         title={
           savedRegions.length === 1
-            ? "1 saved area"
-            : `${savedRegions.length} saved areas`
+            ? "1 offline map"
+            : `${savedRegions.length} offline maps`
         }
         subtitle={
           savedRegions.length === 0
-            ? "Download an area to use maps offline"
+            ? "Save an offline map to use maps with no signal"
             : `${(savedBytes / 1024 / 1024).toFixed(0)} MB · rename or delete in Saved`
         }
         // Lands on Saved's Regions filter, not its everything-list: a pointer
         // that makes the user find the thing again is not a pointer.
         onPress={() => onOpenSaved("region")}
-        right={<Icon idea="disclosure" size={20} color={theme.textMuted} />}
+        chevron
       />
     </View>
   );
@@ -704,6 +789,14 @@ const useStyles = makeStyles((theme, textRole) => ({
   legend: { ...textRole.body, color: theme.text },
   landRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   landSwatch: { width: spacing(2), height: spacing(2), borderRadius: 4 },
+  // The bands are translucent: the outline keeps a faint one visible.
+  slopeSwatch: {
+    width: spacing(2),
+    height: spacing(2),
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.line,
+  },
   // Tabular so a column of counts lines up down the tab rather than shuffling
   // by a digit's width.
   count: {

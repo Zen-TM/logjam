@@ -70,7 +70,9 @@ export default function BasemapGallery({
   activeLayerId: string;
   onChange: (id: string) => void;
   mapView: { lng: number; lat: number; zoom: number } | null;
-  /** Basemaps whose tile server is down: drawn as such and not selectable. */
+  /** Basemaps whose tile server is down: drawn as such and not selectable.
+   *  A gallery given none (the Export dialog's) tells for itself from its own
+   *  swatches, so a card that cannot load never sits there blank. */
   unavailable?: ReadonlySet<string>;
   /** A swatch tile loaded (`false`) or failed (`true`). The gallery remounts
    *  when the panel opens, so a recovered server is found on the next open. */
@@ -78,21 +80,34 @@ export default function BasemapGallery({
   oneRow?: boolean;
 }) {
   const [lookalikeFailed, setLookalikeFailed] = useState(false);
+  const [failed, setFailed] = useState<ReadonlySet<string>>(new Set());
+  const isDown = (id: string) => (unavailable ?? failed).has(id);
+  const setDown = (id: string, down: boolean) => {
+    onHealth?.(id, down);
+    if (!unavailable)
+      setFailed((prev) => {
+        if (prev.has(id) === down) return prev;
+        const next = new Set(prev);
+        if (down) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+  };
   const tileRefs = useRef<(HTMLButtonElement | null)[]>([]);
   // The one tab stop: the active tile, or the first enabled one when the
   // active basemap is down (its button is disabled, so it can't take focus).
   const activeIndex = layers.findIndex((layer) => layer.id === activeLayerId);
   const tabStop =
-    activeIndex >= 0 && !unavailable?.has(layers[activeIndex].id)
+    activeIndex >= 0 && !isDown(layers[activeIndex].id)
       ? activeIndex
-      : layers.findIndex((layer) => !unavailable?.has(layer.id));
+      : layers.findIndex((layer) => !isDown(layer.id));
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const from = tileRefs.current.findIndex(
       (tile) => tile === document.activeElement,
     );
     const to = nextEnabledIndex(
-      layers.map((layer) => unavailable?.has(layer.id) ?? false),
+      layers.map((layer) => isDown(layer.id)),
       from,
       event.key,
     );
@@ -113,7 +128,7 @@ export default function BasemapGallery({
       {layers.map((layer, index) => {
         const active = layer.id === activeLayerId;
         const vector = layer.tiles.length === 0;
-        const down = unavailable?.has(layer.id) ?? false;
+        const down = isDown(layer.id);
         const thumbnail = !mapView
           ? null
           : vector
@@ -142,13 +157,13 @@ export default function BasemapGallery({
                 alt=""
                 className={`${classes.thumb} ${down ? classes.hidden : ""}`}
                 draggable={false}
-                onLoad={vector ? undefined : () => onHealth?.(layer.id, false)}
+                onLoad={vector ? undefined : () => setDown(layer.id, false)}
                 onError={() => {
                   if (vector) return setLookalikeFailed(true);
                   // A 404 is a tile outside the provider's coverage, not an
                   // outage: ask the server before marking it down.
                   void serverAnswers(thumbnail).then((ok) => {
-                    if (!ok) onHealth?.(layer.id, true);
+                    if (!ok) setDown(layer.id, true);
                   });
                 }}
               />

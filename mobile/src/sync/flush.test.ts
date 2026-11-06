@@ -68,6 +68,18 @@ function mediaRow(seq: number, extra: Partial<Row> = {}): Row {
   };
 }
 
+function placeCreateRow(seq: number, id: string): Row {
+  return { ...pushRow(seq), entity: "place", op: "create", entity_id: id };
+}
+
+function linkRow(seq: number, mediaId: string, placeId: string): Row {
+  return mediaRow(seq, {
+    op: "link",
+    entity_id: mediaId,
+    fields_json: JSON.stringify({ placeId }),
+  });
+}
+
 function pushRow(seq: number): Row {
   return {
     seq,
@@ -136,12 +148,40 @@ const db = {
     else run(sql, args);
     return Promise.resolve({ changes: 1, lastInsertRowId: 1 });
   },
-  getFirstAsync: (sql: string) =>
-    Promise.resolve({
+  getFirstAsync: (sql: string, ...args: unknown[]) => {
+    if (sql.includes("entity_id = ?")) {
+      // isLinkPending's counts, as flush.ts words them.
+      if (sql.includes("entity = 'media' AND op = 'create'")) {
+        const states = sql.includes("'blocked'")
+          ? ["queued", "inflight", "blocked"]
+          : ["queued", "inflight"];
+        return Promise.resolve({
+          n: rows.filter(
+            (row) =>
+              row.entity === "media" &&
+              row.op === "create" &&
+              row.entity_id === args[0] &&
+              states.includes(row.state),
+          ).length,
+        });
+      }
+      return Promise.resolve({
+        n: rows.filter(
+          (row) =>
+            row.entity !== "media" &&
+            row.entity_id === args[0] &&
+            (["queued", "inflight", "retrying"].includes(row.state) ||
+              (row.op === "create" &&
+                ["blocked", "deadRemote"].includes(row.state))),
+        ).length,
+      });
+    }
+    return Promise.resolve({
       n: sql.includes("'retrying'")
         ? rows.filter((row) => row.state === "retrying").length
         : 0,
-    }),
+    });
+  },
   getAllAsync: (sql: string, ...args: unknown[]) =>
     Promise.resolve(
       sql.includes("entity = 'media'")
@@ -178,6 +218,11 @@ vi.mock("./mediaUpload", () => ({
     if (mediaErrors.has(row.seq))
       return Promise.reject(mediaErrors.get(row.seq));
     if (deadMedia.has(row.seq)) return Promise.reject(new Error("file gone"));
+    rows = rows.filter((candidate) => candidate.seq !== row.seq);
+    return Promise.resolve("done");
+  },
+  runMediaLinkOp: (row: { seq: number }) => {
+    mediaRuns.push(row.seq);
     rows = rows.filter((candidate) => candidate.seq !== row.seq);
     return Promise.resolve("done");
   },
@@ -509,6 +554,26 @@ describe("a write the server applied whose reply was lost", () => {
     expect(shelved).toHaveLength(1);
   });
 
+  // Nothing was replaced, so there is nothing to keep: the user's text is
+  // simply saved. Mutation: drop the `!= null` filter on receipts in flush.ts.
+  it("does not shelve a receipt for a field that was empty on the account", async () => {
+    rows = [
+      {
+        ...pushRow(1),
+        fields_json: JSON.stringify({ notes: "mine" }),
+        base_fields_json: JSON.stringify({ notes: "before" }),
+      },
+    ];
+    answers.set("op-1", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "notes", serverValue: null }],
+    });
+
+    await flushOutbox();
+
+    expect(shelved).toEqual([]);
+  });
+
   it("still shelves a value another device wrote", async () => {
     rows = [
       {
@@ -550,6 +615,131 @@ describe("push result correlation", () => {
 });
 
 describe("media pass", () => {
+  // A trip's copy of a recording names it, and the API refuses a name it has
+  // not seen. Mutation: drop the `sourceMediaId` wait from isLinkPending and
+  // the copy runs (and is parked by a 400) before its recording is up.
+  it("runs a trip's copy only after the recording it names has uploaded", async () => {
+    rows = [
+      mediaRow(1, {
+        fields_json: JSON.stringify({
+          linkedType: "tripLog",
+          linkedId: "t-1",
+          sourceMediaId: "media-2",
+        }),
+      }),
+      mediaRow(2),
+    ];
+
+    await flushOutbox();
+
+    // The copy was queued first but waited for the pass after its recording.
+    expect(mediaRuns).toEqual([2, 1]);
+  });
+
+  // A photo or a route file picked while a place is being made is queued
+  // against an id the server has not seen. Mutation: drop 'retrying' from
+  // isLinkPending's states and the upload runs against a place still being
+  // retried; drop the `link` branch and the file's link runs (and a 404 deletes
+  // it) before the place exists.
+  it("holds a photo until the create of its place has landed", async () => {
+    rows = [
+      placeCreateRow(1, "c-2"),
+      mediaRow(2),
+      mediaRow(3, {
+        fields_json: JSON.stringify({ linkedType: "place", linkedId: "c-9" }),
+      }),
+    ];
+    // The server cannot take the place yet: it is retried, not parked.
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    // Only the photo of a different, settled place went up.
+    expect(mediaRuns).toEqual([3]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("sends the photo once the place's create has been applied", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+    expect(rows).toEqual([]);
+  });
+
+  // The photo of a place whose create is parked would presign, 404 and park as
+  // an issue of its own, N of them from one bad place. Mutation: drop the
+  // `blocked`/`deadRemote` arm from isLinkPending and the photo runs.
+  it("holds a photo while its place's create is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => [row.seq, row.state])).toEqual([
+      [1, "blocked"],
+      [2, "queued"],
+    ]);
+  });
+
+  it("holds a route file's link while its place's create is parked", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+  });
+
+  it("does not hold a photo for a parked EDIT of a place that exists", async () => {
+    rows = [{ ...placeCreateRow(1, "c-2"), op: "update" }, mediaRow(2)];
+    rejections.set("op-1", { code: 400, message: "no" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([2]);
+  });
+
+  // A released link PATCHes a file the API never saw; the 404 is read as gone
+  // and the op deleted, so the way would never attach even after a Retry.
+  // Mutation: drop 'blocked' from the own-upload states.
+  it("holds a link while the upload of its file is parked", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1", state: "blocked" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("holds a route file's link until its place exists", async () => {
+    rows = [placeCreateRow(1, "c-2"), linkRow(2, "file-1", "c-2")];
+    rejections.set("op-1", { code: 503, message: "busy" });
+
+    await flushOutbox();
+
+    expect(mediaRuns).toEqual([]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
+  it("holds a link until the file it moves has uploaded", async () => {
+    rows = [
+      mediaRow(1, { entity_id: "file-1" }),
+      linkRow(2, "file-1", "place-1"),
+    ];
+    mediaErrors.set(1, httpError(503));
+
+    await expect(flushOutbox()).rejects.toBeDefined();
+
+    expect(mediaRuns).toEqual([1]);
+    expect(rows.map((row) => row.seq)).toEqual([1, 2]);
+  });
+
   it("keeps going past a dead op instead of aborting the pass", async () => {
     rows = [mediaRow(1), mediaRow(2), mediaRow(3)];
     deadMedia.add(1);

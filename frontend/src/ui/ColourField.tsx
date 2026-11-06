@@ -220,7 +220,7 @@ function PaletteField({
         onClose={() => setOpen(false)}
         anchorRef={triggerRef}
         label={label}
-        placement="bottom-end"
+        placement="top-end"
         fit
         // This popover IS the field's value being chosen, so looking away
         // settles it — like every other control that picks a value.

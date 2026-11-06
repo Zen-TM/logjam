@@ -108,8 +108,9 @@ export type UserUiPreferences = {
    * can read and act on.
    *
    * The SERVER reads this as the fallback when `POST /places/:id/copy` carries
-   * no `copyMedia`, so a client with no switch of its own (Logjam Web, today)
-   * still honours the user's choice instead of quietly doing the other thing.
+   * no `copyMedia`, so a copy that asks nothing still honours the user's choice
+   * (Settings › Privacy and security, on both clients) instead of quietly doing
+   * the other thing.
    */
   copyPlaceMedia: boolean;
   /**
@@ -170,6 +171,14 @@ function normalizeNotificationPreferences(
 
 export const DEFAULT_THEME_SCHEME_ID: ThemeSchemeId = "sandstone";
 
+/**
+ * The scheme a client opens in before the user has picked one: it follows the
+ * OS, dark to Sandstone and light to Ghost Gum. A stored pick always wins.
+ */
+export function schemeForOs(prefersDark: boolean): ThemeSchemeId {
+  return prefersDark ? DEFAULT_THEME_SCHEME_ID : "ghostGum";
+}
+
 // In the dark schemes, `field` provides input background contrast against
 // `page` (calculated as `color-mix(in srgb, black 12%, page)` resolved to hex),
 // `lineStrong` matches muted text, and `cardPressed` steps darker than `card` so
@@ -185,7 +194,7 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#61553F",
       cardPressed: "#524836",
       field: "#45403C",
-      line: "#6B5F4B",
+      line: "#74674F",
       lineStrong: "#D8CCB9",
       text: "#F7F3EC",
       textMuted: "#D8CCB9",
@@ -204,11 +213,11 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
     description: "Cool plunge-water blues against dark gorge rock.",
     mode: "dark",
     tokens: {
-      page: "#2B3F52",
-      card: "#5F432F",
-      cardPressed: "#16232D",
-      field: "#263748",
-      line: "#16232D",
+      page: "#26394B",
+      card: "#33495E",
+      cardPressed: "#283C4F",
+      field: "#213242",
+      line: "#435A70",
       lineStrong: "#A7BBC9",
       text: "#EAF1F6",
       textMuted: "#A7BBC9",
@@ -232,14 +241,14 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#3A4D45",
       cardPressed: "#2A3A34",
       field: "#27362F",
-      line: "#212E29",
+      line: "#4A6157",
       lineStrong: "#B4C8BC",
       text: "#EAF2EC",
       textMuted: "#B4C8BC",
       accent: "#DAB084",
       warning: "#E6AAA3",
       success: "#8FBE86",
-      neutral: "#A8C4A1",
+      neutral: "#D3DDD0",
       inverse: "#EAF2EC",
       onInverse: INK,
       onFill: INK,
@@ -260,10 +269,10 @@ export const THEME_SCHEMES: Record<ThemeSchemeId, ThemeScheme> = {
       card: "#F9FAF6",
       cardPressed: "#E0E4DB",
       field: "#F9FAF6",
-      line: "#D5DAD0",
+      line: "#BCC3B6",
       lineStrong: "#7A857C",
       text: "#252A26",
-      textMuted: "#4C554D",
+      textMuted: "#3F4740",
       accent: "#778D7C",
       warning: "#C2735A",
       success: "#7E8E3E",
@@ -361,6 +370,34 @@ export function normalizeImportMergePolicy(
     if (typeof v === "string" && VALID_MERGE_VALUES.has(v)) result[field] = v;
   }
   return result as unknown as import("./mergePlace.js").PlaceMergePolicy;
+}
+
+/**
+ * The scheme the user picked, or null when none is stored. A missing or
+ * unreadable value is not a pick: `normalizeUserUiPreferences` fills it with
+ * the default, which would hide from a client that the account has no
+ * preference and the OS should decide.
+ */
+export function storedThemeSchemeId(value: unknown): ThemeSchemeId | null {
+  return typeof value === "object" && value !== null
+    ? normalizeThemeSchemeId((value as Record<string, unknown>).themeSchemeId)
+    : null;
+}
+
+/**
+ * `normalizeUserUiPreferences` for the wire and for writing back: the scheme is
+ * present only when the user picked one, so "no pick" survives a round trip and
+ * saving any other preference does not store the default as a pick.
+ */
+export function normalizeUserUiPreferencesKeepingNoPick(value: unknown): Omit<
+  UserUiPreferences,
+  "themeSchemeId"
+> & {
+  themeSchemeId?: ThemeSchemeId;
+} {
+  const { themeSchemeId: _filled, ...rest } = normalizeUserUiPreferences(value);
+  const picked = storedThemeSchemeId(value);
+  return picked ? { ...rest, themeSchemeId: picked } : rest;
 }
 
 export function normalizeUserUiPreferences(value: unknown): UserUiPreferences {

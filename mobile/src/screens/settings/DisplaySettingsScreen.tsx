@@ -32,6 +32,7 @@ import {
   type TextScale,
   makeStyles,
   useTheme,
+  wash,
 } from "../../theme";
 import type { TUser } from "../../api/types";
 import {
@@ -59,7 +60,7 @@ export function DisplaySettingsScreen() {
   const { accountState } = useAccountState();
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -170,7 +171,7 @@ function SchemeCard({
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected }}
-      accessibilityLabel={scheme.name}
+      accessibilityLabel={`${scheme.name}, ${scheme.mode}`}
       onPress={onPress}
       style={({ pressed }) => [
         styles.scheme,
@@ -188,9 +189,12 @@ function SchemeCard({
           ),
         )}
       </View>
-      <Text style={styles.schemeName} numberOfLines={1}>
-        {scheme.name}
-      </Text>
+      <View style={styles.schemeLabel}>
+        <Text style={styles.schemeName} numberOfLines={1}>
+          {scheme.name}
+        </Text>
+        <Text style={styles.schemeMode}>{scheme.mode}</Text>
+      </View>
       {selected ? <Icon idea="done" size={16} color={theme.accent} /> : null}
     </Pressable>
   );
@@ -211,7 +215,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   },
   schemeSelected: {
     borderColor: theme.accent,
-    backgroundColor: withAlpha(theme.accent, 0.1),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   schemePressed: { backgroundColor: theme.cardPressed },
   swatches: { flexDirection: "row", gap: spacing(0.5) },
@@ -225,5 +229,8 @@ const useStyles = makeStyles((theme, textRole) => ({
     borderWidth: 1,
     borderColor: theme.line,
   },
-  schemeName: { ...textRole.rowTitle, flex: 1, color: theme.text },
+  schemeLabel: { flex: 1 },
+  schemeName: { ...textRole.rowTitle, color: theme.text },
+  // "light" or "dark": what the name alone does not say.
+  schemeMode: { ...textRole.detail, color: theme.textMuted },
 }));

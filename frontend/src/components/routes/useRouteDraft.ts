@@ -46,6 +46,8 @@ export type RouteDraftHandle = {
    *  it belongs here rather than being applied to the saved route. */
   reverse: () => void;
   undo: () => void;
+  /** Empty the line. Undoable, unlike `reset`, which starts a new one. */
+  clear: () => void;
   reset: (
     route?: { points: RoutePoint[]; anchors?: number[] | null } | null,
   ) => void;
@@ -147,6 +149,7 @@ export function useRouteDraft(): RouteDraftHandle {
       [commit],
     ),
     undo,
+    clear: useCallback(() => commit(() => emptyDraft), [commit]),
     reset,
   };
 }

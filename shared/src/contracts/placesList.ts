@@ -6,7 +6,7 @@
 import type { IconIdea } from "../icons.js";
 import { placeSortLabel } from "../placeFilterOptions.js";
 import type { PlaceSortKey } from "../placeFilter.js";
-import type { ContractPlatform, ScreenContract } from "./types.js";
+import type { ClientOnly, ContractPlatform, ScreenContract } from "./types.js";
 
 export const PLACES_LIST = {
   id: "places.list",
@@ -24,7 +24,7 @@ export const PLACES_LIST = {
       key: "listHead",
       on: "web",
       reason:
-        "It carries the keyboard's range-selection hint, which a touch screen has no use for. Logjam GPS names a sort that is not the default in the filter note instead.",
+        "It carries the keyboard's range-selection hint, which a touch screen can't use. Logjam GPS names a sort that is not the default in the filter note instead.",
     },
     {
       key: "truncated",
@@ -73,23 +73,36 @@ export const PLACES_ADD = {
       key: "importFile",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
     {
       key: "importRopewiki",
       on: "web",
       reason:
-        "Logjam GPS has no place importer. Its first-run empty state sends the user to Logjam Web.",
+        "Importing a spreadsheet is desk work: the file is on a computer. Logjam GPS's first-run empty state sends the user to Logjam Web.",
     },
   ],
   copy: {
     add: "Add a place",
-    importFile: "Import from file",
+    importFile: "Import from CSV",
     importRopewiki: "Import from RopeWiki",
     importingRopewiki: "Importing from RopeWiki…",
     menu: "Add places",
   },
 } as const satisfies ScreenContract;
+
+/**
+ * The first-run dialog offering to load the NSW place database or import the
+ * user's own files. Not a menu entry, so not a `PLACES_ADD` section.
+ */
+export const PLACES_ONBOARDING = [
+  {
+    id: "welcomeDialog",
+    on: "web",
+    reason:
+      "Loading RopeWiki and importing files is desk work, like the imports in the Add menu. Logjam GPS's first-run empty state sends the user to Logjam Web for it.",
+  },
+] as const satisfies readonly ClientOnly[];
 
 /** The glyph of each way in, the same idea on both clients. Exhaustive by
  *  type, so an entry cannot be added without one. */
@@ -109,10 +122,12 @@ export function placesCountLabel(count: number): string {
 
 /**
  * Logjam GPS's hero: the size of the whole collection, whatever is filtered.
+ * Empty it is "0 places", so the first-run empty state's "No places yet" is
+ * the only line saying so.
  * Logjam Web's hero is `PLACES_LIST.title`.
  */
 export function placesHeroTitle(count: number): string {
-  return count === 0 ? PLACES_LIST.copy.firstRunTitle : placesCountLabel(count);
+  return placesCountLabel(count);
 }
 
 /**

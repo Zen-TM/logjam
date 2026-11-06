@@ -1,7 +1,8 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
+  COPY_MEDIA_SETTING,
   LEADERBOARD_SETTING,
   notificationGroupLead,
   NOTIFICATION_PREFERENCES,
@@ -29,6 +30,7 @@ import {
   SectionHeader,
   SwitchRow,
   Icon,
+  ErrorState,
   LoadingState,
 } from "../../../ui";
 import CustomFieldSection from "./CustomFieldSection";
@@ -55,6 +57,8 @@ type ListPage = "placeTypes" | "tripAttributes" | "placeAttributes";
  */
 function SettingsPanel({
   currentUser,
+  currentUserError,
+  onRetryCurrentUser,
   customFieldDefs,
   onCustomFieldDefsChange,
   placeCustomFieldDefs,
@@ -64,6 +68,9 @@ function SettingsPanel({
   onCurrentUserChange,
 }: {
   currentUser: TUser | null;
+  /** Our sentence for an account load that failed; settings have nothing to show without it. */
+  currentUserError: string | null;
+  onRetryCurrentUser: () => void;
   /** The saved user, so what reads it elsewhere (Friends' leaderboard button)
    *  follows a switch here without a reload. */
   onCurrentUserChange: (user: TUser) => void;
@@ -94,6 +101,8 @@ function SettingsPanel({
     null,
   );
   const [leaderboardSaving, setLeaderboardSaving] = useState(false);
+  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
+  const [copyMediaSaving, setCopyMediaSaving] = useState(false);
 
   // Seeded from the signed-in user, during render, each time that changes.
   // `null` until the first render has done so.
@@ -107,6 +116,8 @@ function SettingsPanel({
         ...(currentUser.uiPreferences?.notifications ?? {}),
       });
       setLeaderboardOptIn(currentUser.uiPreferences?.leaderboardOptIn ?? false);
+      // On unless the account says otherwise, as the server reads it.
+      setCopyMedia(currentUser.uiPreferences?.copyPlaceMedia ?? true);
     }
   }
 
@@ -146,15 +157,31 @@ function SettingsPanel({
       onCurrentUserChange(
         await updateUserPreferences({ leaderboardOptIn: next }),
       );
-      toast.success(
-        next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left,
-      );
+      toast.done(next ? LEADERBOARD_SETTING.joined : LEADERBOARD_SETTING.left);
     } catch (err) {
       console.error(err);
       setLeaderboardOptIn(previous);
       toast.error(messageFromError(err, LEADERBOARD_SETTING.saveFailed));
     } finally {
       setLeaderboardSaving(false);
+    }
+  }
+
+  async function handleToggleCopyMedia() {
+    if (copyMedia === null) return;
+    const previous = copyMedia;
+    setCopyMedia(!previous);
+    setCopyMediaSaving(true);
+    try {
+      onCurrentUserChange(
+        await updateUserPreferences({ copyPlaceMedia: !previous }),
+      );
+    } catch (err) {
+      console.error(err);
+      setCopyMedia(previous);
+      toast.error(messageFromError(err, COPY_MEDIA_SETTING.saveFailed));
+    } finally {
+      setCopyMediaSaving(false);
     }
   }
 
@@ -189,55 +216,119 @@ function SettingsPanel({
     );
   }
 
+  /** What an account-backed section shows while the account has not loaded:
+   *  our sentence and a retry. */
+  const accountBlock = (content: ReactNode) =>
+    !currentUser && currentUserError ? (
+      <ErrorState message={currentUserError} onRetry={onRetryCurrentUser} />
+    ) : (
+      content
+    );
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
   const sections: Record<
     SectionKeysOn<typeof SETTINGS, "web">,
     () => ReactNode
   > = {
-    preferences: () => (
+    display: () => (
       <>
+        <SectionHeader title={copy.display} />
         <ThemeChooser />
-
-        {/* A heading per group, as Logjam GPS draws them: the heading is the
-            sentence's start, so each switch's label stays short. */}
-        {notifPrefs === null ? (
-          <LoadingState />
-        ) : (
-          NOTIFICATION_GROUPS.map((group) => (
-            <Fragment key={group}>
-              <SectionHeader
-                title={notificationGroupLead(group, "Logjam Web")}
-              />
-              {NOTIFICATION_PREFERENCES.filter(
-                (row) => row.group === group,
-              ).map(({ key, label }) => (
+      </>
+    ),
+    notifications: () => (
+      <>
+        <SectionHeader title={copy.notifications} />
+        {accountBlock(
+          // A lead per group, as Logjam GPS draws them: the lead is the
+          // sentence's start, so each switch's label stays short.
+          notifPrefs === null ? (
+            <LoadingState />
+          ) : (
+            NOTIFICATION_GROUPS.map((group) => (
+              <Group
+                key={group}
+                lead={notificationGroupLead(group, "Logjam Web")}
+              >
+                {NOTIFICATION_PREFERENCES.filter(
+                  (row) => row.group === group,
+                ).map(({ key, label }) => (
+                  <SwitchRow
+                    key={key}
+                    title={label}
+                    checked={notifPrefs[key]}
+                    disabled={notifSavingKey === key}
+                    disabledReason="Saving…"
+                    onChange={() => handleToggleNotif(key)}
+                  />
+                ))}
+              </Group>
+            ))
+          ),
+        )}
+      </>
+    ),
+    privacy: () => (
+      <>
+        <SectionHeader title={copy.privacy} />
+        {/* The failed account is reported once, under Notifications. */}
+        {currentUser || !currentUserError ? (
+          <>
+            <Group lead={copy.copying}>
+              {copyMedia === null ? (
+                <LoadingState />
+              ) : (
                 <SwitchRow
-                  key={key}
-                  title={label}
-                  checked={notifPrefs[key]}
-                  disabled={notifSavingKey === key}
+                  title={COPY_MEDIA_SETTING.label}
+                  description={COPY_MEDIA_SETTING.hint}
+                  checked={copyMedia}
+                  disabled={copyMediaSaving}
                   disabledReason="Saving…"
-                  onChange={() => handleToggleNotif(key)}
+                  onChange={handleToggleCopyMedia}
                 />
-              ))}
-            </Fragment>
-          ))
-        )}
-
-        <SectionHeader title="Friends" />
-        {leaderboardOptIn === null ? (
-          <LoadingState />
-        ) : (
-          <SwitchRow
-            title={LEADERBOARD_SETTING.label}
-            description={LEADERBOARD_SETTING.hint}
-            checked={leaderboardOptIn}
-            disabled={leaderboardSaving}
-            disabledReason="Saving…"
-            onChange={handleToggleLeaderboard}
-          />
-        )}
+              )}
+            </Group>
+            <Group lead={copy.friends}>
+              {leaderboardOptIn === null ? (
+                <LoadingState />
+              ) : (
+                <SwitchRow
+                  title={LEADERBOARD_SETTING.label}
+                  description={LEADERBOARD_SETTING.hint}
+                  checked={leaderboardOptIn}
+                  disabled={leaderboardSaving}
+                  disabledReason="Saving…"
+                  onChange={handleToggleLeaderboard}
+                />
+              )}
+            </Group>
+          </>
+        ) : null}
+        {/* The closing note, where Logjam GPS ends this page with what is kept
+            on the phone. */}
+        <p className={classes.privacy}>
+          Only you see your places unless you share one with a friend. Nothing
+          here leaves your account. Read the{" "}
+          <a
+            className={classes.privacyLink}
+            href="/tos.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Terms
+          </a>{" "}
+          and{" "}
+          <a
+            className={classes.privacyLink}
+            href="/privacy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy policy
+          </a>
+          .
+        </p>
       </>
     ),
     categories: () => (
@@ -292,6 +383,20 @@ function SettingsPanel({
 }
 
 const copy = SETTINGS.copy;
+
+/** A labelled run of rows under a lead line. Not a heading: the section's
+ *  title is the heading, and a second one at its level would flatten the page. */
+function Group({ lead, children }: { lead: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={classes.group}>
+      <p id={id} className={classes.lead}>
+        {lead}
+      </p>
+      {children}
+    </div>
+  );
+}
 
 const NOTIFICATION_GROUPS = [
   "email",

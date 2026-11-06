@@ -20,6 +20,7 @@ import type {
 import {
   ELEVATION_TRACK_MAX_SAMPLES,
   PLACE_SEARCH_API_PATH,
+  loadStateOf,
   tallyNotifications,
   type PlaceSearchRequest,
   type PlaceSearchResponse,
@@ -31,6 +32,7 @@ import {
 } from "./notificationReadOverrides";
 import type {
   BulkShareItem,
+  BulkShareResult,
   FriendShareRow,
   FriendShares,
   LeaderboardResponse,
@@ -676,6 +678,8 @@ export function usePlaces(enabled: boolean) {
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // True once a fetch has SUCCEEDED, not merely settled: a failed first load
+  // is `state: "failed"`, never an empty list (`loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [fetchCount, setFetchCount] = useState(0);
 
@@ -685,7 +689,10 @@ export function usePlaces(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -697,6 +704,7 @@ export function usePlaces(enabled: boolean) {
         if (cancelled) return;
         setPlaces(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
@@ -704,9 +712,7 @@ export function usePlaces(enabled: boolean) {
           setError(messageFromError(err, "Couldn't load places."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -715,7 +721,15 @@ export function usePlaces(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { places, total, loading, loaded, error, refetch };
+  return {
+    places,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 export function useSharedPlaces(enabled: boolean) {
@@ -801,7 +815,10 @@ export function useCurrentUser(enabled: boolean) {
   const [wasEnabled, setWasEnabled] = useState(enabled);
   if (wasEnabled !== enabled) {
     setWasEnabled(enabled);
-    if (!enabled) setCurrentUser(null);
+    if (!enabled) {
+      setCurrentUser(null);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -830,7 +847,10 @@ export function useCurrentUser(enabled: boolean) {
     };
   }, [enabled, fetchCount]);
 
-  const refetchCurrentUser = useCallback(() => setFetchCount((n) => n + 1), []);
+  const refetchCurrentUser = useCallback(() => {
+    setError(null);
+    setFetchCount((n) => n + 1);
+  }, []);
 
   // Synchronously replace the cached user (e.g. with the row returned by a
   // consent PATCH) so gates keyed on user fields update without a refetch gap.
@@ -860,6 +880,7 @@ export function updateUserPreferences(
     notifications: Partial<NotificationPreferences>;
     importMergePolicy: PlaceMergePolicy;
     leaderboardOptIn: boolean;
+    copyPlaceMedia: boolean;
     slopeBands: SlopeBand[];
   }>,
 ): Promise<TUser> {
@@ -1286,8 +1307,9 @@ export function useTripLogs(enabled: boolean) {
   // True owner-filtered total before the server's list cap; null until known.
   const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  // False until the first fetch settles: an empty list before then is not "no
-  // trips yet", and saying so flashes a first-run screen at every user.
+  // False until a fetch succeeds: an empty list before then is not "no trips
+  // yet", and saying so flashes a first-run screen at every user, or covers a
+  // failed load (`state: "failed"`, `loadStateOf`).
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchCount, setFetchCount] = useState(0);
@@ -1298,7 +1320,10 @@ export function useTripLogs(enabled: boolean) {
   const [requested, setRequested] = useState<number | null>(null);
   if (request !== requested) {
     setRequested(request);
-    if (request !== null) setLoading(true);
+    if (request !== null) {
+      setLoading(true);
+      setError(null);
+    }
   }
 
   useEffect(() => {
@@ -1310,16 +1335,14 @@ export function useTripLogs(enabled: boolean) {
         if (cancelled) return;
         setTripLogs(data);
         setTotal(total);
+        setLoaded(true);
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled)
-          setError(messageFromError(err, "Couldn't load trip logs."));
+        if (!cancelled) setError(messageFromError(err, "Couldn't load trips."));
       })
       .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-        setLoaded(true);
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1328,16 +1351,33 @@ export function useTripLogs(enabled: boolean) {
 
   const refetch = useCallback(() => setFetchCount((n) => n + 1), []);
 
-  return { tripLogs, total, loading, loaded, error, refetch };
+  return {
+    tripLogs,
+    total,
+    loading,
+    loaded,
+    state: loadStateOf(loaded, error),
+    error,
+    refetch,
+  };
 }
 
 // ── Media (object storage) ────────────────────────────────────
 
 type MediaUploadMeta = {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  /** Null on a standalone file (`linkedType: "none"`), which names its `origin` instead. */
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  /** What the API checks against `origin` (shared `parseMediaMetadata`). */
+  metadata?: Record<string, unknown>;
   filename: string;
   mediaType: string;
+  /** A trip's copy of a recorded track: the recording it came from. */
+  sourceMediaId?: string;
+  /** A track this one takes over from, deleted with it at confirm. */
+  replaces?: string;
 };
 
 type PresignMediaResponse = {
@@ -1398,16 +1438,28 @@ export function putToPresignedUrl(
 // `thumbnail` is the client-generated JPEG for images/videos, or null for tracks.
 export async function uploadMedia(params: {
   linkedType: MediaLinkedType;
-  linkedId: string;
+  linkedId: string | null;
+  origin?: MediaOrigin;
+  displayName?: string;
+  metadata?: Record<string, unknown>;
   file: File;
   mediaType: string;
   thumbnail: Blob | null;
+  sourceMediaId?: string;
+  /** The uploaded track on this place that this one replaces. The API swaps
+   *  them when the upload is confirmed, so a failed upload keeps the old one. */
+  replaces?: string;
 }): Promise<MediaItem> {
   const meta: MediaUploadMeta = {
     linkedType: params.linkedType,
     linkedId: params.linkedId,
+    ...(params.origin && { origin: params.origin }),
+    ...(params.displayName && { displayName: params.displayName }),
+    ...(params.metadata && { metadata: params.metadata }),
     filename: params.file.name,
     mediaType: params.mediaType,
+    ...(params.sourceMediaId && { sourceMediaId: params.sourceMediaId }),
+    replaces: params.replaces,
   };
   // Declared sizes are signed into the presigned PUT's Content-Length, so the
   // uploaded bytes must match what's declared here (server caps per category).
@@ -1439,6 +1491,28 @@ export async function uploadMedia(params: {
 
 export function deleteMedia(id: string): Promise<void> {
   return apiFetch<void>(`/media/${id}`, { method: "DELETE" });
+}
+
+/**
+ * Move a standalone file (an import or a recording) onto a place as its route,
+ * or off it with null. The same row changes parent, so the file survives being
+ * replaced; a photo or an upload has no life apart from its parent and the API
+ * refuses to move one.
+ */
+export function linkMediaToPlace(
+  id: string,
+  placeId: string | null,
+  /** The uploaded track on that place this one takes over from; the API
+   *  deletes it in the same step as the move. */
+  replaces?: string,
+): Promise<MediaItem> {
+  return apiFetch<MediaItem>(`/media/${id}/link`, {
+    method: "PATCH",
+    body:
+      placeId === null
+        ? { linkedType: "none" }
+        : { linkedType: "place", linkedId: placeId, replaces },
+  });
 }
 
 // ── Standalone files ──────────────────────────────────────────
@@ -1722,6 +1796,27 @@ export function sharePlaceWith(
   });
 }
 
+/**
+ * Share many places with many friends in one request. Re-sharing is a no-op the
+ * server counts rather than a 409, which is why the bulk dialog uses this and
+ * not `sharePlaceWith` in a loop. One `batchId` makes the recipient's inbox one
+ * row.
+ */
+export function bulkSharePlaces(
+  placeIds: string[],
+  recipientIds: string[],
+): Promise<BulkShareResult> {
+  return apiFetch<BulkShareResult>("/bulk-share", {
+    method: "POST",
+    body: {
+      items: placeIds.map((entityId) => ({ entityType: "place", entityId })),
+      recipientIds,
+      batchId: crypto.randomUUID(),
+      copyCount: 0,
+    },
+  });
+}
+
 export function unsharePlaceWith(
   placeId: string,
   userId: string,
@@ -1885,9 +1980,9 @@ export type CopiedPlace = TPlace & {
  *
  * NO `copyMedia` IN THE BODY, deliberately: the server then falls back to the
  * account's `uiPreferences.copyPlaceMedia`, which is what the user last chose
- * on Logjam GPS. Sending a value here would silently override a preference Logjam Web
- * has no switch for. The response says what actually happened to the media,
- * which is what the caller reports.
+ * in Settings. Sending a value here would silently override that preference.
+ * The response says what actually happened to the media, which is what the
+ * caller reports.
  */
 export function copyPlace(placeId: string): Promise<CopiedPlace> {
   return apiFetch<CopiedPlace>(`/places/${placeId}/copy`, { method: "POST" });
@@ -2062,7 +2157,7 @@ export function useTopoExports(enabled: boolean, pollMs: number = 5000) {
       .catch((err) => {
         console.error(err);
         if (!cancelled)
-          setError(messageFromError(err, "Couldn't load exports."));
+          setError(messageFromError(err, "Couldn't load your maps."));
       })
       .finally(() => {
         if (!cancelled) {
@@ -2096,6 +2191,6 @@ export function getTopoExport(id: string): Promise<TopoExportJobView> {
   return apiFetch<TopoExportJobView>(`/topo-exports/${id}`);
 }
 
-// Renders `v3a4 III`, omitting unset segments. Re-exported from
+// Renders `v3a4III`, omitting unset segments. Re-exported from
 // shared/src/canyonGrade.ts so Logjam Web and Logjam GPS format identically.
 export { formatCanyonGrade } from "@logjam/shared";

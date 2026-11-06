@@ -30,6 +30,17 @@
   gap: var(--space-1);
 }
 
+/* Where a list's loading, failed or empty state sits: centred in the space the
+   list would fill, nudged a little above the middle. */
+.listArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 var(--gutter) 15%;
+}
+
 .state {
   composes: detail from "../textRoles.generated.module.css";
   display: flex;
@@ -113,6 +124,30 @@
   flex: 1;
   min-width: 0;
   padding-block: var(--space-1);
+}
+
+/* The one verb a toast offers, as text on the inverted surface: a button with a
+   fill would read as a second toast. */
+.toastAction {
+  flex: none;
+  min-height: var(--control-sm);
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-on-inverse);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.toastAction:hover {
+  background: color-mix(in srgb, var(--color-on-inverse) 10%, transparent);
+}
+
+/* The global ring is the text colour, which IS the inverted surface. */
+.toastAction:focus-visible {
+  outline-color: var(--color-on-inverse);
 }
 
 /* A status is READ, not pressed, so it has no fill and no edge: text, and a dot

@@ -5,6 +5,11 @@ import { Tooltip } from "./Tooltip";
 
 type ButtonVariant = "filled" | "outline" | "danger" | "destructive" | "plain";
 
+/** The warning fill always carries a glyph: that, not its colour, tells it from the accent (shared/DESIGN.md §7). */
+type VariantIcon =
+  | { variant: "destructive"; icon: Glyph }
+  | { variant?: Exclude<ButtonVariant, "destructive">; icon?: Glyph };
+
 /**
  * A control that can be disabled says why (shared/DESIGN.md §5), so `disabled`
  * and `disabledReason` come as a pair: the compiler refuses a bare
@@ -24,7 +29,7 @@ export type Disablable =
  * request runs.
  *
  * `disabledReason` (shared/DESIGN.md §5) says why a disabled button is, and what to do: it
- * shows as a tooltip on hover and on focus and a screen reader hears it as the
+ * shows as a tooltip on hover, on focus and on a press (a touch screen never hovers), and a screen reader hears it as the
  * description. A button that carries one stays FOCUSABLE (`aria-disabled`, and
  * the press does nothing), because a disabled button can neither be tabbed to
  * nor hovered for its tooltip.
@@ -43,11 +48,10 @@ export function Button({
   type = "button",
   ...rest
 }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "disabled"> &
-  Disablable & {
-    variant?: ButtonVariant;
+  Disablable &
+  VariantIcon & {
     compact?: boolean;
     busy?: boolean;
-    icon?: Glyph;
     trailingIcon?: Glyph;
     children: ReactNode;
     ref?: Ref<HTMLButtonElement>;
@@ -84,7 +88,7 @@ export function Button({
   );
   if (!explained) return button();
   return (
-    <Tooltip content={disabledReason as string}>
+    <Tooltip content={disabledReason as string} openOnPress>
       {(describedById) => button(describedById)}
     </Tooltip>
   );
@@ -167,7 +171,7 @@ export function IconButton({
   );
   if (!explained) return button();
   return (
-    <Tooltip content={`${label} — ${disabledReason}`}>
+    <Tooltip content={`${label} — ${disabledReason}`} openOnPress>
       {(describedById) => button(describedById)}
     </Tooltip>
   );

@@ -72,6 +72,9 @@ function popover(
   );
 }
 
+const chip = (name: string) =>
+  screen.getByRole("radio", { name: new RegExp(`^${name}`) });
+
 const onSharpened = () =>
   screen.queryByRole("button", { name: "Back to terrain" });
 
@@ -95,13 +98,46 @@ describe("the Layers popover's start view", () => {
 
   // Mutation: reset the view only in `close()`, and closing with the Layers
   // button (which flips `open` itself) reopens on the sharpened areas.
-  it("reopens on Overlays however it was closed", () => {
+  it("reopens a sub-view on its tab however it was closed", () => {
     const start = { view: "sharpened" } as const;
     const { rerender } = render(popover(false, null));
     rerender(popover(true, start));
     rerender(popover(false, start));
     rerender(popover(true, start));
     expect(onSharpened()).toBeNull();
+    expect(chip("Terrain").getAttribute("aria-checked")).toBe("true");
+  });
+});
+
+describe("the Layers popover's last tab", () => {
+  // Mutation: start `view` on "overlays" in LayersPopover, and the first open
+  // is not on Map (as Logjam GPS's sheet is).
+  it("opens on Map the first time", () => {
+    render(popover(true, null));
+    expect(chip("Map").getAttribute("aria-checked")).toBe("true");
+  });
+
+  // Mutation: reset the view to "overlays" when the popover closes (the old
+  // behaviour), and it reopens on the first tab instead of the last one used.
+  it.each(["Map", "Terrain"])(
+    "reopens on %s after the Layers button closes it",
+    (tab) => {
+      const { rerender } = render(popover(true, null));
+      fireEvent.click(chip(tab));
+      expect(chip(tab).getAttribute("aria-checked")).toBe("true");
+      rerender(popover(false, null));
+      rerender(popover(true, null));
+      expect(chip(tab).getAttribute("aria-checked")).toBe("true");
+    },
+  );
+
+  it("reopens on the tab after the in-popover close too", () => {
+    const { rerender } = render(popover(true, null));
+    fireEvent.click(chip("Map"));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    rerender(popover(false, null));
+    rerender(popover(true, null));
+    expect(chip("Map").getAttribute("aria-checked")).toBe("true");
   });
 });
 

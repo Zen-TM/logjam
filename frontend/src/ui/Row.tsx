@@ -1,4 +1,6 @@
 import {
+  createContext,
+  useContext,
   useId,
   type CSSProperties,
   type HTMLAttributes,
@@ -7,6 +9,8 @@ import {
 import { avatarInitials, friendAvatarHue } from "@logjam/shared";
 import classes from "./Row.module.css";
 import { Icon, type Glyph } from "./Icon";
+import { Tooltip } from "./Tooltip";
+import { pressOutsideControls } from "./cardPress";
 
 /**
  * A row's tile that is also its checkbox (DESIGN.md): the tile at rest, a
@@ -101,13 +105,52 @@ export function Avatar({ username }: { username: string }) {
   );
 }
 
+const InRowList = createContext(false);
+
+/**
+ * A list of rows, as one tab stop with arrow keys (`useListKeys`) and as a
+ * `list` to assistive tech, so a screen reader says "3 of 35". The page opts in
+ * by drawing its rows in one: nothing is inferred from the markup, so a page
+ * that forgets does not quietly lose its arrow keys without a test noticing
+ * (`e2e/a11y.spec.ts`). Only rows and `ListEnd` may sit directly inside.
+ */
+export function RowList({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  const hintId = useId();
+  return (
+    <>
+      <span id={hintId} className="visually-hidden">
+        Arrow keys move between rows, Space selects, Shift+F10 opens actions.
+      </span>
+      <div
+        role="list"
+        data-list=""
+        aria-describedby={hintId}
+        className={[classes.rowList, className].filter(Boolean).join(" ")}
+      >
+        <InRowList.Provider value>{children}</InRowList.Provider>
+      </div>
+    </>
+  );
+}
+
 /**
  * The last thing in a list: the same button its empty state offers ("Add a
  * place type", "Make a GeoPDF"), so adding is where the eye ends up after
  * scrolling to the bottom, not only when there is nothing to scroll.
  */
 export function ListEnd({ children }: { children: ReactNode }) {
-  return <div className={classes.listEnd}>{children}</div>;
+  const inList = useContext(InRowList);
+  return (
+    <div className={classes.listEnd} role={inList ? "listitem" : undefined}>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -129,14 +172,18 @@ export function Row({
   subtitle,
   description,
   trailing,
+  badge,
   footer,
   onOpen,
+  onPress,
+  onClick,
   href,
   download,
   external = false,
   selected = false,
   accentEdge = false,
   disabled = false,
+  disabledReason,
   className,
   ...rest
 }: Omit<HTMLAttributes<HTMLDivElement>, "title"> & {
@@ -147,11 +194,22 @@ export function Row({
    *  glyph says to a sighted reader (a status). */
   description?: string;
   trailing?: ReactNode;
+  /** How many are waiting on this row, drawn before `trailing`. A count is a
+   *  badge, never the subtitle; zero is absent. Word it for assistive tech in
+   *  `aria-label` ("Inbox, 3 unread"). */
+  badge?: number;
   /** Controls that answer the row (Accept, Decline), on a line of their own
    *  INSIDE the card, under the text. Below the card they read as a caption
    *  for the next row down. */
   footer?: ReactNode;
   onOpen?: () => void;
+  /**
+   * A press on the card, anywhere but a control inside it (a ?, a >, the
+   * switch itself), runs this: the whole card is the target of the switch in
+   * `trailing`, which stays the one control in the accessibility tree and the
+   * keyboard path, as `SwitchRow` does.
+   */
+  onPress?: () => void;
   /**
    * The row IS a link: a file to download, a page to open. Same anatomy and
    * the same stretched hit area as `onOpen`, but an anchor — so middle-click,
@@ -170,7 +228,11 @@ export function Row({
    *  tone instead (a form owed within the week). */
   accentEdge?: boolean | "warning";
   disabled?: boolean;
+  /** Why a disabled row is, as `Button`'s: the row stays focusable and says it
+   *  on hover and focus instead of going silently grey. */
+  disabledReason?: string;
 }) {
+  const inList = useContext(InRowList);
   const subtitleId = useId();
   const descriptionId = useId();
   const describedBy =
@@ -178,11 +240,20 @@ export function Row({
       .filter(Boolean)
       .join(" ") || undefined;
   return (
+    // The click is a convenience over the switch's own button (see `onPress`).
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
     <div
       className={[classes.row, className].filter(Boolean).join(" ")}
+      data-pressable={(onPress != null && !disabled) || undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        if (onPress && !disabled) pressOutsideControls(event, onPress);
+      }}
       data-selected={selected}
       data-accent-edge={String(accentEdge)}
       data-disabled={disabled}
+      data-row=""
+      role={inList ? "listitem" : undefined}
       {...rest}
     >
       {leading != null && <div className={classes.leading}>{leading}</div>}
@@ -190,6 +261,7 @@ export function Row({
         {href ? (
           <a
             className={classes.open}
+            data-row-open=""
             href={href}
             download={download}
             {...(external
@@ -199,10 +271,26 @@ export function Row({
           >
             <span className={classes.title}>{title}</span>
           </a>
+        ) : onOpen && disabled && disabledReason ? (
+          <Tooltip content={disabledReason}>
+            {(tipId) => (
+              <button
+                type="button"
+                className={classes.open}
+                aria-disabled
+                aria-describedby={[tipId, describedBy]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <span className={classes.title}>{title}</span>
+              </button>
+            )}
+          </Tooltip>
         ) : onOpen ? (
           <button
             type="button"
             className={classes.open}
+            data-row-open=""
             onClick={onOpen}
             disabled={disabled}
             aria-describedby={describedBy}
@@ -223,7 +311,16 @@ export function Row({
           </span>
         )}
       </div>
-      {trailing != null && <div className={classes.trailing}>{trailing}</div>}
+      {(trailing != null || !!badge) && (
+        <div className={classes.trailing}>
+          {!!badge && (
+            <span className={classes.badge} aria-hidden>
+              {badge}
+            </span>
+          )}
+          {trailing}
+        </div>
+      )}
       {footer != null && <div className={classes.footer}>{footer}</div>}
     </div>
   );

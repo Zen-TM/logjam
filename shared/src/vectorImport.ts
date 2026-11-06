@@ -6,6 +6,8 @@
 // errors are STATIC strings and must never echo file content or coordinate
 // values (test: shared/src/vectorImport.test.ts).
 import { XMLParser, XMLValidator } from "fast-xml-parser";
+import { messageFromError } from "./apiErrors.js";
+import { MEDIA_SIZE_CAPS } from "./media.js";
 
 export type ImportedPosition = number[]; // [lon, lat] or [lon, lat, ele]
 
@@ -61,6 +63,33 @@ export const IMPORT_ERRORS = {
   tooLarge: "File is too large to import",
   unsupportedExtension: "Unsupported file type — use GPX, KML, or GeoJSON",
 } as const;
+
+/**
+ * What each `IMPORT_ERRORS` message says to the user. The constants are for
+ * code and the corpus goldens; these are the sentences a client shows.
+ */
+export const IMPORT_SENTENCES: Record<keyof typeof IMPORT_ERRORS, string> = {
+  unparseable:
+    "We couldn't read that file. Check that it opens in another app.",
+  invalidCoordinates:
+    "That file has a point in an impossible place. Try exporting it again.",
+  noFeatures: "There's no line or point in that file to show on the map.",
+  tooManyPositions:
+    "That file has too many points. Try saving a shorter section.",
+  tooLarge: `That file is over ${MEDIA_SIZE_CAPS.track / 1024 / 1024} MB. Try saving a shorter section.`,
+  unsupportedExtension: "That file isn't a GPX, KML or GeoJSON file.",
+};
+
+/**
+ * What to tell the user when an import failed: the parser's own failures in
+ * `IMPORT_SENTENCES`, anything else through `messageFromError`.
+ */
+export function importFailureMessage(err: unknown, fallback: string): string {
+  const key = (
+    Object.keys(IMPORT_ERRORS) as (keyof typeof IMPORT_ERRORS)[]
+  ).find((each) => err instanceof Error && err.message === IMPORT_ERRORS[each]);
+  return key ? IMPORT_SENTENCES[key] : messageFromError(err, fallback);
+}
 
 // ── shared helpers ──────────────────────────────────────────────────────────
 

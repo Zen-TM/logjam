@@ -48,9 +48,10 @@ test("an owned place's row has every verb, and Edit opens the form on its page",
     "Open place",
     "Log a trip here",
     "Edit place",
-    "Sharpen the area here",
-    "Export the area here",
-    "Share or export…",
+    "Sharpen an area here",
+    "Make a map here",
+    "Export…",
+    "Share…",
     "Delete place",
   ]);
 
@@ -76,8 +77,9 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
   const menu = page.getByRole("menu");
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Open place",
-    "Sharpen the area here",
-    "Export the area here",
+    "Sharpen an area here",
+    "Make a map here",
+    "Export…",
     "Save a copy",
     "Save a copy and remove",
     "Remove from my account",
@@ -89,4 +91,26 @@ test("a shared place's row offers to keep and to let go, never to edit or delete
     page.getByRole("heading", { name: "Remove shared place?" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
+});
+
+// Mutation: drop the owner-only PlacePicker or the Unlink menu entry from the
+// "linkedPlaces" section, or the MediaUpload from "photos", in PlaceDetailPanel.
+test("an owner links and unlinks places, and adds photos, on the place's page", async ({
+  page,
+}) => {
+  const aside = await openPlaces(page);
+  const other = (
+    (await aside.locator("[data-place-id] >> nth=1").innerText()) || ""
+  ).split("\n")[0];
+  await aside.locator("[data-place-id]").first().click();
+
+  await expect(aside.getByText("Drop files or click to upload")).toBeVisible();
+
+  await aside.getByRole("combobox", { name: "Link a place" }).fill(other);
+  await page.getByRole("option", { name: other, exact: true }).first().click();
+  await expect(page.getByText(`Linked to ${other}.`)).toBeVisible();
+
+  await aside.getByRole("button", { name: `Options for ${other}` }).click();
+  await page.getByRole("menuitem", { name: "Unlink from this place" }).click();
+  await expect(page.getByText("Unlinked.")).toBeVisible();
 });

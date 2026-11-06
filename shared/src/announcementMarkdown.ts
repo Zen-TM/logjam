@@ -11,7 +11,7 @@
 //
 // Heading levels are relative: the shallowest heading in a message is level
 // 1, so a body that starts at `##` reads the same as one that starts at `#`.
-import { Lexer, type Token, type Tokens } from "marked";
+import { getDefaults, Lexer, type Token, type Tokens } from "marked";
 
 export type MessageInline =
   | { type: "text"; text: string }
@@ -45,7 +45,12 @@ const LINK_SCHEMES = /^(https?|mailto):/i;
 const NAMED_ENTITY = /&[a-z][a-z0-9]*;/i;
 const ANY_ENTITY = /&(#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 
-export function parseMessageMarkdown(markdown: string): ParsedMessage {
+export function parseMessageMarkdown(
+  markdown: string,
+  // `breaks`: a single newline is a line break, as a note typed in a plain
+  // text field has always drawn; an announcement keeps Markdown's space.
+  { breaks = false }: { breaks?: boolean } = {},
+): ParsedMessage {
   const dropped = new Set<string>();
   const drop = (what: string) => dropped.add(what);
 
@@ -194,7 +199,7 @@ export function parseMessageMarkdown(markdown: string): ParsedMessage {
       }
     });
 
-  const tokens = Lexer.lex(markdown);
+  const tokens = Lexer.lex(markdown, { ...getDefaults(), breaks });
   // Over every heading blocks() draws, a blockquote's included.
   const depths = (ts: Token[]): number[] =>
     ts.flatMap((t) =>

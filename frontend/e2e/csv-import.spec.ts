@@ -35,11 +35,11 @@ async function openImportDialog(page: Page) {
   });
   await page.getByRole("button", { name: "Places", exact: true }).click();
   await page.getByRole("button", { name: /^Add/ }).first().click();
-  await page.getByRole("menuitem", { name: "Import from file" }).click();
+  await page.getByRole("menuitem", { name: "Import from CSV" }).click();
   // Not the Undo confirm: that one is an alertdialog.
   const dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByRole("heading", { name: "Import data" }),
+    dialog.getByRole("heading", { name: "Import from CSV" }),
   ).toBeVisible();
   return dialog;
 }
@@ -67,7 +67,7 @@ async function undoWhatWasImported(page: Page, dialog: Locator) {
   await undo.click();
   await page
     .getByRole("alertdialog", { name: "Undo this import?" })
-    .getByRole("button", { name: "Undo the import" })
+    .getByRole("button", { name: "Undo this import" })
     .click();
   await expect(dialog).toHaveCount(0);
 }
@@ -133,7 +133,7 @@ test("a logbook: the match review, import, Undo", async ({ page }) => {
       .setInputFiles(corpus("logbooks/maintainer-logbook.csv"));
 
     await expect(
-      dialog.getByRole("heading", { name: /^Logbook columns/ }),
+      dialog.getByRole("heading", { name: /^Trip columns/ }),
     ).toBeVisible({ timeout: 15_000 });
     const roles = {
       Name: "name",
@@ -197,10 +197,10 @@ test("a logbook: the match review, import, Undo", async ({ page }) => {
     // 10 rows, one with a date nobody can read, two discarded.
     await expectTallies(dialog, {
       Imported: "7",
-      "Couldn't be read": "1",
       "Linked to a place": "7",
       Discarded: "2",
     });
+    await expect(dialog.getByText("Skipped rows")).toBeVisible();
 
     await undoWhatWasImported(page, dialog);
     await expect(

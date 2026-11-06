@@ -3,6 +3,7 @@
 // unchanged: the confirm copy, the share promise, the refetch and quota refresh.
 import { useMemo, useState } from "react";
 import {
+  incomingLabel,
   LIDAR_JOB_COPY,
   lidarJobSharePromise,
   removeShareConfirm,
@@ -62,9 +63,9 @@ export default function SharpenedAreasView({
   friends: TFriend[];
   /** False until the first fetch of completed areas settles (shared/DESIGN.md §11). */
   loaded: boolean;
-  /** Arms the pick, as the Make a map menu does. */
+  /** Opens the dialog for a new area, as the tray's Sharpen an area does. */
   onSharpen: () => void;
-  /** Export an area, over a sharpened area's footprint. */
+  /** Make a map, over a sharpened area's footprint. */
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyTo: (footprint: GeoJsonPolygonal) => void;
   onRefetchCompletedTopoJobs: () => void;
@@ -93,7 +94,7 @@ export default function SharpenedAreasView({
       ? [
           {
             id: "export",
-            label: "Export this area…",
+            label: "Make a map…",
             icon: "export",
             onSelect: () => onExportArea(job),
           },
@@ -121,10 +122,13 @@ export default function SharpenedAreasView({
           danger: true,
           onSelect: () =>
             ask({
-              title: `Delete ${label}?`,
-              message:
-                "The sharpened area is deleted from your account, and friends you shared it with lose it too. Exports already made from it stay until they expire; one still waiting to start is cancelled.",
-              confirmLabel: "Delete",
+              copy: {
+                confirmTitle: `Delete ${label}?`,
+                confirmBody:
+                  "The sharpened area is deleted from your account, and friends you shared it with lose it too. Map files already made from it stay until they expire; one still waiting to start is cancelled.",
+                confirmLabel: "Delete",
+                tone: "destructive",
+              },
               run: async () => {
                 try {
                   await apiFetch(`/topo-jobs/${job.jobId}`, {
@@ -137,7 +141,7 @@ export default function SharpenedAreasView({
                   toast.error(
                     messageFromError(
                       err,
-                      "Couldn't delete the sharpened area. Please try again.",
+                      "Couldn't delete the sharpened area. Try again.",
                     ),
                   );
                 }
@@ -162,14 +166,16 @@ export default function SharpenedAreasView({
         icon: "close",
         onSelect: () =>
           ask({
-            title: confirm.title,
-            message: confirm.body,
-            confirmLabel: "Remove",
-            tone: "primary",
+            copy: {
+              confirmTitle: confirm.title,
+              confirmBody: confirm.body,
+              confirmLabel: "Remove",
+              tone: "filled",
+            },
             run: async () => {
               try {
                 await unshareEntityWith("topoJob", job.jobId, "me");
-                toast.success(`${label} removed.`);
+                toast.done(`${label} removed.`);
                 onRefetchCompletedTopoJobs();
               } catch (err) {
                 console.error(err);
@@ -197,11 +203,14 @@ export default function SharpenedAreasView({
             </span>
           )}
         </div>
+        <Button compact variant="filled" icon="lidar" onClick={onSharpen}>
+          {LIDAR_JOB_COPY.make}
+        </Button>
         <IconButton icon="close" label="Close" onClick={onClose} />
       </div>
       <div className={classes.body}>
         {!loaded && <LoadingState label="Loading your sharpened areas…" />}
-        {loaded && completedTopoJobs.length === 0 && (
+        {loaded && completedTopoJobs.length === 0 && beingMade.length === 0 && (
           <div className={classes.emptyLine}>
             <span>None yet. Pick an area and sharpen it.</span>
           </div>
@@ -226,7 +235,7 @@ export default function SharpenedAreasView({
               trailing={
                 <>
                   {job.syncRole !== "owner" && (
-                    <StatusPill label="Shared" tone="outline" />
+                    <StatusPill label={incomingLabel(null)} tone="outline" />
                   )}
                   <Menu
                     label={`Actions for ${label}`}
@@ -246,9 +255,6 @@ export default function SharpenedAreasView({
             />
           );
         })}
-        <Button compact variant="filled" icon="lidar" onClick={onSharpen}>
-          {LIDAR_JOB_COPY.make}
-        </Button>
         <MakingFooter
           items={beingMade}
           onDismiss={(item) => onDismissActiveJob(item.id)}

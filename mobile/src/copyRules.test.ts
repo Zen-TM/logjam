@@ -41,11 +41,6 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     reason: "the terms and the agreement are the service's, on both clients",
   },
   {
-    file: "screens/settings/NotificationSettingsScreen.tsx",
-    text: "Notifications from Logjam",
-    reason: "the service sends them, to every client",
-  },
-  {
     file: "saved/SavedScreen.tsx",
     text: "Couldn't reach Logjam",
     reason: "the service, in our words for a failed request",
@@ -56,6 +51,32 @@ const ALLOWED: { file: string; text: string; reason: string }[] = [
     reason: "the service clips the map, not this phone",
   },
 ];
+
+// Strings still to reword to the glossary; delete an entry with its string.
+const BASELINE: { file: string; text: string; rule: string }[] = [];
+
+const baselined = (file: string, rule: string, text: string) =>
+  BASELINE.some(
+    (entry) =>
+      entry.file === file && entry.rule === rule && text.includes(entry.text),
+  );
+
+/** Every rule a user-facing string breaks, bar what ALLOWED excuses. */
+function hits() {
+  return [...sources(SRC), APP].flatMap((path) =>
+    userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
+      ({ line, text }) =>
+        copyViolations(text)
+          .filter(
+            () =>
+              !ALLOWED.some(
+                (a) => relative(SRC, path) === a.file && text.includes(a.text),
+              ),
+          )
+          .map((rule) => ({ file: relative(SRC, path), line, rule, text })),
+    ),
+  );
+}
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -77,6 +98,22 @@ describe("copy on Logjam GPS", () => {
     expect(first.text).toBe("Open it");
   });
 
+  // The words of a confirm are read by the user too, and a string behind a
+  // `??`, a ternary, a `+` or a `${}` is still read. Mutation: drop
+  // `confirmBody` from COPY_PROPS in shared/src/copyRules.ts, or make `stringOf`
+  // stop at the top of the initializer again.
+  it("reads a confirm's words wherever they sit in the value", () => {
+    const found = userFacingStrings(
+      ts,
+      "x.ts",
+      'const a = { confirmTitle: `Delete ${g.label ?? "this region"}?`, confirmBody: ok ? `The ${k} tiles go.` : "No " + "tiles here.", title: g.label ?? "Offline map region" };',
+    ).map(({ text }) => text);
+    expect(found.join("|")).toContain("this region");
+    expect(found.join("|")).toContain("tiles go");
+    expect(found.join("|")).toContain("tiles here");
+    expect(found.join("|")).toContain("Offline map region");
+  });
+
   it("names the surface where it means this client", () => {
     const offenders = [...sources(SRC), APP].flatMap((path) =>
       userFacingStrings(ts, path, readFileSync(path, "utf8"))
@@ -96,24 +133,28 @@ describe("copy on Logjam GPS", () => {
   });
 
   it("breaks no copy rule", () => {
-    const offenders = [...sources(SRC), APP].flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
-        ({ line, text }) =>
-          copyViolations(text)
-            .filter(
-              () =>
-                !ALLOWED.some(
-                  (a) =>
-                    relative(SRC, path) === a.file && text.includes(a.text),
-                ),
-            )
-            .map(
-              (id) =>
-                `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-            ),
-      ),
-    );
+    const offenders = hits()
+      .filter(({ file, rule, text }) => !baselined(file, rule, text))
+      .map(
+        ({ file, line, rule, text }) =>
+          `${file}:${line} "${text}" — ${copySay(rule)}`,
+      );
     expect(offenders).toEqual([]);
+  });
+
+  // Mutation: reword one baselined string so it no longer offends.
+  it("every baseline entry still offends — the list only shrinks", () => {
+    const all = hits();
+    const stale = BASELINE.filter(
+      (entry) =>
+        !all.some(
+          ({ file, rule, text }) =>
+            file === entry.file &&
+            rule === entry.rule &&
+            text.includes(entry.text),
+        ),
+    );
+    expect(stale).toEqual([]);
   });
 
   // The measure tool's words are declared once, in @logjam/shared
@@ -154,5 +195,19 @@ describe("copy on Logjam GPS", () => {
       ),
     );
     expect(offenders).toEqual([]);
+  });
+
+  // A sharee's strips offer no Add and no delete, because the API refuses both
+  // (`assertOwnsTarget`). The pure rule is `media/stripOffers.test.ts`; this is
+  // the wiring. Mutation: drop `readOnly={!isOwner}` from either strip in
+  // `places/PlaceDetailScreen.tsx`.
+  it("passes readOnly={!isOwner} to every place media strip", () => {
+    const source = readFileSync(
+      join(SRC, "places", "PlaceDetailScreen.tsx"),
+      "utf8",
+    );
+    const strips = source.match(/<MediaStrip\b[\s\S]*?\n\s*\/>/g) ?? [];
+    expect(strips.length).toBeGreaterThanOrEqual(2);
+    for (const strip of strips) expect(strip).toContain("readOnly={!isOwner}");
   });
 });

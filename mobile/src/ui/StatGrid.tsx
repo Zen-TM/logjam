@@ -9,6 +9,10 @@ export type Stat = {
   /** Full-width cell instead of half. For a value that wraps badly at half
    *  width — a coordinate pair is the case this exists for. */
   span?: boolean;
+  /** A figure read at arm's length while moving: the `instrument` role. */
+  instrument?: boolean;
+  /** Under the value, muted: why there is no figure. */
+  note?: string;
   /** Makes the cell copy its value on tap, and draws a copy glyph beside the
    *  value so the tap can be found: a tile that only reveals it is a button
    *  when pressed is one nobody presses. */
@@ -36,7 +40,9 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
                 the corner, so a long value wraps before it instead of running
                 underneath it. */}
             <View style={styles.valueRow}>
-              <Text style={styles.value}>{stat.value}</Text>
+              <Text style={stat.instrument ? styles.instrument : styles.value}>
+                {stat.value}
+              </Text>
               {stat.onCopy ? (
                 <Icon
                   idea="copy"
@@ -46,6 +52,7 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
                 />
               ) : null}
             </View>
+            {stat.note ? <Text style={styles.note}>{stat.note}</Text> : null}
           </>
         );
         return stat.onCopy ? (
@@ -93,11 +100,13 @@ const useStyles = makeStyles((theme, textRole) => ({
   pressed: { backgroundColor: theme.cardPressed },
   label: { ...muted(theme, textRole.section), letterSpacing: 0.8 },
   valueRow: { flexDirection: "row", alignItems: "flex-end", gap: spacing(1) },
+  note: { ...muted(theme, textRole.meta) },
   value: {
     flexShrink: 1,
     ...textRole.heading,
     color: theme.text,
   },
+  instrument: { flexShrink: 1, ...textRole.instrument, color: theme.text },
   // Pushed to the cell's right edge; the bottom nudge sits it on the value's
   // baseline rather than on the bottom of its line box.
   copyGlyph: { marginLeft: "auto", marginBottom: spacing(0.5) },

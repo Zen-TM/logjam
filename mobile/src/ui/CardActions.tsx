@@ -17,7 +17,9 @@ type ButtonProps = React.ComponentProps<typeof Button>;
 // one that survives cold hands, and it reads as belonging to the card it fills.
 // Three or more stack, each full width: a third of a phone wraps every label.
 // Pass `Button`s as children; they are grown and made compact here, so a screen
-// never lays the row out itself (guard: `cardActions.test.ts`).
+// never lays the row out itself (guard: `cardActions.test.ts`). A button that
+// says `compact={false}` keeps the full 48 for the verbs pressed with gloves on
+// (a recording's Pause and Finish).
 export function CardActions({ children }: { children: ReactNode }) {
   const stacked = Children.toArray(children).filter(isValidElement).length > 2;
   return (
@@ -27,7 +29,8 @@ export function CardActions({ children }: { children: ReactNode }) {
       {Children.map(children, (child) =>
         isValidElement(child)
           ? cloneElement(child as ReactElement<ButtonProps>, {
-              compact: true,
+              compact:
+                (child as ReactElement<ButtonProps>).props.compact ?? true,
               grow: true,
             })
           : null,

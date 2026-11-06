@@ -33,6 +33,8 @@ import {
   tripPlanDatesLine,
   tripPlanGoing,
   tripPlanInPlanNow,
+  tripPlanInviteLists,
+  TRIP_PLAN_ROLE_ABOUT,
   tripPlanIsDated,
   tripPlanIsOver,
   tripPlanLeaveState,
@@ -183,7 +185,7 @@ describe("the plans list", () => {
           waitingFor: { id: "u", username: "mira" },
         }),
       ),
-    ).toBe("Waiting for mira to let you in");
+    ).toBe("Waiting for mira to accept you");
   });
 
   it("badges the invites the caller has not answered", () => {
@@ -200,6 +202,9 @@ describe("the plans list", () => {
     expect(tripPlansEmpty(0, "past").title).toBe("No plans yet");
     expect(tripPlansEmpty(2, "past").title).toBe("No past plans");
     expect(tripPlansEmpty(2, "archived").title).toBe("Nothing archived");
+    // Past says where plans arrive; no other bucket needs the line.
+    expect(tripPlansEmpty(2, "past").body).toMatch(/dates have passed/);
+    expect(tripPlansEmpty(2, "upcoming").body).toBeUndefined();
   });
 });
 
@@ -445,7 +450,7 @@ describe("a plan's verbs", () => {
   it("gives a reason for each verb only one client has, and for no other", () => {
     for (const list of PLAN_VERB_LISTS)
       for (const verb of list)
-        expect("on" in verb, verb.id).toBe("reason" in verb);
+        expect("on" in verb, verb.id).toBe("reason" in verb || "gap" in verb);
   });
 
   it("counts what a delete takes, leaving zeros out", () => {
@@ -455,7 +460,7 @@ describe("a plan's verbs", () => {
     expect(
       planDeleteConfirm("Wollangambe trip", { places: 0, ways: 0 }).confirmBody,
     ).toBe(
-      "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay.",
+      "Its write-up, forms and everyone's answers go, for everyone. Copies people saved to their own accounts stay. This can't be undone.",
     );
   });
 
@@ -464,13 +469,15 @@ describe("a plan's verbs", () => {
   it("counts the caller's own answer among those a form delete takes", () => {
     const form = { title: "Carpooling", answers: [], myAnswer: { seats: 2 } };
     expect(planFormDeleteConfirm(form).confirmBody).toBe(
-      "Its questions and 1 answer go, for everyone in the plan.",
+      "Its questions and 1 answer go, for everyone in the plan. This can't be undone.",
     );
     expect(
       planFormDeleteConfirm({ ...form, answers: [{}, {}] }).confirmBody,
-    ).toBe("Its questions and 3 answers go, for everyone in the plan.");
+    ).toBe(
+      "Its questions and 3 answers go, for everyone in the plan. This can't be undone.",
+    );
     expect(planFormDeleteConfirm({ ...form, myAnswer: null }).confirmBody).toBe(
-      "Its questions go, for everyone in the plan.",
+      "Its questions go, for everyone in the plan. This can't be undone.",
     );
   });
 });
@@ -643,10 +650,10 @@ describe("a plan's items", () => {
   // (shared/DESIGN.md §9: a destructive confirm counts what goes).
   it("counts a deleted place's photos", () => {
     expect(planItemDeleteConfirm("Wollangambe").confirmBody).toBe(
-      "It goes for everyone in the plan. Copies people saved stay.",
+      "It goes for everyone in the plan. Copies people saved stay. This can't be undone.",
     );
     expect(planItemDeleteConfirm("Wollangambe", 1).confirmBody).toBe(
-      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay.",
+      "It goes for everyone in the plan. Its photo goes too. Copies people saved stay. This can't be undone.",
     );
     expect(planItemDeleteConfirm("Wollangambe", 3).confirmBody).toContain(
       "Its 3 photos go too.",
@@ -745,6 +752,7 @@ describe("a plan's people", () => {
       confirmBody:
         "You won't be able to make yourself a leader again. The leaders mira, tom and sue can.",
       confirmLabel: "Make yourself a member",
+      tone: "filled",
     });
     expect(planSelfRoleConfirm("editor", ["mira"]).confirmBody).toBe(
       "You won't be able to make yourself a leader again. The leader mira can.",
@@ -999,19 +1007,15 @@ describe("an invite's preview", () => {
 });
 
 describe("Start a trip log's places line", () => {
-  const bare = { media: [] };
-  const withOne = { media: [{}] };
-  // Mutation: decide from every place, or ignore the picks, and picking
-  // only a place without photos promises "with its photos".
-  it("promises photos only where the picks have some", () => {
-    expect(tripPlanTripLogPlacesLine([bare], true)).not.toMatch(/photos/);
-    expect(tripPlanTripLogPlacesLine([], true)).not.toMatch(/photos/);
-    expect(tripPlanTripLogPlacesLine([bare, withOne], true)).toMatch(
-      /with its photos/,
+  // Mutation: say "all" whenever something matched, or drop the left-out
+  // count, and the picker hides that a place is not linkable.
+  it("says which are listed and what is left out", () => {
+    expect(tripPlanTripLogPlacesLine(0, 2)).toMatch(/none/);
+    expect(tripPlanTripLogPlacesLine(2, 2)).toMatch(/all in your places/);
+    expect(tripPlanTripLogPlacesLine(1, 3)).toBe(
+      "Only places you already have are listed; the other 2 are left out.",
     );
-    expect(tripPlanTripLogPlacesLine([withOne], false)).toMatch(
-      /without its photos/,
-    );
+    expect(tripPlanTripLogPlacesLine(2, 3)).toMatch(/the other 1 is left out/);
   });
 });
 
@@ -1068,7 +1072,7 @@ describe("Add a place or way's footer and outcome", () => {
     expect(tripPlanAddOutcome({ ...base, added: 0, why: "No." })).toBeNull();
     expect(tripPlanAddOutcome({ ...base, added: 2 })).toEqual({
       message: "Added 2 places or ways.",
-      tone: "info",
+      tone: "done",
     });
     expect(tripPlanAddOutcome({ ...base, added: 1, why: "No." })).toEqual({
       message: "Added 1 of 2. No.",
@@ -1376,6 +1380,45 @@ describe("invite role order", () => {
     expect([...TRIP_PLAN_ROLES_PICK_ORDER].sort()).toEqual(
       [...TRIP_PLAN_ROLES].sort(),
     );
+  });
+});
+
+describe("who Invite people offers", () => {
+  const bob = { id: "u2", username: "bob" };
+  const carol = { id: "u3", username: "carol" };
+  const bobby = { id: "u4", username: "bobby" };
+
+  // Mutation: list friends only once a search has run, and the friend a
+  // leader came to invite is not there until they type three letters.
+  it("lists every friend before anything is typed", () => {
+    expect(tripPlanInviteLists([bob, carol], [], "")).toEqual({
+      friends: [bob, carol],
+      others: [],
+    });
+  });
+
+  // Mutation: skip the friend filter, and a short query hides the friend.
+  it("narrows the friends by what is typed, however short", () => {
+    expect(tripPlanInviteLists([bob, carol], [], " BO ").friends).toEqual([
+      bob,
+    ]);
+  });
+
+  // Mutation: drop the id check, and a friend the search also found is
+  // offered twice, once under each heading.
+  it("leaves a friend out of the other people the search found", () => {
+    expect(tripPlanInviteLists([bob], [bob, bobby], "bob")).toEqual({
+      friends: [bob],
+      others: [bobby],
+    });
+  });
+
+  // Mutation: delete a role's sentence, and Invite people names a role
+  // without saying what it can do.
+  it("says what every role can do, in a sentence each", () => {
+    const about = TRIP_PLAN_ROLES.map((role) => TRIP_PLAN_ROLE_ABOUT[role]);
+    expect(about.every((line) => line.trim().length > 0)).toBe(true);
+    expect(new Set(about).size).toBe(TRIP_PLAN_ROLES.length);
   });
 });
 

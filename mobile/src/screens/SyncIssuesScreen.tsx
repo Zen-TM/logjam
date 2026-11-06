@@ -1,9 +1,8 @@
 // Account sync issues — "what didn't save, and what do you want me to do?"
 //
-// ONE LIST: stuck changes (push failures) and lost values (pull LWW drops) are
-// unified because to the user both mean the same thing — a change made locally
-// is not in their account. Both are counted (`countSyncIssues`), both are
-// actionable, and nothing on this screen expires: a countdown to deleting the
+// ONE LIST: stuck changes (push failures) and conflicts (another device wrote
+// the same field) are unified because both want a decision from the user.
+// Both are counted (`countSyncIssues`), both are actionable, and nothing on this screen expires: a countdown to deleting the
 // last copy of someone's writing is the exact failure this page exists to
 // prevent.
 //
@@ -12,7 +11,7 @@
 // is the engine's problem, not the user's: `flush.ts` parks it as `retrying`
 // and the cycle comes back for it, for a day (`shouldGiveUpOnSyncOp`). So a row
 // here is either a refusal about the request, a row deleted under the edit, a
-// value another device overwrote, or something the app has already retried by
+// value another device also changed, or something the app has already retried by
 // itself — which is why the sheet's retry copy can say how many attempts it
 // spent before asking.
 //
@@ -40,12 +39,13 @@
 // `mobile/src/screens/syncIssueDisplay.test.ts`), which a place create op
 // carries (§11 — a list is what ends up in a screenshot).
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, FlatList, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 import { useConnectivity } from "../map/connectivity";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import {
   BottomSheet,
+  confirm,
   Hero,
   IconButton,
   Row,
@@ -84,10 +84,12 @@ import {
   opChanges,
   opTarget,
   opTitle,
-  previewValue,
   rejectedFields,
   restoreBlockReason,
   restoreConfirmBody,
+  hasEarlierVersion,
+  keepMineConfirmBody,
+  readableValue,
   restoreSubtitle,
   salvageableFields,
   selectionCountLabel,
@@ -137,7 +139,7 @@ export function SyncIssuesScreen({
   // disappearing means the change finally landed.
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") =>
+    (text: string, tone: ToastMessage["tone"] = "done") =>
       setToast({ text, tone, nonce: Date.now() }),
     [],
   );
@@ -166,25 +168,24 @@ export function SyncIssuesScreen({
       .catch((err: unknown) => console.error(err));
   }, []);
 
-  const confirmResync = useCallback(() => {
-    Alert.alert(
-      "Get a fresh copy?",
-      "Re-downloads your places, trips and photos from scratch. " +
-        "Uploads still waiting are kept.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Download again",
-          onPress: () =>
-            void resyncFromScratch()
-              .then(() => {
-                notify("Downloading a fresh copy…");
-                load();
-              })
-              .catch((err: unknown) => console.error(err)),
-        },
-      ],
-    );
+  const confirmResync = useCallback(async () => {
+    if (
+      !(await confirm({
+        confirmTitle: "Get a fresh copy?",
+        confirmBody:
+          "Re-downloads your places, trips and photos from scratch. " +
+          "Uploads still waiting are kept.",
+        confirmLabel: "Download again",
+        tone: "filled",
+      }))
+    )
+      return;
+    void resyncFromScratch()
+      .then(() => {
+        notify("Downloading a fresh copy…");
+        load();
+      })
+      .catch((err: unknown) => console.error(err));
   }, [load, notify]);
 
   useEffect(() => {
@@ -196,7 +197,7 @@ export function SyncIssuesScreen({
     (
       run: Promise<unknown>,
       done: string,
-      tone: ToastMessage["tone"] = "info",
+      tone: ToastMessage["tone"] = "done",
     ) => {
       setMenuIssue(null);
       void run
@@ -206,7 +207,7 @@ export function SyncIssuesScreen({
         })
         .catch((err: unknown) => {
           console.error(err);
-          notify("That didn't work. Try again in a moment.", "error");
+          notify("Couldn't do that. Try again in a moment.", "error");
         });
     },
     [load, notify],
@@ -285,52 +286,46 @@ export function SyncIssuesScreen({
       .catch((err: unknown) => console.error(err));
   }, [load, notify, online, retryable]);
 
-  const confirmBulkRestore = useCallback(() => {
+  const confirmBulkRestore = useCallback(async () => {
     // Restoring is a clobber on every device, and in bulk it is a clobber the
     // user cannot read one value at a time — so it confirms, like the delete
     // beside it, and the body says what it costs.
-    Alert.alert(
-      restorable.length === 1
-        ? "Restore this value?"
-        : `Restore ${restorable.length} values?`,
+    const ok = await confirm({
+      confirmTitle:
+        restorable.length === 1
+          ? "Restore the earlier version?"
+          : `Restore ${restorable.length} earlier versions?`,
       // A one-row selection gets the same quoted value the sheet's own confirm
       // gives it: the bar is a different route to the same irreversible write,
       // not a reason to say less about it.
-      restoreConfirmBody(
+      confirmBody: restoreConfirmBody(
         restorable.length,
-        restorable.length === 1 && typeof restorable[0].serverValue === "string"
-          ? restorable[0].serverValue
+        restorable.length === 1
+          ? readableValue(restorable[0].field, restorable[0].currentValue)
           : undefined,
       ),
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Restore",
-          onPress: () => {
-            void Promise.all(
-              restorable.map((entry) => restoreShelfValue(entry.id)),
-            )
-              .then(() => {
-                notify(
-                  restorable.length === 1
-                    ? "Value restored."
-                    : `${restorable.length} values restored.`,
-                );
-                clearSelection();
-                load();
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify("Couldn't restore those.", "error");
-              });
-          },
-        },
-      ],
-    );
+      confirmLabel: "Restore",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    void Promise.all(restorable.map((entry) => restoreShelfValue(entry.id)))
+      .then(() => {
+        notify(
+          restorable.length === 1
+            ? "Earlier version restored."
+            : `${restorable.length} earlier versions restored.`,
+        );
+        clearSelection();
+        load();
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        notify("Couldn't restore those.", "error");
+      });
   }, [clearSelection, load, notify, restorable]);
 
   /** The bulk delete: discard for stuck rows, forget for lost ones. */
-  const discardSelected = useCallback(() => {
+  const discardSelected = useCallback(async () => {
     const uploadCount = selectedStuck.filter(
       (op) => op.entity === "media",
     ).length;
@@ -340,31 +335,23 @@ export function SyncIssuesScreen({
       lostCount: selectedLost.length,
     });
     const total = selectedStuck.length + selectedLost.length;
-    Alert.alert(
-      total === 1 ? "Discard this?" : `Discard ${total} entries?`,
-      body,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () => {
-            void Promise.all([
-              ...selectedStuck.map((op) => discardParkedOp(op.seq)),
-              ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
-            ])
-              .then(() => {
-                clearSelection();
-                notify(
-                  total === 1 ? "Discarded." : `${total} entries discarded.`,
-                );
-                load();
-              })
-              .catch((err: unknown) => console.error(err));
-          },
-        },
-      ],
-    );
+    const ok = await confirm({
+      confirmTitle: total === 1 ? "Discard this?" : `Discard ${total} entries?`,
+      confirmBody: body,
+      confirmLabel: "Discard",
+      tone: "destructive",
+    });
+    if (!ok) return;
+    void Promise.all([
+      ...selectedStuck.map((op) => discardParkedOp(op.seq)),
+      ...selectedLost.map((entry) => dismissShelfEntry(entry.id)),
+    ])
+      .then(() => {
+        clearSelection();
+        notify(total === 1 ? "Discarded." : `${total} entries discarded.`);
+        load();
+      })
+      .catch((err: unknown) => console.error(err));
   }, [clearSelection, load, notify, selectedLost, selectedStuck]);
 
   /**
@@ -373,118 +360,115 @@ export function SyncIssuesScreen({
    * dialog is showing them, which is the whole reason this is safe to offer.
    */
   const confirmSendRest = useCallback(
-    (op: ParkedOp) => {
+    async (op: ParkedOp) => {
       setMenuIssue(null);
       const dropped = rejectedFields(op);
       const kept = salvageableFields(op);
-      Alert.alert(
-        "Send the rest?",
-        `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
+      const ok = await confirm({
+        confirmTitle: "Send the rest?",
+        confirmBody:
+          `${listFields(kept)} ${kept.length === 1 ? "is" : "are"} saved to your account. ` +
           `${listFields(dropped)} ${dropped.length === 1 ? "is" : "are"} deleted — ` +
           `${dropped.length === 1 ? "it's" : "they're"} what your account refused.`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Send the rest",
-            onPress: () =>
-              void retryWithoutFields(op.seq, dropped)
-                .then(() => {
-                  notify(
-                    online
-                      ? "Sending the rest of that change…"
-                      : "Queued. It goes up when you have signal.",
-                  );
-                  load();
-                })
-                .catch((err: unknown) => {
-                  console.error(err);
-                  notify("That didn't work. Try again in a moment.", "error");
-                }),
-          },
-        ],
-      );
+        confirmLabel: "Send the rest",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void retryWithoutFields(op.seq, dropped)
+        .then(() => {
+          notify(
+            online
+              ? "Sending the rest of that change…"
+              : "Queued. It goes up when you have signal.",
+          );
+          load();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify("Couldn't do that. Try again in a moment.", "error");
+        });
     },
     [load, notify, online],
   );
 
   const confirmDiscard = useCallback(
-    (op: ParkedOp) => {
+    async (op: ParkedOp) => {
       setMenuIssue(null);
-      Alert.alert("Discard this change?", discardExplanation(op), [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Discard",
-          style: "destructive",
-          onPress: () =>
-            void discardParkedOp(op.seq)
-              .then(() => {
-                notify(
-                  op.entity === "media"
-                    ? "Upload deleted from this phone."
-                    : "Change discarded.",
-                );
-                load();
-              })
-              .catch((err: unknown) => console.error(err)),
-        },
-      ]);
+      const ok = await confirm({
+        confirmTitle: "Discard this change?",
+        confirmBody: discardExplanation(op),
+        confirmLabel: "Discard",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void discardParkedOp(op.seq)
+        .then(() => {
+          notify(
+            op.entity === "media"
+              ? "Upload deleted from this phone."
+              : "Change discarded.",
+          );
+          load();
+        })
+        .catch((err: unknown) => console.error(err));
     },
     [load, notify],
   );
 
-  const confirmForget = useCallback(
-    (entry: ShelfEntry) => {
+  const keepMine = useCallback(
+    async (entry: ShelfEntry) => {
       setMenuIssue(null);
-      Alert.alert(
-        "Discard this value?",
-        "This is the only copy left of what you typed. It can't be got back.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () =>
-              void dismissShelfEntry(entry.id)
-                .then(() => {
-                  notify("Value discarded.");
-                  load();
-                })
-                .catch((err: unknown) => console.error(err)),
-          },
-        ],
-      );
+      // Your text is already the account's, so there is nothing to send: the
+      // only thing this deletes is the earlier text, and that can't come back.
+      // With nothing replaced there is nothing to lose, so no dialog.
+      if (hasEarlierVersion(entry)) {
+        const ok = await confirm({
+          confirmTitle: "Keep my version?",
+          confirmBody: keepMineConfirmBody(
+            readableValue(entry.field, entry.serverValue),
+          ),
+          confirmLabel: "Keep mine",
+          tone: "destructive",
+        });
+        if (!ok) return;
+      }
+      void dismissShelfEntry(entry.id)
+        .then(() => {
+          notify("Kept your version.");
+          load();
+        })
+        .catch((err: unknown) => console.error(err));
     },
     [load, notify],
   );
 
   const confirmRestore = useCallback(
-    (entry: ShelfEntry) => {
+    async (entry: ShelfEntry) => {
       setMenuIssue(null);
-      // The value about to be destroyed is quoted in the dialog: this is the
-      // last moment it exists anywhere, and the sheet that was showing it has
-      // closed behind the alert.
-      const replacing =
-        typeof entry.serverValue === "string" ? entry.serverValue : undefined;
-      Alert.alert("Restore this value?", restoreConfirmBody(1, replacing), [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Restore",
-          onPress: () =>
-            void restoreShelfValue(entry.id)
-              .then(() => {
-                notify(
-                  online
-                    ? "Value restored. It'll reach your other devices next sync."
-                    : "Value restored on this phone. It syncs when you have signal.",
-                );
-                load();
-              })
-              .catch((err: unknown) => {
-                console.error(err);
-                notify("Couldn't restore that value.", "error");
-              }),
-        },
-      ]);
+      // The value about to be destroyed (the user's own) is quoted in the
+      // dialog: this is the last moment it exists anywhere, and the sheet that
+      // was showing it has closed behind the alert.
+      const replacing = readableValue(entry.field, entry.currentValue);
+      const ok = await confirm({
+        confirmTitle: "Restore the earlier version?",
+        confirmBody: restoreConfirmBody(1, replacing),
+        confirmLabel: "Restore",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void restoreShelfValue(entry.id)
+        .then(() => {
+          notify(
+            online
+              ? "Earlier version restored. It'll reach your other devices next sync."
+              : "Earlier version restored on this phone. It syncs when you have signal.",
+          );
+          load();
+        })
+        .catch((err: unknown) => {
+          console.error(err);
+          notify("Couldn't restore that version.", "error");
+        });
     },
     [load, notify, online],
   );
@@ -566,7 +550,7 @@ export function SyncIssuesScreen({
                   {restorable.length > 0 ? (
                     <IconButton
                       icon="undo"
-                      accessibilityLabel={`Restore ${restorable.length} selected values`}
+                      accessibilityLabel={`Restore ${restorable.length} earlier versions`}
                       color={theme.accent}
                       onPress={confirmBulkRestore}
                     />
@@ -580,8 +564,7 @@ export function SyncIssuesScreen({
           ) : (
             <View style={styles.railHint}>
               <Text style={styles.railHintText} numberOfLines={2}>
-                These changes aren&apos;t in your account. Tap one to see what
-                it was.
+                Tap one to see what happened and what you can do.
               </Text>
             </View>
           )}
@@ -635,7 +618,7 @@ export function SyncIssuesScreen({
                 recreateFromDeadRemote(op.seq),
                 op.entity === "place"
                   ? "Place recreated with your change."
-                  : "Waypoint recreated with your change.",
+                  : "Place recreated with your change.",
               )
             }
             onSendRest={confirmSendRest}
@@ -649,10 +632,10 @@ export function SyncIssuesScreen({
             onKeepBoth={(entry) =>
               act(
                 keepBothShelfValue(entry.id),
-                "Both kept — your text was added below.",
+                "Both kept — the earlier text is above yours.",
               )
             }
-            onForget={confirmForget}
+            onKeepMine={keepMine}
           />
         ) : null}
       </BottomSheet>
@@ -715,12 +698,8 @@ function StuckMenu({
       {canRecreate(op) ? (
         <Row
           icon="retry"
-          title={op.entity === "place" ? "Recreate place" : "Recreate waypoint"}
-          subtitle={
-            op.entity === "place"
-              ? "Makes a new place from this phone's copy, with your change."
-              : "Makes a new waypoint, with your change."
-          }
+          title="Recreate place"
+          subtitle="Makes a new place from this phone's copy, with your change."
           onPress={() => onRecreate(op)}
         />
       ) : null}
@@ -776,71 +755,73 @@ function LostMenu({
   entry,
   onRestore,
   onKeepBoth,
-  onForget,
+  onKeepMine,
 }: {
   entry: ShelfEntry;
   onRestore: (entry: ShelfEntry) => void;
   onKeepBoth: (entry: ShelfEntry) => void;
-  onForget: (entry: ShelfEntry) => void;
+  onKeepMine: (entry: ShelfEntry) => void;
 }) {
-  const theme = useTheme();
   const styles = useStyles();
 
-  // The other device's value is absent when it CLEARED the field — there is no
-  // "Kept" to show, and a block reading "(empty)" would be three lines of chrome
-  // around nothing.
-  const hasKept = entry.serverValue !== null;
+  // The earlier text is absent when the account had nothing there — a block
+  // reading "(empty)" would be three lines of chrome around nothing.
+  const hasEarlier = hasEarlierVersion(entry);
   return (
     <View style={styles.menuBody}>
       <Text style={styles.menuCause}>{shelfExplanation(entry)}</Text>
-      {/* Labelled by which value is LIVE, not by whose it is — both are the
-          user's. Selectable rather than a Copy button: RN's own text selection
-          is the platform's copy affordance and costs no dependency. */}
+      {/* Labelled by which value is LIVE: yours is saved, the other is the only
+          copy left. Selectable rather than a Copy button: RN's own text
+          selection is the platform's copy affordance and costs no dependency. */}
       <View style={styles.valueBlock}>
-        <Text style={styles.menuLabel}>Discarded</Text>
+        <Text style={styles.menuLabel}>
+          {entry.changedSince ? "Saved now" : "Yours (saved)"}
+        </Text>
         <Text style={styles.menuValue} selectable>
-          {previewValue(entry.field, entry.shelvedValue)}
+          {readableValue(entry.field, entry.currentValue)}
         </Text>
       </View>
-      {hasKept ? (
+      {hasEarlier ? (
         <View style={styles.valueBlock}>
-          <Text style={styles.menuLabel}>Kept</Text>
+          <Text style={styles.menuLabel}>Replaced</Text>
           <Text style={styles.menuValue} selectable>
-            {previewValue(entry.field, entry.serverValue)}
+            {readableValue(entry.field, entry.serverValue)}
           </Text>
         </View>
       ) : null}
       <Text style={styles.menuCause}>
-        {hasKept
+        {hasEarlier
           ? "Press and hold either value to copy it."
           : "Press and hold the value to copy it."}
       </Text>
       {/* Keep both first: it is the only way out of this sheet that destroys
-          nothing, so it goes above the one that does. */}
+          nothing. */}
       {entry.canKeepBoth ? (
         <Row
           icon="merge"
           title="Keep both"
-          subtitle="Appends the discarded text to what's there now."
+          subtitle="Puts the earlier text above yours."
           onPress={() => onKeepBoth(entry)}
         />
       ) : null}
+      <Row
+        icon="done"
+        title="Keep my version"
+        subtitle={
+          hasEarlier ? "Already saved. Deletes the earlier text." : undefined
+        }
+        onPress={() => onKeepMine(entry)}
+      />
       {entry.restoreBlock === null ? (
         <Row
           icon="undo"
-          title="Restore the discarded value"
-          subtitle={restoreSubtitle(entry)}
+          title="Restore the earlier version"
+          subtitle={restoreSubtitle()}
           onPress={() => onRestore(entry)}
         />
-      ) : (
+      ) : hasEarlier ? (
         <Text style={styles.menuCause}>{restoreBlockReason(entry)}</Text>
-      )}
-      <Row
-        icon="delete"
-        hue={theme.warning}
-        title="Discard this value"
-        onPress={() => onForget(entry)}
-      />
+      ) : null}
     </View>
   );
 }

@@ -13,7 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Alert, FlatList, RefreshControl, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   PLAN_REQUEST_VERBS,
@@ -60,11 +60,15 @@ import {
   CardActions,
   ChipRail,
   EmptyState,
-  ErrorState,
   Hero,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroFlatList,
+  useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   IconButton,
-  ListEnd,
-  LoadingState,
+  ListBody,
   Row,
   SelectionBar,
   SelectionMark,
@@ -75,6 +79,9 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  confirm,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
@@ -171,6 +178,8 @@ export function PlansScreen({
   onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
   const { assetHue } = useHues();
   const { accountState } = useAccountState();
@@ -186,7 +195,7 @@ export function PlansScreen({
   const [toastAt, setToastAt] = useState<number | undefined>(undefined);
   if (message && message.at !== toastAt) {
     setToastAt(message.at);
-    setToast({ text: message.text, tone: "info", nonce: message.at });
+    setToast({ text: message.text, tone: "done", nonce: message.at });
   }
   const today = todayDateKey();
 
@@ -256,7 +265,7 @@ export function PlansScreen({
       void leavePlan(plan.id)
         .then(async () => {
           await poll();
-          setToast({ text: done, tone: "info", nonce: Date.now() });
+          setToast({ text: done, tone: "done", nonce: Date.now() });
         })
         .catch((err: unknown) =>
           setToast({
@@ -285,7 +294,7 @@ export function PlansScreen({
           await Promise.all([poll(), fetchPlan(plan.id)]).catch(console.error);
           setToast({
             text: TRIP_PLAN_JOIN.copy.joined,
-            tone: "info",
+            tone: "done",
             nonce: Date.now(),
           });
         })
@@ -308,7 +317,7 @@ export function PlansScreen({
   );
 
   const report = useCallback(
-    (text: string, tone: "info" | "error") =>
+    (text: string, tone: "done" | "error") =>
       setToast({ text, tone, nonce: Date.now() }),
     [setToast],
   );
@@ -322,21 +331,8 @@ export function PlansScreen({
   ) =>
     call
       .then(() => afterPlanWrite(plan.id, gone))
-      .then(() => report(done, "info"))
+      .then(() => report(done, "done"))
       .catch((err: unknown) => report(messageFromError(err, failed), "error"));
-  const confirm = (
-    words: { confirmTitle: string; confirmBody: string; confirmLabel: string },
-    destructive: boolean,
-    action: () => void,
-  ) =>
-    Alert.alert(words.confirmTitle, words.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: words.confirmLabel,
-        style: destructive ? "destructive" : "default",
-        onPress: action,
-      },
-    ]);
   // A card's ⋯: the verbs its own page offers that make sense without it open.
   const cardAction = async (
     plan: TripPlanSummary,
@@ -367,17 +363,13 @@ export function PlansScreen({
     const counts = cached
       ? tripPlanCounts(cached.plan)
       : { places: 0, ways: 0 };
-    confirm(
-      planDeleteConfirm(plan.name, counts),
+    if (!(await confirm(planDeleteConfirm(plan.name, counts)))) return;
+    void write(
+      plan,
+      deletePlan(plan.id),
       true,
-      () =>
-        void write(
-          plan,
-          deletePlan(plan.id),
-          true,
-          pageCopy.deleted,
-          pageCopy.deleteFailed,
-        ),
+      pageCopy.deleted,
+      pageCopy.deleteFailed,
     );
   };
 
@@ -391,9 +383,9 @@ export function PlansScreen({
       selectOnly(failedIds);
       await poll();
     } else clearSelection();
-    report(message, failedIds.length > 0 ? "error" : "info");
+    report(message, failedIds.length > 0 ? "error" : "done");
   };
-  const runBulk = () => {
+  const runBulk = async () => {
     if (!online) return report(OFFLINE, "error");
     const { lead, leave: leaving } = bulk;
     const steps = (deleteAdded: boolean) => [
@@ -420,7 +412,9 @@ export function PlansScreen({
         run: (deleteAdded) => void finishBulk(steps(deleteAdded)),
       });
     const words = tripPlanBulkConfirm(counts);
-    confirm(words, words.destructive, () => void finishBulk(steps(false)));
+    const tone = words.destructive ? "destructive" : "filled";
+    if (!(await confirm({ ...words, tone }))) return;
+    void finishBulk(steps(false));
   };
   const runBulkArchive = () => {
     if (!online) return report(OFFLINE, "error");
@@ -439,6 +433,14 @@ export function PlansScreen({
     ({ item }: { item: TripPlanSummary }) => {
       const stamp = stamps.get(item.id);
       const pill = tripPlanRowPill(item);
+      // Under the name with the other marks: beside it, at a large text size,
+      // the pill left the title a sliver and broke it mid-word.
+      const pillMark = pill ? (
+        <StatusPill
+          label={pill}
+          tone={item.status === "active" ? "outline" : "accent"}
+        />
+      ) : null;
       const picked = selectedKeys.includes(item.id);
       return (
         <Row
@@ -473,12 +475,6 @@ export function PlansScreen({
           disabled={selecting && !planSelectable(item)}
           right={
             <View style={styles.trailing}>
-              {pill ? (
-                <StatusPill
-                  label={pill}
-                  tone={item.status === "active" ? "outline" : "accent"}
-                />
-              ) : null}
               {selecting && planSelectable(item) ? (
                 // The ⋯'s box, so the card keeps its size when selecting starts.
                 <SelectionMark selected={picked} />
@@ -496,11 +492,13 @@ export function PlansScreen({
           // downloaded and changed marks sit under the line, so a long one
           // can't squeeze the name and dates.
           footer={
-            item.status === "active" &&
-            (planChanged(item, stamp) ||
+            item.status !== "invited" &&
+            (pill ||
+              planChanged(item, stamp) ||
               stamp?.downloadedAt ||
               item.unansweredForms > 0) ? (
               <View style={styles.pills}>
+                {pillMark}
                 {item.unansweredForms > 0 ? (
                   <StatusPill
                     label={tripPlanFormsToAnswerLine(item.unansweredForms)}
@@ -531,12 +529,14 @@ export function PlansScreen({
                 style={styles.footer}
                 onStartShouldSetResponder={() => true}
               >
+                {pillMark}
                 <CardActions>
                   <Button
                     label={TRIP_PLAN_JOIN.copy.join}
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
+                    reasonShown
                     onPress={() => join(item)}
                   />
                   <Button
@@ -545,21 +545,18 @@ export function PlansScreen({
                     loading={leaving.has(item.id)}
                     disabled={!online}
                     disabledReason={OFFLINE}
-                    onPress={() =>
-                      Alert.alert(
-                        TRIP_PLAN_JOIN.copy.declineTitle,
-                        TRIP_PLAN_JOIN.copy.declineBody,
-                        [
-                          { text: "Cancel", style: "cancel" },
-                          {
-                            text: copy.decline,
-                            style: "destructive",
-                            onPress: () =>
-                              leave(item, copy.declined, copy.declineFailed),
-                          },
-                        ],
+                    reasonShown
+                    onPress={async () => {
+                      if (
+                        await confirm({
+                          confirmTitle: TRIP_PLAN_JOIN.copy.declineTitle,
+                          confirmBody: TRIP_PLAN_JOIN.copy.declineBody,
+                          confirmLabel: copy.decline,
+                          tone: "filled",
+                        })
                       )
-                    }
+                        leave(item, copy.declined, copy.declineFailed);
+                    }}
                   />
                 </CardActions>
                 {online ? null : <Text style={styles.hint}>{OFFLINE}</Text>}
@@ -605,36 +602,62 @@ export function PlansScreen({
       : unavailableReasonText("needs-connection"),
   };
   const empty = tripPlansEmpty(plans?.length ?? 0, bucket);
+  // The states that replace the list are not under it, so they take its room.
+  const listReady =
+    shown.kind !== "loading" &&
+    shown.kind !== "failed" &&
+    shown.kind !== "neverFetched";
   const sections: Record<
     SectionKeysOn<typeof TRIP_PLANS_LIST, "gps">,
     ReactNode
   > = {
     hero: (
-      <Hero
-        title={
-          shown.kind === "list"
-            ? tripPlansHeroTitle(shown.plans, today)
-            : shown.kind === "loading"
-              ? copy.loading
-              : TRIP_PLANS_LIST.title
-        }
-        titleNumberOfLines={2}
-        onBack={onBack}
-        backLabel={backLabel}
-      >
-        <View style={styles.pills}>
-          <Button
-            label={copy.add}
-            icon="add"
-            compact
-            variant="outlineAccent"
-            disabled={!online}
-            disabledReason={unavailableReasonText("needs-connection")}
-            onPress={() => setNewOpen(true)}
-          />
-          <SyncStatusPills online={online} pendingCount={0} />
-        </View>
-      </Hero>
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
+              compact
+                ? compactHeroTitle(TRIP_PLANS_LIST.title, plans?.length ?? 0)
+                : shown.kind === "list"
+                  ? tripPlansHeroTitle(shown.plans, today)
+                  : shown.kind === "loading"
+                    ? copy.loading
+                    : TRIP_PLANS_LIST.title
+            }
+            // Unbounded: the date is the point of this title, and a clamp cuts it.
+            titleNumberOfLines={0}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              compact ? (
+                <HeroAdd
+                  label={copy.add}
+                  icon="add"
+                  compact
+                  disabled={!online}
+                  disabledReason={unavailableReasonText("needs-connection")}
+                  onPress={() => setNewOpen(true)}
+                />
+              ) : undefined
+            }
+          >
+            {compact ? undefined : (
+              <View style={styles.pills}>
+                <Button
+                  label={copy.add}
+                  icon="add"
+                  compact
+                  disabled={!online}
+                  disabledReason={unavailableReasonText("needs-connection")}
+                  onPress={() => setNewOpen(true)}
+                />
+                <SyncStatusPills online={online} pendingCount={0} />
+              </View>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
     buckets: (
       <View style={styles.rail}>
@@ -653,6 +676,8 @@ export function PlansScreen({
                   }
                   color={theme.accent}
                   disabled={!online}
+                  disabledReason={OFFLINE}
+                  reasonShown
                   onPress={runBulkArchive}
                 />
               ) : null
@@ -662,7 +687,7 @@ export function PlansScreen({
             onDelete={runBulk}
             deleteIcon={bulk.destructive ? "delete" : "leave"}
             destructive={bulk.destructive}
-            deleteDisabled={!online}
+            deleteDisabledReason={online ? undefined : OFFLINE}
             deleteLabel={
               online ? bulk.deleteLabel : `${bulk.deleteLabel}. ${OFFLINE}`
             }
@@ -677,62 +702,68 @@ export function PlansScreen({
         )}
       </View>
     ),
-    list:
-      shown.kind === "loading" ? (
-        <LoadingState label={copy.loading} />
-      ) : shown.kind === "neverFetched" ? (
-        <EmptyState icon="offline" title={TRIP_PLAN_OFFLINE.noPlansOffline} />
-      ) : shown.kind === "failed" ? (
-        <ErrorState message={shown.message} onRetry={() => void poll()} />
-      ) : (
-        <FlatList
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          data={rows}
-          keyExtractor={planKey}
-          renderItem={renderItem}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void poll()}
-              tintColor={theme.accent}
-            />
+    list: (
+      <View style={[styles.list, listReady ? undefined : heroCollapse.inset()]}>
+        <ListBody
+          state={
+            shown.kind === "loading"
+              ? "loading"
+              : shown.kind === "failed"
+                ? "failed"
+                : "ready"
           }
-          ListEmptyComponent={
-            <EmptyState
-              icon={empty.icon}
-              title={empty.title}
-              hint={empty.body}
-              // The way in, where a new plan would land.
-              action={bucket === "upcoming" ? newPlan : undefined}
-            />
-          }
-          // The list ends with the button its empty state offers.
-          ListFooterComponent={
-            bucket === "upcoming" && rows.length > 0 ? (
-              <ListEnd>
-                <Button
-                  {...newPlan}
-                  variant="outlineAccent"
-                  disabled={!online}
-                />
-                {/* Away from the hero's Offline pill, so the words go under
-                    it (ui/Button.tsx). */}
-                {newPlan.disabledReason ? (
-                  <Text style={styles.offline}>{newPlan.disabledReason}</Text>
-                ) : null}
-              </ListEnd>
+          loadingLabel={copy.loading}
+          error={shown.kind === "failed" ? shown.message : null}
+          onRetry={() => void poll()}
+          empty={
+            shown.kind === "neverFetched" ? (
+              <EmptyState
+                icon="offline"
+                title={TRIP_PLAN_OFFLINE.noPlansOffline}
+              />
             ) : undefined
           }
-        />
-      ),
+        >
+          <HeroFlatList
+            style={styles.list}
+            {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
+            contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
+            data={rows}
+            keyExtractor={planKey}
+            renderItem={renderItem}
+            refreshControl={
+              <pull.Refresh
+                progressViewOffset={heroCollapse.headerHeight}
+                refreshing={refreshing}
+                onRefresh={() => void poll()}
+                tintColor={theme.accent}
+              />
+            }
+            ListEmptyComponent={
+              <EmptyState
+                icon={empty.icon}
+                title={empty.title}
+                hint={empty.body}
+                // The way in, where a new plan would land.
+                action={bucket === "upcoming" ? newPlan : undefined}
+              />
+            }
+          />
+        </ListBody>
+      </View>
+    ),
   };
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(TRIP_PLANS_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(TRIP_PLANS_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
       <PlanDetailsSheet
         visible={newOpen}
         onClose={() => setNewOpen(false)}
@@ -852,11 +883,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   menu: { gap: spacing(1) },
   hint: { ...muted(theme, textRole.detail) },
   // One line, centred: a pill and the ⋯ share a centre line.
-  trailing: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing(1),
-  },
+  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   pills: {
     flexDirection: "row",
     flexWrap: "wrap",

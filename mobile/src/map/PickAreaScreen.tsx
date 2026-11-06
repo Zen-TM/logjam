@@ -322,6 +322,7 @@ export function PickAreaScreen({
             // Null only until the map has reported its first bounds — a second
             // or two on launch, not a state the user can get stuck in.
             disabled={area == null}
+            disabledReason="Waiting for the map"
             onPress={() => area && onConfirm(area)}
           />
         </View>
@@ -333,7 +334,7 @@ export function PickAreaScreen({
 const useStyles = makeStyles((theme) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // Where the notice sits; the kit `Notice` draws it (a scrim under `text`
-  // would be dark on dark in Daylight).
+  // would be dark on dark in Ghost Gum).
   // After the back button, which owns the top left.
   hint: {
     position: "absolute",

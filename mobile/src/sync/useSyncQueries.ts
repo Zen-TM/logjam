@@ -15,6 +15,7 @@ import {
   listMirrorPlaceTypes,
   listMirrorTrips,
   listMirrorPlaceLinks,
+  listLoggedTrackIds,
   listMirrorRoutes,
   getMirrorPlace,
   getMirrorTrip,
@@ -26,8 +27,12 @@ import {
   type MirrorRoute,
 } from "./mirrorStore";
 import { mirrorQueryError } from "./mirrorQueryError";
-import { onMirrorChanged } from "./syncDb";
-import { countPendingOps, pendingCreateIds } from "./outbox";
+import { getSyncStateValue, onMirrorChanged } from "./syncDb";
+import {
+  countPendingOpRows,
+  countPendingOps,
+  pendingCreateIds,
+} from "./outbox";
 import { countSyncIssues } from "./syncIssues";
 import {
   getSyncStatus,
@@ -40,6 +45,17 @@ export function useSyncStatus(): SyncStatus {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(getSyncStatus);
   useEffect(() => onSyncStatusChanged(setSyncStatus), []);
   return syncStatus;
+}
+
+/** When the last sync finished. The engine's own stamp is empty until the first
+ *  sync of a session, so a cold start with no signal reads the stored one. */
+export function useLastSyncAt(): string | null {
+  const live = useSyncStatus().lastSyncAt;
+  const [stored, setStored] = useState<string | null>(null);
+  useEffect(() => {
+    void getSyncStateValue("lastSyncAt").then(setStored).catch(console.error);
+  }, []);
+  return live ?? stored;
 }
 
 export type MirrorQueryState<T> = {
@@ -188,6 +204,14 @@ export function useMirrorIncomingShareOwners(): MirrorQueryState<
   return useMirrorQuery(readIncomingShareOwners);
 }
 
+/**
+ * The recordings a trip has been logged from — "Log a trip" is not offered on
+ * these (shared/src/trackTrip.ts). Null until first read: offer it meanwhile.
+ */
+export function useMirrorLoggedTrackIds(): MirrorQueryState<Set<string>> {
+  return useMirrorQuery(listLoggedTrackIds);
+}
+
 /** Media attached to one place or trip, pendingUpload rows included. */
 export function useMirrorMedia(
   linkedType: "place" | "tripLog",
@@ -229,19 +253,12 @@ export function usePendingCreateIds(): Set<string> {
   return ids;
 }
 
-/**
- * How many local changes are still waiting to reach the server.
- *
- * The reassurance Logjam GPS owes the user: their edit is not lost, it
- * is queued. Counts every outbox row that hasn't flushed, media uploads
- * included, and updates live as the queue drains.
- */
-export function usePendingSyncCount(): number {
+function usePendingCount(read: () => Promise<number>): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
     let cancelled = false;
     const refresh = () => {
-      countPendingOps()
+      read()
         .then((n) => {
           if (!cancelled) setCount(n);
         })
@@ -255,8 +272,23 @@ export function usePendingSyncCount(): number {
       unsubscribeMirror();
       unsubscribeSync();
     };
-  }, []);
+  }, [read]);
   return count;
+}
+
+/**
+ * How many things the user made or changed are still waiting to reach the
+ * server: a place created and edited offline is one, a track is one, a photo is
+ * one. The reassurance Logjam GPS owes the user: their edit is not lost, it is
+ * queued. Updates live as the queue drains.
+ */
+export function usePendingSyncCount(): number {
+  return usePendingCount(countPendingOps);
+}
+
+/** The queued ops behind that count: how much work is waiting, not how many things. */
+export function usePendingOpCount(): number {
+  return usePendingCount(countPendingOpRows);
 }
 
 /** Live count of everything on the Account sync issues screen. */

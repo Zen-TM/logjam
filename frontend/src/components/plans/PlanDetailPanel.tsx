@@ -61,7 +61,6 @@ import {
   IconButton,
   IconTile,
   LoadingState,
-  ListEnd,
   Menu,
   Row,
   StatusPill,
@@ -270,7 +269,7 @@ export default function PlanDetailPanel({
     setBusy(true);
     try {
       await action();
-      if (success) toast.success(success);
+      if (success) toast.done(success);
       refetch();
       return true;
     } catch (err) {
@@ -526,7 +525,8 @@ export default function PlanDetailPanel({
         {plan.sections.length === 0 ? (
           <EmptyState
             icon="notes"
-            title={copy.writeUpEmpty}
+            title={copy.writeUpEmptyTitle}
+            body={copy.writeUpEmptyBody}
             actions={
               canAddSection && (
                 <Button
@@ -579,17 +579,6 @@ export default function PlanDetailPanel({
             </section>
           ))
         )}
-        {plan.sections.length > 0 && canAddSection && (
-          <ListEnd>
-            <Button
-              variant="filled"
-              icon="add"
-              onClick={() => setSectionOpen({ id: null })}
-            >
-              {planAddVerbLabel("section")}
-            </Button>
-          </ListEnd>
-        )}
       </div>
     ),
     items: tab === "items" && (
@@ -608,7 +597,12 @@ export default function PlanDetailPanel({
         {plan.forms.length === 0 ? (
           <EmptyState
             icon="form"
-            title={role === "leader" ? copy.formsEmptyLeader : copy.formsEmpty}
+            title={copy.formsEmpty}
+            body={
+              role === "leader"
+                ? copy.formsEmptyBodyLeader
+                : copy.formsEmptyBody
+            }
             actions={
               canBuildForms && (
                 <Button
@@ -668,19 +662,6 @@ export default function PlanDetailPanel({
               }
             />
           ))
-        )}
-        {plan.forms.length > 0 && canBuildForms && (
-          <ListEnd>
-            <Button
-              variant="filled"
-              icon="add"
-              disabled={formsFull}
-              disabledReason={formsFullReason}
-              onClick={() => setBuilding({ id: null })}
-            >
-              {planAddVerbLabel("form")}
-            </Button>
-          </ListEnd>
         )}
       </div>
     ),
@@ -746,10 +727,9 @@ export default function PlanDetailPanel({
 
       {pickingTripPlaces && (
         <PlanTripLogPlacesDialog
-          planId={plan.id}
           places={plan.places}
-          onCopied={onOwnChanged}
-          onStale={() => refetch({ quiet: true })}
+          // The trip API takes only the caller's own places, not a shared one.
+          own={own.places.filter((place) => place.ownerId === myUserId)}
           onClose={() => setPickingTripPlaces(false)}
           onDone={(placeIds, placeTypeIds) => {
             setPickingTripPlaces(false);
@@ -797,7 +777,7 @@ export default function PlanDetailPanel({
               formUpdatedAt: answeringForm.updatedAt,
             });
             setAnswering(null);
-            toast.success(formsCopy.saved);
+            toast.done(formsCopy.saved);
             refetch();
           }}
         />
@@ -817,9 +797,7 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={formCopy != null}
-        title={formCopy?.confirmTitle}
-        message={formCopy?.confirmBody}
-        confirmLabel={formCopy?.confirmLabel}
+        copy={formCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={() => {
@@ -869,16 +847,14 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={confirm?.kind === "delete"}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel={deleteCopy.confirmLabel}
+        copy={deleteCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           try {
             setBusy(true);
             await deletePlan(plan.id);
-            toast.success(copy.deleted);
+            toast.done(copy.deleted);
             setConfirm(null);
             onPlansChanged();
             onBack();
@@ -892,33 +868,14 @@ export default function PlanDetailPanel({
       />
       <ConfirmDialog
         open={confirm?.kind === "leave"}
-        title={leaveCopy.confirmTitle}
-        message={
-          <>
-            <p>{leaveCopy.confirmBody}</p>
-            {mineCount.places + mineCount.ways > 0 && (
-              <Checkbox
-                label={planLeaveDeleteAddedLabel(
-                  mineCount,
-                  mineCount.bytes > 0
-                    ? formatBytes(mineCount.bytes)
-                    : undefined,
-                )}
-                checked={deleteAdded}
-                onChange={setDeleteAdded}
-              />
-            )}
-          </>
-        }
-        confirmLabel={leaveCopy.confirmLabel}
-        confirmColor={deleteAdded ? "error" : "primary"}
+        copy={leaveCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={async () => {
           try {
             setBusy(true);
             await leavePlan(plan.id, deleteAdded);
-            toast.success(copy.left);
+            toast.done(copy.left);
             setConfirm(null);
             onPlansChanged();
             onBack();
@@ -929,12 +886,21 @@ export default function PlanDetailPanel({
             setBusy(false);
           }
         }}
-      />
+      >
+        {mineCount.places + mineCount.ways > 0 && (
+          <Checkbox
+            label={planLeaveDeleteAddedLabel(
+              mineCount,
+              mineCount.bytes > 0 ? formatBytes(mineCount.bytes) : undefined,
+            )}
+            checked={deleteAdded}
+            onChange={setDeleteAdded}
+          />
+        )}
+      </ConfirmDialog>
       <ConfirmDialog
         open={sectionCopy != null}
-        title={sectionCopy?.confirmTitle}
-        message={sectionCopy?.confirmBody}
-        confirmLabel={sectionCopy?.confirmLabel}
+        copy={sectionCopy}
         busy={busy}
         onClose={() => setConfirm(null)}
         onConfirm={() => {

@@ -10,6 +10,8 @@ export const MAP_TERRAIN = {
   sections: [
     { key: "contours" },
     { key: "slope" },
+    // Opened from the Slope row on Logjam Web, a row of its own on Logjam GPS.
+    { key: "slopeBands" },
     { key: "hillshade" },
     // Only while a sharpened area of the user's has a vegetation layer.
     { key: "vegetation" },
@@ -17,13 +19,7 @@ export const MAP_TERRAIN = {
       key: "sharpenedAreas",
       on: "web",
       reason:
-        "Making, sharing and deleting sharpened areas is planning, done at home: Logjam GPS draws the ones the account has and saves them from Saved.",
-    },
-    {
-      key: "slopeBands",
-      on: "web",
-      reason:
-        "Choosing the angles and colours of the slope bands is planning, done at home: Logjam GPS draws the bands the account has.",
+        "Making a sharpened area, and deleting it from the account, is planning, done at home: Logjam GPS draws the ones the account has and, from Saved, shares one, saves it and deletes its device copy.",
     },
   ],
   copy: {
@@ -33,6 +29,10 @@ export const MAP_TERRAIN = {
     hillshade: "Hillshade",
     vegetation: "Vegetation",
     sharpenedAreas: "Sharpened areas",
+    // Behind the Sharpened areas row's help button, titled with its label.
+    sharpenedAreasAbout: "About sharpened areas",
+    sharpenedAreasLegend:
+      "A sharpened area redraws contours, slope and hillshade from LiDAR you supply, at the survey's own detail instead of the statewide layers'. It is yours alone until you share it with a friend.",
     vegetationHint: "Scrub density for bushbashing",
     // Behind the Vegetation row's help button, titled with its label.
     vegetationAbout: "About vegetation",
@@ -48,6 +48,16 @@ export const MAP_TERRAIN = {
     landCaveat:
       "Land Council freehold can show as private land. Roads, waterways and public areas aren't properly mapped around Sydney and Wollongong.",
     slopeBands: "Slope bands",
+    // One sentence under each switch. Slope's colours are the account's bands,
+    // so its key is `slopeLegendRows`, behind the row's help button.
+    contoursHint: "A line every 10 m of height",
+    slopeHint: "Coloured by steepness",
+    hillshadeHint: "Ridges and gullies stand out",
+    slopeAbout: "About slope",
+    slopeLegend:
+      "Steepness in degrees from flat. An easy walk is under 10°, a steep scramble around 30°, and a cliff 45° or more. Ground flatter than the first band has no colour.",
+    // At the top of the editor on both clients.
+    slopeBandsIntro: "Colour terrain based on how steep it is.",
     // The Contours switch over a topographic sheet, which has its own.
     contoursPrinted: "This map prints its own",
     // The Hillshade switch over imagery.

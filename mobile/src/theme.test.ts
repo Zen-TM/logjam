@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_THEME_SCHEME_ID, THEME_SCHEMES } from "@logjam/shared";
 
-import { clampTextScale, huesFor, placeholderColor, withAlpha } from "./theme";
+import {
+  clampTextScale,
+  fontSize,
+  huesFor,
+  scaleType,
+  placeholderColor,
+  withAlpha,
+} from "./theme";
 
 describe("withAlpha", () => {
   it("expands 3-digit and parses 6-digit hex", () => {
@@ -42,6 +49,23 @@ describe("clampTextScale", () => {
 
   it("treats a missing OS scale as 1 rather than dividing by zero", () => {
     expect(clampTextScale(1.15, 0)).toBe(1.15);
+  });
+});
+
+// Mutation: drop the Math.max in scaleType, and the 0.9 pick draws xs at 11.
+describe("scaleType", () => {
+  it("never renders under the 12 px floor", () => {
+    expect(scaleType(12, 0.9)).toBe(12);
+    expect(scaleType(14, 0.9)).toBe(13);
+  });
+
+  it("leaves larger picks alone", () => {
+    expect(scaleType(12, 1.5)).toBe(18);
+  });
+
+  it("holds for every size at the launch scale", () => {
+    for (const px of Object.values(fontSize))
+      expect(px).toBeGreaterThanOrEqual(12);
   });
 });
 

@@ -5,7 +5,7 @@ ECS Fargate export worker. Processes a single TopoExportJob then exits.
 
 Reads the export-job ID from EXPORT_JOB_ID. An export of an area renders the
 statewide terrain over its box (area_export.py). An export of a topo, which
-only a row queued before Export an area can be, fetches the source TopoJob's
+only a row queued before Make a map can be, fetches the source TopoJob's
 outputs from S3 (COGs for raster layers, raw GeoJSONs for vectors, vector
 PMTiles where needed) and dispatches to the renderer for its
 {format, bundling, layers}. Either way it uploads the artefact to:
@@ -79,10 +79,7 @@ log = logging.getLogger("export_worker")
 # (shared/DESIGN.md §11). Why a render failed is a developer's detail: it is
 # raw stderr from ogr2ogr, gdal_translate or tippecanoe, with temp paths in it,
 # and stays in the worker's log.
-GENERIC_FAILURE = (
-    "This export couldn't be made. Start it again, and contact support if it "
-    "keeps failing."
-)
+GENERIC_FAILURE = "This map couldn't be made. Start it again."
 
 
 def failure_sentence(error: Exception) -> str:
@@ -200,23 +197,23 @@ def send_completion_email(
         'style="display:block" /></p>'
     )
     if ok:
-        subject = f"Topo export ready — {format_.upper()}"
+        subject = f"Map ready — {format_.upper()}"
         text = (
-            "Your topo export is ready.\n\n"
+            "Your map is ready.\n\n"
             f"Open Logjam Web to download: {base}/?export={export_job_id}"
         )
         html = (
             f"{logo_html}"
-            f"<p>Your topo export is ready.</p>"
+            f"<p>Your map is ready.</p>"
             f'<p><a href="{base}/?export={export_job_id}">Open Logjam Web to download</a></p>'
         )
     else:
-        subject = f"Topo export failed — {format_.upper()}"
+        subject = f"Map failed — {format_.upper()}"
         safe_error = error or "Unknown error"
-        text = f"Your topo export failed.\n\n{safe_error}\n\nOpen Logjam Web to retry: {base}"
+        text = f"Your map couldn't be made.\n\n{safe_error}\n\nOpen Logjam Web to retry: {base}"
         html = (
             f"{logo_html}"
-            f"<p>Your topo export failed.</p>"
+            f"<p>Your map couldn't be made.</p>"
             f"<p><strong>{safe_error}</strong></p>"
             f'<p><a href="{base}">Open Logjam Web to retry</a></p>'
         )

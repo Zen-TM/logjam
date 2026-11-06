@@ -1,6 +1,29 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Button, ErrorState, LoadingState, Row, StatGrid, SwitchRow } from ".";
+import {
+  Button,
+  ErrorState,
+  ListBody,
+  LoadingState,
+  Row,
+  StatGrid,
+  SwitchRow,
+  Toast,
+} from ".";
+
+// A press on a disabled button opens its reason in a tooltip, which positions
+// itself with ResizeObserver and the popover API; jsdom has neither.
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    disconnect() {}
+  },
+);
+Object.assign(HTMLElement.prototype, {
+  showPopover() {},
+  hidePopover() {},
+});
 
 afterEach(cleanup);
 
@@ -10,6 +33,35 @@ afterEach(cleanup);
 // Mutations that turn these red: make `Row` always render its `.open` button;
 // drop `aria-disabled` from a Button that carries a reason; stop SwitchRow's
 // row click from toggling.
+describe("a Row with onPress answers a press on its card", () => {
+  // Mutation: drop `!disabled` from Row's click, and a dimmed card still toggles.
+  // Mutation: spread the caller's onClick after the card's, and it is replaced.
+  it("runs on the card, not on a control inside it, and not when disabled", () => {
+    const onPress = vi.fn();
+    const onClick = vi.fn();
+    const onHelp = vi.fn();
+    const row = (disabled: boolean) => (
+      <Row
+        title="Contours"
+        onPress={onPress}
+        onClick={onClick}
+        disabled={disabled}
+        trailing={<button onClick={onHelp}>help</button>}
+      />
+    );
+    const { rerender } = render(row(false));
+    fireEvent.click(screen.getByText("Contours"));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "help" }));
+    expect(onHelp).toHaveBeenCalledTimes(1);
+    expect(onPress).toHaveBeenCalledTimes(1);
+    rerender(row(true));
+    fireEvent.click(screen.getByText("Contours"));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("Row is pressable only when it does something", () => {
   it("has nothing to press when it has no onOpen and no href", () => {
     render(<Row title="Grade" subtitle="3B" trailing={<span>x</span>} />);
@@ -154,5 +206,66 @@ describe("loading and failed states", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A failed load never draws the empty state (shared/DESIGN.md §11). Mutation
+// that turns it red: draw `empty` before checking `state === "failed"`.
+describe("ListBody", () => {
+  const body = (state: "loading" | "failed" | "ready", onRetry = vi.fn()) =>
+    render(
+      <ListBody
+        state={state}
+        error="Couldn't load places."
+        onRetry={onRetry}
+        empty={<p>Add your first place</p>}
+      >
+        <p>the list</p>
+      </ListBody>,
+    );
+
+  it("draws the error with Try again for a failed load, never the empty state", () => {
+    const onRetry = vi.fn();
+    body("failed", onRetry);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Couldn't load places.",
+    );
+    expect(screen.queryByText("Add your first place")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws the loading line while loading, then the empty state, else the list", () => {
+    body("loading");
+    expect(screen.getByRole("status")).toBeTruthy();
+    cleanup();
+    body("ready");
+    expect(screen.getByText("Add your first place")).toBeTruthy();
+    cleanup();
+    render(
+      <ListBody state="ready" error={null}>
+        <p>the list</p>
+      </ListBody>,
+    );
+    expect(screen.getByText("the list")).toBeTruthy();
+  });
+});
+
+describe("Toast action", () => {
+  // Mutation that turns it red: drop the dismiss after the action.
+  it("does the action, then dismisses", () => {
+    const onPress = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <Toast
+        message="Saved."
+        tone="done"
+        action={{ label: "Open", onPress }}
+        onDismiss={onDismiss}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });

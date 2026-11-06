@@ -28,6 +28,7 @@ import {
   TRIPS_LIST,
   UNTAGGED_ACTIVITY,
   type FieldStat,
+  type LoadState,
   type LogbookRange,
   type LogbookStats,
   type ScopedCustomFieldDef,
@@ -50,7 +51,7 @@ import {
   StatGrid,
   type SparkBucket,
   Icon,
-  LoadingState,
+  ListBody,
 } from "../../../ui";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
@@ -89,7 +90,9 @@ function AnalyticsPanel({
   onBack,
   tripLogs,
   tripLogsTotal,
-  loaded,
+  state,
+  error,
+  onRetry,
   places,
   customFieldDefs,
   placeCustomFieldDefs,
@@ -99,7 +102,9 @@ function AnalyticsPanel({
   onBack: () => void;
   tripLogs: TTripLog[];
   tripLogsTotal: number | null;
-  loaded: boolean;
+  state: LoadState;
+  error: string | null;
+  onRetry: () => void;
   /** The user's own places: `GET /places`, never the shared list. */
   places: TPlace[];
   customFieldDefs: ScopedCustomFieldDef[];
@@ -185,29 +190,36 @@ function AnalyticsPanel({
     );
   };
 
+  const loaded = state === "ready";
   const title = !loaded
     ? STATS.title
     : activity
       ? logbookActivityLabel(activity)
       : statsHeroTitle(stats.days);
 
-  const status = !loaded ? (
-    <div className={classes.emptyArea} role="status">
-      <LoadingState label={copy.loading} />
-    </div>
-  ) : stats.trips === 0 ? (
-    <div className={classes.emptyArea}>
-      <EmptyState
-        icon="stats"
-        title={copy.emptyTitle}
-        body={
-          activity
-            ? statsEmptyActivityBody(logbookActivityLabel(activity))
-            : copy.emptyBody
-        }
-      />
-    </div>
-  ) : null;
+  const status = (
+    <ListBody
+      state={state}
+      loadingLabel={copy.loading}
+      error={error}
+      onRetry={onRetry}
+      empty={
+        stats.trips === 0 ? (
+          <EmptyState
+            icon="stats"
+            title={copy.emptyTitle}
+            body={
+              activity
+                ? statsEmptyActivityBody(logbookActivityLabel(activity))
+                : copy.emptyBody
+            }
+          />
+        ) : null
+      }
+    >
+      {null}
+    </ListBody>
+  );
 
   const showing = loaded && stats.trips > 0;
   // Exhaustive by type: a section the contract names and this panel does not

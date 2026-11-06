@@ -221,6 +221,12 @@ export const PLACE_TYPE_ICON_KEYS = [
   "square",
 ] as const;
 
+/** The glyph a NEW type starts on, in both clients. Not the pin: the built-in
+ *  Marker wears it, and a type that starts there reads as Marker until its icon
+ *  is changed. Guard: `placeTypes.test.ts`. */
+export const NEW_PLACE_TYPE_ICON_KEY =
+  "star" as const satisfies (typeof PLACE_TYPE_ICON_KEYS)[number];
+
 export type PlaceTypeIconKey = (typeof PLACE_TYPE_ICON_KEYS)[number];
 
 export function isPlaceTypeIconKey(value: unknown): value is PlaceTypeIconKey {
@@ -246,8 +252,9 @@ export const PLACE_TYPE_COLORS = [
   // with its type's colour and writes a label on top; mid-tone hues fail WCAG AA
   // on the label. Light hues carry dark ink; that is what makes the fill usable,
   // and it is why the palette is light rather than merely tasteful.
-  // `scripts/wcag-contrast.mjs` asserts both pairs — the chip label at 4.5 and
-  // the map marker at 3 — under every scheme.
+  // `scripts/wcag-contrast.mjs` asserts the chip label at 4.5 under every
+  // scheme, and a point mark's edge at 3: `MAP_INK.casing` on light land and
+  // `MAP_INK.ring` on satellite.
   //
   // The heath violet is deliberately ABSENT: it is reserved for "shared", which
   // is a different axis (fill = type, ring = shared) and must not collide

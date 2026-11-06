@@ -1,5 +1,5 @@
 import { useThemePreferences } from "../../../themePreferences";
-import { SectionHeader, Icon, ErrorBanner, LoadingState } from "../../../ui";
+import { Icon, ErrorBanner, LoadingState } from "../../../ui";
 import classes from "./ThemeChooser.module.css";
 
 /**
@@ -22,7 +22,6 @@ function ThemeChooser() {
 
   return (
     <>
-      <SectionHeader title="Theme" />
       {error && <ErrorBanner message={error} />}
       {isHydrating ? (
         <LoadingState label="Loading your saved theme…" />
@@ -59,7 +58,10 @@ function ThemeChooser() {
                     />
                   ))}
                 </span>
-                <span className={classes.name}>{scheme.name}</span>
+                <span className={classes.label}>
+                  <span>{scheme.name}</span>
+                  <span className={classes.mode}>{scheme.mode}</span>
+                </span>
                 {selected && (
                   <Icon
                     idea="done"

@@ -5,7 +5,7 @@
   right: 0;
   /* Leave the bottom nav strip uncovered so it stays tappable. */
   bottom: var(--bottom-nav-height);
-  background: var(--scrim);
+  background: var(--scrim-light);
   z-index: 3;
   border: none;
   padding: 0;
@@ -32,12 +32,14 @@
   touch-action: none;
 }
 
-/* Drag handle bar — the only grab area, so panel-body scroll stays usable, and
-   a `slider` the arrow keys move between the three snaps. The whole bar is the
-   target: it is 36px of grip on a full-width row, and a keyboard reaching a
-   4px-tall pill would be a worse promise than reaching none. The bar is drawn
-   16px tall; `::after` grows what a finger or a pointer hits to `--control-lg`
-   (36px, 48 on a touch screen) without moving the content under it. */
+/* Drag handle bar — a `slider` the arrow keys move between the heights (a page
+   scrolled to its top is also dragged by a pull down anywhere on it:
+   BottomSheet.tsx). The whole bar is the target: it is 36px of grip on a
+   full-width row, and a keyboard reaching a 4px-tall pill would be a worse
+   promise than reaching none. The bar is drawn 16px tall; `::after` grows what
+   a finger or a pointer hits to at least 44px (`--control-lg` is 36 for a
+   pointer), upward over the map and never down over the page's own first
+   control, whose top edge must stay pressable. */
 .handle {
   position: relative;
   flex-shrink: 0;
@@ -52,7 +54,8 @@
 .handle::after {
   content: "";
   position: absolute;
-  inset: calc((100% - var(--control-lg)) / 2) 0;
+  inset: auto 0 0;
+  height: max(var(--control-lg), 44px); /* intrinsic: the 44px minimum target */
 }
 
 /* The ring hugs the grip rather than the full-width bar it sits in, so focus
@@ -87,4 +90,11 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* A page's own scroller keeps the scroll it overshoots: the browser's pull to
+   refresh and iOS's rubber band must not take a pull down from the top. (Only
+   scroll containers read this.) */
+.content * {
+  overscroll-behavior-y: contain;
 }

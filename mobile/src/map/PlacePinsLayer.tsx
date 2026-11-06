@@ -25,6 +25,10 @@ import {
 import {
   SHARED_PLACE_COLOR,
   MAP_INK,
+  PIN_CASING_COLOR,
+  PIN_CASING_WIDTH,
+  PIN_HALO_COLOR,
+  pinHaloRadius,
   PLACE_BADGE_OFFSET,
   PLACE_BADGE_SHARED_IMAGE,
   PLACE_BADGE_SIZE,
@@ -78,6 +82,16 @@ const MUTED_OPACITY = [
   PLAN_DIM,
   1,
 ] as unknown as number;
+
+const PIN_RADIUS = 6;
+
+// The pin's white halo, a disc under it (`mapPin.ts`: a circle layer draws one
+// stroke). The same opacity as the pin, so a muted pin fades whole.
+const HALO_STYLE = {
+  circleRadius: pinHaloRadius(PIN_RADIUS),
+  circleColor: PIN_HALO_COLOR,
+  circleOpacity: MUTED_OPACITY,
+};
 
 // Bitmaps, not SDFs: a badge is a coloured disc with a white glyph and rim.
 const BADGE_IMAGES = Object.fromEntries(
@@ -136,16 +150,22 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         onPress={onPress}
       >
         <Layer
+          key={`${idPrefix}shared-place-halo`}
+          type="circle"
+          id={`${idPrefix}shared-place-halo`}
+          style={HALO_STYLE}
+        />
+        <Layer
           key={`${idPrefix}shared-place-circles`}
           type="circle"
           id={`${idPrefix}shared-place-circles`}
           // Identical to an owned pin, deliberately: the badge says what is
           // different about this place, so the dot does not have to.
           style={{
-            circleRadius: 6,
+            circleRadius: PIN_RADIUS,
             circleColor: ["get", "color"] as unknown as string,
-            circleStrokeColor: MAP_INK.ring,
-            circleStrokeWidth: 1.5,
+            circleStrokeColor: PIN_CASING_COLOR,
+            circleStrokeWidth: PIN_CASING_WIDTH,
             circleOpacity: MUTED_OPACITY,
             circleStrokeOpacity: MUTED_OPACITY,
           }}
@@ -184,16 +204,21 @@ export const PlacePinsLayer = memo(function PlacePinsLayer({
         onPress={onPress}
       >
         <Layer
+          key={`${idPrefix}place-halo`}
+          type="circle"
+          id={`${idPrefix}place-halo`}
+          style={HALO_STYLE}
+        />
+        <Layer
           key={`${idPrefix}place-circles`}
           type="circle"
           id={`${idPrefix}place-circles`}
           style={{
-            circleRadius: 6,
+            circleRadius: PIN_RADIUS,
             circleColor: ["get", "color"] as unknown as string,
-            // White, not a colour: an owned pin's ring is a separator against
-            // the map, not a second piece of information.
-            circleStrokeColor: MAP_INK.ring,
-            circleStrokeWidth: 1.5,
+            // A separator against the map, not a second piece of information.
+            circleStrokeColor: PIN_CASING_COLOR,
+            circleStrokeWidth: PIN_CASING_WIDTH,
             // `muted`: the user's own, faint beside a plan's in plan mode.
             circleOpacity: MUTED_OPACITY,
             circleStrokeOpacity: MUTED_OPACITY,

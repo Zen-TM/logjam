@@ -14,25 +14,8 @@
 // does, so it belongs in that tool's HUD where it already lives (DESIGN.md —
 // tool behaviour goes with the tool, not in a settings page).
 //
-// THE ONE ROW THAT IS NOT A PREFERENCE is the place names for search: a file,
-// downloaded and removed here because a guest can reach this page and not
-// Offline and storage, and because what it serves is the map's search box.
-//
 // PRIVACY: sides, colours, enums and two sampling numbers. Nothing positional.
 import { useCallback, useState } from "react";
-import { Alert } from "react-native";
-import { formatDateKey } from "@logjam/shared";
-
-import { unavailableReasonText } from "../../auth/capabilities";
-import { formatBytes } from "../../format";
-import { useConnectivity } from "../../map/connectivity";
-import { isOfflineOnly } from "../../offline/offlineOnlyMode";
-import {
-  PLACE_REGISTRY_DOWNLOAD_ESTIMATE,
-  removePlaceRegistry,
-  requestPlaceRegistry,
-  usePlaceRegistryStatus,
-} from "../../offline/placeRegistry";
 
 import {
   isCompassEnabled,
@@ -89,8 +72,6 @@ import {
 } from "../../tracks/sensorLog";
 import { applyRecordingOptionsToActiveTrack } from "../../tracks/trackRecorder";
 import {
-  IconButton,
-  Row,
   ScreenScroll,
   SectionHeader,
   ColourField,
@@ -106,7 +87,7 @@ const LONG_PRESS_LABELS: Record<LongPressAction, string> = {
   ask: "Ask each time",
   waypoint: "Drop a marker",
   navigate: "Navigate",
-  route: "Draw route",
+  route: "Draw a route",
   measure: "Measure",
   place: "Add place",
 };
@@ -287,6 +268,7 @@ export function MapSettingsScreen() {
 
         <SectionHeader title="Your location marker" />
         <ColourField
+          icon="colour"
           label="Colour"
           palette={MARKER_COLOR_ORDER.map((id) => MARKER_COLORS[id])}
           value={MARKER_COLORS[markerColorId]}
@@ -303,6 +285,7 @@ export function MapSettingsScreen() {
           }}
         />
 
+        <SectionHeader title="On the map" />
         <PreferenceRow
           icon="northUp"
           title="Map always north-up"
@@ -403,6 +386,7 @@ export function MapSettingsScreen() {
         />
 
         {/* ── Recording ─────────────────────────────────────────────────── */}
+        <SectionHeader title="Recording" />
         <ChoiceGroup
           label="Track detail"
           options={(Object.keys(FIX_RATE_LABELS) as FixRate[]).map((rate) => ({
@@ -420,7 +404,7 @@ export function MapSettingsScreen() {
             // stretch, and getting it on the following trip is no use.
             applyRecordingOptionsToActiveTrack()
               .then((applied) => {
-                if (applied) notify("Recording now at the new detail.", "info");
+                if (applied) notify("Recording now at the new detail.", "done");
               })
               .catch((error: unknown) => {
                 console.error(error);
@@ -442,9 +426,6 @@ export function MapSettingsScreen() {
             setAccuracyLimit(limit);
           }}
         />
-
-        <SectionHeader title="Search" />
-        <PlaceNamesRow />
 
         {/* ── Research ──────────────────────────────────────────────────────
             Developer-only, default off, and worded as what it is rather than
@@ -479,7 +460,7 @@ export function MapSettingsScreen() {
                 next
                   ? "Raw sensors will be logged from the next recording."
                   : "Sensor logging off from the next recording.",
-                "info",
+                "done",
               );
             }}
           />
@@ -523,64 +504,4 @@ function sensorLoggingSubtitle(
     return `${what} On from the next recording.`;
   const mb = (status.bytes / 1_000_000).toFixed(1);
   return `${what} Logging now — ${mb} MB.`;
-}
-
-/** The place registry the map's search box reads (offline/placeRegistry.ts).
- *  Download and Remove report at the app shell (BackgroundToast.tsx). */
-function PlaceNamesRow() {
-  const { stored, storedBytes, latest, downloading } = usePlaceRegistryStatus();
-  const offlineOnly = isOfflineOnly();
-  const online = useConnectivity(offlineOnly) === "online";
-
-  const download = () => void requestPlaceRegistry();
-  const remove = () =>
-    Alert.alert(
-      "Remove place names?",
-      "Search finds only your own places until you download them again.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => void removePlaceRegistry(),
-        },
-      ],
-    );
-
-  const subtitle = downloading
-    ? "Downloading…"
-    : stored
-      ? `${formatDateKey(`${stored.version}T00:00:00.000Z`)} · ${formatBytes(storedBytes)}`
-      : offlineOnly
-        ? "Offline maps only is on"
-        : online
-          ? latest
-            ? `About ${formatBytes(latest.bytes)}`
-            : PLACE_REGISTRY_DOWNLOAD_ESTIMATE
-          : unavailableReasonText("needs-connection");
-
-  return (
-    <Row
-      icon="search"
-      title="Place names for search"
-      subtitle={subtitle}
-      right={
-        stored ? (
-          <IconButton
-            icon="delete"
-            accessibilityLabel="Remove place names"
-            disabled={downloading}
-            onPress={remove}
-          />
-        ) : (
-          <IconButton
-            icon="saveOffline"
-            accessibilityLabel="Download place names"
-            disabled={downloading || !online}
-            onPress={download}
-          />
-        )
-      }
-    />
-  );
 }

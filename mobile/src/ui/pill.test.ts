@@ -20,12 +20,38 @@ describe("the chip's count badge", () => {
     expect(badge).not.toContain("radius.pill");
   });
 
+  // The same geometry on a navigation row's count. Mutation: put
+  // `borderRadius: radius.pill` back in Row.tsx's `badge` style.
+  it("is the same box on a row's count badge", () => {
+    const source = readFileSync(new URL("./Row.tsx", import.meta.url), "utf8");
+    const badge = source.slice(
+      source.indexOf("  badge: {"),
+      source.indexOf("  badgeText:"),
+    );
+    expect(badge).toContain("halfRadius(BADGE_SIZE)");
+    expect(badge).toContain("minWidth: BADGE_SIZE");
+    expect(badge).not.toContain("radius.pill");
+  });
+
   // Red when the badge stops remounting as its chip flips: a half radius alone
   // comes back squarish on the emulator once another chip is selected.
   // To see it: delete the `key={active ? "on" : "off"}` line in Chip.tsx.
   it("is remounted when its chip flips between active and not", () => {
     const source = readFileSync(new URL("./Chip.tsx", import.meta.url), "utf8");
     expect(source).toContain('key={active ? "on" : "off"}');
+  });
+});
+
+// A status pill sits in the middle of a row's trailing slot, not at its top.
+// Mutation: put `alignSelf: "flex-start"` back on the StatusPill base style, and
+// "From bob" floats above the ⋯ beside it on a shared place's row.
+describe("a status pill is centred in its row", () => {
+  it("does not set alignSelf", () => {
+    const source = readFileSync(
+      new URL("./StatusPill.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).not.toMatch(/alignSelf:/);
   });
 });
 

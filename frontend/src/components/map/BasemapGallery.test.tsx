@@ -132,4 +132,22 @@ describe("BasemapGallery", () => {
     fireEvent.click(tile);
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  // Mutation: leave the failure to `onHealth` alone, and a gallery with no
+  // parent tracking it (the Export dialog's) shows a failed swatch as a
+  // blank card that can still be picked.
+  it("tells a failed swatch is down for itself when it is given no list", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ status: 503 }));
+    const { container, onChange } = draw();
+    fireEvent.error(container.querySelectorAll("img")[1]);
+    await screen.findByText("Not available right now");
+    const tile = screen.getByRole("radio", { name: /SIX Topo/ });
+    expect((tile as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.load(container.querySelectorAll("img")[1]);
+    await waitFor(() =>
+      expect(screen.queryByText("Not available right now")).toBeNull(),
+    );
+    fireEvent.click(tile);
+    expect(onChange).toHaveBeenCalledWith("six-topo");
+  });
 });

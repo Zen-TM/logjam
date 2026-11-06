@@ -18,7 +18,6 @@ import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 import {
   ASSET_HUES,
   CONTROL,
-  DEFAULT_THEME_SCHEME_ID,
   FONT,
   FONT_WEIGHT,
   FORM_RHYTHM,
@@ -27,6 +26,7 @@ import {
   OPACITY,
   PLACE_STATUS_HUES,
   RADIUS,
+  schemeForOs,
   SPACE_UNIT,
   type SpaceStep,
   TEXT_ROLES,
@@ -34,6 +34,7 @@ import {
   TOUCH_TARGET_MIN,
   type ThemeSchemeId,
   type ThemeTokens,
+  WASH,
 } from "@logjam/shared";
 
 import { readPref, writePref } from "./prefsDb";
@@ -45,7 +46,22 @@ function resolveSchemeId(): ThemeSchemeId {
   const stored = readPref(THEME_SCHEME_PREF_KEY);
   // An unrecognised id (downgraded Logjam GPS, hand-edited row) falls back rather than
   // crashing the whole style layer on a bad string.
-  return normalizeThemeSchemeId(stored) ?? DEFAULT_THEME_SCHEME_ID;
+  return normalizeThemeSchemeId(stored) ?? schemeForOs(osPrefersDark());
+}
+
+/**
+ * Whether the OS is in dark mode; true where there is no OS to ask, which is
+ * Sandstone, the default. Required lazily for the reason `osFontScale` is.
+ */
+function osPrefersDark(): boolean {
+  try {
+    const { Appearance } =
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require("react-native") as typeof import("react-native");
+    return Appearance.getColorScheme() !== "light";
+  } catch {
+    return true;
+  }
 }
 
 let currentThemeSchemeId = resolveSchemeId();
@@ -220,9 +236,15 @@ export function persistTextScale(scale: TextScale): boolean {
   return writePref(TEXT_SCALE_PREF_KEY, String(scale));
 }
 
+/** No type renders under this, whatever the pick: the 0.9 option would draw `xs`
+ *  at 11. The floor is the smallest step, `FONT.gps.xs` (12 on both clients). */
+const TEXT_FLOOR_PX = FONT.gps.xs;
+
 // Rounded to whole pixels: RN takes fractional font sizes, but a 13.8 px label
 // beside a 13.8 px icon lands on a different subpixel on every device.
-const scaled = (px: number): number => Math.round(px * textScale);
+export const scaleType = (px: number, scale: number): number =>
+  Math.max(Math.round(px * scale), TEXT_FLOOR_PX);
+const scaled = (px: number): number => scaleType(px, textScale);
 
 // Spacing, radius and type read the shared scales (`@logjam/shared`
 // designTokens.ts), the same names Logjam Web's tokens are generated from.
@@ -237,6 +259,7 @@ export const fontSize = {
   base: scaled(FONT.gps.base),
   lg: scaled(FONT.gps.lg),
   xl: scaled(FONT.gps.xl),
+  xxl: scaled(FONT.gps.xxl),
 } as const;
 /** n steps of the shared unit: `spacing(1.5)` is the web's `--space-1-5`. */
 export const spacing = (n: SpaceStep): number => n * SPACE_UNIT;
@@ -246,6 +269,16 @@ export const formRhythm = FORM_RHYTHM;
 
 /** A disabled control's dim, the same number on both clients. */
 export const opacity = OPACITY;
+
+/** The tints: `withAlpha(token, wash.selected)`. A literal alpha is a lint
+ *  error (eslint.config.js). */
+export const wash = WASH;
+
+/** A page-coloured surface drawn over the map or a photo, which a wash is too
+ *  faint to be: chrome you read through to the map (`map`), a fade or a frame
+ *  (`dim`), and the near-invisible fill iOS needs to hit-test a view (`hit`).
+ *  Same lint as `wash`. */
+export const veil = { map: 0.9, dim: 0.6, hit: 0.01 } as const;
 
 /** Control heights: a phone is a touch screen, so it takes the touch set. */
 export const controlSize = CONTROL.touch;
@@ -278,6 +311,7 @@ type TextRoleStyle = {
   fontWeight: (typeof fontWeight)[keyof typeof fontWeight];
   lineHeight?: number;
   textTransform?: "uppercase";
+  fontVariant?: ["tabular-nums"];
 };
 export type TextRoles = { [Name in keyof typeof TEXT_ROLES]: TextRoleStyle };
 /**
@@ -298,6 +332,7 @@ export const textRoles = Object.fromEntries(
       fontWeight: fontWeight[role.weight],
       ...("leading" in role ? { lineHeight: leading } : {}),
       ...("uppercase" in role ? { textTransform: "uppercase" } : {}),
+      ...("tabular" in role ? { fontVariant: ["tabular-nums"] } : {}),
     };
     return [name, style];
   }),

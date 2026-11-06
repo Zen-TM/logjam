@@ -30,6 +30,7 @@ import { useFieldDefs } from "../customFields/useFieldDefs";
 import { AttributeTable } from "../customFields/CustomFieldValues";
 import { MediaStrip } from "../media/MediaStrip";
 import { resolveRouteAttachmentBbox } from "../media/routeAttachmentBbox";
+import { NoteBody } from "../plans/WriteUpBody";
 import { spacing, makeStyles, useTheme, muted } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import {
@@ -46,7 +47,6 @@ import {
   StatusPill,
   Toast,
   type ToastMessage,
-  Icon,
 } from "../ui";
 import { TripEditSheet } from "./TripEditSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
@@ -85,7 +85,7 @@ export function TripDetailScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const toastNonce = useRef(0);
-  const notify = useCallback((text: string, tone: "info" | "error") => {
+  const notify = useCallback((text: string, tone: "done" | "error") => {
     toastNonce.current += 1;
     setToast({ text, tone, nonce: toastNonce.current });
   }, []);
@@ -142,9 +142,7 @@ export function TripDetailScreen({
               icon="place"
               hue={theme.accent}
               title={place.name}
-              right={
-                <Icon idea="disclosure" size={20} color={theme.textMuted} />
-              }
+              chevron
               onPress={() => onOpenPlace(place.id, place.name)}
             />
           ))
@@ -176,6 +174,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.photosEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "done")}
         />
       </>
     ),
@@ -191,6 +190,7 @@ export function TripDetailScreen({
           media={attachments}
           emptyHint={copy.routesEmpty}
           onFailed={(text) => notify(text, "error")}
+          onAdded={(text) => notify(text, "done")}
           onShowRoute={(item) => {
             resolveRouteAttachmentBbox({
               mediaId: item.id,
@@ -216,7 +216,7 @@ export function TripDetailScreen({
       <>
         <SectionHeader title={copy.notes} />
         {current.notes ? (
-          <Text style={styles.notes}>{current.notes}</Text>
+          <NoteBody notes={current.notes} />
         ) : (
           <Text style={styles.muted}>{copy.notesEmpty}</Text>
         )}
@@ -244,8 +244,6 @@ export function TripDetailScreen({
           <IconButton
             icon="overflow"
             accessibilityLabel={`Actions for ${tripTitle(current)}`}
-            color={theme.accent}
-            filled
             onPress={() => setMenuOpen(true)}
           />
         }
@@ -267,7 +265,7 @@ export function TripDetailScreen({
         surface="page"
         onClose={() => setMenuOpen(false)}
         onEdit={() => setEditing(true)}
-        onInfo={(text) => notify(text, "info")}
+        onInfo={(text) => notify(text, "done")}
         onError={(text) => notify(text, "error")}
         onGone={onBack}
       />
@@ -279,7 +277,7 @@ export function TripDetailScreen({
         places={placesQuery.data ?? []}
         existingTypes={distinctTripTypes(allTrips.data ?? [])}
         onClose={() => setEditing(false)}
-        onSaved={(text) => notify(text, "info")}
+        onSaved={(text) => notify(text, "done")}
       />
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -296,8 +294,4 @@ const useStyles = makeStyles((theme, textRole) => ({
     gap: spacing(1),
   },
   muted: { ...muted(theme, textRole.detail) },
-  notes: {
-    ...textRole.paragraph,
-    color: theme.text,
-  },
 }));

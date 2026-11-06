@@ -13,7 +13,7 @@ import {
 
 import { searchUsers, type UserSearchResult } from "../api/friends";
 import { makeStyles, muted, spacing, useTheme } from "../theme";
-import { Row, TextField } from "../ui";
+import { Row, SectionHeader, TextField } from "../ui";
 
 const copy = FRIENDS.copy;
 
@@ -22,6 +22,10 @@ export function UserSearch({
   failed,
   offline,
   onChange,
+  belowField,
+  only,
+  quietEmpty,
+  resultsTitle,
   right,
 }: {
   label: string;
@@ -30,7 +34,16 @@ export function UserSearch({
   /** Searching needs a connection: said under the field instead. */
   offline?: string;
   /** The query changed: a row's failure no longer applies. */
-  onChange?: () => void;
+  onChange?: (query: string) => void;
+  /** Rows drawn between the field and the results: the caller's own matches. */
+  belowField?: ReactNode;
+  /** Which of the found people to draw as results; the caller's own lists
+   *  (`belowField`) draw the rest. */
+  only?: (found: UserSearchResult[]) => UserSearchResult[];
+  /** Something else answers the query: "no one by that name" would be wrong. */
+  quietEmpty?: boolean;
+  /** Heads the results, once there are some. */
+  resultsTitle?: string;
   right: (user: UserSearchResult) => ReactNode;
 }) {
   const theme = useTheme();
@@ -46,7 +59,7 @@ export function UserSearch({
   const changeQuery = (next: string) => {
     setQuery(next);
     setError(null);
-    onChange?.();
+    onChange?.(next);
     const searchable = next.trim().length >= USER_SEARCH_MIN_CHARS;
     // A cancelled search never clears its own spinner: this does.
     setSearching(searchable && !offline);
@@ -80,7 +93,12 @@ export function UserSearch({
     };
   }, [trimmed, long, offline, failed]);
 
-  const cutShort = friendSearchHint(results.length, total);
+  const shown = only ? only(results) : results;
+  const cutShort = friendSearchHint(
+    shown.length,
+    total,
+    results.length - shown.length,
+  );
   return (
     <View style={styles.body}>
       <TextField
@@ -91,18 +109,27 @@ export function UserSearch({
         error={error}
         hint={offline}
       />
+      {belowField}
       {/* A search the drop cancelled never clears `searching`; offline,
           nothing is working, so no spinner. */}
       {searching && !offline ? (
         <ActivityIndicator color={theme.accent} style={styles.spinner} />
       ) : null}
-      {trimmed.length > 0 && !long ? (
+      {trimmed.length > 0 && !long && !quietEmpty ? (
         <Text style={styles.hint}>{copy.searchHint}</Text>
       ) : null}
-      {long && !searching && !error && !offline && results.length === 0 ? (
+      {long &&
+      !searching &&
+      !error &&
+      !offline &&
+      !quietEmpty &&
+      shown.length === 0 ? (
         <Text style={styles.hint}>{copy.searchEmpty}</Text>
       ) : null}
-      {results.map((user) => (
+      {resultsTitle && shown.length > 0 ? (
+        <SectionHeader title={resultsTitle} />
+      ) : null}
+      {shown.map((user) => (
         <Row
           key={user.id}
           icon="account"

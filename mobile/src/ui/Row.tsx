@@ -1,17 +1,30 @@
 import type { ComponentProps } from "react";
-import { Pressable, Text, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  Text,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 
 import {
   hitSlop,
   opacity,
   radius,
   spacing,
+  wash,
   withAlpha,
   makeStyles,
   muted,
+  textScale,
   useTheme,
 } from "../theme";
+import { holdTick } from "./holdTick";
 import { Icon, type Glyph } from "./Icon";
+import { BADGE_SIZE, halfRadius } from "./pill";
+
+/** Past this drawn text size a row's trailing column stops fitting beside its words. */
+const LARGE_TEXT = 1.3;
 
 // Canonical list row, laid out horizontally: a leading node (icon tile / dot /
 // thumbnail), a title + optional subtitle, and an optional trailing accessory
@@ -37,7 +50,10 @@ export function Row({
   icon,
   hue,
   right,
+  badge,
   footer,
+  chevron = false,
+  rightBelow = false,
   progress,
   onPress,
   onLongPress,
@@ -68,6 +84,13 @@ export function Row({
   hue?: string;
   right?: React.ReactNode;
   /**
+   * How many are waiting on this row, drawn before `right` (§5's trailing
+   * order). A count is a badge, never the subtitle; zero is absent. The
+   * caller words it for a screen reader in `accessibilityLabel` ("Inbox, 3
+   * unread").
+   */
+  badge?: number;
+  /**
    * Full-width content pinned under the row's own line, INSIDE the card — the
    * slot for per-row actions that don't fit the trailing accessory (§5's order
    * runs out at one inline action). Keeping them inside the card is what says
@@ -75,6 +98,18 @@ export function Row({
    * the row below.
    */
   footer?: React.ReactNode;
+  /**
+   * "This opens something": the disclosure arrow, last on the line. An
+   * unavailable row opens nothing, so it draws none; always ask for it here,
+   * never draw the glyph in `right` (guard: disabledPressed.test.ts).
+   */
+  chevron?: boolean;
+  /**
+   * `right` is a column of several things (a size, glyphs, a ⋯). At a large
+   * text size it takes the line's width from the title, so it drops under the
+   * subtitle, right-aligned, and the words get the whole card.
+   */
+  rightBelow?: boolean;
   progress?: number | null;
   onPress?: () => void;
   /** Press-and-hold — the way a multi-select starts (DESIGN.md). */
@@ -92,9 +127,10 @@ export function Row({
    */
   selected?: boolean;
   /**
-   * Unavailable right now, with the reason in the subtitle (UX §5): the row
-   * dims AND stops responding, and a screen reader hears the subtitle as the
-   * reason. Dropping `onPress` alone leaves a row that looks live and silently
+   * Unavailable right now, with the reason in the subtitle (UX §5): the tile,
+   * title and controls dim AND the row stops responding, while the subtitle
+   * stays at full strength (at the disabled opacity it falls under 3:1), and a
+   * screen reader hears it as the reason. Dropping `onPress` alone leaves a row that looks live and silently
    * does nothing, which is worse than a visibly dead one.
    */
   disabled?: boolean;
@@ -121,12 +157,41 @@ export function Row({
   // horizontal layout every row has always had. `progress` stays a direct child
   // of the card, not of the line: it is absolutely positioned against the card's
   // padding box, and nesting it would inset the bar by the card's padding.
+  // Our multiplier times the OS's: the size the words are actually drawn at.
+  const { fontScale } = useWindowDimensions();
+  const stackRight =
+    rightBelow && right != null && textScale * fontScale >= LARGE_TEXT;
+  const rightNode =
+    right != null || badge ? (
+      <View
+        style={[
+          styles.right,
+          badge ? styles.rightRow : null,
+          disabled && styles.disabled,
+          stackRight && styles.rightBelow,
+        ]}
+      >
+        {badge ? (
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>{badge}</Text>
+          </View>
+        ) : null}
+        {right}
+      </View>
+    ) : null;
   const body = (
     <>
       <View style={styles.line}>
-        {lead != null ? <View style={styles.leading}>{lead}</View> : null}
+        {lead != null ? (
+          <View style={[styles.leading, disabled && styles.disabled]}>
+            {lead}
+          </View>
+        ) : null}
         <View style={styles.main}>
-          <Text style={styles.title} numberOfLines={titleNumberOfLines}>
+          <Text
+            style={[styles.title, disabled && styles.disabled]}
+            numberOfLines={titleNumberOfLines}
+          >
             {title}
           </Text>
           {subtitle ? (
@@ -134,10 +199,18 @@ export function Row({
               {subtitle}
             </Text>
           ) : null}
+          {stackRight ? rightNode : null}
         </View>
-        {right != null ? <View style={styles.right}>{right}</View> : null}
+        {stackRight ? null : rightNode}
+        {chevron && !disabled ? (
+          <Icon idea="disclosure" size={20} color={theme.textMuted} />
+        ) : null}
       </View>
-      {footer != null ? <View style={styles.footer}>{footer}</View> : null}
+      {footer != null ? (
+        <View style={[styles.footer, disabled && styles.disabled]}>
+          {footer}
+        </View>
+      ) : null}
       {progress != null ? (
         <View style={styles.progressTrack}>
           <View
@@ -165,7 +238,6 @@ export function Row({
           styles.row,
           styles.readOnly,
           selected && styles.selected,
-          disabled && styles.disabled,
           style,
         ]}
       >
@@ -182,14 +254,20 @@ export function Row({
       accessibilityActions={accessibilityActions}
       onAccessibilityAction={onAccessibilityAction}
       onPress={onPress}
-      onLongPress={onLongPress}
+      onLongPress={
+        onLongPress
+          ? () => {
+              holdTick();
+              onLongPress();
+            }
+          : undefined
+      }
       disabled={disabled}
       hitSlop={hitSlop}
       style={({ pressed }) => [
         styles.row,
         selected && styles.selected,
         pressed && styles.pressed,
-        disabled && styles.disabled,
         style,
       ]}
     >
@@ -264,6 +342,18 @@ const useStyles = makeStyles((theme, textRole) => ({
     justifyContent: "center",
     gap: spacing(0.5),
   },
+  rightRow: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
+  badge: {
+    minWidth: BADGE_SIZE,
+    height: BADGE_SIZE,
+    paddingHorizontal: spacing(1),
+    borderRadius: halfRadius(BADGE_SIZE),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.warning,
+  },
+  badgeText: { ...textRole.caption, color: theme.onFill },
+  rightBelow: { alignSelf: "flex-end" },
   title: { ...textRole.rowTitle, color: theme.text },
   subtitle: muted(theme, textRole.detail),
   progressTrack: {
@@ -272,7 +362,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     right: 0,
     bottom: 0,
     height: 3,
-    backgroundColor: withAlpha(theme.text, 0.1),
+    backgroundColor: withAlpha(theme.text, wash.selected),
   },
   progressFill: { height: 3, borderRadius: radius.pill },
 }));

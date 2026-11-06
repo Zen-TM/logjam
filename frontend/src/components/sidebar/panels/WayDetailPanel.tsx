@@ -42,6 +42,7 @@ import {
   pairedStatLayout,
   wayVerbIcon,
   MAP_MEASURE,
+  sharedWayNote,
 } from "@logjam/shared";
 import {
   copyRoute,
@@ -266,6 +267,11 @@ export default function WayDetailPanel({
   const sharingPlace =
     sharedPlaces.find((place) => place.id === placeId) ?? null;
   const ownerName = route ? ownerUsername(friends, route.ownerId) : null;
+  const removeShare = removeShareConfirm({
+    kindLabel: "route",
+    itemName: way.title,
+    ownerName,
+  });
 
   const run = async (action: () => Promise<unknown>, failure: string) => {
     setBusy(true);
@@ -289,7 +295,7 @@ export default function WayDetailPanel({
         // are one fact about the line, and side by side is what makes them
         // comparable.
         {
-          label: "Distance",
+          label: PAIRED_STAT_LABELS.distance,
           value: formatDistanceM(routeLengthM(route.points)),
           span: true,
         },
@@ -306,7 +312,7 @@ export default function WayDetailPanel({
         ...(way.distanceM != null
           ? [
               {
-                label: "Distance",
+                label: PAIRED_STAT_LABELS.distance,
                 value: formatDistanceM(way.distanceM),
                 span: true,
               },
@@ -362,7 +368,7 @@ export default function WayDetailPanel({
     void run(async () => {
       const copy = await copyRoute(route.id);
       if (alsoRemove) await unshareEntityWith("route", route.id, "me");
-      toast.success(
+      toast.done(
         alsoRemove
           ? `"${copy.name}" is yours now, and ${ownerName ?? "their"} share is removed.`
           : `"${copy.name}" is yours now.`,
@@ -407,7 +413,7 @@ export default function WayDetailPanel({
     setEnding(null);
     void run(async () => {
       await unshareEntityWith("route", route.id, "me");
-      toast.success(`${way.title} removed.`);
+      toast.done(`${way.title} removed.`);
       onBack();
     }, "Couldn't remove that route.");
   };
@@ -505,7 +511,7 @@ export default function WayDetailPanel({
     const from = linkedPlace?.name;
     void run(async () => {
       await updateRoute(route.id, { placeId: null });
-      toast.success(from ? `Unlinked from ${from}.` : "Unlinked.");
+      toast.done(from ? `Unlinked from ${from}.` : "Unlinked.");
     }, "Couldn't unlink the route.");
   };
 
@@ -517,9 +523,9 @@ export default function WayDetailPanel({
       // Say it worked. The panel showing the place afterwards is the real
       // confirmation, but it was silent even once that started working, and a
       // write with no acknowledgement reads as a write that did not happen.
-      toast.success(name ? `Linked to ${name}.` : "Linked to a place.");
+      toast.done(name ? `Linked to ${name}.` : "Linked to a place.");
       if (result.displacedRoute) {
-        toast.info(
+        toast.done(
           `"${result.displacedRoute.name}" was unlinked and kept as a standalone route.`,
         );
       }
@@ -732,9 +738,9 @@ export default function WayDetailPanel({
         {!owned && (
           <section className={classes.section}>
             <p className={classes.note}>
-              {way.viaPlace
-                ? `Shared with you as part of ${sharingPlace?.name ?? "a place"} — you can see it, but not change it. Removing that place is what stops it showing here.`
-                : "Shared with you — you can see it, but not change it."}
+              {sharedWayNote(
+                way.viaPlace ? (sharingPlace?.name ?? "a place") : null,
+              )}
             </p>
           </section>
         )}
@@ -761,7 +767,7 @@ export default function WayDetailPanel({
           send={async (recipientIds) => {
             const { filename } = await sendCopyOfMedia(file.id, recipientIds);
             setShowSendCopy(false);
-            toast.success(
+            toast.done(
               recipientIds.length === 1
                 ? `Sent ${filename}.`
                 : `Sent ${filename} to ${recipientIds.length} friends.`,
@@ -770,15 +776,21 @@ export default function WayDetailPanel({
         />
       )}
 
-      {renaming && file && (
+      {renaming && (route || file) && (
         <RenameWayDialog
-          file={file}
+          noun={route ? "route" : "file"}
+          currentName={route ? route.name : mediaDisplayName(file!)}
           busy={busy}
           onSave={(name) => {
             setRenaming(false);
             void run(
-              () => renameMedia(file.id, name),
-              "Couldn't rename that file.",
+              () =>
+                route
+                  ? updateRoute(route.id, { name })
+                  : renameMedia(file!.id, name),
+              route
+                ? "Couldn't rename that route."
+                : "Couldn't rename that file.",
             );
           }}
           onClose={() => setRenaming(false)}
@@ -787,14 +799,14 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={pendingLink !== null}
-        title="Replace this place's route?"
-        message={
-          pendingLink
-            ? `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`
-            : ""
+        copy={
+          pendingLink && {
+            confirmTitle: "Replace this place's route?",
+            confirmBody: `${pendingLink.placeName} already has the route "${pendingLink.incumbentName}". It will be unlinked and kept as a standalone route — nothing is deleted.`,
+            confirmLabel: "Replace",
+            tone: "filled",
+          }
         }
-        confirmLabel="Replace"
-        confirmColor="primary"
         busy={busy}
         onConfirm={() => {
           const target = pendingLink;
@@ -809,22 +821,12 @@ export default function WayDetailPanel({
           makes) and the button is not the red one a delete uses. */}
       <ConfirmDialog
         open={ending === "remove"}
-        title={
-          removeShareConfirm({
-            kindLabel: "route",
-            itemName: way.title,
-            ownerName,
-          }).title
-        }
-        message={
-          removeShareConfirm({
-            kindLabel: "route",
-            itemName: way.title,
-            ownerName,
-          }).body
-        }
-        confirmLabel="Remove"
-        confirmColor="primary"
+        copy={{
+          confirmTitle: removeShare.title,
+          confirmBody: removeShare.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={handleRemoveShare}
         onClose={() => setEnding(null)}
@@ -832,12 +834,14 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={ending === "copyAndRemove"}
-        title="Save to your Ways and remove?"
-        message={`A copy of "${way.title}" is saved to your Ways first, then ${
-          ownerName ? `${ownerName}'s` : "the owner's"
-        } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`}
-        confirmLabel="Save and remove"
-        confirmColor="primary"
+        copy={{
+          confirmTitle: "Save a copy and remove?",
+          confirmBody: `A copy of "${way.title}" is saved to your Ways first, then ${
+            ownerName ? `${ownerName}'s` : "the owner's"
+          } share is removed from your account. The copy is yours to keep and edit — nothing of theirs is deleted.`,
+          confirmLabel: "Save and remove",
+          tone: "filled",
+        }}
         busy={busy}
         onConfirm={() => handleCopy(true)}
         onClose={() => setEnding(null)}
@@ -845,9 +849,13 @@ export default function WayDetailPanel({
 
       <ConfirmDialog
         open={confirmDelete}
-        title={route ? "Delete route?" : "Delete this file?"}
-        message={`"${way.title}" is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.`}
-        confirmLabel="Delete"
+        copy={{
+          confirmTitle: `Delete ${way.title}?`,
+          confirmBody:
+            "It is removed from your account, so it goes from Logjam GPS and your other devices too. This can't be undone.",
+          confirmLabel: "Delete",
+          tone: "destructive",
+        }}
         busy={busy}
         onConfirm={() => {
           setConfirmDelete(false);
@@ -859,27 +867,30 @@ export default function WayDetailPanel({
   );
 }
 
-/** Renaming a file, as a form with a Cancel — never a live field that commits
- *  on blur (DESIGN.md). */
+/** Renaming a file or a route, as a form with a Cancel — never a live field
+ *  that commits on blur (DESIGN.md). */
 function RenameWayDialog({
-  file,
+  noun,
+  currentName,
   busy,
   onSave,
   onClose,
 }: {
-  file: StandaloneFile;
+  noun: "file" | "route";
+  currentName: string;
   busy: boolean;
   onSave: (name: string) => void;
   onClose: () => void;
 }) {
-  const current = mediaDisplayName(file);
+  const current = currentName;
+  const label = noun === "route" ? "Route name" : "File name";
   const [name, setName] = useState(current);
   const [error, setError] = useState<string | null>(null);
 
   function save() {
     const trimmed = name.trim();
     if (trimmed.length === 0) {
-      setError("File name is required");
+      setError(`${label} is required`);
       return;
     }
     if (trimmed === current) {
@@ -892,7 +903,7 @@ function RenameWayDialog({
   return (
     <Dialog
       open
-      title="Rename this file"
+      title={`Rename this ${noun}`}
       onClose={onClose}
       dismissible={!busy}
       footer={
@@ -907,7 +918,7 @@ function RenameWayDialog({
       }
     >
       <TextField
-        label="File name"
+        label={label}
         value={name}
         error={error}
         onChange={(event) => {

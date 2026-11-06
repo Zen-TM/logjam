@@ -21,9 +21,9 @@
  */
 export const WORKER_SPECS = {
   /** logjam-topo-worker — LiDAR topo generation. The expensive one. */
-  topo: { vcpus: 8, memoryGiB: 16, label: "Topo generation" },
-  /** logjam-topo-export-worker — on-demand export rendering. */
-  topoExport: { vcpus: 4, memoryGiB: 8, label: "Topo export" },
+  topo: { vcpus: 8, memoryGiB: 16, label: "Sharpen an area" },
+  /** logjam-topo-export-worker — on-demand map rendering. */
+  topoExport: { vcpus: 4, memoryGiB: 8, label: "Make a map" },
 } as const;
 
 export type WorkerKind = keyof typeof WORKER_SPECS;
@@ -118,4 +118,30 @@ export function formatCredits(credits: number): string {
   if (rounded < 90) return `${rounded} credit${rounded === 1 ? "" : "s"}`;
   const hours = rounded / 60;
   return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)} credit-hours`;
+}
+
+/** The number alone, in the unit `quota` picks: credit-hours from ~90, else credits. */
+function inUnitOf(quota: number, credits: number): [string, string] {
+  const n = Math.max(0, Math.round(credits));
+  if (Math.max(0, Math.round(quota)) >= 90) {
+    const h = n / 60;
+    return [h >= 10 ? String(Math.round(h)) : h.toFixed(1), "credit-hours"];
+  }
+  return [String(n), `credit${n === 1 ? "" : "s"}`];
+}
+
+/** `credits` as a quantity in the unit `quota` picks, e.g. "0.6 credit-hours". */
+export function formatCreditsLike(credits: number, quota: number): string {
+  return inUnitOf(quota, credits).join(" ");
+}
+
+/**
+ * "used of quota" in ONE unit, picked from the quota. Formatting each side on
+ * its own printed "76 credits of 20 credit-hours" once usage was under the hour
+ * threshold and the allowance was over it.
+ */
+export function formatCreditsOf(used: number, quota: number): string {
+  const [u] = inUnitOf(quota, used);
+  const [q, unit] = inUnitOf(quota, quota);
+  return `${u} of ${q} ${unit}`;
 }

@@ -55,15 +55,29 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   panel never makes its own. Every hero is the same height, so switching
   views never moves the rail under it.
 - **A page with two views swaps them under one chip rail**, the first under
-  the hero. A view reached from the page (Logs → Stats, by a hero icon) or a
+  the hero. A view reached from the page (Trips → Stats, by a hero icon) or a
   step inside a view opens in place with `Hero onBack`; focus goes to the arrow on the way in and to the opened row on the
   way out.
 - **One "add" per page**: a compact filled `Add ▾` in the hero, opening a
   menu. A page's housekeeping verbs (Mark all as read) are behind the hero's
   ⋯. A list's search bar sits under its rail (`shared/DESIGN.md` §2).
-- **Narrow web (≤768px) is Logjam GPS's tab bar.** One breakpoint:
-  `useIsMobile()` for behaviour, `@media` for layout. A narrow branch changes
-  the furniture, never a thing's landmark, name, roles or keys.
+- **Narrow web (≤768px) has Logjam GPS's tab bar with Plans in place of Map.**
+  Places, Trips, Ways, Plans, then More. A page is a sheet over the map, so
+  closing it is how a user gets back to the map, and a tab for it would be a
+  second way to do the same thing. Logjam GPS keeps one because its pages fill
+  the screen.
+  One breakpoint: `useIsMobile()` for behaviour, `@media` for layout. A narrow
+  branch changes the furniture, never a thing's landmark, name, roles or keys.
+- **A narrow sheet has two heights, half (a bit under half the screen) and
+  full, and a way out.** Swiping it down from half closes it, as its × does,
+  and so does Escape when nothing inside has taken the key. It is dragged by
+  its grab bar (a hit area at least 44px tall, grown upward so it never covers
+  the page's first control) or by a pull down anywhere on a page that is
+  scrolled to its top, as on Logjam GPS. A field, a chart that scrubs
+  (`touch-action: none`) or an element marked `data-no-sheet-drag` keeps its
+  own touches. A gesture that has gone up, sideways or scrolled the page stays
+  the page's. There is no peek to rest at: it showed a title and nothing to
+  read.
 - **Chrome over the map is placed from `--map-inset-left`** (CSS, from
   `data-panel-open` and `data-sheet-open`). Never pass a width from JS.
 - **An armed map tool is a page in the panel**, never a card over the map.
@@ -72,7 +86,10 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   out; a measurement is not kept, so leaving it asks nothing.
   Narrow, its sheet opens at the peek (the note, the distance and Undo:
   `DraftPeek`) so the map is there to press; dragging it up brings back the
-  rest.
+  rest. The peek is only for a tool, or a map flow that holds the sheet there,
+  so the map is there to press. Its floor is the peek while a map flow runs and
+  for the route tool, whose × asks before it discards a line (`closeAsksFirst`);
+  Measure keeps nothing, so a swipe past its peek closes it as its × does.
 - **MapLibre's controls are restyled, not rebuilt**: kit buttons on the map's
   public API; the scale bar and attribution stay MapLibre's.
 - **Hovering a row lights its pin; pressing a pin opens the place**, from any
@@ -87,7 +104,6 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
   topo's style). It is non-modal and never opens by itself on arrival.
 - **Every filter wears `FilterField`**, and its control follows the shape of
   the attribute (`AttributeFilter`), never its key.
-- **Sort persists; filters do not**, and Reset leaves the sort alone.
 
 ## 3. Surfaces and actions
 
@@ -102,12 +118,23 @@ rail │ panel 380              │ sheet 380 (optional)  │ map
 - **`Popover`** is non-modal. Whether an outside press closes it is the
   caller's call, and Layers and a value picker both close (so does the Tools
   tray); a press on the map closes them too. More than a switch inside opens a sub-view, never a second popover
-  or an accordion.
+  or an accordion. The map point panel (a click opens its facts, a right-click
+  opens it on Options) is the exception to the × (shared/DESIGN.md §3): no ×, a
+  press on the map outside it closes it and the click it ends in asks about no
+  new point (`suppressAskWithin`; a route, place or gauge under the press still
+  acts, as does a press on any other control), and Escape undoes one layer.
+  A popover with no × (`closeButton={false}`) gets the top margin the × bar
+  would have: its first header or card never touches the edge.
 - **`Menu`** is titled with the thing it acts on.
 - **A setting a task rarely changes is a `Row` that opens a sub-view**, its
-  current answer as the subtitle. Inside a `Dialog`, two ways of setting one
-  thing are a `ChipRail` that swaps the view under it (Export an area's On the
-  map · Type the edges), never a disclosure.
+  current answer as the subtitle. Inside a `Dialog`, two views of one thing
+  are a `ChipRail` that swaps the view under it (Coordinates' Lat/Lon · E/N),
+  never a disclosure. Two _ways of entering_ one thing are not views: Make
+  a map's Area row has Pick on the map, an action that leaves the dialog
+  for the map, beside Type the coordinates, which opens the edges beneath the
+  row. Both take the filled look when they hold the answer (Pick once the
+  area was drawn on the map, Type while the edges are open). An area picker
+  with only the map way (Sharpen area) is a single button.
 - **A caught error goes through `messageFromError(err, "Couldn't save
   place.")`**, then `ErrorBanner` (a form still open), `FieldError` (one
   field) or `useToast().error` (background).
@@ -174,6 +201,16 @@ WCAG 2.2 AA is the floor.
   (`Tooltip.tsx`).
 - **Escape closes one layer per press** (`useEscape`); anything layered
   inside a dialog handles Escape on its own element.
+- **A list of `Row`s is a `RowList`: one tab stop** (`useListKeys`, wired once
+  in `SidebarPanel`; the page opts in by drawing its rows in one, and a test
+  per page holds it). Up/Down, Home and End move between rows, Enter opens,
+  Space ticks the tile (Shift+Space a range) and says so, Shift+F10 or the
+  context-menu key opens the row's actions; the list is a `list` that says so.
+  "Skip to panel" comes before "Skip to map".
+- **A page with a back arrow is left by Escape** (`usePanelFocus`): the same as
+  pressing the arrow, never from inside a text field. Focus goes to the arrow
+  on the way in and to the row that was opened on the way back (the next row
+  after a delete). Escape also lifts an armed Measure or Draw tool.
 - **Nothing interactive inside a `<label>`.** Exclusive choices are a named
   `radiogroup`.
 - **A badge is `aria-hidden`, its count in the name** ("Inbox, 9 unread").

@@ -121,6 +121,12 @@
   color: var(--color-text-muted);
 }
 
+.statNote {
+  composes: meta from "../textRoles.generated.module.css";
+  display: block;
+  color: var(--color-text-muted);
+}
+
 .statValue {
   composes: heading from "../textRoles.generated.module.css";
   margin: 0;

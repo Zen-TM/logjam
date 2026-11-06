@@ -12,7 +12,7 @@
 // `onShowOnMap` is the ONE row that is Saved-only: on the map you are already
 // looking at the line you tapped.
 import { useEffect, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   climbFromProfile,
   messageFromError,
@@ -25,8 +25,16 @@ import {
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
-import { BottomSheet, closedSheet, RenameForm, Row, ColourField } from "../ui";
+import {
+  BottomSheet,
+  closedSheet,
+  confirm,
+  RenameForm,
+  Row,
+  ColourField,
+} from "../ui";
 import { trackActions } from "../saved/assetActions";
+import { useMirrorLoggedTrackIds } from "../sync/useSyncQueries";
 import { usePlacePicker } from "../places/usePlacePicker";
 import type { Bbox } from "../saved/bboxOfPoints";
 import { ExportUnsupportedError } from "../fileExport";
@@ -150,7 +158,8 @@ export function TrackOptionsSheet({
       : null;
 
   const shareRowProps = useShareRowProps(online);
-  const actions = track ? trackActions(track) : null;
+  const loggedTrackIds = useMirrorLoggedTrackIds().data ?? undefined;
+  const actions = track ? trackActions(track, loggedTrackIds) : null;
   // THE sharing panel, in its "send a copy" mode — the same component every
   // other surface renders, with the wording the one non-revocable verb needs.
   const share = useSharePanel({
@@ -244,7 +253,7 @@ export function TrackOptionsSheet({
           : sending
             ? share.title
             : attaching
-              ? "Attach to a place"
+              ? "Link to a place"
               : track.name
       }
       onBack={leaveSubMode ?? undefined}
@@ -335,6 +344,9 @@ export function TrackOptionsSheet({
             />
           ) : null}
           <ColourField
+            icon="colour"
+            hue={assetHue.track}
+            disabled={busy}
             label="Colour"
             palette={TRACK_COLORS}
             value={track.color}
@@ -396,7 +408,7 @@ export function TrackOptionsSheet({
               picker says before the fact (routeSlot.ts's promise). */}
           {actions.createRouteFrom ? (
             <Row
-              title="Attach to a place"
+              title="Link to a place"
               subtitle="As that place's route"
               icon="link"
               hue={assetHue.route}
@@ -439,22 +451,23 @@ export function TrackOptionsSheet({
             icon="delete"
             hue={theme.warning}
             disabled={busy}
-            onPress={() => {
+            onPress={async () => {
               close();
               if (!actions.delete) return;
               const removal = actions.delete;
-              Alert.alert(removal.confirmTitle, removal.confirmBody, [
-                { text: "Keep it", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () =>
-                    removal.run().catch((err: unknown) => {
-                      console.error(err);
-                      onError("Couldn't delete that track.");
-                    }),
-                },
-              ]);
+              if (
+                !(await confirm({
+                  confirmTitle: removal.confirmTitle,
+                  confirmBody: removal.confirmBody,
+                  confirmLabel: "Delete",
+                  tone: "destructive",
+                }))
+              )
+                return;
+              removal.run().catch((err: unknown) => {
+                console.error(err);
+                onError("Couldn't delete that track.");
+              });
             }}
           />
         </View>

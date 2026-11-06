@@ -11,8 +11,10 @@
 import { StyleSheet, View } from "react-native";
 
 import { useAccountState } from "../auth/AccountStateContext";
+import { useLastSyncAt } from "../sync/useSyncQueries";
 import { spacing } from "../theme";
 import { StatusPill } from "./StatusPill";
+import { syncAgeLabel } from "./syncAge";
 
 export function SyncStatusPills({
   online,
@@ -24,12 +26,20 @@ export function SyncStatusPills({
 }) {
   const isGuest = useAccountState().accountState === "guest";
   const showPending = pendingCount > 0 && !isGuest;
+  const lastSyncAt = useLastSyncAt();
+  // Only drawn offline, and a tab screen outlives the day it was opened on, so
+  // the clock is read as the pill is drawn, not when the screen mounted.
+  const age = online ? null : syncAgeLabel(lastSyncAt);
 
   if (online && !showPending) return null;
   return (
     <View style={styles.row}>
       {online ? null : (
-        <StatusPill label="Offline" tone="muted" icon="offline" />
+        <StatusPill
+          label={age ? `Offline · ${age}` : "Offline"}
+          tone="muted"
+          icon="offline"
+        />
       )}
       {showPending ? (
         <StatusPill

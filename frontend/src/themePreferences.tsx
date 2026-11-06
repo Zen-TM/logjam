@@ -10,6 +10,8 @@ import {
 import {
   DEFAULT_THEME_SCHEME_ID,
   normalizeUserUiPreferences,
+  schemeForOs,
+  storedThemeSchemeId,
   THEME_SCHEMES,
   THEME_SCHEME_ORDER,
   type ThemeScheme,
@@ -25,6 +27,12 @@ function applyScheme(id: ThemeSchemeId) {
   document.documentElement.dataset.scheme = id;
   window.dispatchEvent(new Event("logjam-theme-change"));
 }
+
+/** Until the account holds a pick, the scheme follows the OS. */
+const osScheme = () =>
+  schemeForOs(
+    window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true,
+  );
 
 type ThemePreferencesContextValue = {
   schemeId: ThemeSchemeId;
@@ -44,9 +52,7 @@ export function ThemePreferencesProvider({
 }: {
   children: ReactNode;
 }) {
-  const [schemeId, setSchemeId] = useState<ThemeSchemeId>(
-    DEFAULT_THEME_SCHEME_ID,
-  );
+  const [schemeId, setSchemeId] = useState<ThemeSchemeId>(osScheme);
   const [isHydrating, setIsHydrating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,8 +67,7 @@ export function ThemePreferencesProvider({
 
     try {
       const user = await fetchCurrentUser();
-      const normalized = normalizeUserUiPreferences(user.uiPreferences);
-      setSchemeId(normalized.themeSchemeId);
+      setSchemeId(storedThemeSchemeId(user.uiPreferences) ?? osScheme());
     } catch (err) {
       // Best-effort: keep the local default theme rather than surface a
       // toast for a background hydration failure — but still log it, or a
@@ -89,9 +94,7 @@ export function ThemePreferencesProvider({
       } catch (err) {
         console.error(err);
         setSchemeId(previous);
-        setError(
-          messageFromError(err, "Couldn't save theme. Please try again."),
-        );
+        setError(messageFromError(err, "Couldn't save theme. Try again."));
       } finally {
         setIsSaving(false);
       }

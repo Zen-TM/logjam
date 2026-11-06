@@ -7,6 +7,7 @@ import {
   MAP_TERRAIN,
   NSW_LAND,
   PLACE_TYPE_COLORS,
+  slopeLegendRows,
   takesNswContours,
   takesNswHillshade,
   type SectionKeysOn,
@@ -22,6 +23,7 @@ import SlopeSettings from "../dialogs/topoSettings/SlopeSettings";
 import {
   ChipRail,
   Dialog,
+  Icon,
   IconButton,
   IconTile,
   Popover,
@@ -32,6 +34,10 @@ import {
 import classes from "./LayersPopover.module.css";
 
 type View = "overlays" | "basemap" | "terrain" | "slopeBands" | "sharpened";
+
+/** The tab a view belongs to: a sub-view is Terrain's. */
+const tabOf = (view: View): View =>
+  view === "sharpened" || view === "slopeBands" ? "terrain" : view;
 
 const copy = MAP_LAYERS.copy;
 const terrainCopy = MAP_TERRAIN.copy;
@@ -125,7 +131,7 @@ export default function LayersPopover({
   sharpenedLoaded: boolean;
   activeTopoJobs: TopoJob[];
   friends: TFriend[];
-  /** Arms the pick for a new sharpened area, as the Make a map menu does. */
+  /** Opens the dialog for a new sharpened area, as the tray's Sharpen an area does. */
   onSharpen: () => void;
   onExportArea: (job: CompletedTopoJob) => void;
   onFlyToArea: (footprint: GeoJsonPolygonal) => void;
@@ -133,13 +139,15 @@ export default function LayersPopover({
   onDismissActiveJob: (jobId: string) => void;
   onQuotaChanged: () => void;
 }) {
-  const [view, setView] = useState<View>("overlays");
+  const [view, setView] = useState<View>("basemap");
   // However it closes (the button toggles `open` itself), the next opening
-  // starts on Overlays; a start request made in the same render wins.
+  // is on the tab it was last on, the first time on Map, as Logjam GPS's Layers
+  // sheet is (in memory, not persisted). A sub-view falls back to the tab it
+  // opened from. A start request made in the same render wins.
   const [wasOpen, setWasOpen] = useState(open);
   if (wasOpen !== open) {
     setWasOpen(open);
-    if (!open) setView("overlays");
+    if (!open) setView(tabOf);
   }
   const [seenStartView, setSeenStartView] = useState(startView);
   if (seenStartView !== startView) {
@@ -160,7 +168,7 @@ export default function LayersPopover({
   ].filter(Boolean).length;
 
   const close = () => {
-    setView("overlays");
+    setView(tabOf);
     onClose();
   };
 
@@ -258,6 +266,7 @@ export default function LayersPopover({
                   onChange={onTerrainLayerChange}
                   activeLayerId={activeLayerId}
                   onOpenSlopeBands={() => setView("slopeBands")}
+                  slopeBands={slopeBands}
                   hasVegetation={hasVegetation}
                   sharpenedCount={
                     sharpenedLoaded ? completedTopoJobs.length : null
@@ -326,7 +335,7 @@ export default function LayersPopover({
                     onToggle={setShowMgaGrid}
                   />
                   {/* The list ends with the way to add to it: the same
-                      import the Ways and Logs lists offer. */}
+                      import the Ways list offers. */}
                   <Row
                     leading={
                       <IconTile icon="upload" hue="var(--color-neutral)" />
@@ -354,6 +363,7 @@ export function TerrainPane({
   onChange,
   activeLayerId,
   onOpenSlopeBands,
+  slopeBands,
   hasVegetation,
   sharpenedCount,
   onOpenSharpened,
@@ -362,6 +372,8 @@ export function TerrainPane({
   onChange: (key: TerrainSwitchKey, on: boolean) => void;
   activeLayerId: string;
   onOpenSlopeBands: () => void;
+  /** The account's bands: the slope key shows them as the map paints them. */
+  slopeBands: readonly SlopeBand[];
   /** Whether any sharpened area has a vegetation layer to switch. */
   hasVegetation: boolean;
   /** Null until the first fetch settles. */
@@ -369,6 +381,8 @@ export function TerrainPane({
   onOpenSharpened: () => void;
 }) {
   const [legendOpen, setLegendOpen] = useState(false);
+  const [slopeLegendOpen, setSlopeLegendOpen] = useState(false);
+  const [sharpenedAboutOpen, setSharpenedAboutOpen] = useState(false);
   // One shape for all three, so the Slope row's chevron is the only difference.
   const row = (key: TerrainSwitchKey, extra: ReactNode = null) => {
     const title = terrainCopy[key];
@@ -378,12 +392,15 @@ export function TerrainPane({
       ? terrainCopy.contoursPrinted
       : shadowed
         ? terrainCopy.hillshadeImagery
-        : undefined;
+        : terrainCopy[`${key as "contours" | "slope" | "hillshade"}Hint`];
     return (
       <Row
         key={key}
         title={title}
         subtitle={reason}
+        onPress={
+          printed || shadowed ? undefined : () => onChange(key, !layers[key])
+        }
         trailing={
           <>
             {extra}
@@ -408,11 +425,18 @@ export function TerrainPane({
     slope: () =>
       row(
         "slope",
-        <IconButton
-          icon="disclosure"
-          label={terrainCopy.slopeBands}
-          onClick={onOpenSlopeBands}
-        />,
+        <>
+          <IconButton
+            icon="help"
+            label={terrainCopy.slopeAbout}
+            onClick={() => setSlopeLegendOpen(true)}
+          />
+          <IconButton
+            icon="disclosure"
+            label={terrainCopy.slopeBands}
+            onClick={onOpenSlopeBands}
+          />
+        </>,
       ),
     hillshade: () => row("hillshade"),
     vegetation: () =>
@@ -421,6 +445,7 @@ export function TerrainPane({
           key="vegetation"
           title={terrainCopy.vegetation}
           subtitle={terrainCopy.vegetationHint}
+          onPress={() => onChange("vegetation", !layers.vegetation)}
           trailing={
             <>
               <IconButton
@@ -446,6 +471,16 @@ export function TerrainPane({
             : `${terrainCopy.sharpenedAreas} · ${sharpenedCount}`
         }
         onOpen={onOpenSharpened}
+        trailing={
+          <>
+            <IconButton
+              icon="help"
+              label={terrainCopy.sharpenedAreasAbout}
+              onClick={() => setSharpenedAboutOpen(true)}
+            />
+            <Icon idea="disclosure" size={18} aria-hidden />
+          </>
+        }
       />
     ),
     // Opened from the Slope row's chevron, as a view of its own.
@@ -455,11 +490,33 @@ export function TerrainPane({
     <div className={classes.body}>
       {contractSectionKeys(MAP_TERRAIN, "web").map((key) => panes[key]())}
       <Dialog
+        open={slopeLegendOpen}
+        title={terrainCopy.slope}
+        onClose={() => setSlopeLegendOpen(false)}
+      >
+        <p>{terrainCopy.slopeLegend}</p>
+        <ul className={classes.landLegend}>
+          {slopeLegendRows(slopeBands).map(({ label, colour }) => (
+            <li key={label}>
+              <IconTile icon="layers" hue={colour} />
+              {label}
+            </li>
+          ))}
+        </ul>
+      </Dialog>
+      <Dialog
         open={legendOpen}
         title={terrainCopy.vegetation}
         onClose={() => setLegendOpen(false)}
       >
         <p>{terrainCopy.vegetationLegend}</p>
+      </Dialog>
+      <Dialog
+        open={sharpenedAboutOpen}
+        title={terrainCopy.sharpenedAreas}
+        onClose={() => setSharpenedAboutOpen(false)}
+      >
+        <p>{terrainCopy.sharpenedAreasLegend}</p>
       </Dialog>
     </div>
   );
@@ -565,6 +622,7 @@ function OverlayRow({
       leading={<IconTile icon={icon} hue={hue} />}
       title={title}
       subtitle={subtitle}
+      onPress={() => onToggle(!checked)}
       trailing={
         <>
           {help && (

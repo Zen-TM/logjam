@@ -20,14 +20,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Alert,
-  Keyboard,
-  RefreshControl,
-  SectionList,
-  Text,
-  View,
-} from "react-native";
+import { Keyboard, Text, View } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   activeTripFilterCount,
@@ -45,7 +38,9 @@ import {
   NO_TYPE_FILTER_VALUE,
   reconcileCustomFieldFilters,
   sortTrips,
+  TRIP_SORT_OPTIONS,
   tripDeleteConfirm,
+  tripDeleteDone,
   tripsEmptyKind,
   tripsEmptyState,
   tripsFilterNote,
@@ -68,6 +63,7 @@ import {
   makeStyles,
   useTheme,
   muted,
+  wash,
 } from "../theme";
 import type { MirrorTrip } from "../sync/mirrorStore";
 import { deleteTripLocal } from "../sync/outbox";
@@ -85,6 +81,12 @@ import {
   Button,
   ErrorState,
   Hero,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroSectionList,
+  useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   ListEnd,
   IconButton,
   LoadingState,
@@ -94,19 +96,26 @@ import {
   SearchField,
   SyncStatusPills,
   Toast,
+  confirm,
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
   Icon,
   EmptyState,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
 import { TripEditSheet } from "./TripEditSheet";
+import { useStoredSort } from "../sortPreference";
 import { LogsFilterSheet } from "./LogsFilterSheet";
 import { TripOptionsSheet } from "./TripOptionsSheet";
 
 const ALL_TYPES = "";
+
+/** The page's name: the full hero's eyebrow and the compact row's title. */
+const PAGE_NAME = "Trips";
 
 export function LogsScreen({
   onOpenTrip,
@@ -116,6 +125,8 @@ export function LogsScreen({
   onOpenStats: () => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const connectivity = useConnectivity();
@@ -134,14 +145,18 @@ export function LogsScreen({
   const [dateFrom, setDateFrom] = useState<string | null>(null);
   const [dateTo, setDateTo] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  // Attribute filters and the sort live and die with the screen, like every
-  // other filter here: the state never leaves the device and is never
-  // persisted, so a month-old filter can't greet the user as missing trips.
+  // Attribute filters live and die with the screen, like every other filter
+  // here: they are never persisted, so a month-old filter can't greet the user
+  // as missing trips. The sort is a preference and outlives it.
   const [customFilters, setCustomFilters] = useState<
     Record<string, CustomFieldFilter>
   >({});
   const [includeUnknowns, setIncludeUnknowns] = useState(false);
-  const [sort, setSort] = useState<TripSortKey>("newest");
+  const [sort, setSort] = useStoredSort<TripSortKey>(
+    "trips",
+    TRIP_SORT_OPTIONS.map((option) => option.key),
+    "newest",
+  );
   const { defs: tripDefs } = useFieldDefs("tripLog");
   const [menuTripId, setMenuTripId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ trip: MirrorTrip | null } | null>(
@@ -152,7 +167,7 @@ export function LogsScreen({
   const toastNonce = useRef(0);
   const info = useCallback((text: string) => {
     toastNonce.current += 1;
-    setToast({ text, tone: "info", nonce: toastNonce.current });
+    setToast({ text, tone: "done", nonce: toastNonce.current });
   }, []);
   const fail = useCallback((text: string) => {
     toastNonce.current += 1;
@@ -237,34 +252,31 @@ export function LogsScreen({
     }, [clearSelection]),
   );
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     const targets = selectedItems;
     const count = targets.length;
-    const confirm = tripDeleteConfirm(count);
-    Alert.alert(confirm.confirmTitle, confirm.confirmBody, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: () => {
-          void (async () => {
-            let failures = 0;
-            for (const trip of targets) {
-              try {
-                await deleteTripLocal(trip.id);
-              } catch (err) {
-                console.error(err);
-                failures += 1;
-              }
-            }
-            clearSelection();
-            if (failures === 0)
-              info(`Deleted ${count} ${count === 1 ? "trip" : "trips"}.`);
-            else fail(`${failures} of ${count} couldn't be deleted.`);
-          })();
-        },
-      },
-    ]);
+    if (
+      !(await confirm(
+        tripDeleteConfirm(
+          targets[0] && count === 1
+            ? { title: tripTitle(targets[0]) }
+            : { count },
+        ),
+      ))
+    )
+      return;
+    let failures = 0;
+    for (const trip of targets) {
+      try {
+        await deleteTripLocal(trip.id);
+      } catch (err) {
+        console.error(err);
+        failures += 1;
+      }
+    }
+    clearSelection();
+    if (failures === 0) info(tripDeleteDone(count));
+    else fail(`${failures} of ${count} couldn't be deleted.`);
   }, [selectedItems, clearSelection, fail, info]);
 
   // Tallies come from the OTHER axes only, so a chip's count answers "how many
@@ -404,58 +416,75 @@ export function LogsScreen({
   // not name cannot be drawn.
   const sections: Record<SectionKeysOn<typeof TRIPS_LIST, "gps">, ReactNode> = {
     hero: (
-      <Hero
-        eyebrow="Logbook"
-        title={tripsHeroTitle(trips.length)}
-        actions={
-          <View style={styles.heroActions}>
-            {/* The retrospective lives one tap away rather than on this screen:
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            eyebrow={PAGE_NAME}
+            title={
+              compact
+                ? compactHeroTitle(PAGE_NAME, trips.length)
+                : tripsHeroTitle(trips.length)
+            }
+            actions={
+              <View style={styles.heroActions}>
+                {/* The retrospective lives one tap away rather than on this screen:
                 Logs answers "what have I done?", stats answers "am I getting
                 out, and is it going anywhere?" — two questions, so two screens
                 (shared/DESIGN.md §2). */}
-            <IconButton
-              icon="stats"
-              accessibilityLabel={copy.stats}
-              color={theme.textMuted}
-              onPress={onOpenStats}
-            />
-            <IconButton
-              icon="filter"
-              accessibilityLabel={TRIPS_FILTER_SHEET.title}
-              color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
-              filled={sheetFilterCount > 0}
-              onPress={() => {
-                // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
-                // over a live IME inherits KeyboardAvoidingView's shrunk frame
-                // and stops short of the bottom edge, leaving a stripe of the
-                // tab bar showing under it.
-                Keyboard.dismiss();
-                setSheetOpen(true);
-              }}
-            />
-            {/* One way in, so a button: Logjam Web's menu holds this and an
-                import (`TRIPS_ADD`). */}
-            <Button
-              label={TRIPS_ADD.copy.add}
-              icon={TRIPS_ADD_ICON.add}
-              compact
-              onPress={() => setEditing({ trip: null })}
-            />
-          </View>
-        }
-      >
-        <ActivitySpark
-          buckets={spark}
-          caption={`${recentCount} in the last 12 months · ${placeCount} ${
-            placeCount === 1 ? "place" : "places"
-          }`}
-        />
+                <IconButton
+                  icon="stats"
+                  accessibilityLabel={copy.stats}
+                  color={theme.textMuted}
+                  onPress={onOpenStats}
+                />
+                <IconButton
+                  icon="filter"
+                  accessibilityLabel={TRIPS_FILTER_SHEET.title}
+                  color={sheetFilterCount > 0 ? theme.accent : theme.textMuted}
+                  filled={sheetFilterCount > 0}
+                  onPress={() => {
+                    // Drop the keyboard BEFORE the sheet mounts: a sheet that opens
+                    // over a live IME inherits KeyboardAvoidingView's shrunk frame
+                    // and stops short of the bottom edge, leaving a stripe of the
+                    // tab bar showing under it.
+                    Keyboard.dismiss();
+                    setSheetOpen(true);
+                  }}
+                />
+                {/* One way in, so a button: Logjam Web's menu holds this and an
+                import (`TRIPS_ADD`). With no trips the empty state carries
+                the one add. */}
+                {trips.length > 0 && (
+                  <HeroAdd
+                    label={TRIPS_ADD.copy.add}
+                    icon={TRIPS_ADD_ICON.add}
+                    compact={compact}
+                    onPress={() => setEditing({ trip: null })}
+                  />
+                )}
+              </View>
+            }
+          >
+            {compact ? undefined : (
+              <>
+                <ActivitySpark
+                  buckets={spark}
+                  caption={`${recentCount} in the last 12 months · ${placeCount} ${
+                    placeCount === 1 ? "place" : "places"
+                  }`}
+                />
 
-        {/* State of the world, once, where it can be read at a glance. Offline
-            is not an error here — logging, editing and attaching all work — so
-            it is paired with what is waiting rather than with a warning. */}
-        <SyncStatusPills online={online} pendingCount={pendingCount} />
-      </Hero>
+                {/* State of the world, once, where it can be read at a glance.
+                Offline is not an error here — logging, editing and attaching
+                all work — so it is paired with what is waiting rather than
+                with a warning. */}
+                <SyncStatusPills online={online} pendingCount={pendingCount} />
+              </>
+            )}
+          </Hero>
+        )}
+      </CollapsingHero>
     ),
 
     typeRail: (
@@ -466,7 +495,7 @@ export function LogsScreen({
             showSelectAll={selectedItems.length < selectableItems.length}
             onClear={clearSelection}
             onSelectAll={selectAll}
-            onDelete={deleteSelected}
+            onDelete={() => void deleteSelected()}
           />
         ) : (
           <ChipRail
@@ -513,9 +542,10 @@ export function LogsScreen({
       ) : null,
 
     list: (
-      <SectionList
+      <HeroSectionList
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
         sections={yearSections}
         keyExtractor={keyExtractor}
         keyboardShouldPersistTaps="handled"
@@ -529,7 +559,8 @@ export function LogsScreen({
         windowSize={5}
         removeClippedSubviews
         refreshControl={
-          <RefreshControl
+          <pull.Refresh
+            progressViewOffset={heroCollapse.headerHeight}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {
@@ -574,9 +605,14 @@ export function LogsScreen({
 
   return (
     <View style={styles.screen}>
-      {contractSectionKeys(TRIPS_LIST, "gps").map((key) => (
-        <Fragment key={key}>{sections[key]}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(TRIPS_LIST, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{sections[key]}</Fragment>
+          ))}
+      </CollapsingHeader>
+      {sections.list}
 
       <TripOptionsSheet
         trip={menuTrip}
@@ -774,7 +810,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     paddingLeft: spacing(1.5),
     paddingRight: spacing(0.5),
     borderRadius: radius.pill,
-    backgroundColor: withAlpha(theme.accent, 0.12),
+    backgroundColor: withAlpha(theme.accent, wash.selected),
   },
   rangeText: { ...textRole.detail, flex: 1, color: theme.text },
   list: { flex: 1 },

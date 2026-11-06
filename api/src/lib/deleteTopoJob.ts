@@ -40,7 +40,7 @@ export async function deleteTopoJob(
       where: { status: "queued", sourceJobIds: { has: jobId } },
       data: {
         status: "failed",
-        errorMessage: say`A LiDAR map this export needed was deleted before it started.`,
+        errorMessage: say`A LiDAR map this one needed was deleted before it started.`,
       },
     });
     // Share.entityId is polymorphic, so Postgres cannot cascade: without

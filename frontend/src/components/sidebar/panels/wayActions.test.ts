@@ -3,26 +3,47 @@ import { WAY_SHARE_VERB } from "@logjam/shared";
 import { wayProperties, wayVerbs, type WaySurface } from "./wayActions";
 import type { WayItem } from "./waysModel";
 
-type Subject = Pick<WayItem, "kind" | "shared" | "placeId" | "viaPlace">;
+type Subject = Pick<
+  WayItem,
+  "kind" | "shared" | "placeId" | "viaPlace" | "hasOrigin" | "hasTrip"
+>;
 
 const route = (over: Partial<Subject> = {}): Subject => ({
   kind: "route",
   shared: false,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const importFile = (over: Partial<Subject> = {}): Subject => ({
   kind: "import",
   shared: false,
   viaPlace: false,
+  hasOrigin: true,
   placeId: null,
+  hasTrip: false,
   ...over,
 });
 const ids = (subject: Subject, surface: WaySurface = "row") =>
   wayVerbs(subject, surface).map((verb) => verb.id);
 
 describe("wayVerbs", () => {
+  // `PATCH /media/:id` and `POST /file-sends/from-media` take only a file that
+  // says what it is; one attached in a place's form has no origin. Red when
+  // the `hasOrigin` gate is dropped from `wayVerbs` or `wayProperties`.
+  it("offers a file with no origin only Download and Delete among the file verbs", () => {
+    const subject = importFile({ hasOrigin: false, placeId: "p1" });
+    const offered = ids(subject);
+    expect(offered).toEqual(
+      expect.arrayContaining(["download", "delete", "openPlace"]),
+    );
+    expect(offered).not.toContain("rename");
+    expect(offered).not.toContain("sendCopy");
+    expect(wayProperties(subject).colour).toBe(false);
+  });
+
   // The rule the three surfaces were drifting away from.
   it("gives a row and a detail page the same verbs but for Open", () => {
     const subject = route({ placeId: "p1" });
@@ -181,9 +202,10 @@ describe("wayVerbs", () => {
     ).not.toContain("download");
   });
 
-  it("renames a file in place, and leaves a route to its own form", () => {
+  // Mutation: restore the `kind !== "route"` exclusion in `wayVerbs`.
+  it("renames a file or a route in place", () => {
     expect(ids(importFile())).toContain("rename");
-    expect(ids(route())).not.toContain("rename");
+    expect(ids(route())).toContain("rename");
   });
 
   it("offers its place only when it has one", () => {
@@ -203,6 +225,14 @@ describe("wayVerbs", () => {
       "logTrip",
     ]);
     expect(ids(track, "detail").slice(0, 2)).toEqual(["openPlace", "logTrip"]);
+  });
+
+  // Mutation: drop `!way.hasTrip` from the logTrip verb, and a recording with
+  // a trip is offered one again.
+  it("stops offering Log a trip on a recording that has a trip", () => {
+    const track = importFile({ kind: "track", hasTrip: true });
+    expect(ids(track, "row")).not.toContain("logTrip");
+    expect(ids(track, "detail")).not.toContain("logTrip");
   });
 
   // A route is a plan and an import is somebody's walk with no day of its own;

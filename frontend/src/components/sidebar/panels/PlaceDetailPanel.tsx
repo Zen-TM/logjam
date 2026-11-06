@@ -24,20 +24,31 @@ import {
   formatDateKey,
   formatFieldValue,
   isReservedFieldKey,
+  formatDistanceM,
   mediaCategory,
+  mediaDisplayName,
+  placeRoute,
+  routeLengthM,
   primaryTripType,
   placeDeleteConfirm,
+  placeLinkedToast,
+  placeDeleteDone,
   removeShareConfirm,
   contractSectionsFor,
+  canyonGradeRow,
+  isCanyonGradeKey,
+  ADD_WAY,
   PLACE_PAGE,
   PLACE_PAGE_PRIMARY_VERBS,
   WEATHER,
+  formatPlacePosition,
   placeAttributesTitle,
+  placeSectionTitle,
   placeSources,
   placeStatus,
   placeStatusLabel,
   placeVerbs,
-  systemFieldDef,
+  withFieldUnit,
   type SectionKeysOn,
   type MediaItem,
   type ScopedCustomFieldDef,
@@ -50,15 +61,19 @@ import { PlaceGauge } from "../../gauges/PlaceGauge";
 import { PlaceWeather } from "../../weather/PlaceWeather";
 import PlaceDialog from "../../dialogs/PlaceDialog";
 import ShareDialog from "../../dialogs/ShareDialog";
+import { NoteBody } from "../../plans/WriteUpBody";
 import TripLogDialog from "../../dialogs/TripLogDialog";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import AddWayDialog from "../../dialogs/AddWayDialog";
 import type {
   TPlace,
   TFriend,
   TTripLog,
   TPlaceShare,
   TPlaceType,
+  TRoute,
 } from "../../../placeUtils";
+import { boundsOfPoints } from "./waysModel";
 import {
   deletePlace,
   getCustomFields,
@@ -74,6 +89,8 @@ import {
   updatePlace,
 } from "../../../placeUtils";
 import PlaceSlideshow from "../../media/PlaceSlideshow";
+import MediaUpload from "../../media/MediaUpload";
+import PlacePicker from "../../common/PlacePicker";
 import { placeTypeLucideIcon } from "./placeTypeIcon";
 import { tripTypeLook } from "./tripTypeIcon";
 import { placeVerbEntries, type WebPlaceVerbId } from "./placeVerbMenu";
@@ -88,9 +105,14 @@ import {
   Menu,
   Row,
   SectionHeader,
+  StatGrid,
   StatusPill,
 } from "../../../ui";
-import { formatCanyonGrade } from "../../../placeUtils";
+import {
+  formatCanyonGrade,
+  linkMediaToPlace,
+  updateRoute,
+} from "../../../placeUtils";
 
 /**
  * Runs a verb pressed on the place's ROW that needs this page's forms and
@@ -137,14 +159,10 @@ function formatCustomFieldValue(
   return String(value);
 }
 
-/** The value as it is READ: the stored answer plus the unit its definition
- *  declares ("15 m"). Only a built-in carries one, and only where the label
- *  does not already say it — "Hours" says hours. */
+/** The value as it is READ: the stored answer plus its unit ("15 m"). */
 function displayValue(def: TripLogCustomFieldDef, raw: unknown): string | null {
   const text = formatCustomFieldValue(raw, def.type);
-  if (text == null) return null;
-  const unit = systemFieldDef(def.key)?.unit;
-  return unit ? `${text} ${unit}` : text;
+  return text == null ? null : withFieldUnit(def.key, text);
 }
 
 /** A parked value as one line. Objects are stringified rather than dropped:
@@ -177,7 +195,7 @@ function PlaceDetailPanel({
   onBack,
   onOpenTrip,
   onMakeMap,
-  onSharePlace,
+  onExportPlace,
   verbRequest,
   onVerbRequestConsumed,
   customFieldDefs,
@@ -186,8 +204,15 @@ function PlaceDetailPanel({
   placeCustomFieldDefs,
   onPlaceCustomFieldDefsChange,
   onQuotaChanged,
+  onWaysChanged,
   onRefetchTripLogs,
   onAfterDelete,
+  routes,
+  currentUserId,
+  onFocusBounds,
+  onOpenRoute,
+  onRoutesChanged,
+  onDrawRoute,
 }: {
   place: TPlace | undefined;
   places: TPlace[];
@@ -207,7 +232,7 @@ function PlaceDetailPanel({
   /** Start a map over this place; the menu names the two kinds. */
   onMakeMap: (place: TPlace, kind: "topo" | "geopdf") => void;
   /** Open the share-or-export dialog on this place, the one the list uses. */
-  onSharePlace: (placeId: string) => void;
+  onExportPlace: (placeId: string) => void;
   /** A verb pressed on this place's row in the list, for this page to run. */
   verbRequest: { id: WebPlaceVerbId } | null;
   onVerbRequestConsumed: () => void;
@@ -218,12 +243,26 @@ function PlaceDetailPanel({
   placeCustomFieldDefs: ScopedCustomFieldDef[];
   onPlaceCustomFieldDefsChange: (defs: ScopedCustomFieldDef[]) => void;
   onQuotaChanged: () => void;
+  /** A file was attached or removed: the Ways list reads files from here too. */
+  onWaysChanged: () => void;
   // Retrigger the global Trip Logs list/search after a trip is created or
   // deleted here — the place-scoped refetch below only updates this panel.
   onRefetchTripLogs: () => void;
   // Leave the (now-empty) place-detail panel after a delete so it doesn't
   // dead-end in "No place selected".
   onAfterDelete: () => void;
+  /** Every drawn route the user can see; one may fill this place's route slot. */
+  routes: TRoute[];
+  /** Whose routes are the user's own: only those can be attached here. */
+  currentUserId: string | null;
+  /** Fit the map to a box, as the route row's tap does. */
+  onFocusBounds: (bounds: [number, number, number, number]) => void;
+  /** Open the route's own page (the Way). */
+  onOpenRoute: (route: TRoute) => void;
+  /** A route was changed here (unlinked); the Ways list must refetch. */
+  onRoutesChanged: () => void;
+  /** Arm the map's pen for this place's route slot. */
+  onDrawRoute: (placeId: string) => void;
 }) {
   const toast = useToast();
   const [showEdit, setShowEdit] = useState(false);
@@ -234,9 +273,9 @@ function PlaceDetailPanel({
   const [removing, setRemoving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [trackToDelete, setTrackToDelete] = useState<MediaItem | null>(null);
-  const [deletingTrack, setDeletingTrack] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [addingWay, setAddingWay] = useState(false);
+  const [fileToDelete, setFileToDelete] = useState<MediaItem | null>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
 
   const [tripLogs, setTripLogs] = useState<TTripLog[]>([]);
   const [placeMedia, setPlaceMedia] = useState<MediaItem[]>([]);
@@ -274,18 +313,28 @@ function PlaceDetailPanel({
   const TypeGlyph = placeTypeLucideIcon(placeType?.iconKey ?? "map-pin");
 
   /** What this KIND of place records, and what this one answered. Only the
-   *  answered ones: a form asks every question, a page reports the answers. */
+   *  answered ones: a form asks every question, a page reports the answers.
+   *  The three grade inputs read as the one Grade row, first, as on the hero. */
   const attributes = useMemo(() => {
     if (!place) return [];
-    return defsForType(placeCustomFieldDefs, place.placeTypeId)
+    const answered = defsForType(placeCustomFieldDefs, place.placeTypeId)
+      .filter((def) => !isCanyonGradeKey(def.key))
       .map((def) => ({
-        def,
+        key: def.key,
+        label: def.label,
         text: displayValue(def, fieldValue(place.fieldValues, def.key)),
       }))
       .filter(
-        (row): row is { def: ScopedCustomFieldDef; text: string } =>
+        (row): row is { key: string; label: string; text: string } =>
           row.text != null,
       );
+    const grade = canyonGradeRow(place.fieldValues);
+    return grade
+      ? [
+          { key: grade[0], label: grade[1], text: String(grade[2]) },
+          ...answered,
+        ]
+      : answered;
   }, [place, placeCustomFieldDefs]);
 
   /**
@@ -418,16 +467,14 @@ function PlaceDetailPanel({
   // the callbacks below don't each have to re-check it.
   const current = place;
 
-  const coordinates = `${current.latitude.toFixed(4)}, ${current.longitude.toFixed(4)}`;
+  const coordinates = formatPlacePosition(current.latitude, current.longitude);
 
   /** The one thing a coordinate is FOR: getting it into whatever the user is
-   *  navigating with. The glyph answers for two seconds — a toast for a copy
-   *  is a notification about something the user is watching happen. */
+   *  navigating with, so the coordinates are the control. */
   async function handleCopyCoordinates() {
     try {
       await navigator.clipboard.writeText(coordinates);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      toast.done(PLACE_PAGE.copy.copyPosition);
     } catch (err) {
       // A browser that refuses the clipboard (no permission, no secure
       // context) must say so rather than looking like it worked.
@@ -483,14 +530,12 @@ function PlaceDetailPanel({
       setSelectedPlaceID(null);
       onRefetch();
       onQuotaChanged();
-      toast.success("Place deleted.");
+      toast.done(placeDeleteDone(1));
       // Return to the places list — the detail panel has nothing to show now.
       onAfterDelete();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't delete place. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't delete place. Try again."));
       setDeleting(false);
     }
   }
@@ -503,11 +548,11 @@ function PlaceDetailPanel({
       onRefetchShared();
       setSelectedPlaceID(null);
       onAfterDelete();
-      toast.success("Removed.");
+      toast.done("Removed.");
     } catch (err) {
       console.error(err);
       toast.error(
-        messageFromError(err, "Couldn't remove that place. Please try again."),
+        messageFromError(err, "Couldn't remove that place. Try again."),
       );
     } finally {
       setRemoving(false);
@@ -523,8 +568,8 @@ function PlaceDetailPanel({
    *
    * The media report comes back on the response rather than being predicted in
    * the confirm. Whether photos come is the account's remembered
-   * `copyPlaceMedia`, which this app has no switch for yet, so the honest thing
-   * is to promise nothing beforehand and say what happened after.
+   * `copyPlaceMedia` (Settings › Privacy and security), so the honest thing is
+   * to promise nothing beforehand and say what happened after.
    */
   async function handleCopyPlace(andRemove: boolean) {
     setCopying(true);
@@ -543,16 +588,14 @@ function PlaceDetailPanel({
             : `Copied, but ${skipped === 1 ? "1 photo or file" : `${skipped} photos and files`} couldn't be copied.`,
         );
       } else {
-        toast.success(
+        toast.done(
           andRemove ? "Copied, and the shared one removed." : "Copied.",
         );
       }
       onRefetch();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't copy place. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't copy place. Try again."));
     } finally {
       setCopying(false);
       setConfirmCopyAndRemove(false);
@@ -574,6 +617,7 @@ function PlaceDetailPanel({
         toast.error(messageFromError(err, "Couldn't refresh media."));
       });
     onQuotaChanged();
+    onWaysChanged();
   }
 
   function refreshTripLogs() {
@@ -581,31 +625,41 @@ function PlaceDetailPanel({
       .then(setTripLogs)
       .catch((err) => {
         console.error(err);
-        toast.error(messageFromError(err, "Couldn't refresh trip logs."));
+        toast.error(messageFromError(err, "Couldn't refresh trips."));
       });
     // Also refresh the global Trip Logs list/search (separate query).
     onRefetchTripLogs();
   }
 
-  async function handleDeleteTrack() {
-    if (!trackToDelete) return;
-    setDeletingTrack(true);
+  async function handleDeleteFile() {
+    if (!fileToDelete) return;
+    setDeletingFile(true);
     try {
-      await deleteMedia(trackToDelete.id);
-      setPlaceMedia((prev) => prev.filter((m) => m.id !== trackToDelete.id));
-      setTrackToDelete(null);
+      await deleteMedia(fileToDelete.id);
+      setPlaceMedia((prev) => prev.filter((m) => m.id !== fileToDelete.id));
+      setFileToDelete(null);
       onQuotaChanged();
     } catch (err) {
       console.error(err);
-      toast.error(
-        messageFromError(err, "Couldn't delete track. Please try again."),
-      );
+      toast.error(messageFromError(err, "Couldn't delete file. Try again."));
     } finally {
-      setDeletingTrack(false);
+      setDeletingFile(false);
     }
   }
 
   const busy = copying || deleting || removing;
+
+  // The API takes the WHOLE list of links on a place PATCH.
+  async function writeLinks(ids: string[], done: string, failed: string) {
+    try {
+      await updatePlace(current.id, { linkedPlaceIds: ids });
+      toast.done(done);
+      onRefetch();
+    } catch (err) {
+      console.error(err);
+      toast.error(messageFromError(err, failed));
+    }
+  }
 
   async function setGauge(gaugeId: string | null) {
     try {
@@ -626,8 +680,9 @@ function PlaceDetailPanel({
       setShowTripLogDialog(true);
     },
     makeTopo: () => onMakeMap(current, "topo"),
-    exportArea: () => onMakeMap(current, "geopdf"),
-    share: () => onSharePlace(current.id),
+    makeGeoPdf: () => onMakeMap(current, "geopdf"),
+    exportPlace: () => onExportPlace(current.id),
+    share: () => setShowShareDialog(true),
     copy: () => void handleCopyPlace(false),
     copyAndRemove: () => setConfirmCopyAndRemove(true),
     remove: () => setConfirmRemove(true),
@@ -644,8 +699,9 @@ function PlaceDetailPanel({
   const visualMedia = placeMedia.filter(
     (m) => mediaCategory(m.mediaType) !== "track",
   );
-  const track =
-    placeMedia.find((m) => mediaCategory(m.mediaType) === "track") ?? null;
+  const slot = place ? placeRoute(place.id, routes, placeMedia) : null;
+  const track = slot?.kind === "file" ? slot.file : null;
+  const drawnRoute = slot?.kind === "drawn" ? slot.route : null;
 
   const copy = PLACE_PAGE.copy;
   const sources = placeSources(current.fieldValues);
@@ -655,6 +711,7 @@ function PlaceDetailPanel({
       : placeStatus({ syncRole: "owner" }, tripLogs.length)
     : placeStatus({ syncRole: "shared" }, 0);
   const grade = formatCanyonGrade(current.fieldValues);
+  const isShared = placeShares.length > 0;
   const primaryVerbs = placeVerbs("web", "page", isOwnedPlace).filter((verb) =>
     (PLACE_PAGE_PRIMARY_VERBS as readonly string[]).includes(verb.id),
   );
@@ -682,7 +739,11 @@ function PlaceDetailPanel({
           {grade ? <StatusPill label={grade} tone="outline" /> : null}
           {placeStatusKey ? (
             <StatusPill
-              label={placeStatusLabel(placeStatusKey, tripLogs.length)}
+              label={placeStatusLabel(
+                placeStatusKey,
+                tripLogs.length,
+                ownerUsername(friends, current.ownerId),
+              )}
               tone={placeStatusKey === "done" ? "accent" : "outline"}
             />
           ) : null}
@@ -718,16 +779,15 @@ function PlaceDetailPanel({
     position: () => (
       <section className={classes.section}>
         <SectionHeader title={copy.position} />
-        <Row
-          leading={<IconTile icon="place" hue="var(--color-accent)" />}
-          title={coordinates}
-          trailing={
-            <IconButton
-              icon={copied ? "done" : "copy"}
-              label={`Copy the coordinates of ${current.name}`}
-              onClick={() => void handleCopyCoordinates()}
-            />
-          }
+        <StatGrid
+          stats={[
+            {
+              label: "Coordinates",
+              value: coordinates,
+              span: true,
+              onCopy: () => void handleCopyCoordinates(),
+            },
+          ]}
         />
       </section>
     ),
@@ -749,7 +809,13 @@ function PlaceDetailPanel({
     gauge: () =>
       current.gaugeId || isOwnedPlace ? (
         <section className={classes.section}>
-          <SectionHeader title={copy.gauge} />
+          <SectionHeader
+            title={placeSectionTitle("gauge", copy.gauge, {
+              owned: isOwnedPlace,
+              shared: isShared,
+              filled: Boolean(current.gaugeId),
+            })}
+          />
           <PlaceGauge
             latitude={current.latitude}
             longitude={current.longitude}
@@ -765,12 +831,16 @@ function PlaceDetailPanel({
       attributes.length > 0 ? (
         <section className={classes.section}>
           <SectionHeader
-            title={placeAttributesTitle(placeType?.name ?? null)}
+            title={placeSectionTitle(
+              "attributes",
+              placeAttributesTitle(placeType?.name ?? null),
+              { owned: isOwnedPlace, shared: isShared, filled: true },
+            )}
           />
           <dl className={classes.table}>
-            {attributes.map(({ def, text }) => (
-              <div key={def.key} className={classes.tableRow}>
-                <dt>{def.label}</dt>
+            {attributes.map(({ key, label, text }) => (
+              <div key={key} className={classes.tableRow}>
+                <dt>{label}</dt>
                 <dd className={classes.figure}>{text}</dd>
               </div>
             ))}
@@ -811,11 +881,17 @@ function PlaceDetailPanel({
       return (
         <section className={classes.section}>
           <SectionHeader
-            title={hasNotes && isOwnedPlace ? copy.notesVisible : copy.notes}
+            title={placeSectionTitle("notes", copy.notes, {
+              owned: isOwnedPlace,
+              shared: isShared,
+              filled: hasNotes,
+            })}
           />
-          <p className={hasNotes ? classes.notes : classes.muted}>
-            {hasNotes ? current.notes : copy.notesEmpty}
-          </p>
+          {hasNotes ? (
+            <NoteBody notes={current.notes ?? ""} />
+          ) : (
+            <p className={classes.muted}>{copy.notesEmpty}</p>
+          )}
         </section>
       );
     },
@@ -823,7 +899,14 @@ function PlaceDetailPanel({
     sources: () =>
       sources.length > 0 ? (
         <section className={classes.section}>
-          <SectionHeader title={copy.sources} count={sources.length} />
+          <SectionHeader
+            title={placeSectionTitle("sources", copy.sources, {
+              owned: isOwnedPlace,
+              shared: isShared,
+              filled: true,
+            })}
+            count={sources.length}
+          />
           {sources.map((source, index) => (
             <Row
               key={index}
@@ -845,13 +928,31 @@ function PlaceDetailPanel({
     photos: () => (
       <section className={classes.section}>
         <SectionHeader
-          title={copy.photos}
+          title={placeSectionTitle("photos", copy.photos, {
+            owned: isOwnedPlace,
+            shared: isShared,
+            filled: visualMedia.length > 0,
+          })}
           count={visualMedia.length > 0 ? visualMedia.length : undefined}
         />
         {visualMedia.length > 0 ? (
-          <PlaceSlideshow media={visualMedia} />
+          <PlaceSlideshow
+            media={visualMedia}
+            onDelete={isOwnedPlace ? setFileToDelete : undefined}
+          />
         ) : (
           <p className={classes.muted}>{copy.photosEmpty}</p>
+        )}
+        {isOwnedPlace && (
+          <MediaUpload
+            category="visual"
+            linkedType="place"
+            linkedId={current.id}
+            onUploaded={(item) => {
+              setPlaceMedia((prev) => [...prev, item]);
+              onQuotaChanged();
+            }}
+          />
         )}
       </section>
     ),
@@ -862,27 +963,111 @@ function PlaceDetailPanel({
     // others.
     route: () => (
       <section className={classes.section}>
-        <SectionHeader title={copy.route} />
-        {track ? (
+        <SectionHeader
+          title={placeSectionTitle("route", copy.route, {
+            owned: isOwnedPlace,
+            shared: isShared,
+            filled: Boolean(track || drawnRoute),
+          })}
+        />
+        {drawnRoute ? (
+          <Row
+            leading={<IconTile icon="route" hue="var(--hue-route)" />}
+            title={drawnRoute.name}
+            subtitle={`Drawn route · ${formatDistanceM(routeLengthM(drawnRoute.points))}`}
+            onOpen={() => {
+              const bounds = boundsOfPoints(drawnRoute.points);
+              if (bounds) onFocusBounds(bounds);
+            }}
+            trailing={
+              <>
+                <IconButton
+                  icon="forward"
+                  label="Open way"
+                  onClick={() => onOpenRoute(drawnRoute)}
+                />
+                {isOwnedPlace && (
+                  <IconButton
+                    icon="unlink"
+                    label="Unlink from this place"
+                    onClick={() => {
+                      updateRoute(drawnRoute.id, { placeId: null })
+                        .then(() => {
+                          onRoutesChanged();
+                          toast.done("Route unlinked.");
+                        })
+                        .catch((err: unknown) =>
+                          toast.error(
+                            messageFromError(
+                              err,
+                              "Couldn't unlink that route.",
+                            ),
+                          ),
+                        );
+                    }}
+                  />
+                )}
+              </>
+            }
+          />
+        ) : track ? (
           <Row
             leading={<IconTile icon="track" hue="var(--hue-track)" />}
-            title={track.filename}
+            title={mediaDisplayName(track)}
             subtitle="Click to download"
             href={track.displayUrl}
             download={track.filename}
             trailing={
               isOwnedPlace ? (
-                <IconButton
-                  icon="delete"
-                  label={`Delete the track ${track.filename}`}
-                  tone="danger"
-                  onClick={() => setTrackToDelete(track)}
-                />
+                // An import or a recording is the user's own file, so it comes
+                // off the place and stays; only a file uploaded here has no life
+                // apart from the place and can only be deleted.
+                track.origin !== null ? (
+                  <IconButton
+                    icon="unlink"
+                    label="Unlink from this place"
+                    onClick={() => {
+                      linkMediaToPlace(track.id, null)
+                        .then(() => {
+                          reloadPlaceMedia();
+                          toast.done("Route unlinked.");
+                        })
+                        .catch((err: unknown) =>
+                          toast.error(
+                            messageFromError(
+                              err,
+                              "Couldn't unlink that route.",
+                            ),
+                          ),
+                        );
+                    }}
+                  />
+                ) : (
+                  <IconButton
+                    icon="delete"
+                    label={`Delete the track ${mediaDisplayName(track)}`}
+                    tone="danger"
+                    onClick={() => setFileToDelete(track)}
+                  />
+                )
               ) : undefined
             }
           />
         ) : (
           <p className={classes.muted}>{copy.routeEmpty}</p>
+        )}
+        {isOwnedPlace && (
+          <div>
+            <Button
+              compact
+              icon={drawnRoute || track ? "replace" : "add"}
+              onClick={() => setAddingWay(true)}
+            >
+              {drawnRoute || track
+                ? ADD_WAY.copy.replaceTitle
+                : ADD_WAY.copy.title}
+            </Button>
+          </div>
         )}
       </section>
     ),
@@ -914,10 +1099,55 @@ function PlaceDetailPanel({
                 }
                 title={linked.name}
                 onOpen={() => setSelectedPlaceID(linked.id)}
+                trailing={
+                  <Menu
+                    label={`Options for ${linked.name}`}
+                    title={linked.name}
+                    placement="bottom-end"
+                    entries={[
+                      {
+                        id: "unlink",
+                        label: copy.unlinkFromPlace,
+                        icon: "unlink",
+                        onSelect: () =>
+                          void writeLinks(
+                            linkedPlaces
+                              .filter((row) => row.id !== linked.id)
+                              .map((row) => row.id),
+                            copy.unlinked,
+                            copy.unlinkFailed,
+                          ),
+                      },
+                    ]}
+                    trigger={(props) => (
+                      <IconButton
+                        {...props}
+                        icon="overflow"
+                        label={`Options for ${linked.name}`}
+                      />
+                    )}
+                  />
+                }
               />
             );
           })
         )}
+        <PlacePicker
+          label={copy.linkAPlace}
+          places={places.filter(
+            (row) =>
+              row.id !== current.id &&
+              !linkedPlaces.some((l) => l.id === row.id),
+          )}
+          onSelect={(picked) =>
+            void writeLinks(
+              [...linkedPlaces.map((row) => row.id), picked.id],
+              placeLinkedToast(picked.name),
+              copy.linkFailed,
+            )
+          }
+        />
+        <p className={classes.muted}>{copy.linkAPlaceHint}</p>
       </section>
     ),
 
@@ -966,7 +1196,7 @@ function PlaceDetailPanel({
         <Row
           leading={<IconTile icon="shareFriend" hue="var(--color-accent)" />}
           title={copy.shareWithFriend}
-          onOpen={() => onSharePlace(current.id)}
+          onOpen={() => setShowShareDialog(true)}
         />
       </section>
     ),
@@ -1010,6 +1240,24 @@ function PlaceDetailPanel({
           ))}
         </div>
       </div>
+
+      {isOwnedPlace && (
+        <AddWayDialog
+          open={addingWay}
+          placeId={current.id}
+          placeName={current.name}
+          routes={routes}
+          currentUserId={currentUserId}
+          media={placeMedia}
+          onClose={() => setAddingWay(false)}
+          onDrawRoute={() => onDrawRoute(current.id)}
+          onFilled={() => {
+            reloadPlaceMedia();
+            onRoutesChanged();
+            onQuotaChanged();
+          }}
+        />
+      )}
 
       <PlaceDialog
         place={current}
@@ -1073,27 +1321,33 @@ function PlaceDetailPanel({
       {/* The only one of the three that LOSES something, so it asks first. */}
       <ConfirmDialog
         open={foreignItem !== null && confirmDiscard}
-        title={`Discard "${foreignItem?.label ?? ""}"?`}
-        message="The value is removed from this place. This can't be undone."
-        confirmLabel="Discard"
-        confirmColor="error"
+        copy={
+          foreignItem && {
+            confirmTitle: `Discard "${foreignItem.label}"?`,
+            confirmBody:
+              "The value is removed from this place. This can't be undone.",
+            confirmLabel: "Discard",
+            tone: "destructive",
+          }
+        }
         busy={foreignFieldBusy}
         onConfirm={() => runForeignFieldAction("discard")}
         onClose={() => setConfirmDiscard(false)}
       />
 
       <ConfirmDialog
-        open={trackToDelete != null}
-        title="Delete track?"
-        message={
-          <>
-            This permanently deletes the track <b>{trackToDelete?.filename}</b>.
-            This cannot be undone.
-          </>
+        open={fileToDelete != null}
+        copy={
+          fileToDelete && {
+            confirmTitle: `Delete ${fileToDelete.filename}?`,
+            confirmBody: "The file is deleted and can't be brought back.",
+            confirmLabel: "Delete",
+            tone: "destructive",
+          }
         }
-        busy={deletingTrack}
-        onConfirm={handleDeleteTrack}
-        onClose={() => setTrackToDelete(null)}
+        busy={deletingFile}
+        onConfirm={handleDeleteFile}
+        onClose={() => setFileToDelete(null)}
       />
 
       {isOwnedPlace && (
@@ -1111,8 +1365,12 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={confirmCopyAndRemove}
-        title={copyAndRemoveCopy.title}
-        message={copyAndRemoveCopy.body}
+        copy={{
+          confirmTitle: copyAndRemoveCopy.title,
+          confirmBody: copyAndRemoveCopy.body,
+          confirmLabel: "Save a copy and remove",
+          tone: "filled",
+        }}
         busy={copying}
         onConfirm={() => handleCopyPlace(true)}
         onClose={() => setConfirmCopyAndRemove(false)}
@@ -1122,9 +1380,12 @@ function PlaceDetailPanel({
           `removeShareConfirm`, not this page's own wording. */}
       <ConfirmDialog
         open={confirmRemove}
-        title={removeCopy.title}
-        message={removeCopy.body}
-        confirmLabel="Remove"
+        copy={{
+          confirmTitle: removeCopy.title,
+          confirmBody: removeCopy.body,
+          confirmLabel: "Remove",
+          tone: "filled",
+        }}
         busy={removing}
         onConfirm={handleRemoveShare}
         onClose={() => setConfirmRemove(false)}
@@ -1132,10 +1393,7 @@ function PlaceDetailPanel({
 
       <ConfirmDialog
         open={showDeleteConfirm}
-        title={deleteCopy.confirmTitle}
-        message={deleteCopy.confirmBody}
-        confirmLabel="Delete"
-        confirmColor="error"
+        copy={deleteCopy}
         busy={deleting}
         onConfirm={handleDelete}
         onClose={() => setShowDeleteConfirm(false)}

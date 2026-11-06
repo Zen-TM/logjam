@@ -1,10 +1,16 @@
 import { useRef, useState } from "react";
-import type { MediaItem, MediaLinkedType } from "@logjam/shared";
+import {
+  attachSummary,
+  type MediaCategory,
+  type MediaItem,
+  type MediaLinkedType,
+} from "@logjam/shared";
 import { uploadMedia } from "../../placeUtils";
 import { resolveMediaType, generateThumbnail } from "./mediaFiles";
 import { messageFromError } from "../../errors/messageFromError";
 import classes from "./MediaUpload.module.css";
 import { FieldError, Icon } from "../../ui";
+import { useToast } from "../feedback/ToastProvider";
 
 // One uploader serves both surfaces; the category narrows what's accepted.
 //   visual → photos + videos      track → GPX/KML only      (undefined → all)
@@ -26,6 +32,7 @@ export default function MediaUpload({
   linkedType,
   linkedId,
   onUploaded,
+  onBusyChange,
   disabled,
   resolveLinkedId,
   category,
@@ -35,6 +42,8 @@ export default function MediaUpload({
   linkedType: MediaLinkedType;
   linkedId: string;
   onUploaded: (item: MediaItem) => void;
+  /** Called as an upload starts and ends, so a dialog can hold its exits. */
+  onBusyChange?: (busy: boolean) => void;
   disabled?: boolean;
   // When set, awaited once per upload batch to obtain the linkedId. Lets a
   // not-yet-saved entity (e.g. a draft trip log) be materialised on first
@@ -54,6 +63,7 @@ export default function MediaUpload({
   const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const toast = useToast();
 
   const accept = category ? ACCEPT_BY_CATEGORY[category] : ACCEPT_ALL;
   const subHint = category
@@ -76,6 +86,7 @@ export default function MediaUpload({
     const selected = Array.from(files);
     setErrors([]);
     const failures: string[] = [];
+    const added: MediaCategory[] = [];
     if (maxFiles != null && selected.length > maxFiles) {
       setErrors([
         `You can upload at most ${maxFiles} file${maxFiles === 1 ? "" : "s"} here.`,
@@ -83,6 +94,7 @@ export default function MediaUpload({
       return;
     }
     setBusy(true);
+    onBusyChange?.(true);
     try {
       const targetId = resolveLinkedId ? await resolveLinkedId() : linkedId;
       for (const file of selected) {
@@ -107,6 +119,7 @@ export default function MediaUpload({
             thumbnail,
           });
           onUploaded(item);
+          added.push(resolved.category);
         } catch (err) {
           console.error(err);
           failures.push(
@@ -120,6 +133,13 @@ export default function MediaUpload({
     }
     setErrors(failures);
     setBusy(false);
+    onBusyChange?.(false);
+    // A failure has one place: the list under the dropzone names each file, so
+    // the toast says only what went in, and nothing when nothing did.
+    const summary = attachSummary(added, failures.length, {
+      failuresListed: true,
+    });
+    if (summary) toast.done(summary.message);
   }
 
   return (

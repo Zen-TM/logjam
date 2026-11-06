@@ -32,7 +32,8 @@ vi.mock("../offline/localStores", () => ({ WEATHER_DIR: "file:///w/" }));
 const at = (lat: number): WeatherForecast => ({
   cell: weatherCell({ latitude: lat, longitude: 150 }, 600),
   fetchedAt: 1,
-  pastRainMm: 0,
+  hours: [],
+  past: { source: "model", days: [] },
   days: [],
 });
 

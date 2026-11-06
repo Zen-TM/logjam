@@ -74,6 +74,8 @@ vi.mock("../tracks/trackRecorder", () => ({
 }));
 const clearRecentSearches = vi.hoisted(() => vi.fn());
 vi.mock("../map/recentSearches", () => ({ clearRecentSearches }));
+const forgetSlopeBandsEdit = vi.hoisted(() => vi.fn());
+vi.mock("../map/slopeBandsPreference", () => ({ forgetSlopeBandsEdit }));
 vi.mock("../map/sharpenedArchives", () => ({
   stopSharpenedAreasForWipe: () => record("stop:sharpened"),
 }));
@@ -123,6 +125,14 @@ describe("wipeAllLocalData", () => {
   it("forgets the recent map searches", async () => {
     await wipeAllLocalData();
     expect(clearRecentSearches).toHaveBeenCalledOnce();
+  });
+
+  // Mutation: drop forgetSlopeBandsEdit() from wipeAllLocalData, and the same
+  // account signing back in has its slope bands ignored until a restart.
+  it("forgets a slope-band edit not yet sent", async () => {
+    forgetSlopeBandsEdit.mockClear();
+    await wipeAllLocalData();
+    expect(forgetSlopeBandsEdit).toHaveBeenCalledOnce();
   });
 
   it("deletes every declared directory", async () => {

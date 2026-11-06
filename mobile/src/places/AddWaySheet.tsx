@@ -7,7 +7,7 @@
 // (mobile/AGENTS.md).
 //
 //   a route you drew   → the Route row is linked (Route.placeId)
-//   an import          → a COPY of its stored original is uploaded as media
+//   an import          → the stored import is linked to the place
 //   a recorded track   → a Route is CREATED from it and that is linked; the
 //                        recording is an observation and is never linked
 //   a .gpx/.kml file   → uploaded as media
@@ -30,22 +30,42 @@ import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import {
+  ADD_WAY,
+  mediaDisplayName,
+  addWayFileRow,
+  addWayImportSubtitle,
+  addWayNoImports,
+  addWayNoTracks,
+  attachableRoutes,
   formatDistanceM,
-  messageFromError,
   routeLengthM,
+  routesMatching,
+  TRIP_FORM,
+  wayFailureMessage,
 } from "@logjam/shared";
 
 import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import { BottomSheet, Row, SectionHeader, TextField } from "../ui";
-import { linkStandaloneMediaLocal } from "../sync/mediaUpload";
+import {
+  discardPickedFile,
+  linkStandaloneMediaLocal,
+} from "../sync/mediaUpload";
 import { importVectorSource } from "../imports/vectorImports";
 import { updateRouteLocal } from "../sync/outbox";
 import { useMirrorRoutes } from "../sync/useSyncQueries";
-import type { MirrorMedia } from "../sync/mirrorStore";
+import { listStandaloneMedia, type MirrorMedia } from "../sync/mirrorStore";
 import { routeFileMimeType } from "../media/routeFileMime";
 import { listVectorImports, type VectorImport } from "../imports/importsDb";
 import { listTracks, type Track } from "../tracks/tracksDb";
 import { trackActions, vectorImportActions } from "../saved/assetActions";
+import { syncedTrackSource } from "../tracks/tripTrackSource";
+import {
+  trackSourceWay,
+  tripFileWay,
+  tripImportWay,
+  tripRecordingWay,
+  tripRouteWay,
+} from "../logs/tripWays";
 import { fillRouteSlot } from "./fillRouteSlot";
 import {
   IMPORT_TO_PLACE_PROMISE,
@@ -56,24 +76,49 @@ import {
 
 type Mode = "sources" | "routes" | "imports" | "tracks";
 
+/**
+ * A way chosen for a place that does not exist yet: the Add-a-place form holds
+ * it and runs `write` with the new place's id once the place is queued, so
+ * cancelling the form leaves nothing behind.
+ */
+export type StagedWay = {
+  /** What the form shows for it: a route, recording or file name. */
+  label: string;
+  write: (placeId: string) => Promise<string>;
+  /** Frees what the pick holds until it is written (a picker's cache file).
+   *  Called when the way is removed, swapped or the form is cancelled. */
+  discard?: () => Promise<void>;
+};
+
 export function AddWaySheet({
   placeId,
   placeName,
   media,
   visible,
   onClose,
+  onClosed,
   onDrawRoute,
+  onStage,
+  forTrip = false,
   onInfo,
   onError,
 }: {
-  placeId: string;
+  /** Null while the place is still being made: a pick is handed to `onStage`
+   *  instead of written, and nothing in the slot can be displaced. */
+  placeId: string | null;
   placeName: string;
   /** This place's attachments — half of what can be occupying the slot. */
   media: MirrorMedia[];
   visible: boolean;
   onClose: () => void;
+  /** The sheet has finished closing and any picker it parked has settled. */
+  onClosed?: () => void;
   /** Arm the map's pen for this place. Absent when the host has no map. */
   onDrawRoute?: () => void;
+  onStage?: (way: StagedWay) => void;
+  /** The way is for a trip being logged, not a place: every source stages a
+   *  COPY of its file (`tripWays.ts`), and there is no pen. `placeId` is null. */
+  forTrip?: boolean;
   onInfo: (message: string) => void;
   onError: (message: string) => void;
 }) {
@@ -86,6 +131,9 @@ export function AddWaySheet({
   const [busy, setBusy] = useState(false);
   const [imports, setImports] = useState<VectorImport[] | null>(null);
   const [tracks, setTracks] = useState<Track[] | null>(null);
+  // A trip only: the account's recordings made on another device. A trip takes
+  // a copy of the file, so these work like Logjam Web's list.
+  const [remoteTracks, setRemoteTracks] = useState<MirrorMedia[]>([]);
   /**
    * Work deferred until this sheet has fully closed. A system picker launched
    * from inside an open Modal can never attach its own window, and its promise
@@ -142,6 +190,19 @@ export function AddWaySheet({
     };
   }, [mode]);
 
+  useEffect(() => {
+    if (mode !== "tracks" || !forTrip) return;
+    let cancelled = false;
+    listStandaloneMedia("track")
+      .then((all) => {
+        if (!cancelled) setRemoteTracks(all);
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, forTrip]);
+
   const close = useCallback(() => {
     setMode("sources");
     onClose();
@@ -152,7 +213,17 @@ export function AddWaySheet({
    * documented order, then say what happened — once, for every source.
    */
   const fill = useCallback(
-    (source: WaySource, write: () => Promise<string>) => {
+    (
+      source: WaySource,
+      label: string,
+      write: (placeId: string, replaces?: string) => Promise<string>,
+      discard?: () => Promise<void>,
+    ) => {
+      if (placeId === null) {
+        onStage?.({ label, write: (id) => write(id), discard });
+        close();
+        return;
+      }
       setBusy(true);
       // The write's own sentence, said only once the swap has finished — a
       // toast fired before the incumbent is gone would describe a slot that
@@ -162,8 +233,8 @@ export function AddWaySheet({
         placeName,
         source,
         occupant: routeSlotOccupant(placeId, routes.data ?? [], media),
-        write: () =>
-          write().then((said) => {
+        write: (replaces) =>
+          write(placeId, replaces).then((said) => {
             message = said;
           }),
       })
@@ -178,13 +249,11 @@ export function AddWaySheet({
           // UNDER an open sheet, so a failure reported with this one still up
           // is a failure the user never sees.
           close();
-          onError(
-            messageFromError(err, "Couldn't set that as this place's route."),
-          );
+          onError(wayFailureMessage(err));
         })
         .finally(() => setBusy(false));
     },
-    [placeId, placeName, close, media, onError, onInfo, routes.data],
+    [placeId, placeName, close, media, onError, onInfo, onStage, routes.data],
   );
 
   /** Close first, then run — every system picker needs a window of its own. */
@@ -207,7 +276,7 @@ export function AddWaySheet({
     const asset = result.assets[0];
     const mimeType = routeFileMimeType(asset.name, asset.mimeType);
     if (mimeType === null) {
-      onError("Pick a .gpx or .kml file.");
+      onError(ADD_WAY.copy.notRouteFile);
       return;
     }
     // The confirm comes AFTER the file is chosen: a user who backs out of the
@@ -217,30 +286,50 @@ export function AddWaySheet({
     // uploaded straight onto the place. One kind of file, one row, one place
     // it lives — it appears in Saved like every other import, survives being
     // replaced here, and can be put on another place later.
-    fill("file", async () => {
+    if (forTrip) {
+      // A trip's file is its own copy: nothing is imported into Saved.
+      fill(
+        "file",
+        asset.name,
+        tripFileWay({ uri: asset.uri, mimeType, fileName: asset.name }),
+        // The picker's cache copy, until Save hands it to the upload.
+        () => discardPickedFile(asset.uri),
+      );
+      return;
+    }
+    fill("file", asset.name, async (id, replaces) => {
       const record = await importVectorSource(asset.uri, asset.name);
-      await linkStandaloneMediaLocal(record.id, placeId);
-      return "Route file linked to this place.";
+      await linkStandaloneMediaLocal(record.id, id, replaces);
+      return ADD_WAY.copy.fileDone;
     });
-  }, [placeId, fill, onError]);
+  }, [fill, forTrip, onError]);
 
-  const drawnRoutes = (routes.data ?? [])
-    // A route shared with you belongs to someone else; the API refuses the
-    // write, so it must not be offered.
-    .filter((route) => route.syncRole !== "shared")
-    .filter((route) => {
-      const needle = query.trim().toLowerCase();
-      return !needle || route.name.toLowerCase().includes(needle);
-    });
+  // A route shared with you belongs to someone else; the API refuses the
+  // write, so it must not be offered. (A trip's copy of its line is fine, but
+  // the place's sharee is not the trip's, so the same rule keeps it simple.)
+  const ownRoutes = (routes.data ?? []).filter(
+    (route) => route.syncRole !== "shared",
+  );
+  const drawnRoutes = forTrip
+    ? routesMatching(ownRoutes, query)
+    : attachableRoutes(ownRoutes, placeId ?? "", query);
 
   // A verb that can only refuse is absent (DESIGN.md): an import with no
   // .gpx/.kml original, and a recording too short to make a route from, both
   // withhold their descriptor, so neither reaches this list.
-  const attachableImports = (imports ?? []).filter(
-    (row) => vectorImportActions(row).attachToPlace != null,
+  const attachableImports = (imports ?? []).filter((row) =>
+    forTrip
+      ? tripImportWay(row) != null
+      : vectorImportActions(row).attachToPlace != null,
   );
   const convertibleTracks = (tracks ?? []).filter(
     (track) => trackActions(track).createRouteFrom != null,
+  );
+
+  // The ones made here are in the list above, under their own name.
+  const madeHere = new Set((tracks ?? []).map((track) => track.mediaId));
+  const otherDeviceTracks = remoteTracks.filter(
+    (file) => !madeHere.has(file.id),
   );
 
   return (
@@ -251,29 +340,34 @@ export function AddWaySheet({
       onBack={mode === "sources" ? undefined : () => setMode("sources")}
       onClosed={() => {
         const job = pending;
-        if (!job) return;
+        if (!job) {
+          onClosed?.();
+          return;
+        }
         setPending(null);
         // A picker flow can reject (a cancelled folder grant, a failed read);
         // unhandled here it was an unhandled rejection and the row looked dead.
-        void job().catch((err: unknown) => {
-          console.error(err);
-          onError("That didn't work. Please try again.");
-        });
+        void job()
+          .catch((err: unknown) => {
+            console.error(err);
+            onError("Couldn't finish that. Try again.");
+          })
+          .finally(() => onClosed?.());
       }}
       title={
         mode === "routes"
-          ? "Choose a route you drew"
+          ? ADD_WAY.copy.routeTitle
           : mode === "imports"
-            ? "Use an imported file"
+            ? ADD_WAY.copy.importTitle
             : mode === "tracks"
-              ? "Use a recorded track"
-              : "Add a way"
+              ? ADD_WAY.copy.trackTitle
+              : ADD_WAY.copy.title
       }
       header={
         mode === "routes" ? (
           <View style={styles.header}>
             <TextField
-              label="Find a route"
+              label={ADD_WAY.copy.findRoute}
               value={query}
               onChangeText={setQuery}
             />
@@ -297,8 +391,8 @@ export function AddWaySheet({
           <Row
             icon="route"
             hue={assetHue.route}
-            title="Choose a route you drew"
-            subtitle="One of your saved routes"
+            title={ADD_WAY.copy.routeTitle}
+            subtitle={ADD_WAY.copy.routeSubtitle}
             disabled={busy}
             onPress={() => setMode("routes")}
           />
@@ -306,8 +400,8 @@ export function AddWaySheet({
             <Row
               icon="draw"
               hue={assetHue.route}
-              title="Draw a route on the map"
-              subtitle="Opens the map to draw a route"
+              title={ADD_WAY.copy.drawTitle}
+              subtitle={ADD_WAY.copy.drawSubtitle}
               disabled={busy}
               onPress={() => {
                 close();
@@ -318,24 +412,24 @@ export function AddWaySheet({
           <Row
             icon="track"
             hue={assetHue.track}
-            title="Use a recorded track"
-            subtitle="A track you recorded in Logjam GPS"
+            title={ADD_WAY.copy.trackTitle}
+            subtitle={ADD_WAY.copy.trackSubtitle}
             disabled={busy}
             onPress={() => setMode("tracks")}
           />
           <Row
             icon="importedFile"
             hue={assetHue.import}
-            title="Use an imported file"
-            subtitle="A GPX or KML already in Saved"
+            title={ADD_WAY.copy.importTitle}
+            subtitle={addWayImportSubtitle("gps")}
             disabled={busy}
             onPress={() => setMode("imports")}
           />
           <Row
             icon="importedFile"
             hue={assetHue.import}
-            title="Import a new file"
-            subtitle="A .gpx or .kml from this phone"
+            title={addWayFileRow("gps", forTrip ? "trip" : "place").title}
+            subtitle={addWayFileRow("gps", forTrip ? "trip" : "place").subtitle}
             disabled={busy}
             onPress={() => runAfterSheet(pickFile)}
           />
@@ -347,30 +441,34 @@ export function AddWaySheet({
         <View style={styles.body}>
           {drawnRoutes.length === 0 ? (
             <Text style={styles.hint}>
-              {query
-                ? "No route of yours matches that."
-                : "You haven't drawn any routes yet."}
+              {query ? ADD_WAY.copy.noRouteMatch : ADD_WAY.copy.noRoutes}
             </Text>
           ) : (
             drawnRoutes.map((route) => {
-              const here = route.placeId === placeId;
+              const here = placeId !== null && route.placeId === placeId;
               return (
                 <Row
                   key={route.id}
                   title={route.name}
                   subtitle={
                     here
-                      ? "Already this place's route"
+                      ? ADD_WAY.copy.alreadyHere
                       : formatDistanceM(routeLengthM(route.points))
                   }
                   icon={here ? "done" : "route"}
                   hue={here ? theme.accent : assetHue.route}
                   disabled={busy || here}
                   onPress={() =>
-                    fill("route", async () => {
-                      await updateRouteLocal(route.id, { placeId });
-                      return "Route attached to this place.";
-                    })
+                    fill(
+                      "route",
+                      route.name,
+                      forTrip
+                        ? tripRouteWay(route)
+                        : async (id) => {
+                            await updateRouteLocal(route.id, { placeId: id });
+                            return ADD_WAY.copy.routeDone;
+                          },
+                    )
                   }
                 />
               );
@@ -381,14 +479,13 @@ export function AddWaySheet({
 
       {mode === "imports" ? (
         <View style={styles.body}>
-          <Text style={styles.hint}>{IMPORT_TO_PLACE_PROMISE}</Text>
+          <Text style={styles.hint}>
+            {forTrip ? TRIP_FORM.copy.wayCopiedHint : IMPORT_TO_PLACE_PROMISE}
+          </Text>
           {imports === null ? (
             <ActivityIndicator color={theme.accent} />
           ) : attachableImports.length === 0 ? (
-            <Text style={styles.hint}>
-              No imported GPX or KML on this phone. Import one from Saved and it
-              shows up here.
-            </Text>
+            <Text style={styles.hint}>{addWayNoImports("gps")}</Text>
           ) : (
             attachableImports.map((row) => (
               <Row
@@ -398,10 +495,19 @@ export function AddWaySheet({
                 title={row.name}
                 disabled={busy}
                 onPress={() =>
-                  fill("import", async () => {
-                    await vectorImportActions(row).attachToPlace!(placeId);
-                    return "Attached a copy as this place's route.";
-                  })
+                  fill(
+                    "import",
+                    row.name,
+                    forTrip
+                      ? tripImportWay(row)!
+                      : async (id, replaces) => {
+                          await vectorImportActions(row).attachToPlace!(
+                            id,
+                            replaces,
+                          );
+                          return ADD_WAY.copy.linkedDone;
+                        },
+                  )
                 }
               />
             ))
@@ -411,17 +517,19 @@ export function AddWaySheet({
 
       {mode === "tracks" ? (
         <View style={styles.body}>
-          <Text style={styles.hint}>{TRACK_TO_ROUTE_PROMISE}</Text>
+          <Text style={styles.hint}>
+            {forTrip ? TRIP_FORM.copy.wayCopiedHint : TRACK_TO_ROUTE_PROMISE}
+          </Text>
           {tracks === null ? (
             <ActivityIndicator color={theme.accent} />
-          ) : convertibleTracks.length === 0 ? (
-            <Text style={styles.hint}>
-              No finished recording here is long enough to make a route from.
-              Start one from the map and it shows up here once you stop it.
-            </Text>
+          ) : convertibleTracks.length === 0 &&
+            otherDeviceTracks.length === 0 ? (
+            <Text style={styles.hint}>{addWayNoTracks("gps")}</Text>
           ) : (
             <>
-              <SectionHeader title={`${convertibleTracks.length} finished`} />
+              {convertibleTracks.length > 0 ? (
+                <SectionHeader title={`${convertibleTracks.length} finished`} />
+              ) : null}
               {convertibleTracks.map((track) => (
                 <Row
                   key={track.id}
@@ -431,17 +539,51 @@ export function AddWaySheet({
                   subtitle={trackSummary(track)}
                   disabled={busy}
                   onPress={() =>
-                    fill("track", async () => {
-                      const { name, pointCount } =
-                        await trackActions(track).createRouteFrom!(placeId);
-                      // RDP always throws points away; saying how many survived
-                      // is what stops the user concluding Logjam GPS lost
-                      // their recording.
-                      return `Saved “${name}” — ${pointCount} points — as this place's route.`;
-                    })
+                    fill(
+                      "track",
+                      track.name,
+                      forTrip
+                        ? tripRecordingWay(track)
+                        : async (id) => {
+                            const { name, pointCount } =
+                              await trackActions(track).createRouteFrom!(id);
+                            // RDP always throws points away; saying how many
+                            // survived is what stops the user concluding Logjam
+                            // GPS lost their recording.
+                            return `Saved “${name}” — ${pointCount} points — as this place's route.`;
+                          },
+                    )
                   }
                 />
               ))}
+              {forTrip && otherDeviceTracks.length > 0 ? (
+                <>
+                  <SectionHeader title="From your other devices" />
+                  {otherDeviceTracks.map((file) => (
+                    <Row
+                      key={file.id}
+                      icon="track"
+                      hue={file.color ?? assetHue.track}
+                      title={mediaDisplayName(file)}
+                      subtitle={
+                        file.localDisplayPath === null
+                          ? "Needs a connection to copy"
+                          : undefined
+                      }
+                      disabled={busy}
+                      onPress={() => {
+                        const way = trackSourceWay(
+                          syncedTrackSource({
+                            ...file,
+                            title: mediaDisplayName(file),
+                          }),
+                        );
+                        fill("track", way.label, way.write);
+                      }}
+                    />
+                  ))}
+                </>
+              ) : null}
             </>
           )}
         </View>

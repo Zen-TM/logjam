@@ -13,15 +13,16 @@ import {
   fetchComputeEstimate,
   fetchCurrentUser,
 } from "../../placeUtils";
-import { useUnsavedChangesGuard } from "../../useUnsavedChangesGuard";
-import ConfirmDialog from "./ConfirmDialog";
 import type { TBbox } from "../map/Map";
 import {
+  abandonConfirm,
   parseZipCentralDirectory,
   classifyElvisEntries,
   ElvisZipError,
   estimateElvisTileCount,
-  formatCredits,
+  formatCreditsLike,
+  formatCreditsOf,
+  formatMinutes,
   regionNameFromSurvey,
   LIDAR_JOB_COPY,
   type ElvisStats,
@@ -143,6 +144,7 @@ export default function TopoDialog({
   // the ZIP has been validated (the tile count is the estimator's only input),
   // or when the server has too little history to have an opinion.
   const [jobCredits, setJobCredits] = useState<number | null>(null);
+  const [jobSeconds, setJobSeconds] = useState<number | null>(null);
   // The server's own verdict on whether this submission would be refused.
   // Preferred over recomputing used + cost > quota on the client, so there is
   // one rule for the decision rather than two that can disagree.
@@ -218,6 +220,7 @@ export default function TopoDialog({
     setEstimateKey({ open, activeTileCount });
     if (!open || !activeTileCount) {
       setJobCredits(null);
+      setJobSeconds(null);
       setJobWouldExceed(false);
     }
   }
@@ -228,6 +231,7 @@ export default function TopoDialog({
       .then((estimate) => {
         if (cancelled) return;
         setJobCredits(estimate.credits);
+        setJobSeconds(estimate.estimatedSeconds);
         setJobWouldExceed(estimate.wouldExceed);
         // The estimate response carries a fresher balance than the one loaded
         // when the dialog opened, so adopt it rather than keeping two views.
@@ -316,7 +320,7 @@ export default function TopoDialog({
 
   function onFilePicked(picked: File) {
     if (!picked.name.toLowerCase().endsWith(".zip")) {
-      setValidationError("Please select a .zip file.");
+      setValidationError("Select a .zip file.");
       return;
     }
     // A new ZIP is a new job: the stopped one is let go, and with it the lock
@@ -353,7 +357,7 @@ export default function TopoDialog({
           ? ` Allowance resets ${new Date(creditsResetAt).toLocaleDateString("en-AU", { month: "short", day: "numeric" })}.`
           : "";
         setError(
-          `Not enough processing credits. This job needs about ${formatCredits(jobCredits)} but only ${formatCredits(remaining)} remain.${resetStr}`,
+          `Not enough processing credits. This job needs about ${formatCreditsLike(jobCredits, creditsQuota)} but only ${formatCreditsLike(remaining, creditsQuota)} remain.${resetStr}`,
         );
         return;
       }
@@ -410,7 +414,6 @@ export default function TopoDialog({
   // finalizing) close is already blocked above; once done there's nothing left
   // to lose.
   const isDirty = phase === "form" && file != null;
-  const guard = useUnsavedChangesGuard(isDirty, performClose);
 
   const uploading = phase === "uploading" || phase === "finalizing";
   const uploadPct =
@@ -440,8 +443,11 @@ export default function TopoDialog({
         dismissible={!uploading}
         // Inside a sub-view every way out means "back to the form", never
         // "throw away the ZIP I just chose".
-        onClose={mode === "form" ? guard.requestClose : backToForm}
-        footer={
+        onClose={mode === "form" ? performClose : backToForm}
+        discard={
+          isDirty && mode === "form" ? abandonConfirm("request", true) : null
+        }
+        footer={(requestClose) =>
           uploading ? undefined : phase === "done" ? (
             <Button variant="filled" onClick={onClose}>
               Done
@@ -452,7 +458,7 @@ export default function TopoDialog({
             </Button>
           ) : (
             <>
-              <Button onClick={guard.requestClose}>Cancel</Button>
+              <Button onClick={requestClose}>Cancel</Button>
               <Button variant="filled" onClick={handleSubmit} busy={validating}>
                 Make it
               </Button>
@@ -496,6 +502,7 @@ export default function TopoDialog({
               {stats?.tileCount
                 ? `${stats.tileCount} area${stats.tileCount > 1 ? "s" : ""} queued. `
                 : ""}
+              {jobSeconds ? `It takes ${formatMinutes(jobSeconds)}. ` : ""}
               We'll let you know when it's ready. You can close this.
             </p>
           </div>
@@ -507,7 +514,7 @@ export default function TopoDialog({
             warnCredits={jobWouldExceed && stats === null}
           />
         ) : (
-          <>
+          <div className={classes.form}>
             <p className={classes.wideHint}>
               This is easier on a bigger screen.
             </p>
@@ -626,19 +633,9 @@ export default function TopoDialog({
                 onChange={setVegetation}
               />
             )}
-          </>
+          </div>
         )}
       </Dialog>
-
-      <ConfirmDialog
-        open={guard.guardOpen}
-        title="Discard unsaved changes?"
-        message="Your loaded file will be lost."
-        confirmLabel="Discard"
-        confirmColor="error"
-        onConfirm={guard.confirmDiscard}
-        onClose={guard.cancelDiscard}
-      />
     </>
   );
 }
@@ -682,8 +679,8 @@ function ZipSummary({
       ? [
           "Credits",
           jobCredits !== null
-            ? `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · about ${formatCredits(jobCredits)} for this one`
-            : `${formatCredits(creditsUsed)} of ${formatCredits(creditsQuota)} used this month · we can't tell yet what this one will cost`,
+            ? `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · about ${formatCreditsLike(jobCredits, creditsQuota)} for this one`
+            : `${formatCreditsOf(creditsUsed, creditsQuota)} used this month · we can't tell yet what this one will cost`,
         ]
       : null,
   ];

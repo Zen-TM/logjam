@@ -38,8 +38,10 @@ import {
   categoryHasThumbnail,
   isMediaOrigin,
   parseMediaMetadata,
+  parseSourceMediaId,
   parseTrackClimb,
   MediaMetadataError,
+  SourceMediaIdError,
   type MediaLinkedType,
   type MediaOrigin,
   pickNextTrackColor,
@@ -75,8 +77,19 @@ function parseLinkTarget(body: Record<string, unknown>): {
   linkedType: MediaLinkedType;
   linkedId: string | null;
   origin: MediaOrigin | null;
+  sourceMediaId: string | null;
 } {
   const { linkedType, linkedId, origin } = body;
+  let sourceMediaId: string | null;
+  try {
+    sourceMediaId = parseSourceMediaId(body.sourceMediaId);
+  } catch (err) {
+    if (err instanceof SourceMediaIdError) throw malformed(err.message);
+    throw err;
+  }
+  if (sourceMediaId !== null && linkedType !== "tripLog") {
+    throw malformed("Only a trip's file can name a source recording");
+  }
   if (
     linkedType !== "place" &&
     linkedType !== "tripLog" &&
@@ -95,12 +108,12 @@ function parseLinkTarget(body: Record<string, unknown>): {
     if (parsedOrigin === null) {
       throw malformed("A standalone file requires an origin");
     }
-    return { linkedType, linkedId: null, origin: parsedOrigin };
+    return { linkedType, linkedId: null, origin: parsedOrigin, sourceMediaId };
   }
   if (typeof linkedId !== "string" || !linkedId) {
     throw malformed("linkedId is required");
   }
-  return { linkedType, linkedId, origin: parsedOrigin };
+  return { linkedType, linkedId, origin: parsedOrigin, sourceMediaId };
 }
 
 // Only the owner of the target place (or the place owning the trip log) may
@@ -140,6 +153,25 @@ async function assertOwnsTarget(
   }
 }
 
+// A trip's copy may only name one of the caller's own recordings. A foreign
+// id, a missing one and a non-recording all answer the same 400, so the status
+// is no oracle for other people's media ids. Guards: "refuses another account's
+// recording…" and "refuses a source on confirm…" in
+// src/__tests__/tripTrackLink.test.ts.
+async function assertOwnsSourceTrack(
+  userId: string,
+  sourceMediaId: string | null,
+) {
+  if (sourceMediaId === null) return;
+  const source = await prisma.media.findUnique({
+    where: { id: sourceMediaId },
+    select: { ownerId: true, origin: true },
+  });
+  if (!source || source.ownerId !== userId || source.origin !== "track") {
+    throw malformed("sourceMediaId must name one of your recorded tracks");
+  }
+}
+
 // A place may have at most one track (GPX/KML). Trip logs are unconstrained.
 // Checked in both presign (fail fast) and confirm (authoritative — the presign
 // check can race; the orphan sweeper reclaims a blob whose confirm is rejected).
@@ -147,8 +179,9 @@ async function assertPlaceTrackSlotFree(
   linkedType: string,
   linkedId: string | null,
   category: MediaCategory,
-  /** The row being MOVED, on a re-link: it is otherwise its own incumbent. */
-  ignoreMediaId?: string,
+  /** The row being MOVED, on a re-link, and the one being REPLACED: each is
+   *  otherwise an incumbent that refuses the write. */
+  ignoreMediaIds: string[] = [],
 ) {
   if (linkedType !== "place" || linkedId === null || category !== "track")
     return;
@@ -157,11 +190,107 @@ async function assertPlaceTrackSlotFree(
       linkedType: "place",
       linkedId,
       mediaType: { in: TRACK_MIME_TYPES as unknown as string[] },
-      ...(ignoreMediaId ? { id: { not: ignoreMediaId } } : {}),
+      ...(ignoreMediaIds.length > 0 ? { id: { notIn: ignoreMediaIds } } : {}),
     },
   });
   if (existing > 0)
     throw new AppError(409, say`This place already has a track.`);
+}
+
+/**
+ * `replaces`: the track a new one takes over from, swapped in the same
+ * transaction that lands the new one (see `dropReplaced`). It must be the
+ * caller's own file uploaded onto this same place (no origin: an import or a
+ * recording lives on elsewhere and is unlinked, never deleted). A foreign id, a
+ * missing one and one that is not that all answer the same 400, so the status
+ * is no oracle for other people's media ids. Guard: "answers the same
+ * 400…" in src/__tests__/replaceTrack.test.ts.
+ */
+async function assertOwnsReplaced(
+  userId: string,
+  replaces: unknown,
+  linkedType: string,
+  linkedId: string | null,
+  category: MediaCategory,
+): Promise<{ id: string; sizeBytes: bigint } | null> {
+  if (replaces === undefined || replaces === null) return null;
+  const refusal = "replaces must name your own uploaded track on this place";
+  if (typeof replaces !== "string" || !replaces) throw malformed(refusal);
+  if (linkedType !== "place" || category !== "track") throw malformed(refusal);
+  const old = await prisma.media.findUnique({
+    where: { id: replaces },
+    select: {
+      ownerId: true,
+      linkedType: true,
+      linkedId: true,
+      origin: true,
+      mediaType: true,
+      fileSizeBytes: true,
+    },
+  });
+  if (
+    !old ||
+    old.ownerId !== userId ||
+    old.linkedType !== "place" ||
+    old.linkedId !== linkedId ||
+    old.origin !== null ||
+    mediaCategory(old.mediaType) !== "track"
+  ) {
+    throw malformed(refusal);
+  }
+  return { id: replaces, sizeBytes: old.fileSizeBytes };
+}
+
+/** The old file went between the check and the swap; the write is rolled back. */
+class ReplacedFileGone extends AppError {
+  constructor() {
+    super(400, say`The file you were replacing is no longer on this place.`);
+  }
+}
+
+/**
+ * Delete the track a write replaces, inside that write's transaction: the row,
+ * its quota and the tombstones (owner and the place's sharees), as for a
+ * DELETE. A sharee's next delta therefore unlinks the old file and carries the
+ * new one. Returns the blob keys to remove once the transaction has committed,
+ * or throws `ReplacedFileGone` if another request took the old row first, which
+ * rolls the write back.
+ */
+async function dropReplaced(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  replacesId: string,
+): Promise<string[]> {
+  const old = await tx.media.findFirst({
+    where: { id: replacesId, ownerId: userId },
+  });
+  if (!old) throw new ReplacedFileGone();
+  // deleteMany, not delete: of two requests naming the same old file the loser
+  // matches nothing, instead of throwing P2025 as a 500.
+  const { count } = await tx.media.deleteMany({
+    where: { id: replacesId, ownerId: userId },
+  });
+  if (count === 0) throw new ReplacedFileGone();
+  const placeId = placeIdOfMedia(old);
+  const sharees =
+    placeId !== null
+      ? await tx.placeShare.findMany({
+          where: { placeId },
+          select: { sharedWithId: true },
+        })
+      : [];
+  await decrementStorageUsed(userId, old.fileSizeBytes, tx);
+  await writeTombstones(
+    tx,
+    mediaDeleteTombstones({
+      ownerId: userId,
+      mediaId: replacesId,
+      shareeIds: sharees.map((s) => s.sharedWithId),
+    }),
+  );
+  return [old.s3KeyDisplay, old.s3KeyThumbnail].filter((k): k is string =>
+    Boolean(k),
+  );
 }
 
 /**
@@ -247,7 +376,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { sizeBytes, thumbnailSizeBytes } = body;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const { category, mediaType } = validateMediaType(
       body.mediaType,
       body.filename,
@@ -286,12 +416,32 @@ router.post(
         return;
       }
     }
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    // After the replay above: a copy that already exists is returned even if
+    // its recording has since been deleted (guard: "answers a replay…" in
+    // tripTrackLink.test.ts).
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
+    const replaces = await assertOwnsReplaced(
+      user.id,
+      body.replaces,
+      linkedType,
+      linkedId,
+      category,
+    );
+    await assertPlaceTrackSlotFree(
+      linkedType,
+      linkedId,
+      category,
+      replaces ? [replaces.id] : [],
+    );
     // Headroom pre-check including the declared upload; the authoritative
-    // quota charge still happens on confirm against the real S3 size.
+    // quota charge still happens on confirm against the real S3 size. The file
+    // being replaced is credited, as confirm credits it before charging: a user
+    // at their quota can swap a file for one no larger.
     await assertHasStorageQuota(
       user.id,
       BigInt(sizes.sizeBytes + (sizes.thumbnailSizeBytes ?? 0)),
+      prisma,
+      replaces?.sizeBytes ?? 0n,
     );
 
     const mediaId = clientMediaId ?? randomUUID();
@@ -335,7 +485,8 @@ router.post(
     const user = await getUser(req.user!.sub);
     const mediaId = getParam(req.params.mediaId);
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const { linkedType, linkedId, origin } = parseLinkTarget(body);
+    const { linkedType, linkedId, origin, sourceMediaId } =
+      parseLinkTarget(body);
     const metadata = parseMediaMetadataOr400(origin, body.metadata);
     const { category, mediaType, filename } = validateMediaType(
       body.mediaType,
@@ -358,7 +509,27 @@ router.post(
       return;
     }
 
-    await assertPlaceTrackSlotFree(linkedType, linkedId, category);
+    // Authoritative: presign may not have carried the source at all. After the
+    // replay above, for the reason given at presign.
+    await assertOwnsSourceTrack(user.id, sourceMediaId);
+    // After the replay above: a swap that already landed has deleted the old
+    // file, and its retry must get the new one back, not a 400.
+    const replaces = await assertOwnsReplaced(
+      user.id,
+      body.replaces,
+      linkedType,
+      linkedId,
+      category,
+    );
+    await assertPlaceTrackSlotFree(
+      linkedType,
+      linkedId,
+      category,
+      replaces ? [replaces.id] : [],
+    );
+    // Before the transaction, so a bad name is a 400 with the blobs left for
+    // the client's retry, as it was before `replaces` existed.
+    const displayName = parseMediaDisplayName(body.displayName);
 
     const { displayKey, thumbnailKey } = mediaKeys(user.id, mediaId, mediaType);
     const expectThumb = categoryHasThumbnail(category);
@@ -408,8 +579,15 @@ router.post(
     // together. No crash window can leave the quota charged without a row,
     // and an over-quota throw undoes the charge without a manual decrement.
     let media;
+    let replacedKeys: string[] = [];
     try {
       media = await prisma.$transaction(async (tx) => {
+        // The old file goes first so its bytes are freed before the new ones
+        // are charged: replacing a file near the quota must not need room for
+        // both.
+        replacedKeys = replaces
+          ? await dropReplaced(tx, user.id, replaces.id)
+          : [];
         await incrementStorageUsed(user.id, totalBytes, tx);
         const { used, quota } = await getStorageUsage(user.id, tx);
         if (used > quota) {
@@ -447,7 +625,8 @@ router.post(
             linkedType,
             linkedId,
             origin,
-            displayName: parseMediaDisplayName(body.displayName),
+            sourceMediaId,
+            displayName,
             metadata,
             s3KeyDisplay: displayKey,
             s3KeyThumbnail: expectThumb ? thumbnailKey : null,
@@ -461,8 +640,11 @@ router.post(
         });
       });
     } catch (err) {
-      if (err instanceof AppError && err.statusCode === 507) {
-        // Transaction rolled back (charge undone); remove the uploaded
+      if (
+        err instanceof AppError &&
+        (err.statusCode === 507 || err instanceof ReplacedFileGone)
+      ) {
+        // Transaction rolled back (charge undone, the old file kept); remove the uploaded
         // objects best-effort so the 507 is not masked by a cleanup failure.
         await deleteS3KeysBestEffort(
           MEDIA_BUCKET,
@@ -487,6 +669,11 @@ router.post(
       throw err;
     }
 
+    // The swap committed: the old blobs are unreachable now. Best-effort, as
+    // the orphan sweeper reclaims any this misses.
+    if (replacedKeys.length > 0) {
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, replacedKeys);
+    }
     res.status(201).json(await toMediaItem(media));
   },
 );
@@ -598,6 +785,20 @@ router.get(
       where: { ownerId: user.id, origin: { not: null } },
       orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     });
+    // The recordings a trip has been logged from: one query bounded by the
+    // account's trip files, however many recordings it has.
+    const withTrip = new Set(
+      (
+        await prisma.media.findMany({
+          where: {
+            ownerId: user.id,
+            linkedType: "tripLog",
+            sourceMediaId: { not: null },
+          },
+          select: { sourceMediaId: true },
+        })
+      ).map((copy) => copy.sourceMediaId),
+    );
     const files: StandaloneFile[] = rows.flatMap((row) => {
       if (!isMediaOrigin(row.origin)) return [];
       return [
@@ -611,6 +812,7 @@ router.get(
           origin: row.origin,
           metadata: readMediaMetadata(row.origin, row.metadata),
           linkedPlaceId: placeIdOfMedia(row),
+          hasTrip: withTrip.has(row.id),
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
         },
@@ -734,7 +936,28 @@ router.patch(
     const category = mediaCategory(media.mediaType);
     if (!category) throw malformed("Unsupported media type");
     await assertOwnsTarget(user.id, linkedType, nextLinkedId);
-    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, id);
+    // Already on this place: a retry of a link whose reply was lost, after the
+    // swap deleted the old file. Answer the plain re-link, as presign and
+    // confirm answer a replay before looking at `replaces`.
+    const alreadyThere =
+      media.linkedType === "place" && media.linkedId === nextLinkedId;
+    const replaces =
+      linkedType === "place" && !alreadyThere
+        ? await assertOwnsReplaced(
+            user.id,
+            body.replaces,
+            linkedType,
+            nextLinkedId,
+            category,
+          )
+        : null;
+    if (linkedType === "none" && body.replaces != null) {
+      throw malformed("Unlinking must not carry replaces");
+    }
+    await assertPlaceTrackSlotFree(linkedType, nextLinkedId, category, [
+      id,
+      ...(replaces ? [replaces.id] : []),
+    ]);
 
     // Whoever could see this file only through its OLD place must be told to
     // forget it, in the same transaction as the move (the tombstone rule). A
@@ -746,7 +969,11 @@ router.patch(
         ? previousPlaceId
         : null;
 
+    let replacedKeys: string[] = [];
     const updated = await prisma.$transaction(async (tx) => {
+      replacedKeys = replaces
+        ? await dropReplaced(tx, user.id, replaces.id)
+        : [];
       const row = await tx.media.update({
         where: { id },
         data: { linkedType, linkedId: nextLinkedId },
@@ -767,6 +994,9 @@ router.patch(
       return row;
     });
 
+    if (replacedKeys.length > 0) {
+      await deleteS3KeysBestEffort(MEDIA_BUCKET, replacedKeys);
+    }
     res.json(await toMediaItem(updated));
   },
 );

@@ -1,11 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
+  NOTIFICATION_DESTINATIONS,
   NOTIFICATION_TYPES,
+  notificationPlaceId,
   notificationAnnouncement,
   notificationHaystack,
   notificationKind,
   notificationLabel,
   notificationPlanTarget,
+  notificationWayTarget,
 } from "./notificationLabel.js";
 import type { TNotification } from "./apiTypes.js";
 
@@ -91,7 +94,7 @@ describe("notificationLabel", () => {
           entityId: "w1",
         }),
       ),
-    ).toEqual({ text: "bob shared a waypoint with you" });
+    ).toEqual({ text: "bob shared a place with you" });
     expect(
       notificationLabel(
         notification("item_shared", {
@@ -99,7 +102,7 @@ describe("notificationLabel", () => {
           entityType: "topoJob",
         }),
       ).text,
-    ).toBe("bob shared a LiDAR topo with you");
+    ).toBe("bob shared a LiDAR map with you");
     // An entity type this build has never heard of still reads as a sentence
     // rather than leaking a raw enum name.
     expect(
@@ -120,16 +123,16 @@ describe("notificationLabel", () => {
     });
   });
 
-  // Mutation: uppercase the format again, and it reads "GPKG export ready".
-  it("names an export's format as the app does", () => {
+  // Mutation: uppercase the format again, and it reads "GPKG map ready".
+  it("names a map's format as the app does", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", { format: "gpkg" }),
       ).text,
-    ).toBe("GeoPackage export ready");
+    ).toBe("GeoPackage map ready");
   });
 
-  it("labels export completion and failure", () => {
+  it("labels a map's completion and failure", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -137,7 +140,7 @@ describe("notificationLabel", () => {
           jobName: "Kanangra",
         }),
       ).text,
-    ).toBe("PDF export for Kanangra ready");
+    ).toBe("PDF map for Kanangra ready");
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -146,11 +149,17 @@ describe("notificationLabel", () => {
           errorMessage: "boom",
         }),
       ),
-    ).toEqual({ text: "PDF export failed", detail: "boom" });
+    ).toEqual({ text: "PDF map failed", detail: "boom" });
+    // Only a real format is upper-cased. Mutation: upper-case the fallback.
+    expect(
+      notificationLabel(
+        notification("topo_export_complete", { status: "failed" }),
+      ).text,
+    ).toBe("Map failed");
   });
 
   // Mutation: drop the size branch and the detail line vanishes.
-  it("gives a finished export its size when it has one", () => {
+  it("gives a finished map its size when it has one", () => {
     expect(
       notificationLabel(
         notification("topo_export_complete", {
@@ -158,7 +167,7 @@ describe("notificationLabel", () => {
           resultBytes: 5 * 1024 ** 2,
         }),
       ),
-    ).toEqual({ text: "GeoTIFF export ready", detail: "5 MB" });
+    ).toEqual({ text: "GeoTIFF map ready", detail: "5 MB" });
   });
 
   it("degrades gracefully on missing payload fields", () => {
@@ -315,6 +324,26 @@ describe("NOTIFICATION_TYPES", () => {
   });
 });
 
+// Mutation that turns this red: add a type to NOTIFICATION_TYPES without an
+// entry in NOTIFICATION_DESTINATIONS (it fails to compile too), or declare
+// `place` / `plan` for a type whose payload names neither.
+describe("NOTIFICATION_DESTINATIONS", () => {
+  it("declares exactly the stored types", () => {
+    expect(Object.keys(NOTIFICATION_DESTINATIONS).sort()).toEqual(
+      [...NOTIFICATION_TYPES].sort(),
+    );
+  });
+
+  it("agrees with the place and plan targets the payload names", () => {
+    for (const type of NOTIFICATION_TYPES) {
+      const n = notification(type, { placeId: "p1", planId: "pl1" });
+      const kind = NOTIFICATION_DESTINATIONS[type];
+      if (kind === "place") expect(notificationPlaceId(n), type).not.toBeNull();
+      expect(notificationPlanTarget(n) !== null, type).toBe(kind === "plan");
+    }
+  });
+});
+
 // Mutation that turns this red: word a plan_access_ended reason as another's,
 // or drop the planName the payload carries for it.
 describe("plan notifications", () => {
@@ -339,7 +368,7 @@ describe("plan notifications", () => {
       ).text;
     expect(ended("removed")).toBe("You're no longer in Wollangambe trip");
     expect(ended("declined")).toBe(
-      "Your request to join Wollangambe trip was turned down",
+      "Your request to join Wollangambe trip was declined",
     );
     expect(ended("deleted")).toBe("Wollangambe trip was deleted");
   });
@@ -376,6 +405,31 @@ describe("a plan notification", () => {
     ).toBeNull();
     expect(
       notificationPlanTarget(notification("place_shared", { planId: "p" })),
+    ).toBeNull();
+  });
+
+  // Mutation that turns it red: drop the entityType check, and a shared place
+  // or LiDAR map opens the Ways list for an id that is not a route.
+  it("names the route a route share is about, and nothing else", () => {
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route", entityId: "r1" }),
+      ),
+    ).toBe("r1");
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "topoJob", entityId: "j1" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("item_shared", { entityType: "route" }),
+      ),
+    ).toBeNull();
+    expect(
+      notificationWayTarget(
+        notification("place_shared", { entityType: "route", entityId: "r1" }),
+      ),
     ).toBeNull();
   });
 });

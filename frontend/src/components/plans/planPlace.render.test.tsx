@@ -18,7 +18,7 @@ import PlanItemEditDialog from "./PlanItemEditDialog";
 import PlanPlacePage from "./PlanPlacePage";
 import type { TPlace } from "../../placeUtils";
 
-const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+const toast = { done: vi.fn(), error: vi.fn() };
 vi.mock("../feedback/ToastProvider", () => ({ useToast: () => toast }));
 vi.mock("../../plansApi", () => ({
   patchPlanItem: vi.fn(async () => undefined),
@@ -66,7 +66,21 @@ describe("a plan's place on Logjam Web", () => {
     render(<PlanPlacePage place={place} onBack={() => {}} />);
     expect(screen.getByText("Exit left at the pool.")).toBeTruthy();
     expect(screen.getByText(/The Claustral/)).toBeTruthy();
-    expect(screen.getByText("V grade")).toBeTruthy();
+    expect(screen.getByText("Grade")).toBeTruthy();
+    expect(screen.getByText("v3")).toBeTruthy();
+    expect(screen.queryByText("V grade")).toBeNull();
+  });
+
+  // Mutation: draw the notes as a raw paragraph again, and Markdown a member
+  // typed shows as typed.
+  it("draws its notes as Markdown", () => {
+    const { container } = render(
+      <PlanPlacePage
+        place={{ ...place, notes: "**a**" } as TripPlanPlace}
+        onBack={() => {}}
+      />,
+    );
+    expect(container.querySelector("strong")?.textContent).toBe("a");
   });
 
   // Mutation: leave foreignFields out of PlanPlacePage or the edit dialog, and
@@ -113,7 +127,7 @@ describe("a plan's place on Logjam Web", () => {
         onClose={() => {}}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Other names"), {
+    fireEvent.change(screen.getByLabelText("Also known as"), {
       target: { value: "The Claustral, Claustral Canyon" },
     });
     fireEvent.change(screen.getByLabelText(/^Elevation/), {

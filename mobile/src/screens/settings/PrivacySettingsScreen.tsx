@@ -7,13 +7,15 @@
 // back on (DESIGN.md, `appLockPreference.ts`, fail-closed). Without that,
 // the switch is a one-tap bypass of the thing it controls.
 //
-// ONE ROW HERE IS ACCOUNT-SCOPED, like the copy-media row on Offline and
-// storage: the friends leaderboard (`uiPreferences.leaderboardOptIn`) lives on
-// the user record because the server decides who sees whose count. It is on
-// THIS page because what it decides is what leaves for friends to see, and it
-// is where someone goes to turn that off. Unlike its neighbours it is dead
-// with "Needs an account" for a guest, who could link one, and with "Needs a
-// connection" offline (shared/DESIGN.md §5).
+// TWO ROWS HERE ARE ACCOUNT-SCOPED, because the server reads them. The friends
+// leaderboard (`uiPreferences.leaderboardOptIn`) decides who sees whose count;
+// it is on THIS page because what it decides is what leaves for friends to
+// see, and it is where someone goes to turn that off. "Copy photos too"
+// (`uiPreferences.copyPlaceMedia`) is the fallback when a copy request does not
+// say, so Logjam Web follows a choice made here; it decides whether a shared
+// place's photos are duplicated into this account's quota. Unlike their
+// neighbours both are dead with "Needs an account" for a guest, who could link
+// one, and with "Needs a connection" offline (shared/DESIGN.md §5).
 //
 // The closing section is not a setting — it is an answer. "What of mine is on
 // this device, and what protects it?" is a fair question to have about an
@@ -22,7 +24,12 @@
 // (shared/DESIGN.md §13).
 import { useCallback, useState } from "react";
 import { Text } from "react-native";
-import { LEADERBOARD_SETTING, messageFromError } from "@logjam/shared";
+import {
+  COPY_MEDIA_SETTING,
+  LEADERBOARD_SETTING,
+  messageFromError,
+  SETTINGS,
+} from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../../api/queries";
@@ -60,7 +67,7 @@ export function PrivacySettingsScreen() {
 
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -158,6 +165,36 @@ export function PrivacySettingsScreen() {
       })
       .finally(() => setSavingLeaderboard(false));
   }, [leaderboard, notify]);
+
+  // Same shape as the leaderboard: optimistic, re-seeded on the VALUE. On
+  // unless the account says otherwise, as the server reads it.
+  const [copyMedia, setCopyMedia] = useState<boolean | null>(null);
+  const serverCopyMedia = userQuery.data
+    ? (userQuery.data.uiPreferences?.copyPlaceMedia ?? true)
+    : null;
+  const [seededCopyFor, setSeededCopyFor] = useState<boolean | null>(null);
+  if (serverCopyMedia !== seededCopyFor) {
+    setSeededCopyFor(serverCopyMedia);
+    if (serverCopyMedia !== null) setCopyMedia(serverCopyMedia);
+  }
+  const [savingCopyMedia, setSavingCopyMedia] = useState(false);
+  const toggleCopyMedia = useCallback(() => {
+    if (copyMedia === null) return;
+    const next = !copyMedia;
+    setCopyMedia(next);
+    setSavingCopyMedia(true);
+    apiFetch<TUser>("/users/me", {
+      method: "PATCH",
+      body: { copyPlaceMedia: next },
+    })
+      .catch((err: unknown) => {
+        console.error(err);
+        setCopyMedia(!next);
+        notify(messageFromError(err, COPY_MEDIA_SETTING.saveFailed), "error");
+      })
+      .finally(() => setSavingCopyMedia(false));
+  }, [copyMedia, notify]);
+  // Both account rows are dead for the same reasons (guest, offline, no answer).
   const serverPrefs = capabilityStatus("serverPrefs", accountState, online);
   const leaderboardBlocked: string | undefined =
     serverPrefs.status === "unavailable"
@@ -211,7 +248,22 @@ export function PrivacySettingsScreen() {
           onToggle={toggleSaveToGallery}
         />
 
-        <SectionHeader title="Friends" />
+        <SectionHeader title={SETTINGS.copy.copying} />
+        <PreferenceRow
+          icon="photo"
+          title={COPY_MEDIA_SETTING.label}
+          subtitle={leaderboardBlocked ?? COPY_MEDIA_SETTING.hint}
+          subtitleNumberOfLines={2}
+          value={copyMedia ?? true}
+          ready={
+            leaderboardBlocked === undefined &&
+            copyMedia !== null &&
+            !savingCopyMedia
+          }
+          onToggle={toggleCopyMedia}
+        />
+
+        <SectionHeader title={SETTINGS.copy.friends} />
         <PreferenceRow
           icon="leaderboard"
           title={LEADERBOARD_SETTING.label}

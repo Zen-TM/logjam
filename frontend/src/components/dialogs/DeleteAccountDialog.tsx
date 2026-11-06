@@ -1,7 +1,6 @@
 import {
   ACCOUNT,
   ACCOUNT_DELETE_BODY,
-  deleteAccountPhrase,
   deleteAccountPhraseLabel,
   deleteAccountPhraseMatches,
 } from "@logjam/shared";
@@ -67,9 +66,7 @@ function DeleteAccountForm({
       onDeleted();
     } catch (err) {
       console.error(err);
-      setError(
-        messageFromError(err, "Couldn't delete account. Please try again."),
-      );
+      setError(messageFromError(err, "Couldn't delete account. Try again."));
       setDeleting(false);
     }
   }
@@ -94,6 +91,7 @@ function DeleteAccountForm({
             type="submit"
             form={formId}
             variant="destructive"
+            icon="delete"
             busy={deleting}
             disabled={!inputMatches}
             disabledReason="Type the phrase above to confirm"
@@ -116,7 +114,6 @@ function DeleteAccountForm({
           label={deleteAccountPhraseLabel(username)}
           value={confirmInput}
           onChange={(event) => setConfirmInput(event.target.value)}
-          placeholder={deleteAccountPhrase(username)}
           disabled={deleting}
           data-autofocus
         />

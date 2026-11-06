@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import {
   drawsYoursHeading,
   PLACE_TYPE_COLORS,
+  NEW_PLACE_TYPE_ICON_KEY,
   PLACE_TYPE_ICON_KEYS,
   placeTypeColorName,
+  placeCountLabel,
   placeTypeDeleteConfirm,
   PLACE_TYPE_NAME_MAX_LENGTH,
   placeTypeNameError,
@@ -21,6 +23,7 @@ import {
   type TPlaceType,
 } from "../../../placeUtils";
 import ConfirmDialog from "../../dialogs/ConfirmDialog";
+import { useToast } from "../../feedback/ToastProvider";
 import { TypeAttributesDialog } from "./CustomFieldSection";
 import { messageFromError } from "../../../errors/messageFromError";
 import {
@@ -29,7 +32,6 @@ import {
   Hero,
   IconButton,
   IconTile,
-  ListEnd,
   Menu,
   Row,
   SectionHeader,
@@ -97,6 +99,7 @@ function PlaceTypeSection({
   const [deleting, setDeleting] = useState<TPlaceType | null>(null);
   const [mergingFrom, setMergingFrom] = useState<TPlaceType | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
+  const toast = useToast();
 
   /** Re-read rather than patch a local copy: `placeCount` moves when places
    *  are reassigned, and a stale count is what decides which verb a row gets. */
@@ -137,7 +140,7 @@ function PlaceTypeSection({
   const addTypeButton = (
     <Button
       compact
-      variant="outline"
+      variant="filled"
       icon="add"
       onClick={() => setEditing("new")}
     >
@@ -207,10 +210,9 @@ function PlaceTypeSection({
                             danger: true,
                             onSelect: () => {
                               setMergingFrom(type);
-                              setMergeTargetId(
-                                types.find((other) => other.id !== type.id)
-                                  ?.id ?? "",
-                              );
+                              // No default: one click must not file a type's
+                              // places under whichever type happens to be first.
+                              setMergeTargetId("");
                             },
                           }
                         : {
@@ -250,7 +252,6 @@ function PlaceTypeSection({
                 subtitle={placeCountLabel(type.placeCount)}
               />
             ))}
-            <ListEnd>{addTypeButton}</ListEnd>
           </>
         )}
       </div>
@@ -288,10 +289,7 @@ function PlaceTypeSection({
 
       <ConfirmDialog
         open={deleting !== null}
-        title={placeTypeDeleteConfirm(deleting?.name ?? "").confirmTitle}
-        message={placeTypeDeleteConfirm(deleting?.name ?? "").confirmBody}
-        confirmLabel={copy.deleteType}
-        confirmColor="error"
+        copy={deleting && placeTypeDeleteConfirm(deleting.name)}
         busy={saving}
         onConfirm={async () => {
           const type = deleting;
@@ -313,46 +311,55 @@ function PlaceTypeSection({
           places have still moved, which is the half that carries the data. */}
       <ConfirmDialog
         open={mergingFrom !== null}
-        title={`Merge "${mergingFrom?.name ?? ""}" into another type?`}
-        message={
-          <>
-            <Select
-              label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
-              value={mergeTargetId}
-              onChange={(event) => setMergeTargetId(event.target.value)}
-            >
-              {types
-                .filter((type) => type.id !== mergingFrom?.id)
-                .map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-            </Select>
-            <p className={classes.note}>
-              "{mergingFrom?.name ?? ""}" is then deleted. Values{" "}
-              {mergeTarget ? `"${mergeTarget.name}"` : "the new type"} has no
-              attribute for are kept on each place, and can be added to it
-              later.
-            </p>
-          </>
+        copy={
+          mergingFrom && {
+            confirmTitle: `Merge "${mergingFrom.name}" into ${
+              mergeTarget ? `"${mergeTarget.name}"` : "another type"
+            }?`,
+            confirmBody: `"${mergingFrom.name}" is then deleted. Values ${
+              mergeTarget ? `"${mergeTarget.name}"` : "the new type"
+            } has no attribute for are kept on each place, and can be added to it later.`,
+            confirmLabel: "Merge",
+            tone: "destructive",
+            icon: "merge",
+          }
         }
-        confirmLabel="Merge"
-        confirmColor="error"
         busy={saving}
+        confirmDisabledReason={
+          mergeTargetId ? undefined : "Pick the type to move them to"
+        }
         onConfirm={async () => {
           const type = mergingFrom;
           if (!type || !mergeTargetId) return;
+          const moved = placeCountLabel(type.placeCount);
           const ok = await run(async () => {
             await reassignPlaceType(type.id, mergeTargetId);
             await deletePlaceType(type.id);
           }, "Couldn't merge those types.");
-          if (ok) setMergingFrom(null);
+          if (ok) {
+            setMergingFrom(null);
+            toast.done(`${moved} moved to ${mergeTarget?.name}`);
+          }
         }}
         onClose={() => {
           if (!saving) setMergingFrom(null);
         }}
-      />
+      >
+        <Select
+          label={`Move its ${placeCountLabel(mergingFrom?.placeCount ?? 0)} to`}
+          value={mergeTargetId}
+          onChange={(event) => setMergeTargetId(event.target.value)}
+        >
+          <option value="">Choose a type</option>
+          {types
+            .filter((type) => type.id !== mergingFrom?.id)
+            .map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+        </Select>
+      </ConfirmDialog>
     </div>
   );
 }
@@ -438,7 +445,7 @@ function PlaceTypeDialog({
 }) {
   const [name, setName] = useState(editing?.name ?? "");
   const [iconKey, setIconKey] = useState(
-    editing?.iconKey ?? PLACE_TYPE_ICON_KEYS[0],
+    editing?.iconKey ?? NEW_PLACE_TYPE_ICON_KEY,
   );
   const [color, setColor] = useState(editing?.color ?? PLACE_TYPE_COLORS[0]);
   // A taken name shows as it is typed; a blank one only once Save was pressed.
@@ -484,7 +491,7 @@ function PlaceTypeDialog({
           data-autofocus
         />
 
-        <SectionHeader title="Icon" />
+        <span className={classes.fieldLabel}>Icon</span>
         <div className={classes.iconGrid} role="radiogroup" aria-label="Icon">
           {PLACE_TYPE_ICON_KEYS.map((key) => {
             const Icon = placeTypeLucideIcon(key);
@@ -525,10 +532,6 @@ function PlaceTypeDialog({
       </div>
     </Dialog>
   );
-}
-
-function placeCountLabel(count: number): string {
-  return `${count} place${count === 1 ? "" : "s"}`;
 }
 
 export default PlaceTypeSection;

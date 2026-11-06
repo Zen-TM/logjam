@@ -19,23 +19,39 @@
 // off the title). Where there is no state to report, there is no subtitle — §7.
 //
 // PRIVACY: counts, a username, a storage figure. No place names, no coordinates.
-import { useCallback, useEffect, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { Text, View } from "react-native";
 import {
+  labelWithBadge,
+  navBadgeNoun,
+  navFor,
+  navLabel,
   tripPlansBadgeCount,
   tripPlansMoreSubtitle,
-  TRIP_PLANS_LIST,
+  type NavId,
+  type NavIdOn,
   type TripPlanSummary,
 } from "@logjam/shared";
 
 import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { useAccountState } from "../auth/AccountStateContext";
-import { capabilityRowProps, capabilityStatus } from "../auth/capabilities";
+import {
+  capabilityRowProps,
+  capabilityStatus,
+  unavailableReasonText,
+} from "../auth/capabilities";
 import { formatBytes } from "../format";
 import { useConnectivity } from "../map/connectivity";
 import { readPlansList } from "../plans/plansCache";
 import { onMirrorChanged } from "../sync/syncDb";
 import {
+  usePendingOpCount,
   usePendingSyncCount,
   useSyncIssueCount,
   useSyncStatus,
@@ -47,14 +63,13 @@ import {
   Hero,
   Row,
   ScreenScroll,
-  StatusPill,
   Icon,
   Toast,
   todayDateKey,
   type Glyph,
   type ToastMessage,
 } from "../ui";
-import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
+import { syncHealth, type SyncTone } from "./syncHealth";
 
 // Tone → the glyph and colour the headline wears. `warning` is the scheme's own
 // warning token; "pending" borrows the muted text colour rather than inventing a
@@ -62,10 +77,20 @@ import { syncHealth, syncIssuesSubtitle, type SyncTone } from "./syncHealth";
 const useToneStyle = makeThemed(
   (theme): Record<SyncTone, { icon: Glyph; color: string }> => ({
     ok: { icon: "success", color: theme.accent },
+    info: { icon: "info", color: theme.textMuted },
     pending: { icon: "pending", color: theme.textMuted },
     problem: { icon: "warning", color: theme.warning },
   }),
 );
+
+// The row has the room to name the whole chooser; the hero's compact button
+// shares a line with "No account" and a longer label truncates it.
+const GUEST_SIGN_IN = "Sign in or create an account";
+
+/** The entries of More: every Logjam GPS destination that is not a tab. */
+type MoreId = Exclude<NavIdOn<"gps">, "places" | "logs" | "saved">;
+
+const navIcon = (id: NavId) => navFor("gps").find((e) => e.id === id)!.icon;
 
 export function MoreScreen({
   unreadCount,
@@ -87,7 +112,7 @@ export function MoreScreen({
   const theme = useTheme();
   const styles = useStyles();
 
-  const { accountState, linkAccount } = useAccountState();
+  const { accountState } = useAccountState();
   const isGuest = accountState === "guest";
   // Best-effort: the hub is fully usable without it (offline, or a failed
   // fetch), so a failure costs one subtitle rather than the screen. A guest has
@@ -100,6 +125,7 @@ export function MoreScreen({
   const online = useConnectivity() === "online";
   const syncStatus = useSyncStatus();
   const pendingCount = usePendingSyncCount();
+  const pendingOpCount = usePendingOpCount();
   const issueCount = useSyncIssueCount();
   const plans = useCachedPlansList(isGuest);
   const plansWaiting = plans ? tripPlansBadgeCount(plans) : 0;
@@ -109,6 +135,7 @@ export function MoreScreen({
     state: syncStatus.state,
     lastSyncAt: syncStatus.lastSyncAt,
     pendingCount,
+    pendingOpCount,
     issueCount,
     errorKind: syncStatus.errorKind,
     waitingSince: syncStatus.waitingSince,
@@ -123,9 +150,105 @@ export function MoreScreen({
   const syncNow = useCallback(async () => {
     await requestSync();
     if (getSyncStatus().state !== "error")
-      setToast({ text: "Synced.", tone: "info", nonce: Date.now() });
-  }, []);
+      setToast({ text: "Synced.", tone: "done", nonce: Date.now() });
+  }, [setToast]);
   const user = userQuery.data;
+  const syncNowStatus = capabilityStatus("syncNow", accountState, online);
+
+  // The menu is `NAV`'s More entries in `NAV`'s order; this only says what each
+  // row shows. tsc refuses an entry with no row here.
+  const rows: Record<MoreId, ReactNode> = {
+    // The one "something is waiting on you" signal. Files a friend sent are
+    // answered inline in the inbox, so their waiting count is part of this one.
+    inbox: (
+      <Row
+        icon={navIcon("inbox")}
+        title={navLabel("inbox")}
+        badge={unreadCount ?? 0}
+        accessibilityLabel={labelWithBadge(navLabel("inbox"), unreadCount ?? 0)}
+        onPress={onOpenInbox}
+        {...capabilityRowProps("inbox", accountState, online)}
+        chevron
+      />
+    ),
+    // Read from the plans cache, which the shell's poll keeps fresh: the hub
+    // fetches nothing of its own. An invite is also an unread inbox row, so it
+    // badges this row, not the tab a second time.
+    plans: (
+      <Row
+        icon={navIcon("plans")}
+        title={navLabel("plans")}
+        subtitle={
+          plans && !plansWaiting
+            ? tripPlansMoreSubtitle(plans, todayDateKey())
+            : undefined
+        }
+        badge={plansWaiting}
+        accessibilityLabel={labelWithBadge(
+          navLabel("plans"),
+          plansWaiting,
+          navBadgeNoun("plans"),
+        )}
+        onPress={onOpenPlans}
+        {...capabilityRowProps("plans", accountState, online)}
+        chevron
+      />
+    ),
+    friends: (
+      <Row
+        icon={navIcon("friends")}
+        title={navLabel("friends")}
+        // Managing friendships needs an account and a connection; say which in
+        // place of a subtitle rather than letting the screen fail after the tap
+        // (DESIGN.md).
+        onPress={onOpenFriends}
+        {...capabilityRowProps("friends", accountState, online)}
+        chevron
+      />
+    ),
+    // Sync issues can only exist once something has tried to sync.
+    syncIssues: isGuest ? null : (
+      <Row
+        icon={navIcon("syncIssues")}
+        hue={issueCount > 0 ? theme.warning : undefined}
+        title="Account sync issues"
+        badge={issueCount}
+        accessibilityLabel={labelWithBadge(
+          "Account sync issues",
+          issueCount,
+          navBadgeNoun("syncIssues"),
+        )}
+        onPress={onOpenSyncIssues}
+        chevron
+      />
+    ),
+    settings: (
+      <Row
+        icon={navIcon("settings")}
+        title={navLabel("settings")}
+        onPress={onOpenSettings}
+        chevron
+      />
+    ),
+    account: (
+      <Row
+        icon={navIcon("account")}
+        // The Account row stays live for a guest: it is the way IN to an
+        // account, so disabling it with "Needs an account" would be a joke at
+        // the user's expense.
+        title={isGuest ? GUEST_SIGN_IN : navLabel("account")}
+        subtitle={
+          isGuest
+            ? "Back up and share what's on this phone"
+            : user
+              ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
+              : undefined
+        }
+        onPress={onOpenAccount}
+        chevron
+      />
+    ),
+  };
 
   return (
     // Hero pinned, menu scrolls (DESIGN.md) — the menu is short today, but the rule is
@@ -140,11 +263,13 @@ export function MoreScreen({
           // offer instead of the operation.
           isGuest ? (
             <Button
-              label="Create account"
-              icon="addFriend"
+              label="Sign in"
+              icon="signIn"
               variant="outlineAccent"
               compact
-              onPress={linkAccount}
+              // The Account page, like the row: its button asks before merging
+              // this phone's data into an account.
+              onPress={onOpenAccount}
             />
           ) : (
             <Button
@@ -153,9 +278,11 @@ export function MoreScreen({
               variant="outlineAccent"
               compact
               loading={syncStatus.state === "syncing"}
-              disabled={
-                capabilityStatus("syncNow", accountState, online).status !==
-                "available"
+              disabled={syncNowStatus.status !== "available"}
+              disabledReason={
+                syncNowStatus.status === "available"
+                  ? ""
+                  : unavailableReasonText(syncNowStatus.reason)
               }
               onPress={() => void syncNow()}
             />
@@ -174,97 +301,11 @@ export function MoreScreen({
       </Hero>
 
       <ScreenScroll padded={false} contentStyle={styles.menu}>
-        {/* The one "something is waiting on you" signal. Files a friend sent
-            are answered inline in the inbox, so their waiting count is part of
-            this one. */}
-        <Row
-          icon="notifications"
-          title="Inbox"
-          subtitle={unreadCount ? `${unreadCount} unread` : "Nothing new"}
-          onPress={onOpenInbox}
-          {...capabilityRowProps("inbox", accountState, online)}
-          right={
-            <Trailing
-              badge={
-                unreadCount ? (
-                  <StatusPill label={String(unreadCount)} tone="accent" />
-                ) : null
-              }
-            />
-          }
-        />
-        {/* Read from the plans cache, which the shell's poll keeps fresh: the
-            hub fetches nothing of its own. An invite is also an unread inbox
-            row, so it badges this row, not the tab a second time. */}
-        <Row
-          icon="plan"
-          title={TRIP_PLANS_LIST.title}
-          subtitle={
-            plans ? tripPlansMoreSubtitle(plans, todayDateKey()) : undefined
-          }
-          onPress={onOpenPlans}
-          {...capabilityRowProps("plans", accountState, online)}
-          right={
-            <Trailing
-              badge={
-                plansWaiting ? (
-                  <StatusPill label={String(plansWaiting)} tone="accent" />
-                ) : null
-              }
-            />
-          }
-        />
-        <Row
-          icon="friends"
-          title="Friends"
-          // Managing friendships needs an account and a connection; say which
-          // in place of a subtitle rather than letting the screen fail after
-          // the tap (DESIGN.md).
-          onPress={onOpenFriends}
-          {...capabilityRowProps("friends", accountState, online)}
-          right={<Trailing />}
-        />
-        {/* Sync issues can only exist once something has tried to sync. */}
-        {isGuest ? null : (
-          <Row
-            icon="warning"
-            hue={issueCount > 0 ? theme.warning : undefined}
-            title="Account sync issues"
-            subtitle={syncIssuesSubtitle(issueCount)}
-            onPress={onOpenSyncIssues}
-            right={
-              <Trailing
-                badge={
-                  issueCount > 0 ? (
-                    <StatusPill label={String(issueCount)} tone="warning" />
-                  ) : null
-                }
-              />
-            }
-          />
-        )}
-        <Row
-          icon="settings"
-          title="Settings"
-          onPress={onOpenSettings}
-          right={<Trailing />}
-        />
-        <Row
-          icon="account"
-          // The Account row stays live for a guest: it is the way IN to an
-          // account, so disabling it with "Needs an account" would be a joke at
-          // the user's expense.
-          title={isGuest ? "Create an account" : "Account"}
-          subtitle={
-            isGuest
-              ? "Back up and share what's on this phone"
-              : user
-                ? `${formatBytes(user.storageUsedBytes)} of ${formatBytes(user.storageQuotaBytes)} used`
-                : undefined
-          }
-          onPress={onOpenAccount}
-          right={<Trailing />}
-        />
+        {navFor("gps")
+          .filter((entry) => !entry.tab)
+          .map((entry) => (
+            <Fragment key={entry.id}>{rows[entry.id as MoreId]}</Fragment>
+          ))}
       </ScreenScroll>
       <Toast message={toast} onDismissed={() => setToast(null)} />
     </View>
@@ -286,19 +327,6 @@ function useCachedPlansList(isGuest: boolean): TripPlanSummary[] | null {
   return plans;
 }
 
-/** Optional badge, then the chevron — the §5 trailing order. */
-function Trailing({ badge }: { badge?: React.ReactNode }) {
-  const theme = useTheme();
-  const styles = useStyles();
-
-  return (
-    <View style={styles.trailing}>
-      {badge}
-      <Icon idea="disclosure" size={20} color={theme.textMuted} />
-    </View>
-  );
-}
-
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   // The hero runs edge to edge; only the menu takes the body padding.
@@ -307,5 +335,4 @@ const useStyles = makeStyles((theme, textRole) => ({
   healthText: { flex: 1, gap: spacing(0.25) },
   headline: { ...textRole.rowTitle },
   detail: { ...muted(theme, textRole.detail) },
-  trailing: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
 }));

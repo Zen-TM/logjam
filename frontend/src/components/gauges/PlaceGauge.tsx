@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GAUGES,
   PLACE_PAGE,
@@ -42,6 +42,14 @@ export function PlaceGauge({
 }) {
   const copy = PLACE_PAGE.copy;
   const [picking, setPicking] = useState(false);
+  const chooser = useRef<HTMLDivElement>(null);
+  // The row that opened the chooser is gone by now: bring the chooser into
+  // view and put the keyboard in it.
+  useEffect(() => {
+    if (!picking) return;
+    chooser.current?.scrollIntoView?.({ block: "nearest" });
+    chooser.current?.focus({ preventScroll: true });
+  }, [picking]);
   const { file, failed, now } = useGauges(owned || !!gaugeId);
   const chosen = gaugeId ? file?.gauges.find((g) => g.id === gaugeId) : null;
   const tile = <IconTile icon="gauge" hue="var(--color-accent)" />;
@@ -86,44 +94,46 @@ export function PlaceGauge({
           onOpen={() => onChange(null)}
         />
       )}
-      {owned && picking && !file && (
-        <p className={classes.muted}>
-          {failed ? GAUGES.copy.failed : copy.gaugeLoading}
-        </p>
-      )}
       {owned && picking && (
-        <Row
-          leading={<IconTile icon="close" hue="var(--color-accent)" />}
-          title={copy.cancelPick}
-          onOpen={() => setPicking(false)}
-        />
-      )}
-      {owned && picking && file && (
-        <>
-          <p className={classes.muted}>{copy.gaugePickerHint}</p>
-          {nearbyGauges(file.gauges, latitude, longitude, NEARBY).map(
-            ({ gauge, distanceM }) => {
-              const level = latestGaugeReading(gauge, now);
-              return (
-                <Row
-                  key={gauge.id}
-                  leading={tile}
-                  title={gaugeDisplayName(gauge.name)}
-                  subtitle={[
-                    formatDistanceM(distanceM),
-                    level?.level != null && level.levelAt != null
-                      ? `${formatGaugeLevel(level.level)}, ${gaugeAgo(level.levelAt, now)}`
-                      : GAUGES.copy.noLevel,
-                  ].join(" · ")}
-                  onOpen={() => {
-                    setPicking(false);
-                    onChange(gauge.id);
-                  }}
-                />
-              );
-            },
+        <div ref={chooser} tabIndex={-1} className={classes.chooser}>
+          {!file && (
+            <p className={classes.muted}>
+              {failed ? GAUGES.copy.failed : copy.gaugeLoading}
+            </p>
           )}
-        </>
+          <Row
+            leading={<IconTile icon="close" hue="var(--color-accent)" />}
+            title={copy.cancelPick}
+            onOpen={() => setPicking(false)}
+          />
+          {file && (
+            <>
+              <p className={classes.muted}>{copy.gaugePickerHint}</p>
+              {nearbyGauges(file.gauges, latitude, longitude, NEARBY).map(
+                ({ gauge, distanceM }) => {
+                  const level = latestGaugeReading(gauge, now);
+                  return (
+                    <Row
+                      key={gauge.id}
+                      leading={tile}
+                      title={gaugeDisplayName(gauge.name)}
+                      subtitle={[
+                        formatDistanceM(distanceM),
+                        level?.level != null && level.levelAt != null
+                          ? `${formatGaugeLevel(level.level)}, ${gaugeAgo(level.levelAt, now)}`
+                          : GAUGES.copy.noLevel,
+                      ].join(" · ")}
+                      onOpen={() => {
+                        setPicking(false);
+                        onChange(gauge.id);
+                      }}
+                    />
+                  );
+                },
+              )}
+            </>
+          )}
+        </div>
       )}
     </>
   );

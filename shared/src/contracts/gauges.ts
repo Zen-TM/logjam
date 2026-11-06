@@ -38,9 +38,9 @@ export const GAUGES = {
     onLastTrip: "on your last trip here",
     now: "now",
     noneNow: "no recent reading now",
-    noneForDate: "This gauge has no reading for that date.",
+    noneForDate: "has no reading for that date.",
     noRecent: "This gauge has had no reading in the last 7 days.",
-    failed: "River gauges couldn\u2019t be loaded.",
+    failed: "River gauges couldn't be loaded.",
     staleFile: "Readings last refreshed",
     // Only if the file's own attribution is blank: the credit is never dropped.
     credit: "© State of New South Wales through WaterNSW",
@@ -274,5 +274,8 @@ export function tripGaugeLines(
   });
   return lines.length > 0 || days.length === 0 || !inputs.some((i) => i.history)
     ? lines
-    : [GAUGES.copy.noneForDate];
+    : inputs.map(
+        ({ gauge }) =>
+          `${gaugeDisplayName(gauge.name)} ${GAUGES.copy.noneForDate}`,
+      );
 }

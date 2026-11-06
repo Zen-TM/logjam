@@ -1,10 +1,10 @@
-import { Fragment, type Ref } from "react";
+import { Fragment, type MouseEvent, type Ref } from "react";
+import { labelWithBadge } from "@logjam/shared";
 import type { PanelId } from "./panels";
 import {
   partitionNavItems,
   aggregateBadgeCount,
   isPanelInMore,
-  labelWithBadge,
   MORE_BADGE_NOUN,
   type NavBadgeCounts,
 } from "./navItems";
@@ -30,7 +30,7 @@ function NavButton({
   active: boolean;
   count: number;
   badgeNoun?: string;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   ref?: Ref<HTMLButtonElement>;
 } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">) {
   return (
@@ -62,9 +62,9 @@ function NavButton({
 
 /**
  * The page nav. A fixed 84px rail on desktop — every page labelled, the active
- * one filled — and Logjam GPS's tab bar on narrow web (Map · Places · Logs ·
- * Ways · More). Pressing the open page's button closes it; on narrow web the
- * Map tab does.
+ * one filled — and a tab bar on narrow web (Places · Trips · Ways · Plans ·
+ * More). Pressing the open page's button closes it. Narrow web has no Map tab:
+ * its panels are sheets over the map, and closing one is how a user gets back.
  */
 function NavRail({
   activePanel,
@@ -79,7 +79,13 @@ function NavRail({
   const { railItems, moreItems, spacerAfterIndex } =
     partitionNavItems(isNarrow);
 
-  const toggle = (id: PanelId) => onPanelChange(activePanel === id ? null : id);
+  const toggle = (id: PanelId, event?: MouseEvent) => {
+    onPanelChange(activePanel === id ? null : id);
+    // Opened from the keyboard (a click event's detail is 0 then): carry focus
+    // into the panel, so its controls are one Tab away, not past every rail stop.
+    if (activePanel !== id && event?.detail === 0)
+      requestAnimationFrame(() => document.getElementById("panel")?.focus());
+  };
 
   const items = railItems.map((item, index) => (
     <Fragment key={item.id}>
@@ -90,7 +96,7 @@ function NavRail({
         aria-current={activePanel === item.id ? "page" : undefined}
         count={badgeCounts[item.id] ?? 0}
         badgeNoun={item.badgeNoun}
-        onClick={() => toggle(item.id)}
+        onClick={(event) => toggle(item.id, event)}
       />
       {index === spacerAfterIndex && <div className={classes.spacer} />}
     </Fragment>
@@ -110,14 +116,6 @@ function NavRail({
   const moreCount = aggregateBadgeCount(moreItems, badgeCounts);
   return (
     <nav className={classes.tabs} aria-label="Pages">
-      <NavButton
-        label="Map"
-        icon="map"
-        active={activePanel === null}
-        aria-current={activePanel === null ? "page" : undefined}
-        count={0}
-        onClick={() => onPanelChange(null)}
-      />
       {items}
       <Menu
         label="More pages"

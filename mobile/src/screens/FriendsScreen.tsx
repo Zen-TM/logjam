@@ -29,35 +29,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  Share,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Share, Text, View } from "react-native";
 import {
   contractSectionKeys,
-  friendAcceptedMessage,
   friendInviteMessage,
   friendInviteUrl,
   friendInvitesLiveLabel,
   friendRemovedMessage,
   friendRemoveConfirm,
+  friendRequestAnswers,
   friendRequestMadeFriend,
   friendsEmptyKind,
-  friendsHeroTitle,
+  friendsHeroSubtitle,
   FRIENDS,
   friendVerb,
-  leaderboardBadge,
+  LEADERBOARD_SETTING,
   leaderboardButtonLabel,
   selfStanding,
   type LeaderboardResponse,
   messageFromError,
   type FriendsBucket,
   type SectionKeysOn,
+  loadStateOf,
 } from "@logjam/shared";
 
 import {
@@ -79,30 +72,31 @@ import { fetchCurrentUser, useApiQuery } from "../api/queries";
 import { config } from "../config";
 import { useAccountState } from "../auth/AccountStateContext";
 import { capabilityScreenBlock } from "../auth/capabilities";
-import {
-  spacing,
-  makeStyles,
-  radius,
-  useTheme,
-  useHues,
-  muted,
-} from "../theme";
+import { spacing, makeStyles, useTheme, useHues, muted } from "../theme";
 import {
   BottomSheet,
   Button,
   EmptyState,
   ErrorBanner,
-  ErrorState,
   Hero,
-  ListEnd,
+  confirm,
+  CollapsingHeader,
+  CollapsingHero,
+  HeroFlatList,
+  useHeroCollapse,
+  HeroAdd,
+  compactHeroTitle,
   IconButton,
-  LoadingState,
+  ListBody,
+  RequestRow,
   Row,
   ChipRail,
   StatusPill,
   Toast,
   type ChipOption,
   type ToastMessage,
+  mergeScrollProps,
+  useRefreshFromTop,
 } from "../ui";
 import { UserSearch } from "./UserSearch";
 
@@ -138,6 +132,8 @@ export function FriendsScreen({
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
   const theme = useTheme();
+  const heroCollapse = useHeroCollapse();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -156,7 +152,7 @@ export function FriendsScreen({
   const [menuItem, setMenuItem] = useState<FriendItem | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const notify = useCallback(
-    (text: string, tone: ToastMessage["tone"] = "info") => {
+    (text: string, tone: ToastMessage["tone"] = "done") => {
       setToast({ text, tone, nonce: Date.now() });
     },
     [],
@@ -241,25 +237,22 @@ export function FriendsScreen({
   );
 
   const confirmRemove = useCallback(
-    (item: Extract<FriendItem, { kind: "friend" }>) => {
+    async (item: Extract<FriendItem, { kind: "friend" }>) => {
       setMenuItem(null);
       // A dialog, because the consequence is the point and it is bigger than the
       // verb suggests (DESIGN.md).
-      const { confirmTitle, confirmBody } = friendRemoveConfirm(item.username);
-      Alert.alert(confirmTitle, confirmBody, [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () =>
-            void runAction(
-              item.friendshipId,
-              () => removeFriend(item.friendshipId),
-              copy.removeFailed,
-              friendRemovedMessage(item.username),
-            ),
-        },
-      ]);
+      const ok = await confirm({
+        ...friendRemoveConfirm(item.username),
+        confirmLabel: "Remove",
+        tone: "destructive",
+      });
+      if (!ok) return;
+      void runAction(
+        item.friendshipId,
+        () => removeFriend(item.friendshipId),
+        copy.removeFailed,
+        friendRemovedMessage(item.username),
+      );
     },
     [runAction],
   );
@@ -277,6 +270,32 @@ export function FriendsScreen({
     [onOpenShares],
   );
   const openMenu = useCallback((item: FriendItem) => setMenuItem(item), []);
+  // The same two answers, words and decline question as the Inbox row.
+  const answerRequest = useCallback(
+    (
+      item: Extract<FriendItem, { kind: "request" }>,
+      action: ReturnType<typeof friendRequestAnswers>[number],
+    ) => {
+      const run = () =>
+        void runAction(
+          item.requestId,
+          () =>
+            action.kind === "accept"
+              ? acceptFriendRequest(item.requestId)
+              : declineFriendRequest(item.requestId),
+          action.failure,
+          action.success,
+        );
+      if (!action.confirm) return run();
+      void confirm({
+        confirmTitle: action.confirm.title,
+        confirmBody: action.confirm.body,
+        confirmLabel: action.confirm.confirmLabel,
+        tone: "destructive",
+      }).then((ok) => ok && run());
+    },
+    [runAction],
+  );
   const keyExtractor = useCallback((item: FriendItem) => item.key, []);
   const renderItem = useCallback(
     ({ item }: { item: FriendItem }) => (
@@ -288,9 +307,10 @@ export function FriendsScreen({
         }
         onOpen={openFriend}
         onMenu={openMenu}
+        onAnswer={answerRequest}
       />
     ),
-    [busyId, openFriend, openMenu],
+    [answerRequest, busyId, openFriend, openMenu],
   );
 
   const items = useMemo<FriendItem[]>(() => {
@@ -323,10 +343,21 @@ export function FriendsScreen({
       </View>
     );
   }
-  if (friends === null && loadError) {
-    return <ErrorState message={loadError} onRetry={() => void load()} />;
+  // With the Hero kept: a failed load must leave the way back.
+  if (friends === null) {
+    return (
+      <View style={styles.root}>
+        <Hero title={FRIENDS.title} onBack={onBack} backLabel={backLabel} />
+        <ListBody
+          state={loadStateOf(false, loadError)}
+          error={loadError}
+          onRetry={() => void load()}
+        >
+          {null}
+        </ListBody>
+      </View>
+    );
   }
-  if (friends === null) return <LoadingState />;
 
   const buckets: ChipOption<Bucket>[] = [
     {
@@ -353,29 +384,38 @@ export function FriendsScreen({
   // draw, or the reverse, fails `tsc` (`FRIENDS`, shared/src/contracts).
   const page: Record<SectionKeysOn<typeof FRIENDS, "gps">, () => ReactNode> = {
     hero: () => (
-      <Hero
-        title={friendsHeroTitle(requests.length, friends.length)}
-        onBack={onBack}
-        backLabel={backLabel}
-        actions={
-          <View style={styles.heroActions}>
-            {/* Nothing at all until the user joins: Settings is the only way in. */}
-            {leaderboardOptIn && board?.joined !== false ? (
-              <LeaderboardButton
-                standing={board?.joined ? selfStanding(board) : null}
-                onPress={onOpenLeaderboard}
-              />
-            ) : null}
-            <Button
-              label={copy.add}
-              icon="addFriend"
-              variant="outlineAccent"
+      <CollapsingHero collapse={heroCollapse}>
+        {(compact) => (
+          <Hero
+            compact={compact}
+            title={
               compact
-              onPress={() => setAddOpen(true)}
-            />
-          </View>
-        }
-      />
+                ? compactHeroTitle(FRIENDS.title, friends.length)
+                : FRIENDS.title
+            }
+            value={friendsHeroSubtitle(requests.length, friends.length)}
+            onBack={onBack}
+            backLabel={backLabel}
+            actions={
+              <View style={styles.heroActions}>
+                {/* Nothing at all until the user joins: Settings is the only way in. */}
+                {leaderboardOptIn && board?.joined !== false ? (
+                  <LeaderboardButton
+                    standing={board?.joined ? selfStanding(board) : null}
+                    onPress={onOpenLeaderboard}
+                  />
+                ) : null}
+                <HeroAdd
+                  label={copy.addTitle}
+                  icon="addFriend"
+                  compact={compact}
+                  onPress={() => setAddOpen(true)}
+                />
+              </View>
+            }
+          />
+        )}
+      </CollapsingHero>
     ),
     buckets: () => (
       <View style={styles.rail}>
@@ -388,61 +428,59 @@ export function FriendsScreen({
       </View>
     ),
     list: () => (
-      <>
-        {/* Stays inline with a retry, because a stale list IS the problem and it
-            persists until the fetch works (DESIGN.md). */}
-        {loadError ? (
-          <View style={styles.banner}>
-            <ErrorBanner message={loadError} onRetry={() => void load()} />
-          </View>
-        ) : null}
-
-        <FlatList
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          data={items}
-          keyExtractor={keyExtractor}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={theme.accent}
-            />
-          }
-          renderItem={renderItem}
-          ListFooterComponent={
-            // The list ends with the button its empty state offers.
-            items.length > 0 ? (
-              <ListEnd>
-                <Button
-                  label={copy.addTitle}
-                  icon="addFriend"
-                  variant="outlineAccent"
-                  onPress={() => setAddOpen(true)}
-                />
-              </ListEnd>
-            ) : undefined
-          }
-          ListEmptyComponent={
-            <EmptyPanel
-              kind={friendsEmptyKind({
-                friends: friends.length,
-                requests: requests.length,
-                bucket,
-              })}
-              onAdd={() => setAddOpen(true)}
-            />
-          }
-        />
-      </>
+      <HeroFlatList
+        style={styles.list}
+        {...mergeScrollProps(heroCollapse.scrollProps, pull.scrollProps)}
+        contentContainerStyle={[styles.listContent, heroCollapse.inset()]}
+        data={items}
+        keyExtractor={keyExtractor}
+        refreshControl={
+          <pull.Refresh
+            progressViewOffset={heroCollapse.headerHeight}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.accent}
+          />
+        }
+        renderItem={renderItem}
+        ListFooterComponent={
+          friends.length > 0 &&
+          !(leaderboardOptIn && board?.joined !== false) ? (
+            <Text style={styles.hint}>{LEADERBOARD_SETTING.offer}</Text>
+          ) : undefined
+        }
+        ListEmptyComponent={
+          <EmptyPanel
+            kind={friendsEmptyKind({
+              friends: friends.length,
+              requests: requests.length,
+              bucket,
+            })}
+            onAdd={() => setAddOpen(true)}
+          />
+        }
+      />
     ),
   };
 
   return (
     <View style={styles.root}>
-      {contractSectionKeys(FRIENDS, "gps").map((key) => (
-        <Fragment key={key}>{page[key]()}</Fragment>
-      ))}
+      <CollapsingHeader collapse={heroCollapse}>
+        {contractSectionKeys(FRIENDS, "gps")
+          .filter((key) => key !== "list")
+          .map((key) => (
+            <Fragment key={key}>{page[key]()}</Fragment>
+          ))}
+        {/* Stays inline with a retry, because a stale list IS the problem and it
+            persists until the fetch works (DESIGN.md); pinned, so a long scroll
+            still shows it. */}
+        {loadError ? (
+          <View style={styles.banner}>
+            <ErrorBanner message={loadError} onRetry={() => void load()} />
+          </View>
+        ) : null}
+      </CollapsingHeader>
+      {page.list()}
 
       <BottomSheet
         visible={addOpen}
@@ -484,38 +522,6 @@ export function FriendsScreen({
             />
           </View>
         ) : null}
-        {menuItem?.kind === "request" ? (
-          <View style={styles.menuBody}>
-            <Row
-              icon={friendVerb("accept").icon}
-              title={friendVerb("accept").label}
-              onPress={() => {
-                const request = menuItem;
-                setMenuItem(null);
-                void runAction(
-                  request.requestId,
-                  () => acceptFriendRequest(request.requestId),
-                  copy.acceptFailed,
-                  friendAcceptedMessage(request.username),
-                );
-              }}
-            />
-            <Row
-              icon={friendVerb("decline").icon}
-              title={friendVerb("decline").label}
-              onPress={() => {
-                const request = menuItem;
-                setMenuItem(null);
-                void runAction(
-                  request.requestId,
-                  () => declineFriendRequest(request.requestId),
-                  copy.declineFailed,
-                  copy.declined,
-                );
-              }}
-            />
-          </View>
-        ) : null}
       </BottomSheet>
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
@@ -527,9 +533,8 @@ export function FriendsScreen({
  * The card every list in this app uses (DESIGN.md): the row's body opens the thing, the
  * ⋯ opens its actions. A friend opens to their sharing screen — read-only, so
  * the tap costs nothing, while the verbs that revoke stay behind the sheet. A
- * request has nowhere to open to, so both its body and its ⋯ reach the same
- * accept/decline sheet; it carries no inline Accept, because one trailing
- * control is what makes this the same card as a place's.
+ * request has nowhere to open to, so it answers in the row, with the same
+ * Accept and Decline as the Inbox.
  *
  * Memoised, with callbacks that take the item rather than closing over it — §9.
  */
@@ -538,23 +543,42 @@ const FriendRow = memo(function FriendRow({
   busy,
   onOpen,
   onMenu,
+  onAnswer,
 }: {
   item: FriendItem;
   busy: boolean;
   onOpen: (item: FriendItem) => void;
   onMenu: (item: FriendItem) => void;
+  onAnswer: (
+    item: Extract<FriendItem, { kind: "request" }>,
+    action: ReturnType<typeof friendRequestAnswers>[number],
+  ) => void;
 }) {
   const theme = useTheme();
   const { placeHue } = useHues();
 
-  const request = item.kind === "request";
+  if (item.kind === "request") {
+    return (
+      <RequestRow
+        icon="addFriend"
+        hue={placeHue.shared}
+        title={item.username}
+        subtitle={copy.requestSubtitle}
+        answers={friendRequestAnswers(item.username).map((action) => ({
+          key: action.kind,
+          label: action.label,
+          decline: action.kind === "decline",
+          onPress: () => onAnswer(item, action),
+        }))}
+        disabled={busy}
+      />
+    );
+  }
   return (
     <Row
-      icon={request ? "addFriend" : "account"}
-      hue={request ? placeHue.shared : undefined}
+      icon="account"
       title={item.username}
-      subtitle={request ? copy.requestSubtitle : undefined}
-      onPress={() => (request ? onMenu(item) : onOpen(item))}
+      onPress={() => onOpen(item)}
       right={
         busy ? (
           <ActivityIndicator color={theme.accent} />
@@ -683,7 +707,7 @@ function AddFriendBody({
             <StatusPill label={copy.pillRequested} tone="outline" />
           ) : (
             <Button
-              label={copy.add}
+              label={copy.addTitle}
               variant="outlineAccent"
               compact
               onPress={() => void send(user)}
@@ -697,6 +721,7 @@ function AddFriendBody({
         icon="link"
         variant="outlineAccent"
         disabled={inviting}
+        disabledReason="Making the link…"
         onPress={() => void shareInvite()}
       />
       {liveInvites === null ? (
@@ -729,7 +754,9 @@ function EmptyPanel({
   onAdd: () => void;
 }) {
   if (kind === "noRequests") {
-    return <EmptyState title={copy.noRequestsTitle} />;
+    return (
+      <EmptyState title={copy.noRequestsTitle} hint={copy.noRequestsBody} />
+    );
   }
   return (
     <EmptyState
@@ -740,9 +767,9 @@ function EmptyPanel({
   );
 }
 
-/** The way into the leaderboard, wearing the user's rank as the More tab's
- *  Inbox row wears its unread count, in the accent: a rank is news, not a
- *  warning. The badge is hidden; its number is in the name (shared/DESIGN.md). */
+/** The way into the leaderboard. No numeric badge: a number on a button reads
+ *  as an unread count, and a rank is not one. Its rank is in the name, and the
+ *  board's own hero says it. */
 function LeaderboardButton({
   standing,
   onPress,
@@ -750,45 +777,18 @@ function LeaderboardButton({
   standing: { rank: number; size: number } | null;
   onPress: () => void;
 }) {
-  const styles = useStyles();
-  const badge = standing && leaderboardBadge(standing.rank, standing.size);
   return (
-    <View>
-      <IconButton
-        icon="leaderboard"
-        accessibilityLabel={leaderboardButtonLabel(standing)}
-        onPress={onPress}
-      />
-      {badge ? (
-        <View
-          style={styles.rankBadge}
-          pointerEvents="none"
-          importantForAccessibility="no-hide-descendants"
-          accessibilityElementsHidden
-        >
-          <Text style={styles.rankBadgeText}>{badge}</Text>
-        </View>
-      ) : null}
-    </View>
+    <IconButton
+      icon="leaderboard"
+      accessibilityLabel={leaderboardButtonLabel(standing)}
+      onPress={onPress}
+    />
   );
 }
 
 const useStyles = makeStyles((theme, textRole) => ({
   root: { flex: 1, backgroundColor: theme.page },
   heroActions: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
-  rankBadge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    minWidth: 18,
-    height: 18,
-    paddingHorizontal: spacing(0.5),
-    borderRadius: radius.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.accent,
-  },
-  rankBadgeText: { ...textRole.caption, color: theme.onFill },
   rail: {
     paddingHorizontal: spacing(2),
     paddingTop: spacing(1.5),

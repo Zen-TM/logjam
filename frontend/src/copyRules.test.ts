@@ -111,6 +111,42 @@ function childExpressionStrings(
   return found;
 }
 
+// Strings still to reword to the glossary; delete an entry with its string.
+const BASELINE: { file: string; text: string; rule: string }[] = [];
+
+const baselined = (file: string, rule: string, text: string) =>
+  BASELINE.some(
+    (entry) =>
+      entry.file === file && entry.rule === rule && text.includes(entry.text),
+  );
+
+/** Every rule a user-facing string, or a JSX child expression's string,
+ *  breaks, bar what ALLOWED excuses. */
+let cached: ReturnType<typeof scan> | undefined;
+const hits = () => (cached ??= scan());
+function scan() {
+  return sources(SRC).flatMap((path) => {
+    const source = readFileSync(path, "utf8");
+    const found = [
+      ...userFacingStrings(ts, path, source).filter(
+        ({ text }) =>
+          !ALLOWED.some(
+            (a) => relative(SRC, path) === a.file && text.includes(a.text),
+          ),
+      ),
+      ...(path.endsWith(".tsx") ? childExpressionStrings(path, source) : []),
+    ];
+    return found.flatMap(({ line, text }) =>
+      copyViolations(text).map((rule) => ({
+        file: relative(SRC, path),
+        line,
+        rule,
+        text,
+      })),
+    );
+  });
+}
+
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -140,39 +176,28 @@ describe("copy on Logjam Web", () => {
   });
 
   it("breaks no copy rule", () => {
-    const offenders = sources(SRC).flatMap((path) =>
-      userFacingStrings(ts, path, readFileSync(path, "utf8")).flatMap(
-        ({ line, text }) =>
-          copyViolations(text)
-            .filter(
-              () =>
-                !ALLOWED.some(
-                  (a) =>
-                    relative(SRC, path) === a.file && text.includes(a.text),
-                ),
-            )
-            .map(
-              (id) =>
-                `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-            ),
-      ),
-    );
+    const offenders = hits()
+      .filter(({ file, rule, text }) => !baselined(file, rule, text))
+      .map(
+        ({ file, line, rule, text }) =>
+          `${file}:${line} "${text}" — ${copySay(rule)}`,
+      );
     expect(offenders).toEqual([]);
   });
 
-  it("breaks no copy rule in a child expression either", () => {
-    const offenders = sources(SRC).flatMap((path) =>
-      path.endsWith(".tsx")
-        ? childExpressionStrings(path, readFileSync(path, "utf8")).flatMap(
-            ({ line, text }) =>
-              copyViolations(text).map(
-                (id) =>
-                  `${relative(SRC, path)}:${line} "${text}" — ${copySay(id)}`,
-              ),
-          )
-        : [],
+  // Mutation: reword one baselined string so it no longer offends.
+  it("every baseline entry still offends — the list only shrinks", () => {
+    const all = hits();
+    const stale = BASELINE.filter(
+      (entry) =>
+        !all.some(
+          ({ file, rule, text }) =>
+            file === entry.file &&
+            rule === entry.rule &&
+            text.includes(entry.text),
+        ),
     );
-    expect(offenders).toEqual([]);
+    expect(stale).toEqual([]);
   });
 
   // The API writes its refusals for the user and `messageFromError` shows them

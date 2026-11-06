@@ -9,7 +9,8 @@ import { currentDeclinationDeg, shortestAngleDelta } from "./heading";
 import type { NorthReference } from "./mapPreferences";
 
 /**
- * Tape scale. 2.2 px per degree puts ~80° of the circle in the 176 px strip:
+ * Tape scale. 2.2 px per degree puts ~80° of the circle in the 176 px strip at
+ * normal type:
  * always at least two labelled 30° marks on screen, which is what makes the
  * centre reading legible without counting ticks, and no more map covered than
  * that needs.
@@ -71,6 +72,41 @@ export function compassTicks(
     });
   }
   return ticks;
+}
+
+/**
+ * Whether a label centred on `x` sits wholly inside a `widthPx` tape. The tape
+ * clips at its ends, so a label that straddles one reads as a fragment of a
+ * bearing (a "24" for 240); its mark still draws, the number waits until it is
+ * in full.
+ */
+export function compassLabelFits(
+  x: number,
+  widthPx: number,
+  labelWidthPx: number,
+): boolean {
+  return x - labelWidthPx / 2 >= 0 && x + labelWidthPx / 2 <= widthPx;
+}
+
+/**
+ * The three boxes the tape draws its type in, at `scale`: Logjam's text size
+ * times the system's font scale, because RN applies both to every `<Text>`.
+ * Never below 1, so the tape is never smaller than it was at normal type.
+ *
+ * Width: 176 px at 1, wider as the labels grow, so a window that holds the
+ * labels in full still holds two of them (labels sit 30° apart: 66 px). The
+ * widest the strip gets (scale 2) is 206 px, which every phone has room for
+ * beside the action column.
+ */
+export function compassStripWidth(scale: number): number {
+  return 176 + Math.round(30 * (Math.max(1, scale) - 1));
+}
+/** Room for a three-digit label centred on its tick. */
+export function compassLabelWidth(scale: number): number {
+  return Math.round(30 * Math.max(1, scale));
+}
+export function compassStripHeight(scale: number): number {
+  return Math.round(38 * Math.max(1, scale));
 }
 
 /**

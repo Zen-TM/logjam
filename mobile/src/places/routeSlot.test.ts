@@ -19,6 +19,7 @@ const media = (
   linkedId: string,
   mediaType: string,
   filename: string | null,
+  origin: MirrorMedia["origin"] = "import",
 ): MirrorMedia => ({
   id,
   linkedType: "place",
@@ -27,7 +28,7 @@ const media = (
   filename,
   color: null,
   displayName: null,
-  origin: null,
+  origin,
   metadata: {},
   fileSizeBytes: null,
   createdAt: "2026-08-22T00:00:00.000Z",
@@ -115,6 +116,8 @@ describe("routeSlotDisplaceConfirm", () => {
     ).toEqual({
       confirmTitle: "Claustral already has a route",
       confirmBody: "“Old line” will be unlinked, but the route is kept.",
+      confirmLabel: "Replace",
+      tone: "filled",
     });
   });
 
@@ -128,6 +131,19 @@ describe("routeSlotDisplaceConfirm", () => {
       "“old.gpx” will be unlinked, but the file is kept in Saved.",
     );
     expect(confirm?.confirmBody).not.toContain("deleted");
+  });
+
+  // A file uploaded from Logjam Web has no origin: the API will not unlink it
+  // (400), so replacing it deletes it, and the confirm has to say so.
+  it("says an uploaded file (no origin) will be deleted, in the destructive tone", () => {
+    const confirm = routeSlotDisplaceConfirm("Claustral", {
+      kind: "file",
+      media: media("m1", "c1", GPX, "web.gpx", null),
+    });
+    expect(confirm?.confirmBody).toBe(
+      "“web.gpx” was uploaded to this place and will be deleted.",
+    );
+    expect(confirm?.tone).toBe("destructive");
   });
 
   it("names an unnamed file rather than saying “null”", () => {

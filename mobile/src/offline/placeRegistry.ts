@@ -2,8 +2,8 @@
 // searched as the user types with nothing typed leaving the phone (ADR 0034).
 //
 // WHEN IT IS FETCHED: first with the user's first region download (for a
-// guest too: the file is a public CDN object, not a call to our API), or from
-// Settings → Map. After that it is kept fresh at app start, on return to the
+// guest too: the file is a public CDN object, not a call to our API). After
+// that it is kept fresh at app start, on return to the
 // foreground and on regained signal, as `topoAutoDownload.ts` is, Wi-Fi only
 // by default, and never in offline-only mode or on a timer (ADR 0013).
 //
@@ -42,11 +42,9 @@ import {
 } from "@logjam/shared";
 
 import { downloadFromPresignedUrl } from "../api/presignedTransfer";
-import { unavailableReasonText } from "../auth/capabilities";
 import { config } from "../config";
 import { subscribeReconnect } from "../map/connectivity";
 import { readPref, writePref } from "../prefsDb";
-import type { ToastMessage } from "../ui";
 import { assertSpaceFor, hasSpaceFor, NotEnoughSpaceError } from "./freeSpace";
 import { PLACE_REGISTRY_DIR } from "./localStores";
 import { canRunNow } from "./networkPolicy";
@@ -56,9 +54,11 @@ import { listArtifacts } from "./registryDb";
 const POINTER_URI = `${PLACE_REGISTRY_DIR}pointer.json`;
 const DOWNLOAD_URI = `${PLACE_REGISTRY_DIR}download.tmp`;
 
-/** "on" once the user started a region download or asked in Settings; "off"
- *  once they removed it, which a later region download does not undo. Unset
- *  (null) on a phone that has done neither. */
+/** "on" once the user started a region download. Unset (null) on a phone that
+ *  has not. The file cannot be removed from the phone, so nothing writes "off"
+ *  any more; a phone still holding "off" from when it could be removed is
+ *  treated as unset and gets the public file again, which holds nothing about
+ *  the user (ADR 0034). */
 const WANTED_PREF_KEY = "placeRegistryWanted";
 
 /** The path of a build whose index would not build. Not fetched again; keyed
@@ -83,24 +83,14 @@ const MIN_INTERVAL_MS = 10_000;
 export type PlaceRegistryStatus = {
   /** The build on this phone, or null when it has none. */
   stored: PlaceRegistryPointer | null;
-  /** What the stored build takes on disk: the pointer's `bytes` is the
-   *  download, gzipped. */
-  storedBytes: number;
-  /** The newest build this session has seen, stored or not, for the size of
-   *  a download not yet made. */
-  latest: PlaceRegistryPointer | null;
-  downloading: boolean;
   /** The last load of the stored build failed and kept the file: the search
-   *  box offers Try again. Cleared by the next load, install or Remove. */
+   *  box offers Try again. Cleared by the next load or install. */
   loadFailed: boolean;
 };
 
 const initial = readStoredPointer();
 let status: PlaceRegistryStatus = {
   stored: initial,
-  storedBytes: initial ? diskBytes(initial) : 0,
-  latest: initial,
-  downloading: false,
   loadFailed: false,
 };
 const listeners = new Set<() => void>();
@@ -145,14 +135,6 @@ function readStoredPointer(): PlaceRegistryPointer | null {
 
 function dataUri(pointer: PlaceRegistryPointer): string {
   return `${PLACE_REGISTRY_DIR}${pointer.path}`;
-}
-
-function diskBytes(pointer: PlaceRegistryPointer): number {
-  try {
-    return new File(dataUri(pointer)).size;
-  } catch {
-    return 0;
-  }
 }
 
 /** The index, if it is loaded. Synchronous, for a search on every keystroke. */
@@ -219,7 +201,7 @@ async function buildIndex(
       await FileSystem.deleteAsync(dataUri(stored), { idempotent: true }).catch(
         () => {},
       );
-      publish({ stored: null, storedBytes: 0 });
+      publish({ stored: null });
     } else {
       // Kept, so nothing else changes: say so, or the box loads forever.
       publish({ loadFailed: true });
@@ -293,7 +275,7 @@ export type FetchOutcome =
  * Bring this phone's file up to the CDN's current build.
  *
  * `allowMetered` is the user's answer for a fetch they started (a region
- * download's "use mobile data", or a press in Settings); a refresh leaves it
+ * download's "use mobile data"); a refresh leaves it
  * out and asks the `placeNames` connection policy instead. A fetch the user
  * started rejects with NotEnoughSpaceError when the file would not fit; a
  * refresh skips.
@@ -322,7 +304,6 @@ export async function fetchPlaceRegistry(options: {
   }
   const promise = runFetch(options.allowMetered).finally(() => {
     fetching = null;
-    publish({ downloading: false });
   });
   fetching = { promise, allowMetered: options.allowMetered === true };
   return promise;
@@ -334,7 +315,6 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
   try {
     const pointer = await fetchPointer();
     if (!pointer) return "failed";
-    publish({ latest: pointer });
     if (pointer.version === status.stored?.version) return "current";
     if (pointer.path === readPref(UNREADABLE_PREF_KEY)) return "unreadable";
     // ADR 0005: nothing large is written without asking whether it fits.
@@ -344,7 +324,6 @@ async function runFetch(allowMetered?: boolean): Promise<FetchOutcome> {
     } else {
       await assertSpaceFor(onDisk);
     }
-    publish({ downloading: true });
     await installBuild(pointer);
     return "updated";
   } catch (err) {
@@ -405,7 +384,6 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   index = null;
   publish({
     stored: pointer,
-    storedBytes: diskBytes(pointer),
     loadFailed: false,
   });
   // Only the new build is kept: the old file, and anything a crash left.
@@ -425,79 +403,12 @@ async function installBuild(pointer: PlaceRegistryPointer): Promise<void> {
   }
 }
 
-// --- Toasts -----------------------------------------------------------------
-// Settings → Map's Download and Remove finish wherever the user has got to, so
-// they announce themselves at the app shell (BackgroundToast.tsx), as a region
-// download does. Region-started and automatic fetches stay silent.
-const toastListeners = new Set<
-  (message: Omit<ToastMessage, "nonce">) => void
->();
-
-/** Subscribe to Download's and Remove's outcomes: BackgroundToast only. */
-export function onPlaceRegistryToast(
-  listener: (message: Omit<ToastMessage, "nonce">) => void,
-): () => void {
-  toastListeners.add(listener);
-  return () => toastListeners.delete(listener);
-}
-
-function toast(text: string): void {
-  for (const listener of toastListeners) listener({ text, tone: "error" });
-}
-
-/** What Download says when it did not bring the file; nothing when it did. */
-export const DOWNLOAD_PROBLEM: Record<FetchOutcome, string | null> = {
-  updated: null,
-  current: null,
-  skipped: unavailableReasonText("needs-connection"),
-  "offline-only": "Turn off Offline maps only to download place names.",
-  unreadable:
-    "The latest place names can't be read, so Logjam GPS waits for the next build.",
-  failed: "Download didn't finish.",
-};
-
-/** Delete the file and stop refreshing it, until the user asks again. */
-export async function removePlaceRegistry(): Promise<void> {
-  writePref(WANTED_PREF_KEY, "off");
-  await fetching?.promise.catch(() => {});
-  try {
-    await FileSystem.deleteAsync(PLACE_REGISTRY_DIR, { idempotent: true });
-  } catch (err) {
-    console.error(err);
-    toast("Couldn't remove the place names.");
-    return;
-  }
-  index = null;
-  publish({ stored: null, storedBytes: 0, loadFailed: false });
-}
-
-/** Settings → Map's Download: wanted from now on, on any connection. */
-export async function requestPlaceRegistry(): Promise<FetchOutcome> {
-  writePref(WANTED_PREF_KEY, "on");
-  try {
-    const outcome = await fetchPlaceRegistry({ allowMetered: true });
-    const problem = DOWNLOAD_PROBLEM[outcome];
-    if (problem) toast(problem);
-    return outcome;
-  } catch (err) {
-    toast(
-      err instanceof NotEnoughSpaceError
-        ? err.message
-        : (DOWNLOAD_PROBLEM.failed ?? ""),
-    );
-    return "failed";
-  }
-}
-
 /**
  * A region download started. The first one brings the file, on the connection
- * the user allowed for the maps; a phone that already has it, or whose user
- * removed it, fetches nothing.
+ * the user allowed for the maps; a phone that already has it fetches nothing.
  */
 export function placeRegistryWithRegion(allowMetered: boolean): void {
-  const wanted = readPref(WANTED_PREF_KEY);
-  if (wanted === "off") return;
-  if (wanted !== "on") writePref(WANTED_PREF_KEY, "on");
+  if (readPref(WANTED_PREF_KEY) !== "on") writePref(WANTED_PREF_KEY, "on");
   if (hasPlaceRegistry()) return;
   // Silent, the space refusal too: the maps' own download says if they fit.
   fetchPlaceRegistry({ allowMetered }).catch((err: unknown) =>
@@ -520,10 +431,9 @@ function requestCheck(): void {
 /**
  * A phone that held a region before Logjam GPS had the registry counts as
  * having asked: its user downloaded for the field before the file existed.
- * Never once they removed it.
  */
 async function adoptForSavedRegions(): Promise<void> {
-  if (readPref(WANTED_PREF_KEY) !== null) return;
+  if (readPref(WANTED_PREF_KEY) === "on") return;
   const artifacts = await listArtifacts();
   if (artifacts.some((artifact) => artifact.kind === "basemap-region")) {
     writePref(WANTED_PREF_KEY, "on");

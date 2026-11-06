@@ -9,6 +9,7 @@ import {
   withAlpha,
   makeStyles,
   useTheme,
+  wash,
 } from "../theme";
 import { Icon, type Glyph } from "./Icon";
 import { BADGE_SIZE, halfRadius } from "./pill";
@@ -51,6 +52,7 @@ export function Chip({
   count,
   starred = false,
   dashed = false,
+  choice,
   onPress,
 }: {
   label: string;
@@ -62,6 +64,10 @@ export function Chip({
   /** Trailing star: this chip is the one that counts (ChipPicker's `primaryValue`). */
   starred?: boolean;
   dashed?: boolean;
+  /** What picking this chip means to a screen reader: one of a rail's options
+   *  (`radio`) or a vocabulary entry toggled on its own (`checkbox`). Left out,
+   *  the chip is a plain button, as the "add one" chip is. */
+  choice?: "single" | "multi";
   onPress: () => void;
 }) {
   const theme = useTheme();
@@ -72,9 +78,17 @@ export function Chip({
   const tint = chipFill(hue ?? theme.accent, theme);
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={
+        choice === "single"
+          ? "radio"
+          : choice === "multi"
+            ? "checkbox"
+            : "button"
+      }
       accessibilityLabel={starred ? `${label}, starred` : undefined}
-      accessibilityState={{ selected: active, disabled }}
+      accessibilityState={
+        choice ? { checked: active, disabled } : { selected: active, disabled }
+      }
       disabled={disabled}
       onPress={onPress}
       hitSlop={hitSlop}
@@ -144,7 +158,7 @@ const useStyles = makeStyles((theme, textRole) => ({
     minWidth: CHIP_HEIGHT,
     justifyContent: "center",
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: opacity.pressed },
   disabled: { opacity: opacity.disabled },
   label: { ...textRole.control, color: theme.text },
   // `onFill`, not the page colour: text or a glyph on a colour fill needs
@@ -167,11 +181,11 @@ const useStyles = makeStyles((theme, textRole) => ({
     minWidth: BADGE_SIZE,
     paddingHorizontal: spacing(0.5),
     borderRadius: halfRadius(BADGE_SIZE),
-    backgroundColor: withAlpha(theme.text, 0.12),
+    backgroundColor: withAlpha(theme.text, wash.selected),
     alignItems: "center",
     justifyContent: "center",
   },
-  // No wash on a fill: an ink wash darkens Daylight's accent until the count
+  // No wash on a fill: an ink wash darkens Ghost Gum's accent until the count
   // on it falls under 4.5:1. The count reads as `onFill` on the fill itself.
   badgeActive: { backgroundColor: "transparent" },
   badgeText: { ...textRole.caption, color: theme.textMuted },

@@ -62,11 +62,11 @@ export function lidarJobSharePromise(
 export function sharePromise(kind: SharePromiseKind | "selection"): string {
   switch (kind) {
     case "place":
-      return "Friends you pick can see this place and its notes and photos, and save a copy or export it. Your trips stay private. Unsharing doesn't remove copies they've already made.";
+      return "Friends you pick can see this place and its notes and photos, and save a copy or export it. Your trips stay private. Stopping sharing doesn't remove copies they've already made.";
     case "route":
       return `Friends you pick can see this route on their map and export it, but can't change or delete it. ${STOP}`;
     case "topoJob":
-      return `Friends you pick can see this LiDAR topo on their map and download or export it. Only you can delete it. ${STOP}`;
+      return `Friends you pick can see this LiDAR map on their map and download or export it. Only you can delete it. ${STOP}`;
     // No surface offers a download or export of the area itself, only of its
     // vegetation layer (contracts.test.ts; the old Export is offered by kind,
     // frontend mapsModel.test.ts).
@@ -78,6 +78,31 @@ export function sharePromise(kind: SharePromiseKind | "selection"): string {
     case "selection":
       return `Friends you pick can view and export these, but can't change them. ${STOP}`;
   }
+}
+
+/**
+ * The other sentences that say who can see something. Both clients read them
+ * from here, and `shareSentences.test.ts` in each fails on a client that types
+ * one of its own.
+ */
+export const SHARE_SENTENCES = {
+  notesHint:
+    "Visible to friends you share the place with. Per-trip notes stay private.",
+  linkedRoutes: "Friends you share a place with can see its linked routes.",
+  linkedFile:
+    "The file is linked to the place, so friends you share the place with can see it. It stays in Saved, and unlinking it later leaves it there.",
+} as const;
+
+/** What a way shared with you is to you, and what stops it showing. */
+export function sharedWayNote(viaPlaceName: string | null): string {
+  return viaPlaceName
+    ? `Shared with you as part of ${viaPlaceName} — you can see it, but not change it. Removing that place is what stops it showing here.`
+    : "Shared with you — you can see it, but not change it.";
+}
+
+/** The count's unit on a friend's sharing screen. */
+export function friendSeesUnit(count: number): string {
+  return count === 1 ? "item they can see" : "items they can see";
 }
 
 /** A friend picker with nobody to pick, and the way out of it. */

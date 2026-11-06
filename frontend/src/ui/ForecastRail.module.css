@@ -1,0 +1,131 @@
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.title {
+  composes: control from "../textRoles.generated.module.css";
+  margin: 0;
+  color: var(--color-text);
+}
+
+.summary {
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text-muted);
+}
+
+/* A mouse pages with buttons; a finger swipes, and has no use for them. */
+.buttons {
+  display: none;
+  margin-inline-start: auto;
+}
+
+@media (pointer: fine) {
+  .buttons {
+    display: flex;
+  }
+}
+
+/* The wheel and a sideways swipe stay on the row (`contain`), so a swipe past
+   its end never turns the panel's page; the snap lands a card on the edge, and
+   the card width leaves the next one peeking. */
+.track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: var(--space-0-5);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  /* Room for the focus ring, which the clip above would cut. */
+  padding-block: 2px;
+}
+
+.track::-webkit-scrollbar {
+  display: none;
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/* A read-out: a hairline box, no fill (shared/DESIGN.md §4). */
+.card {
+  flex: 0 0 auto;
+  /* intrinsic: four and a half cards in the 380px panel. */
+  width: 4.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-0-5);
+  padding: var(--space-1) var(--space-0-5);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  scroll-snap-align: start;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+/* The first card is told by ink and a firmer edge, not a fill. */
+.card[data-current="true"] {
+  border-color: var(--color-text-muted);
+  color: var(--color-text);
+}
+
+.label {
+  composes: caption from "../textRoles.generated.module.css";
+  color: var(--color-text);
+}
+
+.glyph {
+  color: var(--color-text);
+}
+
+.temperature {
+  composes: control from "../textRoles.generated.module.css";
+  color: var(--color-text);
+}
+
+/* The wash and fill of ActivitySpark's bars, laid flat. */
+.bar {
+  align-self: stretch;
+  height: var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-text) 12%, transparent);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+}
+
+.rain {
+  composes: detail from "../textRoles.generated.module.css";
+  color: var(--color-text);
+}
+
+/* None is a dash in the muted ink, so a wet card is the one with a figure. */
+.rain[data-dry="true"] {
+  color: var(--color-text-muted);
+}
+
+.meta {
+  composes: meta from "../textRoles.generated.module.css";
+}
