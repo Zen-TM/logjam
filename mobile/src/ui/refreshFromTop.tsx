@@ -22,6 +22,11 @@ export function useRefreshFromTop() {
   const [pull] = useState(() => {
     const pin = createRefreshPin();
     const scrollProps = {
+      // Without nested scrolling Android's refresh layout cannot start a pull
+      // from the list's scroll and falls back to its touch interception, which
+      // honours the pin's `enabled` (a nested pull ignores it). None of these
+      // lists sits in a scroll parent.
+      nestedScrollEnabled: false,
       onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) =>
         pin.scroll(event.nativeEvent.contentOffset.y),
       onTouchStart: (event: Touches) => {
