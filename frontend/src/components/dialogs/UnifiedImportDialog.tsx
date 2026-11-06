@@ -1429,7 +1429,7 @@ function UnifiedImportDialog({
                 everything the user had just set. */}
             <Select
               label="Place type"
-              hint="Every place in this file lands in this type, and the columns below map onto its fields."
+              hint="A file with a placeType column starts on that type; otherwise every place gets the type you choose."
               value={importPlaceTypeId}
               onChange={(event) => changeImportPlaceType(event.target.value)}
             >
