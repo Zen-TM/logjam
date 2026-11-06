@@ -23,6 +23,10 @@ import {
   fieldStrength,
   fieldStrengthUt,
   foldCompassProbe,
+  createCompassProbeSchedule,
+  COMPASS_PROBE_INTERVAL_MS,
+  COMPASS_PROBE_URGENT_MS,
+  COMPASS_URGENT_PROBES,
   headingSettled,
   isDeclinationLearned,
   learnDeclination,
@@ -556,6 +560,36 @@ describe("the compass calibration verdict", () => {
     expect(compassProbeIsUrgent(fold([bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad]))).toBe(true);
     expect(compassProbeIsUrgent(fold([bad, bad, bad, good]))).toBe(false);
+  });
+
+  // Red when `foldCompassProbe` builds a new state for an unchanged verdict:
+  // an uncalibrated phone (an S9, always) would re-render the map every probe.
+  // To see it: drop the `Math.min` / early return in `foldCompassProbe`.
+  it("hands back the same state once the verdict cannot change", () => {
+    const warned = fold([bad, bad, bad]);
+    expect(foldCompassProbe(warned, bad)).toBe(warned);
+    expect(foldCompassProbe(warned, null)).toBe(warned);
+    expect(foldCompassProbe(warned, good)).toBe(NO_COMPASS_CALIBRATION);
+  });
+
+  // Red when the cap never fires: the schedule must count the probes it has
+  // run. To see it: drop the `++` in `createCompassProbeSchedule`.
+  it("probes urgently for a while, then settles to the slow cadence", () => {
+    const quiet = createCompassProbeSchedule(false);
+    expect(quiet.nextDelayMs()).toBe(COMPASS_PROBE_INTERVAL_MS);
+
+    const urgent = createCompassProbeSchedule(true);
+    const delays = Array.from({ length: COMPASS_URGENT_PROBES + 3 }, () =>
+      urgent.nextDelayMs(),
+    );
+    // The first probe runs at once, so the schedule hands out one fewer urgent
+    // wait than there are urgent probes.
+    expect(delays.slice(0, COMPASS_URGENT_PROBES - 1)).toEqual(
+      Array(COMPASS_URGENT_PROBES - 1).fill(COMPASS_PROBE_URGENT_MS),
+    );
+    expect(delays.slice(COMPASS_URGENT_PROBES - 1)).toEqual(
+      Array(4).fill(COMPASS_PROBE_INTERVAL_MS),
+    );
   });
 });
 

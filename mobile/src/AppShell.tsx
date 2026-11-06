@@ -1203,6 +1203,14 @@ export function AppShell({
           onReady={tapIntake.flush}
         >
           <Tabs.Navigator
+            // Hidden tabs stay attached to the window, `display: none`. By default
+            // react-native-screens detaches an inactive tab's native views and
+            // re-attaches the whole tree on every switch (a 220-330 ms mount
+            // batch on the S9). Costs: the native views stay in memory, a hidden
+            // tab keeps re-rendering (react-native-screens ignores freezeOnBlur
+            // when it is not detaching), and nothing is drawn or laid out for it.
+            // Guard: tabAttach.test.ts.
+            detachInactiveScreens={false}
             // A route being drawn or edited owns the map's taps and has no home
             // anywhere else, so the tab bar refuses to take you off it. The draft
             // does survive (routeDraftStore), but nothing on another tab says so —

@@ -194,6 +194,7 @@ import {
   EMPTY_FIELD_WINDOW,
   NO_COMPASS_CALIBRATION,
   addFieldSample,
+  createCompassProbeSchedule,
   compassProbeIsUrgent,
   createHeadingFilter,
   declinationNeedsRefresh,
@@ -294,7 +295,8 @@ import {
 } from "../ui";
 import { BASEMAP_THUMB_CREDIT } from "./BasemapThumb";
 import { PlaceRoutesLayer, type PlaceRoutesStatus } from "./PlaceRoutesLayer";
-import { MapLayersSheet, type LayerToggleEntry } from "./MapLayersSheet";
+import { MapLayersSheetHost, type LayerToggleEntry } from "./MapLayersSheet";
+import { createLayersOpen } from "./layersOpen";
 import { MapHoldSheet, type MapHoldRun } from "./MapHoldSheet";
 import { MapPointSheet, type MapPoint, type OwnFix } from "./MapPointSheet";
 import { GaugeSheet } from "../gauges/GaugeSheet";
@@ -538,14 +540,6 @@ const ROTATION_VECTOR_GRACE_MS = 1500;
  * first sample would therefore report a false fault on a healthy compass.
  */
 const COMPASS_PROBE_WINDOW_MS = 2000;
-/**
- * Two cadences. The slow one is the resting cost; the urgent one applies while
- * a warning is up or being confirmed (`compassProbeIsUrgent`), so a successful
- * figure-of-eight clears the banner in seconds rather than in minutes — which
- * is the half of the timing the user actually notices.
- */
-const COMPASS_PROBE_INTERVAL_MS = 120_000;
-const COMPASS_PROBE_URGENT_MS = 6_000;
 
 /**
  * How often the location arrow re-asks whether its fix is still current.
@@ -978,7 +972,7 @@ export function MapScreen({
     [],
   );
   const slopeBands = useSlopeBands();
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [layersOpen] = useState(createLayersOpen);
   const [attributionOpen, setAttributionOpen] = useState(false);
   // Press-and-hold target, and the point handed to the place form once that
   // sheet has actually closed (never two sheets at once — DESIGN.md).
@@ -1011,7 +1005,9 @@ export function MapScreen({
   );
   // A basemap whose tile server is down is not drawn; the fallback is, and the
   // pick stays, so the map returns to it when the server answers again.
-  const downBasemaps = useDownBasemaps(connectivity === "online", pickerOpen);
+  const { down: downBasemaps, probe: probeBasemaps } = useDownBasemaps(
+    connectivity === "online",
+  );
   const shownBasemapId = basemapToShow(
     basemapId,
     downBasemaps,
@@ -4041,7 +4037,9 @@ export function MapScreen({
   const [compassCalibration, setCompassCalibration] = useState(
     NO_COMPASS_CALIBRATION,
   );
-  const [fieldWindow, setFieldWindow] = useState(EMPTY_FIELD_WINDOW);
+  // The verdict, not the window: a boolean that has not changed bails out of the
+  // render, where a fresh window object re-rendered the map every probe.
+  const [fieldInterference, setFieldInterference] = useState(false);
   // In the dep array so the cadence changes with the verdict. It flips at most
   // once per transition, and the restart's immediate probe is exactly what a
   // transition wants.
@@ -4080,7 +4078,7 @@ export function MapScreen({
         // Heard nothing at all? Say nothing. A phone lying still emits no
         // heading events, and silence is not a fault.
         setCompassCalibration((current) => foldCompassProbe(current, best));
-        setFieldWindow(field);
+        setFieldInterference(magneticInterference(field));
         // ...and where Settings can read it, so "is my compass all right" has
         // an answer somewhere on the device.
         publishCompassProbe(best, field);
@@ -4105,14 +4103,16 @@ export function MapScreen({
       })();
     };
 
-    probe();
-    const repeat = setInterval(
-      probe,
-      compassProbeUrgent ? COMPASS_PROBE_URGENT_MS : COMPASS_PROBE_INTERVAL_MS,
-    );
+    const schedule = createCompassProbeSchedule(compassProbeUrgent);
+    let repeat: ReturnType<typeof setTimeout>;
+    const next = () => {
+      probe();
+      repeat = setTimeout(next, schedule.nextDelayMs());
+    };
+    next();
     return () => {
       live = false;
-      clearInterval(repeat);
+      clearTimeout(repeat);
       clearTimeout(closeAt);
       subscription?.remove();
       subscription = null;
@@ -5716,7 +5716,7 @@ export function MapScreen({
             arrow, the tape and course-up are all as wrong as each other, which
             is why this sits with the map's own notices rather than next to any
             one of them. Clears itself on the next probe that reads clean. */}
-        {headingWanted && magneticInterference(fieldWindow) ? (
+        {headingWanted && fieldInterference ? (
           <Notice icon="warning" tone="warning">
             Magnetic interference — move the phone away from metal
           </Notice>
@@ -5772,7 +5772,7 @@ export function MapScreen({
           accessibilityRole="button"
           accessibilityLabel="Choose layers"
           style={styles.controlButton}
-          onPress={() => setPickerOpen(true)}
+          onPress={() => layersOpen.set(true)}
         >
           <Icon idea="layers" size={FAB_ICON} color={theme.text} />
         </Pressable>
@@ -6066,9 +6066,9 @@ export function MapScreen({
 
       <Toast message={toast} onDismissed={() => setToast(null)} />
 
-      <MapLayersSheet
-        visible={pickerOpen}
-        onClose={() => setPickerOpen(false)}
+      <MapLayersSheetHost
+        open={layersOpen}
+        onOpened={probeBasemaps}
         connectivity={connectivity}
         basemapId={basemapId}
         onBasemapChange={chooseBasemap}
@@ -6083,7 +6083,7 @@ export function MapScreen({
         offlineOnly={offlineOnly}
         onOfflineOnlyChange={setOfflineOnly}
         onSaveArea={() => {
-          setPickerOpen(false);
+          layersOpen.set(false);
           onSaveMapsOffline?.({
             basemapId,
             center: [camera.longitude, camera.latitude],
@@ -6091,11 +6091,11 @@ export function MapScreen({
           });
         }}
         onOpenSaved={(category) => {
-          setPickerOpen(false);
+          layersOpen.set(false);
           onOpenSaved?.(category);
         }}
         onImportFile={() => {
-          setPickerOpen(false);
+          layersOpen.set(false);
           onImportFile?.();
         }}
       />

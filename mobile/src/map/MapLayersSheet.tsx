@@ -33,7 +33,15 @@
 // contours, features) over an area, and drawing all five at once is three
 // stacked rasters under a vector stack — a mess, not a map. So it keeps its
 // disclosure, and sits LAST because it is the only row that opens.
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
 import {
   BASEMAP_CATALOG,
@@ -51,6 +59,7 @@ import {
   type TerrainSwitchKey,
 } from "@logjam/shared";
 
+import { type LayersOpen } from "./layersOpen";
 import {
   spacing,
   makeStyles,
@@ -132,6 +141,29 @@ export type LayerToggleEntry = {
     onChange: (next: boolean) => void;
   }[];
 };
+
+/** The sheet, subscribed to `open` itself so MapScreen need not be. */
+export function MapLayersSheetHost({
+  open,
+  onOpened,
+  ...rest
+}: Omit<ComponentProps<typeof MapLayersSheet>, "visible" | "onClose"> & {
+  open: LayersOpen;
+  /** Runs each time the sheet opens (the basemap reachability probe). */
+  onOpened: () => void;
+}) {
+  const visible = useSyncExternalStore(open.subscribe, open.get);
+  useEffect(() => {
+    if (visible) onOpened();
+  }, [visible, onOpened]);
+  return (
+    <MapLayersSheet
+      {...rest}
+      visible={visible}
+      onClose={() => open.set(false)}
+    />
+  );
+}
 
 export function MapLayersSheet({
   visible,
