@@ -39,6 +39,10 @@ export const WEATHER = {
     // never reads as the model's guess.
     pastModel: `Modelled rain, past ${WEATHER_PAST_DAYS} days`,
     pastGauge: `Rain gauge, past ${WEATHER_PAST_DAYS} days`,
+    model: "Forecast model",
+    // Says what the choice means; the models' names are `WEATHER_MODELS`.
+    modelHint:
+      "Best match lets Open-Meteo choose; pick a model to see its own forecast.",
     now: "Now",
     earlier: "Scroll back",
     later: "Scroll on",

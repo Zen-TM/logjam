@@ -8,7 +8,9 @@ import {
   fetchForecast,
   weatherCell,
   weatherCellKey,
+  type WeatherCell,
   type WeatherForecast,
+  type WeatherModelId,
 } from "@logjam/shared";
 
 import { useConnectivity } from "../map/connectivity";
@@ -19,6 +21,7 @@ import {
   weatherEpoch,
 } from "./weatherStorage";
 import { mayFetch } from "./weatherState";
+import { readWeatherModel, writeWeatherModel } from "./weatherModelPreference";
 
 export type WeatherStatus = "idle" | "loading" | "failed";
 
@@ -30,6 +33,10 @@ export type Weather = {
   /** When the forecast was last read or fetched: what its age counts from. */
   now: number;
   refresh: () => void;
+  /** The forecast model asked for: a device preference, kept per cell. */
+  model: WeatherModelId;
+  /** Remembers the model and asks for its forecast, on the press that chose it. */
+  chooseModel: (model: WeatherModelId) => void;
 };
 
 type Held = {
@@ -45,10 +52,11 @@ export function useWeather(
   allowNetwork: boolean,
 ): Weather {
   const canFetch = useConnectivity(!allowNetwork) === "online";
+  const [model, setModel] = useState(readWeatherModel);
   const cell = useMemo(
-    () => weatherCell(point, elevationM),
+    () => weatherCell(point, elevationM, model),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the point's two numbers are the identity
-    [point.latitude, point.longitude, elevationM],
+    [point.latitude, point.longitude, elevationM, model],
   );
   const key = weatherCellKey(cell);
   // Kept under its cell's key, so a state held for another cell reads as none.
@@ -84,35 +92,55 @@ export function useWeather(
       .catch(() => {});
     return () => {
       current = false;
-      inFlight.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the cell
   }, [key]);
 
-  const refresh = useCallback(() => {
-    if (!mayFetch({ canFetch, offlineOnlyNow: isOfflineOnly() })) return;
-    const epoch = weatherEpoch();
-    inFlight.current?.abort();
-    const controller = new AbortController();
-    inFlight.current = controller;
-    setHeld((h) => ({
-      ...(h.key === key ? h : { forecast: null, now: h.now }),
-      key,
-      status: "loading",
-    }));
-    fetchForecast(cell, { signal: controller.signal })
-      .then((fresh) => {
-        if (controller.signal.aborted) return;
-        setHeld({ key, forecast: fresh, status: "idle", now: Date.now() });
-        cacheForecast(fresh, epoch).catch(() => {});
-      })
-      .catch(() => {
-        if (controller.signal.aborted) return;
-        setHeld((h) => ({ ...h, key, status: "failed" }));
-      });
-  }, [canFetch, cell, key]);
+  // Not with the read above: choosing a model changes the key and asks in the
+  // same press, and that ask must outlive the key's change.
+  useEffect(() => () => inFlight.current?.abort(), []);
+
+  const fetchCell = useCallback(
+    (target: WeatherCell) => {
+      const key = weatherCellKey(target);
+      if (!mayFetch({ canFetch, offlineOnlyNow: isOfflineOnly() })) return;
+      const epoch = weatherEpoch();
+      inFlight.current?.abort();
+      const controller = new AbortController();
+      inFlight.current = controller;
+      setHeld((h) => ({
+        ...(h.key === key ? h : { forecast: null, now: h.now }),
+        key,
+        status: "loading",
+      }));
+      fetchForecast(target, { signal: controller.signal })
+        .then((fresh) => {
+          if (controller.signal.aborted) return;
+          setHeld({ key, forecast: fresh, status: "idle", now: Date.now() });
+          cacheForecast(fresh, epoch).catch(() => {});
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return;
+          setHeld((h) => ({ ...h, key, status: "failed" }));
+        });
+    },
+    [canFetch],
+  );
+
+  const refresh = useCallback(() => fetchCell(cell), [fetchCell, cell]);
+  const chooseModel = useCallback(
+    (next: WeatherModelId) => {
+      setModel(next);
+      writeWeatherModel(next);
+      fetchCell(weatherCell(point, elevationM, next));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the point's two numbers are the identity
+    [fetchCell, point.latitude, point.longitude, elevationM],
+  );
 
   return {
+    model,
+    chooseModel,
     forecast: here.forecast,
     status: here.status,
     canFetch,

@@ -5,9 +5,10 @@
 // delete `credit` from `WEATHER_SECTIONS`; draw a row's cards from anywhere but
 // `weatherRows` in `WeatherView.tsx`; drop the `return` after
 // `weather.refresh()` in `MapPointSheet.tsx` (the panel then closes on the press);
-// drop the `mayFetch` guard from `refresh` in `useWeather.ts`;
-// move the `fetchForecast` call out of `refresh` in `useWeather.ts` (a fetch on
-// opening).
+// drop the `mayFetch` guard from `fetchCell` in `useWeather.ts`;
+// move the `fetchForecast` call out of `fetchCell` in `useWeather.ts` (a fetch on
+// opening); draw the model chips from anything but `WEATHER_MODELS`, or call
+// `refresh` rather than `chooseModel` from them (the choice then asks nothing).
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { contractSectionKeys, PLACE_PAGE, WEATHER } from "@logjam/shared";
@@ -49,6 +50,15 @@ describe("Logjam GPS draws what the weather contracts name", () => {
     expect(rail).toMatch(/<ScrollView\s+horizontal\s+nestedScrollEnabled/);
   });
 
+  it("offers the shared models and asks on the press that chose one", () => {
+    const view = read("./WeatherView.tsx");
+    expect(view).toContain("WEATHER_MODELS.map");
+    expect(view).toContain("onChange={weather.chooseModel}");
+    const hook = read("./useWeather.ts");
+    expect(hook).toContain("weatherCell(point, elevationM, model)");
+    expect(hook).toContain("fetchCell(weatherCell(point, elevationM, next))");
+  });
+
   it("the place page has a weather section, drawn", () => {
     expect(contractSectionKeys(PLACE_PAGE, "gps")).toContain("weather");
     expect(read("../places/PlaceDetailScreen.tsx")).toContain(
@@ -69,17 +79,21 @@ describe("the press is what asks for the weather", () => {
   it("asks mayFetch before sending anything", () => {
     const source = read("./useWeather.ts");
     expect(source.indexOf("mayFetch(")).toBeGreaterThan(
-      source.indexOf("const refresh"),
+      source.indexOf("const fetchCell"),
     );
     expect(source.indexOf("mayFetch(")).toBeLessThan(
       source.indexOf("fetchForecast("),
     );
   });
 
-  it("fetches only inside refresh", () => {
+  it("fetches only inside fetchCell, which only a press calls", () => {
     const source = read("./useWeather.ts");
     expect(source.match(/fetchForecast\(/g)).toHaveLength(1);
     expect(source.indexOf("fetchForecast(")).toBeGreaterThan(
+      source.indexOf("const fetchCell"),
+    );
+    expect(source.match(/fetchCell\(/g)).toHaveLength(2);
+    expect(source.indexOf("fetchCell(cell)")).toBeGreaterThan(
       source.indexOf("const refresh"),
     );
   });

@@ -6,6 +6,7 @@ import { Linking, Pressable, Text, View } from "react-native";
 import {
   WEATHER,
   WEATHER_CREDIT_URL,
+  WEATHER_MODELS,
   weatherAge,
   weatherRows,
   type SectionKeysOn,
@@ -14,7 +15,7 @@ import {
 } from "@logjam/shared";
 
 import { hitSlop, makeStyles, muted, spacing } from "../theme";
-import { Button, ForecastRail } from "../ui";
+import { Button, ChipRail, ForecastRail } from "../ui";
 import type { Weather } from "./useWeather";
 import { weatherViewState } from "./weatherState";
 
@@ -100,6 +101,19 @@ export function WeatherView({ weather }: { weather: Weather }) {
           onPress={weather.refresh}
         />
       </View>
+      <View style={styles.model}>
+        <Text style={styles.note}>{copy.modelHint}</Text>
+        <ChipRail
+          options={WEATHER_MODELS.map(({ id, label }) => ({
+            value: id,
+            label,
+            // Offline a choice could only show nothing (shared/DESIGN.md §5).
+            disabled: !weather.canFetch,
+          }))}
+          value={weather.model}
+          onChange={weather.chooseModel}
+        />
+      </View>
       {WEATHER.sections.map(({ key }) => {
         if (key === "days" && state.kind === "outOfDate")
           return (
@@ -132,6 +146,7 @@ const useStyles = makeStyles((theme, textRole) => ({
   stack: { gap: spacing(1.5) },
   header: { flexDirection: "row", alignItems: "center", gap: spacing(1) },
   headerText: { flex: 1 },
+  model: { gap: spacing(1) },
   note: { ...muted(theme, textRole.detail) },
   credit: {
     ...muted(theme, textRole.meta),

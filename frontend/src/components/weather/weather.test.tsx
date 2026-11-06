@@ -9,6 +9,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WEATHER,
+  WEATHER_MODELS,
   contractSectionKeys,
   parseForecast,
   weatherCell,
@@ -22,6 +23,21 @@ const spot = { latitude: -33.71234, longitude: 150.31188 };
 const now = new Date(2026, 9, 18, 9).getTime();
 const forecast = parseForecast(forecastJson, weatherCell(spot, 1013), now);
 
+// jsdom has no Popover API (see ui/Menu.test.tsx), which the model menu uses.
+Object.assign(HTMLElement.prototype, {
+  showPopover(this: HTMLElement) {
+    this.removeAttribute("popover");
+  },
+  hidePopover() {},
+});
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+const modelProps = { model: "best_match", onModel: vi.fn() } as const;
+
 function stubFetch() {
   const fetch = vi.fn(async () => Response.json(forecastJson));
   vi.stubGlobal("fetch", fetch);
@@ -33,6 +49,7 @@ function setOnline(online: boolean) {
 }
 
 beforeEach(() => {
+  localStorage.clear();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(now);
   setOnline(true);
@@ -50,7 +67,15 @@ describe("WeatherView", () => {
   // Mutation that turns it red: leave a contract section out of the renderer
   // map in WeatherView.tsx, or draw one the contract does not name (tsc too).
   it("draws every section of the WEATHER contract", () => {
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
     const keys = contractSectionKeys(WEATHER, "web");
     expect(keys).toEqual(["hours", "days", "past", "credit"]);
     for (const title of [
@@ -68,7 +93,15 @@ describe("WeatherView", () => {
   // Mutation that turns it red: draw a row's cards from another list than
   // `weatherRows`, or drop `current` from the card.
   it("starts the hours at Now and the days at today, and names every card", () => {
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
     const hours = within(
       screen.getByRole("list", { name: WEATHER.copy.hours }),
     ).getAllByRole("listitem");
@@ -91,7 +124,15 @@ describe("WeatherView", () => {
   });
 
   it("is a focusable, labelled scroller", () => {
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
     const track = screen.getByRole("list", { name: WEATHER.copy.hours });
     expect(track.getAttribute("tabindex")).toBe("0");
   });
@@ -100,7 +141,15 @@ describe("WeatherView", () => {
   // say which row each pages. Mutation that turns it red: pass the same
   // `labels` to every row in WeatherView.tsx.
   it("names each row's buttons after the row", () => {
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
     const names = screen
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label") ?? "")
@@ -115,7 +164,15 @@ describe("WeatherView", () => {
   });
 
   it("pages a row by its buttons", () => {
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={now} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
     const track = screen.getByRole("list", { name: WEATHER.copy.hours });
     const scrollBy = vi.fn();
     track.scrollBy = scrollBy;
@@ -130,7 +187,15 @@ describe("WeatherView", () => {
 
   it("says so when every day has run out", () => {
     const later = new Date(2027, 0, 1).getTime();
-    render(<WeatherView state={ready} online onLoad={vi.fn()} now={later} />);
+    render(
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={vi.fn()}
+        now={later}
+      />,
+    );
     expect(screen.getByText(WEATHER.copy.outOfDate)).toBeTruthy();
     // Only the rain that fell stays.
     expect(screen.queryByRole("list", { name: WEATHER.copy.hours })).toBeNull();
@@ -140,12 +205,24 @@ describe("WeatherView", () => {
   it("refreshes online, and is disabled with its reason offline", () => {
     const onLoad = vi.fn();
     const { rerender } = render(
-      <WeatherView state={ready} online onLoad={onLoad} now={now} />,
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online
+        onLoad={onLoad}
+        now={now}
+      />,
     );
     fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.refresh }));
     expect(onLoad).toHaveBeenCalledTimes(1);
     rerender(
-      <WeatherView state={ready} online={false} onLoad={onLoad} now={now} />,
+      <WeatherView
+        {...modelProps}
+        state={ready}
+        online={false}
+        onLoad={onLoad}
+        now={now}
+      />,
     );
     const refresh = screen.getByRole("button", { name: WEATHER.copy.refresh });
     fireEvent.click(refresh);
@@ -156,13 +233,23 @@ describe("WeatherView", () => {
   it("says loading, and failed with Try again only online", () => {
     const onLoad = vi.fn();
     const { rerender } = render(
-      <WeatherView state={{ status: "loading" }} online onLoad={onLoad} />,
+      <WeatherView
+        {...modelProps}
+        state={{ status: "loading" }}
+        online
+        onLoad={onLoad}
+      />,
     );
     expect(screen.getByRole("status").textContent).toContain(
       WEATHER.copy.loading,
     );
     rerender(
-      <WeatherView state={{ status: "failed" }} online onLoad={onLoad} />,
+      <WeatherView
+        {...modelProps}
+        state={{ status: "failed" }}
+        online
+        onLoad={onLoad}
+      />,
     );
     expect(screen.getByRole("alert").textContent).toContain(
       WEATHER.copy.failed,
@@ -171,6 +258,7 @@ describe("WeatherView", () => {
     expect(onLoad).toHaveBeenCalledTimes(1);
     rerender(
       <WeatherView
+        {...modelProps}
         state={{ status: "failed" }}
         online={false}
         onLoad={onLoad}
@@ -251,5 +339,72 @@ describe("PlaceWeather", () => {
     expect(screen.getByText(WEATHER.copy.needsConnection)).toBeTruthy();
     fireEvent.click(show);
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("the forecast model", () => {
+  const choose = (name: string) => {
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(WEATHER.copy.model) }),
+    );
+    fireEvent.click(screen.getByRole("menuitem", { name: new RegExp(name) }));
+  };
+
+  // Mutation that turns it red: drop `models` from the request the choice
+  // makes, or ask with the old model (a stale closure in `chooseModel`).
+  it("asks again with the model chosen, and remembers it for the next view", async () => {
+    const fetch = stubFetch();
+    const { unmount } = render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await screen.findByText(WEATHER.copy.pastModel);
+    expect(WEATHER_MODELS.map((m) => m.label)).toContain("ECMWF");
+    choose("ECMWF");
+    await screen.findByText(WEATHER.copy.pastModel);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const url = new URL((fetch.mock.calls[1] as unknown as [string])[0]);
+    expect(url.searchParams.get("models")).toBe("ecmwf_ifs");
+    unmount();
+
+    // A view opened later asks for that model, with no menu pressed.
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await screen.findByText(WEATHER.copy.pastModel);
+    const next = new URL((fetch.mock.calls[2] as unknown as [string])[0]);
+    expect(next.searchParams.get("models")).toBe("ecmwf_ifs");
+    expect(
+      screen.getByRole("button", { name: `${WEATHER.copy.model}: ECMWF` }),
+    ).toBeTruthy();
+  });
+
+  it("starts at best match, and a stored id it doesn't know reads as best match", async () => {
+    localStorage.setItem("logjam.weatherModel", '"bom_access_global"');
+    const fetch = stubFetch();
+    render(<PlaceWeather point={spot} elevationM={null} />);
+    fireEvent.click(screen.getByRole("button", { name: WEATHER.copy.show }));
+    await screen.findByText(WEATHER.copy.pastModel);
+    const url = new URL((fetch.mock.calls[0] as unknown as [string])[0]);
+    expect(url.searchParams.has("models")).toBe(false);
+    expect(
+      screen.getByRole("button", { name: `${WEATHER.copy.model}: Best match` }),
+    ).toBeTruthy();
+  });
+
+  it("can't be chosen offline, and says why", () => {
+    const { rerender } = render(
+      <WeatherView
+        {...modelProps}
+        state={{ status: "ready", forecast, now }}
+        online={false}
+        onLoad={vi.fn()}
+        now={now}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(WEATHER.copy.model) }),
+    );
+    const item = screen.getByRole("menuitem", { name: /ECMWF/ });
+    expect(item.getAttribute("aria-disabled")).toBe("true");
+    expect(item.textContent).toContain(WEATHER.copy.needsConnection);
+    rerender(<div />);
   });
 });

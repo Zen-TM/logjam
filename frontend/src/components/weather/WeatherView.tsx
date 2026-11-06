@@ -2,14 +2,16 @@ import { useEffect, useRef, type ReactNode } from "react";
 import {
   WEATHER,
   WEATHER_CREDIT_URL,
+  WEATHER_MODELS,
   contractSectionKeys,
   weatherAge,
   weatherDaysFrom,
   weatherRows,
   type WeatherForecast,
+  type WeatherModelId,
   type WeatherRow,
 } from "@logjam/shared";
-import { Button, ErrorState, ForecastRail, LoadingState } from "../../ui";
+import { Button, ErrorState, ForecastRail, LoadingState, Menu } from "../../ui";
 import type { WeatherState } from "./useWeather";
 import classes from "./WeatherView.module.css";
 
@@ -23,6 +25,9 @@ export function WeatherView(props: {
   online: boolean;
   /** Fetches again: Refresh, and Try again after a failure. */
   onLoad: () => void;
+  /** The forecast model asked for, and what choosing another does. */
+  model: WeatherModelId;
+  onModel: (model: WeatherModelId) => void;
   /** Folds the forecast back to its row; the figures stay for the next open. */
   onHide?: () => void;
   now?: number;
@@ -52,6 +57,8 @@ function WeatherBody({
   state,
   online,
   onLoad,
+  model,
+  onModel,
   onHide,
   now: fixedNow,
 }: Parameters<typeof WeatherView>[0]) {
@@ -111,6 +118,8 @@ function WeatherBody({
         online={online}
         now={now}
         onLoad={onLoad}
+        model={model}
+        onModel={onModel}
         onHide={onHide}
       />
       {contractSectionKeys(WEATHER, "web").map((key) => (
@@ -125,18 +134,48 @@ function Header({
   online,
   now,
   onLoad,
+  model,
+  onModel,
   onHide,
 }: {
   forecast: WeatherForecast;
   online: boolean;
   now: number;
   onLoad: () => void;
+  model: WeatherModelId;
+  onModel: (model: WeatherModelId) => void;
   onHide?: () => void;
 }) {
+  const current = WEATHER_MODELS.find((m) => m.id === model);
   return (
     <div className={classes.header}>
       <span className={classes.age}>{weatherAge(forecast.fetchedAt, now)}</span>
       <div className={classes.actions}>
+        <Menu
+          label={WEATHER.copy.model}
+          title={WEATHER.copy.modelHint}
+          placement="bottom-end"
+          entries={WEATHER_MODELS.map(({ id, label }) => ({
+            id,
+            label,
+            icon: id === model ? "done" : undefined,
+            accessibleLabel: id === model ? `${label}, current` : undefined,
+            // Offline a choice could only show nothing (shared/DESIGN.md §5).
+            disabledReason: online ? undefined : WEATHER.copy.needsConnection,
+            onSelect: () => onModel(id),
+          }))}
+          trigger={(props) => (
+            <Button
+              {...props}
+              variant="outline"
+              compact
+              trailingIcon="expand"
+              aria-label={`${WEATHER.copy.model}: ${current?.label}`}
+            >
+              {current?.label}
+            </Button>
+          )}
+        />
         <Button
           variant="outline"
           compact

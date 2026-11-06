@@ -26,6 +26,8 @@ export function PlaceWeather({
         state={weather.state}
         online={online}
         onLoad={weather.load}
+        model={weather.model}
+        onModel={weather.chooseModel}
         onHide={() => setHidden(true)}
       />
     );

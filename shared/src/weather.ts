@@ -24,11 +24,36 @@ export const WEATHER_HOURS_SHOWN = 24;
 export const WEATHER_HOURS_KEPT = 48;
 const HOUR_MS = 3_600_000;
 
+/**
+ * The forecast models a user may ask Open-Meteo for (its `models=` ids). Each
+ * is global, so covers NSW, and returns every variable requested below
+ * (checked against the live API for a Blue Mountains cell, 2026-11). Left out:
+ * `bom_access_global`, which has returned nothing since BoM suspended its open
+ * data in June 2025. Best match is Open-Meteo's own pick and sends no `models`.
+ * Guard: `weather.test.ts` ("asks for a chosen model by id").
+ */
+export const WEATHER_MODELS = [
+  { id: "best_match", label: "Best match" },
+  { id: "ecmwf_ifs", label: "ECMWF" },
+  { id: "icon_seamless", label: "ICON" },
+  { id: "gfs_seamless", label: "GFS" },
+  { id: "ukmo_seamless", label: "UK Met Office" },
+] as const;
+
+export type WeatherModelId = (typeof WEATHER_MODELS)[number]["id"];
+export const WEATHER_MODEL_DEFAULT: WeatherModelId = "best_match";
+
+export function isWeatherModelId(value: unknown): value is WeatherModelId {
+  return WEATHER_MODELS.some((model) => model.id === value);
+}
+
 export type WeatherCell = {
   latitude: number;
   longitude: number;
   /** Metres, to the nearest 10, or null where the height isn't known. */
   elevationM: number | null;
+  /** Absent is best match: a copy kept before models were offered has none. */
+  model?: WeatherModelId;
 };
 
 export type WeatherDay = {
@@ -91,8 +116,10 @@ function snap(degrees: number): number {
 export function weatherCell(
   point: { latitude: number; longitude: number },
   elevationM: number | null | undefined,
+  model: WeatherModelId = WEATHER_MODEL_DEFAULT,
 ): WeatherCell {
   return {
+    ...(model === WEATHER_MODEL_DEFAULT ? {} : { model }),
     latitude: snap(point.latitude),
     longitude: snap(point.longitude),
     elevationM:
@@ -102,9 +129,15 @@ export function weatherCell(
   };
 }
 
-/** One string per cell: what a client caches a forecast under. */
+/**
+ * One string per cell and model: what a client caches a forecast under, so one
+ * model's figures are never shown for another's. Best match keeps the key it
+ * had before models were offered.
+ */
 export function weatherCellKey(cell: WeatherCell): string {
-  return `${cell.latitude.toFixed(1)},${cell.longitude.toFixed(1)},${cell.elevationM ?? ""}`;
+  const model =
+    cell.model && cell.model !== WEATHER_MODEL_DEFAULT ? `,${cell.model}` : "";
+  return `${cell.latitude.toFixed(1)},${cell.longitude.toFixed(1)},${cell.elevationM ?? ""}${model}`;
 }
 
 const DAILY = [
@@ -137,6 +170,8 @@ export function weatherRequestUrl(cell: WeatherCell): string {
   // Absent, Open-Meteo uses its own DEM's height at the cell's centre, which
   // in canyon country can be hundreds of metres from the spot's.
   if (cell.elevationM != null) params.set("elevation", String(cell.elevationM));
+  if (cell.model && cell.model !== WEATHER_MODEL_DEFAULT)
+    params.set("models", cell.model);
   return `${OPEN_METEO_FORECAST_URL}?${params}`;
 }
 
