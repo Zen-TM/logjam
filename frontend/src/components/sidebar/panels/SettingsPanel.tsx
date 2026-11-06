@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useId, useState, type ReactNode } from "react";
 import {
   contractSectionKeys,
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -193,47 +193,65 @@ function SettingsPanel({
     );
   }
 
+  /** What an account-backed section shows while the account has not loaded:
+   *  our sentence and a retry. */
+  const accountBlock = (content: ReactNode) =>
+    !currentUser && currentUserError ? (
+      <ErrorState message={currentUserError} onRetry={onRetryCurrentUser} />
+    ) : (
+      content
+    );
+
   // Exhaustive by type: a section the contract names and this panel does not
   // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
   const sections: Record<
     SectionKeysOn<typeof SETTINGS, "web">,
     () => ReactNode
   > = {
-    preferences: () => (
+    display: () => (
       <>
+        <SectionHeader title={copy.display} />
         <ThemeChooser />
-
-        {!currentUser && currentUserError ? (
-          <ErrorState message={currentUserError} onRetry={onRetryCurrentUser} />
-        ) : (
-          <>
-            {/* A heading per group, as Logjam GPS draws them: the heading is the
-            sentence's start, so each switch's label stays short. */}
-            {notifPrefs === null ? (
-              <LoadingState />
-            ) : (
-              NOTIFICATION_GROUPS.map((group) => (
-                <Fragment key={group}>
-                  <SectionHeader
-                    title={notificationGroupLead(group, "Logjam Web")}
+      </>
+    ),
+    notifications: () => (
+      <>
+        <SectionHeader title={copy.notifications} />
+        {accountBlock(
+          // A lead per group, as Logjam GPS draws them: the lead is the
+          // sentence's start, so each switch's label stays short.
+          notifPrefs === null ? (
+            <LoadingState />
+          ) : (
+            NOTIFICATION_GROUPS.map((group) => (
+              <Group
+                key={group}
+                lead={notificationGroupLead(group, "Logjam Web")}
+              >
+                {NOTIFICATION_PREFERENCES.filter(
+                  (row) => row.group === group,
+                ).map(({ key, label }) => (
+                  <SwitchRow
+                    key={key}
+                    title={label}
+                    checked={notifPrefs[key]}
+                    disabled={notifSavingKey === key}
+                    disabledReason="Saving…"
+                    onChange={() => handleToggleNotif(key)}
                   />
-                  {NOTIFICATION_PREFERENCES.filter(
-                    (row) => row.group === group,
-                  ).map(({ key, label }) => (
-                    <SwitchRow
-                      key={key}
-                      title={label}
-                      checked={notifPrefs[key]}
-                      disabled={notifSavingKey === key}
-                      disabledReason="Saving…"
-                      onChange={() => handleToggleNotif(key)}
-                    />
-                  ))}
-                </Fragment>
-              ))
-            )}
-
-            <SectionHeader title="Friends" />
+                ))}
+              </Group>
+            ))
+          ),
+        )}
+      </>
+    ),
+    privacy: () => (
+      <>
+        <SectionHeader title={copy.privacy} />
+        {/* The failed account is reported once, under Notifications. */}
+        {currentUser || !currentUserError ? (
+          <Group lead={copy.friends}>
             {leaderboardOptIn === null ? (
               <LoadingState />
             ) : (
@@ -246,8 +264,32 @@ function SettingsPanel({
                 onChange={handleToggleLeaderboard}
               />
             )}
-          </>
-        )}
+          </Group>
+        ) : null}
+        {/* The closing note, where Logjam GPS ends this page with what is kept
+            on the phone. */}
+        <p className={classes.privacy}>
+          Only you see your places unless you share one with a friend. Nothing
+          here leaves your account. Read the{" "}
+          <a
+            className={classes.privacyLink}
+            href="/tos.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Terms
+          </a>{" "}
+          and{" "}
+          <a
+            className={classes.privacyLink}
+            href="/privacy.html"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy policy
+          </a>
+          .
+        </p>
       </>
     ),
     categories: () => (
@@ -293,28 +335,6 @@ function SettingsPanel({
           every panel has, which is where its × lives. */}
       <Hero title={SETTINGS.title} />
       <div className={classes.root}>
-        <p className={classes.privacy}>
-          Only you see your places unless you share one with a friend. Nothing
-          here leaves your account. Read the{" "}
-          <a
-            className={classes.privacyLink}
-            href="/tos.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Terms
-          </a>{" "}
-          and{" "}
-          <a
-            className={classes.privacyLink}
-            href="/privacy.html"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Privacy policy
-          </a>
-          .
-        </p>
         {contractSectionKeys(SETTINGS, "web").map((key) => (
           <Fragment key={key}>{sections[key]()}</Fragment>
         ))}
@@ -324,6 +344,20 @@ function SettingsPanel({
 }
 
 const copy = SETTINGS.copy;
+
+/** A labelled run of rows under a lead line. Not a heading: the section's
+ *  title is the heading, and a second one at its level would flatten the page. */
+function Group({ lead, children }: { lead: string; children: ReactNode }) {
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={id} className={classes.group}>
+      <p id={id} className={classes.lead}>
+        {lead}
+      </p>
+      {children}
+    </div>
+  );
+}
 
 const NOTIFICATION_GROUPS = [
   "email",

@@ -12,10 +12,25 @@ export const SETTINGS = {
   id: "settings.menu",
   title: "Settings",
   sections: [
-    // What is set, not kept. Logjam Web draws the switches inline; Logjam GPS
-    // splits them by where they are stored (this phone, the account) into
-    // pages, so each page can say once what it needs.
-    { key: "preferences" },
+    // What is set, in the order a user goes looking: Logjam GPS draws one row
+    // per section here that opens a page of its own (split by where the
+    // settings are stored, so each page says once what it needs), Logjam Web
+    // draws each one inline. A section only one client has is below.
+    { key: "display" },
+    {
+      key: "map",
+      on: "gps",
+      reason:
+        "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
+    },
+    { key: "notifications" },
+    {
+      key: "offline",
+      on: "gps",
+      reason:
+        "Offline maps and copied photos are stored on the phone. A browser keeps neither.",
+    },
+    { key: "privacy" },
     { key: "categories" },
     { key: "attributes" },
     {
@@ -26,6 +41,12 @@ export const SETTINGS = {
     },
   ],
   copy: {
+    display: "Display",
+    map: "Map",
+    notifications: "Notifications",
+    offline: "Offline and storage",
+    privacy: "Privacy and security",
+    friends: "Friends",
     categories: "Your own place types",
     attributes: `Your own ${ATTRIBUTE_NOUN.many}`,
     placeTypes: "Place types",
@@ -36,25 +57,12 @@ export const SETTINGS = {
 } as const satisfies ScreenContract;
 
 /**
- * The Logjam GPS settings pages and rows with no Logjam Web twin. Not
- * sections: `preferences` is one section on both clients, and Logjam GPS
- * splits it into pages.
+ * The Logjam GPS rows with no Logjam Web twin, inside a section both clients
+ * draw. A whole page only Logjam GPS has is a section above.
  */
 export const SETTINGS_PHONE_ONLY = [
   {
-    id: "map",
-    on: "gps",
-    reason:
-      "These set how the phone's location marker, compass, battery use and screen behave on the map. Logjam Web's map runs on the browser's own settings.",
-  },
-  {
-    id: "offline",
-    on: "gps",
-    reason:
-      "Offline maps and copied photos are stored on the phone. A browser keeps neither.",
-  },
-  {
-    id: "privacy",
+    id: "deviceGuards",
     on: "gps",
     reason:
       "App lock, crash reports and Save to gallery configure the phone's own lock, error reporting and photo library. Logjam Web leaves each to the browser.",

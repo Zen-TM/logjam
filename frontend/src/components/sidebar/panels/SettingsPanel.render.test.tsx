@@ -4,12 +4,15 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  contractSectionKeys,
   LEADERBOARD_SETTING,
   NOTIFICATION_PREFERENCES,
   notificationGroupLead,
+  SETTINGS,
 } from "@logjam/shared";
 
 import { updateUserPreferences, type TUser } from "../../../placeUtils";
@@ -101,27 +104,52 @@ describe("the leaderboard switch", () => {
   });
 });
 
-// Each notification switch sits under its group's heading, which starts the
-// sentence its short label ends. Mutation: draw the switches under one
-// heading, or put one under the other group's.
+// Each notification switch sits in its group, whose lead starts the sentence
+// its short label ends. Mutation: draw the switches in one group, or put one in
+// the other group.
 describe("the notification switches", () => {
-  it("sit under their group's heading", () => {
+  it("sit in their group", () => {
     show();
-    const email = screen.getByRole("heading", {
-      name: notificationGroupLead("email", "Logjam Web"),
-    });
-    const inApp = screen.getByRole("heading", {
-      name: notificationGroupLead("inApp", "Logjam Web"),
-    });
-    const after = (a: Node, b: Node) =>
-      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    for (const { group, label } of NOTIFICATION_PREFERENCES) {
-      const row = screen.getByRole("switch", { name: label });
-      if (group === "email") {
-        expect(after(email, row) && after(row, inApp)).toBe(true);
-      } else {
-        expect(after(inApp, row)).toBe(true);
+    for (const group of ["email", "inApp"] as const) {
+      const box = screen.getByRole("group", {
+        name: notificationGroupLead(group, "Logjam Web"),
+      });
+      const expected = NOTIFICATION_PREFERENCES.filter(
+        (row) => row.group === group,
+      ).map((row) => row.label);
+      expect(within(box).getAllByRole("switch")).toHaveLength(expected.length);
+      for (const name of expected) {
+        within(box).getByRole("switch", { name });
       }
+    }
+  });
+});
+
+// Logjam GPS's Settings menu lists its pages in `SETTINGS`' order; Logjam Web
+// draws the sections both have in that same order, under the same names.
+// Mutation: swap two `contractSectionKeys` cases in the panel, rename a heading
+// in place of reading `SETTINGS.copy`, or draw Privacy above Notifications.
+describe("the sections", () => {
+  it("are the contract's, in its order, under its names", () => {
+    renderPanel();
+    const shown = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((el) => el.textContent);
+    const expected = contractSectionKeys(SETTINGS, "web")
+      .filter((key) => ["display", "notifications", "privacy"].includes(key))
+      .map((key) => SETTINGS.copy[key as keyof typeof SETTINGS.copy]);
+    expect(shown.slice(0, expected.length)).toEqual(expected);
+    expect(expected).toEqual([
+      "Display",
+      "Notifications",
+      "Privacy and security",
+    ]);
+  });
+
+  it("leave out the pages only the phone has", () => {
+    renderPanel();
+    for (const name of ["Map", "Offline and storage"]) {
+      expect(screen.queryByRole("heading", { name })).toBeNull();
     }
   });
 });

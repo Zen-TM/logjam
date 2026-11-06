@@ -22,7 +22,11 @@
 // (shared/DESIGN.md §13).
 import { useCallback, useState } from "react";
 import { Text } from "react-native";
-import { LEADERBOARD_SETTING, messageFromError } from "@logjam/shared";
+import {
+  LEADERBOARD_SETTING,
+  messageFromError,
+  SETTINGS,
+} from "@logjam/shared";
 
 import { apiFetch } from "../../api/apiFetch";
 import { fetchCurrentUser, useApiQuery } from "../../api/queries";
@@ -211,7 +215,7 @@ export function PrivacySettingsScreen() {
           onToggle={toggleSaveToGallery}
         />
 
-        <SectionHeader title="Friends" />
+        <SectionHeader title={SETTINGS.copy.friends} />
         <PreferenceRow
           icon="leaderboard"
           title={LEADERBOARD_SETTING.label}

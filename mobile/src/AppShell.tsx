@@ -37,6 +37,7 @@ import {
   navLabel,
   isThemeSchemeId,
   needsReconsent,
+  SETTINGS,
   TRIP_PLANS_LIST,
   type IconIdea,
 } from "@logjam/shared";
@@ -1678,7 +1679,7 @@ export function AppShell({
                   >
                     {({ navigation, route }) => (
                       <SettingsPageRoute
-                        title="Display"
+                        title={SETTINGS.copy.display}
                         navigation={navigation}
                         route={route}
                       >
@@ -1692,7 +1693,7 @@ export function AppShell({
                   >
                     {({ navigation, route }) => (
                       <SettingsPageRoute
-                        title="Map"
+                        title={SETTINGS.copy.map}
                         navigation={navigation}
                         route={route}
                       >
@@ -1706,7 +1707,7 @@ export function AppShell({
                   >
                     {({ navigation, route }) => (
                       <SettingsPageRoute
-                        title="Notifications"
+                        title={SETTINGS.copy.notifications}
                         navigation={navigation}
                         route={route}
                       >
@@ -1720,7 +1721,7 @@ export function AppShell({
                   >
                     {({ navigation, route }) => (
                       <SettingsPageRoute
-                        title="Offline and storage"
+                        title={SETTINGS.copy.offline}
                         navigation={navigation}
                         route={route}
                       >
@@ -1740,7 +1741,7 @@ export function AppShell({
                   >
                     {({ navigation, route }) => (
                       <SettingsPageRoute
-                        title="Privacy and security"
+                        title={SETTINGS.copy.privacy}
                         navigation={navigation}
                         route={route}
                       >

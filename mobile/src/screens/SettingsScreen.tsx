@@ -76,17 +76,13 @@ export type SettingsPage =
 
 const copy = SETTINGS.copy;
 
-const PAGES: {
-  page: SettingsPage;
-  icon: Glyph;
-  title: string;
-}[] = [
-  { page: "display", icon: "typography", title: "Display" },
-  { page: "map", icon: "map", title: "Map" },
-  { page: "notifications", icon: "notifications", title: "Notifications" },
-  { page: "offline", icon: "device", title: "Offline and storage" },
-  { page: "privacy", icon: "private", title: "Privacy and security" },
-];
+const PAGE_ICONS: Record<SettingsPage, Glyph> = {
+  display: "typography",
+  map: "map",
+  notifications: "notifications",
+  offline: "device",
+  privacy: "private",
+};
 
 type SheetMode =
   | { kind: "closed" }
@@ -165,31 +161,33 @@ export function SettingsScreen({
     onDone: () => setSheet({ kind: "fields", entity: formEntity }),
   });
 
+  const pageRow = (page: SettingsPage) => (
+    <Row
+      key={page}
+      icon={PAGE_ICONS[page]}
+      title={copy[page]}
+      // Notifications is an account-backed page, so it says so on the way
+      // in rather than after the tap (DESIGN.md). Offline and storage
+      // opens for a guest and sorts its own rows.
+      {...(page === "notifications"
+        ? capabilityRowProps("serverPrefs", accountState, online)
+        : {})}
+      onPress={() => onOpenPage(page)}
+      chevron
+    />
+  );
+
   // Exhaustive by type: a section the contract names and this screen does not
   // draw, or the reverse, fails `tsc` (`SETTINGS`, shared/src/contracts).
   const sections: Record<
     SectionKeysOn<typeof SETTINGS, "gps">,
     () => ReactNode
   > = {
-    preferences: () => (
-      <>
-        {PAGES.map(({ page, icon, title }) => (
-          <Row
-            key={page}
-            icon={icon}
-            title={title}
-            // Notifications is an account-backed page, so it says so on the way
-            // in rather than after the tap (DESIGN.md). Offline and storage
-            // opens for a guest and sorts its own rows.
-            {...(page === "notifications"
-              ? capabilityRowProps("serverPrefs", accountState, online)
-              : {})}
-            onPress={() => onOpenPage(page)}
-            chevron
-          />
-        ))}
-      </>
-    ),
+    display: () => pageRow("display"),
+    map: () => pageRow("map"),
+    notifications: () => pageRow("notifications"),
+    offline: () => pageRow("offline"),
+    privacy: () => pageRow("privacy"),
     categories: () => (
       <>
         {/* A list you keep, not a preference you set — which is why the LIST
