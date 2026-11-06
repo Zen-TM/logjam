@@ -867,17 +867,14 @@ describe("GeoPdfDialog, the Terrain layers over a LiDAR job", () => {
 
 // Shared places are opt-in on a printable artifact: a friend consented to
 // seeing them in Logjam, not to being named on a PDF. Mutation: start the
-// chip pressed, or drop its hint.
+// chip pressed.
 describe("GeoPdfDialog, the Overlays group", () => {
-  it("starts with My places on and Shared places off, and says why", () => {
+  it("starts with My places on and Shared places off", () => {
     render(dialog({ open: true }));
     const pressed = (name: string) =>
       screen.getByRole("button", { name }).getAttribute("aria-pressed");
     expect(pressed("My places")).toBe("true");
     expect(pressed("Shared places")).toBe("false");
-    expect(
-      screen.getByText(/not with whoever you hand the PDF to/),
-    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Shared places" }));
     expect(pressed("Shared places")).toBe("true");

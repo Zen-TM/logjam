@@ -171,8 +171,6 @@ const SHAPE_KEYS = TERRAIN_LAYER_KEYS.filter((key) => key !== "land");
 // The Overlays group's chips that are not layers of the map.
 const MY_PLACES = "my-places";
 const SHARED_PLACES = "shared-places";
-const SHARED_PLACES_HINT =
-  "Shared places are ones a friend shared with you, not with whoever you hand the PDF to.";
 
 const COORD_TOOLTIP =
   "Lat/Lon is what a GPS shows you. E/N is the MGA2020 grid, the one printed on NSW topo maps.";
@@ -1382,7 +1380,6 @@ function GeoPdfDialog({
                       setShowSharedPlacesOnPdf(!showSharedPlacesOnPdf);
                     else toggleOverlay(value);
                   }}
-                  hint={SHARED_PLACES_HINT}
                 />
               </section>
 
