@@ -153,7 +153,7 @@ function Header({
       <div className={classes.actions}>
         <Menu
           label={WEATHER.copy.model}
-          title={WEATHER.copy.modelHint}
+          title={WEATHER.copy.model}
           placement="bottom-end"
           entries={WEATHER_MODELS.map(({ id, label }) => ({
             id,

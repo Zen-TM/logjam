@@ -41,6 +41,8 @@ export const WEATHER = {
     pastGauge: `Rain gauge, past ${WEATHER_PAST_DAYS} days`,
     model: "Forecast model",
     // Says what the choice means; the models' names are `WEATHER_MODELS`.
+    // Logjam GPS shows it above the chips. Logjam Web's menu heads the list
+    // with `model` instead: a menu heading holds two lines, and this is more.
     modelHint:
       "Best match lets Open-Meteo choose; pick a model to see its own forecast.",
     now: "Now",
