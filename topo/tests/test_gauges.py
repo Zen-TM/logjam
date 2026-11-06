@@ -323,7 +323,7 @@ class FrozenDatetime(datetime):
 
     @classmethod
     def now(cls, tz=None):
-        return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+        return NOW.astimezone(tz)
 
 
 def run_with(s3, gauges, fetch, bom=None, env=True):
@@ -339,7 +339,7 @@ def run_with(s3, gauges, fetch, bom=None, env=True):
         ),
         mock.patch.object(g.time, "sleep"),
         # Without it the fixtures' readings age past READINGS_DAYS a week after
-        # NOW and are dropped: this suite went red on 2026-11-06.
+        # NOW and are dropped.
         mock.patch.object(g, "datetime", FrozenDatetime),
     ]
     for p in patches:
