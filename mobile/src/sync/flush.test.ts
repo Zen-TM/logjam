@@ -554,6 +554,26 @@ describe("a write the server applied whose reply was lost", () => {
     expect(shelved).toHaveLength(1);
   });
 
+  // Nothing was replaced, so there is nothing to keep: the user's text is
+  // simply saved. Mutation: drop the `!= null` filter on receipts in flush.ts.
+  it("does not shelve a receipt for a field that was empty on the account", async () => {
+    rows = [
+      {
+        ...pushRow(1),
+        fields_json: JSON.stringify({ notes: "mine" }),
+        base_fields_json: JSON.stringify({ notes: "before" }),
+      },
+    ];
+    answers.set("op-1", {
+      status: "appliedWithConflict",
+      conflicts: [{ field: "notes", serverValue: null }],
+    });
+
+    await flushOutbox();
+
+    expect(shelved).toEqual([]);
+  });
+
   it("still shelves a value another device wrote", async () => {
     rows = [
       {

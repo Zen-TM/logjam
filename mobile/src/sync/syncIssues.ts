@@ -15,7 +15,7 @@ import {
   type SyncPushOp,
 } from "@logjam/shared";
 
-import { getMirrorPlace } from "./mirrorStore";
+import { getMirrorPlace, getMirrorTrip } from "./mirrorStore";
 import { parkedError, type ParkedError } from "./parkedError";
 import {
   canKeepBothField,
@@ -79,9 +79,18 @@ export type ShelfEntry = {
   entity: string;
   entityId: string;
   field: string;
-  /** What the user wrote, and lost. */
+  /** What the user wrote. The account took it: a conflict receipt exists only
+   *  for an APPLIED push, and the API's rule is that the later arrival wins. */
   shelvedValue: unknown;
-  /** What the account holds instead — null when the other device CLEARED it. */
+  /** What the field holds NOW, as this phone mirrors it — `shelvedValue` when
+   *  the mirror can't say. Restore and Keep both overwrite THIS, so dialogs
+   *  quote it: the user may have edited the field again, or another device
+   *  written after the flush, and a snapshot would name text that isn't there. */
+  currentValue: unknown;
+  /** True when `currentValue` is no longer the text the user's push wrote. */
+  changedSince: boolean;
+  /** What the account held before the user's write replaced it — the only copy
+   *  left of it. Null when the account had nothing there. */
   serverValue: unknown;
   at: string;
   /** Why "Restore" is unavailable, or null when it can be. */
@@ -94,14 +103,15 @@ export type ShelfEntry = {
 };
 
 /**
- * Why a shelved value cannot be put back, or null when it can.
+ * Why the earlier version cannot be put back, or null when it can.
  *
  * Checked BEFORE the verb is offered, because every one of these ends the same
  * way if it isn't: the write parks as a fresh `blocked` op, and a row the user
  * tapped in Lost reappears in Stuck. A recovery action that manufactures a new
- * sync issue is worse than no recovery action.
+ * sync issue is worse than no recovery action. `nothing` is the account having
+ * held nothing: "restoring" it would clear the user's field.
  */
-export type RestoreBlock = "gone" | "unsupported";
+export type RestoreBlock = "gone" | "unsupported" | "nothing";
 
 type ParkedRow = {
   seq: number;
@@ -209,19 +219,23 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     const target = await shelfTarget(entity, row.entity_id, field);
     const shelvedValue = row.shelved_json ? JSON.parse(row.shelved_json) : null;
     const serverValue = row.server_json ? JSON.parse(row.server_json) : null;
+    const live = await liveFieldValue(entity, row.entity_id, field);
+    const currentValue = live === undefined ? shelvedValue : live;
     entries.push({
       id: row.id,
       entity,
       entityId: row.entity_id,
       field,
       shelvedValue,
+      currentValue,
+      changedSince: !sameValue(currentValue, shelvedValue),
       serverValue,
       at: row.at,
-      restoreBlock: target.block,
+      restoreBlock: target.block ?? (serverValue === null ? "nothing" : null),
       canKeepBoth:
         target.block === null &&
         canKeepBothField(entity, field) &&
-        isMergeablePair(shelvedValue, serverValue),
+        isMergeablePair(currentValue, serverValue),
       // The stored name first: it was captured while the row still existed, and
       // the mirror lookup is only the fallback for entries shelved before the
       // column did (`ensureLocalColumns` backfills nothing).
@@ -233,6 +247,33 @@ export async function listShelfEntries(): Promise<ShelfEntry[]> {
     });
   }
   return entries;
+}
+
+/**
+ * The field's value in the phone's mirror, or `undefined` when the mirror
+ * can't say (an entity with no mirror reader, a row since deleted). Places and
+ * trips are the entities that conflict in practice.
+ */
+async function liveFieldValue(
+  entity: string,
+  entityId: string,
+  field: string,
+): Promise<unknown> {
+  const row =
+    entity === "place"
+      ? await getMirrorPlace(entityId)
+      : entity === "tripLog"
+        ? await getMirrorTrip(entityId)
+        : null;
+  return row && field in row
+    ? (row as unknown as Record<string, unknown>)[field]
+    : undefined;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  const flat = (value: unknown) =>
+    JSON.stringify(typeof value === "string" ? value.trim() : (value ?? null));
+  return flat(a) === flat(b);
 }
 
 /** Two values worth joining: both real text, and not already the same text. */
@@ -274,38 +315,39 @@ async function shelfTarget(
 }
 
 /**
- * Put a shelved value back: write it locally, queue the update, and DELETE the
- * shelf row — the issue has been dealt with, and a row that stayed behind in a
- * "restored" state asked the user to decide the same thing twice.
+ * Put the account's earlier version back: write it locally, queue the update,
+ * and DELETE the shelf row — the issue has been dealt with, and a row that
+ * stayed behind in a "restored" state asked the user to decide the same thing
+ * twice.
  *
- * This is a clobber, not a merge: the value it displaces is the other device's,
- * and after this write nothing records what that was. The confirm dialog is
- * where that is said, and it quotes the value being replaced, because this
- * function is the point of no return for it. `keepBothShelfValue` is the way
- * out that costs nothing.
+ * This is a clobber, not a merge: the value it displaces is the user's own
+ * (live on every device now), and after this write nothing records what that
+ * was. The confirm dialog is where that is said, and it quotes the value being
+ * replaced, because this function is the point of no return for it.
+ * `keepBothShelfValue` is the way out that costs nothing.
  *
  * The write wins on arrival because it is a NEW edit with a current timestamp,
  * not a replay of the one that lost. It loses only to an edit made after it,
  * which is ordinary LWW and correct.
  */
 export async function restoreShelfValue(id: number): Promise<void> {
-  await writeShelfValue(id, (entry) => entry.shelvedValue);
+  await writeShelfValue(id, (entry) => entry.serverValue);
 }
 
 /**
- * Keep both: write `{kept}\n\n{recovered}` and delete the shelf row.
+ * Keep both: write `{earlier}\n\n{yours}` and delete the shelf row.
  *
- * The kept value goes FIRST because the sentence describing it has to be
- * unambiguous — "your text is added below what's there now" — and chronology
+ * The earlier text goes FIRST because the sentence describing it has to be
+ * unambiguous — "the earlier text is added above yours" — and chronology
  * cannot supply an order here: an offline edit can be typed after the value
- * that beat it to the server.
+ * it replaced.
  */
 export async function keepBothShelfValue(id: number): Promise<void> {
   await writeShelfValue(id, (entry) => {
     if (!entry.canKeepBoth) {
       throw new Error(`Cannot keep both for shelf entry ${id}`);
     }
-    return `${String(entry.serverValue).trim()}\n\n${String(entry.shelvedValue).trim()}`;
+    return `${String(entry.serverValue).trim()}\n\n${String(entry.currentValue).trim()}`;
   });
 }
 
@@ -653,7 +695,8 @@ async function dropOp(seq: number): Promise<void> {
 }
 
 /**
- * Throw a lost value away. The only copy — conflict entries never expire (a
+ * "Keep my version": the user's text is already the account's, so this only
+ * deletes the earlier text — the only copy. Conflict entries never expire (a
  * countdown to silent deletion would violate fail-loudly), so the table shrinks
  * only when the user says so.
  */

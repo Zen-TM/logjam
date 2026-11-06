@@ -350,18 +350,16 @@ export function discardExplanation(op: ParkedOp): string {
 }
 
 /**
- * A lost value's headline. Says whose it was, which field, and which thing —
- * in the past tense, because unlike a stuck change this one has already gone.
+ * A conflict's headline: another device changed the same thing the user did.
+ * Neutral on who "won" in the title; the sheet says it (`shelfExplanation`).
  */
 export function shelfTitle(entry: ShelfEntry): string {
   const label = fieldLabel(entry.field);
   const subject = entry.entityName
     ? `for “${entry.entityName}”`
     : `on a ${entityNoun(entry.entity)}`;
-  const verb = `${isPluralLabel(label) ? "were" : "was"} ${
-    entry.serverValue === null ? "cleared" : "overwritten"
-  }`;
-  return `Your ${label} ${subject} ${verb}`;
+  const verb = isPluralLabel(label) ? "were" : "was";
+  return `Your ${label} ${subject} ${verb} also changed on another device`;
 }
 
 /**
@@ -379,30 +377,34 @@ function isPluralLabel(label: string): boolean {
   return label.endsWith("s");
 }
 
-/** The supporting line: what is there instead, and how long ago. */
+/** The supporting line: what the user's text replaced, and how long ago. */
 export function shelfSubtitle(entry: ShelfEntry, now: number): string {
   const when = relativeTime(entry.at, now);
-  if (entry.serverValue === null) return `Cleared on another device · ${when}`;
-  return `Kept instead: ${previewValue(entry.field, entry.serverValue)} · ${when}`;
+  if (entry.serverValue === null) return `Yours was saved · ${when}`;
+  return `Replaced: ${readableValue(entry.field, entry.serverValue)} · ${when}`;
 }
 
 /**
- * Why this value is not in the user's data, in one sentence.
+ * What happened, in one sentence.
  *
- * The screen's hardest question — "I typed that, where did it go?" — and after
- * the merge it has exactly one answer, because a shelf entry can only ever be a
- * conflict receipt: the push was APPLIED and another device's value for that
- * field was newer. Nothing expires it, so nothing here promises a deadline.
+ * The screen's hardest question, and the answer is the opposite of "where did
+ * my text go": a shelf entry is a conflict receipt, so the push was APPLIED and
+ * the user's text is the account's. What is gone is the other device's text,
+ * and this entry holds the only copy. Nothing expires it, so nothing here
+ * promises a deadline.
  */
 export function shelfExplanation(entry: ShelfEntry): string {
-  if (entry.serverValue === null) {
-    return "Another device cleared this attribute after you wrote it, so your text was dropped.";
+  if (entry.changedSince) {
+    return "This was changed again after your version was saved. The earlier text is still here.";
   }
-  return "Your change was overwritten by another device on this account.";
+  if (entry.serverValue === null) {
+    return "Your version was saved. Another device had changed this item in the meantime.";
+  }
+  return "Your version was saved. It replaced a different one that another device wrote.";
 }
 
 /**
- * Why a lost value can't be put back. Shown INSTEAD of the verb, never under a
+ * Why the earlier version can't be put back. Shown INSTEAD of the verb, never under a
  * dimmed one: both reasons mean the write would park as a fresh stuck op, and a
  * recovery action that manufactures a new sync issue is worse than none.
  */
@@ -414,52 +416,79 @@ export function restoreBlockReason(entry: ShelfEntry): string {
       return `The ${entityNoun(entry.entity)} this belonged to has been deleted, so there's nothing to restore it into.`;
     case "unsupported":
       return "This one can't be restored automatically — make the change again yourself.";
+    case "nothing":
+      return "There was nothing there before, so there's no earlier version to restore.";
     default:
       return "";
   }
 }
 
-/**
- * What restoring this value would do, for the row's subtitle — or null where
- * saying it would frighten someone for nothing.
- *
- * "It replaces what's there now" is the whole point of the verb when there IS
- * something there. When the other device CLEARED the field, there is nothing
- * to replace, and the warning describes a cost the user is not paying.
- */
-export function restoreSubtitle(entry: ShelfEntry): string | undefined {
-  return entry.serverValue === null
-    ? undefined
-    : "It replaces what's there now, on every device.";
+/** What restoring the earlier version does, for the row's subtitle. */
+export function restoreSubtitle(): string {
+  return "Replaces yours, on every device.";
 }
 
 /**
  * What restoring costs, for the confirm — it is a clobber, not a merge, and
  * after it nothing anywhere records the value it replaced.
  *
- * So the dialog QUOTES that value. This is the point of no return for it, the
- * sheet that was showing both has closed behind the dialog, and "replaces what
- * your account holds now" names no text the user can weigh. Bulk can't quote
- * (there are N of them), so it says how many instead — and Keep both is the way
- * out that costs nothing, which is why it sits next to Restore in the sheet.
+ * So the dialog QUOTES that value (the user's own). This is the point of no
+ * return for it, the sheet that was showing both has closed behind the dialog,
+ * and "replaces what your account holds now" names no text the user can weigh.
+ * Bulk can't quote (there are N of them), so it says how many instead — and
+ * Keep both is the way out that costs nothing, which is why it sits next to
+ * Restore in the sheet.
  */
 export function restoreConfirmBody(count: number, replacing?: string): string {
   if (count === 1) {
     const quoted = replacing
       ? ` It replaces “${truncate(replacing)}”, which is then gone.`
       : "";
-    return `Your value goes back into your account, on every device you're signed in on.${quoted}`;
+    return `The earlier version goes back into your account, on every device you're signed in on.${quoted}`;
   }
   return (
-    `Those ${count} values go back into your account, on every device you're ` +
-    "signed in on. What each one replaces is gone."
+    `Those ${count} earlier versions go back into your account, on every device ` +
+    "you're signed in on. What each one replaces is gone."
   );
+}
+
+/**
+ * What "Keep my version" costs: the earlier text is deleted, and it is the only
+ * copy. Quoted for the same reason as `restoreConfirmBody`.
+ */
+export function keepMineConfirmBody(replaced: string): string {
+  return `Your version stays. The earlier one, “${truncate(replaced)}”, is deleted.`;
 }
 
 /** Long values are quoted in a system dialog, which has no room for an essay. */
 function truncate(text: string, max = 120): string {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** Whether there is an earlier version to keep, quote or restore. */
+export function hasEarlierVersion(entry: ShelfEntry): boolean {
+  return entry.serverValue !== null;
+}
+
+/**
+ * Any field value as a person reads it: text as it is, a list joined, an
+ * attributes blob as "Label: value" lines. Used where a dialog quotes the text
+ * it is about to delete, whatever type the field is.
+ */
+export function readableValue(field: string, value: unknown): string {
+  if (UNRENDERABLE_FIELDS.has(field)) return "(hidden)";
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(", ");
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !key.startsWith("_"))
+      .map(([key, inner]) => {
+        const label = fieldLabel(key);
+        return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${fieldValueText(key, inner)}`;
+      })
+      .join("; ");
+  }
+  return previewValue(field, value);
 }
 
 /** A shelved or parked field value, rendered for reading — never a coordinate. */
@@ -474,7 +503,7 @@ export function previewValue(field: string, value: unknown): string {
  * The confirm body for discarding a SELECTION, as ONE function over the counts.
  *
  * Three different things wear one button here: a stuck edit (its text deleted),
- * a stuck upload (its cached copy deleted from the phone) and a lost value (the
+ * a stuck upload (its cached copy deleted from the phone) and an earlier version (the
  * last record of it, gone). A sentence true of one of them is false about the
  * other two, and counts that vary independently make copy assembled from
  * clauses read like a filled-in template — same rule, and same shape, as
@@ -489,7 +518,7 @@ export function bulkDiscardBody({
   editCount: number;
   /** Stuck media ops — a cached file, deleted. */
   uploadCount: number;
-  /** Lost values, deleted outright. */
+  /** Conflicts kept as the user's version: the earlier text, deleted. */
   lostCount: number;
 }): string {
   const clauses: string[] = [];
@@ -510,8 +539,8 @@ export function bulkDiscardBody({
   if (lostCount > 0) {
     clauses.push(
       lostCount === 1
-        ? "One lost value is deleted — it is the only copy left"
-        : `${lostCount} lost values are deleted — they are the only copies left`,
+        ? "One earlier version is deleted — it is the only copy left. Yours stays"
+        : `${lostCount} earlier versions are deleted — they are the only copies left. Yours stay`,
     );
   }
   if (clauses.length === 0) return "Nothing is selected.";
@@ -538,7 +567,7 @@ export function selectionCountLabel({
   selected: number;
   /** Stuck ops a retry could still land. */
   retryCount: number;
-  /** Lost values that can be written back. */
+  /** Earlier versions that can be put back. */
   restoreCount: number;
 }): string {
   const verbs: string[] = [];
