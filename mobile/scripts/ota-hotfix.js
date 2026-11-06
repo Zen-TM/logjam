@@ -15,12 +15,19 @@
 //     Prints the PR comment for a plan, from VERSION, RUNTIME, REFUSAL, PLAN,
 //     SMOKE (job results) and RUN_URL in the environment.
 //
-//   node scripts/ota-hotfix.js gate
+//   node scripts/ota-hotfix.js gate publish|rollback
 //     Prints why this run may not publish or roll back, or nothing: from
 //     ACTOR, TRIGGERING_ACTOR and OWNER, and for a publish CHECK_RUNS (a file
-//     of the PR head's ota-plan check runs, as a JSON array) and HEAD.
+//     of the PR head's ota-plan check runs, as a JSON array) and HEAD. A
+//     missing value refuses.
 const { execFileSync, spawnSync } = require("node:child_process");
+const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
+
+// What this script prints lands in $GITHUB_OUTPUT and `::error::` lines, where
+// a newline in a path (which git prints raw under -z) would start a new
+// output or workflow command.
+const oneLine = (text) => text.replace(/[\u0000-\u001f\u007f]/g, "?");
 
 // A release candidate (-rc.N) is not a build in the field, so never a target.
 function latestRelease(tags) {
@@ -40,13 +47,13 @@ function planRefusal({ version, changed, pick, baseRuntime, patchedRuntime }) {
   // The API deploys on the same merge, so the two would race.
   const api = changed.filter((f) => f.startsWith("api/"));
   if (api.length > 0)
-    return `It also changes api/ (${api.join(", ")}), which deploys on the same merge: land the API change first, in its own PR.`;
+    return `It also changes api/ (${oneLine(api.join(", "))}), which deploys on the same merge: land the API change first, in its own PR.`;
   if (!changed.some((f) => /^(mobile|shared)\//.test(f)))
     return "It changes nothing under mobile/ or shared/, so an update would carry nothing.";
   if (pick === "empty")
     return `release/mobile-v${version} already has this change.`;
   if (pick !== "ok")
-    return `It does not apply cleanly to release/mobile-v${version}: ${pick.join(", ")} conflict.`;
+    return `It does not apply cleanly to release/mobile-v${version}: ${oneLine(pick.join(", "))} conflict.`;
   if (baseRuntime !== patchedRuntime)
     return `It changes the native fingerprint (${baseRuntime} to ${patchedRuntime}): a native change needs a release, not an update.`;
   return null;
@@ -68,9 +75,9 @@ function planComment({ version, runtime, refusal, plan, smoke, runUrl }) {
 // A merge or dispatch by the owner, and no re-run by anyone else: a re-run
 // keeps github.actor but reads the label as it is then.
 function actorRefusal({ actor, triggeringActor, owner }) {
-  const other = [actor, triggeringActor].find((a) => a !== owner);
-  if (!other) return null;
-  return `${other} started this run, and only ${owner} publishes or rolls back an OTA update. To publish it, follow docs/operations/mobile-release.md, OTA hotfixes, By hand.`;
+  if (owner && actor === owner && triggeringActor === owner) return null;
+  const other = actor === owner ? triggeringActor : actor;
+  return `${other || "Someone unknown"} started this run, and only ${owner} publishes or rolls back an OTA update. To publish it, follow docs/operations/mobile-release.md, OTA hotfixes, By hand.`;
 }
 
 // The ota-plan job GitHub Actions ran last on the PR's head. Only its result
@@ -94,6 +101,21 @@ function planCheckRefusal(checkRuns, head) {
   if (last?.conclusion === "success") return null;
   const state = last ? (last.conclusion ?? "still running") : "missing";
   return `its ota-plan check on ${head} is ${state}.`;
+}
+
+// `mode` is "publish" or "rollback"; `env` holds the values named above.
+function gateRefusal(mode, env, read = (f) => readFileSync(f, "utf8")) {
+  if (mode !== "publish" && mode !== "rollback")
+    return `Unknown gate "${mode}": publish or rollback.`;
+  const byActor = actorRefusal({
+    actor: env.ACTOR,
+    triggeringActor: env.TRIGGERING_ACTOR,
+    owner: env.OWNER,
+  });
+  if (byActor || mode === "rollback") return byActor;
+  if (!env.CHECK_RUNS || !env.HEAD)
+    return "The gate was given no ota-plan check runs to read.";
+  return planCheckRefusal(JSON.parse(read(env.CHECK_RUNS)), env.HEAD);
 }
 
 function resolveRuntime(mobile) {
@@ -161,7 +183,8 @@ if (require.main === module) {
   const [cmd, ...args] = process.argv.slice(2);
   if (cmd === "plan") {
     const result = plan(args[0], args[1]);
-    for (const [k, v] of Object.entries(result)) console.log(`${k}=${v}`);
+    for (const [k, v] of Object.entries(result))
+      console.log(`${k}=${oneLine(v)}`);
   } else if (cmd === "comment") {
     const e = process.env;
     console.log(
@@ -175,28 +198,19 @@ if (require.main === module) {
       }),
     );
   } else if (cmd === "gate") {
-    const e = process.env;
-    const refusal =
-      actorRefusal({
-        actor: e.ACTOR,
-        triggeringActor: e.TRIGGERING_ACTOR,
-        owner: e.OWNER,
-      }) ??
-      (e.CHECK_RUNS
-        ? planCheckRefusal(
-            JSON.parse(require("node:fs").readFileSync(e.CHECK_RUNS, "utf8")),
-            e.HEAD,
-          )
-        : null);
-    if (refusal) console.log(refusal);
+    const refusal = gateRefusal(args[0], process.env);
+    if (refusal) console.log(oneLine(refusal));
   } else {
-    console.error("usage: ota-hotfix.js plan <dir> <commit> | comment | gate");
+    console.error(
+      "usage: ota-hotfix.js plan <dir> <commit> | comment | gate publish|rollback",
+    );
     process.exit(2);
   }
 }
 
 module.exports = {
   actorRefusal,
+  gateRefusal,
   latestRelease,
   planCheckRefusal,
   planComment,

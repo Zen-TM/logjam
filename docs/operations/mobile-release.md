@@ -163,7 +163,9 @@ stays X.Y.Z: the update must match the build.
    `.github/actions/build-dev-apk` under today's `mobile-emulator.yml`: if
    those have drifted apart since the tag, the smoke fails and the hotfix goes
    by hand.
-3. **Merge it yourself.** `.github/workflows/ota-hotfix.yml` publishes only
+3. **Merge it yourself,** keeping the `(#N)` GitHub puts at the end of the
+   squash commit's title: the workflow finds the PR by it, and without it
+   publishes nothing. `.github/workflows/ota-hotfix.yml` publishes only
    when the repository owner merged (and started the run) and `ota-plan`
    passed on the PR's head. It
    cherry-picks the squash commit onto `release/mobile-vX.Y.Z`, publishes it

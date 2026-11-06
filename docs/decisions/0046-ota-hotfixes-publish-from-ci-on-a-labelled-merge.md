@@ -48,8 +48,9 @@ somewhere a workflow can read: that is what changes from 0009.
    `mobile/src/otaHotfix.test.ts`.
 3. **The merge publishes, from `main`.** `.github/workflows/ota-hotfix.yml`
    acts only when the repository owner both merged the PR and started the run
-   (a re-run by anyone else is refused), and GitHub Actions' latest finished
-   `ota-plan` run on the PR's head passed. It re-runs the plan's refusals on
+   (a re-run by anyone else is refused), and the `ota-plan` run GitHub Actions
+   started last on the PR's head, skipped runs aside, finished and passed:
+   one still running refuses. It re-runs the plan's refusals on
    the release branch as it is then, cherry-picks the squash commit,
    publishes it to `preview`, promotes that group to `production` (rule 3 of
    0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an

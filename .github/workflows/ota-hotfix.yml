@@ -11,8 +11,9 @@ name: ota-hotfix
 # It publishes only what ota-plan.yml passed on the PR's head, and only from
 # a run the repository owner started: a collaborator may merge an approved PR,
 # or re-run this one, but whether a fix is worth a hotfix is the owner's call
-# (`ota-hotfix.js gate`). The branch is pushed after the publish, so a failed
-# publish leaves nothing behind to block a re-run.
+# (`ota-hotfix.js gate`, and publish's own `if:` for a re-run of that job
+# alone). Guard: mobile/src/otaHotfix.test.ts. The branch is pushed after the
+# publish, so a failed publish leaves nothing behind to block a re-run.
 
 on:
   push:
@@ -63,7 +64,7 @@ jobs:
           head=$(jq -r .head.sha <<< "$pr")
           gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=ota-plan&filter=all" \
             --paginate --jq '.check_runs[]' | jq -s . > "$RUNNER_TEMP/runs.json"
-          refusal=$(CHECK_RUNS="$RUNNER_TEMP/runs.json" HEAD="$head" node mobile/scripts/ota-hotfix.js gate)
+          refusal=$(CHECK_RUNS="$RUNNER_TEMP/runs.json" HEAD="$head" node mobile/scripts/ota-hotfix.js gate publish)
           if [ -n "$refusal" ]; then
             echo "::error::$refusal"
             gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "**OTA hotfix not published:** $refusal"
@@ -78,7 +79,11 @@ jobs:
 
   publish:
     needs: find
-    if: needs.find.outputs.pr != ''
+    # Re-running this job alone reuses find's outputs without its gate.
+    if: >-
+      needs.find.outputs.pr != '' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     # EXPO_TOKEN, the OTA signing key and the release-branch deploy key live
     # only here; the Environment admits main alone

@@ -13,6 +13,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   actorRefusal,
+  gateRefusal,
   latestRelease,
   planCheckRefusal,
   planComment,
@@ -100,6 +101,59 @@ describe("OTA hotfix plan", () => {
     ).toMatch(/writer started this run/);
   });
 
+  // Mutation: let a missing actor or owner through (a dropped or misspelt
+  // env line in a workflow), or skip the plan check when CHECK_RUNS is unset.
+  it("refuses when the gate is missing what it decides on", () => {
+    expect(
+      actorRefusal({
+        actor: undefined,
+        triggeringActor: undefined,
+        owner: undefined,
+      }),
+    ).not.toBeNull();
+    expect(
+      actorRefusal({ actor: "", triggeringActor: "", owner: "" }),
+    ).not.toBeNull();
+    const owner = { ACTOR: "o", TRIGGERING_ACTOR: "o", OWNER: "o" };
+    expect(gateRefusal("rollback", owner)).toBeNull();
+    expect(gateRefusal("publish", owner)).toMatch(/no ota-plan check runs/);
+    expect(
+      gateRefusal("publish", { ...owner, CHECK_RUNS: "runs.json" }),
+    ).toMatch(/no ota-plan check runs/);
+    expect(gateRefusal("", owner)).toMatch(/Unknown gate/);
+    const runs = JSON.stringify([
+      {
+        name: "ota-plan",
+        app: { id: 15368 },
+        conclusion: "success",
+        started_at: "2026-11-07T01:00:00Z",
+      },
+    ]);
+    expect(
+      gateRefusal(
+        "publish",
+        { ...owner, CHECK_RUNS: "runs.json", HEAD: "abc" },
+        () => runs,
+      ),
+    ).toBeNull();
+    expect(
+      gateRefusal(
+        "publish",
+        { ...owner, ACTOR: "w", CHECK_RUNS: "runs.json", HEAD: "abc" },
+        () => runs,
+      ),
+    ).toMatch(/w started/);
+  });
+
+  // Mutation: print a path as git gives it under -z, newline and all.
+  it("keeps every refusal on one line", () => {
+    const evil = "api/a\nrefusal=\nz";
+    expect(
+      planRefusal({ ...ok, changed: ["mobile/src/a.ts", evil] }),
+    ).not.toMatch(/\n/);
+    expect(planRefusal({ ...ok, pick: [evil] })).not.toMatch(/\n/);
+  });
+
   // Mutation: drop the app filter or the skipped filter, sort by
   // completed_at, or let a run with no conclusion through.
   it("publishes only on GitHub Actions' latest finished ota-plan pass", () => {
@@ -142,25 +196,53 @@ describe("OTA hotfix plan", () => {
     );
   });
 
-  // Mutation: drop the gate call from either workflow, or move it after the
-  // step that publishes or rolls back.
+  // Mutation: drop the gate call from either workflow, move it after the step
+  // that publishes or rolls back, drop its `exit 1`, its CHECK_RUNS or HEAD,
+  // an actor env line, or an actor clause from either job's `if:`.
   it("runs the gate before every publish and rollback", () => {
     const workflow = (name: string) =>
       readFileSync(join(__dirname, "../../.github/workflows", name), "utf8");
+    const actorEnv = [
+      "ACTOR: ${{ github.actor }}",
+      "TRIGGERING_ACTOR: ${{ github.triggering_actor }}",
+      "OWNER: ${{ github.repository_owner }}",
+    ];
+    const owner =
+      "github.actor == github.repository_owner && github.triggering_actor == github.repository_owner";
+    const between = (text: string, from: string, to: string) => {
+      const start = text.indexOf(from);
+      const end = text.indexOf(to, start);
+      expect(start, from).toBeGreaterThan(-1);
+      expect(end, to).toBeGreaterThan(start);
+      return text.slice(start, end);
+    };
+
     const hotfix = workflow("ota-hotfix.yml");
-    const gate = hotfix.indexOf("node mobile/scripts/ota-hotfix.js gate");
-    expect(gate).toBeGreaterThan(-1);
-    expect(gate).toBeLessThan(hotfix.indexOf('echo "pr=$number"'));
-    expect(hotfix).toMatch(
-      /\n {2}publish:\n {4}needs: find\n {4}if: needs\.find\.outputs\.pr != ''\n/,
+    const find = between(hotfix, "\n  find:\n", "\n  publish:\n");
+    for (const line of actorEnv) expect(find).toContain(line);
+    const gated = between(
+      find,
+      'refusal=$(CHECK_RUNS="$RUNNER_TEMP/runs.json" HEAD="$head" node mobile/scripts/ota-hotfix.js gate publish)',
+      'echo "pr=$number"',
     );
+    expect(gated).toMatch(/if \[ -n "\$refusal" \]; then[^]*exit 1\n {10}fi\n/);
+    const publishIf = between(hotfix, "\n  publish:\n", "runs-on:");
+    expect(publishIf.replace(/\s+/g, " ")).toContain(
+      `needs.find.outputs.pr != '' && ${owner}`,
+    );
+
     const rollback = workflow("ota-rollback.yml");
-    const rollbackGate = rollback.indexOf(
-      "node mobile/scripts/ota-hotfix.js gate",
+    expect(between(rollback, "\n  rollback:\n", "runs-on:")).toContain(
+      `if: ${owner}\n`,
     );
-    expect(rollbackGate).toBeGreaterThan(-1);
-    expect(rollbackGate).toBeLessThan(
-      rollback.indexOf('eas update:rollback "$GROUP"'),
+    const step = between(
+      rollback,
+      "- name: Only the owner rolls back",
+      'eas update:rollback "$GROUP"',
+    );
+    for (const line of actorEnv) expect(step).toContain(line);
+    expect(step).toContain(
+      'refusal=$(node mobile/scripts/ota-hotfix.js gate rollback)\n          if [ -n "$refusal" ]; then echo "::error::$refusal"; exit 1; fi\n',
     );
   });
 });

@@ -6,7 +6,8 @@ name: ota-rollback
 # the latest on its branch for its runtime. Run it on main (Actions →
 # ota-rollback, or `gh workflow run ota-rollback.yml -f group=<id>`), so
 # undoing a hotfix doesn't depend on which machine holds the signing key.
-# The owner alone, re-runs included, as with a publish (`ota-hotfix.js gate`).
+# The owner alone, re-runs included, as with a publish (the job's `if:`, and
+# `ota-hotfix.js gate` to say why). Guard: mobile/src/otaHotfix.test.ts.
 
 on:
   workflow_dispatch:
@@ -27,6 +28,7 @@ concurrency:
 
 jobs:
   rollback:
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     environment: mobile-ota
     steps:
@@ -44,7 +46,7 @@ jobs:
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           OWNER: ${{ github.repository_owner }}
         run: |
-          refusal=$(node mobile/scripts/ota-hotfix.js gate)
+          refusal=$(node mobile/scripts/ota-hotfix.js gate rollback)
           if [ -n "$refusal" ]; then echo "::error::$refusal"; exit 1; fi
       # eas-cli evaluates app.config.ts for the signing certificate.
       - name: Install
