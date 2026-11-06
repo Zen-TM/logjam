@@ -367,7 +367,8 @@ test.describe("desktop", () => {
     page,
   }) => {
     // The plan's trip, already over: Start a trip log then asks which of its
-    // places the trip links. Only the dates are rewritten.
+    // places the trip links, and the seed's meeting point is not one of
+    // alice's own, so it says none can be. Only the dates are rewritten.
     await page.route(/\/plans\/[0-9a-f-]{36}$/, async (route) => {
       if (route.request().method() !== "GET") return route.continue();
       const response = await route.fetch();
@@ -398,9 +399,9 @@ test.describe("desktop", () => {
       .getByRole("menuitem", { name: "Start a trip log from this plan" })
       .click();
     const dialog = page.locator("dialog[open]");
-    await expect(
-      dialog.getByRole("checkbox", { name: "Wollangambe meeting point" }),
-    ).toBeVisible();
+    await expect(dialog).toContainText(
+      "None of this plan's places are in your places, so the trip links none.",
+    );
     await expectNoViolations(page, "dialog");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
