@@ -29,9 +29,10 @@ Needed before the first release tag.
 1. **GitHub settings:** `infra/terraform/envs/github` declares the
    `mobile-release` Environment (deployable from `mobile-v*` tags only) and
    two rulesets that let only repository admins create, move or delete
-   `mobile-v*` tags and `release/mobile-v*` branches. A tag push is a release,
-   and the workflow accepts a tag on those branches, so these are the
-   permissions that matter.
+   `mobile-v*` tags and `release/mobile-v*` branches, except that the deploy
+   key held in the `mobile-ota` Environment may also push those branches for
+   an OTA hotfix (step 7). A tag push is a release, and the workflow accepts a
+   tag on those branches, so these are the permissions that matter.
 2. **`EXPO_TOKEN`**, the Environment's one secret, set by hand (Settings →
    Environments → `mobile-release`): a robot-user access token from expo.dev
    for the `logjamnsw` account, with access to the `logjam-mobile` project.
@@ -157,14 +158,25 @@ stays X.Y.Z: the update must match the build.
    typecheck, unit tests and the emulator smoke on the result
    (`.github/workflows/ota-plan.yml`, `mobile/scripts/ota-hotfix.js`). It
    runs again on each push while the label is on. The comment says which
-   version and runtime the merge would publish to, or why it can't.
+   version and runtime the merge would publish to, or why it can't. The smoke
+   runs the release's own `mobile/scripts/emulator-smoke.sh` and
+   `.github/actions/build-dev-apk` under today's `mobile-emulator.yml`: if
+   those have drifted apart since the tag, the smoke fails and the hotfix goes
+   by hand.
 3. **Merge it yourself.** `.github/workflows/ota-hotfix.yml` publishes only
-   when the repository owner merged and `ota-plan` passed on the PR's head. It
+   when the repository owner merged (and started the run) and `ota-plan`
+   passed on the PR's head. It
    cherry-picks the squash commit onto `release/mobile-vX.Y.Z`, publishes it
    to `preview`, promotes that group to `production` (through the same
    `check-production-update.js` checks as by hand), then pushes the branch.
    It comments on the PR with both group ids, or with what failed: if the
-   promotion fails, the update is on `preview` only.
+   promotion fails, the update is on `preview` only. If the comment says the
+   branch was not pushed, push it by hand (By hand, step 1, with the
+   cherry-pick) before anything else merges with the label: the next hotfix
+   is planned on the branch as it is on GitHub, so it would lack this fix and
+   take it back off phones. A hotfix merged while another publishes waits;
+   a third one merged meanwhile cancels the waiting one, which comments so:
+   re-run it.
 4. **Watch Sentry** for the next launches. To undo, run
    `gh workflow run ota-rollback.yml -f group=<production group id>` on
    `main` (or Actions → ota-rollback). It republishes the update before it,
@@ -234,7 +246,7 @@ maintainer's machine, after the fix has merged to `main`:
 
 When a released build needs a fix that is **not** JavaScript only, and `main`
 holds work that should not ship yet: branch `release/mobile-vX.Y.Z` from the
-tag as in step 2 above, cherry-pick, bump to X.Y.(Z+1) and add its
+tag as in [OTA hotfixes, By hand](#by-hand), step 1, cherry-pick, bump to X.Y.(Z+1) and add its
 `CHANGELOG.md` section on the branch (and the same section on `main`), then
 tag `mobile-vX.Y.(Z+1)` on the branch and release as usual. The bump is an
 admin push, not a PR, so the required `expo-doctor` check does not run on it:

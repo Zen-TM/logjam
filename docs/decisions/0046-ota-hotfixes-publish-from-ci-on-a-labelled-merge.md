@@ -47,12 +47,15 @@ somewhere a workflow can read: that is what changes from 0009.
    unit tests and the emulator smoke on the patched tree. Guard:
    `mobile/src/otaHotfix.test.ts`.
 3. **The merge publishes, from `main`.** `.github/workflows/ota-hotfix.yml`
-   acts only when the repository owner merged the PR and `ota-plan` passed on
-   its head. It cherry-picks the squash commit onto the release branch,
+   acts only when the repository owner both merged the PR and started the run
+   (a re-run by anyone else is refused), and GitHub Actions' latest finished
+   `ota-plan` run on the PR's head passed. It re-runs the plan's refusals on
+   the release branch as it is then, cherry-picks the squash commit,
    publishes it to `preview`, promotes that group to `production` (rule 3 of
    0023 still runs there) and pushes the branch. `ota-rollback.yml` undoes an
-   update with the same key. No guard test: the owner check and the plan check
-   are conditions in the workflow.
+   update with the same key, for the owner alone. Guard: the gate tests in
+   `mobile/src/otaHotfix.test.ts`, which also check both workflows call
+   `ota-hotfix.js gate` first.
 4. **Only admins and the deploy key in `mobile-ota` may push
    `release/mobile-v*`.** Guard: the `releases_stay_the_maintainers` run in
    `guards.tftest.hcl`.
@@ -73,7 +76,15 @@ somewhere a workflow can read: that is what changes from 0009.
   automated lane promotes to `production` straight after `preview`, without
   the manual lane's check of the update on a release candidate; the emulator
   smoke runs the dev client against a local stack, not the store build. Every
-  push to a labelled PR runs the emulator, up to an hour.
+  push to a labelled PR runs the emulator, up to an hour. `EXPO_TOKEN`, which
+  only `mobile-v*` tags could read, is now also readable on `main`. The
+  `ota-plan` result is advisory against a PR that edits `ota-plan.yml`, since
+  the check runs the PR's own workflow: its lint, tests and smoke can be made
+  to pass, though the refusals that matter (the fingerprint, `api/`, a
+  conflict) run again at publish from `main`. If the push fails after a
+  publish, nothing stops the next hotfix from being planned on the branch
+  without the first fix and taking it back off phones; the PR comment says
+  to push by hand first.
 - **Neutral:** GitHub's deploy-key bypass covers every deploy key of the
   repository, so no other deploy key may have write access. Before first use,
   the rollback drill on `preview` (`docs/operations/mobile-release.md`), and

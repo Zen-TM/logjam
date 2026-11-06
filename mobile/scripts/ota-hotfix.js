@@ -14,6 +14,11 @@
 //   node scripts/ota-hotfix.js comment
 //     Prints the PR comment for a plan, from VERSION, RUNTIME, REFUSAL, PLAN,
 //     SMOKE (job results) and RUN_URL in the environment.
+//
+//   node scripts/ota-hotfix.js gate
+//     Prints why this run may not publish or roll back, or nothing: from
+//     ACTOR, TRIGGERING_ACTOR and OWNER, and for a publish CHECK_RUNS (a file
+//     of the PR head's ota-plan check runs, as a JSON array) and HEAD.
 const { execFileSync, spawnSync } = require("node:child_process");
 const { join } = require("node:path");
 
@@ -60,6 +65,37 @@ function planComment({ version, runtime, refusal, plan, smoke, runUrl }) {
   return `${head}On merge, publishes an OTA hotfix to ${version} (runtime \`${runtime}\`): to \`preview\`, then promoted to \`production\`.`;
 }
 
+// A merge or dispatch by the owner, and no re-run by anyone else: a re-run
+// keeps github.actor but reads the label as it is then.
+function actorRefusal({ actor, triggeringActor, owner }) {
+  const other = [actor, triggeringActor].find((a) => a !== owner);
+  if (!other) return null;
+  return `${other} started this run, and only ${owner} publishes or rolls back an OTA update. To publish it, follow docs/operations/mobile-release.md, OTA hotfixes, By hand.`;
+}
+
+// The ota-plan job GitHub Actions ran last on the PR's head. Only its result
+// counts: another label's event leaves a skipped run, a re-run still in
+// progress has no conclusion yet, and any App with checks: write could post
+// a check run of the same name. A PR that edits ota-plan.yml decides what
+// that job runs; the refusals that matter run again at publish.
+const GITHUB_ACTIONS_APP_ID = 15368;
+function planCheckRefusal(checkRuns, head) {
+  const last = checkRuns
+    .filter(
+      (r) =>
+        r.name === "ota-plan" &&
+        r.app?.id === GITHUB_ACTIONS_APP_ID &&
+        r.conclusion !== "skipped",
+    )
+    // ISO dates order as strings; a run not yet started sorts last, so it
+    // blocks.
+    .sort((a, b) => ((a.started_at ?? "~") < (b.started_at ?? "~") ? -1 : 1))
+    .at(-1);
+  if (last?.conclusion === "success") return null;
+  const state = last ? (last.conclusion ?? "still running") : "missing";
+  return `its ota-plan check on ${head} is ${state}.`;
+}
+
 function resolveRuntime(mobile) {
   execFileSync("npm", ["ci", "--no-audit", "--no-fund"], {
     cwd: mobile,
@@ -80,13 +116,11 @@ function plan(dir, commit) {
       stdio: ["ignore", "pipe", "inherit"],
     }).trim();
   const version = latestRelease(git("tag", "--list", "mobile-v*").split("\n"));
-  const changed = git(
-    "diff-tree",
-    "--no-commit-id",
-    "--name-only",
-    "-r",
-    commit,
-  ).split("\n");
+  // -z: by default git quotes a path with non-ASCII bytes ("api/\303\251.ts").
+  const paths = (out) => out.split("\0").filter(Boolean);
+  const changed = paths(
+    git("diff-tree", "-z", "--no-commit-id", "--name-only", "-r", commit),
+  );
   const out = { version: version ?? "", base: "", runtime: "", refusal: "" };
   const early = planRefusal({ version, changed, pick: "ok" });
   if (early) return { ...out, refusal: early };
@@ -104,12 +138,15 @@ function plan(dir, commit) {
 
   let pick = "ok";
   if (
+    // Its stdout goes to stderr: this script's stdout is $GITHUB_OUTPUT.
     spawnSync("git", ["-C", dir, "cherry-pick", "-x", commit], {
-      stdio: "inherit",
+      stdio: ["ignore", 2, "inherit"],
     }).status !== 0
   ) {
-    const conflicts = git("-C", dir, "diff", "--name-only", "--diff-filter=U");
-    pick = conflicts ? conflicts.split("\n") : "empty";
+    const conflicts = paths(
+      git("-C", dir, "diff", "-z", "--name-only", "--diff-filter=U"),
+    );
+    pick = conflicts.length > 0 ? conflicts : "empty";
     spawnSync("git", ["-C", dir, "cherry-pick", "--abort"]);
   }
   const patchedRuntime =
@@ -137,10 +174,31 @@ if (require.main === module) {
         runUrl: e.RUN_URL,
       }),
     );
+  } else if (cmd === "gate") {
+    const e = process.env;
+    const refusal =
+      actorRefusal({
+        actor: e.ACTOR,
+        triggeringActor: e.TRIGGERING_ACTOR,
+        owner: e.OWNER,
+      }) ??
+      (e.CHECK_RUNS
+        ? planCheckRefusal(
+            JSON.parse(require("node:fs").readFileSync(e.CHECK_RUNS, "utf8")),
+            e.HEAD,
+          )
+        : null);
+    if (refusal) console.log(refusal);
   } else {
-    console.error("usage: ota-hotfix.js plan <dir> <commit> | comment");
+    console.error("usage: ota-hotfix.js plan <dir> <commit> | comment | gate");
     process.exit(2);
   }
 }
 
-module.exports = { latestRelease, planComment, planRefusal };
+module.exports = {
+  actorRefusal,
+  latestRelease,
+  planCheckRefusal,
+  planComment,
+  planRefusal,
+};
