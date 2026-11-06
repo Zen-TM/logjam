@@ -88,6 +88,7 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { BulkShareButton, BulkShareSheet } from "./BulkShareSheet";
 import { CopySheet } from "./CopySheet";
@@ -142,6 +143,7 @@ export function FriendSharesScreen({
   onOpenPlace: (placeId: string) => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -572,8 +574,10 @@ export function FriendSharesScreen({
           data={cards}
           keyExtractor={cardKey}
           renderItem={renderItem}
+          {...pull.scrollProps}
           refreshControl={
             <RefreshControl
+              enabled={pull.enabled}
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={theme.accent}

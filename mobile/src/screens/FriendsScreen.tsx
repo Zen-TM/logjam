@@ -103,6 +103,7 @@ import {
   Toast,
   type ChipOption,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { UserSearch } from "./UserSearch";
 
@@ -138,6 +139,7 @@ export function FriendsScreen({
   onOpenShares: (friend: { friendshipId: string; username: string }) => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -402,8 +404,10 @@ export function FriendsScreen({
           contentContainerStyle={styles.listContent}
           data={items}
           keyExtractor={keyExtractor}
+          {...pull.scrollProps}
           refreshControl={
             <RefreshControl
+              enabled={pull.enabled}
               refreshing={refreshing}
               onRefresh={onRefresh}
               tintColor={theme.accent}

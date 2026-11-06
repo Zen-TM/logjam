@@ -110,6 +110,7 @@ import {
   type ChipOption,
   type ToastMessage,
   EmptyState,
+  useRefreshFromTop,
 } from "../ui";
 import { deletePlaceLocal } from "../sync/outbox";
 import { TripEditSheet } from "../logs/TripEditSheet";
@@ -166,6 +167,7 @@ export function PlacesScreen({
   onPickArea: () => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const { placeHue } = useHues();
   const styles = useStyles();
 
@@ -789,8 +791,10 @@ export function PlacesScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        {...pull.scrollProps}
         refreshControl={
           <RefreshControl
+            enabled={pull.enabled}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

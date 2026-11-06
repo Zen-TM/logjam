@@ -55,6 +55,7 @@ import {
   Row,
   Toast,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { dismissPodium, isPodiumDismissed } from "./leaderboard";
 
@@ -121,6 +122,7 @@ export function LeaderboardScreen({
   backLabel: string;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -221,8 +223,10 @@ export function LeaderboardScreen({
       <ScrollView
         style={styles.list}
         contentContainerStyle={styles.listContent}
+        {...pull.scrollProps}
         refreshControl={
           <RefreshControl
+            enabled={pull.enabled}
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={theme.accent}

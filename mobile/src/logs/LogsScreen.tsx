@@ -99,6 +99,7 @@ import {
   type ToastMessage,
   Icon,
   EmptyState,
+  useRefreshFromTop,
 } from "../ui";
 import { useFieldDefs } from "../customFields/useFieldDefs";
 import { primaryTripType, tripTypeLabel, tripTypeMeta } from "./tripTypeMeta";
@@ -116,6 +117,7 @@ export function LogsScreen({
   onOpenStats: () => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const connectivity = useConnectivity();
@@ -528,8 +530,10 @@ export function LogsScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        {...pull.scrollProps}
         refreshControl={
           <RefreshControl
+            enabled={pull.enabled}
             refreshing={syncStatus.state === "syncing"}
             onRefresh={() => {
               if (!online) {

@@ -75,6 +75,7 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { PlanDetailsSheet } from "./PlanDetailsSheet";
 import { planSelectable, runPlanBulk } from "./planBulk";
@@ -171,6 +172,7 @@ export function PlansScreen({
   onOpenPlan: (plan: Pick<TripPlanSummary, "id" | "name" | "status">) => void;
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
   const { assetHue } = useHues();
   const { accountState } = useAccountState();
@@ -691,8 +693,10 @@ export function PlansScreen({
           data={rows}
           keyExtractor={planKey}
           renderItem={renderItem}
+          {...pull.scrollProps}
           refreshControl={
             <RefreshControl
+              enabled={pull.enabled}
               refreshing={refreshing}
               onRefresh={() => void poll()}
               tintColor={theme.accent}

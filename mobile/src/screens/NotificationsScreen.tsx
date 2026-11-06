@@ -127,6 +127,7 @@ import {
   useBulkSelection,
   type ChipOption,
   type ToastMessage,
+  useRefreshFromTop,
 } from "../ui";
 import { notificationMeta } from "./notificationMeta";
 
@@ -267,6 +268,7 @@ export function NotificationsScreen({
   openAnnouncement?: { announcementId: string; nonce: number };
 }) {
   const theme = useTheme();
+  const pull = useRefreshFromTop();
   const styles = useStyles();
 
   const { accountState } = useAccountState();
@@ -1101,8 +1103,10 @@ export function NotificationsScreen({
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews
+        {...pull.scrollProps}
         refreshControl={
           <RefreshControl
+            enabled={pull.enabled}
             refreshing={false}
             onRefresh={query.refetch}
             tintColor={theme.accent}
