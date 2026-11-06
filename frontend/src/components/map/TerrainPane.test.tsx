@@ -5,10 +5,11 @@ import {
   MAP_TERRAIN,
   NSW_FIRE,
   NSW_LAND,
+  OVERLAY_LEGENDS,
   RASTER_TEMPLATE_DEFAULTS,
   TERRAIN_LAYER_DEFAULTS,
 } from "@logjam/shared";
-import { FireRow, LandRow, TerrainPane } from "./LayersPopover";
+import { OverlayLegendRow, TerrainPane } from "./LayersPopover";
 
 // jsdom has no modal <dialog>; the kit's Dialog calls both.
 HTMLDialogElement.prototype.showModal = function showModal() {
@@ -207,7 +208,11 @@ describe("the Land tenure row on Logjam Web", () => {
   it("is off by default, and switches the land key", () => {
     const onToggle = vi.fn();
     render(
-      <LandRow checked={TERRAIN_LAYER_DEFAULTS.land} onToggle={onToggle} />,
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.land}
+        checked={TERRAIN_LAYER_DEFAULTS.land}
+        onToggle={onToggle}
+      />,
     );
     const land = screen.getByRole("switch", { name: "Show land tenure" });
     expect(land.getAttribute("aria-checked")).toBe("false");
@@ -222,7 +227,13 @@ describe("the Land tenure row on Logjam Web", () => {
   // Mutation: drop the caveat, and Sydney's gaps and Land Council freehold
   // read as fact. The credit is a CC BY term of the data.
   it("opens its legend with the classes, caveat and credit", () => {
-    render(<LandRow checked={false} onToggle={vi.fn()} />);
+    render(
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.land}
+        checked={false}
+        onToggle={vi.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: copy.landAbout }));
     const legend = screen.getByRole("dialog", { name: copy.land }).textContent;
     expect(legend).toContain(copy.landLegend);
@@ -237,7 +248,11 @@ describe("the Fire history row on Logjam Web", () => {
   it("is off by default, and switches the fire key", () => {
     const onToggle = vi.fn();
     render(
-      <FireRow checked={TERRAIN_LAYER_DEFAULTS.fire} onToggle={onToggle} />,
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.fire}
+        checked={TERRAIN_LAYER_DEFAULTS.fire}
+        onToggle={onToggle}
+      />,
     );
     const fire = screen.getByRole("switch", { name: "Show fire history" });
     expect(fire.getAttribute("aria-checked")).toBe("false");
@@ -252,7 +267,13 @@ describe("the Fire history row on Logjam Web", () => {
   // Mutation: drop the caveat or the credit, and an unmapped fire reads as no
   // fire, and a CC BY term of the data goes unmet.
   it("opens its legend with the key, caveat and credit", () => {
-    render(<FireRow checked={false} onToggle={vi.fn()} />);
+    render(
+      <OverlayLegendRow
+        legend={OVERLAY_LEGENDS.fire}
+        checked={false}
+        onToggle={vi.fn()}
+      />,
+    );
     fireEvent.click(screen.getByRole("button", { name: copy.fireAbout }));
     const legend = screen.getByRole("dialog", { name: copy.fire }).textContent;
     expect(legend).toContain(copy.fireLegend);
