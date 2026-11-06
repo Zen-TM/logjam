@@ -4,12 +4,17 @@ import type { ScopedCustomFieldDef } from "@logjam/shared";
 import type { TPlace } from "../../../placeUtils";
 import PlaceDetailPanel from "./PlaceDetailPanel";
 
+vi.mock("../../gauges/useGauges", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../gauges/useGauges")>()),
+  useGauges: () => ({ file: null, failed: false, now: Date.now() }),
+}));
 vi.mock("../../feedback/ToastProvider", () => ({
   useToast: () => ({ done: vi.fn(), error: vi.fn() }),
 }));
 vi.mock("../../../placeUtils", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../placeUtils")>()),
   getPlaceDetail: vi.fn(async () => ({ tripLogs: [], media: [] })),
+  getPlaceShares: vi.fn(async () => []),
 }));
 
 // jsdom has no matchMedia, ResizeObserver, scrollIntoView or modal <dialog>.
