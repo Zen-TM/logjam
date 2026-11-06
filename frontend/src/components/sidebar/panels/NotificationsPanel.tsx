@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AREA_EXPORT_FAILED,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -16,6 +17,7 @@ import {
   bulkReadAction,
   collapseBatches,
   countBatchRows,
+  BUG_REPORT_URL,
   expandBatchSelection,
   findNotificationBatches,
   CLEAR_READ_CONFIRM,
@@ -741,6 +743,27 @@ function NotificationsPanel({
           }
         >
           Download
+        </Button>
+      );
+    }
+    // A failed export has no support to contact; the bug form is the way on,
+    // for the failure that tells the owner nothing to do. Too large, outside
+    // NSW and the rest say their own next step.
+    if (
+      n.type === "topo_export_complete" &&
+      n.payload.errorMessage === AREA_EXPORT_FAILED
+    ) {
+      return (
+        <Button
+          compact
+          variant="outline"
+          disabled={selecting}
+          disabledReason="Not while selecting"
+          onClick={() =>
+            window.open(BUG_REPORT_URL, "_blank", "noopener,noreferrer")
+          }
+        >
+          Report a bug
         </Button>
       );
     }

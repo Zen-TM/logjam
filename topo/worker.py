@@ -59,10 +59,7 @@ logging.basicConfig(
 log = logging.getLogger("worker")
 
 
-GENERIC_FAILURE = (
-    "This LiDAR map couldn't be made. Make it again, and contact support if it "
-    "keeps failing."
-)
+GENERIC_FAILURE = "This LiDAR map couldn't be made. Make it again."
 
 
 class JobInputError(Exception):

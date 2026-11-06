@@ -7,7 +7,11 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INBOX } from "@logjam/shared";
+import {
+  AREA_EXPORT_FAILED,
+  AREA_EXPORT_TOO_LARGE,
+  INBOX,
+} from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
 import type { TNotification } from "../../../placeUtils";
 import { ToastProvider } from "../../feedback/ToastProvider";
@@ -295,5 +299,45 @@ describe("NotificationsPanel: a shared route", () => {
       screen.getByRole("button", { name: "bob shared a route with you" }),
     );
     expect(await screen.findByText("This was removed.")).toBeTruthy();
+  });
+});
+
+describe("NotificationsPanel: a failed export", () => {
+  const failed: TNotification = {
+    id: "n9",
+    type: "topo_export_complete",
+    payload: {
+      format: "gpkg",
+      status: "failed",
+      errorMessage: AREA_EXPORT_FAILED,
+    },
+    read: false,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Mutation: drop the failed-export branch of `rowFooter`, or open anything
+  // but the bug form.
+  it("offers Report a bug, since there is no support to contact", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    renderPanel([failed]);
+    fireEvent.click(screen.getByRole("button", { name: "Report a bug" }));
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("/issues/new?template=bug.yml"),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    open.mockRestore();
+  });
+
+  // Mutation: show the button for any failed export, and a row that already
+  // says "Choose a smaller area" also offers a bug report.
+  it("leaves it off a failure that says what to do", () => {
+    renderPanel([
+      {
+        ...failed,
+        payload: { ...failed.payload, errorMessage: AREA_EXPORT_TOO_LARGE },
+      },
+    ]);
+    expect(screen.queryByRole("button", { name: "Report a bug" })).toBeNull();
   });
 });

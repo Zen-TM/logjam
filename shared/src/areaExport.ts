@@ -51,6 +51,11 @@ export const AREA_EXPORT_TOO_LARGE = say`A map can be up to ${AREA_EXPORT_MAX_SI
 
 export const AREA_EXPORT_OUTSIDE_NSW = say`That area is outside NSW, where the statewide terrain is. Choose an area in NSW.`;
 
+/** What the worker says when an export fails for no reason the owner can act
+ *  on. Logjam Web offers Report a bug beside exactly this sentence; the
+ *  worker's copy is held to it by `test_export_worker_helpers.py`. */
+export const AREA_EXPORT_FAILED = say`This export couldn't be made. Start it again.`;
+
 const KM_PER_DEGREE_LAT = 110.57;
 const KM_PER_DEGREE_LON_AT_EQUATOR = 111.32;
 
