@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  AREA_EXPORT_FAILED,
   batchKeyFromRowId,
   batchKeyOf,
   batchLabel,
@@ -697,8 +698,13 @@ function NotificationsPanel({
         </Button>
       );
     }
-    // A failed export has no support to contact; the bug form is the way on.
-    if (n.type === "topo_export_complete" && n.payload.status === "failed") {
+    // A failed export has no support to contact; the bug form is the way on,
+    // for the failure that tells the owner nothing to do. Too large, outside
+    // NSW and the rest say their own next step.
+    if (
+      n.type === "topo_export_complete" &&
+      n.payload.errorMessage === AREA_EXPORT_FAILED
+    ) {
       return (
         <Button
           compact

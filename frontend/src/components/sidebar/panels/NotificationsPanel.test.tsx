@@ -7,7 +7,11 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { INBOX } from "@logjam/shared";
+import {
+  AREA_EXPORT_FAILED,
+  AREA_EXPORT_TOO_LARGE,
+  INBOX,
+} from "@logjam/shared";
 import { withReadOverrides } from "../../../notificationReadOverrides";
 import type { TNotification } from "../../../placeUtils";
 import { ToastProvider } from "../../feedback/ToastProvider";
@@ -206,7 +210,7 @@ describe("NotificationsPanel: a failed export", () => {
     payload: {
       format: "gpkg",
       status: "failed",
-      errorMessage: "This export couldn't be made. Start it again.",
+      errorMessage: AREA_EXPORT_FAILED,
     },
     read: false,
     createdAt: new Date().toISOString(),
@@ -224,5 +228,17 @@ describe("NotificationsPanel: a failed export", () => {
       "noopener,noreferrer",
     );
     open.mockRestore();
+  });
+
+  // Mutation: show the button for any failed export, and a row that already
+  // says "Choose a smaller area" also offers a bug report.
+  it("leaves it off a failure that says what to do", () => {
+    renderPanel([
+      {
+        ...failed,
+        payload: { ...failed.payload, errorMessage: AREA_EXPORT_TOO_LARGE },
+      },
+    ]);
+    expect(screen.queryByRole("button", { name: "Report a bug" })).toBeNull();
   });
 });
